@@ -5,7 +5,7 @@
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   font-size: 14px;
   line-height: 1.5;
-  color: #333;
+  color: #2f3542;
   display: block;
 }
 
@@ -17,11 +17,60 @@
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   box-sizing: border-box;
   margin-bottom: 12px;
   overflow: hidden;
-  transition: max-height 0.3s ease;
+}
+
+/* --- Left Sidebar (icon bar) --- */
+
+.favbase-sidebar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 36px;
+  flex-shrink: 0;
+  padding: 8px 0;
+  border-right: 1px solid rgba(0, 0, 0, 0.06);
+  background: #fafafa;
+}
+
+.favbase-sidebar-icon {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+  color: #9499A0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: background 0.15s, color 0.15s;
+  margin-bottom: 4px;
+}
+
+.favbase-sidebar-icon:hover {
+  background: #f0f0f0;
+  color: #2f3542;
+}
+
+.favbase-sidebar-icon--active {
+  background: #e8e8e8;
+  color: #2f3542;
+}
+
+/* --- Main content area (right of sidebar) --- */
+
+.favbase-panel-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 /* --- Header --- */
@@ -30,9 +79,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 12px;
+  padding: 8px 10px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-  min-height: 40px;
+  min-height: 36px;
   flex-shrink: 0;
   cursor: pointer;
 }
@@ -51,15 +100,15 @@
 
 .favbase-panel-logo {
   font-weight: 700;
-  font-size: 15px;
-  color: #00a1d6;
+  font-size: 14px;
+  color: #2f3542;
   white-space: nowrap;
   flex-shrink: 0;
 }
 
 .favbase-panel-video-title {
   font-size: 12px;
-  color: #999;
+  color: #9499A0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -73,7 +122,7 @@
   background: transparent;
   cursor: pointer;
   font-size: 12px;
-  color: #999;
+  color: #9499A0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -83,7 +132,7 @@
 
 .favbase-collapse-btn:hover {
   background: #f0f0f0;
-  color: #333;
+  color: #2f3542;
 }
 
 /* --- Body --- */
@@ -118,13 +167,13 @@
 /* --- Status Bar --- */
 
 .favbase-status {
-  padding: 10px 12px;
-  font-size: 13px;
+  padding: 8px 10px;
+  font-size: 12px;
   border-bottom: 1px solid #f0f0f0;
 }
 
 .favbase-status--loading {
-  color: #999;
+  color: #9499A0;
 }
 
 .favbase-status--loading::before {
@@ -133,7 +182,7 @@
   width: 12px;
   height: 12px;
   border: 2px solid #ddd;
-  border-top-color: #00a1d6;
+  border-top-color: #9499A0;
   border-radius: 50%;
   margin-right: 8px;
   vertical-align: middle;
@@ -150,27 +199,27 @@
 }
 
 .favbase-status--empty {
-  color: #909399;
+  color: #9499A0;
   text-align: center;
-  padding: 24px 12px;
+  padding: 24px 10px;
 }
 
 .favbase-status--ok {
-  color: #67c23a;
-  font-size: 12px;
+  color: #9499A0;
+  font-size: 11px;
 }
 
 /* --- Subtitle List --- */
 
 .favbase-subtitle-list {
-  padding: 4px 0;
+  padding: 2px 0;
 }
 
 .favbase-subtitle-row {
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 5px 12px;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
   transition: background 0.15s;
 }
 
@@ -178,27 +227,42 @@
   background: #f5f7fa;
 }
 
+.favbase-subtitle-row--active {
+  background: #ffeef4;
+}
+
+.favbase-subtitle-row--active .favbase-timestamp {
+  color: #ff6699;
+}
+
+/* Active + hover: keep the pink highlight, don't flash back to grey */
+.favbase-subtitle-row--active:hover {
+  background: #ffeef4;
+}
+
 .favbase-timestamp {
+  width: 36px;
   flex-shrink: 0;
   border: none;
   background: transparent;
-  color: #00a1d6;
+  color: #9499A0;
   font-size: 12px;
   font-family: 'Menlo', 'Monaco', 'Consolas', monospace;
   cursor: pointer;
-  padding: 2px 0;
+  padding: 0;
   line-height: 1.5;
   white-space: nowrap;
+  text-align: left;
 }
 
 .favbase-timestamp:hover {
-  color: #0086b3;
-  text-decoration: underline;
+  color: #ff6699;
 }
 
 .favbase-subtitle-text {
+  flex: 1;
   font-size: 13px;
   line-height: 1.5;
-  color: #333;
+  color: #2f3542;
   word-break: break-word;
 }

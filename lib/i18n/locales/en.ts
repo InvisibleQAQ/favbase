@@ -11,6 +11,8 @@ const en: Record<LocaleKeys, string> = {
   'panel.collapse': 'Collapse panel',
 
   'subtitle.jumpTo': 'Jump to {{time}}',
+
+  'sidebar.subtitles': 'Subtitles',
 };
 
 export default en;

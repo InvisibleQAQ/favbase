@@ -14,13 +14,12 @@ interface RawItem {
 }
 
 /**
- * Five-step subtitle processing pipeline, ported from Bilitato's subtitleProcessor.js.
+ * Four-step subtitle processing pipeline, ported from Bilitato's subtitleProcessor.js.
  *
  * 1. Normalize: full-width -> half-width, strip bracketed annotations
  * 2. Filter: drop short lines (<2 chars), drop interaction keywords, preserve factual lines
  * 3. Filler removal: drop pure filler-word lines, trim leading fillers
- * 4. Merge: group by 30s window + 2s gap, prepend [m:ss] timestamps
- * 5. Deduplicate: bi-gram Jaccard > 0.85 adjacent merge, keep longer text
+ * 4. Deduplicate: bi-gram Jaccard > 0.85 adjacent merge, keep longer text
  *
  * Accepts both Bilibili raw format ({from, to, content}) and favbase format ({start, end, text}).
  */
@@ -28,8 +27,7 @@ export function processSubtitles(raw: RawItem[]): SubtitleRow[] {
   if (!Array.isArray(raw) || raw.length === 0) return [];
 
   const normalized = raw.map(normalizeItem).filter(isValid);
-  const merged = mergeByTime(normalized, 30);
-  return removeDuplicates(merged);
+  return removeDuplicates(normalized);
 }
 
 // ---------------------------------------------------------------------------
@@ -103,47 +101,7 @@ function isValid(item: NormalizedItem): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// Step 4: Merge by time window
-// ---------------------------------------------------------------------------
-
-function formatCompactTs(sec: number): string {
-  const m = Math.floor(sec / 60);
-  const s = Math.floor(sec % 60);
-  return `[${m}:${String(s).padStart(2, '0')}]`;
-}
-
-function mergeByTime(items: NormalizedItem[], windowSec: number): SubtitleRow[] {
-  if (items.length === 0) return [];
-
-  const result: SubtitleRow[] = [];
-
-  let blockStart = items[0].start;
-  let blockEnd = items[0].end;
-  let formatted = `${formatCompactTs(blockStart)} ${items[0].text}`;
-
-  for (let i = 1; i < items.length; i++) {
-    const cur = items[i];
-    const prevEnd = items[i - 1].end;
-    const inWindow = (cur.start - blockStart) < windowSec;
-    const gapSmall = (cur.start - prevEnd) <= 2;
-
-    if (inWindow && gapSmall) {
-      blockEnd = cur.end;
-      formatted += ` ${formatCompactTs(cur.start)} ${cur.text}`;
-    } else {
-      result.push({ start: blockStart, end: blockEnd, text: formatted });
-      blockStart = cur.start;
-      blockEnd = cur.end;
-      formatted = `${formatCompactTs(cur.start)} ${cur.text}`;
-    }
-  }
-
-  result.push({ start: blockStart, end: blockEnd, text: formatted });
-  return result;
-}
-
-// ---------------------------------------------------------------------------
-// Step 5: Deduplicate adjacent (bi-gram Jaccard)
+// Step 4: Deduplicate adjacent (bi-gram Jaccard)
 // ---------------------------------------------------------------------------
 
 function getBigrams(text: string): Set<string> {

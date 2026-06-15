@@ -39,14 +39,14 @@ MVP 阶段，首个功能：B站视频转录（Bilitato 风格视频页面 AI �
 - `lib/types.ts` — SubtitleRow, SubtitleResult, VideoInfo, RawSubtitleItem, SubtitleHandshakeMessage, SubtitleDataMessage, SubtitleRouteSwitchMessage 类型
 - `lib/bilibili/video-info.ts` — extractBvid(), extractPageNum(), fetchVideoInfo(), getCidForPage(), fetchCidByPageList()（CID 降级路径，用 `/x/player/pagelist` 比 `/x/web-interface/view` 更轻量）
 - `lib/bilibili/subtitle-fetcher.ts` — fetchBilibiliSubtitle()（API 降级路径，CDN fetch 带 credentials，响应解析含 5 层 fallback）
-- `lib/bilibili/subtitle-processor.ts` — processSubtitles() 五步管线：normalize -> filter -> filler removal -> merge(30s窗口) -> deduplicate(Jaccard>0.85)。接受 B 站原始格式和 favbase 格式
+- `lib/bilibili/subtitle-processor.ts` — processSubtitles() 四步管线：normalize -> filter -> filler removal -> deduplicate(Jaccard>0.85)。接受 B 站原始格式和 favbase 格式。每条字幕保持独立行，不合并
 - `entrypoints/bilibili-inject.content.ts` — Main World 脚本：`__INITIAL_STATE__` CID 读取 + fetch/XHR 拦截 + 自动触发 CC 按钮（stealth CSS 隐藏字幕显示）+ postMessage 桥接 + 定期重发 HANDSHAKE/DATA（`startReemitLoop`，每 1s 持续 10s，解决 content script 晚加载丢消息）+ 300ms SPA 路由轮询（`startRouteMonitor`）+ 路由变化时 `hardResetForRoute` 级联重置
 - `entrypoints/bilibili-video.content/` — 嵌入B站右侧栏的面板 UI
   - `index.ts` — 挂载逻辑：anchor 到 `.right-container-inner`，插在 UP 主面板后，`autoMount()` 处理 SPA 切换
   - `hooks/useVideoDetect.ts` — 持久 postMessage 监听器：响应 BILI_ROUTE_SWITCH（SPA 导航重置）+ BILI_SUBTITLE_HANDSHAKE（bvid/cid 解析，cid=0 时不锁定 resolved 等待后续重发），3s 超时降级到 fetchCidByPageList API
   - `hooks/useSubtitle.ts` — 双通道：优先接收 postMessage SUBTITLE_DATA（拦截数据），3s 超时降级到 fetchBilibiliSubtitle API + 失败时自动重试（最多 2 次，间隔 3.5s）；两通道均通过 processSubtitles() 处理
-  - `components/Panel.tsx` — 主面板容器（纵向折叠/展开）
-  - `components/SubtitleView.tsx` — 字幕列表 + 时间戳点击跳转
+  - `components/Panel.tsx` — 主面板容器：左侧图标栏（数组驱动，CC 等 Tab）+ 右侧内容区（header + 可折叠 body）
+  - `components/SubtitleView.tsx` — 逐行字幕列表 + 时间戳点击跳转 + 当前播放行高亮（250ms 轮询 `<video>.currentTime`，二分查找活跃行）+ 自动滚动（尊重用户手动滚动意图，4s 超时恢复）
   - `components/StatusBar.tsx` — 加载/无字幕/错误状态
 
 ## 约定
@@ -55,7 +55,7 @@ MVP 阶段，首个功能：B站视频转录（Bilitato 风格视频页面 AI �
 - Step 1 字幕获取: 双通道架构 — Main World 脚本（`bilibili-inject.content.ts`）拦截 fetch/XHR 被动捕获字幕优先，3s 超时降级到 Content Script 同源 API 调用
 - CID 获取: Main World 读取 `window.__INITIAL_STATE__` 优先（定期重发直到 content script 接收），降级到 `/x/player/pagelist` API（轻量，不需要 WBI 签名）
 - postMessage 桥接: Main World -> Isolated World，类型 `BILI_ROUTE_SWITCH`(bvid, 路由变化即时通知) → `BILI_SUBTITLE_HANDSHAKE`(bvid+cid, 800ms延迟) → `BILI_SUBTITLE_DATA`(字幕数据)
-- 字幕后处理: 所有字幕数据（无论来源）均通过 `processSubtitles()` 五步管线处理
+- 字幕后处理: 所有字幕数据（无论来源）均通过 `processSubtitles()` 四步管线处理（不合并，逐条独立）
 - 后续 Groq/LLM 需要时再引入 Background 消息桥
 - 存储: WXT `storage.defineItem`（`local:` 前缀）
 - SPA 路由监控: inject.ts 300ms 轮询 location.href 检测 BV 号/分P 变化 → hardResetForRoute() 级联重置 → ROUTE_SWITCH 即时通知 → 800ms 后重发 HANDSHAKE → 重触发 CC 按钮

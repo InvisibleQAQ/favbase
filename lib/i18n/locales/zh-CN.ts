@@ -9,6 +9,8 @@ const zhCN = {
   'panel.collapse': '收起面板',
 
   'subtitle.jumpTo': '跳转到 {{time}}',
+
+  'sidebar.subtitles': '字幕',
 } as const;
 
 export type LocaleKeys = keyof typeof zhCN;
