@@ -20,7 +20,7 @@ MVP 阶段，首个功能：B站视频转录（Bilitato 风格视频页面 AI �
 - `entrypoints/popup/` — Popup（暂未实现业务逻辑）
 
 ## 关键文档
-
+- 使用wxt框架进行开发, 必须使用 `context7 mcp`查询 wxt文档.
 - `docs/03_favbase-prd.md` — 完整 PRD（知识库全功能）
 - `docs/04_bilibili-transcription-spec.md` — B站视频转录功能实现规格
 - `.trellis/` — Trellis 开发工作流配置
@@ -38,16 +38,17 @@ MVP 阶段，首个功能：B站视频转录（Bilitato 风格视频页面 AI �
 - `lib/types.ts` — SubtitleRow, SubtitleResult, VideoInfo 类型
 - `lib/bilibili/video-info.ts` — extractBvid(), extractPageNum(), fetchVideoInfo(), getCidForPage()
 - `lib/bilibili/subtitle-fetcher.ts` — fetchBilibiliSubtitle()（调用 /x/player/v2 + 字幕 CDN）
-- `entrypoints/bilibili-video.content/` — 左侧固定面板 UI
+- `entrypoints/bilibili-video.content/` — 嵌入B站右侧栏的面板 UI
+  - `index.ts` — 挂载逻辑：anchor 到 `.right-container-inner`，插在 UP 主面板后，`autoMount()` 处理 SPA 切换
   - `hooks/useVideoDetect.ts` — 从 URL 提取 BV 号 + 通过 API 获取 CID
   - `hooks/useSubtitle.ts` — 字幕获取状态管理
-  - `components/Panel.tsx` — 主面板容器（折叠/展开）
+  - `components/Panel.tsx` — 主面板容器（纵向折叠/展开）
   - `components/SubtitleView.tsx` — 字幕列表 + 时间戳点击跳转
   - `components/StatusBar.tsx` — 加载/无字幕/错误状态
 
 ## 约定
 
-- Content Script UI 使用 WXT `createShadowRootUi` + React，`cssInjectionMode: 'ui'`，`isolateEvents: true`
+- Content Script UI 使用 WXT `createShadowRootUi` + React，`cssInjectionMode: 'ui'`，`isolateEvents: true`，嵌入 B 站右侧栏（`autoMount` + anchor 降级链）
 - Step 1 字幕获取: Content Script 同源直接 fetch api.bilibili.com（Cookie 自动携带）
 - 后续 Groq/LLM 需要时再引入 Background 消息桥
 - 存储: WXT `storage.defineItem`（`local:` 前缀）

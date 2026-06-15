@@ -11,7 +11,15 @@ export default defineContentScript({
     const ui = await createShadowRootUi(ctx, {
       name: 'favbase-panel',
       position: 'inline',
-      anchor: 'body',
+      anchor: '.right-container-inner',
+      append(anchor: Element, ui: Element) {
+        const upPanel = anchor.querySelector('.up-panel-container');
+        if (upPanel) {
+          upPanel.after(ui);
+        } else {
+          anchor.prepend(ui);
+        }
+      },
       isolateEvents: true,
       onMount(uiContainer) {
         const wrapper = document.createElement('div');
@@ -25,6 +33,6 @@ export default defineContentScript({
       },
     });
 
-    ui.mount();
+    ui.autoMount();
   },
 });
