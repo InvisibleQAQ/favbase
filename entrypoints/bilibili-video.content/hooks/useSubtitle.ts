@@ -6,23 +6,24 @@ import type { SubtitleRow, SubtitleDataMessage } from '@/lib/types';
 interface SubtitleState {
   rows: SubtitleRow[];
   loading: boolean;
-  /** null = not yet loaded; 'ok' = has subtitles; 'no_subtitle' = API returned none; 'error' = fetch failed */
   status: 'ok' | 'no_subtitle' | 'error' | null;
   error: string | null;
 }
 
-/** Timeout (ms) to wait for intercepted subtitle data before falling back to API. */
 const INTERCEPT_TIMEOUT = 3000;
+const API_RETRY_DELAY = 3500;
+const MAX_API_RETRIES = 2;
 
 /**
  * Fetch subtitles when bvid + cid become available.
  *
  * Dual-channel approach (aligned with Bilitato):
- *   1. Listen for BILI_SUBTITLE_DATA postMessage from the main-world inject script
- *      (passively captured from the player's own fetch/XHR).
- *   2. If no data arrives within 3 seconds, fall back to fetchBilibiliSubtitle() API.
+ *   1. Listen for BILI_SUBTITLE_DATA postMessage from inject script
+ *   2. If no data within 3s, fallback to fetchBilibiliSubtitle() API
+ *   3. If API returns no_subtitle/error, retry up to MAX_API_RETRIES times
  *
- * Both channels feed through the subtitle processor pipeline.
+ * The inject script re-emits cached subtitle data every ~1s,
+ * so Channel 1 should succeed even for late-mounting content scripts.
  */
 export function useSubtitle(bvid: string | null, cid: number | null): SubtitleState {
   const [state, setState] = useState<SubtitleState>({
@@ -38,17 +39,15 @@ export function useSubtitle(bvid: string | null, cid: number | null): SubtitleSt
     let cancelled = false;
     let resolved = false;
     let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
+    let retryCount = 0;
 
     setState({ rows: [], loading: true, status: null, error: null });
 
-    // --- Channel 1: postMessage from main-world inject script ---
     function onMessage(event: MessageEvent) {
       if (event.source !== window) return;
       const msg = event.data as SubtitleDataMessage | undefined;
       if (msg?.type !== 'BILI_SUBTITLE_DATA') return;
       if (cancelled || resolved) return;
-
-      // Validate the data is for the current video
       if (msg.bvid !== bvid) return;
 
       resolved = true;
@@ -66,47 +65,59 @@ export function useSubtitle(bvid: string | null, cid: number | null): SubtitleSt
 
     window.addEventListener('message', onMessage);
 
-    // --- Channel 2: API fallback after timeout ---
-    fallbackTimer = setTimeout(() => {
+    function attemptApiFetch() {
       if (cancelled || resolved) return;
 
-      (async () => {
-        try {
-          const result = await fetchBilibiliSubtitle(bvid, cid);
-          if (cancelled || resolved) return;
-          resolved = true;
+      fallbackTimer = setTimeout(() => {
+        if (cancelled || resolved) return;
 
-          if (result.status === 'ok' && result.rows.length > 0) {
-            // API returns already-converted format (start/end/text);
-            // processSubtitles accepts both formats.
-            const processed = processSubtitles(result.rows);
-            setState({
-              rows: processed,
-              loading: false,
-              status: processed.length > 0 ? 'ok' : 'no_subtitle',
-              error: null,
-            });
-          } else {
-            setState({
-              rows: [],
-              loading: false,
-              status: result.status,
-              error: result.error ?? null,
-            });
+        (async () => {
+          try {
+            const result = await fetchBilibiliSubtitle(bvid!, cid!);
+            if (cancelled || resolved) return;
+
+            if (result.status === 'ok' && result.rows.length > 0) {
+              resolved = true;
+              const processed = processSubtitles(result.rows);
+              setState({
+                rows: processed,
+                loading: false,
+                status: processed.length > 0 ? 'ok' : 'no_subtitle',
+                error: null,
+              });
+            } else if (retryCount < MAX_API_RETRIES) {
+              retryCount++;
+              attemptApiFetch();
+            } else {
+              resolved = true;
+              setState({
+                rows: [],
+                loading: false,
+                status: result.status,
+                error: result.error ?? null,
+              });
+            }
+          } catch (err) {
+            if (cancelled || resolved) return;
+
+            if (retryCount < MAX_API_RETRIES) {
+              retryCount++;
+              attemptApiFetch();
+            } else {
+              resolved = true;
+              setState({
+                rows: [],
+                loading: false,
+                status: 'error',
+                error: err instanceof Error ? err.message : 'Unknown error',
+              });
+            }
           }
-        } catch (err) {
-          if (cancelled || resolved) return;
-          resolved = true;
+        })();
+      }, retryCount === 0 ? INTERCEPT_TIMEOUT : API_RETRY_DELAY);
+    }
 
-          setState({
-            rows: [],
-            loading: false,
-            status: 'error',
-            error: err instanceof Error ? err.message : 'Unknown error',
-          });
-        }
-      })();
-    }, INTERCEPT_TIMEOUT);
+    attemptApiFetch();
 
     return () => {
       cancelled = true;

@@ -37,6 +37,12 @@ export interface SubtitleDataMessage {
   cid: number;
 }
 
+/** PostMessage payload: inject script notifies content script of SPA route change. */
+export interface SubtitleRouteSwitchMessage {
+  type: 'BILI_ROUTE_SWITCH';
+  bvid: string;
+}
+
 /** Video metadata returned by /x/web-interface/view. */
 export interface VideoPage {
   cid: number;

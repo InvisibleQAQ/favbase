@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { extractBvid, extractPageNum, fetchVideoInfo, getCidForPage } from '@/lib/bilibili/video-info';
-import type { SubtitleHandshakeMessage } from '@/lib/types';
+import { extractBvid, extractPageNum, fetchCidByPageList } from '@/lib/bilibili/video-info';
+import type { SubtitleHandshakeMessage, SubtitleRouteSwitchMessage } from '@/lib/types';
 
 interface VideoDetection {
   bvid: string | null;
@@ -10,15 +10,20 @@ interface VideoDetection {
   error: string | null;
 }
 
-/** Timeout (ms) to wait for main-world handshake before falling back to API. */
 const HANDSHAKE_TIMEOUT = 3000;
 
 /**
- * Detect the current bilibili video.
+ * Detect the current bilibili video, with SPA navigation support.
  *
- * Priority:
- *   1. postMessage HANDSHAKE from main-world inject script (reads __INITIAL_STATE__)
- *   2. Fallback: fetch /x/web-interface/view API after 3s timeout
+ * Listens for postMessage events from the main-world inject script:
+ *   - BILI_ROUTE_SWITCH: SPA navigation detected, reset and await new handshake
+ *   - BILI_SUBTITLE_HANDSHAKE: bvid + cid resolved from __INITIAL_STATE__
+ *
+ * The inject script re-emits HANDSHAKE every ~1s for the first 10s,
+ * so even late-mounting content scripts will receive it.
+ *
+ * Fallback: /x/player/pagelist API (simpler than /x/web-interface/view,
+ * doesn't require WBI signature).
  */
 export function useVideoDetect(): VideoDetection {
   const [state, setState] = useState<VideoDetection>({
@@ -30,80 +35,108 @@ export function useVideoDetect(): VideoDetection {
   });
 
   useEffect(() => {
-    const bvid = extractBvid(window.location.href);
-
-    if (!bvid) {
-      setState({ bvid: null, cid: null, title: '', loading: false, error: 'No BV number found in URL' });
-      return;
-    }
-
     let cancelled = false;
     let resolved = false;
+    let currentBvid = extractBvid(window.location.href);
     let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
 
-    // --- Channel 1: postMessage from main-world inject script ---
-    function onMessage(event: MessageEvent) {
-      if (event.source !== window) return;
-      const msg = event.data as SubtitleHandshakeMessage | undefined;
-      if (msg?.type !== 'BILI_SUBTITLE_HANDSHAKE') return;
-      if (cancelled || resolved) return;
-
-      // Validate that the handshake is for the current video
-      if (msg.bvid !== bvid) return;
-
-      resolved = true;
-      if (fallbackTimer) clearTimeout(fallbackTimer);
-
-      setState({
-        bvid: msg.bvid,
-        cid: msg.cid || null,
-        title: '', // title not available from handshake; will be empty until API provides it
-        loading: false,
-        error: null,
-      });
+    function clearFallback() {
+      if (fallbackTimer) {
+        clearTimeout(fallbackTimer);
+        fallbackTimer = null;
+      }
     }
 
-    window.addEventListener('message', onMessage);
+    function startFallbackTimer() {
+      clearFallback();
+      const bvid = currentBvid;
+      fallbackTimer = setTimeout(() => {
+        if (cancelled || resolved) return;
 
-    // --- Channel 2: API fallback after timeout ---
-    fallbackTimer = setTimeout(() => {
-      if (cancelled || resolved) return;
+        (async () => {
+          try {
+            const pageNum = extractPageNum(window.location.href);
+            const cid = await fetchCidByPageList(bvid!, pageNum);
+            if (cancelled || resolved || currentBvid !== bvid) return;
+            resolved = true;
 
-      (async () => {
-        try {
-          const info = await fetchVideoInfo(bvid);
-          if (cancelled || resolved) return;
+            setState({
+              bvid,
+              cid,
+              title: '',
+              loading: false,
+              error: null,
+            });
+          } catch (err) {
+            if (cancelled || resolved || currentBvid !== bvid) return;
+            resolved = true;
+
+            setState({
+              bvid,
+              cid: null,
+              title: '',
+              loading: false,
+              error: err instanceof Error ? err.message : 'Failed to resolve CID',
+            });
+          }
+        })();
+      }, HANDSHAKE_TIMEOUT);
+    }
+
+    function startDetectionCycle(bvid: string | null) {
+      resolved = false;
+      clearFallback();
+
+      if (!bvid) {
+        setState({ bvid: null, cid: null, title: '', loading: false, error: 'No BV number found in URL' });
+        return;
+      }
+
+      currentBvid = bvid;
+      setState({ bvid: null, cid: null, title: '', loading: true, error: null });
+      startFallbackTimer();
+    }
+
+    function onMessage(event: MessageEvent) {
+      if (event.source !== window || cancelled) return;
+      const msg = event.data as (SubtitleRouteSwitchMessage | SubtitleHandshakeMessage) | undefined;
+      if (!msg?.type) return;
+
+      if (msg.type === 'BILI_ROUTE_SWITCH') {
+        const switchMsg = msg as SubtitleRouteSwitchMessage;
+        startDetectionCycle(switchMsg.bvid || extractBvid(window.location.href));
+        return;
+      }
+
+      if (msg.type === 'BILI_SUBTITLE_HANDSHAKE') {
+        const hsMsg = msg as SubtitleHandshakeMessage;
+        if (hsMsg.bvid !== currentBvid) return;
+
+        const newCid = hsMsg.cid || null;
+        if (newCid) {
+          // Valid bvid + cid — fully resolved
           resolved = true;
-
-          const pageNum = extractPageNum(window.location.href);
-          const cid = getCidForPage(info, pageNum);
-
+          clearFallback();
           setState({
-            bvid: info.bvid,
-            cid,
-            title: info.title,
+            bvid: hsMsg.bvid,
+            cid: newCid,
+            title: '',
             loading: false,
             error: null,
           });
-        } catch (err) {
-          if (cancelled || resolved) return;
-          resolved = true;
-
-          setState({
-            bvid,
-            cid: null,
-            title: '',
-            loading: false,
-            error: err instanceof Error ? err.message : 'Failed to fetch video info',
-          });
         }
-      })();
-    }, HANDSHAKE_TIMEOUT);
+        // cid=0: __INITIAL_STATE__ not ready yet. Keep waiting for
+        // the next re-emission or the fallback timer.
+      }
+    }
+
+    window.addEventListener('message', onMessage);
+    startDetectionCycle(currentBvid);
 
     return () => {
       cancelled = true;
       window.removeEventListener('message', onMessage);
-      if (fallbackTimer) clearTimeout(fallbackTimer);
+      clearFallback();
     };
   }, []);
 

@@ -2,12 +2,12 @@
  * Main-world content script for Bilibili video pages.
  *
  * Runs in the page's JS context (world: 'MAIN') so it can:
- * 1. Read window.__INITIAL_STATE__ / __playinfo__ for CID (R1)
- * 2. Intercept fetch / XHR to passively capture subtitle data (R4)
- * 3. Auto-trigger the CC button so the player loads subtitles (R4)
+ * 1. Read window.__INITIAL_STATE__ / __playinfo__ for CID
+ * 2. Intercept fetch / XHR to passively capture subtitle data
+ * 3. Auto-trigger the CC button so the player loads subtitles
  * 4. Bridge data to the isolated content script via postMessage
- *
- * Ported from Bilitato inject.js, stripped to the subtitle-capture essentials.
+ * 5. Periodically re-emit cached data for late-mounting content scripts
+ * 6. Monitor SPA route changes and reset state accordingly
  */
 export default defineContentScript({
   matches: ['*://*.bilibili.com/video/*'],
@@ -15,7 +15,6 @@ export default defineContentScript({
   runAt: 'document_start',
 
   main() {
-    // Guard against duplicate injection
     if ((window as any).__FAVBASE_INJECT_READY__) return;
     (window as any).__FAVBASE_INJECT_READY__ = true;
 
@@ -27,6 +26,16 @@ export default defineContentScript({
     let autoTriggerStarted = false;
     let autoTriggerAttempts = 0;
     let capturedBvid = '';
+    let cachedSubtitleBody: unknown[] | null = null;
+    let routeGeneration = 0; // incremented on each SPA route change
+
+    // SPA route monitoring state
+    let routeResolveTimer: ReturnType<typeof setTimeout> | null = null;
+    let lastBvid = '';
+    let lastPageNum = 1;
+
+    // Periodic re-emission state
+    let reemitTimer: ReturnType<typeof setInterval> | null = null;
 
     const originalFetch = window.fetch;
     const originalXhrOpen = XMLHttpRequest.prototype.open;
@@ -54,9 +63,6 @@ export default defineContentScript({
       return Number(matched?.cid || list[0]?.cid || 0);
     }
 
-    /**
-     * Read bvid + cid from page globals (__INITIAL_STATE__, __playinfo__).
-     */
     function resolvePageMeta(): { bvid: string; cid: number } {
       const state = (window as any).__INITIAL_STATE__ || {};
       const playInfo = (window as any).__playinfo__ || {};
@@ -81,6 +87,62 @@ export default defineContentScript({
       );
 
       return { bvid, cid: Number.isFinite(cid) ? cid : 0 };
+    }
+
+    function getPageNumFromUrl(): number {
+      try {
+        return Number(new URL(location.href).searchParams.get('p') || 1);
+      } catch {
+        return 1;
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // Stealth CSS — hide subtitle display while auto-triggering CC button
+    // -----------------------------------------------------------------------
+
+    const STEALTH_STYLE_ID = '__favbase_stealth_css__';
+    let stealthRestoreTimer: ReturnType<typeof setTimeout> | null = null;
+
+    function applyStealthMask(): void {
+      if (document.getElementById(STEALTH_STYLE_ID)) return;
+      const style = document.createElement('style');
+      style.id = STEALTH_STYLE_ID;
+      style.textContent =
+        '.bpx-player-video-subtitle { visibility: hidden !important; }' +
+        '.bpx-common-toast { display: none !important; }';
+      document.head.appendChild(style);
+    }
+
+    function removeStealthMask(): void {
+      document.getElementById(STEALTH_STYLE_ID)?.remove();
+    }
+
+    function hackSubtitleOff(): void {
+      const stateNodes = document.querySelectorAll(
+        '.bpx-player-ctrl-subtitle, .bpx-player-ctrl-subtitle-panel, .bilibili-player-video-btn-subtitle',
+      );
+      stateNodes.forEach((node) => {
+        node.classList.remove(
+          'active', 'on', 'show', 'open', 'opened',
+          'is-active', 'bpx-state-active', 'bpx-state-show', 'bpx-state-opened',
+        );
+      });
+
+      const containers = document.querySelectorAll(
+        '.bpx-player-video-subtitle, .bili-subtitle, .bpx-player-subtitle-wrap, .bpx-player-subtitle',
+      );
+      containers.forEach((el) => {
+        (el as HTMLElement).style.cssText = 'display: none !important; opacity: 0 !important;';
+      });
+    }
+
+    function scheduleVisualRestore(delayMs: number): void {
+      if (stealthRestoreTimer) clearTimeout(stealthRestoreTimer);
+      stealthRestoreTimer = setTimeout(() => {
+        removeStealthMask();
+        stealthRestoreTimer = null;
+      }, delayMs);
     }
 
     // -----------------------------------------------------------------------
@@ -121,7 +183,6 @@ export default defineContentScript({
         { type: 'BILI_SUBTITLE_HANDSHAKE', bvid, cid },
         '*',
       );
-      // Emit data on next microtask so HANDSHAKE arrives first
       setTimeout(() => {
         window.postMessage(
           { type: 'BILI_SUBTITLE_DATA', data: body, bvid, cid },
@@ -130,8 +191,10 @@ export default defineContentScript({
       }, 0);
     }
 
-    function emitSubtitlePayload(rawText: string, _url: string): void {
+    function emitSubtitlePayload(rawText: string, _url: string, gen?: number): void {
       if (isSubtitleCaptured) return;
+      // Stale response from a previous route — discard
+      if (gen !== undefined && gen !== routeGeneration) return;
 
       let data: any;
       try {
@@ -151,9 +214,12 @@ export default defineContentScript({
 
       isSubtitleCaptured = true;
       capturedBvid = getBvidFromUrl(location.href) || capturedBvid;
+      cachedSubtitleBody = body;
       stopAutoTriggerFlow();
+      hackSubtitleOff();
 
       postSubtitleData(body);
+      scheduleVisualRestore(3000);
     }
 
     // -----------------------------------------------------------------------
@@ -168,10 +234,11 @@ export default defineContentScript({
       const response = await originalFetch.apply(this, args);
 
       if (isSubtitleRequest(url)) {
+        const gen = routeGeneration;
         response
           .clone()
           .text()
-          .then((text) => emitSubtitlePayload(text, url))
+          .then((text) => emitSubtitlePayload(text, url, gen))
           .catch(() => {});
       }
 
@@ -191,8 +258,9 @@ export default defineContentScript({
       const url: string = (this as any).__biliUrl || '';
 
       if (isSubtitleRequest(url)) {
+        const gen = routeGeneration;
         this.addEventListener('load', () => {
-          emitSubtitlePayload(this.responseText, url);
+          emitSubtitlePayload(this.responseText, url, gen);
         });
       }
 
@@ -212,8 +280,8 @@ export default defineContentScript({
 
     function blindSilentOpen(): boolean {
       if (isSubtitleCaptured) return false;
+      applyStealthMask();
 
-      // Try clicking the Chinese track item directly
       const allTextDivs = Array.from(
         document.querySelectorAll(
           '.bpx-player-ctrl-subtitle-language-item-text',
@@ -229,7 +297,6 @@ export default defineContentScript({
         return true;
       }
 
-      // Fallback: click the CC button itself
       const ccBtn = document.querySelector(
         '.bpx-player-ctrl-subtitle',
       ) as HTMLElement | null;
@@ -248,7 +315,6 @@ export default defineContentScript({
         clicked = true;
       }
 
-      // Retry after panel opens
       setTimeout(() => {
         if (isSubtitleCaptured) return;
         const retryTrack = Array.from(
@@ -284,18 +350,93 @@ export default defineContentScript({
     }
 
     function scheduleAutoTriggerFlow(): void {
-      if (isSubtitleCaptured || autoTriggerStarted) return;
-      if (autoTriggerTimer) clearTimeout(autoTriggerTimer);
+      if (isSubtitleCaptured) return;
+      stopAutoTriggerFlow();
+      autoTriggerStarted = false;
       autoTriggerAttempts = 0;
-      // Wait 2s for the player to initialize before trying
       autoTriggerTimer = setTimeout(autoTriggerLoop, 2000);
     }
 
     // -----------------------------------------------------------------------
-    // Bootstrap: emit handshake + start auto-trigger
+    // Periodic re-emission — ensures late-mounting content scripts receive data
     // -----------------------------------------------------------------------
 
-    // Emit initial handshake once page state is likely available
+    function startReemitLoop(): void {
+      stopReemitLoop();
+      let ticks = 0;
+      reemitTimer = setInterval(() => {
+        ticks++;
+        if (ticks > 10) {
+          stopReemitLoop();
+          return;
+        }
+        if (isSubtitleCaptured && cachedSubtitleBody) {
+          postSubtitleData(cachedSubtitleBody);
+        } else {
+          emitInitialHandshake();
+        }
+      }, 1000);
+    }
+
+    function stopReemitLoop(): void {
+      if (reemitTimer) {
+        clearInterval(reemitTimer);
+        reemitTimer = null;
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // SPA route monitoring
+    // -----------------------------------------------------------------------
+
+    function hardResetForRoute(newBvid: string): void {
+      routeGeneration++;
+      isSubtitleCaptured = false;
+      autoTriggerStarted = false;
+      autoTriggerAttempts = 0;
+      capturedBvid = newBvid;
+      cachedSubtitleBody = null;
+      stopAutoTriggerFlow();
+      stopReemitLoop();
+      if (stealthRestoreTimer) {
+        clearTimeout(stealthRestoreTimer);
+        stealthRestoreTimer = null;
+      }
+      removeStealthMask();
+      if (routeResolveTimer) clearTimeout(routeResolveTimer);
+
+      window.postMessage({ type: 'BILI_ROUTE_SWITCH', bvid: newBvid }, '*');
+
+      routeResolveTimer = setTimeout(() => {
+        emitInitialHandshake();
+        scheduleAutoTriggerFlow();
+        startReemitLoop();
+      }, 800);
+    }
+
+    function startRouteMonitor(): void {
+      lastBvid = getBvidFromUrl(location.href);
+      lastPageNum = getPageNumFromUrl();
+
+      setInterval(() => {
+        const currentBvid = getBvidFromUrl(location.href);
+        const currentPageNum = getPageNumFromUrl();
+
+        if (currentBvid === lastBvid && currentPageNum === lastPageNum) return;
+
+        lastBvid = currentBvid;
+        lastPageNum = currentPageNum;
+
+        if (currentBvid) {
+          hardResetForRoute(currentBvid);
+        }
+      }, 300);
+    }
+
+    // -----------------------------------------------------------------------
+    // Bootstrap
+    // -----------------------------------------------------------------------
+
     function emitInitialHandshake(): void {
       const meta = resolvePageMeta();
       if (meta.bvid) {
@@ -307,15 +448,18 @@ export default defineContentScript({
       }
     }
 
-    // __INITIAL_STATE__ is typically set after DOMContentLoaded
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', () => {
         emitInitialHandshake();
         scheduleAutoTriggerFlow();
+        startRouteMonitor();
+        startReemitLoop();
       });
     } else {
       emitInitialHandshake();
       scheduleAutoTriggerFlow();
+      startRouteMonitor();
+      startReemitLoop();
     }
   },
 });
