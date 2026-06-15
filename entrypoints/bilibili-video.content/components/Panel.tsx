@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { SubtitleRow } from '@/lib/types';
+import { t } from '@/lib/i18n';
 import { StatusBar } from './StatusBar';
 import { SubtitleView } from './SubtitleView';
 
@@ -25,7 +26,7 @@ export function Panel({ loading, status, error, rows, title }: PanelProps) {
           className="favbase-collapse-btn"
           type="button"
           onClick={() => setCollapsed((c) => !c)}
-          title={collapsed ? 'Expand panel' : 'Collapse panel'}
+          title={collapsed ? t('panel.expand') : t('panel.collapse')}
         >
           {collapsed ? '▶' : '◀'}
         </button>

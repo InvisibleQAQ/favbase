@@ -1,4 +1,5 @@
 import type { SubtitleRow } from '@/lib/types';
+import { t } from '@/lib/i18n';
 
 interface SubtitleViewProps {
   rows: SubtitleRow[];
@@ -35,7 +36,7 @@ export function SubtitleView({ rows }: SubtitleViewProps) {
             className="favbase-timestamp"
             type="button"
             onClick={() => seekVideo(row.start)}
-            title={`Jump to ${formatTime(row.start)}`}
+            title={t('subtitle.jumpTo', { time: formatTime(row.start) })}
           >
             {formatTime(row.start)}
           </button>

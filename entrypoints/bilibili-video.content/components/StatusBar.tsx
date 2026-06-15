@@ -1,3 +1,5 @@
+import { t } from '@/lib/i18n';
+
 interface StatusBarProps {
   loading: boolean;
   status: 'ok' | 'no_subtitle' | 'error' | null;
@@ -7,25 +9,25 @@ interface StatusBarProps {
 
 export function StatusBar({ loading, status, error, subtitleCount }: StatusBarProps) {
   if (loading) {
-    return <div className="favbase-status favbase-status--loading">正在加载字幕...</div>;
+    return <div className="favbase-status favbase-status--loading">{t('status.loading')}</div>;
   }
 
   if (status === 'error') {
     return (
       <div className="favbase-status favbase-status--error">
-        加载失败: {error ?? '未知错误'}
+        {t('status.error', { error: error ?? t('status.errorUnknown') })}
       </div>
     );
   }
 
   if (status === 'no_subtitle') {
-    return <div className="favbase-status favbase-status--empty">该视频无 AI 字幕</div>;
+    return <div className="favbase-status favbase-status--empty">{t('status.noSubtitle')}</div>;
   }
 
   if (status === 'ok') {
     return (
       <div className="favbase-status favbase-status--ok">
-        共 {subtitleCount} 条字幕 (B站 AI)
+        {t('status.count', { count: subtitleCount })}
       </div>
     );
   }
