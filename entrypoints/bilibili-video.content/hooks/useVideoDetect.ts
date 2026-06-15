@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { extractBvid, extractPageNum, fetchVideoInfo, getCidForPage } from '@/lib/bilibili/video-info';
+import type { SubtitleHandshakeMessage } from '@/lib/types';
 
 interface VideoDetection {
   bvid: string | null;
@@ -9,11 +10,15 @@ interface VideoDetection {
   error: string | null;
 }
 
+/** Timeout (ms) to wait for main-world handshake before falling back to API. */
+const HANDSHAKE_TIMEOUT = 3000;
+
 /**
- * Detect the current bilibili video from URL, fetch CID via API.
+ * Detect the current bilibili video.
  *
- * Does NOT watch for SPA navigation — user must refresh for new video.
- * (SPA monitoring is planned for a later step.)
+ * Priority:
+ *   1. postMessage HANDSHAKE from main-world inject script (reads __INITIAL_STATE__)
+ *   2. Fallback: fetch /x/web-interface/view API after 3s timeout
  */
 export function useVideoDetect(): VideoDetection {
   const [state, setState] = useState<VideoDetection>({
@@ -33,36 +38,72 @@ export function useVideoDetect(): VideoDetection {
     }
 
     let cancelled = false;
+    let resolved = false;
+    let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
 
-    (async () => {
-      try {
-        const info = await fetchVideoInfo(bvid);
-        if (cancelled) return;
+    // --- Channel 1: postMessage from main-world inject script ---
+    function onMessage(event: MessageEvent) {
+      if (event.source !== window) return;
+      const msg = event.data as SubtitleHandshakeMessage | undefined;
+      if (msg?.type !== 'BILI_SUBTITLE_HANDSHAKE') return;
+      if (cancelled || resolved) return;
 
-        const pageNum = extractPageNum(window.location.href);
-        const cid = getCidForPage(info, pageNum);
+      // Validate that the handshake is for the current video
+      if (msg.bvid !== bvid) return;
 
-        setState({
-          bvid: info.bvid,
-          cid,
-          title: info.title,
-          loading: false,
-          error: null,
-        });
-      } catch (err) {
-        if (cancelled) return;
-        setState({
-          bvid,
-          cid: null,
-          title: '',
-          loading: false,
-          error: err instanceof Error ? err.message : 'Failed to fetch video info',
-        });
-      }
-    })();
+      resolved = true;
+      if (fallbackTimer) clearTimeout(fallbackTimer);
+
+      setState({
+        bvid: msg.bvid,
+        cid: msg.cid || null,
+        title: '', // title not available from handshake; will be empty until API provides it
+        loading: false,
+        error: null,
+      });
+    }
+
+    window.addEventListener('message', onMessage);
+
+    // --- Channel 2: API fallback after timeout ---
+    fallbackTimer = setTimeout(() => {
+      if (cancelled || resolved) return;
+
+      (async () => {
+        try {
+          const info = await fetchVideoInfo(bvid);
+          if (cancelled || resolved) return;
+          resolved = true;
+
+          const pageNum = extractPageNum(window.location.href);
+          const cid = getCidForPage(info, pageNum);
+
+          setState({
+            bvid: info.bvid,
+            cid,
+            title: info.title,
+            loading: false,
+            error: null,
+          });
+        } catch (err) {
+          if (cancelled || resolved) return;
+          resolved = true;
+
+          setState({
+            bvid,
+            cid: null,
+            title: '',
+            loading: false,
+            error: err instanceof Error ? err.message : 'Failed to fetch video info',
+          });
+        }
+      })();
+    }, HANDSHAKE_TIMEOUT);
 
     return () => {
       cancelled = true;
+      window.removeEventListener('message', onMessage);
+      if (fallbackTimer) clearTimeout(fallbackTimer);
     };
   }, []);
 

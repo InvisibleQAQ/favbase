@@ -46,7 +46,7 @@ export async function fetchBilibiliSubtitle(
 
   // Step 3: Fetch subtitle JSON (CDN URL needs https: prefix)
   const subtitleUrl = rawUrl.startsWith('//') ? `https:${rawUrl}` : rawUrl;
-  const subRes = await fetch(subtitleUrl);
+  const subRes = await fetch(subtitleUrl, { credentials: 'include' });
 
   if (!subRes.ok) {
     return { status: 'error', rows: [], error: `Subtitle CDN HTTP ${subRes.status}` };
@@ -56,7 +56,7 @@ export async function fetchBilibiliSubtitle(
 
   // Step 4: Parse body array — handle multiple possible response shapes
   const body: unknown[] =
-    subData?.body ?? subData?.data?.body ?? subData?.result?.body ?? [];
+    subData?.body ?? subData?.data?.body ?? subData?.content ?? subData?.result?.body ?? (Array.isArray(subData) ? subData : []);
 
   if (!Array.isArray(body) || body.length === 0) {
     return { status: 'no_subtitle', rows: [] };

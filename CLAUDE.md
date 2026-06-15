@@ -16,7 +16,8 @@ MVP 阶段，首个功能：B站视频转录（Bilitato 风格视频页面 AI �
 ## 入口点
 
 - `entrypoints/background.ts` — Background Service Worker
-- `entrypoints/bilibili-video.content/` — B站视频页 Content Script（Shadow DOM React UI）
+- `entrypoints/bilibili-inject.content.ts` — B站视频页 Main World 脚本（`world: 'MAIN'`，`runAt: 'document_start'`）：读取 `__INITIAL_STATE__` 获取 CID、拦截 fetch/XHR 被动捕获字幕、自动触发 CC 按钮、通过 postMessage 桥接数据到 Isolated World
+- `entrypoints/bilibili-video.content/` — B站视频页 Content Script（Shadow DOM React UI，Isolated World）
 - `entrypoints/popup/` — Popup（暂未实现业务逻辑）
 
 ## 关键文档
@@ -31,17 +32,19 @@ MVP 阶段，首个功能：B站视频转录（Bilitato 风格视频页面 AI �
 
 ## 模块结构
 
-### B站字幕获取 (Step 1 — 已完成)
+### B站字幕获取 (Step 1 — 已完成，Bilitato 对齐)
 
-全部在 Content Script 中完成，不经过 Background。Content Script 运行在 bilibili.com 域下，对 api.bilibili.com 的 fetch 是同源请求，Cookie 自动携带。
+双通道架构：Main World 脚本拦截优先，API 调用降级。
 
-- `lib/types.ts` — SubtitleRow, SubtitleResult, VideoInfo 类型
-- `lib/bilibili/video-info.ts` — extractBvid(), extractPageNum(), fetchVideoInfo(), getCidForPage()
-- `lib/bilibili/subtitle-fetcher.ts` — fetchBilibiliSubtitle()（调用 /x/player/v2 + 字幕 CDN）
+- `lib/types.ts` — SubtitleRow, SubtitleResult, VideoInfo, RawSubtitleItem, SubtitleHandshakeMessage, SubtitleDataMessage 类型
+- `lib/bilibili/video-info.ts` — extractBvid(), extractPageNum(), fetchVideoInfo(), getCidForPage()（API 降级路径使用）
+- `lib/bilibili/subtitle-fetcher.ts` — fetchBilibiliSubtitle()（API 降级路径，CDN fetch 带 credentials，响应解析含 5 层 fallback）
+- `lib/bilibili/subtitle-processor.ts` — processSubtitles() 五步管线：normalize -> filter -> filler removal -> merge(30s窗口) -> deduplicate(Jaccard>0.85)。接受 B 站原始格式和 favbase 格式
+- `entrypoints/bilibili-inject.content.ts` — Main World 脚本：`__INITIAL_STATE__` CID 读取 + fetch/XHR 拦截 + 自动触发 CC 按钮 + postMessage 桥接
 - `entrypoints/bilibili-video.content/` — 嵌入B站右侧栏的面板 UI
   - `index.ts` — 挂载逻辑：anchor 到 `.right-container-inner`，插在 UP 主面板后，`autoMount()` 处理 SPA 切换
-  - `hooks/useVideoDetect.ts` — 从 URL 提取 BV 号 + 通过 API 获取 CID
-  - `hooks/useSubtitle.ts` — 字幕获取状态管理
+  - `hooks/useVideoDetect.ts` — 优先接收 postMessage HANDSHAKE（CID from `__INITIAL_STATE__`），3s 超时降级到 fetchVideoInfo API
+  - `hooks/useSubtitle.ts` — 双通道：优先接收 postMessage SUBTITLE_DATA（拦截数据），3s 超时降级到 fetchBilibiliSubtitle API；两通道均通过 processSubtitles() 处理
   - `components/Panel.tsx` — 主面板容器（纵向折叠/展开）
   - `components/SubtitleView.tsx` — 字幕列表 + 时间戳点击跳转
   - `components/StatusBar.tsx` — 加载/无字幕/错误状态
@@ -49,10 +52,14 @@ MVP 阶段，首个功能：B站视频转录（Bilitato 风格视频页面 AI �
 ## 约定
 
 - Content Script UI 使用 WXT `createShadowRootUi` + React，`cssInjectionMode: 'ui'`，`isolateEvents: true`，嵌入 B 站右侧栏（`autoMount` + anchor 降级链）
-- Step 1 字幕获取: Content Script 同源直接 fetch api.bilibili.com（Cookie 自动携带）
+- Step 1 字幕获取: 双通道架构 — Main World 脚本（`bilibili-inject.content.ts`）拦截 fetch/XHR 被动捕获字幕优先，3s 超时降级到 Content Script 同源 API 调用
+- CID 获取: Main World 读取 `window.__INITIAL_STATE__` 优先，降级到 `/x/web-interface/view` API
+- postMessage 桥接: Main World -> Isolated World，类型 `BILI_SUBTITLE_HANDSHAKE`(bvid+cid) 和 `BILI_SUBTITLE_DATA`(字幕数据)
+- 字幕后处理: 所有字幕数据（无论来源）均通过 `processSubtitles()` 五步管线处理
 - 后续 Groq/LLM 需要时再引入 Background 消息桥
 - 存储: WXT `storage.defineItem`（`local:` 前缀）
-- 字幕获取流程: extractBvid() → fetchVideoInfo() → fetchBilibiliSubtitle(bvid, cid)
-- 字幕 CDN (`aisubtitle.hdslb.com`) 跨域但 CORS 允许，Content Script 可直接 fetch
+- 字幕获取流程（主路径）: inject.ts 拦截 fetch/XHR → postMessage SUBTITLE_DATA → useSubtitle 接收 → processSubtitles()
+- 字幕获取流程（降级路径）: extractBvid() → fetchVideoInfo() → fetchBilibiliSubtitle(bvid, cid) → processSubtitles()
+- 字幕 CDN (`aisubtitle.hdslb.com`) 跨域但 CORS 允许，Content Script 可直接 fetch（带 `credentials: 'include'`）
 - 无字幕降级: Groq Whisper API (`whisper-large-v3-turbo`)（Step 2）
 - LLM 总结: OpenAI 协议兼容多 Provider，Quality/Efficiency 两种模式（Step 2）
