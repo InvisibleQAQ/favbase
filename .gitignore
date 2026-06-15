@@ -26,3 +26,7 @@ web-ext.config.ts
 *.sw?
 
 node_modules/
+.agents/
+.claude/
+.codex/
+.trellis/
