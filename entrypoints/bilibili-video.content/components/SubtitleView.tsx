@@ -90,14 +90,20 @@ export function SubtitleView({ rows }: SubtitleViewProps) {
     return () => clearInterval(id);
   }, [rows]);
 
-  // --- Auto-scroll on active index change ---
+  // --- Auto-scroll: center active row in scroll container ---
   useEffect(() => {
     if (activeIndex < 0 || userScrolledRef.current) return;
     const el = rowRefs.current[activeIndex];
     if (!el) return;
+    const scrollParent = listRef.current?.closest('.favbase-panel-body') as HTMLElement | null;
+    if (!scrollParent) return;
 
     programmaticScrollRef.current = true;
-    el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    const parentRect = scrollParent.getBoundingClientRect();
+    const elRect = el.getBoundingClientRect();
+    const targetTop = elRect.top - parentRect.top + scrollParent.scrollTop
+      - scrollParent.clientHeight / 2 + el.clientHeight / 2;
+    scrollParent.scrollTo({ top: Math.max(0, targetTop), behavior: 'smooth' });
   }, [activeIndex]);
 
   // --- Attach scroll listener to the actual scrollable parent ---
