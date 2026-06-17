@@ -55,3 +55,43 @@ export interface VideoInfo {
   title: string;
   pages: VideoPage[];
 }
+
+/** Static definition of a LLM provider (immutable config). */
+export interface LLMProviderDef {
+  id: string;
+  name: string;
+  baseUrl: string;
+  defaultModel: string;
+  headerKey: string;
+  tokenPrefix: string;
+  regUrl: string;
+  type?: 'google' | 'claude';
+}
+
+/** Static definition of an ASR provider. */
+export interface ASRProviderDef {
+  id: string;
+  name: string;
+  defaultModel: string;
+}
+
+/** User-configurable settings (persisted to storage). */
+export interface UserSettings {
+  // LLM
+  provider: string;
+  providerApiKeys: Record<string, string>;
+  providerModels: Record<string, string>;
+  customBaseUrl: string;
+  customModel: string;
+  customProtocol: 'openai' | 'claude';
+
+  // ASR
+  asrProvider: 'groq' | 'siliconflow';
+  groqApiKey: string;
+  groqModel: string;
+  siliconFlowApiKey: string;
+  siliconFlowAsrModel: string;
+
+  // Mode
+  prefMode: 'quality' | 'efficiency';
+}

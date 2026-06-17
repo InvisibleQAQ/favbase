@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import type { SubtitleRow } from '@/lib/types';
+import type { SubtitleRow, UserSettings } from '@/lib/types';
 import type { LocaleKeys } from '@/lib/i18n/locales/zh-CN';
 import { t } from '@/lib/i18n';
 import { StatusBar } from './StatusBar';
 import { SubtitleView } from './SubtitleView';
+import { SettingsView } from './SettingsView';
 
 interface SidebarTab {
   id: string;
@@ -13,6 +14,7 @@ interface SidebarTab {
 
 const SIDEBAR_TABS: SidebarTab[] = [
   { id: 'cc', icon: 'CC', label: 'sidebar.subtitles' },
+  { id: 'settings', icon: '⚙', label: 'sidebar.settings' },
 ];
 
 interface PanelProps {
@@ -21,10 +23,17 @@ interface PanelProps {
   error: string | null;
   rows: SubtitleRow[];
   title: string;
+  settings: UserSettings;
+  onUpdateSettings: (patch: Partial<UserSettings>) => void;
+  settingsSaved: boolean;
 }
 
-export function Panel({ loading, status, error, rows, title }: PanelProps) {
+export function Panel({
+  loading, status, error, rows, title,
+  settings, onUpdateSettings, settingsSaved,
+}: PanelProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const [activeTab, setActiveTab] = useState('cc');
   const toggle = () => setCollapsed((c) => !c);
 
   return (
@@ -33,9 +42,12 @@ export function Panel({ loading, status, error, rows, title }: PanelProps) {
         {SIDEBAR_TABS.map((tab) => (
           <button
             key={tab.id}
-            className="favbase-sidebar-icon favbase-sidebar-icon--active"
+            className={
+              `favbase-sidebar-icon${tab.id === activeTab ? ' favbase-sidebar-icon--active' : ''}`
+            }
             title={t(tab.label)}
             type="button"
+            onClick={() => setActiveTab(tab.id)}
           >
             {tab.icon}
           </button>
@@ -59,13 +71,24 @@ export function Panel({ loading, status, error, rows, title }: PanelProps) {
         </div>
 
         <div className="favbase-panel-body">
-          <StatusBar
-            loading={loading}
-            status={status}
-            error={error}
-            subtitleCount={rows.length}
-          />
-          {status === 'ok' && <SubtitleView rows={rows} />}
+          {activeTab === 'cc' && (
+            <>
+              <StatusBar
+                loading={loading}
+                status={status}
+                error={error}
+                subtitleCount={rows.length}
+              />
+              {status === 'ok' && <SubtitleView rows={rows} />}
+            </>
+          )}
+          {activeTab === 'settings' && (
+            <SettingsView
+              settings={settings}
+              onUpdate={onUpdateSettings}
+              saved={settingsSaved}
+            />
+          )}
         </div>
       </div>
     </div>

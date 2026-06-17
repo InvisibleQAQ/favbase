@@ -11,6 +11,31 @@ const zhCN = {
   'subtitle.jumpTo': '跳转到 {{time}}',
 
   'sidebar.subtitles': '字幕',
+  'sidebar.settings': '设置',
+
+  'settings.llm': 'LLM 设置',
+  'settings.llmProvider': 'LLM 服务商',
+  'settings.apiKey': 'API Key',
+  'settings.apiKeyPlaceholder': '输入 API Key',
+  'settings.model': '模型',
+  'settings.modelPlaceholder': '输入模型名称',
+  'settings.getKey': '获取密钥',
+  'settings.customBaseUrl': '自定义 Base URL',
+  'settings.customBaseUrlPlaceholder': 'https://your-endpoint.com/v1/',
+  'settings.customProtocol': '协议',
+
+  'settings.asr': 'ASR 设置',
+  'settings.asrProvider': 'ASR 服务商',
+
+  'settings.mode': '调用模式',
+  'settings.modeQuality': '质量优先',
+  'settings.modeQualityDesc': '两次独立请求并行，结果更准确',
+  'settings.modeEfficiency': '效率优先',
+  'settings.modeEfficiencyDesc': '单次请求合并，速度更快',
+
+  'settings.saved': '已保存',
+  'settings.show': '显示',
+  'settings.hide': '隐藏',
 } as const;
 
 export type LocaleKeys = keyof typeof zhCN;

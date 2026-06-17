@@ -13,6 +13,31 @@ const en: Record<LocaleKeys, string> = {
   'subtitle.jumpTo': 'Jump to {{time}}',
 
   'sidebar.subtitles': 'Subtitles',
+  'sidebar.settings': 'Settings',
+
+  'settings.llm': 'LLM Settings',
+  'settings.llmProvider': 'LLM Provider',
+  'settings.apiKey': 'API Key',
+  'settings.apiKeyPlaceholder': 'Enter API Key',
+  'settings.model': 'Model',
+  'settings.modelPlaceholder': 'Enter model name',
+  'settings.getKey': 'Get Key',
+  'settings.customBaseUrl': 'Custom Base URL',
+  'settings.customBaseUrlPlaceholder': 'https://your-endpoint.com/v1/',
+  'settings.customProtocol': 'Protocol',
+
+  'settings.asr': 'ASR Settings',
+  'settings.asrProvider': 'ASR Provider',
+
+  'settings.mode': 'Call Mode',
+  'settings.modeQuality': 'Quality',
+  'settings.modeQualityDesc': 'Two parallel requests, more accurate results',
+  'settings.modeEfficiency': 'Efficiency',
+  'settings.modeEfficiencyDesc': 'Single merged request, faster speed',
+
+  'settings.saved': 'Saved',
+  'settings.show': 'Show',
+  'settings.hide': 'Hide',
 };
 
 export default en;
