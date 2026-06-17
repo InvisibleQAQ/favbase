@@ -42,11 +42,11 @@ MVP 阶段，首个功能：B站视频转录（Bilitato 风格视频页面 AI �
 - `lib/bilibili/video-info.ts` — extractBvid(), extractPageNum(), fetchVideoInfo(), getCidForPage(), fetchCidByPageList()（CID 降级路径，用 `/x/player/pagelist` 比 `/x/web-interface/view` 更轻量）
 - `lib/bilibili/subtitle-fetcher.ts` — fetchBilibiliSubtitle()（API 降级路径，CDN fetch 带 credentials，响应解析含 5 层 fallback）
 - `lib/bilibili/subtitle-processor.ts` — processSubtitles() 四步管线：normalize -> filter -> filler removal -> deduplicate(Jaccard>0.85)。接受 B 站原始格式和 favbase 格式。每条字幕保持独立行，不合并
-- `entrypoints/bilibili-inject.content.ts` — Main World 入口协调器：创建 InjectState，安装拦截器，编排 bootstrap 顺序 + reemit loop（每 1s 持续 10s）
-- `lib/bilibili/inject/state.ts` — InjectState 类型 + createState() 工厂，集中管理所有 inject 可变状态（isSubtitleCaptured, routeGeneration, timers 等）
-- `lib/bilibili/inject/subtitle-interceptor.ts` — fetch/XHR 覆写 + isSubtitleRequest() 检测 + emitSubtitlePayload() 解析 + postSubtitleData() 桥接 + resolvePageMeta() 元数据解析
-- `lib/bilibili/inject/cc-trigger.ts` — CC 按钮自动触发（blindSilentOpen, autoTriggerLoop）+ stealth CSS（applyStealthMask/removeStealthMask）+ hackSubtitleOff() DOM 操控
-- `lib/bilibili/inject/route-monitor.ts` — 300ms SPA 路由轮询（startRouteMonitor）+ hardResetForRoute() 级联重置 + emitInitialHandshake() + startReemitLoop()
+- `entrypoints/bilibili-inject.content.ts` — Main World 入口协调器：创建 effects + 状态机 + 拦截器 + 路由监控，5 行 bootstrap
+- `lib/bilibili/inject/state.ts` — InjectStateMachine 状态机（createStateMachine(effects)），拥有全部状态转换（bootstrap/markCaptured/resetForRoute）+ 定时器编排 + reemit loop。通过 InjectEffects 接口注入副作用，纯逻辑可单元测试
+- `lib/bilibili/inject/effects.ts` — InjectEffects 生产实现（createBrowserEffects()）：DOM 操作（triggerCC/hideSubtitleDisplay/restoreDisplay）+ resolvePageMeta() 页面元数据 + postMessage 桥接（postRouteSwitch/postHandshake/postSubtitleData）
+- `lib/bilibili/inject/interceptors.ts` — fetch/XHR 覆写（installInterceptors(sm)）+ isSubtitleRequest() URL 检测，检测到字幕响应后调用 sm.markCaptured()
+- `lib/bilibili/inject/route-monitor.ts` — 300ms SPA 路由轮询（startRouteMonitor(sm)），检测 BV 号/分P 变化后调用 sm.resetForRoute()
 - `entrypoints/bilibili-video.content/` — 嵌入B站右侧栏的面板 UI
   - `index.ts` — 挂载逻辑：anchor 到 `.right-container-inner`，插在 UP 主面板后，`autoMount()` 处理 SPA 切换
   - `hooks/useVideoDetect.ts` — 持久 postMessage 监听器：响应 BILI_ROUTE_SWITCH（SPA 导航重置）+ BILI_SUBTITLE_HANDSHAKE（bvid/cid 解析，cid=0 时不锁定 resolved 等待后续重发），3s 超时降级到 fetchCidByPageList API
@@ -68,8 +68,9 @@ MVP 阶段，首个功能：B站视频转录（Bilitato 风格视频页面 AI �
 - 后续 Groq/LLM 需要时再引入 Background 消息桥
 - 存储: WXT `storage.defineItem`（`local:` 前缀），import from `wxt/utils/storage`（非 `wxt/storage`）
 - 设置持久化: `settingsStorage`（`lib/storage.ts`），UserSettings 单对象存储在 `local:settings`，useSettings hook 提供 500ms debounced 自动保存 + watch 外部变更
-- SPA 路由监控: inject.ts 300ms 轮询 location.href 检测 BV 号/分P 变化 → hardResetForRoute() 级联重置 → ROUTE_SWITCH 即时通知 → 800ms 后重发 HANDSHAKE → 重触发 CC 按钮
-- 字幕获取流程（主路径）: inject.ts 拦截 fetch/XHR → postMessage SUBTITLE_DATA → useSubtitle 接收 → processSubtitles()
+- Inject 状态机: 三阶段生命周期 idle → triggering → captured，通过 InjectEffects 接口注入 DOM/postMessage 副作用，状态转换集中在 state.ts 的 createStateMachine() 内。routeGeneration 作为并发守卫防止路由切换后旧 in-flight 拦截结果被采纳
+- SPA 路由监控: route-monitor.ts 300ms 轮询 location.href 检测 BV 号/分P 变化 → sm.resetForRoute() 级联重置（generation++、清理定时器、restoreDisplay） → ROUTE_SWITCH 即时通知 → 800ms 后重发 HANDSHAKE → 重触发 CC 按钮
+- 字幕获取流程（主路径）: interceptors.ts 拦截 fetch/XHR → sm.markCaptured() 解析+桥接 → postMessage SUBTITLE_DATA → useSubtitle 接收 → processSubtitles()
 - 字幕获取流程（降级路径）: extractBvid() → fetchCidByPageList() → fetchBilibiliSubtitle(bvid, cid) → processSubtitles()（失败自动重试最多 2 次）
 - 字幕 CDN (`aisubtitle.hdslb.com`) 跨域但 CORS 允许，Content Script 可直接 fetch（带 `credentials: 'include'`）
 - 无字幕降级: Groq Whisper API (`whisper-large-v3-turbo`)（Step 2）

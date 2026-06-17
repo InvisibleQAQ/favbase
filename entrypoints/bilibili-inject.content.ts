@@ -1,7 +1,7 @@
-import { createState } from '@/lib/bilibili/inject/state';
-import { installInterceptors } from '@/lib/bilibili/inject/subtitle-interceptor';
-import { scheduleAutoTriggerFlow } from '@/lib/bilibili/inject/cc-trigger';
-import { emitInitialHandshake, startRouteMonitor, startReemitLoop } from '@/lib/bilibili/inject/route-monitor';
+import { createStateMachine } from '@/lib/bilibili/inject/state';
+import { createBrowserEffects } from '@/lib/bilibili/inject/effects';
+import { installInterceptors } from '@/lib/bilibili/inject/interceptors';
+import { startRouteMonitor } from '@/lib/bilibili/inject/route-monitor';
 
 export default defineContentScript({
   matches: ['*://*.bilibili.com/video/*'],
@@ -12,14 +12,13 @@ export default defineContentScript({
     if ((window as any).__FAVBASE_INJECT_READY__) return;
     (window as any).__FAVBASE_INJECT_READY__ = true;
 
-    const state = createState();
-    installInterceptors(state);
+    const effects = createBrowserEffects();
+    const sm = createStateMachine(effects);
+    installInterceptors(sm);
 
     function bootstrap(): void {
-      emitInitialHandshake(state);
-      scheduleAutoTriggerFlow(state);
-      startRouteMonitor(state);
-      startReemitLoop(state);
+      sm.bootstrap();
+      startRouteMonitor(sm);
     }
 
     if (document.readyState === 'loading') {
