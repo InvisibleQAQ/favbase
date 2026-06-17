@@ -42,7 +42,11 @@ MVP 阶段，首个功能：B站视频转录（Bilitato 风格视频页面 AI �
 - `lib/bilibili/video-info.ts` — extractBvid(), extractPageNum(), fetchVideoInfo(), getCidForPage(), fetchCidByPageList()（CID 降级路径，用 `/x/player/pagelist` 比 `/x/web-interface/view` 更轻量）
 - `lib/bilibili/subtitle-fetcher.ts` — fetchBilibiliSubtitle()（API 降级路径，CDN fetch 带 credentials，响应解析含 5 层 fallback）
 - `lib/bilibili/subtitle-processor.ts` — processSubtitles() 四步管线：normalize -> filter -> filler removal -> deduplicate(Jaccard>0.85)。接受 B 站原始格式和 favbase 格式。每条字幕保持独立行，不合并
-- `entrypoints/bilibili-inject.content.ts` — Main World 脚本：`__INITIAL_STATE__` CID 读取 + fetch/XHR 拦截 + 自动触发 CC 按钮（stealth CSS 隐藏字幕显示）+ postMessage 桥接 + 定期重发 HANDSHAKE/DATA（`startReemitLoop`，每 1s 持续 10s，解决 content script 晚加载丢消息）+ 300ms SPA 路由轮询（`startRouteMonitor`）+ 路由变化时 `hardResetForRoute` 级联重置
+- `entrypoints/bilibili-inject.content.ts` — Main World 入口协调器：创建 InjectState，安装拦截器，编排 bootstrap 顺序 + reemit loop（每 1s 持续 10s）
+- `lib/bilibili/inject/state.ts` — InjectState 类型 + createState() 工厂，集中管理所有 inject 可变状态（isSubtitleCaptured, routeGeneration, timers 等）
+- `lib/bilibili/inject/subtitle-interceptor.ts` — fetch/XHR 覆写 + isSubtitleRequest() 检测 + emitSubtitlePayload() 解析 + postSubtitleData() 桥接 + resolvePageMeta() 元数据解析
+- `lib/bilibili/inject/cc-trigger.ts` — CC 按钮自动触发（blindSilentOpen, autoTriggerLoop）+ stealth CSS（applyStealthMask/removeStealthMask）+ hackSubtitleOff() DOM 操控
+- `lib/bilibili/inject/route-monitor.ts` — 300ms SPA 路由轮询（startRouteMonitor）+ hardResetForRoute() 级联重置 + emitInitialHandshake() + startReemitLoop()
 - `entrypoints/bilibili-video.content/` — 嵌入B站右侧栏的面板 UI
   - `index.ts` — 挂载逻辑：anchor 到 `.right-container-inner`，插在 UP 主面板后，`autoMount()` 处理 SPA 切换
   - `hooks/useVideoDetect.ts` — 持久 postMessage 监听器：响应 BILI_ROUTE_SWITCH（SPA 导航重置）+ BILI_SUBTITLE_HANDSHAKE（bvid/cid 解析，cid=0 时不锁定 resolved 等待后续重发），3s 超时降级到 fetchCidByPageList API
