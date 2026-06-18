@@ -1,3 +1,5 @@
+import type { LLMProviderId, ASRProviderId } from './providers';
+
 /** Single subtitle line with timing info. */
 export interface SubtitleRow {
   /** Start time in seconds. */
@@ -24,7 +26,7 @@ export interface RawSubtitleItem {
 
 /** Static definition of a LLM provider (immutable config). */
 export interface LLMProviderDef {
-  id: string;
+  id: LLMProviderId;
   name: string;
   baseUrl: string;
   defaultModel: string;
@@ -36,7 +38,7 @@ export interface LLMProviderDef {
 
 /** Static definition of an ASR provider. */
 export interface ASRProviderDef {
-  id: string;
+  id: ASRProviderId;
   name: string;
   defaultModel: string;
 }
@@ -44,7 +46,7 @@ export interface ASRProviderDef {
 /** User-configurable settings (persisted to storage). */
 export interface UserSettings {
   // LLM
-  provider: string;
+  provider: LLMProviderId;
   providerApiKeys: Record<string, string>;
   providerModels: Record<string, string>;
   customBaseUrl: string;
@@ -52,7 +54,7 @@ export interface UserSettings {
   customProtocol: 'openai' | 'claude';
 
   // ASR
-  asrProvider: 'groq' | 'siliconflow';
+  asrProvider: ASRProviderId;
   groqApiKey: string;
   groqModel: string;
   siliconFlowApiKey: string;

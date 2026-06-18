@@ -1,9 +1,14 @@
 import type { LLMProviderDef, ASRProviderDef } from './types';
 
-/**
- * LLM providers — mirrors Bilitato's PROVIDERS object exactly.
- * Order matches the Bilitato settings dropdown.
- */
+export const LLM_PROVIDER_IDS = [
+  'modelscope', 'zhipu', 'gemini', 'openai', 'openrouter',
+  'deepseek', 'kimi', 'claude', 'custom',
+] as const;
+export type LLMProviderId = typeof LLM_PROVIDER_IDS[number];
+
+export const ASR_PROVIDER_IDS = ['groq', 'siliconflow'] as const;
+export type ASRProviderId = typeof ASR_PROVIDER_IDS[number];
+
 export const LLM_PROVIDERS: LLMProviderDef[] = [
   {
     id: 'modelscope',
@@ -91,7 +96,7 @@ export const LLM_PROVIDERS: LLMProviderDef[] = [
 ];
 
 /** Lookup a provider def by id. Falls back to the first provider. */
-export function getProviderDef(id: string): LLMProviderDef {
+export function getProviderDef(id: LLMProviderId): LLMProviderDef {
   return LLM_PROVIDERS.find((p) => p.id === id) ?? LLM_PROVIDERS[0];
 }
 

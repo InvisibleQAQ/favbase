@@ -36,9 +36,9 @@ MVP 阶段，首个功能：B站视频转录（Bilitato 风格视频页面 AI �
 
 双通道架构：Main World 脚本拦截优先，API 调用降级。
 
-- `lib/types.ts` — SubtitleRow, SubtitleResult, RawSubtitleItem, LLMProviderDef, ASRProviderDef, UserSettings 类型
+- `lib/types.ts` — SubtitleRow, SubtitleResult, RawSubtitleItem, LLMProviderDef(id: LLMProviderId), ASRProviderDef(id: ASRProviderId), UserSettings(provider: LLMProviderId, asrProvider: ASRProviderId) 类型。通过 `import type` 从 providers.ts 引入 ID 类型
 - `lib/bilibili/messaging.ts` — BiliMessageMap（消息类型注册表）+ postBiliMessage()（类型安全发送，支持 defer 延迟）+ onBiliMessage()（类型安全订阅，返回 unsub，内部封装 source 校验）
-- `lib/providers.ts` — LLM_PROVIDERS(9个，与 Bilitato 一致) + ASR_PROVIDERS(Groq/SiliconFlow) 静态定义，getProviderDef() 查找
+- `lib/providers.ts` — LLM_PROVIDER_IDS / ASR_PROVIDER_IDS（`as const`）为 Provider ID 唯一真实来源，推导 LLMProviderId / ASRProviderId 类型。LLM_PROVIDERS(9个) + ASR_PROVIDERS(2个) 静态定义，getProviderDef(id: LLMProviderId) 类型安全查找
 - `lib/storage.ts` — settingsStorage (WXT `storage.defineItem<UserSettings>`)，DEFAULT_SETTINGS 默认值
 - `lib/bilibili/api.ts` — BILIBILI_API 端点集中化（pageList/playerV2 URL builder）+ isSubtitleCdnUrl() 字幕 CDN URL 检测
 - `lib/bilibili/video-info.ts` — extractBvid(), extractPageNum(), fetchCidByPageList()（CID 降级路径，用 BILIBILI_API.pageList()）

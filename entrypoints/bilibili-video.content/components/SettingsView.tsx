@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { UserSettings } from '@/lib/types';
-import { LLM_PROVIDERS, ASR_PROVIDERS, getProviderDef } from '@/lib/providers';
+import { LLM_PROVIDERS, ASR_PROVIDERS, getProviderDef, type LLMProviderId, type ASRProviderId } from '@/lib/providers';
 import { t } from '@/lib/i18n';
 
 interface SettingsViewProps {
@@ -40,7 +40,7 @@ export function SettingsView({ settings, onUpdate, saved }: SettingsViewProps) {
         <select
           className="favbase-settings-select"
           value={settings.provider}
-          onChange={(e) => onUpdate({ provider: e.target.value })}
+          onChange={(e) => onUpdate({ provider: e.target.value as LLMProviderId })}
         >
           {LLM_PROVIDERS.map((p) => (
             <option key={p.id} value={p.id}>{p.name}</option>
@@ -139,7 +139,7 @@ export function SettingsView({ settings, onUpdate, saved }: SettingsViewProps) {
           className="favbase-settings-select"
           value={settings.asrProvider}
           onChange={(e) =>
-            onUpdate({ asrProvider: e.target.value as 'groq' | 'siliconflow' })
+            onUpdate({ asrProvider: e.target.value as ASRProviderId })
           }
         >
           {ASR_PROVIDERS.map((p) => (
