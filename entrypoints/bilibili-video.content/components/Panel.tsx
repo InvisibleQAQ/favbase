@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import type { SubtitleRow, UserSettings } from '@/lib/types';
+import type { SubtitleRow } from '@/lib/types';
 import type { LocaleKeys } from '@/lib/i18n/locales/zh-CN';
 import { t } from '@/lib/i18n';
 import { StatusBar } from './StatusBar';
 import { SubtitleView } from './SubtitleView';
-import { SettingsView } from './SettingsView';
+import { SettingsView, type SettingsViewProps } from './SettingsView';
 
 interface SidebarTab {
   id: string;
@@ -23,14 +23,12 @@ interface PanelProps {
   error: string | null;
   rows: SubtitleRow[];
   title: string;
-  settings: UserSettings;
-  onUpdateSettings: (patch: Partial<UserSettings>) => void;
-  settingsSaved: boolean;
+  settingsProps: SettingsViewProps;
 }
 
 export function Panel({
   loading, status, error, rows, title,
-  settings, onUpdateSettings, settingsSaved,
+  settingsProps,
 }: PanelProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [activeTab, setActiveTab] = useState('cc');
@@ -83,11 +81,7 @@ export function Panel({
             </>
           )}
           {activeTab === 'settings' && (
-            <SettingsView
-              settings={settings}
-              onUpdate={onUpdateSettings}
-              saved={settingsSaved}
-            />
+            <SettingsView {...settingsProps} />
           )}
         </div>
       </div>

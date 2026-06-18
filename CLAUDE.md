@@ -53,10 +53,10 @@ MVP 阶段，首个功能：B站视频转录（Bilitato 风格视频页面 AI �
   - `index.ts` — 挂载逻辑：anchor 到 `.right-container-inner`，插在 UP 主面板后，`autoMount()` 处理 SPA 切换
   - `hooks/useVideoDetect.ts` — 通过 onBiliMessage() 订阅 BILI_ROUTE_SWITCH（SPA 导航重置）+ BILI_SUBTITLE_HANDSHAKE（bvid/cid 解析，cid=0 时不锁定 resolved 等待后续重发），3s 超时降级到 fetchCidByPageList API
   - `hooks/useSubtitle.ts` — 双通道：通过 onBiliMessage() 优先接收 SUBTITLE_DATA（拦截数据），3s 超时降级到 fetchBilibiliSubtitle API + 失败时自动重试（最多 2 次，间隔 3.5s）；两通道均通过 processSubtitles() 处理
-  - `hooks/useSettings.ts` — 从 settingsStorage 读取 UserSettings，debounced 自动保存（500ms），watch 外部变更，保存状态反馈（saved flag, 1.5s 自动清除）
-  - `components/Panel.tsx` — 主面板容器：左侧图标栏（CC + Settings Tab，activeTab 切换）+ 右侧内容区（header + 可折叠 body），根据 activeTab 渲染 SubtitleView 或 SettingsView
+  - `hooks/useSettings.ts` — deep module：settingsStorage 读写（debounced 500ms + watch 外部变更）+ LLM/ASR computed 属性（currentProviderDef, currentLlmApiKey, currentLlmModel, isCustomProvider, currentAsrDef, currentAsrApiKey, currentAsrModel）+ focused action 方法（switchProvider, updateLlmApiKey, updateLlmModel, switchAsrProvider, updateAsrApiKey, updateAsrModel, updatePrefMode 等）。所有 Provider 切换/key 分支逻辑内聚在 hook 内部
+  - `components/Panel.tsx` — 主面板容器：左侧图标栏（CC + Settings Tab，activeTab 切换）+ 右侧内容区（header + 可折叠 body），根据 activeTab 渲染 SubtitleView 或 SettingsView。通过 `settingsProps` 单对象透传设置相关数据
   - `components/SubtitleView.tsx` — 逐行字幕列表 + 时间戳点击跳转 + 当前播放行高亮（250ms 轮询 `<video>.currentTime`，二分查找活跃行）+ 自动滚动（尊重用户手动滚动意图，4s 超时恢复）
-  - `components/SettingsView.tsx` — 设置界面：LLM Provider 下拉（9个）+ 每 Provider 独立 API Key/Model + Custom 额外字段（Base URL/Protocol）+ ASR Provider 切换 + 调用模式 Quality/Efficiency 单选 + API Key password 模式 + 显示/隐藏
+  - `components/SettingsView.tsx` — 纯渲染设置界面：LLM Provider 下拉（9个）+ 每 Provider 独立 API Key/Model + Custom 额外字段 + ASR Provider 切换 + 调用模式单选。零业务逻辑，所有 computed/action 通过 props 从 useSettings 接收
   - `components/StatusBar.tsx` — 加载/无字幕/错误状态
 
 ## 约定
@@ -69,7 +69,7 @@ MVP 阶段，首个功能：B站视频转录（Bilitato 风格视频页面 AI �
 - 字幕后处理: 所有字幕数据（无论来源）均通过 `processSubtitles()` 四步管线处理（不合并，逐条独立）
 - 后续 Groq/LLM 需要时再引入 Background 消息桥
 - 存储: WXT `storage.defineItem`（`local:` 前缀），import from `wxt/utils/storage`（非 `wxt/storage`）
-- 设置持久化: `settingsStorage`（`lib/storage.ts`），UserSettings 单对象存储在 `local:settings`，useSettings hook 提供 500ms debounced 自动保存 + watch 外部变更
+- 设置持久化: `settingsStorage`（`lib/storage.ts`），UserSettings 单对象存储在 `local:settings`。useSettings 是 deep module — 内聚 storage 读写、computed 属性推导、focused action 方法，SettingsView 是纯渲染组件
 - Inject 状态机: 三阶段生命周期 idle → triggering → captured，通过 InjectEffects 接口注入 DOM/postMessage 副作用，状态转换集中在 state.ts 的 createStateMachine() 内。routeGeneration 作为并发守卫防止路由切换后旧 in-flight 拦截结果被采纳
 - SPA 路由监控: route-monitor.ts 300ms 轮询 location.href 检测 BV 号/分P 变化 → sm.resetForRoute() 级联重置（generation++、清理定时器、restoreDisplay） → ROUTE_SWITCH 即时通知 → 800ms 后重发 HANDSHAKE → 重触发 CC 按钮
 - 字幕获取流程（主路径）: interceptors.ts 拦截 fetch/XHR → sm.markCaptured() 解析+桥接 → postMessage SUBTITLE_DATA → useSubtitle 接收 → processSubtitles()

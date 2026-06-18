@@ -1,14 +1,39 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import type { UserSettings } from '@/lib/types';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { UserSettings, LLMProviderDef, ASRProviderDef } from '@/lib/types';
+import type { LLMProviderId, ASRProviderId } from '@/lib/providers';
+import { getProviderDef, ASR_PROVIDERS } from '@/lib/providers';
 import { settingsStorage, DEFAULT_SETTINGS } from '@/lib/storage';
 
 export interface UseSettingsReturn {
   settings: UserSettings;
-  updateSettings: (patch: Partial<UserSettings>) => void;
-  /** True while the initial load from storage is in progress. */
   loading: boolean;
-  /** Briefly true after a save completes, for UI feedback. */
   saved: boolean;
+
+  // LLM computed
+  currentProviderDef: LLMProviderDef;
+  currentLlmApiKey: string;
+  currentLlmModel: string;
+  isCustomProvider: boolean;
+
+  // ASR computed
+  currentAsrDef: ASRProviderDef;
+  currentAsrApiKey: string;
+  currentAsrModel: string;
+
+  // LLM actions
+  switchProvider: (id: LLMProviderId) => void;
+  updateLlmApiKey: (key: string) => void;
+  updateLlmModel: (model: string) => void;
+  updateCustomBaseUrl: (url: string) => void;
+  updateCustomProtocol: (protocol: 'openai' | 'claude') => void;
+
+  // ASR actions
+  switchAsrProvider: (id: ASRProviderId) => void;
+  updateAsrApiKey: (key: string) => void;
+  updateAsrModel: (model: string) => void;
+
+  // Mode
+  updatePrefMode: (mode: 'quality' | 'efficiency') => void;
 }
 
 export function useSettings(): UseSettingsReturn {
@@ -18,7 +43,6 @@ export function useSettings(): UseSettingsReturn {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load initial value from storage.
   useEffect(() => {
     let cancelled = false;
 
@@ -28,7 +52,6 @@ export function useSettings(): UseSettingsReturn {
       setLoading(false);
     });
 
-    // Watch for external changes (e.g. another tab).
     const unwatch = settingsStorage.watch((newVal: UserSettings) => {
       if (newVal) setSettings(newVal);
     });
@@ -39,12 +62,10 @@ export function useSettings(): UseSettingsReturn {
     };
   }, []);
 
-  // Debounced save — 500ms after last update.
   const updateSettings = useCallback((patch: Partial<UserSettings>) => {
     setSettings((prev) => {
       const next = { ...prev, ...patch };
 
-      // Clear any pending save timer.
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
 
       saveTimerRef.current = setTimeout(() => {
@@ -59,7 +80,6 @@ export function useSettings(): UseSettingsReturn {
     });
   }, []);
 
-  // Cleanup timers on unmount.
   useEffect(() => {
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -67,5 +87,105 @@ export function useSettings(): UseSettingsReturn {
     };
   }, []);
 
-  return { settings, updateSettings, loading, saved };
+  // --- LLM computed ---
+  const currentProviderDef = useMemo(
+    () => getProviderDef(settings.provider),
+    [settings.provider],
+  );
+  const currentLlmApiKey = settings.providerApiKeys[settings.provider] ?? '';
+  const currentLlmModel =
+    settings.providerModels[settings.provider] ?? currentProviderDef.defaultModel;
+  const isCustomProvider = settings.provider === 'custom';
+
+  // --- ASR computed ---
+  const currentAsrDef = useMemo(
+    () => ASR_PROVIDERS.find((p) => p.id === settings.asrProvider) ?? ASR_PROVIDERS[0],
+    [settings.asrProvider],
+  );
+  const isGroq = settings.asrProvider === 'groq';
+  const currentAsrApiKey = isGroq ? settings.groqApiKey : settings.siliconFlowApiKey;
+  const currentAsrModel = isGroq ? settings.groqModel : settings.siliconFlowAsrModel;
+
+  // --- LLM actions ---
+  const switchProvider = useCallback(
+    (id: LLMProviderId) => updateSettings({ provider: id }),
+    [updateSettings],
+  );
+
+  const updateLlmApiKey = useCallback(
+    (key: string) =>
+      updateSettings({
+        providerApiKeys: { ...settings.providerApiKeys, [settings.provider]: key },
+      }),
+    [updateSettings, settings.providerApiKeys, settings.provider],
+  );
+
+  const updateLlmModel = useCallback(
+    (model: string) =>
+      updateSettings({
+        providerModels: { ...settings.providerModels, [settings.provider]: model },
+      }),
+    [updateSettings, settings.providerModels, settings.provider],
+  );
+
+  const updateCustomBaseUrl = useCallback(
+    (url: string) => updateSettings({ customBaseUrl: url }),
+    [updateSettings],
+  );
+
+  const updateCustomProtocol = useCallback(
+    (protocol: 'openai' | 'claude') => updateSettings({ customProtocol: protocol }),
+    [updateSettings],
+  );
+
+  // --- ASR actions ---
+  const switchAsrProvider = useCallback(
+    (id: ASRProviderId) => updateSettings({ asrProvider: id }),
+    [updateSettings],
+  );
+
+  const updateAsrApiKey = useCallback(
+    (key: string) =>
+      updateSettings(isGroq ? { groqApiKey: key } : { siliconFlowApiKey: key }),
+    [updateSettings, isGroq],
+  );
+
+  const updateAsrModel = useCallback(
+    (model: string) =>
+      updateSettings(isGroq ? { groqModel: model } : { siliconFlowAsrModel: model }),
+    [updateSettings, isGroq],
+  );
+
+  // --- Mode ---
+  const updatePrefMode = useCallback(
+    (mode: 'quality' | 'efficiency') => updateSettings({ prefMode: mode }),
+    [updateSettings],
+  );
+
+  return {
+    settings,
+    loading,
+    saved,
+
+    currentProviderDef,
+    currentLlmApiKey,
+    currentLlmModel,
+    isCustomProvider,
+
+    currentAsrDef,
+    currentAsrApiKey,
+    currentAsrModel,
+
+    switchProvider,
+    updateLlmApiKey,
+    updateLlmModel,
+    updateCustomBaseUrl,
+    updateCustomProtocol,
+
+    switchAsrProvider,
+    updateAsrApiKey,
+    updateAsrModel,
+
+    updatePrefMode,
+  };
 }
