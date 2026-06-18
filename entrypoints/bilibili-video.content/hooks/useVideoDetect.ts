@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { extractBvid, extractPageNum, fetchCidByPageList } from '@/lib/bilibili/video-info';
-import type { SubtitleHandshakeMessage, SubtitleRouteSwitchMessage } from '@/lib/types';
+import { onBiliMessage } from '@/lib/bilibili/messaging';
 
 interface VideoDetection {
   bvid: string | null;
@@ -97,45 +97,35 @@ export function useVideoDetect(): VideoDetection {
       startFallbackTimer();
     }
 
-    function onMessage(event: MessageEvent) {
-      if (event.source !== window || cancelled) return;
-      const msg = event.data as (SubtitleRouteSwitchMessage | SubtitleHandshakeMessage) | undefined;
-      if (!msg?.type) return;
+    const unsubRouteSwitch = onBiliMessage('BILI_ROUTE_SWITCH', (payload) => {
+      if (cancelled) return;
+      startDetectionCycle(payload.bvid || extractBvid(window.location.href));
+    });
 
-      if (msg.type === 'BILI_ROUTE_SWITCH') {
-        const switchMsg = msg as SubtitleRouteSwitchMessage;
-        startDetectionCycle(switchMsg.bvid || extractBvid(window.location.href));
-        return;
+    const unsubHandshake = onBiliMessage('BILI_SUBTITLE_HANDSHAKE', (payload) => {
+      if (cancelled) return;
+      if (payload.bvid !== currentBvid) return;
+
+      const newCid = payload.cid || null;
+      if (newCid) {
+        resolved = true;
+        clearFallback();
+        setState({
+          bvid: payload.bvid,
+          cid: newCid,
+          title: '',
+          loading: false,
+          error: null,
+        });
       }
+    });
 
-      if (msg.type === 'BILI_SUBTITLE_HANDSHAKE') {
-        const hsMsg = msg as SubtitleHandshakeMessage;
-        if (hsMsg.bvid !== currentBvid) return;
-
-        const newCid = hsMsg.cid || null;
-        if (newCid) {
-          // Valid bvid + cid — fully resolved
-          resolved = true;
-          clearFallback();
-          setState({
-            bvid: hsMsg.bvid,
-            cid: newCid,
-            title: '',
-            loading: false,
-            error: null,
-          });
-        }
-        // cid=0: __INITIAL_STATE__ not ready yet. Keep waiting for
-        // the next re-emission or the fallback timer.
-      }
-    }
-
-    window.addEventListener('message', onMessage);
     startDetectionCycle(currentBvid);
 
     return () => {
       cancelled = true;
-      window.removeEventListener('message', onMessage);
+      unsubRouteSwitch();
+      unsubHandshake();
       clearFallback();
     };
   }, []);

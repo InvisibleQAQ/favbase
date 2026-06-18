@@ -1,4 +1,6 @@
 import { extractBvid } from '../video-info';
+import { postBiliMessage } from '../messaging';
+import type { RawSubtitleItem } from '../../types';
 import type { InjectEffects } from './state';
 
 const STEALTH_STYLE_ID = '__favbase_stealth_css__';
@@ -122,17 +124,15 @@ export function createBrowserEffects(): InjectEffects {
     resolvePageMeta,
 
     postRouteSwitch(bvid: string): void {
-      window.postMessage({ type: 'BILI_ROUTE_SWITCH', bvid }, '*');
+      postBiliMessage('BILI_ROUTE_SWITCH', { bvid });
     },
 
     postHandshake(bvid: string, cid: number): void {
-      window.postMessage({ type: 'BILI_SUBTITLE_HANDSHAKE', bvid, cid }, '*');
+      postBiliMessage('BILI_SUBTITLE_HANDSHAKE', { bvid, cid });
     },
 
     postSubtitleData(bvid: string, cid: number, body: unknown[]): void {
-      setTimeout(() => {
-        window.postMessage({ type: 'BILI_SUBTITLE_DATA', data: body, bvid, cid }, '*');
-      }, 0);
+      postBiliMessage('BILI_SUBTITLE_DATA', { data: body as RawSubtitleItem[], bvid, cid }, { defer: true });
     },
   };
 }

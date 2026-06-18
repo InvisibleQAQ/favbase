@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { fetchBilibiliSubtitle } from '@/lib/bilibili/subtitle-fetcher';
 import { processSubtitles } from '@/lib/bilibili/subtitle-processor';
-import type { SubtitleRow, SubtitleDataMessage } from '@/lib/types';
+import { onBiliMessage } from '@/lib/bilibili/messaging';
+import type { SubtitleRow } from '@/lib/types';
 
 interface SubtitleState {
   rows: SubtitleRow[];
@@ -43,17 +44,14 @@ export function useSubtitle(bvid: string | null, cid: number | null): SubtitleSt
 
     setState({ rows: [], loading: true, status: null, error: null });
 
-    function onMessage(event: MessageEvent) {
-      if (event.source !== window) return;
-      const msg = event.data as SubtitleDataMessage | undefined;
-      if (msg?.type !== 'BILI_SUBTITLE_DATA') return;
+    const unsubData = onBiliMessage('BILI_SUBTITLE_DATA', (payload) => {
       if (cancelled || resolved) return;
-      if (msg.bvid !== bvid) return;
+      if (payload.bvid !== bvid) return;
 
       resolved = true;
       if (fallbackTimer) clearTimeout(fallbackTimer);
 
-      const processed = processSubtitles(msg.data);
+      const processed = processSubtitles(payload.data);
 
       setState({
         rows: processed,
@@ -61,9 +59,7 @@ export function useSubtitle(bvid: string | null, cid: number | null): SubtitleSt
         status: processed.length > 0 ? 'ok' : 'no_subtitle',
         error: null,
       });
-    }
-
-    window.addEventListener('message', onMessage);
+    });
 
     function attemptApiFetch() {
       if (cancelled || resolved) return;
@@ -121,7 +117,7 @@ export function useSubtitle(bvid: string | null, cid: number | null): SubtitleSt
 
     return () => {
       cancelled = true;
-      window.removeEventListener('message', onMessage);
+      unsubData();
       if (fallbackTimer) clearTimeout(fallbackTimer);
     };
   }, [bvid, cid]);

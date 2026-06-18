@@ -22,27 +22,6 @@ export interface RawSubtitleItem {
   content: string;
 }
 
-/** PostMessage payload: main world inject script announces bvid + cid. */
-export interface SubtitleHandshakeMessage {
-  type: 'BILI_SUBTITLE_HANDSHAKE';
-  bvid: string;
-  cid: number;
-}
-
-/** PostMessage payload: main world inject script sends intercepted subtitle data. */
-export interface SubtitleDataMessage {
-  type: 'BILI_SUBTITLE_DATA';
-  data: RawSubtitleItem[];
-  bvid: string;
-  cid: number;
-}
-
-/** PostMessage payload: inject script notifies content script of SPA route change. */
-export interface SubtitleRouteSwitchMessage {
-  type: 'BILI_ROUTE_SWITCH';
-  bvid: string;
-}
-
 /** Video metadata returned by /x/web-interface/view. */
 export interface VideoPage {
   cid: number;
