@@ -18,7 +18,8 @@ export default function App() {
   );
 
   const showTranscribe =
-    subtitle.status === 'no_subtitle' && transcribe.rows.length === 0;
+    (subtitle.status === 'no_subtitle' || subtitle.status === 'error') &&
+    transcribe.rows.length === 0;
 
   const effectiveRows =
     transcribe.rows.length > 0 ? transcribe.rows : subtitle.rows;

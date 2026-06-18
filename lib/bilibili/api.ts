@@ -4,7 +4,7 @@ export const BILIBILI_API = {
   playerV2: (bvid: string, cid: number) =>
     `https://api.bilibili.com/x/player/v2?bvid=${encodeURIComponent(bvid)}&cid=${encodeURIComponent(String(cid))}`,
   playUrl: (bvid: string, cid: number) =>
-    `https://api.bilibili.com/x/player/playurl?bvid=${encodeURIComponent(bvid)}&cid=${encodeURIComponent(String(cid))}&fnval=16&platform=html5`,
+    `https://api.bilibili.com/x/player/playurl?bvid=${encodeURIComponent(bvid)}&cid=${encodeURIComponent(String(cid))}&fnval=16&fnver=0&platform=html5&high_quality=1&otype=json`,
 } as const;
 
 const SUBTITLE_CDN_PATTERNS = [

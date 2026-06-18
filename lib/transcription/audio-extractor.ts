@@ -32,6 +32,14 @@ export async function extractAudioUrl(
   }
 
   const json = await res.json();
+
+  if (Number(json?.code ?? 0) !== 0) {
+    throw new AudioExtractError({
+      code: 'ASR_NO_AUDIO_SOURCE',
+      message: `playurl API 返回失败: ${String(json?.message || '未知错误')}`,
+    });
+  }
+
   const dash = json?.data?.dash;
 
   if (!dash?.audio?.length) {

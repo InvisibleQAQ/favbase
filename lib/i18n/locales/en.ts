@@ -4,7 +4,7 @@ const en: Record<LocaleKeys, string> = {
   'status.loading': 'Loading subtitles...',
   'status.error': 'Failed to load: {{error}}',
   'status.errorUnknown': 'Unknown error',
-  'status.noSubtitle': 'No AI subtitles for this video',
+  'status.noSubtitle': 'No subtitles detected, transcription available',
   'status.count': '{{count}} subtitles (Bilibili AI)',
 
   'panel.expand': 'Expand panel',
@@ -39,7 +39,7 @@ const en: Record<LocaleKeys, string> = {
   'settings.show': 'Show',
   'settings.hide': 'Hide',
 
-  'transcribe.button': 'Transcribe',
+  'transcribe.button': 'Start Transcription',
   'transcribe.cancel': 'Cancel',
   'transcribe.retry': 'Retry',
   'transcribe.noApiKey': 'Please configure Groq API Key in Settings',

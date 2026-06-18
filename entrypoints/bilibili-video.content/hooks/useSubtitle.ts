@@ -104,8 +104,8 @@ export function useSubtitle(bvid: string | null, cid: number | null): SubtitleSt
               setState({
                 rows: [],
                 loading: false,
-                status: 'error',
-                error: err instanceof Error ? err.message : 'Unknown error',
+                status: 'no_subtitle',
+                error: null,
               });
             }
           }
