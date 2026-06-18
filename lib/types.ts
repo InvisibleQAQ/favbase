@@ -22,19 +22,6 @@ export interface RawSubtitleItem {
   content: string;
 }
 
-/** Video metadata returned by /x/web-interface/view. */
-export interface VideoPage {
-  cid: number;
-  page: number;
-  part: string;
-}
-
-export interface VideoInfo {
-  bvid: string;
-  title: string;
-  pages: VideoPage[];
-}
-
 /** Static definition of a LLM provider (immutable config). */
 export interface LLMProviderDef {
   id: string;

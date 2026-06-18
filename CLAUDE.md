@@ -36,12 +36,12 @@ MVP 阶段，首个功能：B站视频转录（Bilitato 风格视频页面 AI �
 
 双通道架构：Main World 脚本拦截优先，API 调用降级。
 
-- `lib/types.ts` — SubtitleRow, SubtitleResult, VideoInfo, RawSubtitleItem, LLMProviderDef, ASRProviderDef, UserSettings 类型
+- `lib/types.ts` — SubtitleRow, SubtitleResult, RawSubtitleItem, LLMProviderDef, ASRProviderDef, UserSettings 类型
 - `lib/bilibili/messaging.ts` — BiliMessageMap（消息类型注册表）+ postBiliMessage()（类型安全发送，支持 defer 延迟）+ onBiliMessage()（类型安全订阅，返回 unsub，内部封装 source 校验）
 - `lib/providers.ts` — LLM_PROVIDERS(9个，与 Bilitato 一致) + ASR_PROVIDERS(Groq/SiliconFlow) 静态定义，getProviderDef() 查找
 - `lib/storage.ts` — settingsStorage (WXT `storage.defineItem<UserSettings>`)，DEFAULT_SETTINGS 默认值
 - `lib/bilibili/api.ts` — BILIBILI_API 端点集中化（pageList/playerV2 URL builder）+ isSubtitleCdnUrl() 字幕 CDN URL 检测
-- `lib/bilibili/video-info.ts` — extractBvid(), extractPageNum(), fetchVideoInfo(), getCidForPage(), fetchCidByPageList()（CID 降级路径，用 BILIBILI_API.pageList()）
+- `lib/bilibili/video-info.ts` — extractBvid(), extractPageNum(), fetchCidByPageList()（CID 降级路径，用 BILIBILI_API.pageList()）
 - `lib/bilibili/subtitle-fetcher.ts` — fetchBilibiliSubtitle()（API 降级路径，用 BILIBILI_API.playerV2()，CDN fetch 带 credentials，响应解析含 5 层 fallback）
 - `lib/bilibili/subtitle-processor.ts` — processSubtitles() 四步管线：normalize -> filter -> filler removal -> deduplicate(Jaccard>0.85)。接受 B 站原始格式和 favbase 格式。每条字幕保持独立行，不合并
 - `entrypoints/bilibili-inject.content.ts` — Main World 入口协调器：创建 effects + 状态机 + 拦截器 + 路由监控，5 行 bootstrap
