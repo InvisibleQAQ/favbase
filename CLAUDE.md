@@ -39,13 +39,14 @@ MVP 阶段，首个功能：B站视频转录（Bilitato 风格视频页面 AI �
 - `lib/types.ts` — SubtitleRow, SubtitleResult, VideoInfo, RawSubtitleItem, SubtitleHandshakeMessage, SubtitleDataMessage, SubtitleRouteSwitchMessage, LLMProviderDef, ASRProviderDef, UserSettings 类型
 - `lib/providers.ts` — LLM_PROVIDERS(9个，与 Bilitato 一致) + ASR_PROVIDERS(Groq/SiliconFlow) 静态定义，getProviderDef() 查找
 - `lib/storage.ts` — settingsStorage (WXT `storage.defineItem<UserSettings>`)，DEFAULT_SETTINGS 默认值
-- `lib/bilibili/video-info.ts` — extractBvid(), extractPageNum(), fetchVideoInfo(), getCidForPage(), fetchCidByPageList()（CID 降级路径，用 `/x/player/pagelist` 比 `/x/web-interface/view` 更轻量）
-- `lib/bilibili/subtitle-fetcher.ts` — fetchBilibiliSubtitle()（API 降级路径，CDN fetch 带 credentials，响应解析含 5 层 fallback）
+- `lib/bilibili/api.ts` — BILIBILI_API 端点集中化（pageList/playerV2 URL builder）+ isSubtitleCdnUrl() 字幕 CDN URL 检测
+- `lib/bilibili/video-info.ts` — extractBvid(), extractPageNum(), fetchVideoInfo(), getCidForPage(), fetchCidByPageList()（CID 降级路径，用 BILIBILI_API.pageList()）
+- `lib/bilibili/subtitle-fetcher.ts` — fetchBilibiliSubtitle()（API 降级路径，用 BILIBILI_API.playerV2()，CDN fetch 带 credentials，响应解析含 5 层 fallback）
 - `lib/bilibili/subtitle-processor.ts` — processSubtitles() 四步管线：normalize -> filter -> filler removal -> deduplicate(Jaccard>0.85)。接受 B 站原始格式和 favbase 格式。每条字幕保持独立行，不合并
 - `entrypoints/bilibili-inject.content.ts` — Main World 入口协调器：创建 effects + 状态机 + 拦截器 + 路由监控，5 行 bootstrap
 - `lib/bilibili/inject/state.ts` — InjectStateMachine 状态机（createStateMachine(effects)），拥有全部状态转换（bootstrap/markCaptured/resetForRoute）+ 定时器编排 + reemit loop。通过 InjectEffects 接口注入副作用，纯逻辑可单元测试
 - `lib/bilibili/inject/effects.ts` — InjectEffects 生产实现（createBrowserEffects()）：DOM 操作（triggerCC/hideSubtitleDisplay/restoreDisplay）+ resolvePageMeta() 页面元数据 + postMessage 桥接（postRouteSwitch/postHandshake/postSubtitleData）
-- `lib/bilibili/inject/interceptors.ts` — fetch/XHR 覆写（installInterceptors(sm)）+ isSubtitleRequest() URL 检测，检测到字幕响应后调用 sm.markCaptured()
+- `lib/bilibili/inject/interceptors.ts` — fetch/XHR 覆写（installInterceptors(sm)），使用 api.ts 的 isSubtitleCdnUrl() 检测字幕响应后调用 sm.markCaptured()
 - `lib/bilibili/inject/route-monitor.ts` — 300ms SPA 路由轮询（startRouteMonitor(sm)），检测 BV 号/分P 变化后调用 sm.resetForRoute()
 - `entrypoints/bilibili-video.content/` — 嵌入B站右侧栏的面板 UI
   - `index.ts` — 挂载逻辑：anchor 到 `.right-container-inner`，插在 UP 主面板后，`autoMount()` 处理 SPA 切换

@@ -1,22 +1,5 @@
 import type { InjectStateMachine } from './state';
-
-export function isSubtitleRequest(rawUrl: string): boolean {
-  if (!rawUrl) return false;
-  let parsed: URL;
-  try {
-    parsed = new URL(rawUrl, location.href);
-  } catch {
-    return false;
-  }
-  const host = parsed.hostname.toLowerCase();
-  const path = parsed.pathname.toLowerCase();
-  if (host === 'data.bilibili.com') return false;
-  if (path.includes('/log/web')) return false;
-  if (/\/bfs\/(ai_)?subtitle\//i.test(path)) return true;
-  if (/\/aisubtitle\//i.test(path)) return true;
-  if (path.endsWith('.json') && path.includes('subtitle')) return true;
-  return false;
-}
+import { isSubtitleCdnUrl } from '../api';
 
 export function installInterceptors(sm: InjectStateMachine): void {
   const originalFetch = window.fetch;
@@ -30,7 +13,7 @@ export function installInterceptors(sm: InjectStateMachine): void {
         : (args[0] as Request)?.url || '';
     const response = await originalFetch.apply(this, args);
 
-    if (isSubtitleRequest(url)) {
+    if (isSubtitleCdnUrl(url)) {
       const gen = sm.generation;
       response
         .clone()
@@ -54,7 +37,7 @@ export function installInterceptors(sm: InjectStateMachine): void {
   XMLHttpRequest.prototype.send = function (body?: Document | XMLHttpRequestBodyInit | null) {
     const url: string = (this as any).__biliUrl || '';
 
-    if (isSubtitleRequest(url)) {
+    if (isSubtitleCdnUrl(url)) {
       const gen = sm.generation;
       this.addEventListener('load', () => {
         sm.markCaptured(gen, this.responseText, location.href);

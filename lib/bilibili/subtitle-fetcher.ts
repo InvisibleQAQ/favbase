@@ -1,4 +1,5 @@
 import type { SubtitleResult, SubtitleRow } from '../types';
+import { BILIBILI_API } from './api';
 
 interface SubtitleTrack {
   lan: string;
@@ -22,7 +23,7 @@ export async function fetchBilibiliSubtitle(
   cid: number,
 ): Promise<SubtitleResult> {
   // Step 1: Get subtitle track list from player API
-  const playerUrl = `https://api.bilibili.com/x/player/v2?bvid=${encodeURIComponent(bvid)}&cid=${encodeURIComponent(String(cid))}`;
+  const playerUrl = BILIBILI_API.playerV2(bvid, cid);
   const playerRes = await fetch(playerUrl, { credentials: 'include' });
 
   if (!playerRes.ok) {

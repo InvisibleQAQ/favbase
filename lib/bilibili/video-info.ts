@@ -1,4 +1,5 @@
 import type { VideoInfo } from '../types';
+import { BILIBILI_API } from './api';
 
 /**
  * Extract BV number from a bilibili video URL.
@@ -69,7 +70,7 @@ export function getCidForPage(info: VideoInfo, pageNum: number): number {
  * Simpler than fetchVideoInfo and less likely to require WBI signature.
  */
 export async function fetchCidByPageList(bvid: string, pageNum: number = 1): Promise<number> {
-  const url = `https://api.bilibili.com/x/player/pagelist?bvid=${encodeURIComponent(bvid)}`;
+  const url = BILIBILI_API.pageList(bvid);
   const res = await fetch(url, { credentials: 'include' });
   if (!res.ok) throw new Error(`Pagelist API HTTP ${res.status}`);
   const json = await res.json();
