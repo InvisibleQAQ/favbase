@@ -36,6 +36,15 @@ const zhCN = {
   'settings.saved': '已保存',
   'settings.show': '显示',
   'settings.hide': '隐藏',
+
+  'transcribe.button': '语音转录',
+  'transcribe.cancel': '取消转录',
+  'transcribe.retry': '重试',
+  'transcribe.noApiKey': '请先在设置中配置 Groq API Key',
+  'transcribe.progress': '转录中 {{progress}}%',
+  'transcribe.cached': '共 {{count}} 条字幕 (Groq 缓存)',
+  'transcribe.done': '共 {{count}} 条字幕 (Groq ASR)',
+  'transcribe.rateLimit': 'Groq 速率限制，{{seconds}}s 后重试',
 } as const;
 
 export type LocaleKeys = keyof typeof zhCN;

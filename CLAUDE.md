@@ -40,7 +40,7 @@ MVP 阶段，首个功能：B站视频转录（Bilitato 风格视频页面 AI �
 - `lib/bilibili/messaging.ts` — BiliMessageMap（消息类型注册表）+ postBiliMessage()（类型安全发送，支持 defer 延迟）+ onBiliMessage()（类型安全订阅，返回 unsub，内部封装 source 校验）
 - `lib/providers.ts` — LLM_PROVIDER_IDS / ASR_PROVIDER_IDS（`as const`）为 Provider ID 唯一真实来源，推导 LLMProviderId / ASRProviderId 类型。LLM_PROVIDERS(9个) + ASR_PROVIDERS(2个) 静态定义，getProviderDef(id: LLMProviderId) 类型安全查找
 - `lib/storage.ts` — settingsStorage (WXT `storage.defineItem<UserSettings>`)，DEFAULT_SETTINGS 默认值
-- `lib/bilibili/api.ts` — BILIBILI_API 端点集中化（pageList/playerV2 URL builder）+ isSubtitleCdnUrl() 字幕 CDN URL 检测
+- `lib/bilibili/api.ts` — BILIBILI_API 端点集中化（pageList/playerV2/playUrl URL builder）+ isSubtitleCdnUrl() 字幕 CDN URL 检测。playUrl(bvid, cid) 用 fnval=16 请求 DASH 音频流
 - `lib/bilibili/video-info.ts` — extractBvid(), extractPageNum(), fetchCidByPageList()（CID 降级路径，用 BILIBILI_API.pageList()）
 - `lib/bilibili/subtitle-fetcher.ts` — fetchBilibiliSubtitle()（API 降级路径，用 BILIBILI_API.playerV2()，CDN fetch 带 credentials，响应解析含 5 层 fallback）
 - `lib/bilibili/subtitle-processor.ts` — processSubtitles() 四步管线：normalize -> filter -> filler removal -> deduplicate(Jaccard>0.85)。接受 B 站原始格式和 favbase 格式。每条字幕保持独立行，不合并
@@ -57,7 +57,22 @@ MVP 阶段，首个功能：B站视频转录（Bilitato 风格视频页面 AI �
   - `components/Panel.tsx` — 主面板容器：左侧图标栏（CC + Settings Tab，activeTab 切换）+ 右侧内容区（header + 可折叠 body），根据 activeTab 渲染 SubtitleView 或 SettingsView。通过 `settingsProps` 单对象透传设置相关数据
   - `components/SubtitleView.tsx` — 逐行字幕列表 + 时间戳点击跳转 + 当前播放行高亮（250ms 轮询 `<video>.currentTime`，二分查找活跃行）+ 自动滚动（尊重用户手动滚动意图，4s 超时恢复）
   - `components/SettingsView.tsx` — 纯渲染设置界面：LLM Provider 下拉（9个）+ 每 Provider 独立 API Key/Model + Custom 额外字段 + ASR Provider 切换 + 调用模式单选。零业务逻辑，所有 computed/action 通过 props 从 useSettings 接收
-  - `components/StatusBar.tsx` — 加载/无字幕/错误状态
+  - `components/StatusBar.tsx` — 加载/无字幕/错误状态，支持 source='bilibili'|'groq' 和 cached 标记
+  - `components/TranscribeButton.tsx` — 转录触发按钮 + 进度条（分阶段）+ 取消按钮 + 错误/重试 + rate limit 倒计时
+  - `hooks/useTranscribe.ts` — ASR 转录状态管理：startTranscribe → browser.runtime.sendMessage(TRANSCRIBE_AUDIO) → 监听 TRANSCRIBE_STATUS 推送 → 结果/错误/重试倒计时。SPA 切换时自动重置
+
+### Groq ASR 转录 (Step 2 — 已完成，Bilitato 对齐)
+
+3 层管线：Content Script → Background SW → Offscreen Document（FFmpeg WASM 分块）。
+
+- `lib/transcription/types.ts` — TranscribeRequest/Abort, TranscribeResponse(success|failure), TranscribeStatusPush, TranscribeErrorCode(16种), GroqTranscriptionResult, ChunkPlan, Offscreen 消息类型, VideoCacheEntry, BgMessage union
+- `lib/transcription/constants.ts` — GROQ_TRANSCRIBE_URL, GROQ_MAX_AUDIO_BYTES(24MB), CHUNK_SECONDS(600), OVERLAP(4s), SAFETY_RATIO(0.72), PROGRESS 阶段映射, 超时常量
+- `lib/transcription/groq-client.ts` — ensureGroqConnectivity(apiKey)（6s pre-flight GET /models）+ requestGroqTranscription(blob, apiKey, model, signal)（FormData POST verbose_json+segment）+ mapTranscriptionToRows() + parseRetryAfter() + AsrError 类
+- `lib/transcription/audio-extractor.ts` — extractAudioUrl(bvid, cid)（playurl API fnval:16 DASH audio，按 bandwidth 降序取最优）+ fetchAudioBlob(url, signal, onProgress)（streaming 下载，10% 粒度进度映射到 20-55%）
+- `lib/transcription/audio-fingerprint.ts` — assertAudioNotReused(blob, bvid)（SHA-256 + LRU(30)，相同 hash 不同 bvid 拒绝）
+- `lib/offscreen/main.ts` — Offscreen Document 逻辑：FFmpeg WASM 加载 + resolveAudioDuration(HTML5 Audio) + estimateSafeChunkSeconds(0.72 安全系数) + buildOverlappedChunkPlan(600s+4s overlap) + splitAudioIntoChunks(FFmpeg -c:a copy) + transcribeChunk(per-chunk Groq API) + mergeTimestampedChunkRows(时间偏移+overlap 裁剪+1.5s 近邻去重)。最多 3 轮 30% 缩减
+- `entrypoints/offscreen.html` — WXT unlisted page，通过 chrome.offscreen.createDocument 创建
+- `entrypoints/background.ts` — Background SW：onMessage(TRANSCRIBE_AUDIO) 编排完整转录流程（cache check → connectivity → audio extract → download → fingerprint → single/chunked transcribe → processSubtitles → cache write）+ TRANSCRIBE_ABORT(AbortController per-tab) + OFFSCREEN_CHUNK_PROGRESS 转发 + 进度推送 via tabs.sendMessage + videoCacheStorage(local:videoCache)
 
 ## 约定
 
@@ -67,7 +82,7 @@ MVP 阶段，首个功能：B站视频转录（Bilitato 风格视频页面 AI �
 - CID 获取: Main World 读取 `window.__INITIAL_STATE__` 优先（定期重发直到 content script 接收），降级到 `/x/player/pagelist` API（轻量，不需要 WBI 签名）
 - postMessage 桥接: Main World -> Isolated World，通过 `lib/bilibili/messaging.ts` 统一收发。BiliMessageMap 定义所有消息类型，发送用 postBiliMessage()，接收用 onBiliMessage()。消息流：`BILI_ROUTE_SWITCH`(bvid, 路由变化即时通知) → `BILI_SUBTITLE_HANDSHAKE`(bvid+cid, 800ms延迟) → `BILI_SUBTITLE_DATA`(字幕数据, defer 发送)。新增消息类型只需在 BiliMessageMap 加一行
 - 字幕后处理: 所有字幕数据（无论来源）均通过 `processSubtitles()` 四步管线处理（不合并，逐条独立）
-- 后续 Groq/LLM 需要时再引入 Background 消息桥
+- Background 消息桥: Content Script ↔ Background 通过 browser.runtime.sendMessage/onMessage。消息类型定义在 `lib/transcription/types.ts`（BgMessage union）。Background → Content Script 进度推送用 browser.tabs.sendMessage。Background ↔ Offscreen 用 chrome.runtime.sendMessage（Chrome-specific API）
 - 存储: WXT `storage.defineItem`（`local:` 前缀），import from `wxt/utils/storage`（非 `wxt/storage`）
 - 设置持久化: `settingsStorage`（`lib/storage.ts`），UserSettings 单对象存储在 `local:settings`。useSettings 是 deep module — 内聚 storage 读写、computed 属性推导、focused action 方法，SettingsView 是纯渲染组件
 - Inject 状态机: 三阶段生命周期 idle → triggering → captured，通过 InjectEffects 接口注入 DOM/postMessage 副作用，状态转换集中在 state.ts 的 createStateMachine() 内。routeGeneration 作为并发守卫防止路由切换后旧 in-flight 拦截结果被采纳
@@ -75,5 +90,8 @@ MVP 阶段，首个功能：B站视频转录（Bilitato 风格视频页面 AI �
 - 字幕获取流程（主路径）: interceptors.ts 拦截 fetch/XHR → sm.markCaptured() 解析+桥接 → postMessage SUBTITLE_DATA → useSubtitle 接收 → processSubtitles()
 - 字幕获取流程（降级路径）: extractBvid() → fetchCidByPageList() → fetchBilibiliSubtitle(bvid, cid) → processSubtitles()（失败自动重试最多 2 次）
 - 字幕 CDN (`aisubtitle.hdslb.com`) 跨域但 CORS 允许，Content Script 可直接 fetch（带 `credentials: 'include'`）
-- 无字幕降级: Groq Whisper API (`whisper-large-v3-turbo`)（Step 2）
-- LLM 总结: OpenAI 协议兼容多 Provider，Quality/Efficiency 两种模式（Step 2）
+- 无字幕降级: useSubtitle 返回 no_subtitle → App 显示 TranscribeButton → 用户点击 → TRANSCRIBE_AUDIO → Background 编排完整 Groq Whisper 转录 → 结果通过 processSubtitles() 后回写 SubtitleView
+- ASR 转录流程: cache check → ensureGroqConnectivity(pre-flight) → extractAudioUrl(playurl fnval:16) → fetchAudioBlob(streaming+progress) → assertAudioNotReused(SHA-256) → ≤24MB: requestGroqTranscription / >24MB: Offscreen FFmpeg 分块 → processSubtitles → cache
+- ASR 缓存: videoCacheStorage (local:videoCache) 按 bvid 缓存 SubtitleRow[] + source，避免重复转录
+- Offscreen Document: WXT unlisted page `entrypoints/offscreen.html`，逻辑在 `lib/offscreen/main.ts`。通过 chrome.offscreen.createDocument 按需创建（singleton），FFmpeg WASM stream-copy 分块，600s 默认 + 4s overlap
+- LLM 总结: OpenAI 协议兼容多 Provider，Quality/Efficiency 两种模式（Step 3，待实现）

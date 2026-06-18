@@ -38,6 +38,15 @@ const en: Record<LocaleKeys, string> = {
   'settings.saved': 'Saved',
   'settings.show': 'Show',
   'settings.hide': 'Hide',
+
+  'transcribe.button': 'Transcribe',
+  'transcribe.cancel': 'Cancel',
+  'transcribe.retry': 'Retry',
+  'transcribe.noApiKey': 'Please configure Groq API Key in Settings',
+  'transcribe.progress': 'Transcribing {{progress}}%',
+  'transcribe.cached': '{{count}} subtitles (Groq cached)',
+  'transcribe.done': '{{count}} subtitles (Groq ASR)',
+  'transcribe.rateLimit': 'Rate limited, retry in {{seconds}}s',
 };
 
 export default en;

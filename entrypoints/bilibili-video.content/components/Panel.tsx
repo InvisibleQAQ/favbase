@@ -5,6 +5,8 @@ import { t } from '@/lib/i18n';
 import { StatusBar } from './StatusBar';
 import { SubtitleView } from './SubtitleView';
 import { SettingsView, type SettingsViewProps } from './SettingsView';
+import { TranscribeButton } from './TranscribeButton';
+import type { UseTranscribeReturn } from '../hooks/useTranscribe';
 
 interface SidebarTab {
   id: string;
@@ -23,11 +25,17 @@ interface PanelProps {
   error: string | null;
   rows: SubtitleRow[];
   title: string;
+  source: 'bilibili' | 'groq';
+  cached: boolean;
+  showTranscribe: boolean;
+  transcribe: UseTranscribeReturn;
+  hasApiKey: boolean;
   settingsProps: SettingsViewProps;
 }
 
 export function Panel({
   loading, status, error, rows, title,
+  source, cached, showTranscribe, transcribe, hasApiKey,
   settingsProps,
 }: PanelProps) {
   const [collapsed, setCollapsed] = useState(false);
@@ -76,7 +84,15 @@ export function Panel({
                 status={status}
                 error={error}
                 subtitleCount={rows.length}
+                source={source}
+                cached={cached}
               />
+              {(showTranscribe || transcribe.transcribing || transcribe.error) && (
+                <TranscribeButton
+                  transcribe={transcribe}
+                  hasApiKey={hasApiKey}
+                />
+              )}
               {status === 'ok' && <SubtitleView rows={rows} />}
             </>
           )}

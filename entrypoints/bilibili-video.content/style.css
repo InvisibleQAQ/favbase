@@ -459,6 +459,116 @@ html, body {
   line-height: 1.4;
 }
 
+/* --- Transcribe Button & Progress --- */
+
+.favbase-transcribe {
+  padding: 10px;
+  text-align: center;
+}
+
+.favbase-transcribe-btn {
+  width: 100%;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(135deg, #f97316, #ea580c);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+  font-family: inherit;
+}
+
+.favbase-transcribe-btn:hover {
+  opacity: 0.9;
+}
+
+.favbase-transcribe-btn:active {
+  transform: scale(0.98);
+}
+
+.favbase-transcribe-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.favbase-transcribe-btn--retry {
+  background: linear-gradient(135deg, #6366f1, #4f46e5);
+}
+
+.favbase-transcribe-progress {
+  width: 100%;
+  height: 4px;
+  background: #f0ece8;
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.favbase-transcribe-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #f97316, #fb923c);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.favbase-transcribe-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: #999;
+  margin-bottom: 6px;
+}
+
+.favbase-transcribe-stage {
+  color: #666;
+}
+
+.favbase-transcribe-percent {
+  font-family: 'Menlo', 'Monaco', monospace;
+  color: #f97316;
+}
+
+.favbase-transcribe-cancel {
+  padding: 4px 12px;
+  font-size: 11px;
+  color: #999;
+  background: #faf9f7;
+  border: 1px solid #e8e4df;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  font-family: inherit;
+}
+
+.favbase-transcribe-cancel:hover {
+  background: #fff3e0;
+  color: #f97316;
+}
+
+.favbase-transcribe-error {
+  font-size: 12px;
+  color: #e74c3c;
+  background: #fdf2f0;
+  padding: 8px;
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+
+.favbase-transcribe-countdown {
+  font-size: 11px;
+  color: #999;
+  padding: 6px 0;
+}
+
+.favbase-transcribe-hint {
+  font-size: 12px;
+  color: #999;
+  padding: 8px;
+}
+
 /* --- Reduced motion --- */
 
 @media (prefers-reduced-motion: reduce) {

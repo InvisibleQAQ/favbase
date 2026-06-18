@@ -5,9 +5,18 @@ interface StatusBarProps {
   status: 'ok' | 'no_subtitle' | 'error' | null;
   error: string | null;
   subtitleCount: number;
+  source?: 'bilibili' | 'groq';
+  cached?: boolean;
 }
 
-export function StatusBar({ loading, status, error, subtitleCount }: StatusBarProps) {
+export function StatusBar({
+  loading,
+  status,
+  error,
+  subtitleCount,
+  source = 'bilibili',
+  cached = false,
+}: StatusBarProps) {
   if (loading) {
     return <div className="favbase-status favbase-status--loading">{t('status.loading')}</div>;
   }
@@ -25,6 +34,15 @@ export function StatusBar({ loading, status, error, subtitleCount }: StatusBarPr
   }
 
   if (status === 'ok') {
+    if (source === 'groq') {
+      const key = cached ? 'transcribe.cached' : 'transcribe.done';
+      return (
+        <div className="favbase-status favbase-status--ok">
+          {t(key, { count: subtitleCount })}
+        </div>
+      );
+    }
+
     return (
       <div className="favbase-status favbase-status--ok">
         {t('status.count', { count: subtitleCount })}

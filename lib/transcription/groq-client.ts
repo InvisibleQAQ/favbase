@@ -1,0 +1,183 @@
+import type { SubtitleRow } from '../types';
+import type {
+  GroqTranscriptionResult,
+  GroqTranscriptionResponse,
+  GroqQuota,
+  TranscribeErrorInfo,
+} from './types';
+import {
+  GROQ_TRANSCRIBE_URL,
+  GROQ_MODELS_URL,
+  GROQ_TRANSCRIPTION_PROMPT,
+  ASR_TASK_TIMEOUT_MS,
+  ASR_CONNECTIVITY_TIMEOUT_MS,
+  AUDIO_FILE_NAME,
+  AUDIO_MIME_TYPE,
+} from './constants';
+
+export class AsrError extends Error {
+  constructor(
+    public info: TranscribeErrorInfo,
+  ) {
+    super(info.message);
+    this.name = 'AsrError';
+  }
+}
+
+export async function ensureGroqConnectivity(apiKey: string): Promise<void> {
+  const controller = new AbortController();
+  const timer = setTimeout(
+    () => controller.abort(),
+    ASR_CONNECTIVITY_TIMEOUT_MS,
+  );
+
+  try {
+    const res = await fetch(GROQ_MODELS_URL, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      signal: controller.signal,
+    });
+
+    if (res.status === 401) {
+      throw new AsrError({
+        code: 'ASR_INVALID_KEY',
+        message: 'Groq API Key 无效',
+      });
+    }
+    if (res.status === 403) {
+      throw new AsrError({
+        code: 'ASR_GROQ_ACCESS_BLOCKED',
+        message: 'Groq API 访问被封禁',
+      });
+    }
+    if (!res.ok) {
+      throw new AsrError({
+        code: 'ASR_GROQ_UNREACHABLE',
+        message: `Groq 连通性检查失败: HTTP ${res.status}`,
+      });
+    }
+  } catch (err) {
+    if (err instanceof AsrError) throw err;
+    throw new AsrError({
+      code: 'ASR_GROQ_UNREACHABLE',
+      message: '无法连接 Groq API，请检查网络',
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function requestGroqTranscription(
+  audioBlob: Blob,
+  apiKey: string,
+  model: string,
+  signal?: AbortSignal,
+): Promise<GroqTranscriptionResult> {
+  const file = new File([audioBlob], AUDIO_FILE_NAME, { type: AUDIO_MIME_TYPE });
+
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('model', model);
+  formData.append('response_format', 'verbose_json');
+  formData.append('prompt', GROQ_TRANSCRIPTION_PROMPT);
+  formData.append('timestamp_granularities[]', 'segment');
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ASR_TASK_TIMEOUT_MS);
+
+  const combinedSignal = signal
+    ? AbortSignal.any([signal, controller.signal])
+    : controller.signal;
+
+  try {
+    const res = await fetch(GROQ_TRANSCRIBE_URL, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}` },
+      body: formData,
+      signal: combinedSignal,
+    });
+
+    if (res.status === 429) {
+      const retryAfter = parseRetryAfter(res);
+      throw new AsrError({
+        code: 'ASR_RATE_LIMIT',
+        message: 'Groq API 速率限制',
+        retryAfter,
+      });
+    }
+
+    if (res.status === 401) {
+      throw new AsrError({
+        code: 'ASR_INVALID_KEY',
+        message: 'Groq API Key 无效',
+      });
+    }
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new AsrError({
+        code: 'ASR_UNKNOWN',
+        message:
+          (body as any)?.error?.message ?? `Groq API 错误: HTTP ${res.status}`,
+      });
+    }
+
+    const quota = parseQuota(res);
+    const data: GroqTranscriptionResponse = await res.json();
+    const rows = mapTranscriptionToRows(data);
+
+    return { rows, quota };
+  } catch (err) {
+    if (err instanceof AsrError) throw err;
+    if ((err as Error).name === 'AbortError') {
+      throw new AsrError({
+        code: 'ASR_REQUEST_TIMEOUT',
+        message: '转录请求超时',
+      });
+    }
+    throw new AsrError({
+      code: 'ASR_UNKNOWN',
+      message: (err as Error).message ?? '转录失败',
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export function mapTranscriptionToRows(
+  data: GroqTranscriptionResponse,
+): SubtitleRow[] {
+  if (!data.segments?.length) return [];
+
+  return data.segments
+    .map((seg) => {
+      const text = seg.text?.trim();
+      if (!text) return null;
+      return {
+        start: Number(seg.start),
+        end: Number(seg.end) || Number(seg.start) + 3,
+        text,
+      };
+    })
+    .filter((r): r is SubtitleRow => r !== null);
+}
+
+function parseRetryAfter(res: Response): number {
+  const header = res.headers.get('retry-after');
+  if (header) {
+    const seconds = Number(header);
+    if (!Number.isNaN(seconds)) return seconds;
+  }
+  return 30;
+}
+
+function parseQuota(res: Response): GroqQuota {
+  return {
+    remainingTokens: Number(
+      res.headers.get('x-ratelimit-remaining-tokens') ?? 0,
+    ),
+    remainingRequests: Number(
+      res.headers.get('x-ratelimit-remaining-requests') ?? 0,
+    ),
+    resetTokens: res.headers.get('x-ratelimit-reset-tokens') ?? '',
+  };
+}
