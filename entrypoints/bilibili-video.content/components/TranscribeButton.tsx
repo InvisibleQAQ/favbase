@@ -1,5 +1,24 @@
 import { t } from '@/lib/i18n';
+import type { LocaleKeys } from '@/lib/i18n/locales/zh-CN';
+import type { TranscribeErrorCode } from '@/lib/transcription/types';
 import type { UseTranscribeReturn } from '../hooks/useTranscribe';
+
+function translateStage(
+  stage: string,
+  stageParams?: Record<string, string | number>,
+): string {
+  if (!stage) return '';
+  const key = `stage.${stage}` as LocaleKeys;
+  return t(key, stageParams);
+}
+
+function translateError(
+  code: TranscribeErrorCode,
+  params?: Record<string, string | number>,
+): string {
+  const key = `error.${code}` as LocaleKeys;
+  return t(key, params);
+}
 
 interface TranscribeButtonProps {
   transcribe: UseTranscribeReturn;
@@ -11,6 +30,7 @@ export function TranscribeButton({ transcribe, hasApiKey }: TranscribeButtonProp
     transcribing,
     progress,
     stage,
+    stageParams,
     error,
     retryCountdown,
     startTranscribe,
@@ -27,7 +47,7 @@ export function TranscribeButton({ transcribe, hasApiKey }: TranscribeButtonProp
           />
         </div>
         <div className="favbase-transcribe-info">
-          <span className="favbase-transcribe-stage">{stage}</span>
+          <span className="favbase-transcribe-stage">{translateStage(stage, stageParams)}</span>
           <span className="favbase-transcribe-percent">{progress}%</span>
         </div>
         <button
@@ -45,7 +65,7 @@ export function TranscribeButton({ transcribe, hasApiKey }: TranscribeButtonProp
     return (
       <div className="favbase-transcribe">
         <div className="favbase-transcribe-error">
-          {error.message}
+          {translateError(error.code, error.params)}
         </div>
         {retryCountdown > 0 ? (
           <div className="favbase-transcribe-countdown">

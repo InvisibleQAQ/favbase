@@ -40,26 +40,26 @@ export async function ensureGroqConnectivity(apiKey: string): Promise<void> {
     if (res.status === 401) {
       throw new AsrError({
         code: 'ASR_INVALID_KEY',
-        message: 'Groq API Key 无效',
+        message: 'Groq API key invalid (401)',
       });
     }
     if (res.status === 403) {
       throw new AsrError({
         code: 'ASR_GROQ_ACCESS_BLOCKED',
-        message: 'Groq API 访问被封禁',
+        message: 'Groq API access blocked (403)',
       });
     }
     if (!res.ok) {
       throw new AsrError({
         code: 'ASR_GROQ_UNREACHABLE',
-        message: `Groq 连通性检查失败: HTTP ${res.status}`,
+        message: `Groq connectivity check failed: HTTP ${res.status}`,
       });
     }
   } catch (err) {
     if (err instanceof AsrError) throw err;
     throw new AsrError({
       code: 'ASR_GROQ_UNREACHABLE',
-      message: '无法连接 Groq API，请检查网络',
+      message: `Cannot reach Groq API: ${(err as Error).message ?? 'network error'}`,
     });
   } finally {
     clearTimeout(timer);
@@ -100,7 +100,7 @@ export async function requestGroqTranscription(
       const retryAfter = parseRetryAfter(res);
       throw new AsrError({
         code: 'ASR_RATE_LIMIT',
-        message: 'Groq API 速率限制',
+        message: `Groq rate limited (retry after ${retryAfter}s)`,
         retryAfter,
       });
     }
@@ -108,16 +108,17 @@ export async function requestGroqTranscription(
     if (res.status === 401) {
       throw new AsrError({
         code: 'ASR_INVALID_KEY',
-        message: 'Groq API Key 无效',
+        message: 'Groq API key invalid (401)',
       });
     }
 
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
+      const apiMsg = (body as any)?.error?.message ?? `HTTP ${res.status}`;
       throw new AsrError({
         code: 'ASR_UNKNOWN',
-        message:
-          (body as any)?.error?.message ?? `Groq API 错误: HTTP ${res.status}`,
+        message: `Groq API error: ${apiMsg}`,
+        params: { detail: apiMsg },
       });
     }
 
@@ -131,12 +132,14 @@ export async function requestGroqTranscription(
     if ((err as Error).name === 'AbortError') {
       throw new AsrError({
         code: 'ASR_REQUEST_TIMEOUT',
-        message: '转录请求超时',
+        message: 'Transcription request timed out',
       });
     }
+    const detail = (err as Error).message ?? 'transcription failed';
     throw new AsrError({
       code: 'ASR_UNKNOWN',
-      message: (err as Error).message ?? '转录失败',
+      message: `Transcription failed: ${detail}`,
+      params: { detail },
     });
   } finally {
     clearTimeout(timer);

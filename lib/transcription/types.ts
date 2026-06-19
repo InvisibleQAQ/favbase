@@ -12,17 +12,33 @@ export interface TranscribeAbort {
   bvid: string;
 }
 
+export type TranscribeStage =
+  | 'start'
+  | 'connectivity'
+  | 'extracting'
+  | 'downloading'
+  | 'uploading'
+  | 'transcribing'
+  | 'chunking'
+  | 'chunk_transcribing'
+  | 'processing'
+  | 'done'
+  | 'cancelled'
+  | 'failed';
+
 export interface TranscribeStatusPush {
   type: 'TRANSCRIBE_STATUS';
   bvid: string;
   progress: number;
-  stage: string;
+  stage: TranscribeStage;
+  stageParams?: Record<string, string | number>;
   error?: TranscribeErrorInfo;
 }
 
 export interface TranscribeErrorInfo {
   code: TranscribeErrorCode;
   message: string;
+  params?: Record<string, string | number>;
   retryAfter?: number;
 }
 

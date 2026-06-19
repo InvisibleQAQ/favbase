@@ -19,7 +19,7 @@ export function t(
   key: LocaleKeys,
   params?: Record<string, string | number>,
 ): string {
-  let text: string = messages[key];
+  let text: string = messages[key] ?? key;
 
   if (params) {
     for (const [name, value] of Object.entries(params)) {

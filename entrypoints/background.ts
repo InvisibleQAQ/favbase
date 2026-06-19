@@ -3,6 +3,7 @@ import type {
   BgMessage,
   TranscribeResponse,
   TranscribeStatusPush,
+  TranscribeStage,
   TranscribeErrorInfo,
   GetVideoCacheRequest,
   ClearVideoCacheRequest,
@@ -61,14 +62,16 @@ export default defineBackground(() => {
     tabId: number,
     bvid: string,
     progress: number,
-    stage: string,
+    stage: TranscribeStage,
     error?: TranscribeErrorInfo,
+    stageParams?: Record<string, string | number>,
   ): void {
     const msg: TranscribeStatusPush = {
       type: 'TRANSCRIBE_STATUS',
       bvid,
       progress,
       stage,
+      stageParams,
       error,
     };
     browser.tabs.sendMessage(tabId, msg).catch(() => {});
@@ -79,11 +82,13 @@ export default defineBackground(() => {
     if (err instanceof AudioExtractError) return err.info;
     if (err instanceof AudioReuseError) return err.info;
     if (err instanceof DOMException && err.name === 'AbortError') {
-      return { code: 'ASR_REQUEST_TIMEOUT', message: '操作已取消' };
+      return { code: 'ASR_REQUEST_TIMEOUT', message: 'Operation aborted' };
     }
+    const detail = err instanceof Error ? err.message : 'unknown error';
     return {
       code: 'ASR_UNKNOWN',
-      message: err instanceof Error ? err.message : '未知错误',
+      message: detail,
+      params: { detail },
     };
   }
 
@@ -99,7 +104,7 @@ export default defineBackground(() => {
       if (signal.aborted) return;
       const increment = 2 + Math.random() * 2;
       current = Math.min(to, current + increment);
-      notifyTab(tabId, bvid, Math.round(current), '转录中');
+      notifyTab(tabId, bvid, Math.round(current), 'transcribing');
     }, 2000);
   }
 
@@ -126,7 +131,7 @@ export default defineBackground(() => {
         success: false,
         error: {
           code: 'ASR_INVALID_KEY',
-          message: '请先在设置中配置 Groq API Key',
+          message: 'Groq API key not configured',
         },
       };
     }
@@ -136,22 +141,22 @@ export default defineBackground(() => {
     tabBvids.set(tabId, bvid);
 
     try {
-      notifyTab(tabId, bvid, PROGRESS.START, '开始转录');
+      notifyTab(tabId, bvid, PROGRESS.START, 'start');
 
-      notifyTab(tabId, bvid, PROGRESS.CONNECTIVITY_CHECK, '检查 Groq 连通性');
+      notifyTab(tabId, bvid, PROGRESS.CONNECTIVITY_CHECK, 'connectivity');
       await ensureGroqConnectivity(apiKey);
 
       if (controller.signal.aborted)
         throw new DOMException('Aborted', 'AbortError');
 
-      notifyTab(tabId, bvid, PROGRESS.DOWNLOAD_BEGIN, '提取音频地址');
+      notifyTab(tabId, bvid, PROGRESS.DOWNLOAD_BEGIN, 'extracting');
       const audioUrl = await extractAudioUrl(bvid, cid);
 
-      notifyTab(tabId, bvid, PROGRESS.DOWNLOAD_BEGIN + 1, '下载音频');
+      notifyTab(tabId, bvid, PROGRESS.DOWNLOAD_BEGIN + 1, 'downloading');
       const audioBlob = await fetchAudioBlob(
         audioUrl,
         controller.signal,
-        (p) => notifyTab(tabId, bvid, p, '下载音频'),
+        (p) => notifyTab(tabId, bvid, p, 'downloading'),
       );
 
       if (controller.signal.aborted)
@@ -162,7 +167,7 @@ export default defineBackground(() => {
       let rows: SubtitleRow[];
 
       if (audioBlob.size <= GROQ_MAX_AUDIO_BYTES) {
-        notifyTab(tabId, bvid, PROGRESS.PREPARE_UPLOAD, '上传音频到 Groq');
+        notifyTab(tabId, bvid, PROGRESS.PREPARE_UPLOAD, 'uploading');
 
         const fakeTimer = startFakeProgress(
           tabId,
@@ -184,7 +189,7 @@ export default defineBackground(() => {
           clearInterval(fakeTimer);
         }
       } else {
-        notifyTab(tabId, bvid, PROGRESS.CHUNK_PREPARE, '准备分块（FFmpeg）');
+        notifyTab(tabId, bvid, PROGRESS.CHUNK_PREPARE, 'chunking');
 
         await ensureOffscreen();
         const sessionId = `${bvid}_${Date.now()}`;
@@ -224,7 +229,7 @@ export default defineBackground(() => {
         rows = transcribeRes.rows!;
       }
 
-      notifyTab(tabId, bvid, PROGRESS.PARSING, '处理字幕');
+      notifyTab(tabId, bvid, PROGRESS.PARSING, 'processing');
       rows = processSubtitles(rows);
 
       await mergeVideoCache(bvid, {
@@ -234,7 +239,7 @@ export default defineBackground(() => {
         rawHash: computeRowsHash(rows),
         updatedAt: Date.now(),
       });
-      notifyTab(tabId, bvid, PROGRESS.DONE, '转录完成');
+      notifyTab(tabId, bvid, PROGRESS.DONE, 'done');
 
       return {
         success: true,
@@ -242,7 +247,7 @@ export default defineBackground(() => {
       };
     } catch (err) {
       const errorInfo = toErrorInfo(err);
-      notifyTab(tabId, bvid, 0, '转录失败', errorInfo);
+      notifyTab(tabId, bvid, 0, 'failed', errorInfo);
       return { success: false, error: errorInfo };
     } finally {
       tabAbortControllers.delete(tabId);
@@ -269,7 +274,9 @@ export default defineBackground(() => {
             tId,
             bvid,
             progress,
-            `分块转录 ${pm.chunkIndex + 1}/${pm.totalChunks}`,
+            'chunk_transcribing',
+            undefined,
+            { current: pm.chunkIndex + 1, total: pm.totalChunks },
           );
         }
         return undefined;

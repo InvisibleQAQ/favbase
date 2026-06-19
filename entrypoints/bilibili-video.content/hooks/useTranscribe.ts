@@ -3,13 +3,15 @@ import type { SubtitleRow } from '@/lib/types';
 import type {
   TranscribeResponse,
   TranscribeStatusPush,
+  TranscribeStage,
   TranscribeErrorInfo,
 } from '@/lib/transcription/types';
 
 export interface TranscribeState {
   transcribing: boolean;
   progress: number;
-  stage: string;
+  stage: TranscribeStage | '';
+  stageParams?: Record<string, string | number>;
   rows: SubtitleRow[];
   error: TranscribeErrorInfo | null;
   cached: boolean;
@@ -79,6 +81,7 @@ export function useTranscribe(
         ...prev,
         progress: m.progress,
         stage: m.stage,
+        stageParams: m.stageParams,
         error: m.error ?? prev.error,
       }));
     };
@@ -120,7 +123,7 @@ export function useTranscribe(
             ...prev,
             transcribing: false,
             progress: 100,
-            stage: '完成',
+            stage: 'done',
             rows: res.data.rows,
             cached: res.data.cached,
             error: null,
@@ -150,12 +153,14 @@ export function useTranscribe(
         }
       })
       .catch((err: Error) => {
+        const detail = err?.message ?? 'communication failed';
         setState((prev) => ({
           ...prev,
           transcribing: false,
           error: {
             code: 'ASR_UNKNOWN',
-            message: err?.message ?? '通信失败',
+            message: detail,
+            params: { detail },
           },
         }));
       });
@@ -167,7 +172,7 @@ export function useTranscribe(
     setState((prev) => ({
       ...prev,
       transcribing: false,
-      stage: '已取消',
+      stage: 'cancelled',
     }));
   }, [bvid]);
 

@@ -27,7 +27,7 @@ export async function extractAudioUrl(
   if (!res.ok) {
     throw new AudioExtractError({
       code: 'ASR_NO_AUDIO_SOURCE',
-      message: `playurl API 失败: HTTP ${res.status}`,
+      message: `playurl API failed: HTTP ${res.status}`,
     });
   }
 
@@ -36,7 +36,7 @@ export async function extractAudioUrl(
   if (Number(json?.code ?? 0) !== 0) {
     throw new AudioExtractError({
       code: 'ASR_NO_AUDIO_SOURCE',
-      message: `playurl API 返回失败: ${String(json?.message || '未知错误')}`,
+      message: `playurl API returned error: ${String(json?.message || 'unknown')}`,
     });
   }
 
@@ -45,7 +45,7 @@ export async function extractAudioUrl(
   if (!dash?.audio?.length) {
     throw new AudioExtractError({
       code: 'ASR_NO_AUDIO_SOURCE',
-      message: '未提取到音轨地址',
+      message: 'No audio tracks found in DASH manifest',
     });
   }
 
@@ -61,7 +61,7 @@ export async function extractAudioUrl(
   if (!audioUrl) {
     throw new AudioExtractError({
       code: 'ASR_NO_AUDIO_SOURCE',
-      message: '音轨 URL 为空',
+      message: 'Audio track URL is empty',
     });
   }
 
@@ -87,10 +87,8 @@ export async function fetchAudioBlob(
   if (!res.ok) {
     throw new AudioExtractError({
       code: 'DOWNLOAD_FAILED',
-      message:
-        res.status === 403
-          ? '音频下载失败: 付费或受限内容'
-          : `音频下载失败: HTTP ${res.status}`,
+      message: `Audio download failed: HTTP ${res.status}`,
+      params: { status: res.status },
     });
   }
 

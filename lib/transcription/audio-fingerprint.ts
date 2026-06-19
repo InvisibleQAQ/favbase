@@ -33,7 +33,7 @@ export async function assertAudioNotReused(
   if (existing && existing.bvid !== bvid) {
     throw new AudioReuseError({
       code: 'ASR_AUDIO_REUSED',
-      message: `音频指纹重复 (原 ${existing.bvid}，当前 ${bvid})，可能是 SPA 导航残留数据`,
+      message: `Audio fingerprint collision (existing ${existing.bvid}, current ${bvid}), likely stale SPA navigation data`,
     });
   }
 

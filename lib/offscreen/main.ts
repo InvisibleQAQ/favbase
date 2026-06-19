@@ -50,13 +50,15 @@ async function fetchAudioBytes(url: string): Promise<ArrayBuffer> {
   } catch (err) {
     throw {
       code: 'DOWNLOAD_FAILED',
-      message: `下载音频失败: ${err instanceof Error ? err.message : 'network error'}`,
+      message: `Audio download failed: ${err instanceof Error ? err.message : 'network error'}`,
+      params: { status: 0 },
     } satisfies TranscribeErrorInfo;
   }
   if (!res.ok) {
     throw {
       code: 'DOWNLOAD_FAILED',
-      message: `下载音频失败: HTTP ${res.status}`,
+      message: `Audio download failed: HTTP ${res.status}`,
+      params: { status: res.status },
     } satisfies TranscribeErrorInfo;
   }
   return res.arrayBuffer();
@@ -191,7 +193,7 @@ async function splitAudioIntoChunks(
 
     const data = await ffmpeg.readFile(outputName);
     if (typeof data === 'string') {
-      throw new Error(`FFmpeg 输出格式错误: chunk ${plan.index}`);
+      throw new Error(`FFmpeg output format error: chunk ${plan.index}`);
     }
 
     results.push({ bytes: data, plan });
@@ -215,7 +217,7 @@ async function handlePrepare(msg: OffscreenPrepareRequest): Promise<void> {
   if (!(duration > 0)) {
     throw {
       code: 'ASR_CHUNK_DURATION_UNKNOWN',
-      message: '无法确定音频时长',
+      message: 'Cannot determine audio duration',
     } satisfies TranscribeErrorInfo;
   }
 
@@ -241,7 +243,7 @@ async function handlePrepare(msg: OffscreenPrepareRequest): Promise<void> {
     } catch {
       throw {
         code: 'ASR_CHUNKING_FAILED',
-        message: 'FFmpeg 分块失败',
+        message: 'FFmpeg chunking failed',
       } satisfies TranscribeErrorInfo;
     }
 
@@ -251,7 +253,7 @@ async function handlePrepare(msg: OffscreenPrepareRequest): Promise<void> {
     if (round === MAX_CHUNK_SHRINK_ROUNDS) {
       throw {
         code: 'ASR_CHUNKING_UNSUPPORTED',
-        message: `经过 ${MAX_CHUNK_SHRINK_ROUNDS} 轮缩减仍超限`,
+        message: `Still oversized after ${MAX_CHUNK_SHRINK_ROUNDS} shrink rounds`,
       } satisfies TranscribeErrorInfo;
     }
 
@@ -292,16 +294,18 @@ async function transcribeChunk(
     const retryAfter = Number(res.headers.get('retry-after') ?? 30);
     throw {
       code: 'ASR_RATE_LIMIT',
-      message: 'Groq API 速率限制',
+      message: `Groq rate limited (retry after ${retryAfter}s)`,
       retryAfter,
     } satisfies TranscribeErrorInfo;
   }
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
+    const apiMsg = (body as any)?.error?.message ?? `HTTP ${res.status}`;
     throw {
       code: 'ASR_UNKNOWN',
-      message: (body as any)?.error?.message ?? `Groq 错误: HTTP ${res.status}`,
+      message: `Groq error: ${apiMsg}`,
+      params: { detail: apiMsg },
     } satisfies TranscribeErrorInfo;
   }
 
@@ -360,7 +364,7 @@ async function handleTranscribe(msg: OffscreenTranscribeRequest): Promise<Subtit
   if (!session) {
     throw {
       code: 'ASR_CHUNKING_FAILED',
-      message: '分块会话不存在',
+      message: `Chunk session not found: ${msg.sessionId}`,
     } satisfies TranscribeErrorInfo;
   }
 

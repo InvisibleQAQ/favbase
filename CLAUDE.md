@@ -58,14 +58,14 @@ MVP 阶段，首个功能：B站视频转录（Bilitato 风格视频页面 AI �
   - `components/SubtitleView.tsx` — 逐行字幕列表 + 时间戳点击跳转 + 当前播放行高亮（250ms 轮询 `<video>.currentTime`，二分查找活跃行）+ 自动滚动（尊重用户手动滚动意图，4s 超时恢复）
   - `components/SettingsView.tsx` — 纯渲染设置界面：LLM Provider 下拉（9个）+ 每 Provider 独立 API Key/Model + Custom 额外字段 + ASR Provider 切换 + 调用模式单选。零业务逻辑，所有 computed/action 通过 props 从 useSettings 接收
   - `components/StatusBar.tsx` — 加载/无字幕/错误状态，支持 source='bilibili'|'groq' 和 cached 标记
-  - `components/TranscribeButton.tsx` — 转录触发按钮 + 进度条（分阶段）+ 取消按钮 + 错误/重试 + rate limit 倒计时
-  - `hooks/useTranscribe.ts` — ASR 转录状态管理：startTranscribe → browser.runtime.sendMessage(TRANSCRIBE_AUDIO) → 监听 TRANSCRIBE_STATUS 推送 → 结果/错误/重试倒计时。SPA 切换时自动重置
+  - `components/TranscribeButton.tsx` — 转录触发按钮 + 进度条（分阶段）+ 取消按钮 + 错误/重试 + rate limit 倒计时。stage/error 通过 `translateStage()`/`translateError()` 调用 `t()` 翻译，不直接渲染 error.message
+  - `hooks/useTranscribe.ts` — ASR 转录状态管理：startTranscribe → browser.runtime.sendMessage(TRANSCRIBE_AUDIO) → 监听 TRANSCRIBE_STATUS 推送 → 结果/错误/重试倒计时。SPA 切换时自动重置。TranscribeState.stage 类型为 `TranscribeStage | ''`
 
 ### Groq ASR 转录 (Step 2 — 已完成，Bilitato 对齐)
 
 3 层管线：Content Script → Background SW → Offscreen Document（FFmpeg WASM 分块）。
 
-- `lib/transcription/types.ts` — TranscribeRequest/Abort, TranscribeResponse(success|failure), TranscribeStatusPush, TranscribeErrorCode(16种), GroqTranscriptionResult, ChunkPlan, Offscreen 消息类型, VideoCacheEntry(含 rawHash), GetVideoCacheRequest/ClearVideoCacheRequest/CacheSubtitleRequest, BgMessage union
+- `lib/transcription/types.ts` — TranscribeRequest/Abort, TranscribeResponse(success|failure), TranscribeStage(12种 union), TranscribeStatusPush(stage enum + stageParams), TranscribeErrorCode(14种) + TranscribeErrorInfo(code + debug message + params), GroqTranscriptionResult, ChunkPlan, Offscreen 消息类型, VideoCacheEntry(含 rawHash), GetVideoCacheRequest/ClearVideoCacheRequest/CacheSubtitleRequest, BgMessage union
 - `lib/transcription/constants.ts` — GROQ_TRANSCRIBE_URL, GROQ_MAX_AUDIO_BYTES(24MB), CHUNK_SECONDS(600), OVERLAP(4s), SAFETY_RATIO(0.72), PROGRESS 阶段映射, 超时常量
 - `lib/transcription/groq-client.ts` — ensureGroqConnectivity(apiKey)（6s pre-flight GET /models）+ requestGroqTranscription(blob, apiKey, model, signal)（FormData POST verbose_json+segment）+ mapTranscriptionToRows() + parseRetryAfter() + AsrError 类
 - `lib/transcription/audio-extractor.ts` — extractAudioUrl(bvid, cid)（playurl API fnval:16 DASH audio，按 bandwidth 降序取最优）+ fetchAudioBlob(url, signal, onProgress)（streaming 下载，10% 粒度进度映射到 20-55%）
@@ -97,4 +97,5 @@ MVP 阶段，首个功能：B站视频转录（Bilitato 风格视频页面 AI �
 - ASR 转录流程: cache check → ensureGroqConnectivity(pre-flight) → extractAudioUrl(playurl fnval:16+high_quality:1, 含 json.code 校验) → fetchAudioBlob(streaming+progress) → assertAudioNotReused(SHA-256) → ≤24MB: requestGroqTranscription / >24MB: Offscreen FFmpeg 分块 → processSubtitles → cache
 - 视频缓存: `lib/cache/video-cache.ts` 模块。per-bvid 独立 key `local:vc:{bvid}`（chrome.storage 中为 `vc:{bvid}`）。内存缓存层（Map<string, VideoCacheEntry>）+ Promise-based per-bvid 写锁 + computeRowsHash 去重。所有来源（bilibili/groq）字幕统一缓存。旧 `local:videoCache` 单体 key 在首次访问时自动迁移。Background 侧 initCacheStorageListener 保持内存缓存与 storage 同步，Content Script 侧 chrome.storage.onChanged 实现跨 tab UI 实时更新
 - Offscreen Document: WXT unlisted page `entrypoints/offscreen.html`，逻辑在 `lib/offscreen/main.ts`。通过 chrome.offscreen.createDocument 按需创建（singleton），FFmpeg WASM stream-copy 分块，600s 默认 + 4s overlap。Background 传 audioUrl（非 ArrayBuffer），Offscreen 自行 fetch 音频数据（避免大体积二进制通过 chrome.runtime.sendMessage 传输不可靠）。FFmpeg WASM 从 `public/ffmpeg/`（@ffmpeg/core@0.12.10）本地加载
+- i18n 架构: `lib/i18n/` 自研轻量方案（无外部依赖），`detectLocale()` 基于 `navigator.language` 选择 zh-CN 或 en。locale 文件在 `lib/i18n/locales/{zh-CN,en}.ts`，`LocaleKeys` 类型从 zh-CN 推导。**seam 在 UI 边界**：lib 层（groq-client/audio-extractor/offscreen 等）只传结构化数据（TranscribeErrorCode + params / TranscribeStage + stageParams），UI 层通过 `t()` 翻译。`TranscribeErrorInfo.message` 是英文 debug-only 字段（console 用），不渲染到 UI。`t()` 对未知 key 返回 key 字符串本身（fallback）。新增 error/stage locale key 时需同时更新 zh-CN.ts 和 en.ts
 - LLM 总结: OpenAI 协议兼容多 Provider，Quality/Efficiency 两种模式（Step 3，待实现）
