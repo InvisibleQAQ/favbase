@@ -193,7 +193,7 @@ export default defineBackground(() => {
           await chrome.runtime.sendMessage({
             type: 'OFFSCREEN_CHUNK_PREPARE',
             sessionId,
-            audioBytes: await audioBlob.arrayBuffer(),
+            audioUrl,
             maxBytes: GROQ_MAX_AUDIO_BYTES,
           } satisfies OffscreenPrepareRequest);
 

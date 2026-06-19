@@ -90,7 +90,7 @@ export interface ChunkPlan {
 export interface OffscreenPrepareRequest {
   type: 'OFFSCREEN_CHUNK_PREPARE';
   sessionId: string;
-  audioBytes: ArrayBuffer;
+  audioUrl: string;
   maxBytes: number;
 }
 

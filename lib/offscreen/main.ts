@@ -1,5 +1,4 @@
 import { FFmpeg } from '@ffmpeg/ffmpeg';
-import { fetchFile } from '@ffmpeg/util';
 import type { SubtitleRow } from '@/lib/types';
 import type {
   OffscreenRequest,
@@ -15,7 +14,6 @@ import {
   CHUNK_SIZE_SAFETY_RATIO,
   CHUNK_SHRINK_FACTOR,
   MAX_CHUNK_SHRINK_ROUNDS,
-  GROQ_MAX_AUDIO_BYTES,
   GROQ_TRANSCRIBE_URL,
   GROQ_TRANSCRIPTION_PROMPT,
   AUDIO_FILE_NAME,
@@ -27,46 +25,97 @@ interface ChunkSession {
 }
 
 const sessions = new Map<string, ChunkSession>();
-let ffmpegInstance: FFmpeg | null = null;
+let ffmpegPromise: Promise<FFmpeg> | null = null;
 
-async function getFFmpeg(): Promise<FFmpeg> {
-  if (ffmpegInstance) return ffmpegInstance;
-
-  const ffmpeg = new FFmpeg();
-  await ffmpeg.load();
-  ffmpegInstance = ffmpeg;
-  return ffmpeg;
+function getFFmpeg(): Promise<FFmpeg> {
+  if (!ffmpegPromise) {
+    ffmpegPromise = (async () => {
+      const ffmpeg = new FFmpeg();
+      const coreURL = chrome.runtime.getURL('/ffmpeg/ffmpeg-core.js');
+      const wasmURL = chrome.runtime.getURL('/ffmpeg/ffmpeg-core.wasm');
+      await ffmpeg.load({ coreURL, wasmURL });
+      return ffmpeg;
+    })().catch((err) => {
+      ffmpegPromise = null;
+      throw err;
+    });
+  }
+  return ffmpegPromise;
 }
 
-function resolveAudioDuration(audioBytes: Uint8Array): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const blob = new Blob([audioBytes.buffer.slice(audioBytes.byteOffset, audioBytes.byteOffset + audioBytes.byteLength) as ArrayBuffer], { type: AUDIO_MIME_TYPE });
-    const url = URL.createObjectURL(blob);
-    const audio = new Audio();
+async function fetchAudioBytes(url: string): Promise<ArrayBuffer> {
+  let res: Response;
+  try {
+    res = await fetch(url, { method: 'GET', credentials: 'omit', mode: 'cors' });
+  } catch (err) {
+    throw {
+      code: 'DOWNLOAD_FAILED',
+      message: `下载音频失败: ${err instanceof Error ? err.message : 'network error'}`,
+    } satisfies TranscribeErrorInfo;
+  }
+  if (!res.ok) {
+    throw {
+      code: 'DOWNLOAD_FAILED',
+      message: `下载音频失败: HTTP ${res.status}`,
+    } satisfies TranscribeErrorInfo;
+  }
+  return res.arrayBuffer();
+}
 
-    const cleanup = () => {
-      URL.revokeObjectURL(url);
-      audio.removeAttribute('src');
-      audio.load();
+async function resolveAudioDuration(audioBytes: ArrayBuffer, mimeType: string): Promise<number> {
+  const fromElement = await readDurationFromAudioElement(audioBytes, mimeType).catch(() => 0);
+  if (fromElement > 0) return fromElement;
+  const ffmpeg = await getFFmpeg();
+  return probeAudioDurationWithFFmpeg(ffmpeg, new Uint8Array(audioBytes));
+}
+
+function readDurationFromAudioElement(audioBytes: ArrayBuffer, mimeType: string): Promise<number> {
+  return new Promise((resolve) => {
+    const blob = new Blob([audioBytes], { type: mimeType });
+    const blobUrl = URL.createObjectURL(blob);
+    let settled = false;
+
+    const audio = new Audio();
+    const settle = (value: number) => {
+      if (settled) return;
+      settled = true;
+      URL.revokeObjectURL(blobUrl);
+      resolve(value);
     };
 
     audio.addEventListener('loadedmetadata', () => {
       const dur = audio.duration;
-      cleanup();
-      if (!Number.isFinite(dur) || dur <= 0) {
-        reject(new Error('无法确定音频时长'));
-      } else {
-        resolve(dur);
-      }
-    });
+      settle(Number.isFinite(dur) && dur > 0 ? dur : 0);
+    }, { once: true });
+    audio.addEventListener('error', () => settle(0), { once: true });
+    setTimeout(() => settle(0), 5000);
 
-    audio.addEventListener('error', () => {
-      cleanup();
-      reject(new Error('无法加载音频以确定时长'));
-    });
-
-    audio.src = url;
+    audio.preload = 'metadata';
+    audio.src = blobUrl;
   });
+}
+
+async function probeAudioDurationWithFFmpeg(ffmpeg: FFmpeg, audioBytes: Uint8Array): Promise<number> {
+  const probeName = `probe_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}.m4a`;
+  const outputName = `${probeName}.duration.txt`;
+  try {
+    await ffmpeg.writeFile(probeName, audioBytes);
+    await (ffmpeg as any).ffprobe([
+      '-v', 'error',
+      '-show_entries', 'format=duration',
+      '-of', 'default=noprint_wrappers=1:nokey=1',
+      probeName,
+      '-o', outputName,
+    ]);
+    const raw = await ffmpeg.readFile(outputName, 'utf8');
+    const duration = Number(String(raw || '').trim());
+    return Number.isFinite(duration) ? duration : 0;
+  } catch {
+    return 0;
+  } finally {
+    await ffmpeg.deleteFile(probeName).catch(() => {});
+    await ffmpeg.deleteFile(outputName).catch(() => {});
+  }
 }
 
 function estimateSafeChunkSeconds(
@@ -154,18 +203,23 @@ async function splitAudioIntoChunks(
 }
 
 async function handlePrepare(msg: OffscreenPrepareRequest): Promise<void> {
-  const audioBytes = new Uint8Array(msg.audioBytes);
-  const totalBytes = audioBytes.byteLength;
+  const sourceBytes = await fetchAudioBytes(msg.audioUrl);
+  const totalBytes = sourceBytes.byteLength;
 
   let duration: number;
   try {
-    duration = await resolveAudioDuration(audioBytes);
+    duration = await resolveAudioDuration(sourceBytes, AUDIO_MIME_TYPE);
   } catch {
+    duration = 0;
+  }
+  if (!(duration > 0)) {
     throw {
       code: 'ASR_CHUNK_DURATION_UNKNOWN',
       message: '无法确定音频时长',
     } satisfies TranscribeErrorInfo;
   }
+
+  const audioBytes = new Uint8Array(sourceBytes);
 
   let chunkSeconds = estimateSafeChunkSeconds(
     totalBytes,
