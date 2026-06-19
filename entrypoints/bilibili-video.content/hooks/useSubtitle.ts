@@ -93,7 +93,7 @@ export function useSubtitle(
     // Step 2: Listen for intercept channel (parallel with cache check)
     const unsubData = onBiliMessage('BILI_SUBTITLE_DATA', (payload) => {
       if (cancelled || resolved) return;
-      if (payload.bvid !== bvid) return;
+      if (payload.bvid?.toLowerCase() !== bvid?.toLowerCase()) return;
 
       resolved = true;
       if (fallbackTimer) clearTimeout(fallbackTimer);

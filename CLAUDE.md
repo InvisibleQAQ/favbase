@@ -41,7 +41,7 @@ MVP 阶段，首个功能：B站视频转录（Bilitato 风格视频页面 AI �
 - `lib/providers.ts` — LLM_PROVIDER_IDS / ASR_PROVIDER_IDS（`as const`）为 Provider ID 唯一真实来源，推导 LLMProviderId / ASRProviderId 类型。LLM_PROVIDERS(9个) + ASR_PROVIDERS(2个) 静态定义，getProviderDef(id: LLMProviderId) 类型安全查找
 - `lib/storage.ts` — settingsStorage (WXT `storage.defineItem<UserSettings>`)，DEFAULT_SETTINGS 默认值
 - `lib/bilibili/api.ts` — BILIBILI_API 端点集中化（pageList/playerV2/playUrl URL builder）+ isSubtitleCdnUrl() 字幕 CDN URL 检测。playUrl(bvid, cid) 用 fnval=16 请求 DASH 音频流
-- `lib/bilibili/video-info.ts` — extractBvid()（返回小写 bvid，case-insensitive 匹配）, extractPageNum(), fetchCidByPageList()（CID 降级路径，用 BILIBILI_API.pageList()）
+- `lib/bilibili/video-info.ts` — extractBvid()（保留原始大小写，B站 API 区分大小写）, extractPageNum(), fetchCidByPageList()（CID 降级路径，用 BILIBILI_API.pageList()）
 - `lib/bilibili/subtitle-fetcher.ts` — fetchBilibiliSubtitle()（API 降级路径，用 BILIBILI_API.playerV2()，CDN fetch 带 credentials，响应解析含 5 层 fallback）
 - `lib/bilibili/subtitle-processor.ts` — processSubtitles() 四步管线：normalize -> filter -> filler removal -> deduplicate(Jaccard>0.85)。接受 B 站原始格式和 favbase 格式。每条字幕保持独立行，不合并
 - `entrypoints/bilibili-inject.content.ts` — Main World 入口协调器：创建 effects + 状态机 + 拦截器 + 路由监控，5 行 bootstrap
@@ -79,7 +79,7 @@ MVP 阶段，首个功能：B站视频转录（Bilitato 风格视频页面 AI �
 
 - Content Script UI 使用 WXT `createShadowRootUi` + React，`cssInjectionMode: 'ui'`，`isolateEvents: true`，嵌入 B 站右侧栏（`autoMount` + anchor 降级链）
 - **WXT Shadow DOM 宽度陷阱**: WXT 注入 `:host{all:initial !important}`，底层 `@webext-core/isolated-element` 在 shadow root 内创建 `<html><body>` 包装（body 有 UA `margin:8px`）。`:host` 和 `html,body` 的关键布局属性必须用 `!important` 覆盖，否则宿主元素会 `display:inline` 导致不撑满宽度
-- BVID 规范化: `extractBvid()` 返回小写 bvid（源头规范化），`normalizeBvid()`（`lib/cache/video-cache.ts`）在缓存模块入口做防御性二次规范化。所有 storage key、写锁、消息传递统一使用小写 bvid，避免同一视频产生不同 key
+- BVID 规范化: `extractBvid()` 保留原始大小写（B站 API 区分大小写），`normalizeBvid()`（`lib/cache/video-cache.ts`）仅在缓存层做小写规范化。storage key、写锁使用小写 bvid；API 调用和消息传递保留原始大小写，比较时用 `.toLowerCase()` 做大小写无关匹配
 - Step 1 字幕获取: 双通道架构 — Main World 脚本（`bilibili-inject.content.ts`）拦截 fetch/XHR 被动捕获字幕优先，3s 超时降级到 Content Script 同源 API 调用
 - CID 获取: Main World 读取 `window.__INITIAL_STATE__` 优先（定期重发直到 content script 接收），降级到 `/x/player/pagelist` API（轻量，不需要 WBI 签名）
 - postMessage 桥接: Main World -> Isolated World，通过 `lib/bilibili/messaging.ts` 统一收发。BiliMessageMap 定义所有消息类型，发送用 postBiliMessage()，接收用 onBiliMessage()。消息流：`BILI_ROUTE_SWITCH`(bvid, 路由变化即时通知) → `BILI_SUBTITLE_HANDSHAKE`(bvid+cid, 800ms延迟) → `BILI_SUBTITLE_DATA`(字幕数据, defer 发送)。新增消息类型只需在 BiliMessageMap 加一行

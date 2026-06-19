@@ -104,7 +104,7 @@ export function useVideoDetect(): VideoDetection {
 
     const unsubHandshake = onBiliMessage('BILI_SUBTITLE_HANDSHAKE', (payload) => {
       if (cancelled) return;
-      if (payload.bvid !== currentBvid) return;
+      if (payload.bvid?.toLowerCase() !== currentBvid?.toLowerCase()) return;
 
       const newCid = payload.cid || null;
       if (newCid) {

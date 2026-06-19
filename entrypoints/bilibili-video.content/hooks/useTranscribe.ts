@@ -73,7 +73,7 @@ export function useTranscribe(
     const handler = (msg: unknown) => {
       const m = msg as TranscribeStatusPush;
       if (m?.type !== 'TRANSCRIBE_STATUS') return;
-      if (m.bvid && m.bvid !== bvid) return;
+      if (m.bvid && m.bvid.toLowerCase() !== bvid?.toLowerCase()) return;
 
       setState((prev) => ({
         ...prev,

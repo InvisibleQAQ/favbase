@@ -3,8 +3,8 @@ import type { SubtitleRow } from '@/lib/types';
 import type { VideoCacheEntry } from '@/lib/transcription/types';
 
 // ---------------------------------------------------------------------------
-// BVID normalization — defensive belt-and-suspenders (extractBvid also
-// lowercases, but callers may construct bvid from other sources)
+// BVID normalization — extractBvid preserves original case for API
+// compatibility; this function lowercases for cache key consistency
 // ---------------------------------------------------------------------------
 
 export function normalizeBvid(bvid: string): string {
