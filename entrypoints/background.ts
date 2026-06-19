@@ -37,6 +37,7 @@ import {
   clearVideoCache,
   initCacheStorageListener,
   computeRowsHash,
+  normalizeBvid,
 } from '@/lib/cache/video-cache';
 
 export default defineBackground(() => {
@@ -303,14 +304,20 @@ export default defineBackground(() => {
 
       if (msg.type === 'CACHE_SUBTITLE') {
         const tabMsg = msg as CacheSubtitleRequest;
+        const bvid = normalizeBvid(tabMsg.bvid);
         const hash = computeRowsHash(tabMsg.rows);
-        return mergeVideoCache(tabMsg.bvid, {
-          bvid: tabMsg.bvid,
+        return mergeVideoCache(bvid, {
+          bvid,
           rows: tabMsg.rows,
           source: tabMsg.source,
           rawHash: hash,
           updatedAt: Date.now(),
-        }).then(() => ({ success: true }));
+        })
+          .then(() => ({ success: true }))
+          .catch((err) => {
+            console.warn('[background] CACHE_SUBTITLE failed:', err);
+            return { success: false };
+          });
       }
 
       return undefined;

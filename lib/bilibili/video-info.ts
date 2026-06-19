@@ -1,8 +1,8 @@
 import { BILIBILI_API } from './api';
 
 export function extractBvid(url: string): string | null {
-  const match = url.match(/\/video\/(BV[\w]+)/);
-  return match?.[1] ?? null;
+  const match = url.match(/\/video\/(BV[\w]+)/i);
+  return match?.[1]?.toLowerCase() ?? null;
 }
 
 export function extractPageNum(url: string): number {

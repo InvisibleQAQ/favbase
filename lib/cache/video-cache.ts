@@ -3,6 +3,16 @@ import type { SubtitleRow } from '@/lib/types';
 import type { VideoCacheEntry } from '@/lib/transcription/types';
 
 // ---------------------------------------------------------------------------
+// BVID normalization — defensive belt-and-suspenders (extractBvid also
+// lowercases, but callers may construct bvid from other sources)
+// ---------------------------------------------------------------------------
+
+export function normalizeBvid(bvid: string): string {
+  const match = bvid.match(/BV[0-9A-Za-z]+/i);
+  return match ? match[0].toLowerCase() : bvid.toLowerCase();
+}
+
+// ---------------------------------------------------------------------------
 // Deep clone
 // ---------------------------------------------------------------------------
 
@@ -87,6 +97,8 @@ function storageKey(bvid: string): `local:vc:${string}` {
 export async function getVideoCache(
   bvid: string,
 ): Promise<VideoCacheEntry | null> {
+  bvid = normalizeBvid(bvid);
+
   // 1. Memory cache hit
   const mem = memoryCache.get(bvid);
   if (mem) return cloneData(mem);
@@ -141,6 +153,8 @@ export async function mergeVideoCache(
   bvid: string,
   patch: Partial<VideoCacheEntry>,
 ): Promise<VideoCacheEntry> {
+  bvid = normalizeBvid(bvid);
+
   return withWriteLock(bvid, async () => {
     const current = await storage.getItem<VideoCacheEntry>(storageKey(bvid));
 

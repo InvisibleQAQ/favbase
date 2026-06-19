@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { fetchBilibiliSubtitle } from '@/lib/bilibili/subtitle-fetcher';
 import { processSubtitles } from '@/lib/bilibili/subtitle-processor';
 import { onBiliMessage } from '@/lib/bilibili/messaging';
+import { normalizeBvid } from '@/lib/cache/video-cache';
 import type { SubtitleRow } from '@/lib/types';
 import type { VideoCacheEntry } from '@/lib/transcription/types';
 
@@ -217,7 +218,7 @@ export function useSubtitle(
     ) => {
       if (areaName !== 'local') return;
       // WXT strips 'local:' prefix — chrome.storage sees 'vc:{bvid}'
-      const key = 'vc:' + bvid;
+      const key = 'vc:' + normalizeBvid(bvid);
       if (!changes[key]) return;
 
       const newValue = changes[key].newValue as VideoCacheEntry | undefined;
