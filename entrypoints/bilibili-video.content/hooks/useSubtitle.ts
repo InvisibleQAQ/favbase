@@ -3,12 +3,15 @@ import { fetchBilibiliSubtitle } from '@/lib/bilibili/subtitle-fetcher';
 import { processSubtitles } from '@/lib/bilibili/subtitle-processor';
 import { onBiliMessage } from '@/lib/bilibili/messaging';
 import type { SubtitleRow } from '@/lib/types';
+import type { VideoCacheEntry } from '@/lib/transcription/types';
 
-interface SubtitleState {
+export interface SubtitleState {
   rows: SubtitleRow[];
   loading: boolean;
   status: 'ok' | 'no_subtitle' | 'error' | null;
   error: string | null;
+  source: 'bilibili' | 'groq' | null;
+  cached: boolean;
 }
 
 const INTERCEPT_TIMEOUT = 3000;
@@ -18,22 +21,29 @@ const MAX_API_RETRIES = 2;
 /**
  * Fetch subtitles when bvid + cid become available.
  *
- * Dual-channel approach (aligned with Bilitato):
- *   1. Listen for BILI_SUBTITLE_DATA postMessage from inject script
- *   2. If no data within 3s, fallback to fetchBilibiliSubtitle() API
- *   3. If API returns no_subtitle/error, retry up to MAX_API_RETRIES times
+ * Data flow priority (high -> low):
+ *   1. Video cache (GET_VIDEO_CACHE message to Background)
+ *   2. Intercept channel (BILI_SUBTITLE_DATA from inject script)
+ *   3. API fallback (fetchBilibiliSubtitle)
+ *   4. No subtitle -> TranscribeButton shown by parent
  *
- * The inject script re-emits cached subtitle data every ~1s,
- * so Channel 1 should succeed even for late-mounting content scripts.
+ * All successful fetches write back to cache via CACHE_SUBTITLE message.
+ * Cross-tab sync via chrome.storage.onChanged listener.
  */
-export function useSubtitle(bvid: string | null, cid: number | null): SubtitleState {
+export function useSubtitle(
+  bvid: string | null,
+  cid: number | null,
+): SubtitleState {
   const [state, setState] = useState<SubtitleState>({
     rows: [],
     loading: false,
     status: null,
     error: null,
+    source: null,
+    cached: false,
   });
 
+  // --- Main fetch effect: cache check + dual-channel ---
   useEffect(() => {
     if (!bvid || !cid) return;
 
@@ -42,8 +52,44 @@ export function useSubtitle(bvid: string | null, cid: number | null): SubtitleSt
     let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
     let retryCount = 0;
 
-    setState({ rows: [], loading: true, status: null, error: null });
+    setState({
+      rows: [],
+      loading: true,
+      status: null,
+      error: null,
+      source: null,
+      cached: false,
+    });
 
+    // Step 1: Check cache first (highest priority)
+    browser.runtime
+      .sendMessage({ type: 'GET_VIDEO_CACHE', bvid })
+      .then(
+        (
+          result: {
+            rows: SubtitleRow[];
+            source: 'bilibili' | 'groq';
+            cached: true;
+          } | null,
+        ) => {
+          if (cancelled || resolved) return;
+          if (result && result.rows.length > 0) {
+            resolved = true;
+            if (fallbackTimer) clearTimeout(fallbackTimer);
+            setState({
+              rows: result.rows,
+              loading: false,
+              status: 'ok',
+              error: null,
+              source: result.source,
+              cached: true,
+            });
+          }
+        },
+      )
+      .catch(() => {}); // Cache miss is not an error
+
+    // Step 2: Listen for intercept channel (parallel with cache check)
     const unsubData = onBiliMessage('BILI_SUBTITLE_DATA', (payload) => {
       if (cancelled || resolved) return;
       if (payload.bvid !== bvid) return;
@@ -52,65 +98,104 @@ export function useSubtitle(bvid: string | null, cid: number | null): SubtitleSt
       if (fallbackTimer) clearTimeout(fallbackTimer);
 
       const processed = processSubtitles(payload.data);
+      const hasRows = processed.length > 0;
 
       setState({
         rows: processed,
         loading: false,
-        status: processed.length > 0 ? 'ok' : 'no_subtitle',
+        status: hasRows ? 'ok' : 'no_subtitle',
         error: null,
+        source: 'bilibili',
+        cached: false,
       });
+
+      // Write B-site subtitles to cache
+      if (hasRows) {
+        browser.runtime
+          .sendMessage({
+            type: 'CACHE_SUBTITLE',
+            bvid,
+            rows: processed,
+            source: 'bilibili' as const,
+          })
+          .catch(() => {});
+      }
     });
 
+    // Step 3: API fallback with retry
     function attemptApiFetch() {
       if (cancelled || resolved) return;
 
-      fallbackTimer = setTimeout(() => {
-        if (cancelled || resolved) return;
+      fallbackTimer = setTimeout(
+        () => {
+          if (cancelled || resolved) return;
 
-        (async () => {
-          try {
-            const result = await fetchBilibiliSubtitle(bvid!, cid!);
-            if (cancelled || resolved) return;
+          (async () => {
+            try {
+              const result = await fetchBilibiliSubtitle(bvid!, cid!);
+              if (cancelled || resolved) return;
 
-            if (result.status === 'ok' && result.rows.length > 0) {
-              resolved = true;
-              const processed = processSubtitles(result.rows);
-              setState({
-                rows: processed,
-                loading: false,
-                status: processed.length > 0 ? 'ok' : 'no_subtitle',
-                error: null,
-              });
-            } else if (retryCount < MAX_API_RETRIES) {
-              retryCount++;
-              attemptApiFetch();
-            } else {
-              resolved = true;
-              setState({
-                rows: [],
-                loading: false,
-                status: result.status,
-                error: result.error ?? null,
-              });
+              if (result.status === 'ok' && result.rows.length > 0) {
+                resolved = true;
+                const processed = processSubtitles(result.rows);
+                const hasRows = processed.length > 0;
+
+                setState({
+                  rows: processed,
+                  loading: false,
+                  status: hasRows ? 'ok' : 'no_subtitle',
+                  error: null,
+                  source: 'bilibili',
+                  cached: false,
+                });
+
+                // Write to cache
+                if (hasRows) {
+                  browser.runtime
+                    .sendMessage({
+                      type: 'CACHE_SUBTITLE',
+                      bvid: bvid!,
+                      rows: processed,
+                      source: 'bilibili' as const,
+                    })
+                    .catch(() => {});
+                }
+              } else if (retryCount < MAX_API_RETRIES) {
+                retryCount++;
+                attemptApiFetch();
+              } else {
+                resolved = true;
+                setState({
+                  rows: [],
+                  loading: false,
+                  status: result.status,
+                  error: result.error ?? null,
+                  source: null,
+                  cached: false,
+                });
+              }
+            } catch {
+              if (cancelled || resolved) return;
+
+              if (retryCount < MAX_API_RETRIES) {
+                retryCount++;
+                attemptApiFetch();
+              } else {
+                resolved = true;
+                setState({
+                  rows: [],
+                  loading: false,
+                  status: 'no_subtitle',
+                  error: null,
+                  source: null,
+                  cached: false,
+                });
+              }
             }
-          } catch (err) {
-            if (cancelled || resolved) return;
-
-            if (retryCount < MAX_API_RETRIES) {
-              retryCount++;
-              attemptApiFetch();
-            } else {
-              resolved = true;
-              setState({
-                rows: [],
-                loading: false,
-                status: 'no_subtitle',
-                error: null,
-              });
-            }
-          }
-        })();
-      }, retryCount === 0 ? INTERCEPT_TIMEOUT : API_RETRY_DELAY);
+          })();
+        },
+        retryCount === 0 ? INTERCEPT_TIMEOUT : API_RETRY_DELAY,
+      );
     }
 
     attemptApiFetch();
@@ -121,6 +206,36 @@ export function useSubtitle(bvid: string | null, cid: number | null): SubtitleSt
       if (fallbackTimer) clearTimeout(fallbackTimer);
     };
   }, [bvid, cid]);
+
+  // --- Storage change watcher for cross-tab sync ---
+  useEffect(() => {
+    if (!bvid) return;
+
+    const handler = (
+      changes: Record<string, chrome.storage.StorageChange>,
+      areaName: string,
+    ) => {
+      if (areaName !== 'local') return;
+      // WXT strips 'local:' prefix — chrome.storage sees 'vc:{bvid}'
+      const key = 'vc:' + bvid;
+      if (!changes[key]) return;
+
+      const newValue = changes[key].newValue as VideoCacheEntry | undefined;
+      if (!newValue || !newValue.rows.length) return;
+
+      setState({
+        rows: newValue.rows,
+        loading: false,
+        status: 'ok',
+        error: null,
+        source: newValue.source,
+        cached: true,
+      });
+    };
+
+    chrome.storage.onChanged.addListener(handler);
+    return () => chrome.storage.onChanged.removeListener(handler);
+  }, [bvid]);
 
   return state;
 }

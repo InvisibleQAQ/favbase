@@ -1,11 +1,12 @@
-import { storage } from 'wxt/utils/storage';
 import type { SubtitleRow } from '@/lib/types';
 import type {
   BgMessage,
   TranscribeResponse,
   TranscribeStatusPush,
   TranscribeErrorInfo,
-  VideoCacheEntry,
+  GetVideoCacheRequest,
+  ClearVideoCacheRequest,
+  CacheSubtitleRequest,
   OffscreenPrepareRequest,
   OffscreenTranscribeRequest,
   OffscreenProgressMessage,
@@ -30,13 +31,17 @@ import {
   GROQ_MAX_AUDIO_BYTES,
   PROGRESS,
 } from '@/lib/transcription/constants';
-
-const videoCacheStorage = storage.defineItem<Record<string, VideoCacheEntry>>(
-  'local:videoCache',
-  { fallback: {} },
-);
+import {
+  getVideoCache,
+  mergeVideoCache,
+  clearVideoCache,
+  initCacheStorageListener,
+  computeRowsHash,
+} from '@/lib/cache/video-cache';
 
 export default defineBackground(() => {
+  initCacheStorageListener();
+
   const tabAbortControllers = new Map<number, AbortController>();
   const tabBvids = new Map<number, string>();
 
@@ -66,21 +71,6 @@ export default defineBackground(() => {
       error,
     };
     browser.tabs.sendMessage(tabId, msg).catch(() => {});
-  }
-
-  async function getCached(bvid: string): Promise<VideoCacheEntry | null> {
-    const cache = await videoCacheStorage.getValue();
-    return cache[bvid] ?? null;
-  }
-
-  async function setCache(
-    bvid: string,
-    rows: SubtitleRow[],
-    source: 'bilibili' | 'groq',
-  ): Promise<void> {
-    const cache = await videoCacheStorage.getValue();
-    cache[bvid] = { bvid, rows, source, updatedAt: Date.now() };
-    await videoCacheStorage.setValue(cache);
   }
 
   function toErrorInfo(err: unknown): TranscribeErrorInfo {
@@ -118,11 +108,11 @@ export default defineBackground(() => {
   ): Promise<TranscribeResponse> {
     const { bvid, cid, title } = msg;
 
-    const cached = await getCached(bvid);
-    if (cached) {
+    const cached = await getVideoCache(bvid);
+    if (cached && cached.rows.length > 0) {
       return {
         success: true,
-        data: { rows: cached.rows, source: 'groq', cached: true },
+        data: { rows: cached.rows, source: cached.source, cached: true },
       };
     }
 
@@ -236,7 +226,13 @@ export default defineBackground(() => {
       notifyTab(tabId, bvid, PROGRESS.PARSING, '处理字幕');
       rows = processSubtitles(rows);
 
-      await setCache(bvid, rows, 'groq');
+      await mergeVideoCache(bvid, {
+        bvid,
+        rows,
+        source: 'groq',
+        rawHash: computeRowsHash(rows),
+        updatedAt: Date.now(),
+      });
       notifyTab(tabId, bvid, PROGRESS.DONE, '转录完成');
 
       return {
@@ -257,7 +253,7 @@ export default defineBackground(() => {
     (
       msg: OffscreenProgressMessage | BgMessage,
       sender: { tab?: { id?: number } },
-    ): undefined | Promise<unknown> => {
+    ): void | Promise<unknown> => {
       if (msg.type === 'OFFSCREEN_CHUNK_PROGRESS') {
         const pm = msg as OffscreenProgressMessage;
         const range =
@@ -290,6 +286,31 @@ export default defineBackground(() => {
       if (msg.type === 'TRANSCRIBE_AUDIO') {
         const tabId = sender.tab?.id ?? 0;
         return handleTranscribe(msg, tabId);
+      }
+
+      if (msg.type === 'GET_VIDEO_CACHE') {
+        const tabMsg = msg as GetVideoCacheRequest;
+        return getVideoCache(tabMsg.bvid).then((entry) => {
+          if (!entry || entry.rows.length === 0) return null;
+          return { rows: entry.rows, source: entry.source, cached: true };
+        });
+      }
+
+      if (msg.type === 'CLEAR_VIDEO_CACHE') {
+        const tabMsg = msg as ClearVideoCacheRequest;
+        return clearVideoCache(tabMsg.bvid).then(() => ({ success: true }));
+      }
+
+      if (msg.type === 'CACHE_SUBTITLE') {
+        const tabMsg = msg as CacheSubtitleRequest;
+        const hash = computeRowsHash(tabMsg.rows);
+        return mergeVideoCache(tabMsg.bvid, {
+          bvid: tabMsg.bvid,
+          rows: tabMsg.rows,
+          source: tabMsg.source,
+          rawHash: hash,
+          updatedAt: Date.now(),
+        }).then(() => ({ success: true }));
       }
 
       return undefined;

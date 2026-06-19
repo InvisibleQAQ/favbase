@@ -26,7 +26,9 @@ export default function App() {
   const effectiveStatus =
     transcribe.rows.length > 0 ? ('ok' as const) : subtitle.status;
   const effectiveSource: 'bilibili' | 'groq' =
-    transcribe.rows.length > 0 ? 'groq' : 'bilibili';
+    transcribe.rows.length > 0 ? 'groq' : (subtitle.source ?? 'bilibili');
+  const effectiveCached =
+    transcribe.rows.length > 0 ? transcribe.cached : subtitle.cached;
 
   const loading = video.loading || subtitle.loading;
   const status = video.error ? ('error' as const) : effectiveStatus;
@@ -40,7 +42,7 @@ export default function App() {
       rows={effectiveRows}
       title={video.title}
       source={effectiveSource}
-      cached={transcribe.cached}
+      cached={effectiveCached}
       showTranscribe={showTranscribe}
       transcribe={transcribe}
       hasApiKey={!!settingsHook.currentAsrApiKey}
