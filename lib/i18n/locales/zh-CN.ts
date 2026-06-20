@@ -3,12 +3,18 @@ const zhCN = {
   'status.error': '加载失败: {{error}}',
   'status.errorUnknown': '未知错误',
   'status.noSubtitle': '未检测到字幕，可开启在线转录',
-  'status.count': '共 {{count}} 条字幕 (B站 AI)',
-
   'panel.expand': '展开面板',
   'panel.collapse': '收起面板',
 
   'subtitle.jumpTo': '跳转到 {{time}}',
+
+  'search.placeholder': '搜索字幕...',
+  'search.clear': '清空',
+  'search.noResults': '未找到匹配的字幕',
+
+  'source.bilibili': '官方AI字幕',
+  'source.groqCached': 'ASR 缓存',
+  'source.groq': 'ASR 转录',
 
   'sidebar.subtitles': '字幕',
   'sidebar.settings': '设置',
@@ -42,8 +48,6 @@ const zhCN = {
   'transcribe.retry': '重试',
   'transcribe.noApiKey': '请先在设置中配置 Groq API Key',
   'transcribe.progress': '转录中 {{progress}}%',
-  'transcribe.cached': '共 {{count}} 条字幕 (Groq 缓存)',
-  'transcribe.done': '共 {{count}} 条字幕 (Groq ASR)',
   'transcribe.rateLimit': 'Groq 速率限制，{{seconds}}s 后重试',
 
   'stage.start': '开始转录',

@@ -225,9 +225,101 @@ html, body {
   padding: 24px 10px;
 }
 
-.favbase-status--ok {
+/* --- Search Toolbar --- */
+
+.favbase-search-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 10px;
+  border-bottom: 1px solid #f0ece8;
+}
+
+.favbase-search-container {
+  flex: 1;
+  position: relative;
+  min-width: 0;
+}
+
+.favbase-search-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 4px 28px 4px 8px;
+  font-size: 12px;
+  font-family: inherit;
+  color: #1a1a2e;
+  background: #faf9f7;
+  border: 1px solid #e8e4df;
+  border-radius: 6px;
+  outline: none;
+  height: 26px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.favbase-search-input:focus {
+  border-color: #f97316;
+  box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.1);
+  background: #fff;
+}
+
+.favbase-search-input::placeholder {
+  color: #bbb;
+}
+
+.favbase-search-clear {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 14px;
   color: #999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  padding: 0;
+  line-height: 1;
+  transition: color 0.15s, background 0.15s;
+}
+
+.favbase-search-clear:hover {
+  color: #f97316;
+  background: #fff3e0;
+}
+
+.favbase-source-badge {
+  flex-shrink: 0;
   font-size: 11px;
+  color: #999;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
+/* --- Search Result Highlight --- */
+
+.favbase-highlight {
+  background: #fef9c3;
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+/* --- Search Empty State --- */
+
+.favbase-search-empty {
+  text-align: center;
+  padding: 24px 10px;
+  font-size: 12px;
+  color: #999;
 }
 
 /* --- Subtitle List --- */
@@ -585,7 +677,9 @@ html, body {
   .favbase-settings-input,
   .favbase-settings-mode-option,
   .favbase-timestamp,
-  .favbase-subtitle-row {
+  .favbase-subtitle-row,
+  .favbase-search-input,
+  .favbase-search-clear {
     transition: none;
   }
 }

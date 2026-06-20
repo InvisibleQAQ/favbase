@@ -5,12 +5,18 @@ const en: Record<LocaleKeys, string> = {
   'status.error': 'Failed to load: {{error}}',
   'status.errorUnknown': 'Unknown error',
   'status.noSubtitle': 'No subtitles detected, transcription available',
-  'status.count': '{{count}} subtitles (Bilibili AI)',
-
   'panel.expand': 'Expand panel',
   'panel.collapse': 'Collapse panel',
 
   'subtitle.jumpTo': 'Jump to {{time}}',
+
+  'search.placeholder': 'Search subtitles...',
+  'search.clear': 'Clear',
+  'search.noResults': 'No matching subtitles',
+
+  'source.bilibili': 'Official AI',
+  'source.groqCached': 'ASR Cached',
+  'source.groq': 'ASR Transcribed',
 
   'sidebar.subtitles': 'Subtitles',
   'sidebar.settings': 'Settings',
@@ -44,8 +50,6 @@ const en: Record<LocaleKeys, string> = {
   'transcribe.retry': 'Retry',
   'transcribe.noApiKey': 'Please configure Groq API Key in Settings',
   'transcribe.progress': 'Transcribing {{progress}}%',
-  'transcribe.cached': '{{count}} subtitles (Groq cached)',
-  'transcribe.done': '{{count}} subtitles (Groq ASR)',
   'transcribe.rateLimit': 'Rate limited, retry in {{seconds}}s',
 
   'stage.start': 'Starting transcription',

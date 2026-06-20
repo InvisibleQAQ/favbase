@@ -13,7 +13,7 @@ const messages = locales[currentLocale];
  *
  * @example
  * t('status.loading')                       // "正在加载字幕..."
- * t('status.count', { count: 42 })          // "共 42 条字幕 (B站 AI)"
+ * t('status.error', { error: 'timeout' })    // "加载失败: timeout"
  */
 export function t(
   key: LocaleKeys,

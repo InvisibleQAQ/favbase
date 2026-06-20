@@ -83,9 +83,6 @@ export function Panel({
                 loading={loading}
                 status={status}
                 error={error}
-                subtitleCount={rows.length}
-                source={source}
-                cached={cached}
               />
               {(showTranscribe || transcribe.transcribing || transcribe.error) && (
                 <TranscribeButton
@@ -93,7 +90,9 @@ export function Panel({
                   hasApiKey={hasApiKey}
                 />
               )}
-              {status === 'ok' && <SubtitleView rows={rows} />}
+              {status === 'ok' && (
+                <SubtitleView rows={rows} source={source} cached={cached} />
+              )}
             </>
           )}
           {activeTab === 'settings' && (
