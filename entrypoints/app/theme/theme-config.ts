@@ -27,11 +27,11 @@ export const themeConfig: ThemeConfig = {
   },
   palette: {
     primary: {
-      lighter: '#D0ECFE',
-      light: '#73BAFB',
-      main: '#1877F2',
-      dark: '#0C44AE',
-      darker: '#042174',
+      lighter: '#FEE9E1',
+      light: '#FDA48A',
+      main: '#FC7E5B',
+      dark: '#C4502E',
+      darker: '#7A2714',
       contrastText: '#FFFFFF',
     },
     secondary: {
@@ -67,11 +67,11 @@ export const themeConfig: ThemeConfig = {
       contrastText: '#1C252E',
     },
     error: {
-      lighter: '#FFE9D5',
-      light: '#FFAC82',
-      main: '#FF5630',
-      dark: '#B71D18',
-      darker: '#7A0916',
+      lighter: '#FFE0DE',
+      light: '#FF7A75',
+      main: '#E53935',
+      dark: '#B71C1C',
+      darker: '#7A0C0C',
       contrastText: '#FFFFFF',
     },
     grey: {
