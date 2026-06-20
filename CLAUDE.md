@@ -5,7 +5,8 @@ B站收藏自动转知识库的 Chromium 浏览器扩展。本地优先，可选
 ## 技术栈
 
 - **框架**: WXT 0.20.26 (Vite) + React 19 + TypeScript 5.9
-- **架构**: Chrome MV3 (Service Worker + Content Script + Shadow DOM UI)
+- **架构**: Chrome MV3 (Service Worker + Content Script + Shadow DOM UI + Extension Page)
+- **UI 框架**: MUI v7 (Extension Page) + 原生 CSS (Content Script Shadow DOM)
 - **存储**: WXT `storage.defineItem`（设置/缓存），后续接入 PGlite + pgvector（知识库）
 - **包管理**: pnpm
 
@@ -18,7 +19,7 @@ MVP 阶段，首个功能：B站视频转录（Bilitato 风格视频页面 AI �
 - `entrypoints/background.ts` — Background Service Worker
 - `entrypoints/bilibili-inject.content.ts` — B站视频页 Main World 脚本（`world: 'MAIN'`，`runAt: 'document_start'`）：读取 `__INITIAL_STATE__` 获取 CID、拦截 fetch/XHR 被动捕获字幕、自动触发 CC 按钮、通过 postMessage 桥接数据到 Isolated World
 - `entrypoints/bilibili-video.content/` — B站视频页 Content Script（Shadow DOM React UI，Isolated World）
-- `entrypoints/app/` — Extension Page（独立标签页主界面，`chrome-extension://<id>/app.html`），当前为占位页
+- `entrypoints/app/` — Extension Page（独立标签页主界面，`chrome-extension://<id>/app.html`），MUI v7 Dashboard
 - `entrypoints/popup/` — Popup 跳板：点击扩展图标 → 打开/聚焦 app.html 标签页
 
 ## 关键文档
@@ -30,8 +31,44 @@ MVP 阶段，首个功能：B站视频转录（Bilitato 风格视频页面 AI �
 ## 参考项目
 
 - `C:\Users\18368\Desktop\00_myCode\24_cyberSquirrel\02_Bilitato` — Bilitato 开源项目，B站视频 AI 助手，是视频转录功能的主要参考实现
+- `C:\Users\18368\Desktop\00_myCode\24_cyberSquirrel\06_material-kit-react` — Material Kit React，MUI v7 Dashboard 模板，app.html UI 风格参考
 
 ## 模块结构
+
+### Extension Page Dashboard (app.html)
+
+MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRouter`（Chrome 扩展页面不支持路径路由）。
+
+- `entrypoints/app/main.tsx` — 入口：Hash Router + lazy 页面加载 + LoadingFallback
+- `entrypoints/app/App.tsx` — 根组件：ThemeProvider + Outlet
+- `entrypoints/app/global.css` — 全局样式：DM Sans Variable + Barlow 字体导入 + baseline reset
+- `entrypoints/app/theme/` — MUI v7 主题系统（palette/typography/shadows/custom-shadows/components），配色和排版完全对齐 material-kit-react
+  - `theme-config.ts` — 调色板常量 + 字体配置（classesPrefix: 'favbase'）
+  - `create-theme.ts` — 主题工厂，合并 colorSchemes.light + components + typography + shape
+  - `theme-provider.tsx` — ThemeVarsProvider + CssBaseline 包装
+  - `extend-theme-types.d.ts` — MUI 类型扩展（customShadows, fontSecondaryFamily, palette 扩展）
+  - `core/palette.ts` — 完整色彩系统，使用 `minimal-shared` 的 `createPaletteChannel` + `varAlpha`
+  - `core/typography.ts` — 排版比例，h1-h6 响应式 + body/caption/overline/button
+  - `core/shadows.ts` — 25 级 MUI 标准阴影
+  - `core/custom-shadows.ts` — card/dialog/dropdown + z1-z24 + 各色彩阴影
+  - `core/components.tsx` — MUI 组件样式覆盖（Card 圆角 16px，Button 无 elevation，Paper 无 backgroundImage 等）
+- `entrypoints/app/layouts/` — 仪表盘布局系统
+  - `core/layout-section.tsx` — 布局骨架：sidebar + sidebarContainer(header+main+footer)，注入 CSS vars via GlobalStyles
+  - `core/header-section.tsx` — 粘性 AppBar + 滚动毛玻璃效果（backdrop-filter blur(6px)），slots: leftArea/rightArea/centerArea
+  - `core/main-section.tsx` — flex column 主内容区
+  - `core/css-vars.ts` — 布局 CSS 变量（nav-zIndex/header-height/nav-width）
+  - `dashboard/layout.tsx` — DashboardLayout：组合 NavDesktop + NavMobile + HeaderSection + MainSection
+  - `dashboard/nav.tsx` — NavDesktop（固定左侧栏 280px，lg 断点显示）+ NavMobile（Drawer 抽屉，pathname 变化自动关闭）+ NavContent（路由激活高亮，varAlpha primary channel）
+  - `dashboard/content.tsx` — DashboardContent：Container maxWidth + dashboard padding CSS vars
+  - `nav-config.tsx` — 导航项：Dashboard/Collections/Settings，Iconify solar 图标
+- `entrypoints/app/components/iconify/` — Iconify 图标系统（与 material-kit-react 同源 `@iconify/react`）
+  - `icon-sets.ts` — 30+ 离线注册图标（solar/eva/mingcute/custom 集），含 favbase 专用图标
+  - `register-icons.ts` — addCollection 离线注册 + `IconifyName` 类型安全
+  - `iconify.tsx` — styled(Icon) 包装，未注册图标 console.warn 提醒
+- `entrypoints/app/pages/` — 页面组件（lazy loaded）
+  - `dashboard.tsx` → `sections/overview/overview-view.tsx`（统计卡片 + 活动列表 + 进度条）
+  - `collections.tsx` / `settings.tsx` — 占位页
+- `entrypoints/app/sections/overview/stat-widget.tsx` — 统计卡片：圆形图标背景 + varAlpha 色调 + title/total
 
 ### B站字幕获取 (Step 1 — 已完成，Bilitato 对齐)
 
@@ -78,6 +115,7 @@ MVP 阶段，首个功能：B站视频转录（Bilitato 风格视频页面 AI �
 
 ## 约定
 
+- Extension Page (app.html): MUI v7 + Emotion CSS-in-JS + `createHashRouter`。Chrome 扩展页面 URL 不支持路径路由，必须用 hash router。主题系统复刻 material-kit-react（`minimal-shared` 工具库 + `@iconify/react` 图标）。新增页面：在 `pages/` 添加 lazy 组件 + `main.tsx` 路由配置 + `nav-config.tsx` 导航项
 - Content Script UI 使用 WXT `createShadowRootUi` + React，`cssInjectionMode: 'ui'`，`isolateEvents: true`，嵌入 B 站右侧栏 `.right-container-inner`（UP 主面板后）。**禁用 `autoMount()`** — 它通过 MutationObserver 在锚点出现瞬间挂载，正值 Vue 水合阶段，注入外部节点会破坏 VDOM 导致评论区消失。必须手动延迟挂载：等 `document.readyState === 'complete'` + 2s（与 Bilitato 一致），SPA 路由切换后通过 500ms 轮询检测脱离并 1s 延迟重挂载
 - **WXT Shadow DOM 宽度陷阱**: WXT 注入 `:host{all:initial !important}`，底层 `@webext-core/isolated-element` 在 shadow root 内创建 `<html><body>` 包装（body 有 UA `margin:8px`）。`:host` 和 `html,body` 的关键布局属性必须用 `!important` 覆盖，否则宿主元素会 `display:inline` 导致不撑满宽度
 - BVID 规范化: `extractBvid()` 保留原始大小写（B站 API 区分大小写），`normalizeBvid()`（`lib/cache/video-cache.ts`）仅在缓存层做小写规范化。storage key、写锁使用小写 bvid；API 调用和消息传递保留原始大小写，比较时用 `.toLowerCase()` 做大小写无关匹配
