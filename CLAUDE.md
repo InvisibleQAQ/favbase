@@ -18,7 +18,8 @@ MVP 阶段，首个功能：B站视频转录（Bilitato 风格视频页面 AI �
 - `entrypoints/background.ts` — Background Service Worker
 - `entrypoints/bilibili-inject.content.ts` — B站视频页 Main World 脚本（`world: 'MAIN'`，`runAt: 'document_start'`）：读取 `__INITIAL_STATE__` 获取 CID、拦截 fetch/XHR 被动捕获字幕、自动触发 CC 按钮、通过 postMessage 桥接数据到 Isolated World
 - `entrypoints/bilibili-video.content/` — B站视频页 Content Script（Shadow DOM React UI，Isolated World）
-- `entrypoints/popup/` — Popup（暂未实现业务逻辑）
+- `entrypoints/app/` — Extension Page（独立标签页主界面，`chrome-extension://<id>/app.html`），当前为占位页
+- `entrypoints/popup/` — Popup 跳板：点击扩展图标 → 打开/聚焦 app.html 标签页
 
 ## 关键文档
 - 使用wxt框架进行开发, 必须使用 `context7 mcp`查询 wxt文档.
