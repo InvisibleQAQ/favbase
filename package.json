@@ -15,11 +15,19 @@
     "postinstall": "wxt prepare"
   },
   "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
     "@ffmpeg/core": "0.12.10",
     "@ffmpeg/ffmpeg": "^0.12.15",
     "@ffmpeg/util": "^0.12.2",
+    "@fontsource-variable/dm-sans": "^5.2.8",
+    "@fontsource/barlow": "^5.2.8",
+    "@iconify/react": "^5.2.1",
+    "@mui/material": "^7.3.11",
+    "minimal-shared": "^1.1.6",
     "react": "^19.2.4",
-    "react-dom": "^19.2.4"
+    "react-dom": "^19.2.4",
+    "react-router-dom": "^7.18.0"
   },
   "devDependencies": {
     "@types/chrome": "^0.1.43",
