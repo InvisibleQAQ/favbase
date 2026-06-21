@@ -1,10 +1,10 @@
 import type { Theme } from '@mui/material/styles';
 
-export function dashboardLayoutVars(theme: Theme) {
+export function dashboardLayoutVars(theme: Theme, pinned = true) {
   return {
     '--layout-transition-easing': 'linear',
     '--layout-transition-duration': '120ms',
-    '--layout-nav-vertical-width': '280px',
+    '--layout-nav-vertical-width': pinned ? '280px' : '72px',
     '--layout-dashboard-content-pt': theme.spacing(1),
     '--layout-dashboard-content-pb': theme.spacing(8),
     '--layout-dashboard-content-px': theme.spacing(5),

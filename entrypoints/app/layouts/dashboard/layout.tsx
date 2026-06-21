@@ -1,10 +1,13 @@
 import type { Breakpoint } from '@mui/material/styles';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 import Box from '@mui/material/Box';
 import { useTheme } from '@mui/material/styles';
+import useMediaQuery from '@mui/material/useMediaQuery';
 import IconButton from '@mui/material/IconButton';
+
+import { sidebarPinnedStorage } from '@/lib/storage';
 
 import { Iconify } from '../../components/iconify';
 
@@ -31,7 +34,31 @@ export function DashboardLayout({
   layoutQuery = 'lg',
 }: DashboardLayoutProps) {
   const theme = useTheme();
+  const isDesktop = useMediaQuery(theme.breakpoints.up(layoutQuery));
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [pinned, setPinned] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    sidebarPinnedStorage.getValue().then((v) => {
+      if (!cancelled) setPinned(v);
+    });
+    const unwatch = sidebarPinnedStorage.watch((newVal) => {
+      setPinned(newVal);
+    });
+    return () => {
+      cancelled = true;
+      unwatch();
+    };
+  }, []);
+
+  const togglePinned = useCallback(() => {
+    setPinned((prev) => {
+      const next = !prev;
+      sidebarPinnedStorage.setValue(next);
+      return next;
+    });
+  }, []);
 
   const renderHeader = () => (
     <HeaderSection
@@ -39,12 +66,24 @@ export function DashboardLayout({
       layoutQuery={layoutQuery}
       slots={{
         leftArea: (
-          <IconButton
-            onClick={() => setMobileOpen(true)}
-            sx={{ mr: 1, ml: -1, [theme.breakpoints.up(layoutQuery)]: { display: 'none' } }}
-          >
-            <Iconify icon="custom:menu-duotone" />
-          </IconButton>
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            {!isDesktop && (
+              <IconButton
+                onClick={(e) => {
+                  (e.currentTarget as HTMLElement).blur();
+                  setMobileOpen(true);
+                }}
+                sx={{ mr: 1, ml: -1 }}
+              >
+                <Iconify icon="custom:menu-duotone" />
+              </IconButton>
+            )}
+            {isDesktop && (
+              <IconButton onClick={togglePinned} sx={{ mr: 1, ml: -1 }}>
+                <Iconify icon="solar:siderbar-bold-duotone" />
+              </IconButton>
+            )}
+          </Box>
         ),
         rightArea: (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0, sm: 0.75 } }} />
@@ -58,7 +97,7 @@ export function DashboardLayout({
       headerSection={renderHeader()}
       sidebarSection={
         <>
-          <NavDesktop data={navData} layoutQuery={layoutQuery} />
+          <NavDesktop data={navData} layoutQuery={layoutQuery} pinned={pinned} />
           <NavMobile
             data={navData}
             open={mobileOpen}
@@ -67,7 +106,7 @@ export function DashboardLayout({
         </>
       }
       footerSection={null}
-      cssVars={{ ...dashboardLayoutVars(theme), ...cssVars }}
+      cssVars={{ ...dashboardLayoutVars(theme, pinned), ...cssVars }}
       sx={[
         {
           [`& .${layoutClasses.sidebarContainer}`]: {

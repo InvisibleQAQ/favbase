@@ -5,6 +5,7 @@ import { varAlpha } from 'minimal-shared/utils';
 
 import Box from '@mui/material/Box';
 import ListItem from '@mui/material/ListItem';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 import ListItemButton from '@mui/material/ListItemButton';
@@ -17,12 +18,14 @@ import type { NavItem } from '../nav-config';
 export type NavContentProps = {
   data: NavItem[];
   sx?: SxProps<Theme>;
+  pinned?: boolean;
 };
 
 export function NavDesktop({
   sx,
   data,
   layoutQuery,
+  pinned = true,
 }: NavContentProps & { layoutQuery: Breakpoint }) {
   const theme = useTheme();
 
@@ -30,7 +33,7 @@ export function NavDesktop({
     <Box
       sx={{
         pt: 2.5,
-        px: 2.5,
+        px: pinned ? 2.5 : 1,
         top: 0,
         left: 0,
         height: 1,
@@ -41,11 +44,15 @@ export function NavDesktop({
         zIndex: 'var(--layout-nav-zIndex)',
         width: 'var(--layout-nav-vertical-width)',
         borderRight: `1px solid ${varAlpha(theme.vars.palette.grey['500Channel'], 0.12)}`,
+        transition: theme.transitions.create(['width', 'padding'], {
+          easing: 'var(--layout-transition-easing)',
+          duration: 'var(--layout-transition-duration)',
+        }),
         [theme.breakpoints.up(layoutQuery)]: { display: 'flex' },
         ...sx,
       }}
     >
-      <NavContent data={data} />
+      <NavContent data={data} pinned={pinned} />
     </Box>
   );
 }
@@ -55,7 +62,7 @@ export function NavMobile({
   data,
   open,
   onClose,
-}: NavContentProps & { open: boolean; onClose: () => void }) {
+}: Omit<NavContentProps, 'pinned'> & { open: boolean; onClose: () => void }) {
   const { pathname } = useLocation();
 
   useEffect(() => {
@@ -77,17 +84,26 @@ export function NavMobile({
         },
       }}
     >
-      <NavContent data={data} />
+      <NavContent data={data} pinned />
     </Drawer>
   );
 }
 
-function NavContent({ data, sx }: NavContentProps) {
+function NavContent({ data, sx, pinned = true }: NavContentProps) {
   const { pathname } = useLocation();
 
   return (
     <>
-      <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 1.5, px: 0.5 }}>
+      <Box
+        sx={{
+          mb: 3,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1.5,
+          px: pinned ? 0.5 : 0,
+          justifyContent: pinned ? 'flex-start' : 'center',
+        }}
+      >
         <Box
           sx={{
             width: 36,
@@ -97,15 +113,18 @@ function NavContent({ data, sx }: NavContentProps) {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
+            flexShrink: 0,
           }}
         >
           <Typography variant="h6" sx={{ color: 'common.white', fontWeight: 800, lineHeight: 1 }}>
             F
           </Typography>
         </Box>
-        <Typography variant="h6" sx={{ fontWeight: 700 }}>
-          favbase
-        </Typography>
+        {pinned && (
+          <Typography variant="h6" sx={{ fontWeight: 700 }}>
+            favbase
+          </Typography>
+        )}
       </Box>
 
       <Box
@@ -119,42 +138,57 @@ function NavContent({ data, sx }: NavContentProps) {
           {data.map((item) => {
             const isActive = item.path === pathname;
 
+            const button = (
+              <ListItemButton
+                disableGutters
+                component={RouterLink}
+                to={item.path}
+                sx={[
+                  (theme) => ({
+                    pl: pinned ? 2 : 0,
+                    py: 1,
+                    gap: pinned ? 2 : 0,
+                    pr: pinned ? 1.5 : 0,
+                    borderRadius: 0.75,
+                    typography: 'body2',
+                    fontWeight: 'fontWeightMedium',
+                    color: theme.vars.palette.text.secondary,
+                    minHeight: 44,
+                    justifyContent: pinned ? 'flex-start' : 'center',
+                    ...(isActive && {
+                      fontWeight: 'fontWeightSemiBold',
+                      color: theme.vars.palette.primary.main,
+                      bgcolor: varAlpha(theme.vars.palette.primary.mainChannel, 0.08),
+                      '&:hover': {
+                        bgcolor: varAlpha(theme.vars.palette.primary.mainChannel, 0.16),
+                      },
+                    }),
+                  }),
+                ]}
+              >
+                <Box component="span" sx={{ width: 24, height: 24, display: 'flex' }}>
+                  {item.icon}
+                </Box>
+                {pinned && (
+                  <>
+                    <Box component="span" sx={{ flexGrow: 1 }}>
+                      {item.title}
+                    </Box>
+                    {item.info && item.info}
+                  </>
+                )}
+              </ListItemButton>
+            );
+
             return (
               <ListItem disableGutters disablePadding key={item.title}>
-                <ListItemButton
-                  disableGutters
-                  component={RouterLink}
-                  to={item.path}
-                  sx={[
-                    (theme) => ({
-                      pl: 2,
-                      py: 1,
-                      gap: 2,
-                      pr: 1.5,
-                      borderRadius: 0.75,
-                      typography: 'body2',
-                      fontWeight: 'fontWeightMedium',
-                      color: theme.vars.palette.text.secondary,
-                      minHeight: 44,
-                      ...(isActive && {
-                        fontWeight: 'fontWeightSemiBold',
-                        color: theme.vars.palette.primary.main,
-                        bgcolor: varAlpha(theme.vars.palette.primary.mainChannel, 0.08),
-                        '&:hover': {
-                          bgcolor: varAlpha(theme.vars.palette.primary.mainChannel, 0.16),
-                        },
-                      }),
-                    }),
-                  ]}
-                >
-                  <Box component="span" sx={{ width: 24, height: 24, display: 'flex' }}>
-                    {item.icon}
-                  </Box>
-                  <Box component="span" sx={{ flexGrow: 1 }}>
-                    {item.title}
-                  </Box>
-                  {item.info && item.info}
-                </ListItemButton>
+                {pinned ? (
+                  button
+                ) : (
+                  <Tooltip title={item.title} placement="right" arrow>
+                    {button}
+                  </Tooltip>
+                )}
               </ListItem>
             );
           })}

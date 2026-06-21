@@ -29,3 +29,8 @@ export const settingsStorage = storage.defineItem<UserSettings>(
   'local:settings',
   { fallback: DEFAULT_SETTINGS },
 );
+
+export const sidebarPinnedStorage = storage.defineItem<boolean>(
+  'local:sidebarPinned',
+  { fallback: true },
+);
