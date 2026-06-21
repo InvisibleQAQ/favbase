@@ -45,6 +45,31 @@ const en: Record<LocaleKeys, string> = {
   'settings.show': 'Show',
   'settings.hide': 'Hide',
 
+  'settings.title': 'AI Service Configuration',
+  'settings.llmCard.title': 'LLM Service',
+  'settings.llmCard.description': 'Configure LLM service for video content summarization',
+  'settings.asrCard.title': 'ASR Transcription',
+  'settings.asrCard.description': 'Configure speech recognition for audio transcription',
+  'settings.advancedCard.title': 'Advanced Settings',
+
+  'settings.testConnection': 'Test Connection',
+  'settings.testing': 'Testing...',
+  'settings.testSuccess': 'Connection successful',
+  'settings.testFailed': 'Connection failed',
+
+  'settings.fetchModels': 'Fetch Models',
+  'settings.fetchingModels': 'Fetching...',
+  'settings.fetchModelsSuccess': 'Found {{count}} available models',
+  'settings.fetchModelsFailed': 'Failed to fetch models',
+  'settings.selectModel': 'Select Model',
+  'settings.searchModels': 'Search models...',
+  'settings.noModels': 'No models available',
+
+  'settings.temperature': 'Temperature',
+  'settings.temperatureDesc': 'Controls randomness of generation (0-2, recommended 0.3)',
+  'settings.maxTokens': 'Max Tokens',
+  'settings.maxTokensDesc': 'Maximum tokens per request',
+
   'transcribe.button': 'Start Transcription',
   'transcribe.cancel': 'Cancel',
   'transcribe.retry': 'Retry',

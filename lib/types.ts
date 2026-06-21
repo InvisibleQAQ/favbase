@@ -62,4 +62,8 @@ export interface UserSettings {
 
   // Mode
   prefMode: 'quality' | 'efficiency';
+
+  // Advanced
+  temperature: number;
+  maxTokens: number;
 }

@@ -43,6 +43,31 @@ const zhCN = {
   'settings.show': '显示',
   'settings.hide': '隐藏',
 
+  'settings.title': 'AI 服务配置',
+  'settings.llmCard.title': 'LLM 服务配置',
+  'settings.llmCard.description': '配置大语言模型服务以实现视频内容总结',
+  'settings.asrCard.title': 'ASR 语音转录',
+  'settings.asrCard.description': '配置语音识别服务以转录视频音频',
+  'settings.advancedCard.title': '高级设置',
+
+  'settings.testConnection': '测试连接',
+  'settings.testing': '测试中...',
+  'settings.testSuccess': '连接成功',
+  'settings.testFailed': '连接失败',
+
+  'settings.fetchModels': '获取模型列表',
+  'settings.fetchingModels': '获取中...',
+  'settings.fetchModelsSuccess': '已获取 {{count}} 个可用模型',
+  'settings.fetchModelsFailed': '获取模型列表失败',
+  'settings.selectModel': '选择模型',
+  'settings.searchModels': '搜索模型...',
+  'settings.noModels': '无可用模型',
+
+  'settings.temperature': '温度 (Temperature)',
+  'settings.temperatureDesc': '控制生成内容的随机性（0-2，推荐 0.3）',
+  'settings.maxTokens': '最大 Token 数',
+  'settings.maxTokensDesc': '单次请求最大生成 token 数量',
+
   'transcribe.button': '开始在线转录',
   'transcribe.cancel': '取消转录',
   'transcribe.retry': '重试',

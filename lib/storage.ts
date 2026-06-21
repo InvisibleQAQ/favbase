@@ -19,6 +19,10 @@ export const DEFAULT_SETTINGS: UserSettings = {
 
   // Mode
   prefMode: 'efficiency',
+
+  // Advanced
+  temperature: 0.3,
+  maxTokens: 1000,
 };
 
 export const settingsStorage = storage.defineItem<UserSettings>(

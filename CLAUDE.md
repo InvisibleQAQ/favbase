@@ -7,6 +7,7 @@ B站收藏自动转知识库的 Chromium 浏览器扩展。本地优先，可选
 - **框架**: WXT 0.20.26 (Vite) + React 19 + TypeScript 5.9
 - **架构**: Chrome MV3 (Service Worker + Content Script + Shadow DOM UI + Extension Page)
 - **UI 框架**: MUI v7 (Extension Page) + 原生 CSS + `--fb-*` design tokens (Content Script Shadow DOM)
+- **AI SDK**: Vercel AI SDK v6（`ai` + `@ai-sdk/openai` + `@ai-sdk/anthropic` + `@ai-sdk/google` + `@ai-sdk/openai-compatible`）
 - **存储**: WXT `storage.defineItem`（设置/缓存），后续接入 PGlite + pgvector（知识库）
 - **包管理**: pnpm
 
@@ -67,14 +68,20 @@ MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRo
   - `iconify.tsx` — styled(Icon) 包装，未注册图标 console.warn 提醒
 - `entrypoints/app/pages/` — 页面组件（lazy loaded）
   - `dashboard.tsx` → `sections/overview/overview-view.tsx`（统计卡片 + 活动列表 + 进度条）
-  - `collections.tsx` / `settings.tsx` — 占位页
+  - `settings.tsx` → `sections/settings/settings-view.tsx`（AI 服务配置：LLM/ASR/高级设置）
+  - `collections.tsx` — 占位页
 - `entrypoints/app/sections/overview/stat-widget.tsx` — 统计卡片：圆形图标背景 + varAlpha 色调 + title/total
+- `entrypoints/app/sections/settings/` — AI 设置页面组件
+  - `settings-view.tsx` — 设置页面主视图：DashboardContent + 3 Card 区块
+  - `llm-config-card.tsx` — LLM 配置卡片：Provider 选择 + API Key（显示/隐藏）+ Get Key 链接 + Model（Autocomplete，支持远程获取模型列表）+ Custom 字段 + 测试连接（AI SDK `generateText`）
+  - `asr-config-card.tsx` — ASR 配置卡片：Provider 选择 + API Key + Model
+  - `advanced-settings-card.tsx` — 高级设置：Temperature + MaxTokens + 调用模式（ToggleButtonGroup）
 
 ### B站字幕获取 (Step 1 — 已完成，Bilitato 对齐)
 
 双通道架构：Main World 脚本拦截优先，API 调用降级。
 
-- `lib/types.ts` — SubtitleRow, SubtitleResult, RawSubtitleItem, LLMProviderDef(id: LLMProviderId), ASRProviderDef(id: ASRProviderId), UserSettings(provider: LLMProviderId, asrProvider: ASRProviderId) 类型。通过 `import type` 从 providers.ts 引入 ID 类型
+- `lib/types.ts` — SubtitleRow, SubtitleResult, RawSubtitleItem, LLMProviderDef(id: LLMProviderId), ASRProviderDef(id: ASRProviderId), UserSettings(provider: LLMProviderId, asrProvider: ASRProviderId, temperature, maxTokens) 类型。通过 `import type` 从 providers.ts 引入 ID 类型
 - `lib/bilibili/messaging.ts` — BiliMessageMap（消息类型注册表）+ postBiliMessage()（类型安全发送，支持 defer 延迟）+ onBiliMessage()（类型安全订阅，返回 unsub，内部封装 source 校验）
 - `lib/providers.ts` — LLM_PROVIDER_IDS / ASR_PROVIDER_IDS（`as const`）为 Provider ID 唯一真实来源，推导 LLMProviderId / ASRProviderId 类型。LLM_PROVIDERS(9个) + ASR_PROVIDERS(2个) 静态定义，getProviderDef(id: LLMProviderId) 类型安全查找
 - `lib/storage.ts` — settingsStorage (WXT `storage.defineItem<UserSettings>`)，DEFAULT_SETTINGS 默认值
@@ -91,7 +98,7 @@ MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRo
   - `index.ts` — 挂载逻辑：anchor 到 `.right-container-inner`，插在 UP 主面板后。禁用 `autoMount()`（它在 Vue 水合期间触发导致评论区崩溃），改用手动延迟挂载（page load + 2s）+ 500ms 轮询检测脱离后重挂载
   - `hooks/useVideoDetect.ts` — 通过 onBiliMessage() 订阅 BILI_ROUTE_SWITCH（SPA 导航重置）+ BILI_SUBTITLE_HANDSHAKE（bvid/cid 解析，cid=0 时不锁定 resolved 等待后续重发），3s 超时降级到 fetchCidByPageList API
   - `hooks/useSubtitle.ts` — 三层数据流：(1) GET_VIDEO_CACHE 缓存优先加载 (2) onBiliMessage() 拦截通道 (3) fetchBilibiliSubtitle API 降级 + 重试。所有成功获取的字幕通过 CACHE_SUBTITLE 消息写入 Background 缓存。chrome.storage.onChanged 监听实现跨 tab 实时同步。返回 { rows, loading, status, error, source, cached }
-  - `hooks/useSettings.ts` — deep module：settingsStorage 读写（debounced 500ms + watch 外部变更）+ LLM/ASR computed 属性（currentProviderDef, currentLlmApiKey, currentLlmModel, isCustomProvider, currentAsrDef, currentAsrApiKey, currentAsrModel）+ focused action 方法（switchProvider, updateLlmApiKey, updateLlmModel, switchAsrProvider, updateAsrApiKey, updateAsrModel, updatePrefMode 等）。所有 Provider 切换/key 分支逻辑内聚在 hook 内部
+  - `hooks/useSettings.ts` — re-export from `lib/hooks/useSettings.ts`（共享 hook）
   - `components/Panel.tsx` — 主面板容器：左侧图标栏（CC + Settings Tab，activeTab 切换）+ 右侧内容区（header + 可折叠 body），根据 activeTab 渲染 SubtitleView 或 SettingsView。通过 `settingsProps` 单对象透传设置相关数据
   - `components/SubtitleView.tsx` — 逐行字幕列表 + 搜索过滤（100ms debounce，CSS display:none 隐藏不匹配行，保持 activeIndex 稳定）+ 搜索高亮（`<mark>` 标黄匹配文本）+ 来源标签（source badge，显示"官方AI字幕"/"ASR 转录"/"ASR 缓存"）+ 时间戳点击跳转 + 当前播放行高亮（250ms 轮询 `<video>.currentTime`，二分查找活跃行）+ 自动滚动（搜索激活时暂停 auto-scroll，清空搜索后恢复；尊重用户手动滚动意图，4s 超时恢复）
   - `components/SettingsView.tsx` — 纯渲染设置界面：LLM Provider 下拉（9个）+ 每 Provider 独立 API Key/Model + Custom 额外字段 + ASR Provider 切换 + 调用模式单选。零业务逻辑，所有 computed/action 通过 props 从 useSettings 接收
@@ -113,6 +120,18 @@ MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRo
 - `lib/cache/video-cache.ts` — 视频缓存模块：normalizeBvid()（防御性小写规范化，所有公开函数入口调用）+ per-bvid 独立 key（`local:vc:{bvid}`）+ 内存缓存层（Map + structuredClone 深拷贝）+ mergeVideoCache（Promise-based per-bvid 写锁 + hash 去重 + quota 降级）+ 旧格式迁移（`local:videoCache` → `local:vc:{bvid}`）+ initCacheStorageListener（Background 侧 chrome.storage.onChanged 同步内存缓存）+ computeRowsHash（轻量指纹）
 - `entrypoints/background.ts` — Background SW：onMessage(TRANSCRIBE_AUDIO) 编排完整转录流程（cache check → connectivity → audio extract → download → fingerprint → single/chunked transcribe → processSubtitles → cache write）+ GET_VIDEO_CACHE/CLEAR_VIDEO_CACHE/CACHE_SUBTITLE handler + TRANSCRIBE_ABORT(AbortController per-tab) + OFFSCREEN_CHUNK_PROGRESS 转发 + 进度推送 via tabs.sendMessage。缓存逻辑委托给 lib/cache/video-cache.ts
 
+### Vercel AI SDK 集成层
+
+Provider factory + 测试连接 + 模型列表获取。为 app.html 设置页面和未来 LLM 总结（Step 3）提供基础设施。
+
+- `lib/ai/provider-factory.ts` — `createLanguageModel(options)` 将 `LLMProviderId` + 用户配置映射为 AI SDK `LanguageModel`。openai → `@ai-sdk/openai`，claude → `@ai-sdk/anthropic`，gemini → `@ai-sdk/google`，其余（modelscope/zhipu/openrouter/deepseek/kimi/custom-openai）→ `@ai-sdk/openai-compatible`，custom-claude → `@ai-sdk/anthropic`
+- `lib/ai/test-connection.ts` — `testLlmConnection()` 通过 `generateText()` 发送 "Reply with exactly 'ok'" 验证 API Key 和端点可达性
+- `lib/ai/fetch-models.ts` — `fetchAvailableModels()` 原生 fetch 调用 `{baseUrl}/models`，适配不同 Provider 认证（Claude 用 `x-api-key` + `anthropic-version`，其余用 `Authorization: Bearer`）
+
+### 共享 Hooks
+
+- `lib/hooks/useSettings.ts` — deep module：settingsStorage 读写（debounced 500ms + watch 外部变更）+ LLM/ASR computed 属性（currentProviderDef, currentLlmApiKey, currentLlmModel, isCustomProvider, currentAsrDef, currentAsrApiKey, currentAsrModel）+ focused action 方法（switchProvider, updateLlmApiKey, updateLlmModel, switchAsrProvider, updateAsrApiKey, updateAsrModel, updatePrefMode, updateTemperature, updateMaxTokens）。app.html 和 Content Script 共享同一实例
+
 ## 约定
 
 - Extension Page (app.html): MUI v7 + Emotion CSS-in-JS + `createHashRouter`。Chrome 扩展页面 URL 不支持路径路由，必须用 hash router。主题系统复刻 material-kit-react（`minimal-shared` 工具库 + `@iconify/react` 图标）。新增页面：在 `pages/` 添加 lazy 组件 + `main.tsx` 路由配置 + `nav-config.tsx` 导航项
@@ -126,7 +145,8 @@ MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRo
 - 字幕后处理: 所有字幕数据（无论来源）均通过 `processSubtitles()` 四步管线处理（不合并，逐条独立）
 - Background 消息桥: Content Script ↔ Background 通过 browser.runtime.sendMessage/onMessage。消息类型定义在 `lib/transcription/types.ts`（BgMessage union）。Background → Content Script 进度推送用 browser.tabs.sendMessage。Background ↔ Offscreen 用 chrome.runtime.sendMessage（Chrome-specific API）
 - 存储: WXT `storage.defineItem`（`local:` 前缀），import from `wxt/utils/storage`（非 `wxt/storage`）
-- 设置持久化: `settingsStorage`（`lib/storage.ts`），UserSettings 单对象存储在 `local:settings`。useSettings 是 deep module — 内聚 storage 读写、computed 属性推导、focused action 方法，SettingsView 是纯渲染组件
+- 设置持久化: `settingsStorage`（`lib/storage.ts`），UserSettings 单对象存储在 `local:settings`。`useSettings`（`lib/hooks/useSettings.ts`）是共享 deep module — 内聚 storage 读写、computed 属性推导、focused action 方法。app.html 和 Content Script 都从此 hook 读写，Content Script 的 `hooks/useSettings.ts` 是 re-export
+- AI SDK Provider 映射: openai → `@ai-sdk/openai`，claude → `@ai-sdk/anthropic`，gemini → `@ai-sdk/google`，其余 OpenAI 兼容 → `@ai-sdk/openai-compatible`。测试连接用 `generateText()`，模型列表用原生 fetch（AI SDK 无 model listing API）
 - Inject 状态机: 三阶段生命周期 idle → triggering → captured，通过 InjectEffects 接口注入 DOM/postMessage 副作用，状态转换集中在 state.ts 的 createStateMachine() 内。routeGeneration 作为并发守卫防止路由切换后旧 in-flight 拦截结果被采纳
 - SPA 路由监控: route-monitor.ts 300ms 轮询 location.href 检测 BV 号/分P 变化 → sm.resetForRoute() 级联重置（generation++、清理定时器、restoreDisplay） → ROUTE_SWITCH 即时通知 → 800ms 后重发 HANDSHAKE → 重触发 CC 按钮
 - 字幕获取流程（主路径）: interceptors.ts 拦截 fetch/XHR → sm.markCaptured() 解析+桥接 → postMessage SUBTITLE_DATA → useSubtitle 接收 → processSubtitles()
