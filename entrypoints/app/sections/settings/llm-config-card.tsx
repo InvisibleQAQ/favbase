@@ -30,6 +30,7 @@ interface LlmConfigCardProps {
   currentLlmApiKey: string;
   currentLlmModel: string;
   isCustomProvider: boolean;
+  saved: boolean;
   switchProvider: (id: LLMProviderId) => void;
   updateLlmApiKey: (key: string) => void;
   updateLlmModel: (model: string) => void;
@@ -46,6 +47,7 @@ export function LlmConfigCard({
   currentLlmApiKey,
   currentLlmModel,
   isCustomProvider,
+  saved,
   switchProvider,
   updateLlmApiKey,
   updateLlmModel,
@@ -140,7 +142,37 @@ export function LlmConfigCard({
             </TextField>
           </Grid>
 
-          {/* API Key + Base URL row */}
+          {/* Base URL */}
+          <Grid size={{ xs: 12, md: isCustomProvider ? 6 : 12 }}>
+            <TextField
+              fullWidth
+              label="Base URL"
+              placeholder="https://your-endpoint.com/v1/"
+              value={isCustomProvider ? settings.customBaseUrl : currentProviderDef.baseUrl}
+              onChange={isCustomProvider ? (e) => updateCustomBaseUrl(e.target.value) : undefined}
+              slotProps={{
+                input: { readOnly: !isCustomProvider },
+              }}
+              sx={!isCustomProvider ? (theme) => ({ '& .MuiInputBase-input': { color: theme.vars.palette.text.secondary } }) : undefined}
+            />
+          </Grid>
+
+          {isCustomProvider && (
+            <Grid size={{ xs: 12, md: 6 }}>
+              <TextField
+                select
+                fullWidth
+                label="协议"
+                value={settings.customProtocol}
+                onChange={(e) => updateCustomProtocol(e.target.value as 'openai' | 'claude')}
+              >
+                <MenuItem value="openai">OpenAI</MenuItem>
+                <MenuItem value="claude">Claude</MenuItem>
+              </TextField>
+            </Grid>
+          )}
+
+          {/* API Key */}
           <Grid size={{ xs: 12, md: 6 }}>
             <TextField
               fullWidth
@@ -232,35 +264,7 @@ export function LlmConfigCard({
             </Grid>
           )}
 
-          {/* Custom provider fields */}
-          {isCustomProvider && (
-            <>
-              <Grid size={{ xs: 12, md: 6 }}>
-                <TextField
-                  fullWidth
-                  label="自定义 Base URL"
-                  placeholder="https://your-endpoint.com/v1/"
-                  value={settings.customBaseUrl}
-                  onChange={(e) => updateCustomBaseUrl(e.target.value)}
-                />
-              </Grid>
-
-              <Grid size={{ xs: 12, md: 6 }}>
-                <TextField
-                  select
-                  fullWidth
-                  label="协议"
-                  value={settings.customProtocol}
-                  onChange={(e) => updateCustomProtocol(e.target.value as 'openai' | 'claude')}
-                >
-                  <MenuItem value="openai">OpenAI</MenuItem>
-                  <MenuItem value="claude">Claude</MenuItem>
-                </TextField>
-              </Grid>
-            </>
-          )}
-
-          {/* Test Connection */}
+          {/* Test Connection + Saved indicator */}
           <Grid size={{ xs: 12 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <Button
@@ -271,6 +275,11 @@ export function LlmConfigCard({
               >
                 {isTesting ? '测试中...' : '测试连接'}
               </Button>
+              {saved && (
+                <Typography variant="body2" sx={{ color: 'success.main', fontWeight: 600 }}>
+                  已保存
+                </Typography>
+              )}
             </Box>
           </Grid>
 

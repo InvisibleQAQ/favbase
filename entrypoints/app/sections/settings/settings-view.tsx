@@ -1,6 +1,5 @@
 import Typography from '@mui/material/Typography';
 import Grid from '@mui/material/Grid';
-import Alert from '@mui/material/Alert';
 
 import { DashboardContent } from '../../layouts/dashboard';
 import { useSettings } from '@/lib/hooks/useSettings';
@@ -16,12 +15,6 @@ export function SettingsView() {
         AI 服务配置
       </Typography>
 
-      {s.saved && (
-        <Alert severity="success" sx={{ mb: 3 }}>
-          已保存
-        </Alert>
-      )}
-
       <Grid container spacing={3}>
         <Grid size={{ xs: 12 }}>
           <LlmConfigCard
@@ -30,6 +23,7 @@ export function SettingsView() {
             currentLlmApiKey={s.currentLlmApiKey}
             currentLlmModel={s.currentLlmModel}
             isCustomProvider={s.isCustomProvider}
+            saved={s.saved}
             switchProvider={s.switchProvider}
             updateLlmApiKey={s.updateLlmApiKey}
             updateLlmModel={s.updateLlmModel}
