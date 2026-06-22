@@ -5,6 +5,8 @@ export const BILIBILI_API = {
     `https://api.bilibili.com/x/player/v2?bvid=${encodeURIComponent(bvid)}&cid=${encodeURIComponent(String(cid))}`,
   playUrl: (bvid: string, cid: number) =>
     `https://api.bilibili.com/x/player/playurl?bvid=${encodeURIComponent(bvid)}&cid=${encodeURIComponent(String(cid))}&fnval=16&fnver=0&platform=html5&high_quality=1&otype=json`,
+  favFolderListAll: (mid: string) =>
+    `https://api.bilibili.com/x/v3/fav/folder/created/list-all?up_mid=${encodeURIComponent(mid)}`,
 } as const;
 
 const SUBTITLE_CDN_PATTERNS = [

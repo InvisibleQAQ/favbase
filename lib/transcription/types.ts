@@ -177,9 +177,19 @@ export interface CacheSubtitleRequest {
   source: 'bilibili' | 'groq';
 }
 
+export interface FetchFavFoldersRequest {
+  type: 'FETCH_FAV_FOLDERS';
+}
+
+export interface CheckBiliLoginRequest {
+  type: 'CHECK_BILI_LOGIN';
+}
+
 export type BgMessage =
   | TranscribeRequest
   | TranscribeAbort
   | GetVideoCacheRequest
   | ClearVideoCacheRequest
-  | CacheSubtitleRequest;
+  | CacheSubtitleRequest
+  | FetchFavFoldersRequest
+  | CheckBiliLoginRequest;

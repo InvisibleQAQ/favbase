@@ -69,8 +69,12 @@ MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRo
 - `entrypoints/app/pages/` — 页面组件（lazy loaded）
   - `dashboard.tsx` → `sections/overview/overview-view.tsx`（统计卡片 + 活动列表 + 进度条）
   - `settings.tsx` → `sections/settings/settings-view.tsx`（AI 服务配置：LLM/ASR/高级设置）
-  - `collections.tsx` — 占位页
+  - `collections.tsx` → `sections/collections/collections-view.tsx`（B站收藏夹列表展示）
 - `entrypoints/app/sections/overview/stat-widget.tsx` — 统计卡片：圆形图标背景 + varAlpha 色调 + title/total
+- `entrypoints/app/sections/collections/` — B站收藏夹页面组件
+  - `collections-view.tsx` — 收藏夹主视图：同步按钮 + 卡片网格 + 未登录引导/空状态/loading skeleton
+  - `fav-folder-card.tsx` — 收藏夹卡片：封面图 + 名称 + 视频数量
+  - `use-fav-folders.ts` — 收藏夹 hook：CHECK_BILI_LOGIN 检测登录 → FETCH_FAV_FOLDERS 同步 → 状态管理（folders/loading/syncing/loginState/error）
 - `entrypoints/app/sections/settings/` — AI 设置页面组件
   - `settings-view.tsx` — 设置页面主视图：DashboardContent + 3 Card 区块
   - `llm-config-card.tsx` — LLM 配置卡片：Provider 选择 + API Key（显示/隐藏）+ Get Key 链接 + Model（Autocomplete，支持远程获取模型列表）+ Custom 字段 + 测试连接（AI SDK `generateText`）
@@ -85,7 +89,10 @@ MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRo
 - `lib/bilibili/messaging.ts` — BiliMessageMap（消息类型注册表）+ postBiliMessage()（类型安全发送，支持 defer 延迟）+ onBiliMessage()（类型安全订阅，返回 unsub，内部封装 source 校验）
 - `lib/providers.ts` — LLM_PROVIDER_IDS / ASR_PROVIDER_IDS（`as const`）为 Provider ID 唯一真实来源，推导 LLMProviderId / ASRProviderId 类型。LLM_PROVIDERS(9个) + ASR_PROVIDERS(2个) 静态定义，getProviderDef(id: LLMProviderId) 类型安全查找
 - `lib/storage.ts` — settingsStorage (WXT `storage.defineItem<UserSettings>`)，DEFAULT_SETTINGS 默认值，sidebarPinnedStorage（`local:sidebarPinned`，布尔值，默认 true）
-- `lib/bilibili/api.ts` — BILIBILI_API 端点集中化（pageList/playerV2/playUrl URL builder）+ isSubtitleCdnUrl() 字幕 CDN URL 检测。playUrl(bvid, cid) 用 fnval=16 请求 DASH 音频流
+- `lib/bilibili/api.ts` — BILIBILI_API 端点集中化（pageList/playerV2/playUrl/favFolderListAll URL builder）+ isSubtitleCdnUrl() 字幕 CDN URL 检测。playUrl(bvid, cid) 用 fnval=16 请求 DASH 音频流
+- `lib/bilibili/auth.ts` — getBiliAuth()：通过 chrome.cookies.get() 读取 SESSDATA + DedeUserID，检查过期时间，返回 BiliAuthInfo | null
+- `lib/bilibili/favorites.ts` — fetchFavFolderList(auth)：调用 `/x/v3/fav/folder/created/list-all`，解析返回 BiliFavFolder[]。BiliAuthError 处理 -101 认证失败
+- `lib/bilibili/favorites-sync.ts` — syncFavFoldersToDb(db, folders)：将 BiliFavFolder[] upsert 到 PGlite sources 表（db 由调用方注入），返回 Source[]
 - `lib/bilibili/video-info.ts` — extractBvid()（保留原始大小写，B站 API 区分大小写）, extractPageNum(), fetchCidByPageList()（CID 降级路径，用 BILIBILI_API.pageList()）
 - `lib/bilibili/subtitle-fetcher.ts` — fetchBilibiliSubtitle()（API 降级路径，用 BILIBILI_API.playerV2()，CDN fetch 带 credentials，响应解析含 5 层 fallback）
 - `lib/bilibili/subtitle-processor.ts` — processSubtitles() 四步管线：normalize -> filter -> filler removal -> deduplicate(Jaccard>0.85)。接受 B 站原始格式和 favbase 格式。每条字幕保持独立行，不合并
@@ -169,7 +176,9 @@ RPC Proxy 架构（参考 memorall）：Offscreen Document 持有 PGlite，Backg
 - CID 获取: Main World 读取 `window.__INITIAL_STATE__` 优先（定期重发直到 content script 接收），降级到 `/x/player/pagelist` API（轻量，不需要 WBI 签名）
 - postMessage 桥接: Main World -> Isolated World，通过 `lib/bilibili/messaging.ts` 统一收发。BiliMessageMap 定义所有消息类型，发送用 postBiliMessage()，接收用 onBiliMessage()。消息流：`BILI_ROUTE_SWITCH`(bvid, 路由变化即时通知) → `BILI_SUBTITLE_HANDSHAKE`(bvid+cid, 800ms延迟) → `BILI_SUBTITLE_DATA`(字幕数据, defer 发送)。新增消息类型只需在 BiliMessageMap 加一行
 - 字幕后处理: 所有字幕数据（无论来源）均通过 `processSubtitles()` 四步管线处理（不合并，逐条独立）
-- Background 消息桥: Content Script ↔ Background 通过 browser.runtime.sendMessage/onMessage。消息类型定义在 `lib/transcription/types.ts`（BgMessage union）。Background → Content Script 进度推送用 browser.tabs.sendMessage。Background ↔ Offscreen 用 chrome.runtime.sendMessage（Chrome-specific API）
+- Background 消息桥: Content Script ↔ Background 通过 browser.runtime.sendMessage/onMessage。消息类型定义在 `lib/transcription/types.ts`（BgMessage union）。Background → Content Script 进度推送用 browser.tabs.sendMessage。Background ↔ Offscreen 用 chrome.runtime.sendMessage（Chrome-specific API）。新增消息类型：`CHECK_BILI_LOGIN`（检测 B 站登录状态）、`FETCH_FAV_FOLDERS`（拉取收藏夹列表 + upsert DB）
+- B 站认证: manifest 声明 `cookies` 权限。`lib/bilibili/auth.ts` 的 `getBiliAuth()` 通过 `chrome.cookies.get()` 读取 SESSDATA + DedeUserID，检查 expirationDate。Background SW 是唯一调用 B 站 API 的上下文（统一出口），手动拼 `Cookie: SESSDATA=xxx` header
+- B 站收藏夹: `FETCH_FAV_FOLDERS` 流程：getBiliAuth() → fetchFavFolderList() → syncFavFoldersToDb()（upsert sources 表）→ 返回 Source[]。app.html 通过 `useFavFolders` hook 发消息获取数据并管理 UI 状态（loading/syncing/loginState/error）
 - 存储: WXT `storage.defineItem`（`local:` 前缀），import from `wxt/utils/storage`（非 `wxt/storage`）
 - 设置持久化: `settingsStorage`（`lib/storage.ts`），UserSettings 单对象存储在 `local:settings`。`useSettings`（`lib/hooks/useSettings.ts`）是共享 deep module — 内聚 storage 读写、computed 属性推导、focused action 方法。app.html 和 Content Script 都从此 hook 读写，Content Script 的 `hooks/useSettings.ts` 是 re-export
 - 侧边栏 Pin/Unpin: `sidebarPinnedStorage`（`lib/storage.ts`），布尔值存储在 `local:sidebarPinned`（默认 true）。DashboardLayout 读取并通过 toggle 按钮切换。Pinned=280px 展开（图标+文字），Unpinned=72px 图标栏（MUI Tooltip 显示菜单名）。Mobile（lg 以下）不受影响，始终 Drawer 模式

@@ -12,6 +12,10 @@ import type {
   OffscreenTranscribeRequest,
   OffscreenProgressMessage,
 } from '@/lib/transcription/types';
+import { getBiliAuth } from '@/lib/bilibili/auth';
+import { fetchFavFolderList, BiliAuthError } from '@/lib/bilibili/favorites';
+import { syncFavFoldersToDb } from '@/lib/bilibili/favorites-sync';
+import { initDbProxy } from '@/lib/database/db';
 import {
   ensureGroqConnectivity,
   requestGroqTranscription,
@@ -325,6 +329,36 @@ export default defineBackground(() => {
             console.warn('[background] CACHE_SUBTITLE failed:', err);
             return { success: false };
           });
+      }
+
+      if (msg.type === 'CHECK_BILI_LOGIN') {
+        return getBiliAuth().then((auth) => ({
+          loggedIn: auth !== null,
+          mid: auth?.mid ?? null,
+        }));
+      }
+
+      if (msg.type === 'FETCH_FAV_FOLDERS') {
+        return (async () => {
+          const auth = await getBiliAuth();
+          if (!auth) {
+            return { success: false, error: 'not_logged_in' } as const;
+          }
+          try {
+            const folders = await fetchFavFolderList(auth);
+            await ensureOffscreen();
+            const db = await initDbProxy(ensureOffscreen);
+            const sources = await syncFavFoldersToDb(db, folders);
+            return { success: true, data: sources } as const;
+          } catch (err) {
+            if (err instanceof BiliAuthError) {
+              return { success: false, error: 'auth_expired' } as const;
+            }
+            const detail = err instanceof Error ? err.message : 'unknown';
+            console.error('[background] FETCH_FAV_FOLDERS failed:', detail);
+            return { success: false, error: detail } as const;
+          }
+        })();
       }
 
       return undefined;
