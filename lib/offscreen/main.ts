@@ -19,6 +19,7 @@ import {
   AUDIO_FILE_NAME,
   AUDIO_MIME_TYPE,
 } from '@/lib/transcription/constants';
+import { initDbMain } from '@/lib/database/db';
 
 interface ChunkSession {
   chunks: { bytes: Uint8Array; plan: ChunkPlan }[];
@@ -401,6 +402,11 @@ async function handleTranscribe(msg: OffscreenTranscribeRequest): Promise<Subtit
 
   return accumulated;
 }
+
+// PGlite initialization (runs alongside FFmpeg, no conflict — different IPC channels)
+// FFmpeg: chrome.runtime.onMessage (request/response)
+// PGlite RPC: chrome.runtime.onConnect (port-based)
+initDbMain().catch((err) => console.error('[offscreen] PGlite init failed:', err));
 
 chrome.runtime.onMessage.addListener(
   (msg: OffscreenRequest, _sender: chrome.runtime.MessageSender, sendResponse: (response?: unknown) => void) => {

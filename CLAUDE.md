@@ -8,7 +8,7 @@ B站收藏自动转知识库的 Chromium 浏览器扩展。本地优先，可选
 - **架构**: Chrome MV3 (Service Worker + Content Script + Shadow DOM UI + Extension Page)
 - **UI 框架**: MUI v7 (Extension Page) + 原生 CSS + `--fb-*` design tokens (Content Script Shadow DOM)
 - **AI SDK**: Vercel AI SDK v6（`ai` + `@ai-sdk/openai` + `@ai-sdk/anthropic` + `@ai-sdk/google` + `@ai-sdk/openai-compatible`）
-- **存储**: WXT `storage.defineItem`（设置/缓存），后续接入 PGlite + pgvector（知识库）
+- **存储**: WXT `storage.defineItem`（设置/缓存） + PGlite 0.5 + Drizzle ORM 0.45 + pgvector（知识库）
 - **包管理**: pnpm
 
 ## 当前状态
@@ -128,6 +128,32 @@ Provider factory + 测试连接 + 模型列表获取。为 app.html 设置页面
 - `lib/ai/test-connection.ts` — `testLlmConnection()` 通过 `generateText()` 发送 "Reply with exactly 'ok'" 验证 API Key 和端点可达性
 - `lib/ai/fetch-models.ts` — `fetchAvailableModels()` 原生 fetch 调用 `{baseUrl}/models`，适配不同 Provider 认证（Claude 用 `x-api-key` + `anthropic-version`，其余用 `Authorization: Bearer`）
 
+### PGlite + Drizzle 数据库层
+
+RPC Proxy 架构（参考 memorall）：Offscreen Document 持有 PGlite，Background SW / app.html 通过 Chrome Port 透明使用 Drizzle query builder。
+
+- `lib/database/constants.ts` — `DB_CHANNEL_NAME`('favbase-db'), `DB_DATA_DIR`('idb://favbase'), `DatabaseMode` enum
+- `lib/database/entities/` — Per-table Drizzle schema 定义（entity-per-file）
+  - `authors.ts` — authors 表（platform + platform_author_id 唯一约束）
+  - `sources.ts` — sources 表（收藏夹/播放列表）
+  - `items.ts` — items 表（核心条目，content_state 6 态 CHECK 约束，FK → authors）
+  - `item-sources.ts` — item_sources 关联表（复合主键 item_id + source_id）
+  - `item-contents.ts` — item_contents 表（1:1，PK = item_id FK → items）
+  - `item-chunks.ts` — item_chunks 表（含 VECTOR(1536) embedding 列）
+- `lib/database/schema.ts` — 集中导出所有表定义（轻量，无 PGlite 运行时依赖）
+- `lib/database/types.ts` — 仅 type 导出（Author/Item/Source 等 Select/Insert 类型）
+- `lib/database/db.ts` — `initDbMain()`（Offscreen 端：创建 PGlite + 跑迁移 + 启动 RPC handler）、`initDbProxy()`（调用端：创建 PGliteSharedProxy + Drizzle）、`getDb()`/`closeDb()`
+- `lib/database/bridges/` — RPC 桥接层
+  - `types.ts` — RPC 协议：RpcRequest/RpcResponse/RpcTransport 接口
+  - `serialization.ts` — Date ↔ `{ __type:'Date', __value: ISO }` 标记序列化（Chrome Port 安全）
+  - `proxy-driver.ts` — `PGliteSharedProxy`（implements PGliteLike，请求 ID 关联 + 30s 超时）
+  - `chrome-port-rpc.ts` — `createChromePortTransport()`（`chrome.runtime.connect`，指数退避重连，消息队列）
+  - `rpc-handler.ts` — `DatabaseRpcHandler`（Offscreen singleton，`chrome.runtime.onConnect` 监听，in-flight 去重）
+- `lib/database/migrations/` — 自定义迁移系统
+  - `index.ts` — `runMigrations(pg)` 跑迁移：读 `_migrations` 表 → 按 version 顺序执行未应用的迁移
+  - `v001-init.ts` — v1 初始化：CREATE EXTENSION + 6 张业务表 + 索引 + GIN trigram 索引 + updated_at 触发器
+- `lib/database/index.ts` — Public API barrel
+
 ### 共享 Hooks
 
 - `lib/hooks/useSettings.ts` — deep module：settingsStorage 读写（debounced 500ms + watch 外部变更）+ LLM/ASR computed 属性（currentProviderDef, currentLlmApiKey, currentLlmModel, isCustomProvider, currentAsrDef, currentAsrApiKey, currentAsrModel）+ focused action 方法（switchProvider, updateLlmApiKey, updateLlmModel, switchAsrProvider, updateAsrApiKey, updateAsrModel, updatePrefMode, updateTemperature, updateMaxTokens）。app.html 和 Content Script 共享同一实例
@@ -157,6 +183,9 @@ Provider factory + 测试连接 + 模型列表获取。为 app.html 设置页面
 - CDN 请求头: `declarativeNetRequest` 静态规则（`public/rules.json`）在网络栈层面为 bilivideo 域名设置 `Referer: https://www.bilibili.com/` + `Origin`。Background SW 的 fetch() 自身设置的 Referer 会被 Chrome MV3 剥离，必须用 declarativeNetRequest
 - ASR 转录流程: cache check → ensureGroqConnectivity(pre-flight) → extractAudioUrl(playurl fnval:16+high_quality:1, 含 json.code 校验) → fetchAudioBlob(streaming+progress) → assertAudioNotReused(SHA-256) → ≤24MB: requestGroqTranscription / >24MB: Offscreen FFmpeg 分块 → processSubtitles → cache
 - 视频缓存: `lib/cache/video-cache.ts` 模块。per-bvid 独立 key `local:vc:{bvid}`（chrome.storage 中为 `vc:{bvid}`）。内存缓存层（Map<string, VideoCacheEntry>）+ Promise-based per-bvid 写锁 + computeRowsHash 去重。所有来源（bilibili/groq）字幕统一缓存。旧 `local:videoCache` 单体 key 在首次访问时自动迁移。Background 侧 initCacheStorageListener 保持内存缓存与 storage 同步，Content Script 侧 chrome.storage.onChanged 实现跨 tab UI 实时更新
-- Offscreen Document: WXT unlisted page `entrypoints/offscreen.html`，逻辑在 `lib/offscreen/main.ts`。通过 chrome.offscreen.createDocument 按需创建（singleton），FFmpeg WASM stream-copy 分块，600s 默认 + 4s overlap。Background 传 audioUrl（非 ArrayBuffer），Offscreen 自行 fetch 音频数据（避免大体积二进制通过 chrome.runtime.sendMessage 传输不可靠）。FFmpeg WASM 从 `public/ffmpeg/`（@ffmpeg/core@0.12.10）本地加载
+- Offscreen Document: WXT unlisted page `entrypoints/offscreen.html`，逻辑在 `lib/offscreen/main.ts`。通过 chrome.offscreen.createDocument 按需创建（singleton）。**双职责**：FFmpeg WASM 分块 + PGlite 数据库持有者。两套 IPC 完全隔离：FFmpeg 用 `chrome.runtime.onMessage`（request/response），PGlite 用 `chrome.runtime.onConnect`（port-based RPC，channel name `favbase-db`）。Background 传 audioUrl（非 ArrayBuffer），Offscreen 自行 fetch 音频数据。FFmpeg WASM 从 `public/ffmpeg/`（@ffmpeg/core@0.12.10）本地加载
+- PGlite 数据库: Offscreen Document 是唯一持有者（单连接模型），持久化到 IndexedDB（`idb://favbase`）。扩展：pgvector（`@electric-sql/pglite-pgvector`）、uuid-ossp、pg_trgm（内置 contrib）。`initDbMain()` 在 Offscreen 启动时调用，同时启动 `DatabaseRpcHandler` 监听 Chrome Port 连接。Background SW 和 app.html 通过 `initDbProxy()` 创建 `PGliteSharedProxy`，Drizzle query builder 在调用端本地构建 SQL，仅执行通过 RPC 代理
+- 数据库迁移: 自定义迁移系统（非 drizzle-kit），`_migrations` 表追踪版本。迁移脚本直接写 SQL（不用 Drizzle 内部 Symbol 反射）。`runMigrations(pg)` 在 `initDbMain()` 内自动执行。新增迁移：在 `lib/database/migrations/` 添加 `vNNN-*.ts`，在 `index.ts` 的 `migrations` 数组追加条目
+- Drizzle Schema: entity-per-file（`lib/database/entities/`），`schema.ts` 集中导出，`types.ts` 仅 type 导出（无运行时依赖，proxy 线程安全导入）。新增表：添加 entity 文件 + 更新 schema.ts + types.ts + 写迁移脚本
 - i18n 架构: `lib/i18n/` 自研轻量方案（无外部依赖），`detectLocale()` 基于 `navigator.language` 选择 zh-CN 或 en。locale 文件在 `lib/i18n/locales/{zh-CN,en}.ts`，`LocaleKeys` 类型从 zh-CN 推导。**seam 在 UI 边界**：lib 层（groq-client/audio-extractor/offscreen 等）只传结构化数据（TranscribeErrorCode + params / TranscribeStage + stageParams），UI 层通过 `t()` 翻译。`TranscribeErrorInfo.message` 是英文 debug-only 字段（console 用），不渲染到 UI。`t()` 对未知 key 返回 key 字符串本身（fallback）。新增 error/stage locale key 时需同时更新 zh-CN.ts 和 en.ts
 - LLM 总结: OpenAI 协议兼容多 Provider，Quality/Efficiency 两种模式（Step 3，待实现）

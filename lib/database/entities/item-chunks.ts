@@ -1,0 +1,25 @@
+import { pgTable, uuid, text, integer, timestamp, index, unique, vector } from 'drizzle-orm/pg-core';
+import { items } from './items';
+
+export const itemChunks = pgTable(
+  'item_chunks',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    itemId: uuid('item_id')
+      .notNull()
+      .references(() => items.id, { onDelete: 'cascade' }),
+    chunkIndex: integer('chunk_index').notNull(),
+    chunkText: text('chunk_text').notNull(),
+    embedding: vector('embedding', { dimensions: 1536 }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    unique('uq_item_chunks_index').on(t.itemId, t.chunkIndex),
+    index('idx_item_chunks_item_id').on(t.itemId),
+    index('idx_item_chunks_text_trgm').using('gin', t.chunkText.op('gin_trgm_ops')),
+  ],
+);
+
+export type ItemChunk = typeof itemChunks.$inferSelect;
+export type NewItemChunk = typeof itemChunks.$inferInsert;
