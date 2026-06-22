@@ -15,7 +15,6 @@ import type {
 import { getBiliAuth } from '@/lib/bilibili/auth';
 import { fetchFavFolderList, BiliAuthError } from '@/lib/bilibili/favorites';
 import { syncFavFoldersToDb } from '@/lib/bilibili/favorites-sync';
-import { initDbProxy } from '@/lib/database/db';
 import {
   ensureGroqConnectivity,
   requestGroqTranscription,
@@ -347,6 +346,7 @@ export default defineBackground(() => {
           try {
             const folders = await fetchFavFolderList(auth);
             await ensureOffscreen();
+            const { initDbProxy } = await import('@/lib/database/db');
             const db = await initDbProxy(ensureOffscreen);
             const sources = await syncFavFoldersToDb(db, folders);
             return { success: true, data: sources } as const;
