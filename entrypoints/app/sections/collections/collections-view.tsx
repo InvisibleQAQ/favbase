@@ -136,7 +136,7 @@ export function CollectionsView() {
         <Grid container spacing={3}>
           {folders.map((folder) => (
             <Grid key={folder.id} size={{ xs: 12, sm: 6, md: 4 }}>
-              <FavFolderCard source={folder} />
+              <FavFolderCard folder={folder} />
             </Grid>
           ))}
         </Grid>

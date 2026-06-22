@@ -3,18 +3,10 @@ import CardMedia from '@mui/material/CardMedia';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 
-import type { Source } from '@/lib/database/types';
+import type { BiliFavFolder } from '@/lib/bilibili/favorites';
 
-interface FavFolderMeta {
-  media_count?: number;
-  cover?: string;
-  intro?: string;
-}
-
-export function FavFolderCard({ source }: { source: Source }) {
-  const meta = source.platformMeta as FavFolderMeta;
-  const cover = meta.cover || '';
-  const count = meta.media_count ?? 0;
+export function FavFolderCard({ folder }: { folder: BiliFavFolder }) {
+  const cover = folder.cover || '';
 
   return (
     <Card
@@ -33,7 +25,7 @@ export function FavFolderCard({ source }: { source: Source }) {
         <CardMedia
           component="img"
           image={cover.startsWith('//') ? `https:${cover}` : cover}
-          alt={source.title}
+          alt={folder.title}
           sx={{ height: 140, objectFit: 'cover' }}
         />
       ) : (
@@ -47,7 +39,7 @@ export function FavFolderCard({ source }: { source: Source }) {
           })}
         >
           <Typography variant="h3" sx={{ color: 'text.disabled' }}>
-            {source.title.charAt(0)}
+            {folder.title.charAt(0)}
           </Typography>
         </Box>
       )}
@@ -56,14 +48,14 @@ export function FavFolderCard({ source }: { source: Source }) {
         <Typography
           variant="subtitle1"
           noWrap
-          title={source.title}
+          title={folder.title}
           sx={{ fontWeight: 600 }}
         >
-          {source.title}
+          {folder.title}
         </Typography>
 
         <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
-          {count} 个视频
+          {folder.media_count} 个视频
         </Typography>
       </Box>
     </Card>
