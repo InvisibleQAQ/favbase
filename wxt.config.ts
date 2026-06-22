@@ -8,6 +8,7 @@ export default defineConfig({
     description: 'Turn your social media bookmarks into a searchable knowledge base',
     permissions: ['storage', 'unlimitedStorage', 'offscreen', 'declarativeNetRequest', 'cookies'],
     host_permissions: [
+      'https://*.bilibili.com/*',
       'https://api.bilibili.com/*',
       'https://*.hdslb.com/*',
       'https://*.bilivideo.com/*',
