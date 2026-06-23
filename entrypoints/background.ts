@@ -5,6 +5,7 @@ import type {
 } from '@/lib/transcription/types';
 import type { BackgroundContext } from '@/lib/background/types';
 import { initCacheStorageListener } from '@/lib/cache/video-cache';
+import { ensure as ensureOffscreen } from '@/lib/offscreen/lifecycle';
 import {
   handleTranscribe,
   handleTranscribeAbort,
@@ -20,17 +21,6 @@ export default defineBackground(() => {
 
   const tabAbortControllers = new Map<number, AbortController>();
   const tabBvids = new Map<number, string>();
-
-  async function ensureOffscreen(): Promise<void> {
-    const exists = await chrome.offscreen.hasDocument();
-    if (!exists) {
-      await chrome.offscreen.createDocument({
-        url: chrome.runtime.getURL('/offscreen.html'),
-        reasons: ['WORKERS'],
-        justification: 'FFmpeg WASM audio chunking for ASR transcription',
-      });
-    }
-  }
 
   const ctx: BackgroundContext = {
     tabAbortControllers,

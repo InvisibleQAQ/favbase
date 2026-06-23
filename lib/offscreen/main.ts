@@ -21,12 +21,37 @@ import {
 } from '@/lib/transcription/constants';
 import { initDbMain } from '@/lib/database/db';
 
+const SESSION_TTL_MS = 10 * 60 * 1000;
+const SESSION_SWEEP_INTERVAL_MS = 60 * 1000;
+
 interface ChunkSession {
   chunks: { bytes: Uint8Array; plan: ChunkPlan }[];
+  lastActive: number;
 }
 
 const sessions = new Map<string, ChunkSession>();
+
+function touchSession(sessionId: string): void {
+  const session = sessions.get(sessionId);
+  if (session) session.lastActive = Date.now();
+}
+
+function sweepStaleSessions(): void {
+  const now = Date.now();
+  for (const [id, session] of sessions) {
+    if (now - session.lastActive > SESSION_TTL_MS) {
+      sessions.delete(id);
+    }
+  }
+}
+
+setInterval(sweepStaleSessions, SESSION_SWEEP_INTERVAL_MS);
+
 let ffmpegPromise: Promise<FFmpeg> | null = null;
+
+function resetFFmpeg(): void {
+  ffmpegPromise = null;
+}
 
 function getFFmpeg(): Promise<FFmpeg> {
   if (!ffmpegPromise) {
@@ -114,6 +139,7 @@ async function probeAudioDurationWithFFmpeg(ffmpeg: FFmpeg, audioBytes: Uint8Arr
     const duration = Number(String(raw || '').trim());
     return Number.isFinite(duration) ? duration : 0;
   } catch {
+    resetFFmpeg();
     return 0;
   } finally {
     await ffmpeg.deleteFile(probeName).catch(() => {});
@@ -174,35 +200,40 @@ async function splitAudioIntoChunks(
   const ffmpeg = await getFFmpeg();
   const inputName = 'input.m4a';
 
-  await ffmpeg.writeFile(inputName, audioBytes);
+  try {
+    await ffmpeg.writeFile(inputName, audioBytes);
 
-  const results: { bytes: Uint8Array; plan: ChunkPlan }[] = [];
+    const results: { bytes: Uint8Array; plan: ChunkPlan }[] = [];
 
-  for (const plan of plans) {
-    const outputName = `chunk_${plan.index}.m4a`;
+    for (const plan of plans) {
+      const outputName = `chunk_${plan.index}.m4a`;
 
-    await ffmpeg.exec([
-      '-i', inputName,
-      '-ss', String(plan.startSec),
-      '-t', String(plan.durationSec),
-      '-vn',
-      '-map', '0:a:0',
-      '-c:a', 'copy',
-      '-movflags', '+faststart',
-      outputName,
-    ]);
+      await ffmpeg.exec([
+        '-i', inputName,
+        '-ss', String(plan.startSec),
+        '-t', String(plan.durationSec),
+        '-vn',
+        '-map', '0:a:0',
+        '-c:a', 'copy',
+        '-movflags', '+faststart',
+        outputName,
+      ]);
 
-    const data = await ffmpeg.readFile(outputName);
-    if (typeof data === 'string') {
-      throw new Error(`FFmpeg output format error: chunk ${plan.index}`);
+      const data = await ffmpeg.readFile(outputName);
+      if (typeof data === 'string') {
+        throw new Error(`FFmpeg output format error: chunk ${plan.index}`);
+      }
+
+      results.push({ bytes: data, plan });
+      await ffmpeg.deleteFile(outputName);
     }
 
-    results.push({ bytes: data, plan });
-    await ffmpeg.deleteFile(outputName);
+    await ffmpeg.deleteFile(inputName);
+    return results;
+  } catch (err) {
+    resetFFmpeg();
+    throw err;
   }
-
-  await ffmpeg.deleteFile(inputName);
-  return results;
 }
 
 async function handlePrepare(msg: OffscreenPrepareRequest): Promise<void> {
@@ -269,7 +300,7 @@ async function handlePrepare(msg: OffscreenPrepareRequest): Promise<void> {
     );
   }
 
-  sessions.set(msg.sessionId, { chunks: chunks! });
+  sessions.set(msg.sessionId, { chunks: chunks!, lastActive: Date.now() });
 }
 
 async function transcribeChunk(
@@ -369,10 +400,13 @@ async function handleTranscribe(msg: OffscreenTranscribeRequest): Promise<Subtit
     } satisfies TranscribeErrorInfo;
   }
 
+  touchSession(msg.sessionId);
+
   let accumulated: SubtitleRow[] = [];
   const total = session.chunks.length;
 
   for (let i = 0; i < total; i++) {
+    touchSession(msg.sessionId);
     const { bytes, plan } = session.chunks[i];
 
     chrome.runtime.sendMessage({
