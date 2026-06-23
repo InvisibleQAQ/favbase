@@ -117,7 +117,7 @@ MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRo
 
 3 层管线：Content Script → Background SW → Offscreen Document（FFmpeg WASM 分块）。
 
-- `lib/transcription/types.ts` — TranscribeRequest/Abort, TranscribeResponse(success|failure), TranscribeStage(12种 union), TranscribeStatusPush(stage enum + stageParams), TranscribeErrorCode(14种) + TranscribeErrorInfo(code + debug message + params), GroqTranscriptionResult, ChunkPlan, Offscreen 消息类型, VideoCacheEntry(含 rawHash), GetVideoCacheRequest/ClearVideoCacheRequest/CacheSubtitleRequest, BgMessage union
+- `lib/transcription/types.ts` — TranscribeRequest/Abort, TranscribeResponse(success|failure), TranscribeStage(12种 union), TranscribeStatusPush(stage enum + stageParams), TranscribeErrorCode(14种) + TranscribeErrorInfo(code + debug message + params), GroqTranscriptionResult, ChunkPlan, Offscreen 消息类型, VideoCacheEntry(含 rawHash), GetVideoCacheRequest/CacheSubtitleRequest, BgMessage union(4成员)
 - `lib/transcription/constants.ts` — GROQ_TRANSCRIBE_URL, GROQ_MAX_AUDIO_BYTES(24MB), CHUNK_SECONDS(600), OVERLAP(4s), SAFETY_RATIO(0.72), PROGRESS 阶段映射, 超时常量
 - `lib/transcription/groq-client.ts` — ensureGroqConnectivity(apiKey)（6s pre-flight GET /models）+ requestGroqTranscription(blob, apiKey, model, signal)（FormData POST verbose_json+segment）+ mapTranscriptionToRows() + parseRetryAfter() + AsrError 类
 - `lib/transcription/audio-extractor.ts` — extractAudioUrl(bvid, cid)（playurl API fnval:16 DASH audio，按 bandwidth 降序取最优）+ fetchAudioBlob(url, signal, onProgress)（streaming 下载，10% 粒度进度映射到 20-55%）
@@ -126,7 +126,10 @@ MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRo
 - `lib/offscreen/main.ts` — Offscreen Document 逻辑：fetchAudioBytes(自行 fetch audioUrl) + resolveAudioDuration(HTML5 Audio 优先，ffprobe 降级) + FFmpeg 本地 WASM 加载(public/ffmpeg/) + estimateSafeChunkSeconds(0.72 安全系数) + buildOverlappedChunkPlan(600s+4s overlap) + splitAudioIntoChunks(FFmpeg -c:a copy) + transcribeChunk(per-chunk Groq API) + mergeTimestampedChunkRows(时间偏移+overlap 裁剪+1.5s 近邻去重)。最多 3 轮 30% 缩减
 - `entrypoints/offscreen.html` — WXT unlisted page，通过 chrome.offscreen.createDocument 创建
 - `lib/cache/video-cache.ts` — 视频缓存模块：normalizeBvid()（防御性小写规范化，所有公开函数入口调用）+ per-bvid 独立 key（`local:vc:{bvid}`）+ 内存缓存层（Map + structuredClone 深拷贝）+ mergeVideoCache（Promise-based per-bvid 写锁 + hash 去重 + quota 降级）+ 旧格式迁移（`local:videoCache` → `local:vc:{bvid}`）+ initCacheStorageListener（Background 侧 chrome.storage.onChanged 同步内存缓存）+ computeRowsHash（轻量指纹）
-- `entrypoints/background.ts` — Background SW：TRANSCRIBE_AUDIO 通过 `runTranscriptionPipeline()` 委托转录编排（构造 PipelineDeps 适配器 + AbortController per-tab + onProgress→notifyTab 桥接），pipeline 返回后处理失败通知。GET_VIDEO_CACHE/CLEAR_VIDEO_CACHE/CACHE_SUBTITLE handler + TRANSCRIBE_ABORT + OFFSCREEN_CHUNK_PROGRESS 转发 + 进度推送 via tabs.sendMessage。缓存逻辑委托给 lib/cache/video-cache.ts
+- `entrypoints/background.ts` — Background SW thin dispatcher：构建 BackgroundContext（tabAbortControllers + tabBvids + notifyTab + ensureOffscreen），`onMessage` switch 路由到独立 handler。~70 行
+- `lib/background/types.ts` — BackgroundContext 接口定义（handler 依赖注入契约）
+- `lib/background/transcription-handlers.ts` — handleTranscribe（runTranscriptionPipeline 编排 + PipelineDeps 适配器）+ handleTranscribeAbort + handleOffscreenProgress
+- `lib/background/cache-handlers.ts` — handleGetVideoCache + handleCacheSubtitle，委托 lib/cache/video-cache.ts
 
 ### Vercel AI SDK 集成层
 
@@ -175,9 +178,9 @@ RPC Proxy 架构（参考 memorall）：Offscreen Document 持有 PGlite，Backg
 - CID 获取: Main World 读取 `window.__INITIAL_STATE__` 优先（定期重发直到 content script 接收），降级到 `/x/player/pagelist` API（轻量，不需要 WBI 签名）
 - postMessage 桥接: Main World -> Isolated World，通过 `lib/bilibili/messaging.ts` 统一收发。BiliMessageMap 定义所有消息类型，发送用 postBiliMessage()，接收用 onBiliMessage()。消息流：`BILI_ROUTE_SWITCH`(bvid, 路由变化即时通知) → `BILI_SUBTITLE_HANDSHAKE`(bvid+cid, 800ms延迟) → `BILI_SUBTITLE_DATA`(字幕数据, defer 发送)。新增消息类型只需在 BiliMessageMap 加一行
 - 字幕后处理: 所有字幕数据（无论来源）均通过 `processSubtitles()` 四步管线处理（不合并，逐条独立）
-- Background 消息桥: Content Script ↔ Background 通过 browser.runtime.sendMessage/onMessage。消息类型定义在 `lib/transcription/types.ts`（BgMessage union）。Background → Content Script 进度推送用 browser.tabs.sendMessage。Background ↔ Offscreen 用 chrome.runtime.sendMessage（Chrome-specific API）。新增消息类型：`CHECK_BILI_LOGIN`（检测 B 站登录状态）、`FETCH_FAV_FOLDERS`（拉取收藏夹列表 + upsert DB）
+- Background 消息桥: Content Script ↔ Background 通过 browser.runtime.sendMessage/onMessage。消息类型定义在 `lib/transcription/types.ts`（BgMessage union，4 成员：TRANSCRIBE_AUDIO/TRANSCRIBE_ABORT/GET_VIDEO_CACHE/CACHE_SUBTITLE）。Background → Content Script 进度推送用 browser.tabs.sendMessage。Background ↔ Offscreen 用 chrome.runtime.sendMessage（Chrome-specific API）。新增消息类型：在 BgMessage union 添加成员 + `lib/background/` 对应领域 handler 文件添加 handler 函数 + `background.ts` dispatcher switch 添加 case
 - B 站认证: manifest 声明 `cookies` 权限。`lib/bilibili/auth.ts` 的 `getBiliAuth()` 通过 `chrome.cookies.get()` 读取 SESSDATA + DedeUserID，检查 expirationDate。Background SW 是唯一调用 B 站 API 的上下文（统一出口），手动拼 `Cookie: SESSDATA=xxx` header
-- B 站收藏夹: `FETCH_FAV_FOLDERS` 流程：getBiliAuth() → fetchFavFolderList() → syncFavFoldersToDb()（upsert sources 表）→ 返回 Source[]。app.html 通过 `useBiliFavFolders` hook 获取数据并管理 UI 状态（loading/syncing/loginState/error）
+- B 站收藏夹: app.html 通过 `useBiliFavFolders` hook 直接调用 `getBiliAuth()` + `fetchFavFolderList()` 获取数据并管理 UI 状态（loading/syncing/loginState/error），不经过 Background 消息桥
 - 存储: WXT `storage.defineItem`（`local:` 前缀），import from `wxt/utils/storage`（非 `wxt/storage`）
 - 设置持久化: `settingsStorage`（`lib/storage.ts`），UserSettings 单对象存储在 `local:settings`。`useSettings`（`lib/hooks/useSettings.ts`）是共享 deep module — 内聚 storage 读写、computed 属性推导、focused action 方法。app.html 和 Content Script 都从此 hook 读写，Content Script 的 `hooks/useSettings.ts` 是 re-export
 - 侧边栏 Pin/Unpin: `sidebarPinnedStorage`（`lib/storage.ts`），布尔值存储在 `local:sidebarPinned`（默认 true）。DashboardLayout 读取并通过 toggle 按钮切换。Pinned=280px 展开（图标+文字），Unpinned=72px 图标栏（MUI Tooltip 显示菜单名）。Mobile（lg 以下）不受影响，始终 Drawer 模式

@@ -165,11 +165,6 @@ export interface GetVideoCacheRequest {
   bvid: string;
 }
 
-export interface ClearVideoCacheRequest {
-  type: 'CLEAR_VIDEO_CACHE';
-  bvid: string;
-}
-
 export interface CacheSubtitleRequest {
   type: 'CACHE_SUBTITLE';
   bvid: string;
@@ -177,19 +172,8 @@ export interface CacheSubtitleRequest {
   source: 'bilibili' | 'groq';
 }
 
-export interface FetchFavFoldersRequest {
-  type: 'FETCH_FAV_FOLDERS';
-}
-
-export interface CheckBiliLoginRequest {
-  type: 'CHECK_BILI_LOGIN';
-}
-
 export type BgMessage =
   | TranscribeRequest
   | TranscribeAbort
   | GetVideoCacheRequest
-  | ClearVideoCacheRequest
-  | CacheSubtitleRequest
-  | FetchFavFoldersRequest
-  | CheckBiliLoginRequest;
+  | CacheSubtitleRequest;
