@@ -20,20 +20,27 @@ export async function initDbMain(): Promise<FavbaseDb> {
   if (dbInstance) return dbInstance;
   if (initPromise) return initPromise;
 
+  const handler = DatabaseRpcHandler.getInstance();
+  handler.startListening(DB_CHANNEL_NAME);
+
   initPromise = (async () => {
-    const pg = await PGlite.create(DB_DATA_DIR, {
-      extensions: { vector, uuid_ossp, pg_trgm },
-      relaxedDurability: true,
-    });
-    pgliteInstance = pg;
+    try {
+      const pg = await PGlite.create(DB_DATA_DIR, {
+        extensions: { vector, uuid_ossp, pg_trgm },
+        relaxedDurability: true,
+      });
+      pgliteInstance = pg;
 
-    await runMigrations(pg);
+      await runMigrations(pg);
 
-    const handler = DatabaseRpcHandler.getInstance();
-    handler.startListening(DB_CHANNEL_NAME, pg);
+      handler.setPGlite(pg);
 
-    dbInstance = drizzle({ client: pg, schema });
-    return dbInstance;
+      dbInstance = drizzle({ client: pg, schema });
+      return dbInstance;
+    } catch (err) {
+      handler.stop();
+      throw err;
+    }
   })();
 
   return initPromise;

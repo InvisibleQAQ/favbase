@@ -7,6 +7,13 @@ export class DatabaseRpcHandler {
   private pglite: PGlite | null = null;
   private listening = false;
   private readonly inFlight = new Set<number>();
+  private pgliteReady!: Promise<void>;
+  private resolvePgliteReady!: () => void;
+  private rejectPgliteReady!: (err: Error) => void;
+
+  private constructor() {
+    this.resetReadyGate();
+  }
 
   static getInstance(): DatabaseRpcHandler {
     if (!DatabaseRpcHandler.instance) {
@@ -15,9 +22,8 @@ export class DatabaseRpcHandler {
     return DatabaseRpcHandler.instance;
   }
 
-  startListening(channelName: string, pglite: PGlite): void {
+  startListening(channelName: string): void {
     if (this.listening) return;
-    this.pglite = pglite;
     this.listening = true;
 
     chrome.runtime.onConnect.addListener((port) => {
@@ -30,21 +36,38 @@ export class DatabaseRpcHandler {
     });
   }
 
+  setPGlite(pg: PGlite): void {
+    this.pglite = pg;
+    this.resolvePgliteReady();
+  }
+
   stop(): void {
     this.listening = false;
     this.pglite = null;
     this.inFlight.clear();
+    this.rejectPgliteReady(new Error('DatabaseRpcHandler stopped'));
+    this.resetReadyGate();
+  }
+
+  private resetReadyGate(): void {
+    this.pgliteReady = new Promise<void>((resolve, reject) => {
+      this.resolvePgliteReady = resolve;
+      this.rejectPgliteReady = reject;
+    });
+    this.pgliteReady.catch(() => {}); // prevent unhandled rejection from stop()
   }
 
   private async handleMessage(
     req: RpcRequest,
     port: chrome.runtime.Port,
   ): Promise<void> {
-    if (!this.listening || !this.pglite) return;
+    if (!this.listening) return;
     if (this.inFlight.has(req.id)) return;
     this.inFlight.add(req.id);
 
     try {
+      await this.pgliteReady;
+
       const payload = deserializeFromRpc(req.payload);
       let result: unknown = null;
 
