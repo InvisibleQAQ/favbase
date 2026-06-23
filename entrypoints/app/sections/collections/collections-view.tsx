@@ -8,7 +8,7 @@ import Skeleton from '@mui/material/Skeleton';
 
 import { Iconify } from '../../components/iconify';
 import { DashboardContent } from '../../layouts/dashboard';
-import { useFavFolders } from './use-fav-folders';
+import { useBiliFavFolders } from './use-bili-fav-folders';
 import { FavFolderCard } from './fav-folder-card';
 
 function LoadingSkeleton() {
@@ -85,7 +85,7 @@ function EmptyState() {
 }
 
 export function CollectionsView() {
-  const { folders, loading, syncing, loginState, lastSyncedAt, error, sync } = useFavFolders();
+  const { folders, loading, syncing, loginState, lastSyncedAt, error, sync } = useBiliFavFolders();
 
   return (
     <DashboardContent maxWidth="xl">

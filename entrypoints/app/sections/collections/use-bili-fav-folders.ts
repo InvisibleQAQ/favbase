@@ -18,7 +18,7 @@ interface UseFavFoldersReturn {
   sync: () => Promise<void>;
 }
 
-export function useFavFolders(): UseFavFoldersReturn {
+export function useBiliFavFolders(): UseFavFoldersReturn {
   const [folders, setFolders] = useState<BiliFavFolder[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
