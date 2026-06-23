@@ -21,8 +21,7 @@ import Divider from '@mui/material/Divider';
 import { Iconify } from '../../components/iconify';
 import { LLM_PROVIDERS, type LLMProviderId } from '@/lib/providers';
 import type { UserSettings, LLMProviderDef } from '@/lib/types';
-import { testLlmConnection, type TestConnectionResult } from '@/lib/ai/test-connection';
-import { fetchAvailableModels } from '@/lib/ai/fetch-models';
+import { testLlmConnection, fetchAvailableModels, type TestConnectionResult } from '@/lib/ai';
 
 interface LlmConfigCardProps {
   settings: UserSettings;

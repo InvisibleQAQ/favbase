@@ -85,9 +85,9 @@ MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRo
 
 双通道架构：Main World 脚本拦截优先，API 调用降级。
 
-- `lib/types.ts` — SubtitleRow, SubtitleResult, RawSubtitleItem, LLMProviderDef(id: LLMProviderId), ASRProviderDef(id: ASRProviderId), UserSettings(provider: LLMProviderId, asrProvider: ASRProviderId, temperature, maxTokens) 类型。通过 `import type` 从 providers.ts 引入 ID 类型
+- `lib/types.ts` — SubtitleRow, SubtitleResult, RawSubtitleItem, SdkType(`'openai'|'anthropic'|'google'|'openai-compatible'`), LLMProviderDef(id+sdkType+baseUrl+defaultModel+regUrl), ASRProviderDef(id: ASRProviderId), UserSettings(provider: LLMProviderId, asrProvider: ASRProviderId, temperature, maxTokens) 类型。通过 `import type` 从 providers.ts 引入 ID 类型
 - `lib/bilibili/messaging.ts` — BiliMessageMap（消息类型注册表）+ postBiliMessage()（类型安全发送，支持 defer 延迟）+ onBiliMessage()（类型安全订阅，返回 unsub，内部封装 source 校验）
-- `lib/providers.ts` — LLM_PROVIDER_IDS / ASR_PROVIDER_IDS（`as const`）为 Provider ID 唯一真实来源，推导 LLMProviderId / ASRProviderId 类型。LLM_PROVIDERS(9个) + ASR_PROVIDERS(2个) 静态定义，getProviderDef(id: LLMProviderId) 类型安全查找
+- `lib/providers.ts` — LLM_PROVIDER_IDS / ASR_PROVIDER_IDS（`as const`）为 Provider ID 唯一真实来源，推导 LLMProviderId / ASRProviderId 类型。LLM_PROVIDERS(9个，每个含 sdkType) + ASR_PROVIDERS(2个) 纯数据定义，getProviderDef(id: LLMProviderId) 类型安全查找。sdkType 驱动 AI SDK 构造器选择和 raw fetch 认证策略
 - `lib/storage.ts` — settingsStorage (WXT `storage.defineItem<UserSettings>`)，DEFAULT_SETTINGS 默认值，sidebarPinnedStorage（`local:sidebarPinned`，布尔值，默认 true）
 - `lib/bilibili/api.ts` — BILIBILI_API 端点集中化（pageList/playerV2/playUrl/favFolderListAll URL builder）+ isSubtitleCdnUrl() 字幕 CDN URL 检测。playUrl(bvid, cid) 用 fnval=16 请求 DASH 音频流
 - `lib/bilibili/auth.ts` — getBiliAuth()：通过 chrome.cookies.get() 读取 SESSDATA + DedeUserID，检查过期时间，返回 BiliAuthInfo | null
@@ -132,9 +132,7 @@ MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRo
 
 Provider factory + 测试连接 + 模型列表获取。为 app.html 设置页面和未来 LLM 总结（Step 3）提供基础设施。
 
-- `lib/ai/provider-factory.ts` — `createLanguageModel(options)` 将 `LLMProviderId` + 用户配置映射为 AI SDK `LanguageModel`。openai → `@ai-sdk/openai`，claude → `@ai-sdk/anthropic`，gemini → `@ai-sdk/google`，其余（modelscope/zhipu/openrouter/deepseek/kimi/custom-openai）→ `@ai-sdk/openai-compatible`，custom-claude → `@ai-sdk/anthropic`
-- `lib/ai/test-connection.ts` — `testLlmConnection()` 通过 `generateText()` 发送 "Reply with exactly 'ok'" 验证 API Key 和端点可达性
-- `lib/ai/fetch-models.ts` — `fetchAvailableModels()` 原生 fetch 调用 `{baseUrl}/models`，适配不同 Provider 认证（Claude 用 `x-api-key` + `anthropic-version`，其余用 `Authorization: Bearer`）
+- `lib/ai/index.ts` — 三函数合一模块。`createLanguageModel(options)` 根据 `def.sdkType` 选择 AI SDK 构造器（openai/anthropic/google/openai-compatible），custom provider 特殊处理 `customProtocol`。`testLlmConnection()` 通过 `generateText()` 验证连接。`fetchAvailableModels()` 原生 fetch 调用 `{baseUrl}/models`，`buildAuthHeaders()` 和 `resolveModelsEndpoint()` 均基于 `sdkType` 分支
 
 ### PGlite + Drizzle 数据库层
 
@@ -183,7 +181,7 @@ RPC Proxy 架构（参考 memorall）：Offscreen Document 持有 PGlite，Backg
 - 存储: WXT `storage.defineItem`（`local:` 前缀），import from `wxt/utils/storage`（非 `wxt/storage`）
 - 设置持久化: `settingsStorage`（`lib/storage.ts`），UserSettings 单对象存储在 `local:settings`。`useSettings`（`lib/hooks/useSettings.ts`）是共享 deep module — 内聚 storage 读写、computed 属性推导、focused action 方法。app.html 和 Content Script 都从此 hook 读写，Content Script 的 `hooks/useSettings.ts` 是 re-export
 - 侧边栏 Pin/Unpin: `sidebarPinnedStorage`（`lib/storage.ts`），布尔值存储在 `local:sidebarPinned`（默认 true）。DashboardLayout 读取并通过 toggle 按钮切换。Pinned=280px 展开（图标+文字），Unpinned=72px 图标栏（MUI Tooltip 显示菜单名）。Mobile（lg 以下）不受影响，始终 Drawer 模式
-- AI SDK Provider 映射: openai → `@ai-sdk/openai`，claude → `@ai-sdk/anthropic`，gemini → `@ai-sdk/google`，其余 OpenAI 兼容 → `@ai-sdk/openai-compatible`。测试连接用 `generateText()`，模型列表用原生 fetch（AI SDK 无 model listing API）
+- AI SDK Provider 映射: `LLMProviderDef.sdkType` 驱动全部分支。openai → `@ai-sdk/openai`，anthropic → `@ai-sdk/anthropic`，google → `@ai-sdk/google`，openai-compatible → `@ai-sdk/openai-compatible`。custom provider 的 sdkType 静态为 `openai-compatible`，`customProtocol==='claude'` 时运行时覆盖为 anthropic。测试连接用 `generateText()`，模型列表用原生 fetch（AI SDK 无 model listing API），认证 header 由 `buildAuthHeaders(sdkType, apiKey)` 统一构建
 - Inject 状态机: 三阶段生命周期 idle → triggering → captured，通过 InjectEffects 接口注入 DOM/postMessage 副作用，状态转换集中在 state.ts 的 createStateMachine() 内。routeGeneration 作为并发守卫防止路由切换后旧 in-flight 拦截结果被采纳
 - SPA 路由监控: route-monitor.ts 300ms 轮询 location.href 检测 BV 号/分P 变化 → sm.resetForRoute() 级联重置（generation++、清理定时器、restoreDisplay） → ROUTE_SWITCH 即时通知 → 800ms 后重发 HANDSHAKE → 重触发 CC 按钮
 - 字幕获取流程（主路径）: interceptors.ts 拦截 fetch/XHR → sm.markCaptured() 解析+桥接 → postMessage SUBTITLE_DATA → useSubtitle 接收 → processSubtitles()

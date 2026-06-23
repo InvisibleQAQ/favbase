@@ -24,16 +24,16 @@ export interface RawSubtitleItem {
   content: string;
 }
 
+export type SdkType = 'openai' | 'anthropic' | 'google' | 'openai-compatible';
+
 /** Static definition of a LLM provider (immutable config). */
 export interface LLMProviderDef {
   id: LLMProviderId;
   name: string;
+  sdkType: SdkType;
   baseUrl: string;
   defaultModel: string;
-  headerKey: string;
-  tokenPrefix: string;
   regUrl: string;
-  type?: 'google' | 'claude';
 }
 
 /** Static definition of an ASR provider. */
