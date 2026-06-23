@@ -74,7 +74,7 @@ MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRo
 - `entrypoints/app/sections/collections/` — B站收藏夹页面组件
   - `collections-view.tsx` — 收藏夹主视图：同步按钮 + 卡片网格 + 未登录引导/空状态/loading skeleton
   - `fav-folder-card.tsx` — 收藏夹卡片：封面图 + 名称 + 视频数量
-  - `use-fav-folders.ts` — 收藏夹 hook：CHECK_BILI_LOGIN 检测登录 → FETCH_FAV_FOLDERS 同步 → 状态管理（folders/loading/syncing/loginState/error）
+  - `use-bili-fav-folders.ts` — B站收藏夹 hook：getBiliAuth 检测登录 → fetchFavFolderList 获取列表 → 状态管理（folders/loading/syncing/loginState/error）
 - `entrypoints/app/sections/settings/` — AI 设置页面组件
   - `settings-view.tsx` — 设置页面主视图：DashboardContent + 3 Card 区块
   - `llm-config-card.tsx` — LLM 配置卡片：Provider 选择 + API Key（显示/隐藏）+ Get Key 链接 + Model（Autocomplete，支持远程获取模型列表）+ Custom 字段 + 测试连接（AI SDK `generateText`）
@@ -122,10 +122,11 @@ MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRo
 - `lib/transcription/groq-client.ts` — ensureGroqConnectivity(apiKey)（6s pre-flight GET /models）+ requestGroqTranscription(blob, apiKey, model, signal)（FormData POST verbose_json+segment）+ mapTranscriptionToRows() + parseRetryAfter() + AsrError 类
 - `lib/transcription/audio-extractor.ts` — extractAudioUrl(bvid, cid)（playurl API fnval:16 DASH audio，按 bandwidth 降序取最优）+ fetchAudioBlob(url, signal, onProgress)（streaming 下载，10% 粒度进度映射到 20-55%）
 - `lib/transcription/audio-fingerprint.ts` — assertAudioNotReused(blob, bvid)（SHA-256 + LRU(30)，相同 hash 不同 bvid 拒绝）
+- `lib/transcription/pipeline.ts` — TranscriptionPipeline 深模块：`runTranscriptionPipeline(request, deps, onProgress)` 纯函数编排转录 8 阶段（cache check → settings → connectivity → extract → download → fingerprint → transcribe/chunk → process+cache）。不依赖 Chrome API，通过 `PipelineDeps` 接口注入所有外部依赖。`toErrorInfo()` 错误映射 + `transcribeWithFakeProgress()` 进度模拟内聚于此
 - `lib/offscreen/main.ts` — Offscreen Document 逻辑：fetchAudioBytes(自行 fetch audioUrl) + resolveAudioDuration(HTML5 Audio 优先，ffprobe 降级) + FFmpeg 本地 WASM 加载(public/ffmpeg/) + estimateSafeChunkSeconds(0.72 安全系数) + buildOverlappedChunkPlan(600s+4s overlap) + splitAudioIntoChunks(FFmpeg -c:a copy) + transcribeChunk(per-chunk Groq API) + mergeTimestampedChunkRows(时间偏移+overlap 裁剪+1.5s 近邻去重)。最多 3 轮 30% 缩减
 - `entrypoints/offscreen.html` — WXT unlisted page，通过 chrome.offscreen.createDocument 创建
 - `lib/cache/video-cache.ts` — 视频缓存模块：normalizeBvid()（防御性小写规范化，所有公开函数入口调用）+ per-bvid 独立 key（`local:vc:{bvid}`）+ 内存缓存层（Map + structuredClone 深拷贝）+ mergeVideoCache（Promise-based per-bvid 写锁 + hash 去重 + quota 降级）+ 旧格式迁移（`local:videoCache` → `local:vc:{bvid}`）+ initCacheStorageListener（Background 侧 chrome.storage.onChanged 同步内存缓存）+ computeRowsHash（轻量指纹）
-- `entrypoints/background.ts` — Background SW：onMessage(TRANSCRIBE_AUDIO) 编排完整转录流程（cache check → connectivity → audio extract → download → fingerprint → single/chunked transcribe → processSubtitles → cache write）+ GET_VIDEO_CACHE/CLEAR_VIDEO_CACHE/CACHE_SUBTITLE handler + TRANSCRIBE_ABORT(AbortController per-tab) + OFFSCREEN_CHUNK_PROGRESS 转发 + 进度推送 via tabs.sendMessage。缓存逻辑委托给 lib/cache/video-cache.ts
+- `entrypoints/background.ts` — Background SW：TRANSCRIBE_AUDIO 通过 `runTranscriptionPipeline()` 委托转录编排（构造 PipelineDeps 适配器 + AbortController per-tab + onProgress→notifyTab 桥接），pipeline 返回后处理失败通知。GET_VIDEO_CACHE/CLEAR_VIDEO_CACHE/CACHE_SUBTITLE handler + TRANSCRIBE_ABORT + OFFSCREEN_CHUNK_PROGRESS 转发 + 进度推送 via tabs.sendMessage。缓存逻辑委托给 lib/cache/video-cache.ts
 
 ### Vercel AI SDK 集成层
 
@@ -178,7 +179,7 @@ RPC Proxy 架构（参考 memorall）：Offscreen Document 持有 PGlite，Backg
 - 字幕后处理: 所有字幕数据（无论来源）均通过 `processSubtitles()` 四步管线处理（不合并，逐条独立）
 - Background 消息桥: Content Script ↔ Background 通过 browser.runtime.sendMessage/onMessage。消息类型定义在 `lib/transcription/types.ts`（BgMessage union）。Background → Content Script 进度推送用 browser.tabs.sendMessage。Background ↔ Offscreen 用 chrome.runtime.sendMessage（Chrome-specific API）。新增消息类型：`CHECK_BILI_LOGIN`（检测 B 站登录状态）、`FETCH_FAV_FOLDERS`（拉取收藏夹列表 + upsert DB）
 - B 站认证: manifest 声明 `cookies` 权限。`lib/bilibili/auth.ts` 的 `getBiliAuth()` 通过 `chrome.cookies.get()` 读取 SESSDATA + DedeUserID，检查 expirationDate。Background SW 是唯一调用 B 站 API 的上下文（统一出口），手动拼 `Cookie: SESSDATA=xxx` header
-- B 站收藏夹: `FETCH_FAV_FOLDERS` 流程：getBiliAuth() → fetchFavFolderList() → syncFavFoldersToDb()（upsert sources 表）→ 返回 Source[]。app.html 通过 `useFavFolders` hook 发消息获取数据并管理 UI 状态（loading/syncing/loginState/error）
+- B 站收藏夹: `FETCH_FAV_FOLDERS` 流程：getBiliAuth() → fetchFavFolderList() → syncFavFoldersToDb()（upsert sources 表）→ 返回 Source[]。app.html 通过 `useBiliFavFolders` hook 获取数据并管理 UI 状态（loading/syncing/loginState/error）
 - 存储: WXT `storage.defineItem`（`local:` 前缀），import from `wxt/utils/storage`（非 `wxt/storage`）
 - 设置持久化: `settingsStorage`（`lib/storage.ts`），UserSettings 单对象存储在 `local:settings`。`useSettings`（`lib/hooks/useSettings.ts`）是共享 deep module — 内聚 storage 读写、computed 属性推导、focused action 方法。app.html 和 Content Script 都从此 hook 读写，Content Script 的 `hooks/useSettings.ts` 是 re-export
 - 侧边栏 Pin/Unpin: `sidebarPinnedStorage`（`lib/storage.ts`），布尔值存储在 `local:sidebarPinned`（默认 true）。DashboardLayout 读取并通过 toggle 按钮切换。Pinned=280px 展开（图标+文字），Unpinned=72px 图标栏（MUI Tooltip 显示菜单名）。Mobile（lg 以下）不受影响，始终 Drawer 模式

@@ -23,12 +23,8 @@ import {
 import {
   extractAudioUrl,
   fetchAudioBlob,
-  AudioExtractError,
 } from '@/lib/transcription/audio-extractor';
-import {
-  assertAudioNotReused,
-  AudioReuseError,
-} from '@/lib/transcription/audio-fingerprint';
+import { assertAudioNotReused } from '@/lib/transcription/audio-fingerprint';
 import { processSubtitles } from '@/lib/bilibili/subtitle-processor';
 import { settingsStorage } from '@/lib/storage';
 import {
@@ -43,6 +39,7 @@ import {
   computeRowsHash,
   normalizeBvid,
 } from '@/lib/cache/video-cache';
+import { runTranscriptionPipeline } from '@/lib/transcription/pipeline';
 
 export default defineBackground(() => {
   initCacheStorageListener();
@@ -80,120 +77,48 @@ export default defineBackground(() => {
     browser.tabs.sendMessage(tabId, msg).catch(() => {});
   }
 
-  function toErrorInfo(err: unknown): TranscribeErrorInfo {
-    if (err instanceof AsrError) return err.info;
-    if (err instanceof AudioExtractError) return err.info;
-    if (err instanceof AudioReuseError) return err.info;
-    if (err instanceof DOMException && err.name === 'AbortError') {
-      return { code: 'ASR_REQUEST_TIMEOUT', message: 'Operation aborted' };
-    }
-    const detail = err instanceof Error ? err.message : 'unknown error';
-    return {
-      code: 'ASR_UNKNOWN',
-      message: detail,
-      params: { detail },
-    };
-  }
-
-  function startFakeProgress(
-    tabId: number,
-    bvid: string,
-    from: number,
-    to: number,
-    signal: AbortSignal,
-  ): ReturnType<typeof setInterval> {
-    let current = from;
-    return setInterval(() => {
-      if (signal.aborted) return;
-      const increment = 2 + Math.random() * 2;
-      current = Math.min(to, current + increment);
-      notifyTab(tabId, bvid, Math.round(current), 'transcribing');
-    }, 2000);
-  }
-
   async function handleTranscribe(
     msg: Extract<BgMessage, { type: 'TRANSCRIBE_AUDIO' }>,
     tabId: number,
   ): Promise<TranscribeResponse> {
     const { bvid, cid, title } = msg;
 
-    const cached = await getVideoCache(bvid);
-    if (cached && cached.rows.length > 0) {
-      return {
-        success: true,
-        data: { rows: cached.rows, source: cached.source, cached: true },
-      };
-    }
-
-    const settings = await settingsStorage.getValue();
-    const apiKey = settings.groqApiKey;
-    const model = settings.groqModel || 'whisper-large-v3-turbo';
-
-    if (!apiKey) {
-      return {
-        success: false,
-        error: {
-          code: 'ASR_INVALID_KEY',
-          message: 'Groq API key not configured',
-        },
-      };
-    }
-
     const controller = new AbortController();
     tabAbortControllers.set(tabId, controller);
     tabBvids.set(tabId, bvid);
 
-    try {
-      notifyTab(tabId, bvid, PROGRESS.START, 'start');
-
-      notifyTab(tabId, bvid, PROGRESS.CONNECTIVITY_CHECK, 'connectivity');
-      await ensureGroqConnectivity(apiKey);
-
-      if (controller.signal.aborted)
-        throw new DOMException('Aborted', 'AbortError');
-
-      notifyTab(tabId, bvid, PROGRESS.DOWNLOAD_BEGIN, 'extracting');
-      const audioUrl = await extractAudioUrl(bvid, cid);
-
-      notifyTab(tabId, bvid, PROGRESS.DOWNLOAD_BEGIN + 1, 'downloading');
-      const audioBlob = await fetchAudioBlob(
-        audioUrl,
-        controller.signal,
-        (p) => notifyTab(tabId, bvid, p, 'downloading'),
-      );
-
-      if (controller.signal.aborted)
-        throw new DOMException('Aborted', 'AbortError');
-
-      await assertAudioNotReused(audioBlob, bvid);
-
-      let rows: SubtitleRow[];
-
-      if (audioBlob.size <= GROQ_MAX_AUDIO_BYTES) {
-        notifyTab(tabId, bvid, PROGRESS.PREPARE_UPLOAD, 'uploading');
-
-        const fakeTimer = startFakeProgress(
-          tabId,
-          bvid,
-          PROGRESS.UPLOAD_BEGIN,
-          PROGRESS.UPLOAD_END,
-          controller.signal,
-        );
-
-        try {
-          const result = await requestGroqTranscription(
-            audioBlob,
-            apiKey,
-            model,
-            controller.signal,
-          );
-          rows = result.rows;
-        } finally {
-          clearInterval(fakeTimer);
-        }
-      } else {
-        notifyTab(tabId, bvid, PROGRESS.CHUNK_PREPARE, 'chunking');
-
+    const deps = {
+      getAsrConfig: async () => {
+        const s = await settingsStorage.getValue();
+        return { apiKey: s.groqApiKey, model: s.groqModel || 'whisper-large-v3-turbo' };
+      },
+      checkCache: async (id: string) => {
+        const entry = await getVideoCache(id);
+        if (!entry || entry.rows.length === 0) return null;
+        return { rows: entry.rows, source: entry.source };
+      },
+      saveCache: async (id: string, rows: SubtitleRow[]) => {
+        await mergeVideoCache(id, {
+          bvid: id,
+          rows,
+          source: 'groq',
+          rawHash: computeRowsHash(rows),
+          updatedAt: Date.now(),
+        });
+      },
+      ensureConnectivity: ensureGroqConnectivity,
+      extractAudioUrl,
+      fetchAudio: fetchAudioBlob,
+      checkAudioReuse: assertAudioNotReused,
+      transcribeDirect: async (
+        blob: Blob, apiKey: string, model: string, signal: AbortSignal,
+      ) => {
+        const result = await requestGroqTranscription(blob, apiKey, model, signal);
+        return result.rows;
+      },
+      transcribeChunked: async (
+        audioUrl: string, apiKey: string, model: string, t: string,
+      ) => {
         await ensureOffscreen();
         const sessionId = `${bvid}_${Date.now()}`;
 
@@ -205,9 +130,7 @@ export default defineBackground(() => {
             maxBytes: GROQ_MAX_AUDIO_BYTES,
           } satisfies OffscreenPrepareRequest);
 
-        if (!prepareRes.success) {
-          throw new AsrError(prepareRes.error!);
-        }
+        if (!prepareRes.success) throw new AsrError(prepareRes.error!);
 
         const transcribeRes: {
           success: boolean;
@@ -218,40 +141,31 @@ export default defineBackground(() => {
           sessionId,
           apiKey,
           model,
-          title,
+          title: t,
         } satisfies OffscreenTranscribeRequest);
 
         chrome.runtime
           .sendMessage({ type: 'OFFSCREEN_CHUNK_RELEASE', sessionId })
           .catch(() => {});
 
-        if (!transcribeRes.success) {
-          throw new AsrError(transcribeRes.error!);
-        }
+        if (!transcribeRes.success) throw new AsrError(transcribeRes.error!);
+        return transcribeRes.rows!;
+      },
+      processSubtitles,
+    };
 
-        rows = transcribeRes.rows!;
+    try {
+      const result = await runTranscriptionPipeline(
+        { bvid, cid, title, signal: controller.signal },
+        deps,
+        (progress, stage, stageParams) => {
+          notifyTab(tabId, bvid, progress, stage, undefined, stageParams);
+        },
+      );
+      if (!result.success) {
+        notifyTab(tabId, bvid, 0, 'failed', result.error);
       }
-
-      notifyTab(tabId, bvid, PROGRESS.PARSING, 'processing');
-      rows = processSubtitles(rows);
-
-      await mergeVideoCache(bvid, {
-        bvid,
-        rows,
-        source: 'groq',
-        rawHash: computeRowsHash(rows),
-        updatedAt: Date.now(),
-      });
-      notifyTab(tabId, bvid, PROGRESS.DONE, 'done');
-
-      return {
-        success: true,
-        data: { rows, source: 'groq', cached: false },
-      };
-    } catch (err) {
-      const errorInfo = toErrorInfo(err);
-      notifyTab(tabId, bvid, 0, 'failed', errorInfo);
-      return { success: false, error: errorInfo };
+      return result;
     } finally {
       tabAbortControllers.delete(tabId);
       tabBvids.delete(tabId);
