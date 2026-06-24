@@ -1,5 +1,5 @@
 import { AUDIO_FINGERPRINT_LRU_SIZE } from './constants';
-import type { TranscribeErrorInfo } from './types';
+import { PipelineError, type TranscribeErrorInfo } from './types';
 
 interface FingerprintEntry {
   hash: string;
@@ -16,9 +16,9 @@ async function sha256(blob: Blob): Promise<string> {
   return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-export class AudioReuseError extends Error {
-  constructor(public info: TranscribeErrorInfo) {
-    super(info.message);
+export class AudioReuseError extends PipelineError {
+  constructor(info: TranscribeErrorInfo) {
+    super(info);
     this.name = 'AudioReuseError';
   }
 }

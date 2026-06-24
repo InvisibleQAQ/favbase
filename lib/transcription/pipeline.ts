@@ -1,12 +1,10 @@
 import type { SubtitleRow } from '../types';
-import type {
-  TranscribeResponse,
-  TranscribeStage,
-  TranscribeErrorInfo,
+import {
+  PipelineError,
+  type TranscribeResponse,
+  type TranscribeStage,
+  type TranscribeErrorInfo,
 } from './types';
-import { AsrError } from './groq-client';
-import { AudioExtractError } from './audio-extractor';
-import { AudioReuseError } from './audio-fingerprint';
 import { GROQ_MAX_AUDIO_BYTES, PROGRESS } from './constants';
 
 export interface AsrConfig {
@@ -57,9 +55,7 @@ export type OnProgress = (
 ) => void;
 
 function toErrorInfo(err: unknown): TranscribeErrorInfo {
-  if (err instanceof AsrError) return err.info;
-  if (err instanceof AudioExtractError) return err.info;
-  if (err instanceof AudioReuseError) return err.info;
+  if (err instanceof PipelineError) return err.info;
   if (err instanceof DOMException && err.name === 'AbortError') {
     return { code: 'ASR_REQUEST_TIMEOUT', message: 'Operation aborted' };
   }

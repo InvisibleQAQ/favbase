@@ -115,7 +115,7 @@ MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRo
 
 3 层管线：Content Script → Background SW → Offscreen Document（FFmpeg WASM 分块）。
 
-- `lib/transcription/types.ts` — TranscribeRequest/Abort, TranscribeResponse(success|failure), TranscribeStage(12种 union), TranscribeStatusPush(stage enum + stageParams), TranscribeErrorCode(14种) + TranscribeErrorInfo(code + debug message + params), GroqTranscriptionResult, ChunkPlan, Offscreen 消息类型, VideoCacheEntry(含 rawHash), GetVideoCacheRequest/CacheSubtitleRequest, BgMessage union(4成员)
+- `lib/transcription/types.ts` — TranscribeRequest/Abort, TranscribeResponse(success|failure), TranscribeStage(12种 union), TranscribeStatusPush(stage enum + stageParams), TranscribeErrorCode(14种) + TranscribeErrorInfo(code + debug message + params), PipelineError(域内错误基类，AsrError/AudioExtractError/AudioReuseError 继承), GroqTranscriptionResult, ChunkPlan, Offscreen 消息类型, VideoCacheEntry(含 rawHash), GetVideoCacheRequest/CacheSubtitleRequest, BgMessage union(4成员)
 - `lib/transcription/constants.ts` — GROQ_TRANSCRIBE_URL, GROQ_MAX_AUDIO_BYTES(24MB), CHUNK_SECONDS(600), OVERLAP(4s), SAFETY_RATIO(0.72), PROGRESS 阶段映射, 超时常量
 - `lib/transcription/groq-client.ts` — ensureGroqConnectivity(apiKey)（6s pre-flight GET /models）+ requestGroqTranscription(blob, apiKey, model, signal)（FormData POST verbose_json+segment）+ mapTranscriptionToRows() + parseRetryAfter() + AsrError 类
 - `lib/transcription/audio-extractor.ts` — 平台无关的音频下载：AudioExtractError 错误类 + fetchAudioBlob(url, signal, onProgress)（streaming 下载，10% 粒度进度映射到 20-55%）。不含 B 站特定逻辑，音频 URL 提取已移至 bilibili-api.ts 的 extractBiliAudioUrl()

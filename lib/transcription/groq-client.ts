@@ -1,9 +1,10 @@
 import type { SubtitleRow } from '../types';
-import type {
-  GroqTranscriptionResult,
-  GroqTranscriptionResponse,
-  GroqQuota,
-  TranscribeErrorInfo,
+import {
+  PipelineError,
+  type GroqTranscriptionResult,
+  type GroqTranscriptionResponse,
+  type GroqQuota,
+  type TranscribeErrorInfo,
 } from './types';
 import {
   GROQ_TRANSCRIBE_URL,
@@ -15,11 +16,9 @@ import {
   AUDIO_MIME_TYPE,
 } from './constants';
 
-export class AsrError extends Error {
-  constructor(
-    public info: TranscribeErrorInfo,
-  ) {
-    super(info.message);
+export class AsrError extends PipelineError {
+  constructor(info: TranscribeErrorInfo) {
+    super(info);
     this.name = 'AsrError';
   }
 }

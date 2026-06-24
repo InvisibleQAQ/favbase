@@ -177,3 +177,10 @@ export type BgMessage =
   | TranscribeAbort
   | GetVideoCacheRequest
   | CacheSubtitleRequest;
+
+export class PipelineError extends Error {
+  constructor(public info: TranscribeErrorInfo) {
+    super(info.message);
+    this.name = 'PipelineError';
+  }
+}

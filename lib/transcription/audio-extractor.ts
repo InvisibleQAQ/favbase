@@ -1,9 +1,9 @@
-import type { TranscribeErrorInfo } from './types';
+import { PipelineError, type TranscribeErrorInfo } from './types';
 import { PROGRESS } from './constants';
 
-export class AudioExtractError extends Error {
-  constructor(public info: TranscribeErrorInfo) {
-    super(info.message);
+export class AudioExtractError extends PipelineError {
+  constructor(info: TranscribeErrorInfo) {
+    super(info);
     this.name = 'AudioExtractError';
   }
 }
