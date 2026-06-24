@@ -1,5 +1,4 @@
 import type {
-  TranscribeStatusPush,
   OffscreenProgressMessage,
   BgMessage,
 } from '@/lib/transcription/types';
@@ -20,21 +19,11 @@ export default defineBackground(() => {
   initCacheStorageListener();
 
   const tabAbortControllers = new Map<number, AbortController>();
-  const tabBvids = new Map<number, string>();
 
   const ctx: BackgroundContext = {
     tabAbortControllers,
-    tabBvids,
-    notifyTab(tabId, bvid, progress, stage, error, stageParams) {
-      const msg: TranscribeStatusPush = {
-        type: 'TRANSCRIBE_STATUS',
-        bvid,
-        progress,
-        stage,
-        stageParams,
-        error,
-      };
-      browser.tabs.sendMessage(tabId, msg).catch(() => {});
+    sendToTab(tabId, message) {
+      browser.tabs.sendMessage(tabId, message).catch(() => {});
     },
     ensureOffscreen,
   };

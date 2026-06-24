@@ -2,10 +2,12 @@ import type { BackgroundContext } from './types';
 import type {
   SubtitleRow,
   TranscribeResponse,
+  TranscribeStage,
+  TranscribeStatusPush,
+  TranscribeErrorInfo,
   OffscreenProgressMessage,
   OffscreenPrepareRequest,
   OffscreenTranscribeRequest,
-  TranscribeErrorInfo,
 } from '@/lib/transcription/types';
 import { settingsStorage } from '@/lib/storage';
 import {
@@ -30,6 +32,28 @@ import {
 } from '@/lib/cache/video-cache';
 import { runTranscriptionPipeline } from '@/lib/transcription/pipeline';
 
+const tabBvids = new Map<number, string>();
+
+function notifyTab(
+  ctx: BackgroundContext,
+  tabId: number,
+  bvid: string,
+  progress: number,
+  stage: TranscribeStage,
+  error?: TranscribeErrorInfo,
+  stageParams?: Record<string, string | number>,
+): void {
+  const msg: TranscribeStatusPush = {
+    type: 'TRANSCRIBE_STATUS',
+    bvid,
+    progress,
+    stage,
+    stageParams,
+    error,
+  };
+  ctx.sendToTab(tabId, msg);
+}
+
 export async function handleTranscribe(
   msg: { bvid: string; cid: number; title: string },
   tabId: number,
@@ -39,7 +63,7 @@ export async function handleTranscribe(
 
   const controller = new AbortController();
   ctx.tabAbortControllers.set(tabId, controller);
-  ctx.tabBvids.set(tabId, bvid);
+  tabBvids.set(tabId, bvid);
 
   const deps = {
     getAsrConfig: async () => {
@@ -116,16 +140,16 @@ export async function handleTranscribe(
       { bvid, cid, title, signal: controller.signal },
       deps,
       (progress, stage, stageParams) => {
-        ctx.notifyTab(tabId, bvid, progress, stage, undefined, stageParams);
+        notifyTab(ctx, tabId, bvid, progress, stage, undefined, stageParams);
       },
     );
     if (!result.success) {
-      ctx.notifyTab(tabId, bvid, 0, 'failed', result.error);
+      notifyTab(ctx, tabId, bvid, 0, 'failed', result.error);
     }
     return result;
   } finally {
     ctx.tabAbortControllers.delete(tabId);
-    ctx.tabBvids.delete(tabId);
+    tabBvids.delete(tabId);
   }
 }
 
@@ -150,8 +174,8 @@ export function handleOffscreenProgress(
     Math.round((msg.chunkIndex / msg.totalChunks) * range);
 
   for (const [tId] of ctx.tabAbortControllers) {
-    const bvid = ctx.tabBvids.get(tId) ?? '';
-    ctx.notifyTab(tId, bvid, progress, 'chunk_transcribing', undefined, {
+    const bvid = tabBvids.get(tId) ?? '';
+    notifyTab(ctx, tId, bvid, progress, 'chunk_transcribing', undefined, {
       current: msg.chunkIndex + 1,
       total: msg.totalChunks,
     });

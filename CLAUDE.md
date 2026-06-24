@@ -124,8 +124,8 @@ MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRo
 - `lib/offscreen/main.ts` — Offscreen Document 逻辑：fetchAudioBytes(自行 fetch audioUrl) + resolveAudioDuration(HTML5 Audio 优先，ffprobe 降级) + FFmpeg 本地 WASM 加载(public/ffmpeg/) + estimateSafeChunkSeconds(0.72 安全系数) + buildOverlappedChunkPlan(600s+4s overlap) + splitAudioIntoChunks(FFmpeg -c:a copy) + transcribeChunk(per-chunk Groq API) + mergeTimestampedChunkRows(时间偏移+overlap 裁剪+1.5s 近邻去重)。最多 3 轮 30% 缩减。Session Map 带 10min TTL 自动清理（60s 扫描）+ FFmpeg 操作失败后 resetFFmpeg() 防止状态污染
 - `entrypoints/offscreen.html` — WXT unlisted page，通过 lifecycle.ensure() 按需创建
 - `lib/cache/video-cache.ts` — 视频缓存模块：normalizeBvid()（防御性小写规范化，所有公开函数入口调用）+ per-bvid 独立 key（`local:vc:{bvid}`）+ 内存缓存层（Map + structuredClone 深拷贝）+ mergeVideoCache(bvid, rows, source)（深接口：hash/timestamp 内部计算，Promise-based per-bvid 写锁 + hash 去重 + quota 降级）+ 旧格式迁移（`local:videoCache` → `local:vc:{bvid}`）+ initCacheStorageListener（Background 侧 chrome.storage.onChanged 同步内存缓存）。computeRowsHash 为模块内部函数，不导出
-- `entrypoints/background.ts` — Background SW thin dispatcher：构建 BackgroundContext（tabAbortControllers + tabBvids + notifyTab + ensureOffscreen from lifecycle.ts），`onMessage` switch 路由到独立 handler。~65 行
-- `lib/background/types.ts` — BackgroundContext 接口定义（handler 依赖注入契约）
+- `entrypoints/background.ts` — Background SW thin dispatcher：构建 BackgroundContext（tabAbortControllers + sendToTab + ensureOffscreen from lifecycle.ts），`onMessage` switch 路由到独立 handler。~55 行
+- `lib/background/types.ts` — BackgroundContext 接口定义（纯通用调度契约，零 transcription 类型依赖）
 - `lib/background/transcription-handlers.ts` — handleTranscribe（runTranscriptionPipeline 编排 + PipelineDeps 适配器）+ handleTranscribeAbort + handleOffscreenProgress
 - `lib/background/cache-handlers.ts` — handleGetVideoCache + handleCacheSubtitle，委托 lib/cache/video-cache.ts
 
