@@ -105,8 +105,9 @@ export async function fetchFavVideos(
   auth: BiliAuthInfo,
   mediaId: number,
   page: number = 1,
+  ps: number = 20,
 ): Promise<BiliFavVideoListResponse> {
-  const url = ENDPOINTS.favResourceList(mediaId, page);
+  const url = ENDPOINTS.favResourceList(mediaId, page, ps);
   const res = await fetch(url, {
     headers: { Cookie: `SESSDATA=${auth.sessdata}` },
   });

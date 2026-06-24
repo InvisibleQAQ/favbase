@@ -5,12 +5,19 @@ import CardActionArea from '@mui/material/CardActionArea';
 import CardMedia from '@mui/material/CardMedia';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
+import Skeleton from '@mui/material/Skeleton';
 
 import type { BiliFavFolder } from '@/lib/bilibili/types';
 
-export function FavFolderCard({ folder }: { folder: BiliFavFolder }) {
+interface FavFolderCardProps {
+  folder: BiliFavFolder;
+  resolvedCover?: string;
+  coverLoading?: boolean;
+}
+
+export function FavFolderCard({ folder, resolvedCover, coverLoading }: FavFolderCardProps) {
   const navigate = useNavigate();
-  const cover = folder.cover || '';
+  const cover = folder.cover || resolvedCover || '';
 
   const handleClick = () => {
     navigate(`/collections/bilibili/${folder.id}`);
@@ -37,6 +44,8 @@ export function FavFolderCard({ folder }: { folder: BiliFavFolder }) {
             alt={folder.title}
             sx={{ height: 140, objectFit: 'cover' }}
           />
+        ) : coverLoading ? (
+          <Skeleton variant="rectangular" height={140} animation="wave" />
         ) : (
           <Box
             sx={(theme) => ({

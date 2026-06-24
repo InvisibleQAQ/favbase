@@ -9,6 +9,7 @@ import Skeleton from '@mui/material/Skeleton';
 import { Iconify } from '../../components/iconify';
 import { DashboardContent } from '../../layouts/dashboard';
 import { useBiliFavFolders } from './use-bili-fav-folders';
+import { useFolderCovers } from './use-folder-covers';
 import { FavFolderCard } from './fav-folder-card';
 
 function LoadingSkeleton() {
@@ -86,6 +87,7 @@ function EmptyState() {
 
 export function CollectionsView() {
   const { folders, loading, syncing, loginState, lastSyncedAt, error, sync } = useBiliFavFolders();
+  const { coverMap, loading: coversLoading } = useFolderCovers(folders);
 
   return (
     <DashboardContent maxWidth="xl">
@@ -136,7 +138,11 @@ export function CollectionsView() {
         <Grid container spacing={3}>
           {folders.map((folder) => (
             <Grid key={folder.id} size={{ xs: 12, sm: 6, md: 4 }}>
-              <FavFolderCard folder={folder} />
+              <FavFolderCard
+                folder={folder}
+                resolvedCover={coverMap[folder.id]}
+                coverLoading={coversLoading && !folder.cover && folder.media_count > 0}
+              />
             </Grid>
           ))}
         </Grid>
