@@ -6,9 +6,10 @@
 
 ---
 
-## 1. `audio-extractor` 硬耦合 `bilibili-api` — 跨域泄漏
+## 1. ~~`audio-extractor` 硬耦合 `bilibili-api` — 跨域泄漏~~ ✅ DONE
 
 **严重度**: CRITICAL
+**修复 commit**: `f53aa18 refactor(transcription): decouple audio-extractor from bilibili`
 **涉及文件**:
 - `lib/transcription/audio-extractor.ts`（耦合源）
 - `lib/bilibili/bilibili-api.ts`（被穿透）
@@ -34,9 +35,10 @@ lib/transcription/audio-extractor.ts
 
 ---
 
-## 2. `pipeline.ts` 导入 3 个具体 Error 类 — 抽象层泄漏
+## 2. ~~`pipeline.ts` 导入 3 个具体 Error 类 — 抽象层泄漏~~ ✅ DONE
 
 **严重度**: HIGH
+**修复 commit**: `22c0b4d refactor(transcription): unify error hierarchy — PipelineError base class`
 **涉及文件**:
 - `lib/transcription/pipeline.ts`（耦合源）
 - `lib/transcription/groq-client.ts`（`AsrError`）
@@ -87,9 +89,10 @@ pipeline.ts 的 import 从 3 个具体模块收窄到 0 个（`PipelineError` �
 
 ---
 
-## 3. `transcription-handlers.ts` 知道 cache 内部实现 — 接口过浅
+## 3. ~~`transcription-handlers.ts` 知道 cache 内部实现 — 接口过浅~~ ✅ DONE
 
 **严重度**: HIGH
+**修复 commit**: `fb9ab19 refactor(cache): deepen mergeVideoCache interface — hide hash/timestamp`
 **涉及文件**:
 - `lib/background/transcription-handlers.ts`（耦合源）
 - `lib/cache/video-cache.ts`（接口过浅）
@@ -134,9 +137,10 @@ saveCache: (id, rows) => mergeVideoCache(id, rows, 'groq'),
 
 ---
 
-## 4. `lib/types.ts` 中央集市 — 无关领域类型混在一起
+## 4. ~~`lib/types.ts` 中央集市 — 无关领域类型混在一起~~ ✅ DONE
 
 **严重度**: MEDIUM
+**修复 commit**: `07296cc refactor(types): dissolve lib/types.ts central bazaar — relocate types by domain`
 **涉及文件**:
 - `lib/types.ts`（12+ 模块依赖）
 - 所有 import `SubtitleRow`、`UserSettings`、`SdkType` 的文件
@@ -165,9 +169,11 @@ saveCache: (id, rows) => mergeVideoCache(id, rows, 'groq'),
 
 ---
 
-## 5. `BackgroundContext` 混杂通用调度与 Bilibili 业务状态
+## 5. ~~`BackgroundContext` 混杂通用调度与 Bilibili 业务状态~~ ✅ DONE
 
 **严重度**: MEDIUM
+**修复 commit**: `4a54719 refactor(background): decouple BackgroundContext from transcription types`
+**实际方案**: `tabBvids` 下沉为 handler 模块级 Map；`notifyTab(6 params)` → `sendToTab(tabId, message: unknown)` 纯传输原语，消息构造责任归还 handler 内部 `notifyTab()` helper。比审计建议的 `TabNotification` 中间类型更彻底 — 传输层完全不知道消息结构。
 **涉及文件**:
 - `lib/background/types.ts`（定义）
 - `lib/background/transcription-handlers.ts`（消费者）
