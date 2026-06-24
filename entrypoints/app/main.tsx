@@ -12,6 +12,7 @@ import { DashboardLayout } from './layouts/dashboard';
 const DashboardPage = lazy(() => import('./pages/dashboard'));
 const CollectionsPage = lazy(() => import('./pages/collections'));
 const SettingsPage = lazy(() => import('./pages/settings'));
+const FolderDetailPage = lazy(() => import('./pages/folder-detail'));
 
 function LoadingFallback() {
   return (
@@ -50,6 +51,7 @@ const router = createHashRouter([
         children: [
           { index: true, element: <DashboardPage /> },
           { path: 'collections', element: <CollectionsPage /> },
+          { path: 'collections/bilibili/:mediaId', element: <FolderDetailPage /> },
           { path: 'settings', element: <SettingsPage /> },
         ],
       },

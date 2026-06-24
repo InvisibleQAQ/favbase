@@ -38,7 +38,7 @@ MVP 阶段，首个功能：B站视频转录（Bilitato 风格视频页面 AI �
 
 ### Extension Page Dashboard (app.html)
 
-MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRouter`（Chrome 扩展页面不支持路径路由）。
+MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRouter`（Chrome 扩展页面不支持路径路由）。路由结构：`/`(Dashboard), `/collections`(收藏夹概览), `/collections/bilibili/:mediaId`(收藏夹视频列表), `/settings`。多平台预留：未来 `/collections/zhihu/:id` 等。
 
 - `entrypoints/app/main.tsx` — 入口：Hash Router + lazy 页面加载 + LoadingFallback
 - `entrypoints/app/App.tsx` — 根组件：ThemeProvider + Outlet
@@ -80,6 +80,13 @@ MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRo
   - `llm-config-card.tsx` — LLM 配置卡片：Provider 选择 + API Key（显示/隐藏）+ Get Key 链接 + Model（Autocomplete，支持远程获取模型列表）+ Custom 字段 + 测试连接（AI SDK `generateText`）
   - `asr-config-card.tsx` — ASR 配置卡片：Provider 选择 + API Key + Model
   - `advanced-settings-card.tsx` — 高级设置：Temperature + MaxTokens + 调用模式（ToggleButtonGroup）
+- `entrypoints/app/sections/collections/` — B站收藏夹页面组件
+  - `collections-view.tsx` — 收藏夹主视图：同步按钮 + 卡片网格 + 未登录引导/空状态/loading skeleton
+  - `fav-folder-card.tsx` — 收藏夹卡片：封面图 + 名称 + 视频数量，点击导航到 `#/collections/bilibili/:mediaId`
+  - `use-bili-fav-folders.ts` — B站收藏夹 hook：getBiliAuth 检测登录 → fetchFavFolders 获取列表 → 状态管理（folders/loading/syncing/loginState/error）
+  - `folder-detail-view.tsx` — 收藏夹视频列表页：返回按钮 + VideoCard 网格 + MUI Pagination 翻页 + 未登录/错误/空状态处理
+  - `video-card.tsx` — 视频卡片：封面缩略图 + 时长标签 + 标题 + UP主 + 播放量，失效视频灰显（attr===9），点击跳转 B 站视频页
+  - `use-bili-fav-videos.ts` — 收藏夹视频 hook：fetchFavVideos 分页请求 + goToPage 翻页 + loading/error/loginState 状态管理
 
 ### B站字幕获取 (Step 1 — 已完成，Bilitato 对齐)
 
@@ -88,9 +95,9 @@ MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRo
 - `lib/bilibili/messaging.ts` — BiliMessageMap（消息类型注册表）+ postBiliMessage()（类型安全发送，支持 defer 延迟）+ onBiliMessage()（类型安全订阅，返回 unsub，内部封装 source 校验）
 - `lib/providers.ts` — SdkType + LLMProviderDef + ASRProviderDef 类型定义，LLM_PROVIDER_IDS / ASR_PROVIDER_IDS（`as const`）为 Provider ID 唯一真实来源，推导 LLMProviderId / ASRProviderId 类型。LLM_PROVIDERS(9个，每个含 sdkType) + ASR_PROVIDERS(2个) 纯数据定义，getProviderDef(id: LLMProviderId) 类型安全查找。sdkType 驱动 AI SDK 构造器选择和 raw fetch 认证策略
 - `lib/storage.ts` — UserSettings 类型定义 + settingsStorage (WXT `storage.defineItem<UserSettings>`)，DEFAULT_SETTINGS 默认值，sidebarPinnedStorage（`local:sidebarPinned`，布尔值，默认 true）
-- `lib/bilibili/types.ts` — RawSubtitleItem, BiliAuthInfo, BiliFavFolder, SubtitleTrack, DashAudioStream 等 bilibili 领域类型
+- `lib/bilibili/types.ts` — RawSubtitleItem, BiliAuthInfo, BiliFavFolder, BiliFavVideo, BiliFavVideoListResponse, SubtitleTrack, DashAudioStream 等 bilibili 领域类型
 - `lib/bilibili/url-utils.ts` — 纯 URL 工具函数（零 chrome.* 依赖，Main World 安全）：extractBvid()（保留原始大小写）, extractPageNum(), isSubtitleCdnUrl()
-- `lib/bilibili/bilibili-api.ts` — B站 API 层深模块：内部 ENDPOINTS URL builder + BiliAuthError。导出 getBiliAuth()（chrome.cookies 读 SESSDATA/DedeUserID）, fetchFavFolders(auth)（收藏夹列表）, fetchSubtitle(bvid, cid)（字幕 API + CDN，Content Script 上下文）, fetchCidByPageList(bvid, pageNum)（CID 降级路径）, fetchPlayUrl(bvid, cid)（DASH manifest）, extractBiliAudioUrl(bvid, cid)（DASH manifest 最优音频流 URL 提取，供 transcription-handlers.ts 注入 pipeline deps）
+- `lib/bilibili/bilibili-api.ts` — B站 API 层深模块：内部 ENDPOINTS URL builder + BiliAuthError。导出 getBiliAuth()（chrome.cookies 读 SESSDATA/DedeUserID）, fetchFavFolders(auth)（收藏夹列表）, fetchFavVideos(auth, mediaId, page)（收藏夹视频分页列表，`/x/v3/fav/resource/list`，每页20条）, fetchSubtitle(bvid, cid)（字幕 API + CDN，Content Script 上下文）, fetchCidByPageList(bvid, pageNum)（CID 降级路径）, fetchPlayUrl(bvid, cid)（DASH manifest）, extractBiliAudioUrl(bvid, cid)（DASH manifest 最优音频流 URL 提取，供 transcription-handlers.ts 注入 pipeline deps）
 - `lib/bilibili/favorites-sync.ts` — syncFavFoldersToDb(db, folders)：将 BiliFavFolder[] upsert 到 PGlite sources 表（db 由调用方注入），返回 Source[]
 - `lib/bilibili/subtitle-processor.ts` — processSubtitles() 四步管线：normalize -> filter -> filler removal -> deduplicate(Jaccard>0.85)。接受 B 站原始格式和 favbase 格式。每条字幕保持独立行，不合并
 - `entrypoints/bilibili-inject.content.ts` — Main World 入口协调器：创建 effects + 状态机 + 拦截器 + 路由监控，5 行 bootstrap

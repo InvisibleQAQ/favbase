@@ -32,6 +32,28 @@ export interface SubtitleTrack {
   subtitle_url: string;
 }
 
+/** Video item inside a bilibili favorite folder (from /x/v3/fav/resource/list). */
+export interface BiliFavVideo {
+  id: number;
+  type: number;
+  title: string;
+  cover: string;
+  intro: string;
+  duration: number;
+  bvid: string;
+  upper: { mid: number; name: string; face: string };
+  cnt_info: { play: number; collect: number; danmaku: number };
+  fav_time: number;
+  attr: number;
+}
+
+/** Paginated response for favorite folder video list. */
+export interface BiliFavVideoListResponse {
+  has_more: boolean;
+  medias: BiliFavVideo[] | null;
+  info: { id: number; title: string; media_count: number };
+}
+
 /** DASH audio stream descriptor from playurl API. */
 export interface DashAudioStream {
   baseUrl?: string;

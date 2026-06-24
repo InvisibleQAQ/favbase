@@ -5,7 +5,7 @@
  */
 
 import type { SubtitleResult, SubtitleRow } from '../transcription/types';
-import type { BiliAuthInfo, BiliFavFolder, DashAudioStream, SubtitleTrack } from './types';
+import type { BiliAuthInfo, BiliFavFolder, BiliFavVideoListResponse, DashAudioStream, SubtitleTrack } from './types';
 
 // ---------------------------------------------------------------------------
 // Internal helpers (not exported)
@@ -20,6 +20,8 @@ const ENDPOINTS = {
     `https://api.bilibili.com/x/player/playurl?bvid=${encodeURIComponent(bvid)}&cid=${encodeURIComponent(String(cid))}&fnval=16&fnver=0&platform=html5&high_quality=1&otype=json`,
   favFolderListAll: (mid: string) =>
     `https://api.bilibili.com/x/v3/fav/folder/created/list-all?up_mid=${encodeURIComponent(mid)}`,
+  favResourceList: (mediaId: number, pn: number, ps: number = 20) =>
+    `https://api.bilibili.com/x/v3/fav/resource/list?media_id=${encodeURIComponent(String(mediaId))}&pn=${encodeURIComponent(String(pn))}&ps=${encodeURIComponent(String(ps))}&platform=web`,
 } as const;
 
 const BILI_COOKIE_URL = 'https://www.bilibili.com';
@@ -96,6 +98,34 @@ export async function fetchFavFolders(
   }
 
   return json.data?.list ?? [];
+}
+
+/** Fetch paginated video list for a favorite folder. */
+export async function fetchFavVideos(
+  auth: BiliAuthInfo,
+  mediaId: number,
+  page: number = 1,
+): Promise<BiliFavVideoListResponse> {
+  const url = ENDPOINTS.favResourceList(mediaId, page);
+  const res = await fetch(url, {
+    headers: { Cookie: `SESSDATA=${auth.sessdata}` },
+  });
+
+  if (!res.ok) {
+    throw new Error(`Bilibili API HTTP ${res.status}`);
+  }
+
+  const json = await res.json();
+
+  if (json.code === -101) {
+    throw new BiliAuthError('SESSDATA expired or invalid');
+  }
+
+  if (json.code !== 0) {
+    throw new Error(`Bilibili API error ${json.code}: ${json.message}`);
+  }
+
+  return json.data;
 }
 
 // ---------------------------------------------------------------------------
