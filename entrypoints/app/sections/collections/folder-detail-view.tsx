@@ -11,6 +11,8 @@ import Pagination from '@mui/material/Pagination';
 import { Iconify } from '../../components/iconify';
 import { DashboardContent } from '../../layouts/dashboard';
 import { useBiliFavVideos } from './use-bili-fav-videos';
+import { useVideoTranscribe } from './use-video-transcribe';
+import { useSettings } from '@/lib/hooks/useSettings';
 import { VideoCard } from './video-card';
 
 function LoadingSkeleton() {
@@ -117,6 +119,11 @@ export function FolderDetailView() {
   const { videos, folderTitle, page, totalPages, loading, loginState, error, goToPage, retry } =
     useBiliFavVideos(numericId);
 
+  const { currentAsrApiKey } = useSettings();
+  const hasAsrApiKey = Boolean(currentAsrApiKey);
+  const { getState, startTranscribe, cancelTranscribe, activeBvid } =
+    useVideoTranscribe(videos, hasAsrApiKey);
+
   const handleBack = () => {
     navigate('/collections');
   };
@@ -154,7 +161,13 @@ export function FolderDetailView() {
           <Grid container spacing={2.5}>
             {videos.map((video) => (
               <Grid key={video.id} size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
-                <VideoCard video={video} />
+                <VideoCard
+                  video={video}
+                  transcribeState={getState(video.bvid)}
+                  onTranscribe={() => startTranscribe(video)}
+                  onCancel={cancelTranscribe}
+                  disabled={Boolean(activeBvid && activeBvid !== video.bvid)}
+                />
               </Grid>
             ))}
           </Grid>

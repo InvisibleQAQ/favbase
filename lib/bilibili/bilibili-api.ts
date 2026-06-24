@@ -130,16 +130,26 @@ export async function fetchFavVideos(
 }
 
 // ---------------------------------------------------------------------------
-// Subtitle — Content Script only (credentials: include, same-origin cookies)
+// Subtitle — Content Script (credentials: include) or Extension Page (explicit auth)
 // ---------------------------------------------------------------------------
 
-/** Fetch bilibili AI subtitles via player API + CDN. Content Script context only. */
+function buildFetchInit(auth?: BiliAuthInfo): RequestInit {
+  if (auth) return { headers: { Cookie: `SESSDATA=${auth.sessdata}` } };
+  return { credentials: 'include' };
+}
+
+/**
+ * Fetch bilibili AI subtitles via player API + CDN.
+ * Content Script: omit auth (uses same-origin cookies).
+ * Extension Page: pass auth for explicit Cookie header.
+ */
 export async function fetchSubtitle(
   bvid: string,
   cid: number,
+  auth?: BiliAuthInfo,
 ): Promise<SubtitleResult> {
   const playerUrl = ENDPOINTS.playerV2(bvid, cid);
-  const playerRes = await fetch(playerUrl, { credentials: 'include' });
+  const playerRes = await fetch(playerUrl, buildFetchInit(auth));
 
   if (!playerRes.ok) {
     return { status: 'error', rows: [], error: `Player API HTTP ${playerRes.status}` };
@@ -160,7 +170,7 @@ export async function fetchSubtitle(
   }
 
   const subtitleUrl = rawUrl.startsWith('//') ? `https:${rawUrl}` : rawUrl;
-  const subRes = await fetch(subtitleUrl, { credentials: 'include' });
+  const subRes = await fetch(subtitleUrl, buildFetchInit(auth));
 
   if (!subRes.ok) {
     return { status: 'error', rows: [], error: `Subtitle CDN HTTP ${subRes.status}` };
@@ -190,13 +200,13 @@ export async function fetchSubtitle(
 }
 
 // ---------------------------------------------------------------------------
-// Video info — Content Script (credentials: include)
+// Video info — Content Script (credentials: include) or Extension Page (auth)
 // ---------------------------------------------------------------------------
 
-/** Fetch CID for a video page via pagelist API. Content Script context. */
-export async function fetchCidByPageList(bvid: string, pageNum: number = 1): Promise<number> {
+/** Fetch CID for a video page via pagelist API. Works from any extension context. */
+export async function fetchCidByPageList(bvid: string, pageNum: number = 1, auth?: BiliAuthInfo): Promise<number> {
   const url = ENDPOINTS.pageList(bvid);
-  const res = await fetch(url, { credentials: 'include' });
+  const res = await fetch(url, buildFetchInit(auth));
   if (!res.ok) throw new Error(`Pagelist API HTTP ${res.status}`);
   const json = await res.json();
   const pages: { cid: number; page: number }[] = json?.data ?? [];

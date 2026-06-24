@@ -3,9 +3,17 @@ import CardMedia from '@mui/material/CardMedia';
 import CardActionArea from '@mui/material/CardActionArea';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
+import LinearProgress from '@mui/material/LinearProgress';
+import IconButton from '@mui/material/IconButton';
+import Chip from '@mui/material/Chip';
+import Tooltip from '@mui/material/Tooltip';
 
+import { t } from '@/lib/i18n';
+import type { LocaleKeys } from '@/lib/i18n/locales/zh-CN';
+import type { TranscribeErrorCode } from '@/lib/transcription/types';
 import { Iconify } from '../../components/iconify';
 import type { BiliFavVideo } from '@/lib/bilibili/types';
+import type { VideoTranscribeState } from './use-video-transcribe';
 
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -18,9 +26,40 @@ function formatPlay(count: number): string {
   return String(count);
 }
 
+function translateStage(
+  stage: string,
+  stageParams?: Record<string, string | number>,
+): string {
+  if (!stage) return '';
+  const key = `stage.${stage}` as LocaleKeys;
+  return t(key, stageParams);
+}
+
+function translateError(
+  code: TranscribeErrorCode,
+  params?: Record<string, string | number>,
+): string {
+  const key = `error.${code}` as LocaleKeys;
+  return t(key, params);
+}
+
 const INVALID_ATTR = 9;
 
-export function VideoCard({ video }: { video: BiliFavVideo }) {
+export interface VideoCardProps {
+  video: BiliFavVideo;
+  transcribeState?: VideoTranscribeState;
+  onTranscribe?: () => void;
+  onCancel?: () => void;
+  disabled?: boolean;
+}
+
+export function VideoCard({
+  video,
+  transcribeState,
+  onTranscribe,
+  onCancel,
+  disabled,
+}: VideoCardProps) {
   const isInvalid = video.attr === INVALID_ATTR;
   const cover = video.cover?.startsWith('//') ? `https:${video.cover}` : video.cover;
 
@@ -41,7 +80,7 @@ export function VideoCard({ video }: { video: BiliFavVideo }) {
         },
       })}
     >
-      <CardActionArea onClick={handleClick} disabled={isInvalid} sx={{ height: '100%' }}>
+      <CardActionArea onClick={handleClick} disabled={isInvalid}>
         <Box sx={{ position: 'relative' }}>
           {cover ? (
             <CardMedia
@@ -109,6 +148,127 @@ export function VideoCard({ video }: { video: BiliFavVideo }) {
           )}
         </Box>
       </CardActionArea>
+
+      {!isInvalid && transcribeState && (
+        <ActionBar
+          state={transcribeState}
+          onTranscribe={onTranscribe}
+          onCancel={onCancel}
+          disabled={disabled}
+        />
+      )}
     </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Action Bar
+// ---------------------------------------------------------------------------
+
+function ActionBar({
+  state,
+  onTranscribe,
+  onCancel,
+  disabled,
+}: {
+  state: VideoTranscribeState;
+  onTranscribe?: () => void;
+  onCancel?: () => void;
+  disabled?: boolean;
+}) {
+  const { contentStatus, transcribing, progress, stage, stageParams, error, retryCountdown } = state;
+
+  // Transcribing → progress display
+  if (transcribing) {
+    return (
+      <Box sx={{ px: 1.5, pb: 1.5 }}>
+        <LinearProgress
+          variant="determinate"
+          value={progress}
+          sx={{ mb: 0.5, borderRadius: 1 }}
+        />
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Typography variant="caption" sx={{ color: 'text.secondary' }} noWrap>
+            {translateStage(stage, stageParams)} {progress}%
+          </Typography>
+          <Tooltip title={t('transcribe.cancel')}>
+            <IconButton size="small" onClick={onCancel} sx={{ p: 0.25 }}>
+              <Iconify icon="mingcute:close-line" width={16} />
+            </IconButton>
+          </Tooltip>
+        </Box>
+      </Box>
+    );
+  }
+
+  // Error → error message + retry
+  if (error) {
+    return (
+      <Box sx={{ px: 1.5, pb: 1.5 }}>
+        <Typography
+          variant="caption"
+          sx={{ color: 'error.main', display: 'block', mb: 0.5 }}
+          noWrap
+          title={translateError(error.code, error.params)}
+        >
+          {translateError(error.code, error.params)}
+        </Typography>
+        {retryCountdown > 0 ? (
+          <Typography variant="caption" sx={{ color: 'text.disabled' }}>
+            {t('transcribe.rateLimit', { seconds: retryCountdown })}
+          </Typography>
+        ) : (
+          <Chip
+            label={t('transcribe.retry')}
+            icon={<Iconify icon="solar:restart-bold" width={14} />}
+            size="small"
+            variant="outlined"
+            onClick={onTranscribe}
+            disabled={disabled}
+            sx={{ height: 24 }}
+          />
+        )}
+      </Box>
+    );
+  }
+
+  // Has content → source badge
+  if (contentStatus === 'has_bilibili' || contentStatus === 'has_groq') {
+    const label = contentStatus === 'has_bilibili' ? t('card.sourceCC') : t('card.sourceASR');
+    const color = contentStatus === 'has_bilibili' ? 'info' : 'success';
+    return (
+      <Box sx={{ px: 1.5, pb: 1.5 }}>
+        <Chip
+          label={label}
+          icon={<Iconify icon="solar:subtitles-bold-duotone" width={14} />}
+          size="small"
+          color={color}
+          variant="outlined"
+          sx={{ height: 24 }}
+        />
+      </Box>
+    );
+  }
+
+  // Checking cache → small skeleton
+  if (contentStatus === 'checking' || contentStatus === 'unknown') {
+    return (
+      <Box sx={{ px: 1.5, pb: 1.5, height: 24 }} />
+    );
+  }
+
+  // No content → transcribe button
+  return (
+    <Box sx={{ px: 1.5, pb: 1.5 }}>
+      <Chip
+        label={t('card.transcribe')}
+        icon={<Iconify icon="solar:subtitles-bold-duotone" width={14} />}
+        size="small"
+        variant="outlined"
+        onClick={onTranscribe}
+        disabled={disabled}
+        sx={{ height: 24 }}
+      />
+    </Box>
   );
 }

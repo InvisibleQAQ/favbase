@@ -104,6 +104,10 @@ const en: Record<LocaleKeys, string> = {
   'error.ASR_NO_AUDIO_SOURCE': 'No audio track found',
   'error.DOWNLOAD_FAILED': 'Audio download failed (HTTP {{status}})',
   'error.ASR_UNKNOWN': 'Unknown error: {{detail}}',
+
+  'card.transcribe': 'Transcribe',
+  'card.sourceCC': 'CC Official',
+  'card.sourceASR': 'ASR',
 };
 
 export default en;

@@ -81,9 +81,10 @@ MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRo
   - `fav-folder-card.tsx` — 收藏夹卡片：封面图（resolvedCover 渐进式加载 + Skeleton + 首字母降级）+ 名称 + 视频数量，点击导航到 `#/collections/bilibili/:mediaId`
   - `use-bili-fav-folders.ts` — B站收藏夹 hook：getBiliAuth 检测登录 → fetchFavFolders 获取列表 → 状态管理（folders/loading/syncing/loginState/error）。fetch 成功后 fire-and-forget 调用 syncFavFoldersToDb 持久化到 PGlite
   - `use-folder-covers.ts` — 收藏夹封面解析 hook：对 cover 为空且 media_count > 0 的收藏夹，并发 fetchFavVideos(auth, id, 1, 1) 取首个视频封面。返回 coverMap + loading。generation 守卫防竞态
-  - `folder-detail-view.tsx` — 收藏夹视频列表页：返回按钮 + VideoCard 网格 + MUI Pagination 翻页 + 未登录/错误/空状态处理
-  - `video-card.tsx` — 视频卡片：封面缩略图 + 时长标签 + 标题 + UP主 + 播放量，失效视频灰显（attr===9），点击跳转 B 站视频页
+  - `folder-detail-view.tsx` — 收藏夹视频列表页：返回按钮 + VideoCard 网格 + MUI Pagination 翻页 + 未登录/错误/空状态处理。集成 useVideoTranscribe hook 管理转录状态
+  - `video-card.tsx` — 视频卡片：封面缩略图 + 时长标签 + 标题 + UP主 + 播放量 + 底部操作栏（转录/状态标记/进度）。失效视频灰显（attr===9）无操作栏。操作栏三态：来源标记（CC 官方/ASR Chip）、转录按钮、进度条（LinearProgress + stage 文字 + 取消按钮）
   - `use-bili-fav-videos.ts` — 收藏夹视频 hook：fetchFavVideos 分页请求 + goToPage 翻页 + loading/error/loginState 状态管理。fetch 成功后 fire-and-forget 调用 syncFavVideosToDb 持久化到 PGlite（需先查 sources 表获取 sourceId）
+  - `use-video-transcribe.ts` — 视频转录状态管理 hook：批量 GET_VIDEO_CACHE 预查内容状态（翻页刷新）+ 转录流程（CID 获取 → 官方字幕优先 → Groq ASR 降级）+ TRANSCRIBE_STATUS 实时进度监听 + 单视频串行控制（activeBvid）+ 取消/重试/rate limit 倒计时。成功后 fire-and-forget 调用 persistSubtitleContent 写入 PGlite item_contents 表
 
 ### B站字幕获取 (Step 1 — 已完成，Bilitato 对齐)
 
@@ -94,9 +95,10 @@ MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRo
 - `lib/storage.ts` — UserSettings 类型定义 + settingsStorage (WXT `storage.defineItem<UserSettings>`)，DEFAULT_SETTINGS 默认值，sidebarPinnedStorage（`local:sidebarPinned`，布尔值，默认 true）
 - `lib/bilibili/types.ts` — RawSubtitleItem, BiliAuthInfo, BiliFavFolder, BiliFavVideo, BiliFavVideoListResponse, SubtitleTrack, DashAudioStream 等 bilibili 领域类型
 - `lib/bilibili/url-utils.ts` — 纯 URL 工具函数（零 chrome.* 依赖，Main World 安全）：extractBvid()（保留原始大小写）, extractPageNum(), isSubtitleCdnUrl()
-- `lib/bilibili/bilibili-api.ts` — B站 API 层深模块：内部 ENDPOINTS URL builder + BiliAuthError。导出 getBiliAuth()（chrome.cookies 读 SESSDATA/DedeUserID）, fetchFavFolders(auth)（收藏夹列表）, fetchFavVideos(auth, mediaId, page, ps=20)（收藏夹视频分页列表，`/x/v3/fav/resource/list`）, fetchSubtitle(bvid, cid)（字幕 API + CDN，Content Script 上下文）, fetchCidByPageList(bvid, pageNum)（CID 降级路径）, fetchPlayUrl(bvid, cid)（DASH manifest）, extractBiliAudioUrl(bvid, cid)（DASH manifest 最优音频流 URL 提取，供 transcription-handlers.ts 注入 pipeline deps）
+- `lib/bilibili/bilibili-api.ts` — B站 API 层深模块：内部 ENDPOINTS URL builder + BiliAuthError + buildFetchInit(auth?) helper（有 auth 时显式 Cookie header，否则 credentials:'include'）。导出 getBiliAuth()（chrome.cookies 读 SESSDATA/DedeUserID）, fetchFavFolders(auth)（收藏夹列表）, fetchFavVideos(auth, mediaId, page, ps=20)（收藏夹视频分页列表，`/x/v3/fav/resource/list`）, fetchSubtitle(bvid, cid, auth?)（字幕 API + CDN，Content Script 省略 auth / Extension Page 传 auth）, fetchCidByPageList(bvid, pageNum, auth?)（CID 获取，同上）, fetchPlayUrl(bvid, cid)（DASH manifest）, extractBiliAudioUrl(bvid, cid)（DASH manifest 最优音频流 URL 提取，供 transcription-handlers.ts 注入 pipeline deps）
 - `lib/bilibili/favorites-sync.ts` — syncFavFoldersToDb(db, folders)：将 BiliFavFolder[] upsert 到 PGlite sources 表（db 由调用方注入），返回 Source[]。由 `useBiliFavFolders` fetch 成功后 fire-and-forget 调用
 - `lib/bilibili/videos-sync.ts` — syncFavVideosToDb(db, videos, sourceId)：将 BiliFavVideo[] upsert 到 PGlite authors + items + item_sources 表。per-video try/catch，部分失败不中断。MVP insert-only 不更新已有记录。由 `useBiliFavVideos` fetch 成功后 fire-and-forget 调用
+- `lib/bilibili/content-sync.ts` — persistSubtitleContent(db, bvid, rows, source)：转录成功后将字幕文本持久化到 PGlite item_contents 表 + 更新 items.content_state='has_content'。按 bvid 查找 item，onConflictDoUpdate upsert。fire-and-forget 调用，不抛异常。由 `useVideoTranscribe` 两条成功路径（官方字幕/ASR）触发
 - `lib/bilibili/subtitle-processor.ts` — processSubtitles() 四步管线：normalize -> filter -> filler removal -> deduplicate(Jaccard>0.85)。接受 B 站原始格式和 favbase 格式。每条字幕保持独立行，不合并
 - `entrypoints/bilibili-inject.content.ts` — Main World 入口协调器：创建 effects + 状态机 + 拦截器 + 路由监控，5 行 bootstrap
 - `lib/bilibili/inject/state.ts` — InjectStateMachine 状态机（createStateMachine(effects)），拥有全部状态转换（bootstrap/markCaptured/resetForRoute）+ 定时器编排 + reemit loop。通过 InjectEffects 接口注入副作用，纯逻辑可单元测试
