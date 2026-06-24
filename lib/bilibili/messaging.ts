@@ -1,4 +1,4 @@
-import type { RawSubtitleItem } from '../types';
+import type { RawSubtitleItem } from './types';
 
 export interface BiliMessageMap {
   BILI_ROUTE_SWITCH: { bvid: string };

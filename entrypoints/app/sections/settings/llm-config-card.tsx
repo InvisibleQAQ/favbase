@@ -19,8 +19,8 @@ import ToggleButton from '@mui/material/ToggleButton';
 import Divider from '@mui/material/Divider';
 
 import { Iconify } from '../../components/iconify';
-import { LLM_PROVIDERS, type LLMProviderId } from '@/lib/providers';
-import type { UserSettings, LLMProviderDef } from '@/lib/types';
+import { LLM_PROVIDERS, type LLMProviderId, type LLMProviderDef } from '@/lib/providers';
+import type { UserSettings } from '@/lib/storage';
 import type { LlmUpdate } from '@/lib/hooks/useSettings';
 import { testLlmConnection, fetchAvailableModels, type TestConnectionResult } from '@/lib/ai';
 

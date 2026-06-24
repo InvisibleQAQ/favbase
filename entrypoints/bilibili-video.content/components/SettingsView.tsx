@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import type { LLMProviderDef, ASRProviderDef, UserSettings } from '@/lib/types';
-import { LLM_PROVIDERS, ASR_PROVIDERS, type LLMProviderId, type ASRProviderId } from '@/lib/providers';
+import { LLM_PROVIDERS, ASR_PROVIDERS, type LLMProviderId, type ASRProviderId, type LLMProviderDef, type ASRProviderDef } from '@/lib/providers';
+import type { UserSettings } from '@/lib/storage';
 import type { LlmUpdate, AsrUpdate } from '@/lib/hooks/useSettings';
 import { t } from '@/lib/i18n';
 

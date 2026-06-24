@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
-import type { SubtitleRow } from '@/lib/types';
+import type { SubtitleRow } from '@/lib/transcription/types';
 import { t } from '@/lib/i18n';
 
 interface SubtitleViewProps {

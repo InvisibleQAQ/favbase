@@ -9,8 +9,8 @@ import InputAdornment from '@mui/material/InputAdornment';
 import IconButton from '@mui/material/IconButton';
 
 import { Iconify } from '../../components/iconify';
-import { ASR_PROVIDERS, type ASRProviderId } from '@/lib/providers';
-import type { UserSettings, ASRProviderDef } from '@/lib/types';
+import { ASR_PROVIDERS, type ASRProviderId, type ASRProviderDef } from '@/lib/providers';
+import type { UserSettings } from '@/lib/storage';
 import type { AsrUpdate } from '@/lib/hooks/useSettings';
 
 interface AsrConfigCardProps {

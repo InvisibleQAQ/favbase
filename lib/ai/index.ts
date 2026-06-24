@@ -3,8 +3,7 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { generateText, type LanguageModel } from 'ai';
-import type { LLMProviderId } from '@/lib/providers';
-import type { SdkType } from '@/lib/types';
+import type { LLMProviderId, SdkType } from '@/lib/providers';
 import { getProviderDef } from '@/lib/providers';
 
 // ---------------------------------------------------------------------------

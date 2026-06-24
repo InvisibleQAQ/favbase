@@ -1,3 +1,9 @@
+export interface RawSubtitleItem {
+  from: number;
+  to: number;
+  content: string;
+}
+
 /** Auth credentials extracted from bilibili cookies. */
 export interface BiliAuthInfo {
   sessdata: string;

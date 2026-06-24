@@ -1,6 +1,5 @@
 import { storage } from 'wxt/utils/storage';
-import type { SubtitleRow } from '@/lib/types';
-import type { VideoCacheEntry } from '@/lib/transcription/types';
+import type { SubtitleRow, VideoCacheEntry } from '@/lib/transcription/types';
 
 // ---------------------------------------------------------------------------
 // BVID normalization — extractBvid preserves original case for API

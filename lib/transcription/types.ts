@@ -1,4 +1,15 @@
-import type { SubtitleRow } from '../types';
+export interface SubtitleRow {
+  start: number;
+  end: number;
+  text: string;
+}
+
+export interface SubtitleResult {
+  status: 'ok' | 'no_subtitle' | 'error';
+  rows: SubtitleRow[];
+  source?: 'bilibili' | 'groq';
+  error?: string;
+}
 
 export interface TranscribeRequest {
   type: 'TRANSCRIBE_AUDIO';

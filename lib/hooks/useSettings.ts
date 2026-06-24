@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { UserSettings, LLMProviderDef, ASRProviderDef } from '@/lib/types';
-import type { LLMProviderId, ASRProviderId } from '@/lib/providers';
+import type { LLMProviderId, ASRProviderId, LLMProviderDef, ASRProviderDef } from '@/lib/providers';
 import { getProviderDef, ASR_PROVIDERS } from '@/lib/providers';
+import type { UserSettings } from '@/lib/storage';
 import { settingsStorage, DEFAULT_SETTINGS } from '@/lib/storage';
 
 // Add new ASR provider here — no if/else needed

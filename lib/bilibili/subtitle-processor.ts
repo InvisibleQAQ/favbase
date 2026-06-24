@@ -1,4 +1,4 @@
-import type { SubtitleRow } from '../types';
+import type { SubtitleRow } from '../transcription/types';
 
 /**
  * Raw subtitle item — either Bilibili API format (from/to/content)

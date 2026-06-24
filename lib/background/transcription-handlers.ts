@@ -1,6 +1,6 @@
 import type { BackgroundContext } from './types';
-import type { SubtitleRow } from '@/lib/types';
 import type {
+  SubtitleRow,
   TranscribeResponse,
   OffscreenProgressMessage,
   OffscreenPrepareRequest,

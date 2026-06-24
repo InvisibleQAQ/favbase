@@ -1,6 +1,6 @@
 import { extractBvid } from '../url-utils';
 import { postBiliMessage } from '../messaging';
-import type { RawSubtitleItem } from '../../types';
+import type { RawSubtitleItem } from '../types';
 import type { InjectEffects } from './state';
 
 const STEALTH_STYLE_ID = '__favbase_stealth_css__';

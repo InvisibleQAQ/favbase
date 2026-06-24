@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { SubtitleRow } from '@/lib/types';
+import type { SubtitleRow } from '@/lib/transcription/types';
 import type { LocaleKeys } from '@/lib/i18n/locales/zh-CN';
 import { t } from '@/lib/i18n';
 import { StatusBar } from './StatusBar';

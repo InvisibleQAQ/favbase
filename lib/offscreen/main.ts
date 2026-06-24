@@ -1,6 +1,6 @@
 import { FFmpeg } from '@ffmpeg/ffmpeg';
-import type { SubtitleRow } from '@/lib/types';
 import type {
+  SubtitleRow,
   OffscreenRequest,
   OffscreenPrepareRequest,
   OffscreenTranscribeRequest,

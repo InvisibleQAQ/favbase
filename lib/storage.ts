@@ -1,5 +1,29 @@
 import { storage } from 'wxt/utils/storage';
-import type { UserSettings } from './types';
+import type { LLMProviderId, ASRProviderId } from './providers';
+
+export interface UserSettings {
+  // LLM
+  provider: LLMProviderId;
+  providerApiKeys: Record<string, string>;
+  providerModels: Record<string, string>;
+  customBaseUrl: string;
+  customModel: string;
+  customProtocol: 'openai' | 'claude';
+
+  // ASR
+  asrProvider: ASRProviderId;
+  groqApiKey: string;
+  groqModel: string;
+  siliconFlowApiKey: string;
+  siliconFlowAsrModel: string;
+
+  // Mode
+  prefMode: 'quality' | 'efficiency';
+
+  // Advanced
+  temperature: number;
+  maxTokens: number;
+}
 
 export const DEFAULT_SETTINGS: UserSettings = {
   // LLM

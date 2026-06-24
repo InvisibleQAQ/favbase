@@ -1,6 +1,6 @@
-import type { SubtitleRow } from '../types';
 import {
   PipelineError,
+  type SubtitleRow,
   type TranscribeResponse,
   type TranscribeStage,
   type TranscribeErrorInfo,

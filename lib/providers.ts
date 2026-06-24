@@ -1,4 +1,4 @@
-import type { LLMProviderDef, ASRProviderDef } from './types';
+export type SdkType = 'openai' | 'anthropic' | 'google' | 'openai-compatible';
 
 export const LLM_PROVIDER_IDS = [
   'modelscope', 'zhipu', 'gemini', 'openai', 'openrouter',
@@ -8,6 +8,21 @@ export type LLMProviderId = typeof LLM_PROVIDER_IDS[number];
 
 export const ASR_PROVIDER_IDS = ['groq', 'siliconflow'] as const;
 export type ASRProviderId = typeof ASR_PROVIDER_IDS[number];
+
+export interface LLMProviderDef {
+  id: LLMProviderId;
+  name: string;
+  sdkType: SdkType;
+  baseUrl: string;
+  defaultModel: string;
+  regUrl: string;
+}
+
+export interface ASRProviderDef {
+  id: ASRProviderId;
+  name: string;
+  defaultModel: string;
+}
 
 export const LLM_PROVIDERS: LLMProviderDef[] = [
   {
