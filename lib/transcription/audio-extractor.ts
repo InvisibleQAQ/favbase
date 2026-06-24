@@ -1,4 +1,5 @@
-import { BILIBILI_API } from '../bilibili/api';
+import { fetchPlayUrl } from '../bilibili/bilibili-api';
+import type { DashAudioStream } from '../bilibili/types';
 import type { TranscribeErrorInfo } from './types';
 import { PROGRESS } from './constants';
 
@@ -9,48 +10,21 @@ export class AudioExtractError extends Error {
   }
 }
 
-interface DashAudioStream {
-  baseUrl?: string;
-  base_url?: string;
-  bandwidth?: number;
-  backupUrl?: string[];
-  backup_url?: string[];
-}
-
 export async function extractAudioUrl(
   bvid: string,
   cid: number,
 ): Promise<string> {
-  const url = BILIBILI_API.playUrl(bvid, cid);
-  const res = await fetch(url, { credentials: 'include' });
-
-  if (!res.ok) {
+  let dash;
+  try {
+    dash = await fetchPlayUrl(bvid, cid);
+  } catch (err) {
     throw new AudioExtractError({
       code: 'ASR_NO_AUDIO_SOURCE',
-      message: `playurl API failed: HTTP ${res.status}`,
+      message: err instanceof Error ? err.message : 'playurl API failed',
     });
   }
 
-  const json = await res.json();
-
-  if (Number(json?.code ?? 0) !== 0) {
-    throw new AudioExtractError({
-      code: 'ASR_NO_AUDIO_SOURCE',
-      message: `playurl API returned error: ${String(json?.message || 'unknown')}`,
-    });
-  }
-
-  const dash = json?.data?.dash;
-
-  if (!dash?.audio?.length) {
-    throw new AudioExtractError({
-      code: 'ASR_NO_AUDIO_SOURCE',
-      message: 'No audio tracks found in DASH manifest',
-    });
-  }
-
-  const streams: DashAudioStream[] = dash.audio;
-  streams.sort(
+  const streams = [...dash.audio].sort(
     (a: DashAudioStream, b: DashAudioStream) =>
       (b.bandwidth ?? 0) - (a.bandwidth ?? 0),
   );

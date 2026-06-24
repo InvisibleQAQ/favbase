@@ -2,7 +2,7 @@ import { eq, and } from 'drizzle-orm';
 import { sources } from '@/lib/database/entities/sources';
 import type { Source } from '@/lib/database/entities/sources';
 import type { FavbaseDb } from '@/lib/database/db';
-import type { BiliFavFolder } from './favorites';
+import type { BiliFavFolder } from './types';
 
 const PLATFORM = 'bilibili';
 

@@ -3,7 +3,7 @@ import CardMedia from '@mui/material/CardMedia';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 
-import type { BiliFavFolder } from '@/lib/bilibili/favorites';
+import type { BiliFavFolder } from '@/lib/bilibili/types';
 
 export function FavFolderCard({ folder }: { folder: BiliFavFolder }) {
   const cover = folder.cover || '';

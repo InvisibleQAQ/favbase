@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { fetchBilibiliSubtitle } from '@/lib/bilibili/subtitle-fetcher';
+import { fetchSubtitle } from '@/lib/bilibili/bilibili-api';
 import { processSubtitles } from '@/lib/bilibili/subtitle-processor';
 import { onBiliMessage } from '@/lib/bilibili/messaging';
 import { normalizeBvid } from '@/lib/cache/video-cache';
@@ -25,7 +25,7 @@ const MAX_API_RETRIES = 2;
  * Data flow priority (high -> low):
  *   1. Video cache (GET_VIDEO_CACHE message to Background)
  *   2. Intercept channel (BILI_SUBTITLE_DATA from inject script)
- *   3. API fallback (fetchBilibiliSubtitle)
+ *   3. API fallback (fetchSubtitle)
  *   4. No subtitle -> TranscribeButton shown by parent
  *
  * All successful fetches write back to cache via CACHE_SUBTITLE message.
@@ -133,7 +133,7 @@ export function useSubtitle(
 
           (async () => {
             try {
-              const result = await fetchBilibiliSubtitle(bvid!, cid!);
+              const result = await fetchSubtitle(bvid!, cid!);
               if (cancelled || resolved) return;
 
               if (result.status === 'ok' && result.rows.length > 0) {

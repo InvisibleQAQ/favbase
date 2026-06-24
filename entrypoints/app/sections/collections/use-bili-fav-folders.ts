@@ -1,10 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getBiliAuth } from '@/lib/bilibili/auth';
-import {
-  fetchFavFolderList,
-  BiliAuthError,
-  type BiliFavFolder,
-} from '@/lib/bilibili/favorites';
+import { getBiliAuth, fetchFavFolders, BiliAuthError } from '@/lib/bilibili/bilibili-api';
+import type { BiliFavFolder } from '@/lib/bilibili/types';
 
 type LoginState = 'unknown' | 'logged_in' | 'not_logged_in';
 
@@ -37,7 +33,7 @@ export function useBiliFavFolders(): UseFavFoldersReturn {
       }
       setLoginState('logged_in');
 
-      const folderList = await fetchFavFolderList(auth);
+      const folderList = await fetchFavFolders(auth);
       setFolders(folderList);
       setLastSyncedAt(new Date());
     } catch (err) {

@@ -1,5 +1,5 @@
 import type { InjectStateMachine } from './state';
-import { isSubtitleCdnUrl } from '../api';
+import { isSubtitleCdnUrl } from '../url-utils';
 
 export function installInterceptors(sm: InjectStateMachine): void {
   const originalFetch = window.fetch;

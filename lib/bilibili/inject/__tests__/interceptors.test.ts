@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isSubtitleCdnUrl } from '../../api';
+import { isSubtitleCdnUrl } from '../../url-utils';
 
 describe('isSubtitleCdnUrl', () => {
   it('detects BFS subtitle paths', () => {

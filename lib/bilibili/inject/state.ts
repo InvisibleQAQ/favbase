@@ -1,4 +1,4 @@
-import { extractBvid } from '../video-info';
+import { extractBvid } from '../url-utils';
 
 export type InjectPhase = 'idle' | 'triggering' | 'captured';
 

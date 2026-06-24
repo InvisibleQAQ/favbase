@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { extractBvid, extractPageNum, fetchCidByPageList } from '@/lib/bilibili/video-info';
+import { extractBvid, extractPageNum } from '@/lib/bilibili/url-utils';
+import { fetchCidByPageList } from '@/lib/bilibili/bilibili-api';
 import { onBiliMessage } from '@/lib/bilibili/messaging';
 
 interface VideoDetection {

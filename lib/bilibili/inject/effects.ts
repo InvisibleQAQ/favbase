@@ -1,4 +1,4 @@
-import { extractBvid } from '../video-info';
+import { extractBvid } from '../url-utils';
 import { postBiliMessage } from '../messaging';
 import type { RawSubtitleItem } from '../../types';
 import type { InjectEffects } from './state';

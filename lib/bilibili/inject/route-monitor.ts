@@ -1,4 +1,4 @@
-import { extractBvid, extractPageNum } from '../video-info';
+import { extractBvid, extractPageNum } from '../url-utils';
 import type { InjectStateMachine } from './state';
 
 export function startRouteMonitor(sm: InjectStateMachine): void {
