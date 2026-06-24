@@ -40,7 +40,7 @@ MVP 阶段，首个功能：B站视频转录（Bilitato 风格视频页面 AI �
 
 MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRouter`（Chrome 扩展页面不支持路径路由）。路由结构：`/`(Dashboard), `/collections`(收藏夹概览), `/collections/bilibili/:mediaId`(收藏夹视频列表), `/settings`。多平台预留：未来 `/collections/zhihu/:id` 等。
 
-- `entrypoints/app/main.tsx` — 入口：Hash Router + lazy 页面加载 + LoadingFallback
+- `entrypoints/app/main.tsx` — 入口：fire-and-forget `initDbProxy()` 建立 DB RPC 连接 + Hash Router + lazy 页面加载 + LoadingFallback
 - `entrypoints/app/App.tsx` — 根组件：ThemeProvider + Outlet
 - `entrypoints/app/global.css` — 全局样式：DM Sans Variable + Barlow 字体导入 + baseline reset
 - `entrypoints/app/theme/` — MUI v7 主题系统（palette/typography/shadows/custom-shadows/components），配色和排版完全对齐 material-kit-react
@@ -79,11 +79,11 @@ MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRo
 - `entrypoints/app/sections/collections/` — B站收藏夹页面组件
   - `collections-view.tsx` — 收藏夹主视图：同步按钮 + 卡片网格 + 未登录引导/空状态/loading skeleton。调用 useFolderCovers 传封面到卡片
   - `fav-folder-card.tsx` — 收藏夹卡片：封面图（resolvedCover 渐进式加载 + Skeleton + 首字母降级）+ 名称 + 视频数量，点击导航到 `#/collections/bilibili/:mediaId`
-  - `use-bili-fav-folders.ts` — B站收藏夹 hook：getBiliAuth 检测登录 → fetchFavFolders 获取列表 → 状态管理（folders/loading/syncing/loginState/error）
+  - `use-bili-fav-folders.ts` — B站收藏夹 hook：getBiliAuth 检测登录 → fetchFavFolders 获取列表 → 状态管理（folders/loading/syncing/loginState/error）。fetch 成功后 fire-and-forget 调用 syncFavFoldersToDb 持久化到 PGlite
   - `use-folder-covers.ts` — 收藏夹封面解析 hook：对 cover 为空且 media_count > 0 的收藏夹，并发 fetchFavVideos(auth, id, 1, 1) 取首个视频封面。返回 coverMap + loading。generation 守卫防竞态
   - `folder-detail-view.tsx` — 收藏夹视频列表页：返回按钮 + VideoCard 网格 + MUI Pagination 翻页 + 未登录/错误/空状态处理
   - `video-card.tsx` — 视频卡片：封面缩略图 + 时长标签 + 标题 + UP主 + 播放量，失效视频灰显（attr===9），点击跳转 B 站视频页
-  - `use-bili-fav-videos.ts` — 收藏夹视频 hook：fetchFavVideos 分页请求 + goToPage 翻页 + loading/error/loginState 状态管理
+  - `use-bili-fav-videos.ts` — 收藏夹视频 hook：fetchFavVideos 分页请求 + goToPage 翻页 + loading/error/loginState 状态管理。fetch 成功后 fire-and-forget 调用 syncFavVideosToDb 持久化到 PGlite（需先查 sources 表获取 sourceId）
 
 ### B站字幕获取 (Step 1 — 已完成，Bilitato 对齐)
 
@@ -95,7 +95,8 @@ MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRo
 - `lib/bilibili/types.ts` — RawSubtitleItem, BiliAuthInfo, BiliFavFolder, BiliFavVideo, BiliFavVideoListResponse, SubtitleTrack, DashAudioStream 等 bilibili 领域类型
 - `lib/bilibili/url-utils.ts` — 纯 URL 工具函数（零 chrome.* 依赖，Main World 安全）：extractBvid()（保留原始大小写）, extractPageNum(), isSubtitleCdnUrl()
 - `lib/bilibili/bilibili-api.ts` — B站 API 层深模块：内部 ENDPOINTS URL builder + BiliAuthError。导出 getBiliAuth()（chrome.cookies 读 SESSDATA/DedeUserID）, fetchFavFolders(auth)（收藏夹列表）, fetchFavVideos(auth, mediaId, page, ps=20)（收藏夹视频分页列表，`/x/v3/fav/resource/list`）, fetchSubtitle(bvid, cid)（字幕 API + CDN，Content Script 上下文）, fetchCidByPageList(bvid, pageNum)（CID 降级路径）, fetchPlayUrl(bvid, cid)（DASH manifest）, extractBiliAudioUrl(bvid, cid)（DASH manifest 最优音频流 URL 提取，供 transcription-handlers.ts 注入 pipeline deps）
-- `lib/bilibili/favorites-sync.ts` — syncFavFoldersToDb(db, folders)：将 BiliFavFolder[] upsert 到 PGlite sources 表（db 由调用方注入），返回 Source[]
+- `lib/bilibili/favorites-sync.ts` — syncFavFoldersToDb(db, folders)：将 BiliFavFolder[] upsert 到 PGlite sources 表（db 由调用方注入），返回 Source[]。由 `useBiliFavFolders` fetch 成功后 fire-and-forget 调用
+- `lib/bilibili/videos-sync.ts` — syncFavVideosToDb(db, videos, sourceId)：将 BiliFavVideo[] upsert 到 PGlite authors + items + item_sources 表。per-video try/catch，部分失败不中断。MVP insert-only 不更新已有记录。由 `useBiliFavVideos` fetch 成功后 fire-and-forget 调用
 - `lib/bilibili/subtitle-processor.ts` — processSubtitles() 四步管线：normalize -> filter -> filler removal -> deduplicate(Jaccard>0.85)。接受 B 站原始格式和 favbase 格式。每条字幕保持独立行，不合并
 - `entrypoints/bilibili-inject.content.ts` — Main World 入口协调器：创建 effects + 状态机 + 拦截器 + 路由监控，5 行 bootstrap
 - `lib/bilibili/inject/state.ts` — InjectStateMachine 状态机（createStateMachine(effects)），拥有全部状态转换（bootstrap/markCaptured/resetForRoute）+ 定时器编排 + reemit loop。通过 InjectEffects 接口注入副作用，纯逻辑可单元测试
@@ -128,8 +129,9 @@ MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRo
 - `lib/offscreen/main.ts` — Offscreen Document 逻辑：fetchAudioBytes(自行 fetch audioUrl) + resolveAudioDuration(HTML5 Audio 优先，ffprobe 降级) + FFmpeg 本地 WASM 加载(public/ffmpeg/) + estimateSafeChunkSeconds(0.72 安全系数) + buildOverlappedChunkPlan(600s+4s overlap) + splitAudioIntoChunks(FFmpeg -c:a copy) + transcribeChunk(per-chunk Groq API) + mergeTimestampedChunkRows(时间偏移+overlap 裁剪+1.5s 近邻去重)。最多 3 轮 30% 缩减。Session Map 带 10min TTL 自动清理（60s 扫描）+ FFmpeg 操作失败后 resetFFmpeg() 防止状态污染
 - `entrypoints/offscreen.html` — WXT unlisted page，通过 lifecycle.ensure() 按需创建
 - `lib/cache/video-cache.ts` — 视频缓存模块：normalizeBvid()（防御性小写规范化，所有公开函数入口调用）+ per-bvid 独立 key（`local:vc:{bvid}`）+ 内存缓存层（Map + structuredClone 深拷贝）+ mergeVideoCache(bvid, rows, source)（深接口：hash/timestamp 内部计算，Promise-based per-bvid 写锁 + hash 去重 + quota 降级）+ 旧格式迁移（`local:videoCache` → `local:vc:{bvid}`）+ initCacheStorageListener（Background 侧 chrome.storage.onChanged 同步内存缓存）。computeRowsHash 为模块内部函数，不导出
-- `entrypoints/background.ts` — Background SW thin dispatcher：构建 BackgroundContext（tabAbortControllers + sendToTab + ensureOffscreen from lifecycle.ts），`onMessage` switch 路由到独立 handler。~55 行
+- `entrypoints/background.ts` — Background SW thin dispatcher：initPortBridge(同步注册 onConnect) + BackgroundContext + `onMessage` switch 路由到独立 handler + onInstalled/onStartup 确保 Offscreen 存活
 - `lib/background/types.ts` — BackgroundContext 接口定义（纯通用调度契约，零 transcription 类型依赖）
+- `lib/background/port-bridge.ts` — PortBridge 双向 Chrome Port 中继：app.html → Background SW → Offscreen（3-hop 架构）。监听 `favbase-db` channel，为每个 Extension Page 连接创建到 Offscreen 的中继，指数退避重连（200ms-5s，最多 20 次）。Must 在 module load time 同步初始化（MV3 SW 要求）
 - `lib/background/transcription-handlers.ts` — handleTranscribe（runTranscriptionPipeline 编排 + PipelineDeps 适配器）+ handleTranscribeAbort + handleOffscreenProgress
 - `lib/background/cache-handlers.ts` — handleGetVideoCache + handleCacheSubtitle，委托 lib/cache/video-cache.ts
 
@@ -141,7 +143,7 @@ Provider factory + 测试连接 + 模型列表获取。为 app.html 设置页面
 
 ### PGlite + Drizzle 数据库层
 
-RPC Proxy 架构（参考 memorall）：Offscreen Document 持有 PGlite，Background SW / app.html 通过 Chrome Port 透明使用 Drizzle query builder。
+RPC Proxy 架构（参考 memorall 3-hop PortBridge 模式）：Offscreen Document 持有 PGlite，app.html 通过 PortBridge 中继（app.html → Background SW → Offscreen）透明使用 Drizzle query builder。app.html 启动时 fire-and-forget 调用 `initDbProxy()`，Background SW 负责 Offscreen 生命周期管理。
 
 - `lib/database/constants.ts` — `DB_CHANNEL_NAME`('favbase-db'), `DB_DATA_DIR`('idb://favbase'), `DatabaseMode` enum
 - `lib/database/entities/` — Per-table Drizzle schema 定义（entity-per-file）
@@ -182,7 +184,8 @@ RPC Proxy 架构（参考 memorall）：Offscreen Document 持有 PGlite，Backg
 - 字幕后处理: 所有字幕数据（无论来源）均通过 `processSubtitles()` 四步管线处理（不合并，逐条独立）
 - Background 消息桥: Content Script ↔ Background 通过 browser.runtime.sendMessage/onMessage。消息类型定义在 `lib/transcription/types.ts`（BgMessage union，4 成员：TRANSCRIBE_AUDIO/TRANSCRIBE_ABORT/GET_VIDEO_CACHE/CACHE_SUBTITLE）。Background → Content Script 进度推送用 browser.tabs.sendMessage。Background ↔ Offscreen 用 chrome.runtime.sendMessage（Chrome-specific API）。新增消息类型：在 BgMessage union 添加成员 + `lib/background/` 对应领域 handler 文件添加 handler 函数 + `background.ts` dispatcher switch 添加 case
 - B 站认证: manifest 声明 `cookies` 权限。`lib/bilibili/bilibili-api.ts` 的 `getBiliAuth()` 通过 `chrome.cookies.get()` 读取 SESSDATA + DedeUserID，检查 expirationDate。需要认证的 API（如 fetchFavFolders）手动拼 `Cookie: SESSDATA=xxx` header，Content Script 侧 API 通过 `credentials: 'include'` 自动带 cookie
-- B 站收藏夹: app.html 通过 `useBiliFavFolders` hook 直接调用 `getBiliAuth()` + `fetchFavFolders()` 获取数据并管理 UI 状态（loading/syncing/loginState/error），不经过 Background 消息桥
+- B 站收藏夹: app.html 通过 `useBiliFavFolders` hook 直接调用 `getBiliAuth()` + `fetchFavFolders()` 获取数据并管理 UI 状态（loading/syncing/loginState/error），不经过 Background 消息桥。fetch 成功后 fire-and-forget 调用 `syncFavFoldersToDb` 持久化到 PGlite sources 表
+- B 站视频持久化: `useBiliFavVideos` fetch 成功后 fire-and-forget 调用 `syncFavVideosToDb`，先查 sources 表获取 sourceId（收藏夹未 sync 则跳过）。per-video try/catch，DB 写入失败不影响 UI。MVP insert-only 不更新已有记录，`content_state='pending'`
 - 存储: WXT `storage.defineItem`（`local:` 前缀），import from `wxt/utils/storage`（非 `wxt/storage`）
 - 设置持久化: `settingsStorage`（`lib/storage.ts`），UserSettings 单对象存储在 `local:settings`。`useSettings`（`lib/hooks/useSettings.ts`）是共享 deep module — 内聚 storage 读写、computed 属性推导、收窄 action（`updateLlm`/`updateAsr` discriminated union）。ASR provider 字段通过 `ASR_FIELD_MAP` 映射（新增 provider 加 map 条目即可）。app.html 和 Content Script 都从此 hook 读写，Content Script 的 `hooks/useSettings.ts` 是 re-export
 - 侧边栏 Pin/Unpin: `sidebarPinnedStorage`（`lib/storage.ts`），布尔值存储在 `local:sidebarPinned`（默认 true）。DashboardLayout 读取并通过 toggle 按钮切换。Pinned=280px 展开（图标+文字），Unpinned=72px 图标栏（MUI Tooltip 显示菜单名）。Mobile（lg 以下）不受影响，始终 Drawer 模式
@@ -197,7 +200,7 @@ RPC Proxy 架构（参考 memorall）：Offscreen Document 持有 PGlite，Backg
 - ASR 转录流程: cache check → ensureGroqConnectivity(pre-flight) → extractBiliAudioUrl(bilibili-api.ts，DASH manifest 最优音频流，通过 PipelineDeps 注入) → fetchAudioBlob(平台无关 streaming 下载+progress) → assertAudioNotReused(SHA-256) → ≤24MB: requestGroqTranscription / >24MB: Offscreen FFmpeg 分块 → processSubtitles → cache
 - 视频缓存: `lib/cache/video-cache.ts` 模块。per-bvid 独立 key `local:vc:{bvid}`（chrome.storage 中为 `vc:{bvid}`）。内存缓存层（Map<string, VideoCacheEntry>）+ Promise-based per-bvid 写锁 + 内部 hash 去重（computeRowsHash 不导出）。调用方只传 `mergeVideoCache(bvid, rows, source)`，hash/timestamp 由 cache 内部管理。所有来源（bilibili/groq）字幕统一缓存。旧 `local:videoCache` 单体 key 在首次访问时自动迁移。Background 侧 initCacheStorageListener 保持内存缓存与 storage 同步，Content Script 侧 chrome.storage.onChanged 实现跨 tab UI 实时更新
 - Offscreen Document: WXT unlisted page `entrypoints/offscreen.html`，逻辑在 `lib/offscreen/main.ts`。通过 `lib/offscreen/lifecycle.ts` 的 `ensure()` 按需创建（singleton，in-flight promise 守卫防并发竞态）。Document 常驻不销毁（PGlite 需要）。**双职责**：FFmpeg WASM 分块 + PGlite 数据库持有者。两套 IPC 完全隔离：FFmpeg 用 `chrome.runtime.onMessage`（request/response），PGlite 用 `chrome.runtime.onConnect`（port-based RPC，channel name `favbase-db`）。Background 传 audioUrl（非 ArrayBuffer），Offscreen 自行 fetch 音频数据。FFmpeg WASM 从 `public/ffmpeg/`（@ffmpeg/core@0.12.10）本地加载。Session Map 带 10min TTL 自动清理防泄漏，FFmpeg 操作失败后自动 reset 实例防状态污染
-- PGlite 数据库: Offscreen Document 是唯一持有者（单连接模型），持久化到 IndexedDB（`idb://favbase`）。扩展：pgvector（`@electric-sql/pglite-pgvector`）、uuid-ossp、pg_trgm（内置 contrib）。`initDbMain()` 在 Offscreen 启动时调用：先同步注册 `DatabaseRpcHandler.startListening()`（`onConnect` listener 立即可用），再异步创建 PGlite + 跑迁移，完成后 `setPGlite()` 解除排队请求。这避免了调用方 connect 时 listener 未注册的时序竞态。Background SW 和 app.html 通过 `initDbProxy()` 创建 `PGliteSharedProxy`，Drizzle query builder 在调用端本地构建 SQL，仅执行通过 RPC 代理
+- PGlite 数据库: Offscreen Document 是唯一持有者（单连接模型），持久化到 IndexedDB（`idb://favbase`）。扩展：pgvector（`@electric-sql/pglite-pgvector`）、uuid-ossp、pg_trgm（内置 contrib）。`initDbMain()` 在 Offscreen 启动时调用：先同步注册 `DatabaseRpcHandler.startListening()`（`onConnect` listener 立即可用），再异步创建 PGlite + 跑迁移，完成后 `setPGlite()` 解除排队请求。这避免了调用方 connect 时 listener 未注册的时序竞态。app.html 通过 3-hop PortBridge 中继访问 DB：`initDbProxy()` → `chrome.runtime.connect('favbase-db')` → Background SW PortBridge → Offscreen RPC Handler。Background SW 在 `onInstalled`/`onStartup` 确保 Offscreen 存活。Drizzle query builder 在调用端本地构建 SQL，仅执行通过 RPC 代理
 - 数据库迁移: 自定义迁移系统（非 drizzle-kit），`_migrations` 表追踪版本。迁移脚本直接写 SQL（不用 Drizzle 内部 Symbol 反射）。`runMigrations(pg)` 在 `initDbMain()` 内自动执行。新增迁移：在 `lib/database/migrations/` 添加 `vNNN-*.ts`，在 `index.ts` 的 `migrations` 数组追加条目
 - Drizzle Schema: entity-per-file（`lib/database/entities/`），`schema.ts` 集中导出，`types.ts` 仅 type 导出（无运行时依赖，proxy 线程安全导入）。新增表：添加 entity 文件 + 更新 schema.ts + types.ts + 写迁移脚本
 - i18n 架构: `lib/i18n/` 自研轻量方案（无外部依赖），`detectLocale()` 基于 `navigator.language` 选择 zh-CN 或 en。locale 文件在 `lib/i18n/locales/{zh-CN,en}.ts`，`LocaleKeys` 类型从 zh-CN 推导。**seam 在 UI 边界**：lib 层（groq-client/audio-extractor/offscreen 等）只传结构化数据（TranscribeErrorCode + params / TranscribeStage + stageParams），UI 层通过 `t()` 翻译。`TranscribeErrorInfo.message` 是英文 debug-only 字段（console 用），不渲染到 UI。`t()` 对未知 key 返回 key 字符串本身（fallback）。新增 error/stage locale key 时需同时更新 zh-CN.ts 和 en.ts

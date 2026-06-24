@@ -6,8 +6,15 @@ import Box from '@mui/material/Box';
 import LinearProgress, { linearProgressClasses } from '@mui/material/LinearProgress';
 import { varAlpha } from 'minimal-shared/utils';
 
+import { initDbProxy } from '@/lib/database';
 import App from './App';
 import { DashboardLayout } from './layouts/dashboard';
+
+// Fire-and-forget: establish DB connection through PortBridge → Offscreen.
+// Does not block UI render. getDb() will be available after init completes.
+initDbProxy().catch((err) =>
+  console.error('[app] DB proxy init failed:', err),
+);
 
 const DashboardPage = lazy(() => import('./pages/dashboard'));
 const CollectionsPage = lazy(() => import('./pages/collections'));

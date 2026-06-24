@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getBiliAuth, fetchFavFolders, BiliAuthError } from '@/lib/bilibili/bilibili-api';
+import { syncFavFoldersToDb } from '@/lib/bilibili/favorites-sync';
+import { getDb } from '@/lib/database';
 import type { BiliFavFolder } from '@/lib/bilibili/types';
 
 type LoginState = 'unknown' | 'logged_in' | 'not_logged_in';
@@ -12,6 +14,11 @@ interface UseFavFoldersReturn {
   lastSyncedAt: Date | null;
   error: string | null;
   sync: () => Promise<void>;
+}
+
+async function syncFoldersToDb(folders: BiliFavFolder[]): Promise<void> {
+  const db = getDb();
+  await syncFavFoldersToDb(db, folders);
 }
 
 export function useBiliFavFolders(): UseFavFoldersReturn {
@@ -36,6 +43,13 @@ export function useBiliFavFolders(): UseFavFoldersReturn {
       const folderList = await fetchFavFolders(auth);
       setFolders(folderList);
       setLastSyncedAt(new Date());
+
+      // Fire-and-forget: persist folders to PGlite
+      if (folderList.length > 0) {
+        syncFoldersToDb(folderList).catch((err) =>
+          console.error('[fav-folders] DB sync failed:', err),
+        );
+      }
     } catch (err) {
       if (err instanceof BiliAuthError) {
         setLoginState('not_logged_in');

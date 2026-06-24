@@ -5,6 +5,8 @@ import type {
 import type { BackgroundContext } from '@/lib/background/types';
 import { initCacheStorageListener } from '@/lib/cache/video-cache';
 import { ensure as ensureOffscreen } from '@/lib/offscreen/lifecycle';
+import { initPortBridge } from '@/lib/background/port-bridge';
+import { DB_CHANNEL_NAME } from '@/lib/database/constants';
 import {
   handleTranscribe,
   handleTranscribeAbort,
@@ -16,6 +18,9 @@ import {
 } from '@/lib/background/cache-handlers';
 
 export default defineBackground(() => {
+  // Synchronous: register onConnect listener before any connection attempts (MV3 SW requirement)
+  initPortBridge(DB_CHANNEL_NAME, ensureOffscreen);
+
   initCacheStorageListener();
 
   const tabAbortControllers = new Map<number, AbortController>();
@@ -50,6 +55,19 @@ export default defineBackground(() => {
       }
     },
   );
+
+  // Ensure Offscreen Document exists on extension lifecycle events.
+  // Offscreen hosts PGlite — without it, DB RPC from app.html would queue forever.
+  chrome.runtime.onInstalled.addListener(() => {
+    ensureOffscreen().catch((err) =>
+      console.error('[background] onInstalled: ensureOffscreen failed', err),
+    );
+  });
+  chrome.runtime.onStartup.addListener(() => {
+    ensureOffscreen().catch((err) =>
+      console.error('[background] onStartup: ensureOffscreen failed', err),
+    );
+  });
 
   console.log('favbase background ready', { id: browser.runtime.id });
 });

@@ -13,7 +13,7 @@ export async function syncFavFoldersToDb(
   const results: Source[] = [];
 
   for (const folder of folders) {
-    const platformSourceId = String(folder.fid);
+    const platformSourceId = String(folder.id);
 
     const existing = await db
       .select()
