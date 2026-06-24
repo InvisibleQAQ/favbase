@@ -14,9 +14,10 @@ import {
   AsrError,
 } from '@/lib/transcription/groq-client';
 import {
-  extractAudioUrl,
   fetchAudioBlob,
+  AudioExtractError,
 } from '@/lib/transcription/audio-extractor';
+import { extractBiliAudioUrl } from '@/lib/bilibili/bilibili-api';
 import { assertAudioNotReused } from '@/lib/transcription/audio-fingerprint';
 import { processSubtitles } from '@/lib/bilibili/subtitle-processor';
 import {
@@ -61,7 +62,16 @@ export async function handleTranscribe(
       });
     },
     ensureConnectivity: ensureGroqConnectivity,
-    extractAudioUrl,
+    extractAudioUrl: async (bvid: string, cid: number) => {
+      try {
+        return await extractBiliAudioUrl(bvid, cid);
+      } catch (err) {
+        throw new AudioExtractError({
+          code: 'ASR_NO_AUDIO_SOURCE',
+          message: err instanceof Error ? err.message : 'Audio extraction failed',
+        });
+      }
+    },
     fetchAudio: fetchAudioBlob,
     checkAudioReuse: assertAudioNotReused,
     transcribeDirect: async (

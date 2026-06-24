@@ -1,5 +1,3 @@
-import { fetchPlayUrl } from '../bilibili/bilibili-api';
-import type { DashAudioStream } from '../bilibili/types';
 import type { TranscribeErrorInfo } from './types';
 import { PROGRESS } from './constants';
 
@@ -8,38 +6,6 @@ export class AudioExtractError extends Error {
     super(info.message);
     this.name = 'AudioExtractError';
   }
-}
-
-export async function extractAudioUrl(
-  bvid: string,
-  cid: number,
-): Promise<string> {
-  let dash;
-  try {
-    dash = await fetchPlayUrl(bvid, cid);
-  } catch (err) {
-    throw new AudioExtractError({
-      code: 'ASR_NO_AUDIO_SOURCE',
-      message: err instanceof Error ? err.message : 'playurl API failed',
-    });
-  }
-
-  const streams = [...dash.audio].sort(
-    (a: DashAudioStream, b: DashAudioStream) =>
-      (b.bandwidth ?? 0) - (a.bandwidth ?? 0),
-  );
-
-  const first = streams[0];
-  const audioUrl = first.baseUrl ?? first.base_url;
-
-  if (!audioUrl) {
-    throw new AudioExtractError({
-      code: 'ASR_NO_AUDIO_SOURCE',
-      message: 'Audio track URL is empty',
-    });
-  }
-
-  return audioUrl;
 }
 
 export async function fetchAudioBlob(
@@ -51,10 +17,6 @@ export async function fetchAudioBlob(
     method: 'GET',
     credentials: 'omit',
     mode: 'cors',
-    headers: {
-      Referer: 'https://www.bilibili.com/',
-      'User-Agent': navigator.userAgent,
-    },
     signal,
   });
 

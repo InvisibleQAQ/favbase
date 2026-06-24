@@ -205,3 +205,19 @@ export async function fetchPlayUrl(bvid: string, cid: number): Promise<DashManif
 
   return { audio: dash.audio };
 }
+
+/** Extract the best audio stream URL from a bilibili video's DASH manifest. */
+export async function extractBiliAudioUrl(
+  bvid: string,
+  cid: number,
+): Promise<string> {
+  const dash = await fetchPlayUrl(bvid, cid);
+  const streams = [...dash.audio].sort(
+    (a: DashAudioStream, b: DashAudioStream) =>
+      (b.bandwidth ?? 0) - (a.bandwidth ?? 0),
+  );
+  const first = streams[0];
+  const url = first.baseUrl ?? first.base_url;
+  if (!url) throw new Error('Audio track URL is empty in DASH manifest');
+  return url;
+}
