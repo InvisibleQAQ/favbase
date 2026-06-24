@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { LLMProviderDef, ASRProviderDef, UserSettings } from '@/lib/types';
 import { LLM_PROVIDERS, ASR_PROVIDERS, type LLMProviderId, type ASRProviderId } from '@/lib/providers';
+import type { LlmUpdate, AsrUpdate } from '@/lib/hooks/useSettings';
 import { t } from '@/lib/i18n';
 
 export interface SettingsViewProps {
@@ -16,17 +17,8 @@ export interface SettingsViewProps {
   currentAsrApiKey: string;
   currentAsrModel: string;
 
-  switchProvider: (id: LLMProviderId) => void;
-  updateLlmApiKey: (key: string) => void;
-  updateLlmModel: (model: string) => void;
-  updateCustomBaseUrl: (url: string) => void;
-  updateCustomProtocol: (protocol: 'openai' | 'claude') => void;
-
-  switchAsrProvider: (id: ASRProviderId) => void;
-  updateAsrApiKey: (key: string) => void;
-  updateAsrModel: (model: string) => void;
-
-  updatePrefMode: (mode: 'quality' | 'efficiency') => void;
+  updateLlm: (update: LlmUpdate) => void;
+  updateAsr: (update: AsrUpdate) => void;
 }
 
 export function SettingsView({
@@ -39,15 +31,8 @@ export function SettingsView({
   currentAsrDef,
   currentAsrApiKey,
   currentAsrModel,
-  switchProvider,
-  updateLlmApiKey,
-  updateLlmModel,
-  updateCustomBaseUrl,
-  updateCustomProtocol,
-  switchAsrProvider,
-  updateAsrApiKey,
-  updateAsrModel,
-  updatePrefMode,
+  updateLlm,
+  updateAsr,
 }: SettingsViewProps) {
   const [showLlmKey, setShowLlmKey] = useState(false);
   const [showAsrKey, setShowAsrKey] = useState(false);
@@ -64,7 +49,7 @@ export function SettingsView({
         <select
           className="favbase-settings-select"
           value={settings.provider}
-          onChange={(e) => switchProvider(e.target.value as LLMProviderId)}
+          onChange={(e) => updateLlm({ field: 'provider', value: e.target.value as LLMProviderId })}
         >
           {LLM_PROVIDERS.map((p) => (
             <option key={p.id} value={p.id}>{p.name}</option>
@@ -90,7 +75,7 @@ export function SettingsView({
             type={showLlmKey ? 'text' : 'password'}
             placeholder={t('settings.apiKeyPlaceholder')}
             value={currentLlmApiKey}
-            onChange={(e) => updateLlmApiKey(e.target.value)}
+            onChange={(e) => updateLlm({ field: 'apiKey', value: e.target.value })}
           />
           <button
             className="favbase-settings-toggle"
@@ -107,7 +92,7 @@ export function SettingsView({
           type="text"
           placeholder={currentProviderDef.defaultModel || t('settings.modelPlaceholder')}
           value={currentLlmModel}
-          onChange={(e) => updateLlmModel(e.target.value)}
+          onChange={(e) => updateLlm({ field: 'model', value: e.target.value })}
         />
 
         {isCustomProvider && (
@@ -118,7 +103,7 @@ export function SettingsView({
               type="text"
               placeholder={t('settings.customBaseUrlPlaceholder')}
               value={settings.customBaseUrl}
-              onChange={(e) => updateCustomBaseUrl(e.target.value)}
+              onChange={(e) => updateLlm({ field: 'customBaseUrl', value: e.target.value })}
             />
 
             <label className="favbase-settings-label">{t('settings.customProtocol')}</label>
@@ -126,7 +111,7 @@ export function SettingsView({
               className="favbase-settings-select"
               value={settings.customProtocol}
               onChange={(e) =>
-                updateCustomProtocol(e.target.value as 'openai' | 'claude')
+                updateLlm({ field: 'customProtocol', value: e.target.value as 'openai' | 'claude' })
               }
             >
               <option value="openai">OpenAI</option>
@@ -144,7 +129,7 @@ export function SettingsView({
         <select
           className="favbase-settings-select"
           value={settings.asrProvider}
-          onChange={(e) => switchAsrProvider(e.target.value as ASRProviderId)}
+          onChange={(e) => updateAsr({ field: 'provider', value: e.target.value as ASRProviderId })}
         >
           {ASR_PROVIDERS.map((p) => (
             <option key={p.id} value={p.id}>{p.name}</option>
@@ -158,7 +143,7 @@ export function SettingsView({
             type={showAsrKey ? 'text' : 'password'}
             placeholder={t('settings.apiKeyPlaceholder')}
             value={currentAsrApiKey}
-            onChange={(e) => updateAsrApiKey(e.target.value)}
+            onChange={(e) => updateAsr({ field: 'apiKey', value: e.target.value })}
           />
           <button
             className="favbase-settings-toggle"
@@ -175,7 +160,7 @@ export function SettingsView({
           type="text"
           placeholder={currentAsrDef.defaultModel}
           value={currentAsrModel}
-          onChange={(e) => updateAsrModel(e.target.value)}
+          onChange={(e) => updateAsr({ field: 'model', value: e.target.value })}
         />
       </div>
 
@@ -190,7 +175,7 @@ export function SettingsView({
               name="prefMode"
               value="quality"
               checked={settings.prefMode === 'quality'}
-              onChange={() => updatePrefMode('quality')}
+              onChange={() => updateLlm({ field: 'prefMode', value: 'quality' })}
             />
             <div className="favbase-settings-mode-content">
               <span className="favbase-settings-mode-label">{t('settings.modeQuality')}</span>
@@ -204,7 +189,7 @@ export function SettingsView({
               name="prefMode"
               value="efficiency"
               checked={settings.prefMode === 'efficiency'}
-              onChange={() => updatePrefMode('efficiency')}
+              onChange={() => updateLlm({ field: 'prefMode', value: 'efficiency' })}
             />
             <div className="favbase-settings-mode-content">
               <span className="favbase-settings-mode-label">{t('settings.modeEfficiency')}</span>

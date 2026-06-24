@@ -21,6 +21,7 @@ import Divider from '@mui/material/Divider';
 import { Iconify } from '../../components/iconify';
 import { LLM_PROVIDERS, type LLMProviderId } from '@/lib/providers';
 import type { UserSettings, LLMProviderDef } from '@/lib/types';
+import type { LlmUpdate } from '@/lib/hooks/useSettings';
 import { testLlmConnection, fetchAvailableModels, type TestConnectionResult } from '@/lib/ai';
 
 interface LlmConfigCardProps {
@@ -30,14 +31,7 @@ interface LlmConfigCardProps {
   currentLlmModel: string;
   isCustomProvider: boolean;
   saved: boolean;
-  switchProvider: (id: LLMProviderId) => void;
-  updateLlmApiKey: (key: string) => void;
-  updateLlmModel: (model: string) => void;
-  updateCustomBaseUrl: (url: string) => void;
-  updateCustomProtocol: (protocol: 'openai' | 'claude') => void;
-  updateTemperature: (value: number) => void;
-  updateMaxTokens: (value: number) => void;
-  updatePrefMode: (mode: 'quality' | 'efficiency') => void;
+  updateLlm: (update: LlmUpdate) => void;
 }
 
 export function LlmConfigCard({
@@ -47,14 +41,7 @@ export function LlmConfigCard({
   currentLlmModel,
   isCustomProvider,
   saved,
-  switchProvider,
-  updateLlmApiKey,
-  updateLlmModel,
-  updateCustomBaseUrl,
-  updateCustomProtocol,
-  updateTemperature,
-  updateMaxTokens,
-  updatePrefMode,
+  updateLlm,
 }: LlmConfigCardProps) {
   const [showKey, setShowKey] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
@@ -65,7 +52,6 @@ export function LlmConfigCard({
   const [remoteModels, setRemoteModels] = useState<string[]>([]);
   const [modelFetchError, setModelFetchError] = useState<string | null>(null);
 
-  // Clear transient state when provider changes
   const prevProviderRef = useRef(settings.provider);
   useEffect(() => {
     if (prevProviderRef.current !== settings.provider) {
@@ -133,7 +119,7 @@ export function LlmConfigCard({
               fullWidth
               label="LLM 服务商"
               value={settings.provider}
-              onChange={(e) => switchProvider(e.target.value as LLMProviderId)}
+              onChange={(e) => updateLlm({ field: 'provider', value: e.target.value as LLMProviderId })}
             >
               {LLM_PROVIDERS.map((p) => (
                 <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>
@@ -148,7 +134,7 @@ export function LlmConfigCard({
               label="Base URL"
               placeholder="https://your-endpoint.com/v1/"
               value={isCustomProvider ? settings.customBaseUrl : currentProviderDef.baseUrl}
-              onChange={isCustomProvider ? (e) => updateCustomBaseUrl(e.target.value) : undefined}
+              onChange={isCustomProvider ? (e) => updateLlm({ field: 'customBaseUrl', value: e.target.value }) : undefined}
               slotProps={{
                 input: { readOnly: !isCustomProvider },
               }}
@@ -163,7 +149,7 @@ export function LlmConfigCard({
                 fullWidth
                 label="协议"
                 value={settings.customProtocol}
-                onChange={(e) => updateCustomProtocol(e.target.value as 'openai' | 'claude')}
+                onChange={(e) => updateLlm({ field: 'customProtocol', value: e.target.value as 'openai' | 'claude' })}
               >
                 <MenuItem value="openai">OpenAI</MenuItem>
                 <MenuItem value="claude">Claude</MenuItem>
@@ -179,7 +165,7 @@ export function LlmConfigCard({
               type={showKey ? 'text' : 'password'}
               placeholder="sk-..."
               value={currentLlmApiKey}
-              onChange={(e) => updateLlmApiKey(e.target.value)}
+              onChange={(e) => updateLlm({ field: 'apiKey', value: e.target.value })}
               slotProps={{
                 input: {
                   endAdornment: (
@@ -224,7 +210,7 @@ export function LlmConfigCard({
               freeSolo
               options={remoteModels}
               value={currentLlmModel}
-              onInputChange={(_e, value) => updateLlmModel(value)}
+              onInputChange={(_e, value) => updateLlm({ field: 'model', value })}
               renderInput={(params) => (
                 <TextField
                   {...params}
@@ -317,7 +303,7 @@ export function LlmConfigCard({
               value={settings.temperature}
               onChange={(e) => {
                 const v = parseFloat(e.target.value);
-                if (!isNaN(v) && v >= 0 && v <= 2) updateTemperature(v);
+                if (!isNaN(v) && v >= 0 && v <= 2) updateLlm({ field: 'temperature', value: v });
               }}
               helperText="控制生成内容的随机性（0-2，推荐 0.3）"
               slotProps={{
@@ -334,7 +320,7 @@ export function LlmConfigCard({
               value={settings.maxTokens}
               onChange={(e) => {
                 const v = parseInt(e.target.value, 10);
-                if (!isNaN(v) && v > 0) updateMaxTokens(v);
+                if (!isNaN(v) && v > 0) updateLlm({ field: 'maxTokens', value: v });
               }}
               helperText="单次请求最大生成 token 数量"
               slotProps={{
@@ -351,7 +337,7 @@ export function LlmConfigCard({
               <ToggleButtonGroup
                 exclusive
                 value={settings.prefMode}
-                onChange={(_e, val) => { if (val) updatePrefMode(val); }}
+                onChange={(_e, val) => { if (val) updateLlm({ field: 'prefMode', value: val }); }}
                 sx={{ gap: 1 }}
               >
                 <ToggleButton value="quality" sx={{ px: 3 }}>

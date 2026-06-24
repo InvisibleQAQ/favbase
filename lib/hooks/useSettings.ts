@@ -4,40 +4,46 @@ import type { LLMProviderId, ASRProviderId } from '@/lib/providers';
 import { getProviderDef, ASR_PROVIDERS } from '@/lib/providers';
 import { settingsStorage, DEFAULT_SETTINGS } from '@/lib/storage';
 
+// Add new ASR provider here — no if/else needed
+const ASR_FIELD_MAP: Record<ASRProviderId, {
+  keyField: keyof UserSettings & string;
+  modelField: keyof UserSettings & string;
+}> = {
+  groq: { keyField: 'groqApiKey', modelField: 'groqModel' },
+  siliconflow: { keyField: 'siliconFlowApiKey', modelField: 'siliconFlowAsrModel' },
+};
+
+export type LlmUpdate =
+  | { field: 'provider'; value: LLMProviderId }
+  | { field: 'apiKey'; value: string }
+  | { field: 'model'; value: string }
+  | { field: 'customBaseUrl'; value: string }
+  | { field: 'customProtocol'; value: 'openai' | 'claude' }
+  | { field: 'temperature'; value: number }
+  | { field: 'maxTokens'; value: number }
+  | { field: 'prefMode'; value: 'quality' | 'efficiency' };
+
+export type AsrUpdate =
+  | { field: 'provider'; value: ASRProviderId }
+  | { field: 'apiKey'; value: string }
+  | { field: 'model'; value: string };
+
 export interface UseSettingsReturn {
   settings: UserSettings;
   loading: boolean;
   saved: boolean;
 
-  // LLM computed
   currentProviderDef: LLMProviderDef;
   currentLlmApiKey: string;
   currentLlmModel: string;
   isCustomProvider: boolean;
 
-  // ASR computed
   currentAsrDef: ASRProviderDef;
   currentAsrApiKey: string;
   currentAsrModel: string;
 
-  // LLM actions
-  switchProvider: (id: LLMProviderId) => void;
-  updateLlmApiKey: (key: string) => void;
-  updateLlmModel: (model: string) => void;
-  updateCustomBaseUrl: (url: string) => void;
-  updateCustomProtocol: (protocol: 'openai' | 'claude') => void;
-
-  // ASR actions
-  switchAsrProvider: (id: ASRProviderId) => void;
-  updateAsrApiKey: (key: string) => void;
-  updateAsrModel: (model: string) => void;
-
-  // Mode
-  updatePrefMode: (mode: 'quality' | 'efficiency') => void;
-
-  // Advanced
-  updateTemperature: (value: number) => void;
-  updateMaxTokens: (value: number) => void;
+  updateLlm: (update: LlmUpdate) => void;
+  updateAsr: (update: AsrUpdate) => void;
 }
 
 export function useSettings(): UseSettingsReturn {
@@ -46,6 +52,7 @@ export function useSettings(): UseSettingsReturn {
   const [saved, setSaved] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingRef = useRef<UserSettings | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -69,10 +76,12 @@ export function useSettings(): UseSettingsReturn {
   const updateSettings = useCallback((patch: Partial<UserSettings>) => {
     setSettings((prev) => {
       const next = { ...prev, ...patch };
+      pendingRef.current = next;
 
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
 
       saveTimerRef.current = setTimeout(() => {
+        pendingRef.current = null;
         settingsStorage.setValue(next).then(() => {
           setSaved(true);
           if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
@@ -86,7 +95,10 @@ export function useSettings(): UseSettingsReturn {
 
   useEffect(() => {
     return () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        if (pendingRef.current) settingsStorage.setValue(pendingRef.current);
+      }
       if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
     };
   }, []);
@@ -101,80 +113,57 @@ export function useSettings(): UseSettingsReturn {
     settings.providerModels[settings.provider] ?? currentProviderDef.defaultModel;
   const isCustomProvider = settings.provider === 'custom';
 
-  // --- ASR computed ---
+  // --- ASR computed (map-driven) ---
   const currentAsrDef = useMemo(
     () => ASR_PROVIDERS.find((p) => p.id === settings.asrProvider) ?? ASR_PROVIDERS[0],
     [settings.asrProvider],
   );
-  const isGroq = settings.asrProvider === 'groq';
-  const currentAsrApiKey = isGroq ? settings.groqApiKey : settings.siliconFlowApiKey;
-  const currentAsrModel = isGroq ? settings.groqModel : settings.siliconFlowAsrModel;
+  const asrFields = ASR_FIELD_MAP[settings.asrProvider];
+  const currentAsrApiKey = (settings[asrFields.keyField] as string) ?? '';
+  const currentAsrModel = (settings[asrFields.modelField] as string) ?? '';
 
-  // --- LLM actions ---
-  const switchProvider = useCallback(
-    (id: LLMProviderId) => updateSettings({ provider: id }),
-    [updateSettings],
+  // --- LLM action ---
+  const updateLlm = useCallback(
+    (update: LlmUpdate) => {
+      switch (update.field) {
+        case 'provider':
+          return updateSettings({ provider: update.value });
+        case 'apiKey':
+          return updateSettings({
+            providerApiKeys: { ...settings.providerApiKeys, [settings.provider]: update.value },
+          });
+        case 'model':
+          return updateSettings({
+            providerModels: { ...settings.providerModels, [settings.provider]: update.value },
+          });
+        case 'customBaseUrl':
+          return updateSettings({ customBaseUrl: update.value });
+        case 'customProtocol':
+          return updateSettings({ customProtocol: update.value });
+        case 'temperature':
+          return updateSettings({ temperature: update.value });
+        case 'maxTokens':
+          return updateSettings({ maxTokens: update.value });
+        case 'prefMode':
+          return updateSettings({ prefMode: update.value });
+      }
+    },
+    [updateSettings, settings.providerApiKeys, settings.providerModels, settings.provider],
   );
 
-  const updateLlmApiKey = useCallback(
-    (key: string) =>
-      updateSettings({
-        providerApiKeys: { ...settings.providerApiKeys, [settings.provider]: key },
-      }),
-    [updateSettings, settings.providerApiKeys, settings.provider],
-  );
-
-  const updateLlmModel = useCallback(
-    (model: string) =>
-      updateSettings({
-        providerModels: { ...settings.providerModels, [settings.provider]: model },
-      }),
-    [updateSettings, settings.providerModels, settings.provider],
-  );
-
-  const updateCustomBaseUrl = useCallback(
-    (url: string) => updateSettings({ customBaseUrl: url }),
-    [updateSettings],
-  );
-
-  const updateCustomProtocol = useCallback(
-    (protocol: 'openai' | 'claude') => updateSettings({ customProtocol: protocol }),
-    [updateSettings],
-  );
-
-  // --- ASR actions ---
-  const switchAsrProvider = useCallback(
-    (id: ASRProviderId) => updateSettings({ asrProvider: id }),
-    [updateSettings],
-  );
-
-  const updateAsrApiKey = useCallback(
-    (key: string) =>
-      updateSettings(isGroq ? { groqApiKey: key } : { siliconFlowApiKey: key }),
-    [updateSettings, isGroq],
-  );
-
-  const updateAsrModel = useCallback(
-    (model: string) =>
-      updateSettings(isGroq ? { groqModel: model } : { siliconFlowAsrModel: model }),
-    [updateSettings, isGroq],
-  );
-
-  // --- Mode ---
-  const updatePrefMode = useCallback(
-    (mode: 'quality' | 'efficiency') => updateSettings({ prefMode: mode }),
-    [updateSettings],
-  );
-
-  // --- Advanced ---
-  const updateTemperature = useCallback(
-    (value: number) => updateSettings({ temperature: value }),
-    [updateSettings],
-  );
-
-  const updateMaxTokens = useCallback(
-    (value: number) => updateSettings({ maxTokens: value }),
-    [updateSettings],
+  // --- ASR action (map-driven) ---
+  const updateAsr = useCallback(
+    (update: AsrUpdate) => {
+      switch (update.field) {
+        case 'provider':
+          return updateSettings({ asrProvider: update.value });
+        case 'apiKey':
+          return updateSettings({ [asrFields.keyField]: update.value });
+        case 'model':
+          return updateSettings({ [asrFields.modelField]: update.value });
+      }
+    },
+    [updateSettings, asrFields],
   );
 
   return {
@@ -191,19 +180,7 @@ export function useSettings(): UseSettingsReturn {
     currentAsrApiKey,
     currentAsrModel,
 
-    switchProvider,
-    updateLlmApiKey,
-    updateLlmModel,
-    updateCustomBaseUrl,
-    updateCustomProtocol,
-
-    switchAsrProvider,
-    updateAsrApiKey,
-    updateAsrModel,
-
-    updatePrefMode,
-
-    updateTemperature,
-    updateMaxTokens,
+    updateLlm,
+    updateAsr,
   };
 }

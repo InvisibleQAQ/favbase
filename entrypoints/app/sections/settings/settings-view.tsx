@@ -24,14 +24,7 @@ export function SettingsView() {
             currentLlmModel={s.currentLlmModel}
             isCustomProvider={s.isCustomProvider}
             saved={s.saved}
-            switchProvider={s.switchProvider}
-            updateLlmApiKey={s.updateLlmApiKey}
-            updateLlmModel={s.updateLlmModel}
-            updateCustomBaseUrl={s.updateCustomBaseUrl}
-            updateCustomProtocol={s.updateCustomProtocol}
-            updateTemperature={s.updateTemperature}
-            updateMaxTokens={s.updateMaxTokens}
-            updatePrefMode={s.updatePrefMode}
+            updateLlm={s.updateLlm}
           />
         </Grid>
 
@@ -41,9 +34,7 @@ export function SettingsView() {
             currentAsrDef={s.currentAsrDef}
             currentAsrApiKey={s.currentAsrApiKey}
             currentAsrModel={s.currentAsrModel}
-            switchAsrProvider={s.switchAsrProvider}
-            updateAsrApiKey={s.updateAsrApiKey}
-            updateAsrModel={s.updateAsrModel}
+            updateAsr={s.updateAsr}
           />
         </Grid>
 

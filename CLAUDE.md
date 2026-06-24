@@ -106,7 +106,7 @@ MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRo
   - `hooks/useSettings.ts` — re-export from `lib/hooks/useSettings.ts`（共享 hook）
   - `components/Panel.tsx` — 主面板容器：左侧图标栏（CC + Settings Tab，activeTab 切换）+ 右侧内容区（header + 可折叠 body），根据 activeTab 渲染 SubtitleView 或 SettingsView。通过 `settingsProps` 单对象透传设置相关数据
   - `components/SubtitleView.tsx` — 逐行字幕列表 + 搜索过滤（100ms debounce，CSS display:none 隐藏不匹配行，保持 activeIndex 稳定）+ 搜索高亮（`<mark>` 标黄匹配文本）+ 来源标签（source badge，显示"官方AI字幕"/"ASR 转录"/"ASR 缓存"）+ 时间戳点击跳转 + 当前播放行高亮（250ms 轮询 `<video>.currentTime`，二分查找活跃行）+ 自动滚动（搜索激活时暂停 auto-scroll，清空搜索后恢复；尊重用户手动滚动意图，4s 超时恢复）
-  - `components/SettingsView.tsx` — 纯渲染设置界面：LLM Provider 下拉（9个）+ 每 Provider 独立 API Key/Model + Custom 额外字段 + ASR Provider 切换 + 调用模式单选。零业务逻辑，所有 computed/action 通过 props 从 useSettings 接收
+  - `components/SettingsView.tsx` — 纯渲染设置界面：LLM Provider 下拉（9个）+ 每 Provider 独立 API Key/Model + Custom 额外字段 + ASR Provider 切换 + 调用模式单选。零业务逻辑，通过 `updateLlm`/`updateAsr` 两个 props 接收所有 action
   - `components/StatusBar.tsx` — 加载/无字幕/错误状态（来源信息已迁移到 SubtitleView 的 source badge）
   - `components/TranscribeButton.tsx` — 转录触发按钮 + 进度条（分阶段）+ 取消按钮 + 错误/重试 + rate limit 倒计时。stage/error 通过 `translateStage()`/`translateError()` 调用 `t()` 翻译，不直接渲染 error.message
   - `hooks/useTranscribe.ts` — ASR 转录状态管理：startTranscribe → browser.runtime.sendMessage(TRANSCRIBE_AUDIO) → 监听 TRANSCRIBE_STATUS 推送 → 结果/错误/重试倒计时。SPA 切换时自动重置。TranscribeState.stage 类型为 `TranscribeStage | ''`
@@ -164,7 +164,7 @@ RPC Proxy 架构（参考 memorall）：Offscreen Document 持有 PGlite，Backg
 
 ### 共享 Hooks
 
-- `lib/hooks/useSettings.ts` — deep module：settingsStorage 读写（debounced 500ms + watch 外部变更）+ LLM/ASR computed 属性（currentProviderDef, currentLlmApiKey, currentLlmModel, isCustomProvider, currentAsrDef, currentAsrApiKey, currentAsrModel）+ focused action 方法（switchProvider, updateLlmApiKey, updateLlmModel, switchAsrProvider, updateAsrApiKey, updateAsrModel, updatePrefMode, updateTemperature, updateMaxTokens）。app.html 和 Content Script 共享同一实例
+- `lib/hooks/useSettings.ts` — deep module：settingsStorage 读写（debounced 500ms + watch 外部变更 + unmount flush）+ LLM/ASR computed 属性（currentProviderDef, currentLlmApiKey, currentLlmModel, isCustomProvider, currentAsrDef, currentAsrApiKey, currentAsrModel）+ 收窄 action 接口：`updateLlm(LlmUpdate)` / `updateAsr(AsrUpdate)` 两个 discriminated union action 替代原 11 个独立 callback。ASR computed 和 action 通过 `ASR_FIELD_MAP` 驱动（新增 ASR provider 只需加 map 条目）。app.html 和 Content Script 共享同一实例
 
 ## 约定
 
@@ -181,7 +181,7 @@ RPC Proxy 架构（参考 memorall）：Offscreen Document 持有 PGlite，Backg
 - B 站认证: manifest 声明 `cookies` 权限。`lib/bilibili/bilibili-api.ts` 的 `getBiliAuth()` 通过 `chrome.cookies.get()` 读取 SESSDATA + DedeUserID，检查 expirationDate。需要认证的 API（如 fetchFavFolders）手动拼 `Cookie: SESSDATA=xxx` header，Content Script 侧 API 通过 `credentials: 'include'` 自动带 cookie
 - B 站收藏夹: app.html 通过 `useBiliFavFolders` hook 直接调用 `getBiliAuth()` + `fetchFavFolders()` 获取数据并管理 UI 状态（loading/syncing/loginState/error），不经过 Background 消息桥
 - 存储: WXT `storage.defineItem`（`local:` 前缀），import from `wxt/utils/storage`（非 `wxt/storage`）
-- 设置持久化: `settingsStorage`（`lib/storage.ts`），UserSettings 单对象存储在 `local:settings`。`useSettings`（`lib/hooks/useSettings.ts`）是共享 deep module — 内聚 storage 读写、computed 属性推导、focused action 方法。app.html 和 Content Script 都从此 hook 读写，Content Script 的 `hooks/useSettings.ts` 是 re-export
+- 设置持久化: `settingsStorage`（`lib/storage.ts`），UserSettings 单对象存储在 `local:settings`。`useSettings`（`lib/hooks/useSettings.ts`）是共享 deep module — 内聚 storage 读写、computed 属性推导、收窄 action（`updateLlm`/`updateAsr` discriminated union）。ASR provider 字段通过 `ASR_FIELD_MAP` 映射（新增 provider 加 map 条目即可）。app.html 和 Content Script 都从此 hook 读写，Content Script 的 `hooks/useSettings.ts` 是 re-export
 - 侧边栏 Pin/Unpin: `sidebarPinnedStorage`（`lib/storage.ts`），布尔值存储在 `local:sidebarPinned`（默认 true）。DashboardLayout 读取并通过 toggle 按钮切换。Pinned=280px 展开（图标+文字），Unpinned=72px 图标栏（MUI Tooltip 显示菜单名）。Mobile（lg 以下）不受影响，始终 Drawer 模式
 - AI SDK Provider 映射: `LLMProviderDef.sdkType` 驱动全部分支。openai → `@ai-sdk/openai`，anthropic → `@ai-sdk/anthropic`，google → `@ai-sdk/google`，openai-compatible → `@ai-sdk/openai-compatible`。custom provider 的 sdkType 静态为 `openai-compatible`，`customProtocol==='claude'` 时运行时覆盖为 anthropic。测试连接用 `generateText()`，模型列表用原生 fetch（AI SDK 无 model listing API），认证 header 由 `buildAuthHeaders(sdkType, apiKey)` 统一构建
 - Inject 状态机: 三阶段生命周期 idle → triggering → captured，通过 InjectEffects 接口注入 DOM/postMessage 副作用，状态转换集中在 state.ts 的 createStateMachine() 内。routeGeneration 作为并发守卫防止路由切换后旧 in-flight 拦截结果被采纳

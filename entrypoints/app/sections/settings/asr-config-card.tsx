@@ -11,15 +11,14 @@ import IconButton from '@mui/material/IconButton';
 import { Iconify } from '../../components/iconify';
 import { ASR_PROVIDERS, type ASRProviderId } from '@/lib/providers';
 import type { UserSettings, ASRProviderDef } from '@/lib/types';
+import type { AsrUpdate } from '@/lib/hooks/useSettings';
 
 interface AsrConfigCardProps {
   settings: UserSettings;
   currentAsrDef: ASRProviderDef;
   currentAsrApiKey: string;
   currentAsrModel: string;
-  switchAsrProvider: (id: ASRProviderId) => void;
-  updateAsrApiKey: (key: string) => void;
-  updateAsrModel: (model: string) => void;
+  updateAsr: (update: AsrUpdate) => void;
 }
 
 export function AsrConfigCard({
@@ -27,9 +26,7 @@ export function AsrConfigCard({
   currentAsrDef,
   currentAsrApiKey,
   currentAsrModel,
-  switchAsrProvider,
-  updateAsrApiKey,
-  updateAsrModel,
+  updateAsr,
 }: AsrConfigCardProps) {
   const [showKey, setShowKey] = useState(false);
 
@@ -47,7 +44,7 @@ export function AsrConfigCard({
               fullWidth
               label="ASR 服务商"
               value={settings.asrProvider}
-              onChange={(e) => switchAsrProvider(e.target.value as ASRProviderId)}
+              onChange={(e) => updateAsr({ field: 'provider', value: e.target.value as ASRProviderId })}
             >
               {ASR_PROVIDERS.map((p) => (
                 <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>
@@ -62,7 +59,7 @@ export function AsrConfigCard({
               type={showKey ? 'text' : 'password'}
               placeholder="输入 API Key"
               value={currentAsrApiKey}
-              onChange={(e) => updateAsrApiKey(e.target.value)}
+              onChange={(e) => updateAsr({ field: 'apiKey', value: e.target.value })}
               slotProps={{
                 input: {
                   endAdornment: (
@@ -90,7 +87,7 @@ export function AsrConfigCard({
               label="模型"
               placeholder={currentAsrDef.defaultModel}
               value={currentAsrModel}
-              onChange={(e) => updateAsrModel(e.target.value)}
+              onChange={(e) => updateAsr({ field: 'model', value: e.target.value })}
             />
           </Grid>
         </Grid>
