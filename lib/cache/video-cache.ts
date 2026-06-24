@@ -28,7 +28,7 @@ export function cloneData<T>(value: T): T {
 // Hash — lightweight fingerprint (aligned with Bilitato, NOT crypto SHA-256)
 // ---------------------------------------------------------------------------
 
-export function computeRowsHash(rows: SubtitleRow[]): string {
+function computeRowsHash(rows: SubtitleRow[]): string {
   if (!rows.length) return 'empty';
   const first = rows[0];
   const last = rows[rows.length - 1];
@@ -151,24 +151,29 @@ const CACHE_DEFAULTS: Omit<VideoCacheEntry, 'bvid'> = {
 
 export async function mergeVideoCache(
   bvid: string,
-  patch: Partial<VideoCacheEntry>,
+  rows: SubtitleRow[],
+  source: 'bilibili' | 'groq',
 ): Promise<VideoCacheEntry> {
   bvid = normalizeBvid(bvid);
+  const rawHash = computeRowsHash(rows);
 
   return withWriteLock(bvid, async () => {
     const current = await storage.getItem<VideoCacheEntry>(storageKey(bvid));
+
+    // Hash dedup: skip write if content unchanged
+    if (current?.rawHash && current.rawHash === rawHash) {
+      return cloneData(current);
+    }
 
     const merged: VideoCacheEntry = {
       ...CACHE_DEFAULTS,
       bvid,
       ...current,
-      ...patch,
+      rows,
+      source,
+      rawHash,
+      updatedAt: Date.now(),
     };
-
-    // Hash dedup: skip write if content unchanged
-    if (current?.rawHash && current.rawHash === merged.rawHash) {
-      return cloneData(current);
-    }
 
     // Attempt storage write
     try {
@@ -194,11 +199,7 @@ export async function mergeVideoCache(
 // ---------------------------------------------------------------------------
 
 export async function clearVideoCache(bvid: string): Promise<void> {
-  await mergeVideoCache(bvid, {
-    rows: [],
-    rawHash: '',
-    updatedAt: Date.now(),
-  });
+  await mergeVideoCache(bvid, [], 'bilibili');
 }
 
 // ---------------------------------------------------------------------------

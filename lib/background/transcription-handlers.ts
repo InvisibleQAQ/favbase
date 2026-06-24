@@ -27,7 +27,6 @@ import {
 import {
   getVideoCache,
   mergeVideoCache,
-  computeRowsHash,
 } from '@/lib/cache/video-cache';
 import { runTranscriptionPipeline } from '@/lib/transcription/pipeline';
 
@@ -53,13 +52,7 @@ export async function handleTranscribe(
       return { rows: entry.rows, source: entry.source };
     },
     saveCache: async (id: string, rows: SubtitleRow[]) => {
-      await mergeVideoCache(id, {
-        bvid: id,
-        rows,
-        source: 'groq',
-        rawHash: computeRowsHash(rows),
-        updatedAt: Date.now(),
-      });
+      await mergeVideoCache(id, rows, 'groq');
     },
     ensureConnectivity: ensureGroqConnectivity,
     extractAudioUrl: async (bvid: string, cid: number) => {

@@ -2,9 +2,7 @@ import type { SubtitleRow } from '@/lib/types';
 import type { CacheSubtitleRequest } from '@/lib/transcription/types';
 import {
   getVideoCache,
-  normalizeBvid,
   mergeVideoCache,
-  computeRowsHash,
 } from '@/lib/cache/video-cache';
 
 export function handleGetVideoCache(
@@ -19,15 +17,7 @@ export function handleGetVideoCache(
 export function handleCacheSubtitle(
   msg: CacheSubtitleRequest,
 ): Promise<{ success: boolean }> {
-  const bvid = normalizeBvid(msg.bvid);
-  const hash = computeRowsHash(msg.rows);
-  return mergeVideoCache(bvid, {
-    bvid,
-    rows: msg.rows,
-    source: msg.source,
-    rawHash: hash,
-    updatedAt: Date.now(),
-  })
+  return mergeVideoCache(msg.bvid, msg.rows, msg.source)
     .then(() => ({ success: true }))
     .catch((err) => {
       console.warn('[background] CACHE_SUBTITLE failed:', err);
