@@ -137,6 +137,16 @@ MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRo
 - `lib/background/transcription-handlers.ts` — handleTranscribe（runTranscriptionPipeline 编排 + PipelineDeps 适配器）+ handleTranscribeAbort + handleOffscreenProgress
 - `lib/background/cache-handlers.ts` — handleGetVideoCache + handleCacheSubtitle，委托 lib/cache/video-cache.ts
 
+### 数据导出模块
+
+PGlite 全量导出（JSON / CSV+ZIP），纯 app.html 侧运行。高内聚 4 模块 + 1 UI 组件。
+
+- `lib/export/query.ts` — `queryAllTables(db, includeEmbedding)` 并发查询 6 张表，Date→ISO 序列化，可选剥离 embedding 列。`isTableDataEmpty()` 判空
+- `lib/export/serialize-json.ts` — `toExportJson(data)` 纯函数，输出 `{ exported_at, version:1, tables }` JSON string
+- `lib/export/serialize-csv.ts` — `toExportCsvZip(data)` 纯函数，RFC 4180 CSV + fflate ZIP 打包，返回 Uint8Array
+- `lib/export/download.ts` — `triggerDownload(blob, filename)` 浏览器下载 + `buildExportFilename(format)` 文件名生成
+- `entrypoints/app/sections/overview/export-card.tsx` — MUI Card 导出 UI：格式切换（JSON/CSV）+ embedding Checkbox + 导出按钮 + 空数据/DB 未就绪错误处理
+
 ### Vercel AI SDK 集成层
 
 Provider factory + 测试连接 + 模型列表获取。为 app.html 设置页面和未来 LLM 总结（Step 3）提供基础设施。

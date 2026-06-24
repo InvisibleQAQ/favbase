@@ -8,6 +8,7 @@ import Box from '@mui/material/Box';
 import { Iconify } from '../../components/iconify';
 import { DashboardContent } from '../../layouts/dashboard';
 import { StatWidget } from './stat-widget';
+import { ExportCard } from './export-card';
 
 export function OverviewView() {
   return (
@@ -144,6 +145,10 @@ export function OverviewView() {
               </Box>
             </CardContent>
           </Card>
+        </Grid>
+
+        <Grid size={{ xs: 12, md: 6, lg: 4 }}>
+          <ExportCard />
         </Grid>
       </Grid>
     </DashboardContent>
