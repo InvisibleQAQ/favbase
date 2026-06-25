@@ -5,10 +5,12 @@ import type {
   TranscribeStage,
   TranscribeStatusPush,
   TranscribeErrorInfo,
+} from '@/lib/transcription/types';
+import type {
   OffscreenProgressMessage,
   OffscreenPrepareRequest,
   OffscreenTranscribeRequest,
-} from '@/lib/transcription/types';
+} from '@/lib/offscreen/types';
 import { settingsStorage } from '@/lib/storage';
 import {
   ensureGroqConnectivity,

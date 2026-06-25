@@ -1,4 +1,5 @@
-import type { SubtitleRow, CacheSubtitleRequest } from '@/lib/transcription/types';
+import type { SubtitleRow } from '@/lib/transcription/types';
+import type { CacheSubtitleRequest } from '@/lib/cache/types';
 import {
   getVideoCache,
   mergeVideoCache,

@@ -1,9 +1,6 @@
 import {
   PipelineError,
   type SubtitleRow,
-  type GroqTranscriptionResult,
-  type GroqTranscriptionResponse,
-  type GroqQuota,
   type TranscribeErrorInfo,
 } from './types';
 import {
@@ -15,6 +12,28 @@ import {
   AUDIO_FILE_NAME,
   AUDIO_MIME_TYPE,
 } from './constants';
+
+interface GroqSegment {
+  start: number;
+  end: number;
+  text: string;
+}
+
+interface GroqTranscriptionResponse {
+  text: string;
+  segments?: GroqSegment[];
+}
+
+interface GroqQuota {
+  remainingTokens: number;
+  remainingRequests: number;
+  resetTokens: string;
+}
+
+interface GroqTranscriptionResult {
+  rows: SubtitleRow[];
+  quota: GroqQuota;
+}
 
 export class AsrError extends PipelineError {
   constructor(info: TranscribeErrorInfo) {

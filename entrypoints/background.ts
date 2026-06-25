@@ -1,7 +1,5 @@
-import type {
-  OffscreenProgressMessage,
-  BgMessage,
-} from '@/lib/transcription/types';
+import type { BgMessage } from '@/lib/background/messages';
+import type { OffscreenProgressMessage } from '@/lib/offscreen/types';
 import type { BackgroundContext } from '@/lib/background/types';
 import { initCacheStorageListener } from '@/lib/cache/video-cache';
 import { ensure as ensureOffscreen } from '@/lib/offscreen/lifecycle';

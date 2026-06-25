@@ -2,12 +2,14 @@ import { FFmpeg } from '@ffmpeg/ffmpeg';
 import {
   PipelineError,
   type SubtitleRow,
-  type OffscreenRequest,
-  type OffscreenPrepareRequest,
-  type OffscreenTranscribeRequest,
-  type ChunkPlan,
   type TranscribeErrorInfo,
 } from '@/lib/transcription/types';
+import type {
+  OffscreenRequest,
+  OffscreenPrepareRequest,
+  OffscreenTranscribeRequest,
+  ChunkPlan,
+} from './types';
 import {
   CHUNK_SECONDS,
   CHUNK_OVERLAP_SECONDS,

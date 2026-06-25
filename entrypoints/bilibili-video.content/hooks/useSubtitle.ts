@@ -3,7 +3,8 @@ import { fetchSubtitle } from '@/lib/bilibili/bilibili-api';
 import { processSubtitles } from '@/lib/bilibili/subtitle-processor';
 import { onBiliMessage } from '@/lib/bilibili/messaging';
 import { normalizeBvid } from '@/lib/cache/video-cache';
-import type { SubtitleRow, VideoCacheEntry } from '@/lib/transcription/types';
+import type { SubtitleRow } from '@/lib/transcription/types';
+import type { VideoCacheEntry } from '@/lib/cache/types';
 
 export interface SubtitleState {
   rows: SubtitleRow[];
