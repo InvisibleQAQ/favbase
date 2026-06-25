@@ -1,4 +1,4 @@
-import { eq, and } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { authors } from '@/lib/database/entities/authors';
 import { items } from '@/lib/database/entities/items';
 import { itemSources } from '@/lib/database/entities/item-sources';
@@ -7,109 +7,109 @@ import type { BiliFavVideo } from './types';
 
 const PLATFORM = 'bilibili';
 
-/**
- * Persist BiliFavVideo[] to PGlite: upsert authors + items + item_sources.
- * MVP: insert-only — existing records are not updated.
- * Per-video try/catch so partial failures don't abort the batch.
- */
 export async function syncFavVideosToDb(
   db: FavbaseDb,
   videos: BiliFavVideo[],
   sourceId: string,
 ): Promise<void> {
-  for (const video of videos) {
-    if (!video.bvid) continue;
+  const valid = videos.filter((v) => v.bvid);
+  if (valid.length === 0) return;
 
-    try {
-      // 1. Upsert author
-      const platformAuthorId = String(video.upper.mid);
-      const existingAuthor = await db
-        .select()
+  try {
+    await db.transaction(async (tx) => {
+      // 1. Deduplicate authors by platformAuthorId, keep first occurrence
+      const authorMap = new Map<string, BiliFavVideo['upper']>();
+      for (const v of valid) {
+        const key = String(v.upper.mid);
+        if (!authorMap.has(key)) authorMap.set(key, v.upper);
+      }
+
+      const authorValues = [...authorMap.entries()].map(([pid, upper]) => ({
+        platform: PLATFORM,
+        platformAuthorId: pid,
+        name: upper.name,
+        avatarUrl: upper.face || null,
+      }));
+
+      await tx
+        .insert(authors)
+        .values(authorValues)
+        .onConflictDoNothing({ target: [authors.platform, authors.platformAuthorId] });
+
+      // 2. Batch select authors to build platformAuthorId -> id map
+      const authorRows = await tx
+        .select({ id: authors.id, platformAuthorId: authors.platformAuthorId })
         .from(authors)
         .where(
           and(
             eq(authors.platform, PLATFORM),
-            eq(authors.platformAuthorId, platformAuthorId),
+            inArray(authors.platformAuthorId, [...authorMap.keys()]),
           ),
-        )
-        .limit(1);
+        );
 
-      let authorId: string;
-      if (existingAuthor.length > 0) {
-        authorId = existingAuthor[0].id;
-      } else {
-        const [inserted] = await db
-          .insert(authors)
-          .values({
+      const authorIdMap = new Map(authorRows.map((r) => [r.platformAuthorId, r.id]));
+
+      // 3. Batch insert items
+      const itemValues = valid
+        .map((v) => {
+          const authorId = authorIdMap.get(String(v.upper.mid));
+          if (!authorId) return null;
+          return {
             platform: PLATFORM,
-            platformAuthorId,
-            name: video.upper.name,
-            avatarUrl: video.upper.face || null,
-          })
-          .returning();
-        authorId = inserted.id;
-      }
+            platformItemId: v.bvid,
+            authorId,
+            title: v.title,
+            authorName: v.upper.name,
+            originalUrl: `https://www.bilibili.com/video/${v.bvid}`,
+            contentState: 'pending' as const,
+            platformMeta: {
+              cover: v.cover,
+              intro: v.intro,
+              duration: v.duration,
+              cnt_info: v.cnt_info,
+              attr: v.attr,
+              type: v.type,
+              fav_time: v.fav_time,
+            },
+          };
+        })
+        .filter((v): v is NonNullable<typeof v> => v !== null);
 
-      // 2. Upsert item
-      const existingItem = await db
-        .select()
+      await tx
+        .insert(items)
+        .values(itemValues)
+        .onConflictDoNothing({ target: [items.platform, items.platformItemId] });
+
+      // 4. Batch select items to build bvid -> id map
+      const bvids = valid.map((v) => v.bvid);
+      const itemRows = await tx
+        .select({ id: items.id, platformItemId: items.platformItemId })
         .from(items)
         .where(
           and(
             eq(items.platform, PLATFORM),
-            eq(items.platformItemId, video.bvid),
+            inArray(items.platformItemId, bvids),
           ),
-        )
-        .limit(1);
+        );
 
-      let itemId: string;
-      if (existingItem.length > 0) {
-        itemId = existingItem[0].id;
-      } else {
-        const [inserted] = await db
-          .insert(items)
-          .values({
-            platform: PLATFORM,
-            platformItemId: video.bvid,
-            authorId,
-            title: video.title,
-            authorName: video.upper.name,
-            originalUrl: `https://www.bilibili.com/video/${video.bvid}`,
-            contentState: 'pending',
-            platformMeta: {
-              cover: video.cover,
-              intro: video.intro,
-              duration: video.duration,
-              cnt_info: video.cnt_info,
-              attr: video.attr,
-              type: video.type,
-              fav_time: video.fav_time,
-            },
-          })
-          .returning();
-        itemId = inserted.id;
+      const itemIdMap = new Map(itemRows.map((r) => [r.platformItemId, r.id]));
+
+      // 5. Batch insert item_sources links
+      const linkValues = valid
+        .map((v) => {
+          const itemId = itemIdMap.get(v.bvid);
+          return itemId ? { itemId, sourceId } : null;
+        })
+        .filter((v): v is { itemId: string; sourceId: string } => v !== null);
+
+      if (linkValues.length > 0) {
+        await tx
+          .insert(itemSources)
+          .values(linkValues)
+          .onConflictDoNothing();
       }
-
-      // 3. Upsert item_sources link
-      const existingLink = await db
-        .select()
-        .from(itemSources)
-        .where(
-          and(
-            eq(itemSources.itemId, itemId),
-            eq(itemSources.sourceId, sourceId),
-          ),
-        )
-        .limit(1);
-
-      if (existingLink.length === 0) {
-        await db.insert(itemSources).values({ itemId, sourceId });
-      }
-    } catch (err) {
-      console.error(
-        `[videos-sync] Failed to sync video bvid=${video.bvid}:`,
-        err,
-      );
-    }
+    });
+  } catch (err) {
+    console.error('[videos-sync] Batch sync failed:', err);
   }
 }
