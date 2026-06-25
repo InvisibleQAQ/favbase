@@ -1,5 +1,4 @@
 import type { BgMessage } from '@/lib/background/messages';
-import type { OffscreenProgressMessage } from '@/lib/offscreen/types';
 import type { BackgroundContext } from '@/lib/background/types';
 import { initCacheStorageListener } from '@/lib/cache/video-cache';
 import { ensure as ensureOffscreen } from '@/lib/offscreen/lifecycle';
@@ -33,12 +32,12 @@ export default defineBackground(() => {
 
   browser.runtime.onMessage.addListener(
     (
-      msg: OffscreenProgressMessage | BgMessage,
+      msg: BgMessage,
       sender: { tab?: { id?: number } },
     ): void | Promise<unknown> => {
       switch (msg.type) {
         case 'OFFSCREEN_CHUNK_PROGRESS':
-          handleOffscreenProgress(msg as OffscreenProgressMessage, ctx);
+          handleOffscreenProgress(msg, ctx);
           return;
         case 'TRANSCRIBE_ABORT':
           return handleTranscribeAbort(sender.tab?.id, ctx);
