@@ -13,10 +13,7 @@ export interface UserSettings {
 
   // ASR
   asrProvider: ASRProviderId;
-  groqApiKey: string;
-  groqModel: string;
-  siliconFlowApiKey: string;
-  siliconFlowAsrModel: string;
+  asrConfigs: Record<string, { apiKey: string; model: string }>;
 
   // Mode
   prefMode: 'quality' | 'efficiency';
@@ -37,10 +34,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
 
   // ASR
   asrProvider: 'groq',
-  groqApiKey: '',
-  groqModel: 'whisper-large-v3-turbo',
-  siliconFlowApiKey: '',
-  siliconFlowAsrModel: 'FunAudioLLM/SenseVoiceSmall',
+  asrConfigs: {},
 
   // Mode
   prefMode: 'efficiency',
@@ -60,19 +54,47 @@ export const sidebarPinnedStorage = storage.defineItem<boolean>(
   { fallback: true },
 );
 
-export const ASR_FIELD_MAP: Record<ASRProviderId, {
-  keyField: keyof UserSettings & string;
-  modelField: keyof UserSettings & string;
-}> = {
-  groq: { keyField: 'groqApiKey', modelField: 'groqModel' },
-  siliconflow: { keyField: 'siliconFlowApiKey', modelField: 'siliconFlowAsrModel' },
-};
-
 export function resolveAsrConfig(settings: UserSettings): { apiKey: string; model: string } {
-  const fields = ASR_FIELD_MAP[settings.asrProvider];
+  const cfg = settings.asrConfigs?.[settings.asrProvider];
   const def = getAsrProviderDef(settings.asrProvider);
   return {
-    apiKey: (settings[fields.keyField] as string) ?? '',
-    model: (settings[fields.modelField] as string) || def.defaultModel,
+    apiKey: cfg?.apiKey ?? '',
+    model: cfg?.model || def.defaultModel,
   };
+}
+
+/**
+ * One-time migration: flat ASR fields -> asrConfigs record.
+ * Call from background.ts onInstalled/onStartup. Idempotent.
+ */
+export async function migrateSettingsIfNeeded(): Promise<void> {
+  const raw = await settingsStorage.getValue();
+
+  // Already migrated or fresh install (asrConfigs exists and has entries, or old fields absent)
+  if (raw.asrConfigs && Object.keys(raw.asrConfigs).length > 0) return;
+
+  // Check for old flat fields
+  const anyRaw = raw as unknown as Record<string, unknown>;
+  const hasOldFields =
+    anyRaw.groqApiKey || anyRaw.groqModel ||
+    anyRaw.siliconFlowApiKey || anyRaw.siliconFlowAsrModel;
+
+  if (!hasOldFields) return; // fresh install, nothing to migrate
+
+  const asrConfigs: Record<string, { apiKey: string; model: string }> = {};
+
+  if (anyRaw.groqApiKey || anyRaw.groqModel) {
+    asrConfigs.groq = {
+      apiKey: (anyRaw.groqApiKey as string) ?? '',
+      model: (anyRaw.groqModel as string) ?? '',
+    };
+  }
+  if (anyRaw.siliconFlowApiKey || anyRaw.siliconFlowAsrModel) {
+    asrConfigs.siliconflow = {
+      apiKey: (anyRaw.siliconFlowApiKey as string) ?? '',
+      model: (anyRaw.siliconFlowAsrModel as string) ?? '',
+    };
+  }
+
+  await settingsStorage.setValue({ ...raw, asrConfigs });
 }

@@ -4,6 +4,7 @@ import { initCacheStorageListener } from '@/lib/cache/video-cache';
 import { ensure as ensureOffscreen } from '@/lib/offscreen/lifecycle';
 import { initPortBridge } from '@/lib/background/port-bridge';
 import { DB_CHANNEL_NAME } from '@/lib/database/constants';
+import { migrateSettingsIfNeeded } from '@/lib/storage';
 import {
   handleTranscribe,
   handleTranscribeAbort,
@@ -59,10 +60,16 @@ export default defineBackground(() => {
     ensureOffscreen().catch((err) =>
       console.error('[background] onInstalled: ensureOffscreen failed', err),
     );
+    migrateSettingsIfNeeded().catch((err) =>
+      console.error('[background] onInstalled: settings migration failed', err),
+    );
   });
   chrome.runtime.onStartup.addListener(() => {
     ensureOffscreen().catch((err) =>
       console.error('[background] onStartup: ensureOffscreen failed', err),
+    );
+    migrateSettingsIfNeeded().catch((err) =>
+      console.error('[background] onStartup: settings migration failed', err),
     );
   });
 

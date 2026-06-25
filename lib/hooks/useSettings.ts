@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LLMProviderId, ASRProviderId, LLMProviderDef, ASRProviderDef } from '@/lib/providers';
 import { getProviderDef, ASR_PROVIDERS } from '@/lib/providers';
 import type { UserSettings } from '@/lib/storage';
-import { settingsStorage, DEFAULT_SETTINGS, ASR_FIELD_MAP, resolveAsrConfig } from '@/lib/storage';
+import { settingsStorage, DEFAULT_SETTINGS, resolveAsrConfig } from '@/lib/storage';
 
 export type LlmUpdate =
   | { field: 'provider'; value: LLMProviderId }
@@ -104,7 +104,7 @@ export function useSettings(): UseSettingsReturn {
     settings.providerModels[settings.provider] ?? currentProviderDef.defaultModel;
   const isCustomProvider = settings.provider === 'custom';
 
-  // --- ASR computed (map-driven) ---
+  // --- ASR computed ---
   const currentAsrDef = useMemo(
     () => ASR_PROVIDERS.find((p) => p.id === settings.asrProvider) ?? ASR_PROVIDERS[0],
     [settings.asrProvider],
@@ -112,7 +112,6 @@ export function useSettings(): UseSettingsReturn {
   const resolved = resolveAsrConfig(settings);
   const currentAsrApiKey = resolved.apiKey;
   const currentAsrModel = resolved.model;
-  const asrFields = ASR_FIELD_MAP[settings.asrProvider];
 
   // --- LLM action ---
   const updateLlm = useCallback(
@@ -143,19 +142,27 @@ export function useSettings(): UseSettingsReturn {
     [updateSettings, settings.providerApiKeys, settings.providerModels, settings.provider],
   );
 
-  // --- ASR action (map-driven) ---
+  // --- ASR action ---
   const updateAsr = useCallback(
     (update: AsrUpdate) => {
       switch (update.field) {
         case 'provider':
           return updateSettings({ asrProvider: update.value });
-        case 'apiKey':
-          return updateSettings({ [asrFields.keyField]: update.value });
-        case 'model':
-          return updateSettings({ [asrFields.modelField]: update.value });
+        case 'apiKey': {
+          const cur = settings.asrConfigs?.[settings.asrProvider] ?? { apiKey: '', model: '' };
+          return updateSettings({
+            asrConfigs: { ...settings.asrConfigs, [settings.asrProvider]: { ...cur, apiKey: update.value } },
+          });
+        }
+        case 'model': {
+          const cur = settings.asrConfigs?.[settings.asrProvider] ?? { apiKey: '', model: '' };
+          return updateSettings({
+            asrConfigs: { ...settings.asrConfigs, [settings.asrProvider]: { ...cur, model: update.value } },
+          });
+        }
       }
     },
-    [updateSettings, asrFields],
+    [updateSettings, settings.asrConfigs, settings.asrProvider],
   );
 
   return {
