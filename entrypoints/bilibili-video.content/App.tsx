@@ -1,7 +1,7 @@
 import { Panel } from './components/Panel';
 import { useVideoDetect } from './hooks/useVideoDetect';
 import { useSubtitle } from './hooks/useSubtitle';
-import { useSettings } from './hooks/useSettings';
+import { useSettings } from '@/lib/hooks/useSettings';
 import { useTranscribe } from './hooks/useTranscribe';
 
 export default function App() {
