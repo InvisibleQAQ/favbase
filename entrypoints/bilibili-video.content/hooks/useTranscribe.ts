@@ -40,11 +40,11 @@ export function useTranscribe(
   });
 
   const { countdown, startCountdown, resetCountdown } = useRetryCountdown();
-  const prevBvidRef = useRef<string | null>(null);
+  const bvidRef = useRef<string | null>(null);
 
   useEffect(() => {
-    const prevBvid = prevBvidRef.current;
-    prevBvidRef.current = bvid;
+    const prevBvid = bvidRef.current;
+    bvidRef.current = bvid;
 
     if (prevBvid && prevBvid !== bvid) {
       browser.runtime
@@ -99,6 +99,7 @@ export function useTranscribe(
     browser.runtime
       .sendMessage({ type: 'TRANSCRIBE_AUDIO', bvid, cid, title })
       .then((response: unknown) => {
+        if (bvidRef.current?.toLowerCase() !== bvid?.toLowerCase()) return;
         const res = response as TranscribeResponse;
 
         if (res.success) {
@@ -124,6 +125,7 @@ export function useTranscribe(
         }
       })
       .catch((err: Error) => {
+        if (bvidRef.current?.toLowerCase() !== bvid?.toLowerCase()) return;
         const detail = err?.message ?? 'communication failed';
         setState((prev) => ({
           ...prev,

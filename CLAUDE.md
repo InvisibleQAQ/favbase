@@ -112,7 +112,7 @@ MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRo
   - `components/SettingsView.tsx` — 纯渲染设置界面：LLM Provider 下拉（9个）+ 每 Provider 独立 API Key/Model + Custom 额外字段 + ASR Provider 切换 + 调用模式单选。零业务逻辑，通过 `updateLlm`/`updateAsr` 两个 props 接收所有 action
   - `components/StatusBar.tsx` — 加载/无字幕/错误状态（来源信息已迁移到 SubtitleView 的 source badge）
   - `components/TranscribeButton.tsx` — 转录触发按钮 + 进度条（分阶段）+ 取消按钮 + 错误/重试 + rate limit 倒计时。stage/error 通过 `translateStage()`/`translateError()` 调用 `t()` 翻译，不直接渲染 error.message
-  - `hooks/useTranscribe.ts` — 转录状态管理：startTranscribe → browser.runtime.sendMessage(TRANSCRIBE_AUDIO) → 监听 TRANSCRIBE_STATUS 推送 → 结果/错误。useRetryCountdown 共享倒计时。SPA 切换时自动重置。官方字幕优先 → ASR 降级策略由 Background handler 层统一管理
+  - `hooks/useTranscribe.ts` — 转录状态管理：startTranscribe → browser.runtime.sendMessage(TRANSCRIBE_AUDIO) → 监听 TRANSCRIBE_STATUS 推送 → 结果/错误。useRetryCountdown 共享倒计时。SPA 切换时自动重置（bvidRef staleness guard：Promise 回调检查 bvidRef.current 是否仍匹配，防止视频 A 的转录结果写入视频 B）。官方字幕优先 → ASR 降级策略由 Background handler 层统一管理
 
 ### Groq ASR 转录 (Step 2 — 已完成，Bilitato 对齐)
 
