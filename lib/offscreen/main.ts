@@ -1,11 +1,12 @@
 import { FFmpeg } from '@ffmpeg/ffmpeg';
-import type {
-  SubtitleRow,
-  OffscreenRequest,
-  OffscreenPrepareRequest,
-  OffscreenTranscribeRequest,
-  ChunkPlan,
-  TranscribeErrorInfo,
+import {
+  PipelineError,
+  type SubtitleRow,
+  type OffscreenRequest,
+  type OffscreenPrepareRequest,
+  type OffscreenTranscribeRequest,
+  type ChunkPlan,
+  type TranscribeErrorInfo,
 } from '@/lib/transcription/types';
 import {
   CHUNK_SECONDS,
@@ -14,11 +15,9 @@ import {
   CHUNK_SIZE_SAFETY_RATIO,
   CHUNK_SHRINK_FACTOR,
   MAX_CHUNK_SHRINK_ROUNDS,
-  GROQ_TRANSCRIBE_URL,
-  GROQ_TRANSCRIPTION_PROMPT,
-  AUDIO_FILE_NAME,
   AUDIO_MIME_TYPE,
 } from '@/lib/transcription/constants';
+import { requestGroqTranscription } from '@/lib/transcription/groq-client';
 import { initDbMain } from '@/lib/database/db';
 
 const SESSION_TTL_MS = 10 * 60 * 1000;
@@ -308,53 +307,17 @@ async function transcribeChunk(
   apiKey: string,
   model: string,
 ): Promise<SubtitleRow[]> {
-  const file = new File([chunkBytes.buffer.slice(chunkBytes.byteOffset, chunkBytes.byteOffset + chunkBytes.byteLength) as ArrayBuffer], AUDIO_FILE_NAME, { type: AUDIO_MIME_TYPE });
-  const formData = new FormData();
-  formData.append('file', file);
-  formData.append('model', model);
-  formData.append('response_format', 'verbose_json');
-  formData.append('prompt', GROQ_TRANSCRIPTION_PROMPT);
-  formData.append('timestamp_granularities[]', 'segment');
-
-  const res = await fetch(GROQ_TRANSCRIBE_URL, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}` },
-    body: formData,
-  });
-
-  if (res.status === 429) {
-    const retryAfter = Number(res.headers.get('retry-after') ?? 30);
-    throw {
-      code: 'ASR_RATE_LIMIT',
-      message: `Groq rate limited (retry after ${retryAfter}s)`,
-      retryAfter,
-    } satisfies TranscribeErrorInfo;
+  const ab = chunkBytes.buffer.slice(chunkBytes.byteOffset, chunkBytes.byteOffset + chunkBytes.byteLength) as ArrayBuffer;
+  const blob = new Blob([ab], { type: AUDIO_MIME_TYPE });
+  try {
+    const { rows } = await requestGroqTranscription(blob, apiKey, model);
+    return rows;
+  } catch (err) {
+    // AsrError (extends PipelineError) can't serialize through sendResponse —
+    // extract the plain TranscribeErrorInfo for chrome IPC.
+    if (err instanceof PipelineError) throw err.info;
+    throw err;
   }
-
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    const apiMsg = (body as any)?.error?.message ?? `HTTP ${res.status}`;
-    throw {
-      code: 'ASR_UNKNOWN',
-      message: `Groq error: ${apiMsg}`,
-      params: { detail: apiMsg },
-    } satisfies TranscribeErrorInfo;
-  }
-
-  const data = await res.json();
-  if (!data.segments?.length) return [];
-
-  return data.segments
-    .map((seg: { start: number; end: number; text: string }) => {
-      const text = seg.text?.trim();
-      if (!text) return null;
-      return {
-        start: Number(seg.start),
-        end: Number(seg.end) || Number(seg.start) + 3,
-        text,
-      };
-    })
-    .filter(Boolean) as SubtitleRow[];
 }
 
 function mergeTimestampedChunkRows(
