@@ -72,9 +72,10 @@ export function useBiliFavVideos(mediaId: number): UseFavVideosReturn {
 
       // Fire-and-forget: persist to PGlite
       if (medias.length > 0) {
-        syncVideosToDb(medias, mediaId).catch((err) =>
-          console.error('[fav-videos] DB sync failed:', err),
-        );
+        syncVideosToDb(medias, mediaId).catch((err) => {
+          console.error('[fav-videos] DB sync failed:', err);
+          if (err?.cause) console.error('[fav-videos] Cause:', err.cause);
+        });
       }
     } catch (err) {
       if (err instanceof BiliAuthError) {

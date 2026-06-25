@@ -94,7 +94,7 @@ MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRo
 - `lib/bilibili/types.ts` — RawSubtitleItem, BiliAuthInfo, BiliFavFolder, BiliFavVideo, BiliFavVideoListResponse, SubtitleTrack, DashAudioStream 等 bilibili 领域类型
 - `lib/bilibili/url-utils.ts` — 纯 URL 工具函数（零 chrome.* 依赖，Main World 安全）：extractBvid()（保留原始大小写）, extractPageNum(), isSubtitleCdnUrl()
 - `lib/bilibili/bilibili-api.ts` — B站 API 层深模块：内部 ENDPOINTS URL builder + BiliAuthError + buildFetchInit(auth?) helper（有 auth 时显式 Cookie header，否则 credentials:'include'）。导出 getBiliAuth()（chrome.cookies 读 SESSDATA/DedeUserID）, fetchFavFolders(auth)（收藏夹列表）, fetchFavVideos(auth, mediaId, page, ps=20)（收藏夹视频分页列表，`/x/v3/fav/resource/list`）, fetchSubtitle(bvid, cid, auth?)（字幕 API + CDN，Content Script 省略 auth / Extension Page 传 auth）, fetchCidByPageList(bvid, pageNum, auth?)（CID 获取，同上）, fetchPlayUrl(bvid, cid)（DASH manifest）, extractBiliAudioUrl(bvid, cid)（DASH manifest 最优音频流 URL 提取，供 transcription-handlers.ts 注入 pipeline deps）
-- `lib/bilibili/favorites-sync.ts` — syncFavFoldersToDb(db, folders)：将 BiliFavFolder[] upsert 到 PGlite sources 表（db 由调用方注入），返回 Source[]。由 `useBiliFavFolders` fetch 成功后 fire-and-forget 调用
+- `lib/bilibili/favorites-sync.ts` — syncFavFoldersToDb(db, folders)：将 BiliFavFolder[] 批量 upsert（`INSERT ON CONFLICT DO UPDATE`）到 PGlite sources 表，单次 RPC 完成，返回 Source[]。由 `useBiliFavFolders` fetch 成功后 fire-and-forget 调用
 - `lib/bilibili/videos-sync.ts` — syncFavVideosToDb(db, videos, sourceId)：将 BiliFavVideo[] 批量 upsert 到 PGlite authors + items + item_sources 表。事务包裹（原子性），3 张表各一次 INSERT ON CONFLICT DO NOTHING + 一次 SELECT 获取 ID 映射（~5 RPC 替代原 N*3 串行）。输入 author 按 platformAuthorId 去重。MVP insert-only 不更新已有记录。由 `useBiliFavVideos` fetch 成功后 fire-and-forget 调用
 - `lib/bilibili/content-sync.ts` — persistSubtitleContent(db, bvid, rows, source)：转录成功后将字幕文本持久化到 PGlite item_contents 表 + 更新 items.content_state='has_content'。按 bvid 查找 item，onConflictDoUpdate upsert。fire-and-forget 调用，不抛异常。由 `useVideoTranscribe` 成功回调触发
 - `lib/bilibili/subtitle-processor.ts` — processSubtitles() 四步管线：normalize -> filter -> filler removal -> deduplicate(Jaccard>0.85)。接受 B 站原始格式和 favbase 格式。每条字幕保持独立行，不合并
@@ -171,7 +171,7 @@ RPC Proxy 架构（参考 memorall 3-hop PortBridge 模式）：Offscreen Docume
 - `lib/database/bridges/` — RPC 桥接层
   - `types.ts` — RPC 协议：RpcRequest/RpcResponse/RpcTransport 接口
   - `serialization.ts` — Date ↔ `{ __type:'Date', __value: ISO }` 标记序列化（Chrome Port 安全）
-  - `proxy-driver.ts` — `PGliteSharedProxy`（implements PGliteLike，请求 ID 关联 + 30s 超时）
+  - `proxy-driver.ts` — `PGliteSharedProxy`（implements PGliteLike，请求 ID 关联 + 30s 超时 + 事务互斥锁：`transaction()` 持锁期间 `query()`/`exec()` 排队等待，防止并发查询混入事务上下文。`createTxClient()` 返回绕过锁的内部客户端供事务回调使用）
   - `chrome-port-rpc.ts` — `createChromePortTransport()`（`chrome.runtime.connect`，指数退避重连，消息队列）
   - `rpc-handler.ts` — `DatabaseRpcHandler`（Offscreen singleton，`chrome.runtime.onConnect` 监听，in-flight 去重，PGlite ready gate 排队机制）
 - `lib/database/migrations/` — 自定义迁移系统

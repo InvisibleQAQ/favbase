@@ -1,4 +1,4 @@
-import { eq, and } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import { sources } from '@/lib/database/entities/sources';
 import type { Source } from '@/lib/database/entities/sources';
 import type { FavbaseDb } from '@/lib/database/db';
@@ -10,23 +10,15 @@ export async function syncFavFoldersToDb(
   db: FavbaseDb,
   folders: BiliFavFolder[],
 ): Promise<Source[]> {
-  const results: Source[] = [];
+  if (folders.length === 0) return [];
 
-  for (const folder of folders) {
-    const platformSourceId = String(folder.id);
+  const now = new Date();
 
-    const existing = await db
-      .select()
-      .from(sources)
-      .where(
-        and(
-          eq(sources.platform, PLATFORM),
-          eq(sources.platformSourceId, platformSourceId),
-        ),
-      )
-      .limit(1);
-
-    const meta = {
+  const values = folders.map((folder) => ({
+    platform: PLATFORM,
+    platformSourceId: String(folder.id),
+    title: folder.title,
+    platformMeta: {
       mlid: folder.id,
       fid: folder.fid,
       mid: folder.mid,
@@ -36,34 +28,21 @@ export async function syncFavFoldersToDb(
       ctime: folder.ctime,
       mtime: folder.mtime,
       attr: folder.attr,
-    };
+    },
+    lastFetchedAt: now,
+  }));
 
-    if (existing.length > 0) {
-      const [updated] = await db
-        .update(sources)
-        .set({
-          title: folder.title,
-          platformMeta: meta,
-          lastFetchedAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .where(eq(sources.id, existing[0].id))
-        .returning();
-      results.push(updated);
-    } else {
-      const [inserted] = await db
-        .insert(sources)
-        .values({
-          platform: PLATFORM,
-          platformSourceId,
-          title: folder.title,
-          platformMeta: meta,
-          lastFetchedAt: new Date(),
-        })
-        .returning();
-      results.push(inserted);
-    }
-  }
-
-  return results;
+  return db
+    .insert(sources)
+    .values(values)
+    .onConflictDoUpdate({
+      target: [sources.platform, sources.platformSourceId],
+      set: {
+        title: sql`excluded.title`,
+        platformMeta: sql`excluded.platform_meta`,
+        lastFetchedAt: sql`excluded.last_fetched_at`,
+        updatedAt: sql`NOW()`,
+      },
+    })
+    .returning();
 }

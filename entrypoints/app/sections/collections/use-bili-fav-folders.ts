@@ -46,9 +46,10 @@ export function useBiliFavFolders(): UseFavFoldersReturn {
 
       // Fire-and-forget: persist folders to PGlite
       if (folderList.length > 0) {
-        syncFoldersToDb(folderList).catch((err) =>
-          console.error('[fav-folders] DB sync failed:', err),
-        );
+        syncFoldersToDb(folderList).catch((err) => {
+          console.error('[fav-folders] DB sync failed:', err);
+          if (err?.cause) console.error('[fav-folders] Cause:', err.cause);
+        });
       }
     } catch (err) {
       if (err instanceof BiliAuthError) {

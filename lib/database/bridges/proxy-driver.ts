@@ -31,6 +31,8 @@ export class PGliteSharedProxy implements PGliteLike {
   private readonly pending = new Map<number, PendingRequest>();
   private readonly unsubscribe: () => void;
   public readonly waitReady: Promise<void>;
+  private txLock: Promise<void> = Promise.resolve();
+  private releaseTxLock: (() => void) | null = null;
 
   constructor(transport: RpcTransport) {
     this.transport = transport;
@@ -39,7 +41,37 @@ export class PGliteSharedProxy implements PGliteLike {
     this.waitReady = this.healthCheck();
   }
 
+  private async acquireTxLock(): Promise<void> {
+    while (this.releaseTxLock) {
+      await this.txLock;
+    }
+    this.txLock = new Promise<void>((resolve) => {
+      this.releaseTxLock = resolve;
+    });
+  }
+
+  private doReleaseTxLock(): void {
+    const release = this.releaseTxLock;
+    this.releaseTxLock = null;
+    release?.();
+  }
+
+  private async waitTxIdle(): Promise<void> {
+    while (this.releaseTxLock) {
+      await this.txLock;
+    }
+  }
+
   async query<R>(
+    sql: string,
+    params?: unknown[],
+    options?: QueryOptions,
+  ): Promise<QueryResult<R>> {
+    await this.waitTxIdle();
+    return this.rawQuery<R>(sql, params, options);
+  }
+
+  private async rawQuery<R>(
     sql: string,
     params?: unknown[],
     options?: QueryOptions,
@@ -54,21 +86,38 @@ export class PGliteSharedProxy implements PGliteLike {
   }
 
   async exec(sql: string): Promise<void> {
+    await this.waitTxIdle();
     await this.call('exec', { sql });
   }
 
   async transaction<T>(fn: (tx: PGliteLike) => Promise<T>): Promise<T> {
-    await this.query('BEGIN');
+    await this.acquireTxLock();
     try {
-      const out = await fn(this);
-      await this.query('COMMIT');
-      return out;
-    } catch (err) {
+      await this.rawQuery('BEGIN');
       try {
-        await this.query('ROLLBACK');
-      } catch { /* swallow rollback error */ }
-      throw err;
+        const out = await fn(this.createTxClient());
+        await this.rawQuery('COMMIT');
+        return out;
+      } catch (err) {
+        try {
+          await this.rawQuery('ROLLBACK');
+        } catch { /* swallow rollback error */ }
+        throw err;
+      }
+    } finally {
+      this.doReleaseTxLock();
     }
+  }
+
+  private createTxClient(): PGliteLike {
+    return {
+      query: <R>(sql: string, params?: unknown[], options?: QueryOptions) =>
+        this.rawQuery<R>(sql, params, options),
+      exec: async (sql: string) => { await this.call('exec', { sql }); },
+      transaction: async <T>(fn: (tx: PGliteLike) => Promise<T>) => fn(this.createTxClient()),
+      waitReady: Promise.resolve(),
+      close: () => Promise.resolve(),
+    };
   }
 
   async close(): Promise<void> {
