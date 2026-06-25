@@ -22,6 +22,7 @@ export interface ASRProviderDef {
   id: ASRProviderId;
   name: string;
   defaultModel: string;
+  baseUrl: string;
 }
 
 export const LLM_PROVIDERS: LLMProviderDef[] = [
@@ -109,10 +110,16 @@ export const ASR_PROVIDERS: ASRProviderDef[] = [
     id: 'groq',
     name: 'Groq',
     defaultModel: 'whisper-large-v3-turbo',
+    baseUrl: 'https://api.groq.com/openai/v1',
   },
   {
     id: 'siliconflow',
     name: 'SiliconFlow',
     defaultModel: 'FunAudioLLM/SenseVoiceSmall',
+    baseUrl: 'https://api.siliconflow.cn/v1',
   },
 ];
+
+export function getAsrProviderDef(id: ASRProviderId): ASRProviderDef {
+  return ASR_PROVIDERS.find((p) => p.id === id) ?? ASR_PROVIDERS[0];
+}

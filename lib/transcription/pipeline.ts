@@ -111,7 +111,7 @@ export async function runTranscriptionPipeline(
       success: false,
       error: {
         code: 'ASR_INVALID_KEY',
-        message: 'Groq API key not configured',
+        message: 'ASR API key not configured',
       },
     };
   }

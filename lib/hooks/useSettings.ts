@@ -2,16 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LLMProviderId, ASRProviderId, LLMProviderDef, ASRProviderDef } from '@/lib/providers';
 import { getProviderDef, ASR_PROVIDERS } from '@/lib/providers';
 import type { UserSettings } from '@/lib/storage';
-import { settingsStorage, DEFAULT_SETTINGS } from '@/lib/storage';
-
-// Add new ASR provider here — no if/else needed
-const ASR_FIELD_MAP: Record<ASRProviderId, {
-  keyField: keyof UserSettings & string;
-  modelField: keyof UserSettings & string;
-}> = {
-  groq: { keyField: 'groqApiKey', modelField: 'groqModel' },
-  siliconflow: { keyField: 'siliconFlowApiKey', modelField: 'siliconFlowAsrModel' },
-};
+import { settingsStorage, DEFAULT_SETTINGS, ASR_FIELD_MAP, resolveAsrConfig } from '@/lib/storage';
 
 export type LlmUpdate =
   | { field: 'provider'; value: LLMProviderId }
@@ -118,9 +109,10 @@ export function useSettings(): UseSettingsReturn {
     () => ASR_PROVIDERS.find((p) => p.id === settings.asrProvider) ?? ASR_PROVIDERS[0],
     [settings.asrProvider],
   );
+  const resolved = resolveAsrConfig(settings);
+  const currentAsrApiKey = resolved.apiKey;
+  const currentAsrModel = resolved.model;
   const asrFields = ASR_FIELD_MAP[settings.asrProvider];
-  const currentAsrApiKey = (settings[asrFields.keyField] as string) ?? '';
-  const currentAsrModel = (settings[asrFields.modelField] as string) ?? '';
 
   // --- LLM action ---
   const updateLlm = useCallback(

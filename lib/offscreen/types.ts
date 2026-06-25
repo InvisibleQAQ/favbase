@@ -20,6 +20,7 @@ export interface OffscreenTranscribeRequest {
   apiKey: string;
   model: string;
   title: string;
+  baseUrl: string;
 }
 
 export interface OffscreenReleaseRequest {

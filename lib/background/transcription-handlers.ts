@@ -11,7 +11,8 @@ import type {
   OffscreenPrepareRequest,
   OffscreenTranscribeRequest,
 } from '@/lib/offscreen/types';
-import { settingsStorage } from '@/lib/storage';
+import { settingsStorage, resolveAsrConfig } from '@/lib/storage';
+import { getAsrProviderDef } from '@/lib/providers';
 import {
   ensureGroqConnectivity,
   requestGroqTranscription,
@@ -64,15 +65,16 @@ export async function handleTranscribe(
 ): Promise<TranscribeResponse> {
   const { bvid, cid, title } = msg;
 
+  const settings = await settingsStorage.getValue();
+  const asrConfig = resolveAsrConfig(settings);
+  const asrDef = getAsrProviderDef(settings.asrProvider);
+
   const controller = new AbortController();
   ctx.tabAbortControllers.set(tabId, controller);
   tabBvids.set(tabId, bvid);
 
   const deps = {
-    getAsrConfig: async () => {
-      const s = await settingsStorage.getValue();
-      return { apiKey: s.groqApiKey, model: s.groqModel || 'whisper-large-v3-turbo' };
-    },
+    getAsrConfig: async () => asrConfig,
     checkCache: async (id: string) => {
       const entry = await getVideoCache(id);
       if (!entry || entry.rows.length === 0) return null;
@@ -81,7 +83,8 @@ export async function handleTranscribe(
     saveCache: async (id: string, rows: SubtitleRow[]) => {
       await mergeVideoCache(id, rows, 'groq');
     },
-    ensureConnectivity: ensureGroqConnectivity,
+    ensureConnectivity: (apiKey: string) =>
+      ensureGroqConnectivity(apiKey, asrDef.baseUrl),
     extractAudioUrl: async (bvid: string, cid: number) => {
       try {
         return await extractBiliAudioUrl(bvid, cid);
@@ -97,7 +100,7 @@ export async function handleTranscribe(
     transcribeDirect: async (
       blob: Blob, apiKey: string, model: string, signal: AbortSignal,
     ) => {
-      const result = await requestGroqTranscription(blob, apiKey, model, signal);
+      const result = await requestGroqTranscription(blob, apiKey, model, signal, asrDef.baseUrl);
       return result.rows;
     },
     transcribeChunked: async (
@@ -128,6 +131,7 @@ export async function handleTranscribe(
           apiKey,
           model,
           title: t,
+          baseUrl: asrDef.baseUrl,
         } satisfies OffscreenTranscribeRequest);
 
         chrome.runtime

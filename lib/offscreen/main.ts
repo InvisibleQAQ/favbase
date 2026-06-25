@@ -308,11 +308,12 @@ async function transcribeChunk(
   chunkBytes: Uint8Array,
   apiKey: string,
   model: string,
+  baseUrl: string,
 ): Promise<SubtitleRow[]> {
   const ab = chunkBytes.buffer.slice(chunkBytes.byteOffset, chunkBytes.byteOffset + chunkBytes.byteLength) as ArrayBuffer;
   const blob = new Blob([ab], { type: AUDIO_MIME_TYPE });
   try {
-    const { rows } = await requestGroqTranscription(blob, apiKey, model);
+    const { rows } = await requestGroqTranscription(blob, apiKey, model, undefined, baseUrl);
     return rows;
   } catch (err) {
     // AsrError (extends PipelineError) can't serialize through sendResponse —
@@ -381,7 +382,7 @@ async function handleTranscribe(msg: OffscreenTranscribeRequest): Promise<Subtit
       totalChunks: total,
     });
 
-    const rows = await transcribeChunk(bytes, msg.apiKey, msg.model);
+    const rows = await transcribeChunk(bytes, msg.apiKey, msg.model, msg.baseUrl);
 
     if (i === 0) {
       accumulated = rows.map((r) => ({

@@ -4,14 +4,14 @@ import {
   type TranscribeErrorInfo,
 } from './types';
 import {
-  GROQ_TRANSCRIBE_URL,
-  GROQ_MODELS_URL,
   GROQ_TRANSCRIPTION_PROMPT,
   ASR_TASK_TIMEOUT_MS,
   ASR_CONNECTIVITY_TIMEOUT_MS,
   AUDIO_FILE_NAME,
   AUDIO_MIME_TYPE,
 } from './constants';
+
+const DEFAULT_ASR_BASE_URL = 'https://api.groq.com/openai/v1';
 
 interface GroqSegment {
   start: number;
@@ -42,7 +42,11 @@ export class AsrError extends PipelineError {
   }
 }
 
-export async function ensureGroqConnectivity(apiKey: string): Promise<void> {
+export async function ensureGroqConnectivity(
+  apiKey: string,
+  baseUrl?: string,
+): Promise<void> {
+  const modelsUrl = `${baseUrl || DEFAULT_ASR_BASE_URL}/models`;
   const controller = new AbortController();
   const timer = setTimeout(
     () => controller.abort(),
@@ -50,7 +54,7 @@ export async function ensureGroqConnectivity(apiKey: string): Promise<void> {
   );
 
   try {
-    const res = await fetch(GROQ_MODELS_URL, {
+    const res = await fetch(modelsUrl, {
       headers: { Authorization: `Bearer ${apiKey}` },
       signal: controller.signal,
     });
@@ -58,26 +62,26 @@ export async function ensureGroqConnectivity(apiKey: string): Promise<void> {
     if (res.status === 401) {
       throw new AsrError({
         code: 'ASR_INVALID_KEY',
-        message: 'Groq API key invalid (401)',
+        message: `ASR API key invalid (401) at ${modelsUrl}`,
       });
     }
     if (res.status === 403) {
       throw new AsrError({
         code: 'ASR_GROQ_ACCESS_BLOCKED',
-        message: 'Groq API access blocked (403)',
+        message: `ASR API access blocked (403) at ${modelsUrl}`,
       });
     }
     if (!res.ok) {
       throw new AsrError({
         code: 'ASR_GROQ_UNREACHABLE',
-        message: `Groq connectivity check failed: HTTP ${res.status}`,
+        message: `ASR connectivity check failed: HTTP ${res.status} at ${modelsUrl}`,
       });
     }
   } catch (err) {
     if (err instanceof AsrError) throw err;
     throw new AsrError({
       code: 'ASR_GROQ_UNREACHABLE',
-      message: `Cannot reach Groq API: ${(err as Error).message ?? 'network error'}`,
+      message: `Cannot reach ASR API (${modelsUrl}): ${(err as Error).message ?? 'network error'}`,
     });
   } finally {
     clearTimeout(timer);
@@ -89,7 +93,9 @@ export async function requestGroqTranscription(
   apiKey: string,
   model: string,
   signal?: AbortSignal,
+  baseUrl?: string,
 ): Promise<GroqTranscriptionResult> {
+  const transcribeUrl = `${baseUrl || DEFAULT_ASR_BASE_URL}/audio/transcriptions`;
   const file = new File([audioBlob], AUDIO_FILE_NAME, { type: AUDIO_MIME_TYPE });
 
   const formData = new FormData();
@@ -107,7 +113,7 @@ export async function requestGroqTranscription(
     : controller.signal;
 
   try {
-    const res = await fetch(GROQ_TRANSCRIBE_URL, {
+    const res = await fetch(transcribeUrl, {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}` },
       body: formData,

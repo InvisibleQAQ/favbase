@@ -1,5 +1,6 @@
 import { storage } from 'wxt/utils/storage';
 import type { LLMProviderId, ASRProviderId } from './providers';
+import { getAsrProviderDef } from './providers';
 
 export interface UserSettings {
   // LLM
@@ -58,3 +59,20 @@ export const sidebarPinnedStorage = storage.defineItem<boolean>(
   'local:sidebarPinned',
   { fallback: true },
 );
+
+export const ASR_FIELD_MAP: Record<ASRProviderId, {
+  keyField: keyof UserSettings & string;
+  modelField: keyof UserSettings & string;
+}> = {
+  groq: { keyField: 'groqApiKey', modelField: 'groqModel' },
+  siliconflow: { keyField: 'siliconFlowApiKey', modelField: 'siliconFlowAsrModel' },
+};
+
+export function resolveAsrConfig(settings: UserSettings): { apiKey: string; model: string } {
+  const fields = ASR_FIELD_MAP[settings.asrProvider];
+  const def = getAsrProviderDef(settings.asrProvider);
+  return {
+    apiKey: (settings[fields.keyField] as string) ?? '',
+    model: (settings[fields.modelField] as string) || def.defaultModel,
+  };
+}

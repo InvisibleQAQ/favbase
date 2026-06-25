@@ -1,9 +1,3 @@
-export const GROQ_TRANSCRIBE_URL =
-  'https://api.groq.com/openai/v1/audio/transcriptions';
-
-export const GROQ_MODELS_URL =
-  'https://api.groq.com/openai/v1/models';
-
 export const GROQ_MAX_AUDIO_BYTES = 24 * 1024 * 1024; // 24 MB
 
 export const GROQ_DEFAULT_MODEL = 'whisper-large-v3-turbo';
