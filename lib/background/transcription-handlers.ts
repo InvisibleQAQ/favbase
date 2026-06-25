@@ -35,6 +35,7 @@ import {
 import { runTranscriptionPipeline } from '@/lib/transcription/pipeline';
 
 const tabBvids = new Map<number, string>();
+const sessionTabMap = new Map<string, number>();
 
 function notifyTab(
   ctx: BackgroundContext,
@@ -104,35 +105,40 @@ export async function handleTranscribe(
     ) => {
       await ctx.ensureOffscreen();
       const sessionId = `${bvid}_${Date.now()}`;
+      sessionTabMap.set(sessionId, tabId);
 
-      const prepareRes: { success: boolean; error?: TranscribeErrorInfo } =
-        await chrome.runtime.sendMessage({
-          type: 'OFFSCREEN_CHUNK_PREPARE',
+      try {
+        const prepareRes: { success: boolean; error?: TranscribeErrorInfo } =
+          await chrome.runtime.sendMessage({
+            type: 'OFFSCREEN_CHUNK_PREPARE',
+            sessionId,
+            audioUrl,
+            maxBytes: GROQ_MAX_AUDIO_BYTES,
+          } satisfies OffscreenPrepareRequest);
+
+        if (!prepareRes.success) throw new AsrError(prepareRes.error!);
+
+        const transcribeRes: {
+          success: boolean;
+          rows?: SubtitleRow[];
+          error?: TranscribeErrorInfo;
+        } = await chrome.runtime.sendMessage({
+          type: 'OFFSCREEN_CHUNK_TRANSCRIBE',
           sessionId,
-          audioUrl,
-          maxBytes: GROQ_MAX_AUDIO_BYTES,
-        } satisfies OffscreenPrepareRequest);
+          apiKey,
+          model,
+          title: t,
+        } satisfies OffscreenTranscribeRequest);
 
-      if (!prepareRes.success) throw new AsrError(prepareRes.error!);
+        chrome.runtime
+          .sendMessage({ type: 'OFFSCREEN_CHUNK_RELEASE', sessionId })
+          .catch(() => {});
 
-      const transcribeRes: {
-        success: boolean;
-        rows?: SubtitleRow[];
-        error?: TranscribeErrorInfo;
-      } = await chrome.runtime.sendMessage({
-        type: 'OFFSCREEN_CHUNK_TRANSCRIBE',
-        sessionId,
-        apiKey,
-        model,
-        title: t,
-      } satisfies OffscreenTranscribeRequest);
-
-      chrome.runtime
-        .sendMessage({ type: 'OFFSCREEN_CHUNK_RELEASE', sessionId })
-        .catch(() => {});
-
-      if (!transcribeRes.success) throw new AsrError(transcribeRes.error!);
-      return transcribeRes.rows!;
+        if (!transcribeRes.success) throw new AsrError(transcribeRes.error!);
+        return transcribeRes.rows!;
+      } finally {
+        sessionTabMap.delete(sessionId);
+      }
     },
     processSubtitles,
   };
@@ -175,6 +181,17 @@ export function handleOffscreenProgress(
     PROGRESS.CHUNK_TRANSCRIBE_BEGIN +
     Math.round((msg.chunkIndex / msg.totalChunks) * range);
 
+  const targetTabId = sessionTabMap.get(msg.sessionId);
+  if (targetTabId !== undefined) {
+    const bvid = tabBvids.get(targetTabId) ?? '';
+    notifyTab(ctx, targetTabId, bvid, progress, 'chunk_transcribing', undefined, {
+      current: msg.chunkIndex + 1,
+      total: msg.totalChunks,
+    });
+    return;
+  }
+
+  // Defensive fallback: sessionId not found (should not happen in normal flow)
   for (const [tId] of ctx.tabAbortControllers) {
     const bvid = tabBvids.get(tId) ?? '';
     notifyTab(ctx, tId, bvid, progress, 'chunk_transcribing', undefined, {
