@@ -80,7 +80,7 @@ MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRo
   - `collections-view.tsx` — 收藏夹主视图：左侧 240px FolderSidebar + 右侧 VideoGridPanel。`/collections` 和 `/collections/bilibili/:mediaId` 共用组件，通过 useParams 获取 mediaId，无 mediaId 时自动 navigate(replace) 到第一个收藏夹。包含 NotLoggedIn/ErrorState/EmptyFolderState/VideoGridSkeleton 共享状态组件
   - `folder-sidebar.tsx` — 收藏夹侧边栏：固定 240px，单分组"BiliBili 收藏夹"标题可上下折叠/展开列表（MUI Collapse）。列表项显示收藏夹名称 + 视频数量，选中项 varAlpha primary 高亮
   - `use-bili-fav-folders.ts` — B站收藏夹 hook：getBiliAuth 检测登录 → fetchFavFolders 获取列表 → 状态管理（folders/loading/syncing/loginState/error）。fetch 成功后 fire-and-forget 调用 syncFavFoldersToDb 持久化到 PGlite
-  - `video-card.tsx` — 视频卡片：封面缩略图 + 时长标签 + 标题 + UP主 + 播放量 + 底部操作栏（转录/状态标记/进度）。失效视频灰显（attr===9）无操作栏。操作栏三态：来源标记（CC 官方/ASR Chip）、转录按钮、进度条（LinearProgress + stage 文字 + 取消按钮）
+  - `video-card.tsx` — 视频卡片：封面缩略图 + 左下角播放量标签 + 右下角时长标签 + 标题 + UP主 + 收藏时间（`formatFavTime`：同年显示 MM-DD，跨年显示 N年前，自然年判断）+ 底部操作栏（转录/状态标记/进度）。失效视频灰显（attr===9）无操作栏。操作栏三态：来源标记（CC 官方/ASR Chip）、转录按钮、进度条（LinearProgress + stage 文字 + 取消按钮）
   - `use-bili-fav-videos.ts` — 收藏夹视频 hook：fetchFavVideos 分页请求 + goToPage 翻页 + loading/error/loginState 状态管理。fetch 成功后 fire-and-forget 调用 syncFavVideosToDb 持久化到 PGlite（需先查 sources 表获取 sourceId）
   - `use-video-transcribe.ts` — 视频转录状态管理 hook：批量 GET_VIDEO_CACHE 预查内容状态（翻页刷新）+ 发送 TRANSCRIBE_AUDIO 消息（不带 cid，handler 自行解析）+ TRANSCRIBE_STATUS 实时进度监听 + 单视频串行控制（activeBvid）+ useRetryCountdown 共享倒计时。成功后 fire-and-forget 调用 persistSubtitleContent 写入 PGlite item_contents 表。官方字幕优先 → ASR 降级策略由 Background handler 层统一管理
 

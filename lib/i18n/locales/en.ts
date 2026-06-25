@@ -108,6 +108,8 @@ const en: Record<LocaleKeys, string> = {
   'card.transcribe': 'Transcribe',
   'card.sourceCC': 'CC Official',
   'card.sourceASR': 'ASR',
+  'card.favAt': 'Saved {{date}}',
+  'card.favYearsAgo': '{{years}}y ago',
 };
 
 export default en;

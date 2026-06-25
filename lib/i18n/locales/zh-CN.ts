@@ -106,6 +106,8 @@ const zhCN = {
   'card.transcribe': '转录',
   'card.sourceCC': 'CC 官方',
   'card.sourceASR': 'ASR',
+  'card.favAt': '收藏于 {{date}}',
+  'card.favYearsAgo': '收藏于{{years}}年前',
 } as const;
 
 export type LocaleKeys = keyof typeof zhCN;

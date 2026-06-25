@@ -26,6 +26,22 @@ function formatPlay(count: number): string {
   return String(count);
 }
 
+function formatFavTime(favTime: number): string {
+  if (!favTime) return '';
+
+  const favDate = new Date(favTime * 1000);
+  const now = new Date();
+  const yearDiff = now.getFullYear() - favDate.getFullYear();
+
+  if (yearDiff <= 0) {
+    const mm = String(favDate.getMonth() + 1).padStart(2, '0');
+    const dd = String(favDate.getDate()).padStart(2, '0');
+    return t('card.favAt', { date: `${mm}-${dd}` });
+  }
+
+  return t('card.favYearsAgo', { years: yearDiff });
+}
+
 function translateStage(
   stage: string,
   stageParams?: Record<string, string | number>,
@@ -104,22 +120,44 @@ export function VideoCard({
           )}
 
           {!isInvalid && (
-            <Box
-              sx={{
-                position: 'absolute',
-                bottom: 4,
-                right: 4,
-                bgcolor: 'rgba(0,0,0,0.7)',
-                color: '#fff',
-                px: 0.75,
-                py: 0.25,
-                borderRadius: 0.5,
-                fontSize: '0.75rem',
-                lineHeight: 1.4,
-              }}
-            >
-              {formatDuration(video.duration)}
-            </Box>
+            <>
+              <Box
+                sx={{
+                  position: 'absolute',
+                  bottom: 4,
+                  left: 4,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 0.25,
+                  bgcolor: 'rgba(0,0,0,0.7)',
+                  color: '#fff',
+                  px: 0.75,
+                  py: 0.25,
+                  borderRadius: 0.5,
+                  fontSize: '0.75rem',
+                  lineHeight: 1.4,
+                }}
+              >
+                <Iconify icon="solar:play-bold" width={12} sx={{ color: '#fff' }} />
+                {formatPlay(video.cnt_info.play)}
+              </Box>
+              <Box
+                sx={{
+                  position: 'absolute',
+                  bottom: 4,
+                  right: 4,
+                  bgcolor: 'rgba(0,0,0,0.7)',
+                  color: '#fff',
+                  px: 0.75,
+                  py: 0.25,
+                  borderRadius: 0.5,
+                  fontSize: '0.75rem',
+                  lineHeight: 1.4,
+                }}
+              >
+                {formatDuration(video.duration)}
+              </Box>
+            </>
           )}
         </Box>
 
@@ -134,16 +172,15 @@ export function VideoCard({
           </Typography>
 
           {!isInvalid && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
               <Typography variant="caption" sx={{ color: 'text.secondary' }} noWrap>
                 {video.upper.name}
               </Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                <Iconify icon="solar:play-bold" width={14} sx={{ color: 'text.disabled' }} />
-                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                  {formatPlay(video.cnt_info.play)}
+              {!!video.fav_time && (
+                <Typography variant="caption" sx={{ color: 'text.disabled' }} noWrap>
+                  · {formatFavTime(video.fav_time)}
                 </Typography>
-              </Box>
+              )}
             </Box>
           )}
         </Box>
