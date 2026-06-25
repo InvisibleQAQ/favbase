@@ -84,7 +84,7 @@ MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRo
   - `folder-detail-view.tsx` — 收藏夹视频列表页：返回按钮 + VideoCard 网格 + MUI Pagination 翻页 + 未登录/错误/空状态处理。集成 useVideoTranscribe hook 管理转录状态
   - `video-card.tsx` — 视频卡片：封面缩略图 + 时长标签 + 标题 + UP主 + 播放量 + 底部操作栏（转录/状态标记/进度）。失效视频灰显（attr===9）无操作栏。操作栏三态：来源标记（CC 官方/ASR Chip）、转录按钮、进度条（LinearProgress + stage 文字 + 取消按钮）
   - `use-bili-fav-videos.ts` — 收藏夹视频 hook：fetchFavVideos 分页请求 + goToPage 翻页 + loading/error/loginState 状态管理。fetch 成功后 fire-and-forget 调用 syncFavVideosToDb 持久化到 PGlite（需先查 sources 表获取 sourceId）
-  - `use-video-transcribe.ts` — 视频转录状态管理 hook：批量 GET_VIDEO_CACHE 预查内容状态（翻页刷新）+ 转录流程（CID 获取 → 官方字幕优先 → Groq ASR 降级）+ TRANSCRIBE_STATUS 实时进度监听 + 单视频串行控制（activeBvid）+ 取消/重试/rate limit 倒计时。成功后 fire-and-forget 调用 persistSubtitleContent 写入 PGlite item_contents 表
+  - `use-video-transcribe.ts` — 视频转录状态管理 hook：批量 GET_VIDEO_CACHE 预查内容状态（翻页刷新）+ 发送 TRANSCRIBE_AUDIO 消息（不带 cid，handler 自行解析）+ TRANSCRIBE_STATUS 实时进度监听 + 单视频串行控制（activeBvid）+ useRetryCountdown 共享倒计时。成功后 fire-and-forget 调用 persistSubtitleContent 写入 PGlite item_contents 表。官方字幕优先 → ASR 降级策略由 Background handler 层统一管理
 
 ### B站字幕获取 (Step 1 — 已完成，Bilitato 对齐)
 
@@ -98,7 +98,7 @@ MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRo
 - `lib/bilibili/bilibili-api.ts` — B站 API 层深模块：内部 ENDPOINTS URL builder + BiliAuthError + buildFetchInit(auth?) helper（有 auth 时显式 Cookie header，否则 credentials:'include'）。导出 getBiliAuth()（chrome.cookies 读 SESSDATA/DedeUserID）, fetchFavFolders(auth)（收藏夹列表）, fetchFavVideos(auth, mediaId, page, ps=20)（收藏夹视频分页列表，`/x/v3/fav/resource/list`）, fetchSubtitle(bvid, cid, auth?)（字幕 API + CDN，Content Script 省略 auth / Extension Page 传 auth）, fetchCidByPageList(bvid, pageNum, auth?)（CID 获取，同上）, fetchPlayUrl(bvid, cid)（DASH manifest）, extractBiliAudioUrl(bvid, cid)（DASH manifest 最优音频流 URL 提取，供 transcription-handlers.ts 注入 pipeline deps）
 - `lib/bilibili/favorites-sync.ts` — syncFavFoldersToDb(db, folders)：将 BiliFavFolder[] upsert 到 PGlite sources 表（db 由调用方注入），返回 Source[]。由 `useBiliFavFolders` fetch 成功后 fire-and-forget 调用
 - `lib/bilibili/videos-sync.ts` — syncFavVideosToDb(db, videos, sourceId)：将 BiliFavVideo[] upsert 到 PGlite authors + items + item_sources 表。per-video try/catch，部分失败不中断。MVP insert-only 不更新已有记录。由 `useBiliFavVideos` fetch 成功后 fire-and-forget 调用
-- `lib/bilibili/content-sync.ts` — persistSubtitleContent(db, bvid, rows, source)：转录成功后将字幕文本持久化到 PGlite item_contents 表 + 更新 items.content_state='has_content'。按 bvid 查找 item，onConflictDoUpdate upsert。fire-and-forget 调用，不抛异常。由 `useVideoTranscribe` 两条成功路径（官方字幕/ASR）触发
+- `lib/bilibili/content-sync.ts` — persistSubtitleContent(db, bvid, rows, source)：转录成功后将字幕文本持久化到 PGlite item_contents 表 + 更新 items.content_state='has_content'。按 bvid 查找 item，onConflictDoUpdate upsert。fire-and-forget 调用，不抛异常。由 `useVideoTranscribe` 成功回调触发
 - `lib/bilibili/subtitle-processor.ts` — processSubtitles() 四步管线：normalize -> filter -> filler removal -> deduplicate(Jaccard>0.85)。接受 B 站原始格式和 favbase 格式。每条字幕保持独立行，不合并
 - `entrypoints/bilibili-inject.content.ts` — Main World 入口协调器：创建 effects + 状态机 + 拦截器 + 路由监控，5 行 bootstrap
 - `lib/bilibili/inject/state.ts` — InjectStateMachine 状态机（createStateMachine(effects)），拥有全部状态转换（bootstrap/markCaptured/resetForRoute）+ 定时器编排 + reemit loop。通过 InjectEffects 接口注入副作用，纯逻辑可单元测试
@@ -115,7 +115,7 @@ MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRo
   - `components/SettingsView.tsx` — 纯渲染设置界面：LLM Provider 下拉（9个）+ 每 Provider 独立 API Key/Model + Custom 额外字段 + ASR Provider 切换 + 调用模式单选。零业务逻辑，通过 `updateLlm`/`updateAsr` 两个 props 接收所有 action
   - `components/StatusBar.tsx` — 加载/无字幕/错误状态（来源信息已迁移到 SubtitleView 的 source badge）
   - `components/TranscribeButton.tsx` — 转录触发按钮 + 进度条（分阶段）+ 取消按钮 + 错误/重试 + rate limit 倒计时。stage/error 通过 `translateStage()`/`translateError()` 调用 `t()` 翻译，不直接渲染 error.message
-  - `hooks/useTranscribe.ts` — ASR 转录状态管理：startTranscribe → browser.runtime.sendMessage(TRANSCRIBE_AUDIO) → 监听 TRANSCRIBE_STATUS 推送 → 结果/错误/重试倒计时。SPA 切换时自动重置。TranscribeState.stage 类型为 `TranscribeStage | ''`
+  - `hooks/useTranscribe.ts` — 转录状态管理：startTranscribe → browser.runtime.sendMessage(TRANSCRIBE_AUDIO) → 监听 TRANSCRIBE_STATUS 推送 → 结果/错误。useRetryCountdown 共享倒计时。SPA 切换时自动重置。官方字幕优先 → ASR 降级策略由 Background handler 层统一管理
 
 ### Groq ASR 转录 (Step 2 — 已完成，Bilitato 对齐)
 
@@ -137,7 +137,7 @@ MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRo
 - `lib/background/types.ts` — BackgroundContext 接口定义（纯通用调度契约，零 transcription 类型依赖）
 - `lib/background/messages.ts` — Background SW 消息注册表：BgClientMessage（TranscribeRequest/Abort + GetVideoCacheRequest/CacheSubtitleRequest）, BgInternalMessage（OffscreenProgressMessage）, BgMessage union。从各领域模块导入成员类型后组合
 - `lib/background/port-bridge.ts` — PortBridge 双向 Chrome Port 中继：app.html → Background SW → Offscreen（3-hop 架构）。监听 `favbase-db` channel，为每个 Extension Page 连接创建到 Offscreen 的中继，指数退避重连（200ms-5s，最多 20 次）。Must 在 module load time 同步初始化（MV3 SW 要求）
-- `lib/background/transcription-handlers.ts` — handleTranscribe（resolveAsrConfig + getAsrProviderDef 解析 ASR provider → 构造 PipelineDeps 适配器 → runTranscriptionPipeline 编排）+ handleTranscribeAbort + handleOffscreenProgress
+- `lib/background/transcription-handlers.ts` — handleTranscribe（cache check → CID 解析（caller 提供或 fetchCidByPageList 降级）→ 官方字幕优先（fetchSubtitle + processSubtitles + mergeVideoCache）→ ASR pipeline 降级（resolveAsrConfig + getAsrProviderDef → PipelineDeps 适配器 → runTranscriptionPipeline））+ handleTranscribeAbort + handleOffscreenProgress
 - `lib/background/cache-handlers.ts` — handleGetVideoCache + handleCacheSubtitle，委托 lib/cache/video-cache.ts
 
 ### 数据导出模块
@@ -185,6 +185,7 @@ RPC Proxy 架构（参考 memorall 3-hop PortBridge 模式）：Offscreen Docume
 ### 共享 Hooks
 
 - `lib/hooks/useSettings.ts` — deep module：settingsStorage 读写（debounced 500ms + watch 外部变更 + unmount flush）+ LLM/ASR computed 属性（currentProviderDef, currentLlmApiKey, currentLlmModel, isCustomProvider, currentAsrDef, currentAsrApiKey, currentAsrModel）+ 收窄 action 接口：`updateLlm(LlmUpdate)` / `updateAsr(AsrUpdate)` 两个 discriminated union action 替代原 11 个独立 callback。ASR computed 和 action 通过 `ASR_FIELD_MAP` 驱动（新增 ASR provider 只需加 map 条目）。app.html 和 Content Script 共享同一实例
+- `lib/hooks/useRetryCountdown.ts` — 共享 retryCountdown hook：`{ countdown, startCountdown(seconds), resetCountdown }`。由 `useTranscribe` 和 `useVideoTranscribe` 共享，消除重复的 setInterval 倒计时逻辑
 
 ## 约定
 
@@ -210,9 +211,9 @@ RPC Proxy 架构（参考 memorall 3-hop PortBridge 模式）：Offscreen Docume
 - 字幕获取流程（主路径）: interceptors.ts 拦截 fetch/XHR → sm.markCaptured() 解析+桥接 → postMessage SUBTITLE_DATA → useSubtitle 接收 → processSubtitles()
 - 字幕获取流程（降级路径）: extractBvid() → fetchCidByPageList() → fetchSubtitle(bvid, cid) → processSubtitles()（失败自动重试最多 2 次）
 - 字幕 CDN (`aisubtitle.hdslb.com`) 跨域但 CORS 允许，Content Script 可直接 fetch（带 `credentials: 'include'`）
-- 无字幕降级: useSubtitle 返回 no_subtitle（网络异常也降级为 no_subtitle 而非 error）→ App 显示 TranscribeButton（status 为 no_subtitle 或 error 时均展示）→ 用户点击 → TRANSCRIBE_AUDIO → Background 编排完整 Groq Whisper 转录 → 结果通过 processSubtitles() 后回写 SubtitleView
+- 无字幕降级: useSubtitle 返回 no_subtitle（网络异常也降级为 no_subtitle 而非 error）→ App 显示 TranscribeButton（status 为 no_subtitle 或 error 时均展示）→ 用户点击 → TRANSCRIBE_AUDIO → Background handler 统一编排（cache check → 官方字幕优先 → ASR pipeline 降级）→ 结果回写 SubtitleView
 - CDN 请求头: `declarativeNetRequest` 静态规则（`public/rules.json`）在网络栈层面为 bilivideo 域名设置 `Referer: https://www.bilibili.com/` + `Origin`。Background SW 的 fetch() 自身设置的 Referer 会被 Chrome MV3 剥离，必须用 declarativeNetRequest
-- ASR 转录流程: resolveAsrConfig(settings) 解析当前 ASR provider → cache check → ensureGroqConnectivity(apiKey, baseUrl) pre-flight → extractBiliAudioUrl → fetchAudioBlob → assertAudioNotReused → ≤24MB: requestGroqTranscription(baseUrl) / >24MB: Offscreen FFmpeg 分块(baseUrl 通过 IPC 传递) → processSubtitles → cache。ASR Provider 选择在 transcription-handlers.ts 适配器层完成，pipeline.ts 通过 PipelineDeps 注入不感知具体 provider
+- 转录总流程（handleTranscribe 编排）: cache check → CID 解析（caller 提供或 fetchCidByPageList）→ fetchSubtitle 官方字幕优先（有字幕 → processSubtitles + mergeVideoCache + 返回 success）→ 无字幕 → ASR pipeline（resolveAsrConfig → ensureGroqConnectivity → extractBiliAudioUrl → fetchAudioBlob → assertAudioNotReused → ≤24MB: requestGroqTranscription / >24MB: Offscreen FFmpeg 分块 → processSubtitles → cache）。TranscribeRequest.cid 可选：content script 有 cid 就传，app.html 不传由 handler 解析。ASR Provider 选择在 transcription-handlers.ts 适配器层完成，pipeline.ts 通过 PipelineDeps 注入不感知具体 provider
 - 视频缓存: `lib/cache/video-cache.ts` 模块。per-bvid 独立 key `local:vc:{bvid}`（chrome.storage 中为 `vc:{bvid}`）。内存缓存层（Map<string, VideoCacheEntry>）+ Promise-based per-bvid 写锁 + 内部 hash 去重（computeRowsHash 不导出）。调用方只传 `mergeVideoCache(bvid, rows, source)`，hash/timestamp 由 cache 内部管理。所有来源（bilibili/groq）字幕统一缓存。旧 `local:videoCache` 单体 key 在首次访问时自动迁移。Background 侧 initCacheStorageListener 保持内存缓存与 storage 同步，Content Script 侧 chrome.storage.onChanged 实现跨 tab UI 实时更新
 - Offscreen Document: WXT unlisted page `entrypoints/offscreen.html`，逻辑在 `lib/offscreen/main.ts`。通过 `lib/offscreen/lifecycle.ts` 的 `ensure()` 按需创建（singleton，in-flight promise 守卫防并发竞态）。Document 常驻不销毁（PGlite 需要）。**双职责**：FFmpeg WASM 分块 + PGlite 数据库持有者。两套 IPC 完全隔离：FFmpeg 用 `chrome.runtime.onMessage`（request/response），PGlite 用 `chrome.runtime.onConnect`（port-based RPC，channel name `favbase-db`）。Background 传 audioUrl（非 ArrayBuffer），Offscreen 自行 fetch 音频数据。FFmpeg WASM 从 `public/ffmpeg/`（@ffmpeg/core@0.12.10）本地加载。Session Map 带 10min TTL 自动清理防泄漏，FFmpeg 操作失败后自动 reset 实例防状态污染
 - PGlite 数据库: Offscreen Document 是唯一持有者（单连接模型），持久化到 IndexedDB（`idb://favbase`）。扩展：pgvector（`@electric-sql/pglite-pgvector`）、uuid-ossp、pg_trgm（内置 contrib）。`initDbMain()` 在 Offscreen 启动时调用：先同步注册 `DatabaseRpcHandler.startListening()`（`onConnect` listener 立即可用），再异步创建 PGlite + 跑迁移，完成后 `setPGlite()` 解除排队请求。这避免了调用方 connect 时 listener 未注册的时序竞态。app.html 通过 3-hop PortBridge 中继访问 DB：`initDbProxy()` → `chrome.runtime.connect('favbase-db')` → Background SW PortBridge → Offscreen RPC Handler。Background SW 在 `onInstalled`/`onStartup` 确保 Offscreen 存活。Drizzle query builder 在调用端本地构建 SQL，仅执行通过 RPC 代理

@@ -6,6 +6,7 @@ import type {
   TranscribeStage,
   TranscribeErrorInfo,
 } from '@/lib/transcription/types';
+import { useRetryCountdown } from '@/lib/hooks/useRetryCountdown';
 
 export interface TranscribeState {
   transcribing: boolean;
@@ -29,21 +30,19 @@ export function useTranscribe(
   title: string,
   hasApiKey: boolean,
 ): UseTranscribeReturn {
-  const [state, setState] = useState<TranscribeState>({
+  const [state, setState] = useState<Omit<TranscribeState, 'retryCountdown'>>({
     transcribing: false,
     progress: 0,
     stage: '',
     rows: [],
     error: null,
     cached: false,
-    retryCountdown: 0,
   });
 
-  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const { countdown, startCountdown, resetCountdown } = useRetryCountdown();
   const prevBvidRef = useRef<string | null>(null);
 
   useEffect(() => {
-    // Abort in-flight transcription when navigating to a different video
     const prevBvid = prevBvidRef.current;
     prevBvidRef.current = bvid;
 
@@ -62,14 +61,9 @@ export function useTranscribe(
       rows: [],
       error: null,
       cached: false,
-      retryCountdown: 0,
     });
-
-    if (countdownRef.current) {
-      clearInterval(countdownRef.current);
-      countdownRef.current = null;
-    }
-  }, [bvid]);
+    resetCountdown();
+  }, [bvid, resetCountdown]);
 
   useEffect(() => {
     const handler = (msg: unknown) => {
@@ -90,12 +84,6 @@ export function useTranscribe(
     return () => browser.runtime.onMessage.removeListener(handler);
   }, [bvid]);
 
-  useEffect(() => {
-    return () => {
-      if (countdownRef.current) clearInterval(countdownRef.current);
-    };
-  }, []);
-
   const startTranscribe = useCallback(() => {
     if (!bvid || !cid || !hasApiKey) return;
 
@@ -105,13 +93,8 @@ export function useTranscribe(
       progress: 0,
       stage: '',
       error: null,
-      retryCountdown: 0,
     }));
-
-    if (countdownRef.current) {
-      clearInterval(countdownRef.current);
-      countdownRef.current = null;
-    }
+    resetCountdown();
 
     browser.runtime
       .sendMessage({ type: 'TRANSCRIBE_AUDIO', bvid, cid, title })
@@ -136,19 +119,7 @@ export function useTranscribe(
           }));
 
           if (res.error.retryAfter) {
-            let remaining = res.error.retryAfter;
-            setState((prev) => ({ ...prev, retryCountdown: remaining }));
-
-            countdownRef.current = setInterval(() => {
-              remaining--;
-              if (remaining <= 0) {
-                if (countdownRef.current) clearInterval(countdownRef.current);
-                countdownRef.current = null;
-                setState((prev) => ({ ...prev, retryCountdown: 0 }));
-              } else {
-                setState((prev) => ({ ...prev, retryCountdown: remaining }));
-              }
-            }, 1000);
+            startCountdown(res.error.retryAfter);
           }
         }
       })
@@ -164,7 +135,7 @@ export function useTranscribe(
           },
         }));
       });
-  }, [bvid, cid, title, hasApiKey]);
+  }, [bvid, cid, title, hasApiKey, resetCountdown, startCountdown]);
 
   const cancelTranscribe = useCallback(() => {
     if (!bvid) return;
@@ -178,6 +149,7 @@ export function useTranscribe(
 
   return {
     ...state,
+    retryCountdown: countdown,
     startTranscribe,
     cancelTranscribe,
   };

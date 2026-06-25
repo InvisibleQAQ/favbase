@@ -22,7 +22,12 @@ import {
   fetchAudioBlob,
   AudioExtractError,
 } from '@/lib/transcription/audio-extractor';
-import { extractBiliAudioUrl } from '@/lib/bilibili/bilibili-api';
+import {
+  extractBiliAudioUrl,
+  getBiliAuth,
+  fetchCidByPageList,
+  fetchSubtitle,
+} from '@/lib/bilibili/bilibili-api';
 import { assertAudioNotReused } from '@/lib/transcription/audio-fingerprint';
 import { processSubtitles } from '@/lib/bilibili/subtitle-processor';
 import {
@@ -59,11 +64,39 @@ function notifyTab(
 }
 
 export async function handleTranscribe(
-  msg: { bvid: string; cid: number; title: string },
+  msg: { bvid: string; cid?: number; title: string },
   tabId: number,
   ctx: BackgroundContext,
 ): Promise<TranscribeResponse> {
-  const { bvid, cid, title } = msg;
+  const { bvid, title } = msg;
+
+  // Check cache first — avoid redundant subtitle/ASR calls
+  const cached = await getVideoCache(bvid);
+  if (cached && cached.rows.length > 0) {
+    return {
+      success: true,
+      data: { rows: cached.rows, source: cached.source, cached: true },
+    };
+  }
+
+  // Resolve CID: use caller-provided value or fetch from API
+  const auth = await getBiliAuth();
+  const cid = msg.cid || (await fetchCidByPageList(bvid, 1, auth ?? undefined));
+
+  // Try official subtitle before ASR pipeline
+  try {
+    const subtitleResult = await fetchSubtitle(bvid, cid, auth ?? undefined);
+    if (subtitleResult.status === 'ok' && subtitleResult.rows.length > 0) {
+      const rows = processSubtitles(subtitleResult.rows);
+      await mergeVideoCache(bvid, rows, 'bilibili');
+      return {
+        success: true,
+        data: { rows, source: 'bilibili', cached: false },
+      };
+    }
+  } catch {
+    // Official subtitle fetch failed — fall through to ASR
+  }
 
   const settings = await settingsStorage.getValue();
   const asrConfig = resolveAsrConfig(settings);

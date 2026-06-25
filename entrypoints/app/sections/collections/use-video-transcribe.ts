@@ -6,14 +6,9 @@ import type {
   TranscribeErrorInfo,
 } from '@/lib/transcription/types';
 import type { BiliFavVideo } from '@/lib/bilibili/types';
-import {
-  getBiliAuth,
-  fetchCidByPageList,
-  fetchSubtitle,
-} from '@/lib/bilibili/bilibili-api';
-import { processSubtitles } from '@/lib/bilibili/subtitle-processor';
 import { persistSubtitleContent } from '@/lib/bilibili/content-sync';
 import { getDb } from '@/lib/database';
+import { useRetryCountdown } from '@/lib/hooks/useRetryCountdown';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -53,12 +48,12 @@ const DEFAULT_STATE: VideoTranscribeState = {
 
 export function useVideoTranscribe(
   videos: BiliFavVideo[],
-  hasAsrApiKey: boolean,
 ): UseVideoTranscribeReturn {
   const [stateMap, setStateMap] = useState<Map<string, VideoTranscribeState>>(new Map());
   const [activeBvid, setActiveBvid] = useState<string | null>(null);
 
-  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const { countdown, startCountdown, resetCountdown } = useRetryCountdown();
+  const countdownBvidRef = useRef<string | null>(null);
   const generationRef = useRef(0);
 
   const updateVideo = useCallback((bvid: string, patch: Partial<VideoTranscribeState>) => {
@@ -123,6 +118,19 @@ export function useVideoTranscribe(
   }, [videos]);
 
   // -------------------------------------------------------------------------
+  // Sync shared countdown into the target video's state.
+  // Uses a ref (not activeBvid) because activeBvid is cleared in .finally()
+  // while countdown may still be ticking from a retryAfter response.
+  // -------------------------------------------------------------------------
+  useEffect(() => {
+    const target = countdownBvidRef.current;
+    if (target) {
+      updateVideo(target, { retryCountdown: countdown });
+      if (countdown === 0) countdownBvidRef.current = null;
+    }
+  }, [countdown, updateVideo]);
+
+  // -------------------------------------------------------------------------
   // Listen for TRANSCRIBE_STATUS progress pushes from Background
   // -------------------------------------------------------------------------
   useEffect(() => {
@@ -144,16 +152,7 @@ export function useVideoTranscribe(
   }, [activeBvid, updateVideo]);
 
   // -------------------------------------------------------------------------
-  // Cleanup countdown on unmount
-  // -------------------------------------------------------------------------
-  useEffect(() => {
-    return () => {
-      if (countdownRef.current) clearInterval(countdownRef.current);
-    };
-  }, []);
-
-  // -------------------------------------------------------------------------
-  // Start transcription flow: official subtitle → ASR fallback
+  // Start transcription: handler manages official subtitle → ASR fallback
   // -------------------------------------------------------------------------
   const startTranscribe = useCallback(
     (video: BiliFavVideo) => {
@@ -162,11 +161,8 @@ export function useVideoTranscribe(
 
       const { bvid, title } = video;
       setActiveBvid(bvid);
-
-      if (countdownRef.current) {
-        clearInterval(countdownRef.current);
-        countdownRef.current = null;
-      }
+      countdownBvidRef.current = null;
+      resetCountdown();
 
       updateVideo(bvid, {
         transcribing: true,
@@ -176,109 +172,38 @@ export function useVideoTranscribe(
         retryCountdown: 0,
       });
 
-      (async () => {
-        try {
-          // 1. Get auth
-          const auth = await getBiliAuth();
+      browser.runtime
+        .sendMessage({ type: 'TRANSCRIBE_AUDIO', bvid, title })
+        .then((response: unknown) => {
+          const res = response as TranscribeResponse;
 
-          // 2. Resolve CID
-          updateVideo(bvid, { stage: 'extracting', progress: 5 });
-          const cid = await fetchCidByPageList(bvid, 1, auth ?? undefined);
-
-          // 3. Try official subtitle first
-          updateVideo(bvid, { stage: 'connectivity', progress: 10 });
-          const subtitleResult = await fetchSubtitle(bvid, cid, auth ?? undefined);
-
-          if (subtitleResult.status === 'ok' && subtitleResult.rows.length > 0) {
-            const processed = processSubtitles(subtitleResult.rows);
-
-            // Cache the official subtitle
-            await browser.runtime
-              .sendMessage({ type: 'CACHE_SUBTITLE', bvid, rows: processed, source: 'bilibili' })
-              .catch(() => {});
-
+          if (res.success) {
             // Persist to PGlite (fire-and-forget)
             try {
               const db = getDb();
-              await persistSubtitleContent(db, bvid, processed, 'bilibili');
+              persistSubtitleContent(db, bvid, res.data.rows, res.data.source).catch(() => {});
             } catch { /* DB not ready — skip silently */ }
 
             updateVideo(bvid, {
               transcribing: false,
               progress: 100,
               stage: 'done',
-              contentStatus: 'has_bilibili',
-              error: null,
-            });
-            setActiveBvid(null);
-            return;
-          }
-
-          // 4. No official subtitle — fall back to Groq ASR
-          if (!hasAsrApiKey) {
-            updateVideo(bvid, {
-              transcribing: false,
-              stage: '',
-              error: {
-                code: 'ASR_INVALID_KEY',
-                message: 'ASR API key not configured',
-              },
-            });
-            setActiveBvid(null);
-            return;
-          }
-
-          updateVideo(bvid, { stage: 'start', progress: 0 });
-
-          const response: TranscribeResponse = await browser.runtime.sendMessage({
-            type: 'TRANSCRIBE_AUDIO',
-            bvid,
-            cid,
-            title,
-          });
-
-          if (response.success) {
-            // Persist to PGlite (fire-and-forget)
-            try {
-              const db = getDb();
-              await persistSubtitleContent(
-                db,
-                bvid,
-                response.data.rows,
-                response.data.source,
-              );
-            } catch { /* DB not ready — skip silently */ }
-
-            updateVideo(bvid, {
-              transcribing: false,
-              progress: 100,
-              stage: 'done',
-              contentStatus: response.data.source === 'bilibili' ? 'has_bilibili' : 'has_groq',
+              contentStatus: res.data.source === 'bilibili' ? 'has_bilibili' : 'has_groq',
               error: null,
             });
           } else {
             updateVideo(bvid, {
               transcribing: false,
-              error: response.error,
+              error: res.error,
             });
 
-            if (response.error.retryAfter) {
-              let remaining = response.error.retryAfter;
-              updateVideo(bvid, { retryCountdown: remaining });
-
-              countdownRef.current = setInterval(() => {
-                remaining--;
-                if (remaining <= 0) {
-                  if (countdownRef.current) clearInterval(countdownRef.current);
-                  countdownRef.current = null;
-                  updateVideo(bvid, { retryCountdown: 0 });
-                } else {
-                  updateVideo(bvid, { retryCountdown: remaining });
-                }
-              }, 1000);
+            if (res.error.retryAfter) {
+              countdownBvidRef.current = bvid;
+              startCountdown(res.error.retryAfter);
             }
           }
-        } catch (err) {
+        })
+        .catch((err: unknown) => {
           const detail = err instanceof Error ? err.message : 'unknown error';
           updateVideo(bvid, {
             transcribing: false,
@@ -288,12 +213,12 @@ export function useVideoTranscribe(
               params: { detail },
             },
           });
-        } finally {
+        })
+        .finally(() => {
           setActiveBvid((current) => (current === bvid ? null : current));
-        }
-      })();
+        });
     },
-    [activeBvid, hasAsrApiKey, updateVideo],
+    [activeBvid, resetCountdown, startCountdown, updateVideo],
   );
 
   // -------------------------------------------------------------------------

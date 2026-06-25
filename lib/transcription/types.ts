@@ -14,7 +14,7 @@ export interface SubtitleResult {
 export interface TranscribeRequest {
   type: 'TRANSCRIBE_AUDIO';
   bvid: string;
-  cid: number;
+  cid?: number;
   title: string;
 }
 

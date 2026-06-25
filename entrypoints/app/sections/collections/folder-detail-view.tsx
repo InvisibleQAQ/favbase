@@ -12,7 +12,6 @@ import { Iconify } from '../../components/iconify';
 import { DashboardContent } from '../../layouts/dashboard';
 import { useBiliFavVideos } from './use-bili-fav-videos';
 import { useVideoTranscribe } from './use-video-transcribe';
-import { useSettings } from '@/lib/hooks/useSettings';
 import { VideoCard } from './video-card';
 
 function LoadingSkeleton() {
@@ -119,10 +118,8 @@ export function FolderDetailView() {
   const { videos, folderTitle, page, totalPages, loading, loginState, error, goToPage, retry } =
     useBiliFavVideos(numericId);
 
-  const { currentAsrApiKey } = useSettings();
-  const hasAsrApiKey = Boolean(currentAsrApiKey);
   const { getState, startTranscribe, cancelTranscribe, activeBvid } =
-    useVideoTranscribe(videos, hasAsrApiKey);
+    useVideoTranscribe(videos);
 
   const handleBack = () => {
     navigate('/collections');
