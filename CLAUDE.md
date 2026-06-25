@@ -69,19 +69,17 @@ MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRo
 - `entrypoints/app/pages/` — 页面组件（lazy loaded）
   - `dashboard.tsx` → `sections/overview/overview-view.tsx`（统计卡片 + 活动列表 + 进度条）
   - `settings.tsx` → `sections/settings/settings-view.tsx`（AI 服务配置：LLM/ASR/高级设置）
-  - `collections.tsx` → `sections/collections/collections-view.tsx`（B站收藏夹列表展示）
+  - `collections.tsx` → `sections/collections/collections-view.tsx`（B站收藏夹 sidebar+grid 单页布局）
 - `entrypoints/app/sections/overview/stat-widget.tsx` — 统计卡片：圆形图标背景 + varAlpha 色调 + title/total
 - `entrypoints/app/sections/settings/` — AI 设置页面组件
   - `settings-view.tsx` — 设置页面主视图：DashboardContent + 3 Card 区块
   - `llm-config-card.tsx` — LLM 配置卡片：Provider 选择 + API Key（显示/隐藏）+ Get Key 链接 + Model（Autocomplete，支持远程获取模型列表）+ Custom 字段 + 测试连接（AI SDK `generateText`）
   - `asr-config-card.tsx` — ASR 配置卡片：Provider 选择 + API Key + Model
   - `advanced-settings-card.tsx` — 高级设置：Temperature + MaxTokens + 调用模式（ToggleButtonGroup）
-- `entrypoints/app/sections/collections/` — B站收藏夹页面组件
-  - `collections-view.tsx` — 收藏夹主视图：同步按钮 + 卡片网格 + 未登录引导/空状态/loading skeleton。调用 useFolderCovers 传封面到卡片
-  - `fav-folder-card.tsx` — 收藏夹卡片：封面图（resolvedCover 渐进式加载 + Skeleton + 首字母降级）+ 名称 + 视频数量，点击导航到 `#/collections/bilibili/:mediaId`
+- `entrypoints/app/sections/collections/` — B站收藏夹页面组件（sidebar+grid 单页布局）
+  - `collections-view.tsx` — 收藏夹主视图：左侧 240px FolderSidebar + 右侧 VideoGridPanel。`/collections` 和 `/collections/bilibili/:mediaId` 共用组件，通过 useParams 获取 mediaId，无 mediaId 时自动 navigate(replace) 到第一个收藏夹。包含 NotLoggedIn/ErrorState/EmptyFolderState/VideoGridSkeleton 共享状态组件
+  - `folder-sidebar.tsx` — 收藏夹侧边栏：固定 240px，单分组"BiliBili 收藏夹"标题可上下折叠/展开列表（MUI Collapse）。列表项显示收藏夹名称 + 视频数量，选中项 varAlpha primary 高亮
   - `use-bili-fav-folders.ts` — B站收藏夹 hook：getBiliAuth 检测登录 → fetchFavFolders 获取列表 → 状态管理（folders/loading/syncing/loginState/error）。fetch 成功后 fire-and-forget 调用 syncFavFoldersToDb 持久化到 PGlite
-  - `use-folder-covers.ts` — 收藏夹封面解析 hook：对 cover 为空且 media_count > 0 的收藏夹，并发 fetchFavVideos(auth, id, 1, 1) 取首个视频封面。返回 coverMap + loading。generation 守卫防竞态
-  - `folder-detail-view.tsx` — 收藏夹视频列表页：返回按钮 + VideoCard 网格 + MUI Pagination 翻页 + 未登录/错误/空状态处理。集成 useVideoTranscribe hook 管理转录状态
   - `video-card.tsx` — 视频卡片：封面缩略图 + 时长标签 + 标题 + UP主 + 播放量 + 底部操作栏（转录/状态标记/进度）。失效视频灰显（attr===9）无操作栏。操作栏三态：来源标记（CC 官方/ASR Chip）、转录按钮、进度条（LinearProgress + stage 文字 + 取消按钮）
   - `use-bili-fav-videos.ts` — 收藏夹视频 hook：fetchFavVideos 分页请求 + goToPage 翻页 + loading/error/loginState 状态管理。fetch 成功后 fire-and-forget 调用 syncFavVideosToDb 持久化到 PGlite（需先查 sources 表获取 sourceId）
   - `use-video-transcribe.ts` — 视频转录状态管理 hook：批量 GET_VIDEO_CACHE 预查内容状态（翻页刷新）+ 发送 TRANSCRIBE_AUDIO 消息（不带 cid，handler 自行解析）+ TRANSCRIBE_STATUS 实时进度监听 + 单视频串行控制（activeBvid）+ useRetryCountdown 共享倒计时。成功后 fire-and-forget 调用 persistSubtitleContent 写入 PGlite item_contents 表。官方字幕优先 → ASR 降级策略由 Background handler 层统一管理
@@ -199,7 +197,7 @@ RPC Proxy 架构（参考 memorall 3-hop PortBridge 模式）：Offscreen Docume
 - 字幕后处理: 所有字幕数据（无论来源）均通过 `processSubtitles()` 四步管线处理（不合并，逐条独立）
 - Background 消息桥: Content Script ↔ Background 通过 browser.runtime.sendMessage/onMessage。消息类型定义在 `lib/background/messages.ts`（BgMessage = BgClientMessage | BgInternalMessage）。BgClientMessage 成员来自各领域模块（`lib/transcription/types.ts` 的 TranscribeRequest/Abort + `lib/cache/types.ts` 的 GetVideoCacheRequest/CacheSubtitleRequest），BgInternalMessage 来自 `lib/offscreen/types.ts`。Background → Content Script 进度推送用 browser.tabs.sendMessage。Background ↔ Offscreen 用 chrome.runtime.sendMessage（Chrome-specific API）。新增消息类型：在对应领域模块定义类型 + 在 `lib/background/messages.ts` 注册到 union + `lib/background/` 对应领域 handler 文件添加 handler 函数 + `background.ts` dispatcher switch 添加 case
 - B 站认证: manifest 声明 `cookies` 权限。`lib/bilibili/bilibili-api.ts` 的 `getBiliAuth()` 通过 `chrome.cookies.get()` 读取 SESSDATA + DedeUserID，检查 expirationDate。需要认证的 API（如 fetchFavFolders）手动拼 `Cookie: SESSDATA=xxx` header，Content Script 侧 API 通过 `credentials: 'include'` 自动带 cookie
-- B 站收藏夹: app.html 通过 `useBiliFavFolders` hook 直接调用 `getBiliAuth()` + `fetchFavFolders()` 获取数据并管理 UI 状态（loading/syncing/loginState/error），不经过 Background 消息桥。fetch 成功后 fire-and-forget 调用 `syncFavFoldersToDb` 持久化到 PGlite sources 表
+- B 站收藏夹: app.html Collections 页面为 sidebar+grid 单页布局（`collections-view.tsx`）。左侧 240px `FolderSidebar`（可折叠分组列表），右侧 `VideoGridPanel`（标题栏+视频网格+分页）。`/collections` 和 `/collections/bilibili/:mediaId` 共用同一组件，通过 `useParams` 获取 mediaId 驱动右侧内容切换，无 mediaId 时自动 navigate(replace) 到第一个收藏夹。`useBiliFavFolders` hook 直接调用 `getBiliAuth()` + `fetchFavFolders()` 获取数据并管理 UI 状态（loading/syncing/loginState/error），不经过 Background 消息桥。fetch 成功后 fire-and-forget 调用 `syncFavFoldersToDb` 持久化到 PGlite sources 表
 - B 站视频持久化: `useBiliFavVideos` fetch 成功后 fire-and-forget 调用 `syncFavVideosToDb`，先查 sources 表获取 sourceId（收藏夹未 sync 则跳过）。批量 upsert + 事务保证原子性（~5 RPC 替代原 N*3 串行），DB 写入失败整批回滚不影响 UI。MVP insert-only 不更新已有记录，`content_state='pending'`
 - 存储: WXT `storage.defineItem`（`local:` 前缀），import from `wxt/utils/storage`（非 `wxt/storage`）
 - 设置持久化: `settingsStorage`（`lib/storage.ts`），UserSettings 单对象存储在 `local:settings`。`useSettings`（`lib/hooks/useSettings.ts`）是共享 deep module — 内聚 storage 读写、computed 属性推导、收窄 action（`updateLlm`/`updateAsr` discriminated union）。ASR 配置结构化为 `asrConfigs: Record<string, { apiKey, model }>`，`resolveAsrConfig` 直接索引 + fallback 到 `defaultModel`。新增 ASR provider 只需在 `providers.ts` 加定义。app.html 和 Content Script 都直接从 `@/lib/hooks/useSettings` 导入
