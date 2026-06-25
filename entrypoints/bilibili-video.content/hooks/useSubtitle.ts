@@ -2,9 +2,8 @@ import { useEffect, useState } from 'react';
 import { fetchSubtitle } from '@/lib/bilibili/bilibili-api';
 import { processSubtitles } from '@/lib/bilibili/subtitle-processor';
 import { onBiliMessage } from '@/lib/bilibili/messaging';
-import { normalizeBvid } from '@/lib/cache/video-cache';
+import { onVideoCacheChange } from '@/lib/cache/video-cache';
 import type { SubtitleRow } from '@/lib/transcription/types';
-import type { VideoCacheEntry } from '@/lib/cache/types';
 
 export interface SubtitleState {
   rows: SubtitleRow[];
@@ -212,30 +211,16 @@ export function useSubtitle(
   useEffect(() => {
     if (!bvid) return;
 
-    const handler = (
-      changes: Record<string, chrome.storage.StorageChange>,
-      areaName: string,
-    ) => {
-      if (areaName !== 'local') return;
-      // WXT strips 'local:' prefix — chrome.storage sees 'vc:{bvid}'
-      const key = 'vc:' + normalizeBvid(bvid);
-      if (!changes[key]) return;
-
-      const newValue = changes[key].newValue as VideoCacheEntry | undefined;
-      if (!newValue || !newValue.rows.length) return;
-
+    return onVideoCacheChange(bvid, (entry) => {
       setState({
-        rows: newValue.rows,
+        rows: entry.rows,
         loading: false,
         status: 'ok',
         error: null,
-        source: newValue.source,
+        source: entry.source,
         cached: true,
       });
-    };
-
-    chrome.storage.onChanged.addListener(handler);
-    return () => chrome.storage.onChanged.removeListener(handler);
+    });
   }, [bvid]);
 
   return state;

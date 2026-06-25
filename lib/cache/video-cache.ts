@@ -86,8 +86,10 @@ const legacyStorage = storage.defineItem<Record<string, VideoCacheEntry>>(
 // Storage key helper
 // ---------------------------------------------------------------------------
 
+const CHROME_KEY_PREFIX = 'vc:';
+
 function storageKey(bvid: string): `local:vc:${string}` {
-  return `local:vc:${bvid}`;
+  return `local:${CHROME_KEY_PREFIX}${bvid}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -212,8 +214,8 @@ export function initCacheStorageListener(): void {
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== 'local') return;
     for (const key of Object.keys(changes)) {
-      if (!key.startsWith('vc:')) continue;
-      const bvid = key.slice(3);
+      if (!key.startsWith(CHROME_KEY_PREFIX)) continue;
+      const bvid = key.slice(CHROME_KEY_PREFIX.length);
       const newValue = changes[key].newValue as VideoCacheEntry | undefined;
       if (newValue) {
         memoryCache.set(bvid, cloneData(newValue));
@@ -222,4 +224,31 @@ export function initCacheStorageListener(): void {
       }
     }
   });
+}
+
+// ---------------------------------------------------------------------------
+// Per-bvid storage change subscription (Content Script side)
+// ---------------------------------------------------------------------------
+
+export function onVideoCacheChange(
+  bvid: string,
+  cb: (entry: VideoCacheEntry) => void,
+): () => void {
+  const normalized = normalizeBvid(bvid);
+  const targetKey = CHROME_KEY_PREFIX + normalized;
+
+  const handler = (
+    changes: Record<string, chrome.storage.StorageChange>,
+    areaName: string,
+  ) => {
+    if (areaName !== 'local') return;
+    if (!changes[targetKey]) return;
+    const newValue = changes[targetKey].newValue as VideoCacheEntry | undefined;
+    if (newValue && newValue.rows.length > 0) {
+      cb(newValue);
+    }
+  };
+
+  chrome.storage.onChanged.addListener(handler);
+  return () => chrome.storage.onChanged.removeListener(handler);
 }
