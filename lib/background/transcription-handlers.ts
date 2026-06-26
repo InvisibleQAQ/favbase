@@ -83,19 +83,49 @@ export async function handleTranscribe(
   const auth = await getBiliAuth();
   const cid = msg.cid || (await fetchCidByPageList(bvid, 1, auth ?? undefined));
 
-  // Try official subtitle before ASR pipeline
-  try {
-    const subtitleResult = await fetchSubtitle(bvid, cid, auth ?? undefined);
-    if (subtitleResult.status === 'ok' && subtitleResult.rows.length > 0) {
-      const rows = processSubtitles(subtitleResult.rows);
-      await mergeVideoCache(bvid, rows, 'bilibili');
-      return {
-        success: true,
-        data: { rows, source: 'bilibili', cached: false },
-      };
+  // Try official subtitle before ASR pipeline (retry up to 2 times on error)
+  const RETRY_DELAYS = [1000, 2000];
+  for (let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++) {
+    try {
+      const subtitleResult = await fetchSubtitle(bvid, cid, auth ?? undefined);
+
+      if (subtitleResult.status === 'ok' && subtitleResult.rows.length > 0) {
+        const rows = processSubtitles(subtitleResult.rows);
+        await mergeVideoCache(bvid, rows, 'bilibili');
+        return {
+          success: true,
+          data: { rows, source: 'bilibili', cached: false },
+        };
+      }
+
+      if (subtitleResult.status === 'no_subtitle') {
+        break;
+      }
+
+      // status === 'error': API rejected the request — retry or fall through
+      if (attempt < RETRY_DELAYS.length) {
+        console.warn(
+          `[handleTranscribe] Official subtitle fetch error for ${bvid} (attempt ${attempt + 1}): ${subtitleResult.error ?? 'unknown'} — retrying in ${RETRY_DELAYS[attempt]}ms`,
+        );
+        await new Promise((r) => setTimeout(r, RETRY_DELAYS[attempt]));
+      } else {
+        console.warn(
+          `[handleTranscribe] Official subtitle fetch failed for ${bvid} after ${attempt + 1} attempts: ${subtitleResult.error ?? 'unknown'} — falling back to ASR`,
+        );
+      }
+    } catch (err) {
+      // Network-level failure — same retry logic
+      if (attempt < RETRY_DELAYS.length) {
+        console.warn(
+          `[handleTranscribe] Official subtitle fetch threw for ${bvid} (attempt ${attempt + 1}): ${err instanceof Error ? err.message : err} — retrying in ${RETRY_DELAYS[attempt]}ms`,
+        );
+        await new Promise((r) => setTimeout(r, RETRY_DELAYS[attempt]));
+      } else {
+        console.warn(
+          `[handleTranscribe] Official subtitle fetch threw for ${bvid} after ${attempt + 1} attempts: ${err instanceof Error ? err.message : err} — falling back to ASR`,
+        );
+      }
     }
-  } catch {
-    // Official subtitle fetch failed — fall through to ASR
   }
 
   const settings = await settingsStorage.getValue();

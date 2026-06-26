@@ -156,6 +156,13 @@ export async function fetchSubtitle(
   }
 
   const playerData = await playerRes.json();
+
+  if (playerData?.code !== 0) {
+    const code = playerData?.code ?? 'unknown';
+    const msg = playerData?.message ?? '';
+    return { status: 'error', rows: [], error: `Player API code ${code}: ${msg}` };
+  }
+
   const subtitles: SubtitleTrack[] | undefined = playerData?.data?.subtitle?.subtitles;
 
   if (!subtitles?.length) {
