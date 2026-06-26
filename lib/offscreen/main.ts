@@ -1,9 +1,5 @@
 import { FFmpeg } from '@ffmpeg/ffmpeg';
-import {
-  PipelineError,
-  type SubtitleRow,
-  type TranscribeErrorInfo,
-} from '@/lib/transcription/types';
+import type { SubtitleRow, TranscribeErrorInfo } from '@/lib/transcription/types';
 import type {
   OffscreenRequest,
   OffscreenPrepareRequest,
@@ -316,9 +312,9 @@ async function transcribeChunk(
     const { rows } = await requestGroqTranscription(blob, apiKey, model, undefined, baseUrl);
     return rows;
   } catch (err) {
-    // AsrError (extends PipelineError) can't serialize through sendResponse —
-    // extract the plain TranscribeErrorInfo for chrome IPC.
-    if (err instanceof PipelineError) throw err.info;
+    if (err != null && typeof err === 'object' && 'info' in err) {
+      throw (err as { info: TranscribeErrorInfo }).info;
+    }
     throw err;
   }
 }
