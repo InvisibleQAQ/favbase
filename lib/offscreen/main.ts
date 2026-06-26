@@ -1,5 +1,5 @@
 import { FFmpeg } from '@ffmpeg/ffmpeg';
-import type { SubtitleRow, TranscribeErrorInfo } from '@/lib/transcription/types';
+import type { SubtitleRow, TranscribeErrorCode, TranscribeErrorInfo } from '@/lib/transcription/types';
 import type {
   OffscreenRequest,
   OffscreenPrepareRequest,
@@ -17,6 +17,14 @@ import {
 } from '@/lib/transcription/constants';
 import { requestGroqTranscription } from '@/lib/transcription/groq-client';
 import { initDbMain } from '@/lib/database/db';
+
+function offscreenError(
+  code: TranscribeErrorCode,
+  message: string,
+  params?: Record<string, string | number>,
+): TranscribeErrorInfo {
+  return { code, message, ...(params && { params }) };
+}
 
 const SESSION_TTL_MS = 10 * 60 * 1000;
 const SESSION_SWEEP_INTERVAL_MS = 60 * 1000;
@@ -71,18 +79,10 @@ async function fetchAudioBytes(url: string): Promise<ArrayBuffer> {
   try {
     res = await fetch(url, { method: 'GET', credentials: 'omit', mode: 'cors' });
   } catch (err) {
-    throw {
-      code: 'DOWNLOAD_FAILED',
-      message: `Audio download failed: ${err instanceof Error ? err.message : 'network error'}`,
-      params: { status: 0 },
-    } satisfies TranscribeErrorInfo;
+    throw offscreenError('DOWNLOAD_FAILED', `Audio download failed: ${err instanceof Error ? err.message : 'network error'}`, { status: 0 });
   }
   if (!res.ok) {
-    throw {
-      code: 'DOWNLOAD_FAILED',
-      message: `Audio download failed: HTTP ${res.status}`,
-      params: { status: res.status },
-    } satisfies TranscribeErrorInfo;
+    throw offscreenError('DOWNLOAD_FAILED', `Audio download failed: HTTP ${res.status}`, { status: res.status });
   }
   return res.arrayBuffer();
 }
@@ -244,10 +244,7 @@ async function handlePrepare(msg: OffscreenPrepareRequest): Promise<void> {
     duration = 0;
   }
   if (!(duration > 0)) {
-    throw {
-      code: 'ASR_CHUNK_DURATION_UNKNOWN',
-      message: 'Cannot determine audio duration',
-    } satisfies TranscribeErrorInfo;
+    throw offscreenError('ASR_CHUNK_DURATION_UNKNOWN', 'Cannot determine audio duration');
   }
 
   const audioBytes = new Uint8Array(sourceBytes);
@@ -270,20 +267,14 @@ async function handlePrepare(msg: OffscreenPrepareRequest): Promise<void> {
     try {
       chunks = await splitAudioIntoChunks(audioBytes, plans);
     } catch {
-      throw {
-        code: 'ASR_CHUNKING_FAILED',
-        message: 'FFmpeg chunking failed',
-      } satisfies TranscribeErrorInfo;
+      throw offscreenError('ASR_CHUNKING_FAILED', 'FFmpeg chunking failed');
     }
 
     const oversized = chunks.some((c) => c.bytes.byteLength > msg.maxBytes);
     if (!oversized) break;
 
     if (round === MAX_CHUNK_SHRINK_ROUNDS) {
-      throw {
-        code: 'ASR_CHUNKING_UNSUPPORTED',
-        message: `Still oversized after ${MAX_CHUNK_SHRINK_ROUNDS} shrink rounds`,
-      } satisfies TranscribeErrorInfo;
+      throw offscreenError('ASR_CHUNKING_UNSUPPORTED', `Still oversized after ${MAX_CHUNK_SHRINK_ROUNDS} shrink rounds`);
     }
 
     chunkSeconds = Math.max(
@@ -356,10 +347,7 @@ function mergeTimestampedChunkRows(
 async function handleTranscribe(msg: OffscreenTranscribeRequest): Promise<SubtitleRow[]> {
   const session = sessions.get(msg.sessionId);
   if (!session) {
-    throw {
-      code: 'ASR_CHUNKING_FAILED',
-      message: `Chunk session not found: ${msg.sessionId}`,
-    } satisfies TranscribeErrorInfo;
+    throw offscreenError('ASR_CHUNKING_FAILED', `Chunk session not found: ${msg.sessionId}`);
   }
 
   touchSession(msg.sessionId);
