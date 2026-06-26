@@ -12,7 +12,6 @@ import type {
   OffscreenTranscribeRequest,
 } from '@/lib/offscreen/types';
 import { settingsStorage, resolveAsrConfig } from '@/lib/storage';
-import { getAsrProviderDef } from '@/lib/providers';
 import {
   ensureGroqConnectivity,
   requestGroqTranscription,
@@ -128,16 +127,15 @@ export async function handleTranscribe(
     }
   }
 
-  const settings = await settingsStorage.getValue();
-  const asrConfig = resolveAsrConfig(settings);
-  const asrDef = getAsrProviderDef(settings.asrProvider);
-
   const controller = new AbortController();
   ctx.tabAbortControllers.set(tabId, controller);
   tabBvids.set(tabId, bvid);
 
   const deps = {
-    getAsrConfig: async () => asrConfig,
+    getAsrConfig: async () => {
+      const s = await settingsStorage.getValue();
+      return resolveAsrConfig(s);
+    },
     checkCache: async (id: string) => {
       const entry = await getVideoCache(id);
       if (!entry || entry.rows.length === 0) return null;
@@ -146,8 +144,8 @@ export async function handleTranscribe(
     saveCache: async (id: string, rows: SubtitleRow[]) => {
       await mergeVideoCache(id, rows, 'groq');
     },
-    ensureConnectivity: (apiKey: string) =>
-      ensureGroqConnectivity(apiKey, asrDef.baseUrl),
+    ensureConnectivity: (apiKey: string, baseUrl: string) =>
+      ensureGroqConnectivity(apiKey, baseUrl),
     extractAudioUrl: async (bvid: string, cid: number) => {
       try {
         return await extractBiliAudioUrl(bvid, cid);
@@ -161,13 +159,13 @@ export async function handleTranscribe(
     fetchAudio: fetchAudioBlob,
     checkAudioReuse: assertAudioNotReused,
     transcribeDirect: async (
-      blob: Blob, apiKey: string, model: string, signal: AbortSignal,
+      blob: Blob, apiKey: string, model: string, signal: AbortSignal, baseUrl: string,
     ) => {
-      const result = await requestGroqTranscription(blob, apiKey, model, signal, asrDef.baseUrl);
+      const result = await requestGroqTranscription(blob, apiKey, model, signal, baseUrl);
       return result.rows;
     },
     transcribeChunked: async (
-      audioUrl: string, apiKey: string, model: string, t: string,
+      audioUrl: string, apiKey: string, model: string, t: string, baseUrl: string,
     ) => {
       await ctx.ensureOffscreen();
       const sessionId = `${bvid}_${Date.now()}`;
@@ -194,7 +192,7 @@ export async function handleTranscribe(
           apiKey,
           model,
           title: t,
-          baseUrl: asrDef.baseUrl,
+          baseUrl,
         } satisfies OffscreenTranscribeRequest);
 
         chrome.runtime

@@ -10,6 +10,7 @@ import { GROQ_MAX_AUDIO_BYTES, PROGRESS } from './constants';
 export interface AsrConfig {
   apiKey: string;
   model: string;
+  baseUrl: string;
 }
 
 export interface PipelineDeps {
@@ -18,7 +19,7 @@ export interface PipelineDeps {
     bvid: string,
   ): Promise<{ rows: SubtitleRow[]; source: 'bilibili' | 'groq' } | null>;
   saveCache(bvid: string, rows: SubtitleRow[]): Promise<void>;
-  ensureConnectivity(apiKey: string): Promise<void>;
+  ensureConnectivity(apiKey: string, baseUrl: string): Promise<void>;
   extractAudioUrl(bvid: string, cid: number): Promise<string>;
   fetchAudio(
     url: string,
@@ -31,12 +32,14 @@ export interface PipelineDeps {
     apiKey: string,
     model: string,
     signal: AbortSignal,
+    baseUrl: string,
   ): Promise<SubtitleRow[]>;
   transcribeChunked(
     audioUrl: string,
     apiKey: string,
     model: string,
     title: string,
+    baseUrl: string,
   ): Promise<SubtitleRow[]>;
   processSubtitles(rows: SubtitleRow[]): SubtitleRow[];
 }
@@ -87,6 +90,7 @@ async function transcribeWithFakeProgress(
       config.apiKey,
       config.model,
       signal,
+      config.baseUrl,
     );
   } finally {
     clearInterval(timer);
@@ -120,7 +124,7 @@ export async function runTranscriptionPipeline(
     onProgress(PROGRESS.START, 'start');
 
     onProgress(PROGRESS.CONNECTIVITY_CHECK, 'connectivity');
-    await deps.ensureConnectivity(config.apiKey);
+    await deps.ensureConnectivity(config.apiKey, config.baseUrl);
     assertNotAborted(signal);
 
     onProgress(PROGRESS.DOWNLOAD_BEGIN, 'extracting');
@@ -151,6 +155,7 @@ export async function runTranscriptionPipeline(
         config.apiKey,
         config.model,
         title,
+        config.baseUrl,
       );
     }
 

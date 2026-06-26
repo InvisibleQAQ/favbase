@@ -54,12 +54,13 @@ export const sidebarPinnedStorage = storage.defineItem<boolean>(
   { fallback: true },
 );
 
-export function resolveAsrConfig(settings: UserSettings): { apiKey: string; model: string } {
+export function resolveAsrConfig(settings: UserSettings): { apiKey: string; model: string; baseUrl: string } {
   const cfg = settings.asrConfigs?.[settings.asrProvider];
   const def = getAsrProviderDef(settings.asrProvider);
   return {
     apiKey: cfg?.apiKey ?? '',
     model: cfg?.model || def.defaultModel,
+    baseUrl: def.baseUrl,
   };
 }
 
