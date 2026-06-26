@@ -7,6 +7,7 @@ export interface InjectEffects {
   hideSubtitleDisplay(): void;
   restoreDisplay(): void;
   resolvePageMeta(): { bvid: string; cid: number };
+  isPageMetaConsistent(): boolean;
   postRouteSwitch(bvid: string): void;
   postHandshake(bvid: string, cid: number): void;
   postSubtitleData(bvid: string, cid: number, body: unknown[]): void;
@@ -48,6 +49,7 @@ export function createStateMachine(effects: InjectEffects): InjectStateMachine {
   }
 
   function emitHandshake(): void {
+    if (!effects.isPageMetaConsistent()) return;
     const meta = effects.resolvePageMeta();
     if (meta.bvid) {
       capturedBvid = meta.bvid;
@@ -57,6 +59,13 @@ export function createStateMachine(effects: InjectEffects): InjectStateMachine {
 
   function autoTriggerLoop(): void {
     if (phase === 'captured') return;
+
+    if (!effects.isPageMetaConsistent()) {
+      autoTriggerAttempts++;
+      if (autoTriggerAttempts >= 10) return;
+      autoTriggerTimer = setTimeout(autoTriggerLoop, 1000);
+      return;
+    }
 
     const triggered = effects.triggerCC();
     if (!triggered) {
@@ -104,6 +113,7 @@ export function createStateMachine(effects: InjectEffects): InjectStateMachine {
     markCaptured(gen: number, rawText: string, currentUrl: string): void {
       if (phase === 'captured') return;
       if (gen !== generation) return;
+      if (!effects.isPageMetaConsistent()) return;
 
       let data: any;
       try { data = JSON.parse(rawText); } catch { return; }

@@ -11,10 +11,11 @@ export function installInterceptors(sm: InjectStateMachine): void {
       typeof args[0] === 'string'
         ? args[0]
         : (args[0] as Request)?.url || '';
+    const isSubtitle = isSubtitleCdnUrl(url);
+    const gen = isSubtitle ? sm.generation : 0;
     const response = await originalFetch.apply(this, args);
 
-    if (isSubtitleCdnUrl(url)) {
-      const gen = sm.generation;
+    if (isSubtitle) {
       response
         .clone()
         .text()

@@ -116,12 +116,21 @@ function triggerCC(): boolean {
   return true;
 }
 
+function checkPageMetaConsistency(): boolean {
+  const state = (window as any).__INITIAL_STATE__ || {};
+  const stateBvid = String(state?.bvid || state?.videoData?.bvid || '');
+  const urlBvid = extractBvid(location.href) || '';
+  if (!stateBvid || !urlBvid) return true;
+  return stateBvid.toLowerCase() === urlBvid.toLowerCase();
+}
+
 export function createBrowserEffects(): InjectEffects {
   return {
     triggerCC,
     hideSubtitleDisplay: hackSubtitleOff,
     restoreDisplay: removeStealthMask,
     resolvePageMeta,
+    isPageMetaConsistent: checkPageMetaConsistency,
 
     postRouteSwitch(bvid: string): void {
       postBiliMessage('BILI_ROUTE_SWITCH', { bvid });

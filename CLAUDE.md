@@ -100,7 +100,7 @@ MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRo
 - `lib/bilibili/subtitle-processor.ts` — processSubtitles() 四步管线：normalize -> filter -> filler removal -> deduplicate(Jaccard>0.85)。接受 B 站原始格式和 favbase 格式。每条字幕保持独立行，不合并
 - `entrypoints/bilibili-inject.content.ts` — Main World 入口协调器：创建 effects + 状态机 + 拦截器 + 路由监控，5 行 bootstrap
 - `lib/bilibili/inject/state.ts` — InjectStateMachine 状态机（createStateMachine(effects)），拥有全部状态转换（bootstrap/markCaptured/resetForRoute）+ 定时器编排 + reemit loop。通过 InjectEffects 接口注入副作用，纯逻辑可单元测试
-- `lib/bilibili/inject/effects.ts` — InjectEffects 生产实现（createBrowserEffects()）：DOM 操作（triggerCC/hideSubtitleDisplay/restoreDisplay）+ resolvePageMeta() 页面元数据 + 通过 messaging.ts 的 postBiliMessage() 桥接消息
+- `lib/bilibili/inject/effects.ts` — InjectEffects 生产实现（createBrowserEffects()）：DOM 操作（triggerCC/hideSubtitleDisplay/restoreDisplay）+ resolvePageMeta() 页面元数据 + isPageMetaConsistent()（检查 `__INITIAL_STATE__` bvid 与 URL bvid 一致性，SPA 过渡期间返回 false）+ 通过 messaging.ts 的 postBiliMessage() 桥接消息
 - `lib/bilibili/inject/interceptors.ts` — fetch/XHR 覆写（installInterceptors(sm)），使用 url-utils.ts 的 isSubtitleCdnUrl() 检测字幕响应后调用 sm.markCaptured()
 - `lib/bilibili/inject/route-monitor.ts` — 300ms SPA 路由轮询（startRouteMonitor(sm)），检测 BV 号/分P 变化后调用 sm.resetForRoute()
 - `entrypoints/bilibili-video.content/` — 嵌入B站右侧栏的面板 UI
@@ -203,7 +203,7 @@ RPC Proxy 架构（参考 memorall 3-hop PortBridge 模式）：Offscreen Docume
 - 设置持久化: `settingsStorage`（`lib/storage.ts`），UserSettings 单对象存储在 `local:settings`。`useSettings`（`lib/hooks/useSettings.ts`）是共享 deep module — 内聚 storage 读写、computed 属性推导、收窄 action（`updateLlm`/`updateAsr` discriminated union）。ASR 配置结构化为 `asrConfigs: Record<string, { apiKey, model }>`，`resolveAsrConfig` 直接索引 + fallback 到 `defaultModel`。新增 ASR provider 只需在 `providers.ts` 加定义。app.html 和 Content Script 都直接从 `@/lib/hooks/useSettings` 导入
 - 侧边栏 Pin/Unpin: `sidebarPinnedStorage`（`lib/storage.ts`），布尔值存储在 `local:sidebarPinned`（默认 true）。DashboardLayout 读取并通过 toggle 按钮切换。Pinned=280px 展开（图标+文字），Unpinned=72px 图标栏（MUI Tooltip 显示菜单名）。Mobile（lg 以下）不受影响，始终 Drawer 模式
 - AI SDK Provider 映射: `LLMProviderDef.sdkType` 驱动全部分支。openai → `@ai-sdk/openai`，anthropic → `@ai-sdk/anthropic`，google → `@ai-sdk/google`，openai-compatible → `@ai-sdk/openai-compatible`。custom provider 的 sdkType 静态为 `openai-compatible`，`customProtocol==='claude'` 时运行时覆盖为 anthropic。测试连接用 `generateText()`，模型列表用原生 fetch（AI SDK 无 model listing API），认证 header 由 `buildAuthHeaders(sdkType, apiKey)` 统一构建
-- Inject 状态机: 三阶段生命周期 idle → triggering → captured，通过 InjectEffects 接口注入 DOM/postMessage 副作用，状态转换集中在 state.ts 的 createStateMachine() 内。routeGeneration 作为并发守卫防止路由切换后旧 in-flight 拦截结果被采纳
+- Inject 状态机: 三阶段生命周期 idle → triggering → captured，通过 InjectEffects 接口注入 DOM/postMessage 副作用，状态转换集中在 state.ts 的 createStateMachine() 内。双层防污染守卫：(1) generation 并发守卫防止路由切换后旧 in-flight 拦截结果被采纳 (2) `isPageMetaConsistent()` 检查 `__INITIAL_STATE__` bvid 与 URL bvid 一致性，SPA 过渡期间（`__INITIAL_STATE__` 尚未更新）拒绝 markCaptured / emitHandshake / autoTrigger，防止旧视频字幕被标记为新视频 bvid。fetch 拦截器必须在 `await` 之前捕获 generation（interceptors.ts），XHR 在 send() 时捕获
 - SPA 路由监控: route-monitor.ts 300ms 轮询 location.href 检测 BV 号/分P 变化 → sm.resetForRoute() 级联重置（generation++、清理定时器、restoreDisplay） → ROUTE_SWITCH 即时通知 → 800ms 后重发 HANDSHAKE → 重触发 CC 按钮
 - 字幕获取流程（主路径）: interceptors.ts 拦截 fetch/XHR → sm.markCaptured() 解析+桥接 → postMessage SUBTITLE_DATA → useSubtitle 接收 → processSubtitles()
 - 字幕获取流程（降级路径）: extractBvid() → fetchCidByPageList() → fetchSubtitle(bvid, cid) → processSubtitles()（失败自动重试最多 2 次）

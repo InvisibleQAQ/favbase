@@ -7,6 +7,7 @@ function mockEffects(overrides?: Partial<InjectEffects>): InjectEffects {
     hideSubtitleDisplay: vi.fn(),
     restoreDisplay: vi.fn(),
     resolvePageMeta: vi.fn(() => ({ bvid: 'BVmock123', cid: 42 })),
+    isPageMetaConsistent: vi.fn(() => true),
     postRouteSwitch: vi.fn(),
     postHandshake: vi.fn(),
     postSubtitleData: vi.fn(),
@@ -253,6 +254,31 @@ describe('createStateMachine', () => {
 
       vi.advanceTimersByTime(5000);
       expect(fx.triggerCC).toHaveBeenCalledTimes(10);
+    });
+  });
+
+  describe('page meta consistency guard', () => {
+    it('rejects markCaptured when __INITIAL_STATE__ is stale', () => {
+      const fx = mockEffects({ isPageMetaConsistent: vi.fn(() => false) });
+      const sm = createStateMachine(fx);
+      sm.markCaptured(0, VALID_SUBTITLE_JSON, 'https://www.bilibili.com/video/BV1abc123');
+      expect(sm.phase).toBe('idle');
+      expect(fx.postSubtitleData).not.toHaveBeenCalled();
+    });
+
+    it('skips emitHandshake when page meta inconsistent', () => {
+      const fx = mockEffects({ isPageMetaConsistent: vi.fn(() => false) });
+      const sm = createStateMachine(fx);
+      sm.bootstrap();
+      expect(fx.postHandshake).not.toHaveBeenCalled();
+    });
+
+    it('delays autoTrigger when page meta inconsistent', () => {
+      const fx = mockEffects({ isPageMetaConsistent: vi.fn(() => false) });
+      const sm = createStateMachine(fx);
+      sm.bootstrap();
+      vi.advanceTimersByTime(12_000);
+      expect(fx.triggerCC).not.toHaveBeenCalled();
     });
   });
 
