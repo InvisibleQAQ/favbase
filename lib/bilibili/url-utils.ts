@@ -20,6 +20,12 @@ export function extractPageNum(url: string): number {
   return match ? Number(match[1]) : 1;
 }
 
+/** Normalize a bilibili cover URL (protocol-relative → https). */
+export function normalizeCover(cover?: string): string {
+  if (!cover) return '';
+  return cover.startsWith('//') ? `https:${cover}` : cover;
+}
+
 /** Check if a URL points to bilibili's subtitle CDN. */
 export function isSubtitleCdnUrl(url: string): boolean {
   if (!url) return false;

@@ -1,13 +1,13 @@
-import { getBiliAuth, fetchFavVideos } from './bilibili-api';
-import { syncFavVideosToDb } from './videos-sync';
+import {
+  checkAuth,
+  fetchAndSyncVideos,
+  getPendingBvids,
+  getPendingPreview,
+  markVideoError,
+} from './bili-sync-service';
 import { transcribeAndPersist, createStatusListener } from './transcribe-utils';
+import { normalizeCover } from './url-utils';
 import { resolveAsrConfig, settingsStorage } from '@/lib/storage';
-import { getDb } from '@/lib/database';
-import { items } from '@/lib/database/entities/items';
-import { itemSources } from '@/lib/database/entities/item-sources';
-import { sources } from '@/lib/database/entities/sources';
-import { eq, and, inArray, sql, desc } from 'drizzle-orm';
-import type { TranscribeResponse } from '@/lib/transcription/types';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -94,11 +94,6 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
-function normalizeCover(cover?: string): string {
-  if (!cover) return '';
-  return cover.startsWith('//') ? `https:${cover}` : cover;
-}
-
 // ---------------------------------------------------------------------------
 // Pipeline
 // ---------------------------------------------------------------------------
@@ -149,63 +144,9 @@ export class AutoTranscribePipeline {
     const gen = ++this.previewGeneration;
 
     try {
-      const db = getDb();
-
-      const sourceRows = await db
-        .select({ id: sources.id })
-        .from(sources)
-        .where(and(eq(sources.platform, 'bilibili'), eq(sources.platformSourceId, String(mediaId))))
-        .limit(1);
-
+      const preview = await getPendingPreview(mediaId);
       if (gen !== this.previewGeneration) return;
-
-      if (sourceRows.length === 0) {
-        this.patch({ previewVideo: null, pendingCount: 0 });
-        return;
-      }
-
-      const sourceId = sourceRows[0].id;
-      const pendingFilter = and(
-        eq(itemSources.sourceId, sourceId),
-        eq(items.platform, 'bilibili'),
-        eq(items.contentState, 'pending'),
-      );
-
-      const pendingRows = await db
-        .select({ title: items.title, authorName: items.authorName, platformMeta: items.platformMeta })
-        .from(items)
-        .innerJoin(itemSources, eq(items.id, itemSources.itemId))
-        .where(pendingFilter)
-        .orderBy(desc(items.createdAt))
-        .limit(1);
-
-      const countRows = await db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(items)
-        .innerJoin(itemSources, eq(items.id, itemSources.itemId))
-        .where(pendingFilter);
-
-      if (gen !== this.previewGeneration) return;
-
-      const pendingCount = countRows[0]?.count ?? 0;
-
-      if (pendingRows.length > 0) {
-        const row = pendingRows[0];
-        const meta = row.platformMeta as Record<string, unknown> | null;
-        const duration = typeof meta?.duration === 'number' ? meta.duration : 0;
-
-        this.patch({
-          previewVideo: {
-            cover: normalizeCover(meta?.cover as string),
-            title: row.title,
-            upper: row.authorName,
-            duration,
-          },
-          pendingCount,
-        });
-      } else {
-        this.patch({ previewVideo: null, pendingCount });
-      }
+      this.patch({ previewVideo: preview.video, pendingCount: preview.pendingCount });
     } catch {
       // DB not ready
     }
@@ -294,27 +235,18 @@ export class AutoTranscribePipeline {
     const stats: AutoTranscribeStats = { cc: 0, asr: 0, skipped: 0, remaining: 0 };
 
     try {
-      const auth = await getBiliAuth();
-      if (!auth) throw new Error('Not logged in');
+      await checkAuth();
 
       const settings = await settingsStorage.getValue();
       const asrConfig = resolveAsrConfig(settings);
       const hasAsrKey = Boolean(asrConfig.apiKey);
 
-      const db = getDb();
-      const sourceRows = await db
-        .select({ id: sources.id })
-        .from(sources)
-        .where(and(eq(sources.platform, 'bilibili'), eq(sources.platformSourceId, String(targetMediaId))))
-        .limit(1);
-
-      const firstPage = await fetchFavVideos(auth, targetMediaId, 1);
+      const firstResult = await fetchAndSyncVideos(targetMediaId, 1);
       signal.throwIfAborted();
-      const totalCount = firstPage.info.media_count;
-      const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+      const totalPages = firstResult.totalPages;
 
       let processedIndex = 0;
-      this.patch({ totalPages, totalVideos: totalCount, currentPage: 0 });
+      this.patch({ totalPages, totalVideos: firstResult.mediaCount, currentPage: 0 });
 
       for (let page = 1; page <= totalPages; page++) {
         signal.throwIfAborted();
@@ -322,32 +254,15 @@ export class AutoTranscribePipeline {
         // --- Sync phase ---
         this.patch({ phase: 'syncing', currentPage: page });
 
-        const pageData = page === 1 ? firstPage : await fetchFavVideos(auth, targetMediaId, page);
+        const pageResult = page === 1 ? firstResult : await fetchAndSyncVideos(targetMediaId, page);
         signal.throwIfAborted();
-        const videos = pageData.medias ?? [];
-
-        if (videos.length > 0 && sourceRows.length > 0) {
-          await syncFavVideosToDb(db, videos, sourceRows[0].id);
-        }
+        const videos = pageResult.videos;
 
         const pageBvids = videos
           .filter((v) => v.attr !== 9 && v.bvid)
           .map((v) => v.bvid);
 
-        let pendingBvids: string[] = [];
-        if (pageBvids.length > 0) {
-          const rows = await db
-            .select({ platformItemId: items.platformItemId })
-            .from(items)
-            .where(
-              and(
-                eq(items.platform, 'bilibili'),
-                inArray(items.platformItemId, pageBvids),
-                eq(items.contentState, 'pending'),
-              ),
-            );
-          pendingBvids = rows.map((r) => r.platformItemId);
-        }
+        const pendingBvids = await getPendingBvids(pageBvids);
 
         stats.skipped += videos.filter((v) => v.attr === 9).length;
         stats.cc += pageBvids.length - pendingBvids.length;
@@ -409,14 +324,7 @@ export class AutoTranscribePipeline {
                 stats.skipped++;
               } else {
                 stats.skipped++;
-                try {
-                  await db
-                    .update(items)
-                    .set({ contentState: 'error' })
-                    .where(
-                      and(eq(items.platform, 'bilibili'), eq(items.platformItemId, bvid)),
-                    );
-                } catch { /* */ }
+                await markVideoError(bvid);
               }
 
               stats.remaining = Math.max(0, stats.remaining - 1);

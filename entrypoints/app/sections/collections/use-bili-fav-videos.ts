@@ -1,9 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getBiliAuth, fetchFavVideos, BiliAuthError } from '@/lib/bilibili/bilibili-api';
-import { syncFavVideosToDb } from '@/lib/bilibili/videos-sync';
-import { getDb } from '@/lib/database';
-import { sources } from '@/lib/database/entities/sources';
-import { eq, and } from 'drizzle-orm';
+import { fetchAndSyncVideos, BiliAuthError } from '@/lib/bilibili/bili-sync-service';
 import type { BiliFavVideo } from '@/lib/bilibili/types';
 
 type LoginState = 'unknown' | 'logged_in' | 'not_logged_in';
@@ -20,29 +16,6 @@ interface UseFavVideosReturn {
   retry: () => void;
 }
 
-const PAGE_SIZE = 20;
-
-async function syncVideosToDb(videos: BiliFavVideo[], mediaId: number): Promise<void> {
-  const db = getDb();
-  const existing = await db
-    .select()
-    .from(sources)
-    .where(
-      and(
-        eq(sources.platform, 'bilibili'),
-        eq(sources.platformSourceId, String(mediaId)),
-      ),
-    )
-    .limit(1);
-
-  if (existing.length === 0) {
-    console.warn('[fav-videos] Source not found for mediaId=%d, skipping DB sync', mediaId);
-    return;
-  }
-
-  await syncFavVideosToDb(db, videos, existing[0].id);
-}
-
 export function useBiliFavVideos(mediaId: number): UseFavVideosReturn {
   const [videos, setVideos] = useState<BiliFavVideo[]>([]);
   const [folderTitle, setFolderTitle] = useState('');
@@ -56,27 +29,12 @@ export function useBiliFavVideos(mediaId: number): UseFavVideosReturn {
     setLoading(true);
     setError(null);
     try {
-      const auth = await getBiliAuth();
-      if (!auth) {
-        setLoginState('not_logged_in');
-        return;
-      }
+      const result = await fetchAndSyncVideos(mediaId, targetPage);
       setLoginState('logged_in');
-
-      const data = await fetchFavVideos(auth, mediaId, targetPage);
-      const medias = data.medias ?? [];
-      setVideos(medias);
-      setFolderTitle(data.info.title);
-      setTotalPages(Math.max(1, Math.ceil(data.info.media_count / PAGE_SIZE)));
+      setVideos(result.videos);
+      setFolderTitle(result.folderTitle);
+      setTotalPages(result.totalPages);
       setPage(targetPage);
-
-      // Fire-and-forget: persist to PGlite
-      if (medias.length > 0) {
-        syncVideosToDb(medias, mediaId).catch((err) => {
-          console.error('[fav-videos] DB sync failed:', err);
-          if (err?.cause) console.error('[fav-videos] Cause:', err.cause);
-        });
-      }
     } catch (err) {
       if (err instanceof BiliAuthError) {
         setLoginState('not_logged_in');

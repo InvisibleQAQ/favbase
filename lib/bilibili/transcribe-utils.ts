@@ -1,6 +1,5 @@
 import type { TranscribeResponse, TranscribeStatusPush } from '@/lib/transcription/types';
-import { persistSubtitleContent } from './content-sync';
-import { getDb } from '@/lib/database';
+import { persistContent } from './bili-sync-service';
 
 export async function transcribeAndPersist(
   bvid: string,
@@ -13,12 +12,7 @@ export async function transcribeAndPersist(
   })) as TranscribeResponse;
 
   if (response.success) {
-    try {
-      const db = getDb();
-      persistSubtitleContent(db, bvid, response.data.rows, response.data.source).catch(() => {});
-    } catch {
-      /* DB not ready */
-    }
+    persistContent(bvid, response.data.rows, response.data.source);
   }
 
   return response;
