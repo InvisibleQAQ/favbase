@@ -73,7 +73,7 @@ export function useSubtitle(
           } | null,
         ) => {
           if (cancelled || resolved) return;
-          if (result && result.rows.length > 0) {
+          if (result) {
             resolved = true;
             if (fallbackTimer) clearTimeout(fallbackTimer);
             setState({

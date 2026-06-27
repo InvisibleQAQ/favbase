@@ -103,11 +103,11 @@ export async function getVideoCache(
 
   // 1. Memory cache hit
   const mem = memoryCache.get(bvid);
-  if (mem) return cloneData(mem);
+  if (mem && mem.rows.length > 0) return cloneData(mem);
 
   // 2. New per-bvid key
   const entry = await storage.getItem<VideoCacheEntry>(storageKey(bvid));
-  if (entry) {
+  if (entry && entry.rows.length > 0) {
     memoryCache.set(bvid, cloneData(entry));
     return cloneData(entry);
   }
@@ -115,18 +115,15 @@ export async function getVideoCache(
   // 3. Legacy migration
   const legacy = await legacyStorage.getValue();
   const legacyEntry = legacy[bvid];
-  if (legacyEntry) {
-    // Ensure rawHash exists on legacy entries
+  if (legacyEntry && legacyEntry.rows.length > 0) {
     const migrated: VideoCacheEntry = {
       ...legacyEntry,
       rawHash: legacyEntry.rawHash || computeRowsHash(legacyEntry.rows),
     };
 
-    // Write to new key
     await storage.setItem(storageKey(bvid), migrated);
     memoryCache.set(bvid, cloneData(migrated));
 
-    // Remove from legacy
     delete legacy[bvid];
     if (Object.keys(legacy).length === 0) {
       await legacyStorage.removeValue();
@@ -194,14 +191,6 @@ export async function mergeVideoCache(
     memoryCache.set(bvid, cloneData(merged));
     return cloneData(merged);
   });
-}
-
-// ---------------------------------------------------------------------------
-// clearCache
-// ---------------------------------------------------------------------------
-
-export async function clearVideoCache(bvid: string): Promise<void> {
-  await mergeVideoCache(bvid, [], 'bilibili');
 }
 
 // ---------------------------------------------------------------------------

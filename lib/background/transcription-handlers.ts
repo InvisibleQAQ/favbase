@@ -196,7 +196,7 @@ export async function handleTranscribe(
     transcribeAudio: createTranscribeAudio(tabId, ctx),
     cacheGet: async (id: string) => {
       const entry = await getVideoCache(id);
-      if (!entry || entry.rows.length === 0) return null;
+      if (!entry) return null;
       return { rows: entry.rows, source: entry.source };
     },
     cacheSave: async (id: string, rows: SubtitleRow[], source: 'bilibili' | 'groq') => {

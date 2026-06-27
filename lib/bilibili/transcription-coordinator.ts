@@ -110,7 +110,7 @@ export class TranscriptionCoordinator {
         if (current?.transcribing) continue;
 
         const contentStatus: ContentStatus =
-          entry && (entry.rows as unknown[])?.length > 0
+          entry
             ? entry.source === 'bilibili'
               ? 'has_bilibili'
               : 'has_groq'

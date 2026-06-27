@@ -9,7 +9,7 @@ export function handleGetVideoCache(
   msg: { bvid: string },
 ): Promise<{ rows: SubtitleRow[]; source: string; cached: true } | null> {
   return getVideoCache(msg.bvid).then((entry) => {
-    if (!entry || entry.rows.length === 0) return null;
+    if (!entry) return null;
     return { rows: entry.rows, source: entry.source, cached: true as const };
   });
 }
