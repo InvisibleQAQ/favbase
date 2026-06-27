@@ -60,12 +60,10 @@ export type TranscribeErrorCode =
   | 'ASR_GROQ_UNREACHABLE'
   | 'ASR_GROQ_ACCESS_BLOCKED'
   | 'ASR_INVALID_KEY'
-  | 'ASR_FILE_TOO_LARGE'
   | 'ASR_CHUNKING_FAILED'
   | 'ASR_CHUNKING_UNSUPPORTED'
   | 'ASR_CHUNK_DURATION_UNKNOWN'
   | 'ASR_AUDIO_REUSED'
-  | 'ASR_AUDIO_BVID_MISMATCH'
   | 'ASR_NO_AUDIO_SOURCE'
   | 'DOWNLOAD_FAILED'
   | 'ASR_UNKNOWN';
@@ -86,9 +84,20 @@ export interface TranscribeFailure {
 
 export type TranscribeResponse = TranscribeSuccess | TranscribeFailure;
 
-export class PipelineError extends Error {
-  constructor(public info: TranscribeErrorInfo) {
-    super(info.message);
-    this.name = 'PipelineError';
-  }
+export function createErrorInfo(
+  code: TranscribeErrorCode,
+  message: string,
+  params?: Record<string, string | number>,
+): TranscribeErrorInfo {
+  return { code, message, ...(params && { params }) };
+}
+
+export function isTranscribeError(err: unknown): err is TranscribeErrorInfo {
+  return (
+    err != null &&
+    typeof err === 'object' &&
+    'code' in err &&
+    'message' in err &&
+    typeof (err as TranscribeErrorInfo).code === 'string'
+  );
 }

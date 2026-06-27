@@ -1,12 +1,5 @@
-import { PipelineError, type TranscribeErrorInfo } from './types';
+import { createErrorInfo } from './types';
 import { PROGRESS } from './constants';
-
-export class AudioExtractError extends PipelineError {
-  constructor(info: TranscribeErrorInfo) {
-    super(info);
-    this.name = 'AudioExtractError';
-  }
-}
 
 export async function fetchAudioBlob(
   audioUrl: string,
@@ -21,11 +14,7 @@ export async function fetchAudioBlob(
   });
 
   if (!res.ok) {
-    throw new AudioExtractError({
-      code: 'DOWNLOAD_FAILED',
-      message: `Audio download failed: HTTP ${res.status}`,
-      params: { status: res.status },
-    });
+    throw createErrorInfo('DOWNLOAD_FAILED', `Audio download failed: HTTP ${res.status}`, { status: res.status });
   }
 
   const contentLength = Number(res.headers.get('content-length') ?? 0);

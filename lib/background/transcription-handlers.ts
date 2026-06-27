@@ -15,9 +15,8 @@ import { settingsStorage, resolveAsrConfig } from '@/lib/storage';
 import {
   ensureGroqConnectivity,
   requestGroqTranscription,
-  AsrError,
 } from '@/lib/transcription/groq-client';
-import { fetchAudioBlob, AudioExtractError } from '@/lib/transcription/audio-extractor';
+import { fetchAudioBlob } from '@/lib/transcription/audio-extractor';
 import {
   extractBiliAudioUrl,
   getBiliAuth,
@@ -25,6 +24,7 @@ import {
   fetchSubtitle,
 } from '@/lib/bilibili/bilibili-api';
 import { assertAudioNotReused } from '@/lib/transcription/audio-fingerprint';
+import { createErrorInfo } from '@/lib/transcription/types';
 import { GROQ_MAX_AUDIO_BYTES, PROGRESS } from '@/lib/transcription/constants';
 import { getVideoCache, mergeVideoCache } from '@/lib/cache/video-cache';
 import {
@@ -104,10 +104,7 @@ function createTranscribeAudio(tabId: number, ctx: BackgroundContext) {
     try {
       audioUrl = await extractBiliAudioUrl(bvid, cid);
     } catch (err) {
-      throw new AudioExtractError({
-        code: 'ASR_NO_AUDIO_SOURCE',
-        message: err instanceof Error ? err.message : 'Audio extraction failed',
-      });
+      throw createErrorInfo('ASR_NO_AUDIO_SOURCE', err instanceof Error ? err.message : 'Audio extraction failed');
     }
 
     onProgress(PROGRESS.DOWNLOAD_BEGIN + 1, 'downloading');
@@ -149,7 +146,7 @@ function createTranscribeAudio(tabId: number, ctx: BackgroundContext) {
           maxBytes: GROQ_MAX_AUDIO_BYTES,
         } satisfies OffscreenPrepareRequest);
 
-      if (!prepareRes.success) throw new AsrError(prepareRes.error!);
+      if (!prepareRes.success) throw prepareRes.error!;
 
       const transcribeRes: {
         success: boolean;
@@ -168,7 +165,7 @@ function createTranscribeAudio(tabId: number, ctx: BackgroundContext) {
         .sendMessage({ type: 'OFFSCREEN_CHUNK_RELEASE', sessionId })
         .catch(() => {});
 
-      if (!transcribeRes.success) throw new AsrError(transcribeRes.error!);
+      if (!transcribeRes.success) throw transcribeRes.error!;
       return transcribeRes.rows!;
     } finally {
       sessionTabMap.delete(sessionId);

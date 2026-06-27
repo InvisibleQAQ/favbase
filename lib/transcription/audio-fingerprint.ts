@@ -1,5 +1,5 @@
 import { AUDIO_FINGERPRINT_LRU_SIZE } from './constants';
-import { PipelineError, type TranscribeErrorInfo } from './types';
+import { createErrorInfo } from './types';
 
 interface FingerprintEntry {
   hash: string;
@@ -16,13 +16,6 @@ async function sha256(blob: Blob): Promise<string> {
   return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-export class AudioReuseError extends PipelineError {
-  constructor(info: TranscribeErrorInfo) {
-    super(info);
-    this.name = 'AudioReuseError';
-  }
-}
-
 export async function assertAudioNotReused(
   blob: Blob,
   bvid: string,
@@ -31,10 +24,7 @@ export async function assertAudioNotReused(
 
   const existing = lru.find((e) => e.hash === hash);
   if (existing && existing.bvid !== bvid) {
-    throw new AudioReuseError({
-      code: 'ASR_AUDIO_REUSED',
-      message: `Audio fingerprint collision (existing ${existing.bvid}, current ${bvid}), likely stale SPA navigation data`,
-    });
+    throw createErrorInfo('ASR_AUDIO_REUSED', `Audio fingerprint collision (existing ${existing.bvid}, current ${bvid}), likely stale SPA navigation data`);
   }
 
   if (existing) {

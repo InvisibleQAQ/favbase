@@ -1,7 +1,7 @@
 import {
-  PipelineError,
+  createErrorInfo,
+  isTranscribeError,
   type SubtitleRow,
-  type TranscribeErrorInfo,
 } from './types';
 import {
   GROQ_TRANSCRIPTION_PROMPT,
@@ -35,13 +35,6 @@ interface GroqTranscriptionResult {
   quota: GroqQuota;
 }
 
-export class AsrError extends PipelineError {
-  constructor(info: TranscribeErrorInfo) {
-    super(info);
-    this.name = 'AsrError';
-  }
-}
-
 export async function ensureGroqConnectivity(
   apiKey: string,
   baseUrl?: string,
@@ -60,29 +53,17 @@ export async function ensureGroqConnectivity(
     });
 
     if (res.status === 401) {
-      throw new AsrError({
-        code: 'ASR_INVALID_KEY',
-        message: `ASR API key invalid (401) at ${modelsUrl}`,
-      });
+      throw createErrorInfo('ASR_INVALID_KEY', `ASR API key invalid (401) at ${modelsUrl}`);
     }
     if (res.status === 403) {
-      throw new AsrError({
-        code: 'ASR_GROQ_ACCESS_BLOCKED',
-        message: `ASR API access blocked (403) at ${modelsUrl}`,
-      });
+      throw createErrorInfo('ASR_GROQ_ACCESS_BLOCKED', `ASR API access blocked (403) at ${modelsUrl}`);
     }
     if (!res.ok) {
-      throw new AsrError({
-        code: 'ASR_GROQ_UNREACHABLE',
-        message: `ASR connectivity check failed: HTTP ${res.status} at ${modelsUrl}`,
-      });
+      throw createErrorInfo('ASR_GROQ_UNREACHABLE', `ASR connectivity check failed: HTTP ${res.status} at ${modelsUrl}`);
     }
   } catch (err) {
-    if (err instanceof AsrError) throw err;
-    throw new AsrError({
-      code: 'ASR_GROQ_UNREACHABLE',
-      message: `Cannot reach ASR API (${modelsUrl}): ${(err as Error).message ?? 'network error'}`,
-    });
+    if (isTranscribeError(err)) throw err;
+    throw createErrorInfo('ASR_GROQ_UNREACHABLE', `Cannot reach ASR API (${modelsUrl}): ${(err as Error).message ?? 'network error'}`);
   } finally {
     clearTimeout(timer);
   }
@@ -122,28 +103,19 @@ export async function requestGroqTranscription(
 
     if (res.status === 429) {
       const retryAfter = parseRetryAfter(res);
-      throw new AsrError({
-        code: 'ASR_RATE_LIMIT',
-        message: `Groq rate limited (retry after ${retryAfter}s)`,
-        retryAfter,
-      });
+      const info = createErrorInfo('ASR_RATE_LIMIT', `Groq rate limited (retry after ${retryAfter}s)`);
+      info.retryAfter = retryAfter;
+      throw info;
     }
 
     if (res.status === 401) {
-      throw new AsrError({
-        code: 'ASR_INVALID_KEY',
-        message: 'Groq API key invalid (401)',
-      });
+      throw createErrorInfo('ASR_INVALID_KEY', 'Groq API key invalid (401)');
     }
 
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       const apiMsg = (body as any)?.error?.message ?? `HTTP ${res.status}`;
-      throw new AsrError({
-        code: 'ASR_UNKNOWN',
-        message: `Groq API error: ${apiMsg}`,
-        params: { detail: apiMsg },
-      });
+      throw createErrorInfo('ASR_UNKNOWN', `Groq API error: ${apiMsg}`, { detail: apiMsg });
     }
 
     const quota = parseQuota(res);
@@ -152,19 +124,12 @@ export async function requestGroqTranscription(
 
     return { rows, quota };
   } catch (err) {
-    if (err instanceof AsrError) throw err;
+    if (isTranscribeError(err)) throw err;
     if ((err as Error).name === 'AbortError') {
-      throw new AsrError({
-        code: 'ASR_REQUEST_TIMEOUT',
-        message: 'Transcription request timed out',
-      });
+      throw createErrorInfo('ASR_REQUEST_TIMEOUT', 'Transcription request timed out');
     }
     const detail = (err as Error).message ?? 'transcription failed';
-    throw new AsrError({
-      code: 'ASR_UNKNOWN',
-      message: `Transcription failed: ${detail}`,
-      params: { detail },
-    });
+    throw createErrorInfo('ASR_UNKNOWN', `Transcription failed: ${detail}`, { detail });
   } finally {
     clearTimeout(timer);
   }

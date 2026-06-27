@@ -1,5 +1,5 @@
 import {
-  PipelineError,
+  isTranscribeError,
   type SubtitleRow,
   type TranscribeResponse,
   type TranscribeStage,
@@ -52,7 +52,7 @@ export type OnProgress = (
 ) => void;
 
 function toErrorInfo(err: unknown): TranscribeErrorInfo {
-  if (err instanceof PipelineError) return err.info;
+  if (isTranscribeError(err)) return err;
   if (err instanceof DOMException && err.name === 'AbortError') {
     return { code: 'ASR_REQUEST_TIMEOUT', message: 'Operation aborted' };
   }
