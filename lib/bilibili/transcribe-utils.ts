@@ -1,0 +1,40 @@
+import type { TranscribeResponse, TranscribeStatusPush } from '@/lib/transcription/types';
+import { persistSubtitleContent } from './content-sync';
+import { getDb } from '@/lib/database';
+
+export async function transcribeAndPersist(
+  bvid: string,
+  title: string,
+): Promise<TranscribeResponse> {
+  const response = (await browser.runtime.sendMessage({
+    type: 'TRANSCRIBE_AUDIO',
+    bvid,
+    title,
+  })) as TranscribeResponse;
+
+  if (response.success) {
+    try {
+      const db = getDb();
+      persistSubtitleContent(db, bvid, response.data.rows, response.data.source).catch(() => {});
+    } catch {
+      /* DB not ready */
+    }
+  }
+
+  return response;
+}
+
+export function createStatusListener(
+  matchBvid: () => string,
+  onStatus: (push: Pick<TranscribeStatusPush, 'progress' | 'stage' | 'stageParams' | 'error'>) => void,
+): () => void {
+  const handler = (msg: unknown) => {
+    const m = msg as TranscribeStatusPush;
+    if (m?.type !== 'TRANSCRIBE_STATUS') return;
+    const target = matchBvid();
+    if (!target || m.bvid.toLowerCase() !== target.toLowerCase()) return;
+    onStatus({ progress: m.progress, stage: m.stage, stageParams: m.stageParams, error: m.error });
+  };
+  browser.runtime.onMessage.addListener(handler);
+  return () => browser.runtime.onMessage.removeListener(handler);
+}

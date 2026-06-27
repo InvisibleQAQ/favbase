@@ -1,13 +1,13 @@
 import { getBiliAuth, fetchFavVideos } from './bilibili-api';
 import { syncFavVideosToDb } from './videos-sync';
-import { persistSubtitleContent } from './content-sync';
+import { transcribeAndPersist, createStatusListener } from './transcribe-utils';
 import { resolveAsrConfig, settingsStorage } from '@/lib/storage';
 import { getDb } from '@/lib/database';
 import { items } from '@/lib/database/entities/items';
 import { itemSources } from '@/lib/database/entities/item-sources';
 import { sources } from '@/lib/database/entities/sources';
 import { eq, and, inArray, sql, desc } from 'drizzle-orm';
-import type { TranscribeResponse, TranscribeStatusPush } from '@/lib/transcription/types';
+import type { TranscribeResponse } from '@/lib/transcription/types';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -109,7 +109,7 @@ export class AutoTranscribePipeline {
   private ac: AbortController | null = null;
   private running = false;
   private countdownTimer: ReturnType<typeof setInterval> | null = null;
-  private statusHandler: ((msg: unknown) => void) | null = null;
+  private statusCleanup: (() => void) | null = null;
   private previewGeneration = 0;
 
   // --- useSyncExternalStore contract ---
@@ -138,7 +138,7 @@ export class AutoTranscribePipeline {
   dispose(): void {
     this.stop();
     this.clearCountdown();
-    this.removeStatusListener();
+    this.uninstallStatusListener();
     this.listeners.clear();
   }
 
@@ -211,25 +211,6 @@ export class AutoTranscribePipeline {
     }
   }
 
-  // --- Seam for #2 reuse: single-video transcribe + DB persist ---
-
-  async transcribeAndPersist(bvid: string, title: string): Promise<TranscribeResponse> {
-    const response = await browser.runtime.sendMessage({
-      type: 'TRANSCRIBE_AUDIO',
-      bvid,
-      title,
-    }) as TranscribeResponse;
-
-    if (response.success) {
-      try {
-        const db = getDb();
-        persistSubtitleContent(db, bvid, response.data.rows, response.data.source).catch(() => {});
-      } catch { /* DB not ready */ }
-    }
-
-    return response;
-  }
-
   // --- Private: state management ---
 
   private patch(p: Partial<AutoTranscribeState>): void {
@@ -285,21 +266,20 @@ export class AutoTranscribePipeline {
   // --- Private: TRANSCRIBE_STATUS listener ---
 
   private installStatusListener(): void {
-    this.removeStatusListener();
-    this.statusHandler = (msg: unknown) => {
-      const m = msg as TranscribeStatusPush;
-      if (m?.type !== 'TRANSCRIBE_STATUS') return;
-      if (!this.running) return;
-      if (m.bvid.toLowerCase() !== this.state.currentVideoBvid.toLowerCase()) return;
-      this.patch({ videoProgress: m.progress, videoStage: m.stage });
-    };
-    browser.runtime.onMessage.addListener(this.statusHandler);
+    this.uninstallStatusListener();
+    this.statusCleanup = createStatusListener(
+      () => this.state.currentVideoBvid,
+      ({ progress, stage }) => {
+        if (!this.running) return;
+        this.patch({ videoProgress: progress, videoStage: stage });
+      },
+    );
   }
 
-  private removeStatusListener(): void {
-    if (this.statusHandler) {
-      browser.runtime.onMessage.removeListener(this.statusHandler);
-      this.statusHandler = null;
+  private uninstallStatusListener(): void {
+    if (this.statusCleanup) {
+      this.statusCleanup();
+      this.statusCleanup = null;
     }
   }
 
@@ -401,7 +381,7 @@ export class AutoTranscribePipeline {
           });
 
           try {
-            const response = await this.transcribeAndPersist(bvid, title);
+            const response = await transcribeAndPersist(bvid, title);
 
             if (response.success) {
               if (response.data.source === 'bilibili') stats.cc++;
@@ -418,7 +398,7 @@ export class AutoTranscribePipeline {
 
               if (errorCode === 'ASR_RATE_LIMIT') {
                 await this.waitWithCountdown(RATE_LIMIT_PAUSE_MS, 'paused', signal);
-                const retryRes = await this.transcribeAndPersist(bvid, title);
+                const retryRes = await transcribeAndPersist(bvid, title);
                 if (retryRes.success) {
                   if (retryRes.data.source === 'bilibili') stats.cc++;
                   else stats.asr++;
@@ -476,7 +456,7 @@ export class AutoTranscribePipeline {
     } finally {
       this.running = false;
       this.ac = null;
-      this.removeStatusListener();
+      this.uninstallStatusListener();
     }
   }
 }
