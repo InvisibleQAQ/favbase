@@ -25,6 +25,7 @@ export interface TranscribeAbort {
 
 export type TranscribeStage =
   | 'start'
+  | 'subtitle_check'
   | 'connectivity'
   | 'extracting'
   | 'downloading'

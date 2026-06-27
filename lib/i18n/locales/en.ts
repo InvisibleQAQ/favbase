@@ -78,6 +78,7 @@ const en: Record<LocaleKeys, string> = {
   'transcribe.rateLimit': 'Rate limited, retry in {{seconds}}s',
 
   'stage.start': 'Starting transcription',
+  'stage.subtitle_check': 'Checking official subtitles',
   'stage.connectivity': 'Checking Groq connectivity',
   'stage.extracting': 'Extracting audio URL',
   'stage.downloading': 'Downloading audio',

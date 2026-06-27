@@ -29,6 +29,7 @@ export const AUDIO_MIME_TYPE = 'audio/mp4';
 
 export const PROGRESS = {
   START: 5,
+  SUBTITLE_CHECK: 8,
   CONNECTIVITY_CHECK: 12,
   DOWNLOAD_BEGIN: 20,
   DOWNLOAD_END: 55,

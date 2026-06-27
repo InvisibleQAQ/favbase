@@ -76,6 +76,7 @@ const zhCN = {
   'transcribe.rateLimit': 'Groq 速率限制，{{seconds}}s 后重试',
 
   'stage.start': '开始转录',
+  'stage.subtitle_check': '检查官方字幕',
   'stage.connectivity': '检查 Groq 连通性',
   'stage.extracting': '提取音频地址',
   'stage.downloading': '下载音频',

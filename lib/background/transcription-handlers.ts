@@ -17,10 +17,7 @@ import {
   requestGroqTranscription,
   AsrError,
 } from '@/lib/transcription/groq-client';
-import {
-  fetchAudioBlob,
-  AudioExtractError,
-} from '@/lib/transcription/audio-extractor';
+import { fetchAudioBlob, AudioExtractError } from '@/lib/transcription/audio-extractor';
 import {
   extractBiliAudioUrl,
   getBiliAuth,
@@ -28,16 +25,13 @@ import {
   fetchSubtitle,
 } from '@/lib/bilibili/bilibili-api';
 import { assertAudioNotReused } from '@/lib/transcription/audio-fingerprint';
-import { processSubtitles } from '@/lib/bilibili/subtitle-processor';
+import { GROQ_MAX_AUDIO_BYTES, PROGRESS } from '@/lib/transcription/constants';
+import { getVideoCache, mergeVideoCache } from '@/lib/cache/video-cache';
 import {
-  GROQ_MAX_AUDIO_BYTES,
-  PROGRESS,
-} from '@/lib/transcription/constants';
-import {
-  getVideoCache,
-  mergeVideoCache,
-} from '@/lib/cache/video-cache';
-import { runTranscriptionPipeline } from '@/lib/transcription/pipeline';
+  runTranscriptionPipeline,
+  type AsrConfig,
+  type OnProgress,
+} from '@/lib/transcription/pipeline';
 
 const tabBvids = new Map<number, string>();
 const sessionTabMap = new Map<string, number>();
@@ -62,6 +56,126 @@ function notifyTab(
   ctx.sendToTab(tabId, msg);
 }
 
+const SUBTITLE_RETRY_DELAYS = [1000, 2000];
+
+function createFetchOfficialSubtitle(auth: Awaited<ReturnType<typeof getBiliAuth>>) {
+  return async (bvid: string, cid: number): Promise<SubtitleRow[] | null> => {
+    for (let attempt = 0; attempt <= SUBTITLE_RETRY_DELAYS.length; attempt++) {
+      try {
+        const result = await fetchSubtitle(bvid, cid, auth ?? undefined);
+        if (result.status === 'ok' && result.rows.length > 0) return result.rows;
+        if (result.status === 'no_subtitle') return null;
+        if (attempt < SUBTITLE_RETRY_DELAYS.length) {
+          console.warn(
+            `[handleTranscribe] Official subtitle error for ${bvid} (attempt ${attempt + 1}): ${result.error ?? 'unknown'} — retrying`,
+          );
+          await new Promise((r) => setTimeout(r, SUBTITLE_RETRY_DELAYS[attempt]));
+        }
+      } catch (err) {
+        if (attempt < SUBTITLE_RETRY_DELAYS.length) {
+          console.warn(
+            `[handleTranscribe] Official subtitle threw for ${bvid} (attempt ${attempt + 1}): ${err instanceof Error ? err.message : err} — retrying`,
+          );
+          await new Promise((r) => setTimeout(r, SUBTITLE_RETRY_DELAYS[attempt]));
+        }
+      }
+    }
+    return null;
+  };
+}
+
+function createTranscribeAudio(tabId: number, ctx: BackgroundContext) {
+  return async (params: {
+    bvid: string;
+    cid: number;
+    config: AsrConfig;
+    signal: AbortSignal;
+    title: string;
+    onProgress: OnProgress;
+  }): Promise<SubtitleRow[]> => {
+    const { bvid, cid, config, signal, title, onProgress } = params;
+
+    onProgress(PROGRESS.CONNECTIVITY_CHECK, 'connectivity');
+    await ensureGroqConnectivity(config.apiKey, config.baseUrl);
+    if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+
+    onProgress(PROGRESS.DOWNLOAD_BEGIN, 'extracting');
+    let audioUrl: string;
+    try {
+      audioUrl = await extractBiliAudioUrl(bvid, cid);
+    } catch (err) {
+      throw new AudioExtractError({
+        code: 'ASR_NO_AUDIO_SOURCE',
+        message: err instanceof Error ? err.message : 'Audio extraction failed',
+      });
+    }
+
+    onProgress(PROGRESS.DOWNLOAD_BEGIN + 1, 'downloading');
+    const audioBlob = await fetchAudioBlob(audioUrl, signal, (p) =>
+      onProgress(p, 'downloading'),
+    );
+    if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+
+    await assertAudioNotReused(audioBlob, bvid);
+
+    if (audioBlob.size <= GROQ_MAX_AUDIO_BYTES) {
+      onProgress(PROGRESS.PREPARE_UPLOAD, 'uploading');
+      let current: number = PROGRESS.UPLOAD_BEGIN;
+      const timer = setInterval(() => {
+        if (signal.aborted) return;
+        current = Math.min(PROGRESS.UPLOAD_END, current + 2 + Math.random() * 2);
+        onProgress(Math.round(current), 'transcribing');
+      }, 2000);
+      try {
+        const result = await requestGroqTranscription(
+          audioBlob, config.apiKey, config.model, signal, config.baseUrl,
+        );
+        return result.rows;
+      } finally {
+        clearInterval(timer);
+      }
+    }
+
+    onProgress(PROGRESS.CHUNK_PREPARE, 'chunking');
+    await ctx.ensureOffscreen();
+    const sessionId = `${bvid}_${Date.now()}`;
+    sessionTabMap.set(sessionId, tabId);
+    try {
+      const prepareRes: { success: boolean; error?: TranscribeErrorInfo } =
+        await chrome.runtime.sendMessage({
+          type: 'OFFSCREEN_CHUNK_PREPARE',
+          sessionId,
+          audioUrl,
+          maxBytes: GROQ_MAX_AUDIO_BYTES,
+        } satisfies OffscreenPrepareRequest);
+
+      if (!prepareRes.success) throw new AsrError(prepareRes.error!);
+
+      const transcribeRes: {
+        success: boolean;
+        rows?: SubtitleRow[];
+        error?: TranscribeErrorInfo;
+      } = await chrome.runtime.sendMessage({
+        type: 'OFFSCREEN_CHUNK_TRANSCRIBE',
+        sessionId,
+        apiKey: config.apiKey,
+        model: config.model,
+        title,
+        baseUrl: config.baseUrl,
+      } satisfies OffscreenTranscribeRequest);
+
+      chrome.runtime
+        .sendMessage({ type: 'OFFSCREEN_CHUNK_RELEASE', sessionId })
+        .catch(() => {});
+
+      if (!transcribeRes.success) throw new AsrError(transcribeRes.error!);
+      return transcribeRes.rows!;
+    } finally {
+      sessionTabMap.delete(sessionId);
+    }
+  };
+}
+
 export async function handleTranscribe(
   msg: { bvid: string; cid?: number; title: string },
   tabId: number,
@@ -69,63 +183,8 @@ export async function handleTranscribe(
 ): Promise<TranscribeResponse> {
   const { bvid, title } = msg;
 
-  // Check cache first — avoid redundant subtitle/ASR calls
-  const cached = await getVideoCache(bvid);
-  if (cached && cached.rows.length > 0) {
-    return {
-      success: true,
-      data: { rows: cached.rows, source: cached.source, cached: true },
-    };
-  }
-
-  // Resolve CID: use caller-provided value or fetch from API
   const auth = await getBiliAuth();
   const cid = msg.cid || (await fetchCidByPageList(bvid, 1, auth ?? undefined));
-
-  // Try official subtitle before ASR pipeline (retry up to 2 times on error)
-  const RETRY_DELAYS = [1000, 2000];
-  for (let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++) {
-    try {
-      const subtitleResult = await fetchSubtitle(bvid, cid, auth ?? undefined);
-
-      if (subtitleResult.status === 'ok' && subtitleResult.rows.length > 0) {
-        const rows = processSubtitles(subtitleResult.rows);
-        await mergeVideoCache(bvid, rows, 'bilibili');
-        return {
-          success: true,
-          data: { rows, source: 'bilibili', cached: false },
-        };
-      }
-
-      if (subtitleResult.status === 'no_subtitle') {
-        break;
-      }
-
-      // status === 'error': API rejected the request — retry or fall through
-      if (attempt < RETRY_DELAYS.length) {
-        console.warn(
-          `[handleTranscribe] Official subtitle fetch error for ${bvid} (attempt ${attempt + 1}): ${subtitleResult.error ?? 'unknown'} — retrying in ${RETRY_DELAYS[attempt]}ms`,
-        );
-        await new Promise((r) => setTimeout(r, RETRY_DELAYS[attempt]));
-      } else {
-        console.warn(
-          `[handleTranscribe] Official subtitle fetch failed for ${bvid} after ${attempt + 1} attempts: ${subtitleResult.error ?? 'unknown'} — falling back to ASR`,
-        );
-      }
-    } catch (err) {
-      // Network-level failure — same retry logic
-      if (attempt < RETRY_DELAYS.length) {
-        console.warn(
-          `[handleTranscribe] Official subtitle fetch threw for ${bvid} (attempt ${attempt + 1}): ${err instanceof Error ? err.message : err} — retrying in ${RETRY_DELAYS[attempt]}ms`,
-        );
-        await new Promise((r) => setTimeout(r, RETRY_DELAYS[attempt]));
-      } else {
-        console.warn(
-          `[handleTranscribe] Official subtitle fetch threw for ${bvid} after ${attempt + 1} attempts: ${err instanceof Error ? err.message : err} — falling back to ASR`,
-        );
-      }
-    }
-  }
 
   const controller = new AbortController();
   ctx.tabAbortControllers.set(tabId, controller);
@@ -136,76 +195,16 @@ export async function handleTranscribe(
       const s = await settingsStorage.getValue();
       return resolveAsrConfig(s);
     },
-    checkCache: async (id: string) => {
+    fetchOfficialSubtitle: createFetchOfficialSubtitle(auth),
+    transcribeAudio: createTranscribeAudio(tabId, ctx),
+    cacheGet: async (id: string) => {
       const entry = await getVideoCache(id);
       if (!entry || entry.rows.length === 0) return null;
       return { rows: entry.rows, source: entry.source };
     },
-    saveCache: async (id: string, rows: SubtitleRow[]) => {
-      await mergeVideoCache(id, rows, 'groq');
+    cacheSave: async (id: string, rows: SubtitleRow[], source: 'bilibili' | 'groq') => {
+      await mergeVideoCache(id, rows, source);
     },
-    ensureConnectivity: (apiKey: string, baseUrl: string) =>
-      ensureGroqConnectivity(apiKey, baseUrl),
-    extractAudioUrl: async (bvid: string, cid: number) => {
-      try {
-        return await extractBiliAudioUrl(bvid, cid);
-      } catch (err) {
-        throw new AudioExtractError({
-          code: 'ASR_NO_AUDIO_SOURCE',
-          message: err instanceof Error ? err.message : 'Audio extraction failed',
-        });
-      }
-    },
-    fetchAudio: fetchAudioBlob,
-    checkAudioReuse: assertAudioNotReused,
-    transcribeDirect: async (
-      blob: Blob, apiKey: string, model: string, signal: AbortSignal, baseUrl: string,
-    ) => {
-      const result = await requestGroqTranscription(blob, apiKey, model, signal, baseUrl);
-      return result.rows;
-    },
-    transcribeChunked: async (
-      audioUrl: string, apiKey: string, model: string, t: string, baseUrl: string,
-    ) => {
-      await ctx.ensureOffscreen();
-      const sessionId = `${bvid}_${Date.now()}`;
-      sessionTabMap.set(sessionId, tabId);
-
-      try {
-        const prepareRes: { success: boolean; error?: TranscribeErrorInfo } =
-          await chrome.runtime.sendMessage({
-            type: 'OFFSCREEN_CHUNK_PREPARE',
-            sessionId,
-            audioUrl,
-            maxBytes: GROQ_MAX_AUDIO_BYTES,
-          } satisfies OffscreenPrepareRequest);
-
-        if (!prepareRes.success) throw new AsrError(prepareRes.error!);
-
-        const transcribeRes: {
-          success: boolean;
-          rows?: SubtitleRow[];
-          error?: TranscribeErrorInfo;
-        } = await chrome.runtime.sendMessage({
-          type: 'OFFSCREEN_CHUNK_TRANSCRIBE',
-          sessionId,
-          apiKey,
-          model,
-          title: t,
-          baseUrl,
-        } satisfies OffscreenTranscribeRequest);
-
-        chrome.runtime
-          .sendMessage({ type: 'OFFSCREEN_CHUNK_RELEASE', sessionId })
-          .catch(() => {});
-
-        if (!transcribeRes.success) throw new AsrError(transcribeRes.error!);
-        return transcribeRes.rows!;
-      } finally {
-        sessionTabMap.delete(sessionId);
-      }
-    },
-    processSubtitles,
   };
 
   try {
@@ -256,7 +255,6 @@ export function handleOffscreenProgress(
     return;
   }
 
-  // Defensive fallback: sessionId not found (should not happen in normal flow)
   for (const [tId] of ctx.tabAbortControllers) {
     const bvid = tabBvids.get(tId) ?? '';
     notifyTab(ctx, tId, bvid, progress, 'chunk_transcribing', undefined, {

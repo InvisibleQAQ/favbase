@@ -5,7 +5,8 @@ import {
   type TranscribeStage,
   type TranscribeErrorInfo,
 } from './types';
-import { GROQ_MAX_AUDIO_BYTES, PROGRESS } from './constants';
+import { PROGRESS } from './constants';
+import { processSubtitles } from '@/lib/bilibili/subtitle-processor';
 
 export interface AsrConfig {
   apiKey: string;
@@ -15,33 +16,26 @@ export interface AsrConfig {
 
 export interface PipelineDeps {
   getAsrConfig(): Promise<AsrConfig>;
-  checkCache(
+  fetchOfficialSubtitle(
+    bvid: string,
+    cid: number,
+  ): Promise<SubtitleRow[] | null>;
+  transcribeAudio(params: {
+    bvid: string;
+    cid: number;
+    config: AsrConfig;
+    signal: AbortSignal;
+    title: string;
+    onProgress: OnProgress;
+  }): Promise<SubtitleRow[]>;
+  cacheGet(
     bvid: string,
   ): Promise<{ rows: SubtitleRow[]; source: 'bilibili' | 'groq' } | null>;
-  saveCache(bvid: string, rows: SubtitleRow[]): Promise<void>;
-  ensureConnectivity(apiKey: string, baseUrl: string): Promise<void>;
-  extractAudioUrl(bvid: string, cid: number): Promise<string>;
-  fetchAudio(
-    url: string,
-    signal: AbortSignal,
-    onProgress: (p: number) => void,
-  ): Promise<Blob>;
-  checkAudioReuse(blob: Blob, bvid: string): Promise<void>;
-  transcribeDirect(
-    blob: Blob,
-    apiKey: string,
-    model: string,
-    signal: AbortSignal,
-    baseUrl: string,
-  ): Promise<SubtitleRow[]>;
-  transcribeChunked(
-    audioUrl: string,
-    apiKey: string,
-    model: string,
-    title: string,
-    baseUrl: string,
-  ): Promise<SubtitleRow[]>;
-  processSubtitles(rows: SubtitleRow[]): SubtitleRow[];
+  cacheSave(
+    bvid: string,
+    rows: SubtitleRow[],
+    source: 'bilibili' | 'groq',
+  ): Promise<void>;
 }
 
 export interface PipelineRequest {
@@ -70,33 +64,6 @@ function assertNotAborted(signal: AbortSignal): void {
   if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
 }
 
-async function transcribeWithFakeProgress(
-  audioBlob: Blob,
-  config: AsrConfig,
-  signal: AbortSignal,
-  deps: PipelineDeps,
-  onProgress: OnProgress,
-): Promise<SubtitleRow[]> {
-  let current: number = PROGRESS.UPLOAD_BEGIN;
-  const timer = setInterval(() => {
-    if (signal.aborted) return;
-    current = Math.min(PROGRESS.UPLOAD_END, current + 2 + Math.random() * 2);
-    onProgress(Math.round(current), 'transcribing');
-  }, 2000);
-
-  try {
-    return await deps.transcribeDirect(
-      audioBlob,
-      config.apiKey,
-      config.model,
-      signal,
-      config.baseUrl,
-    );
-  } finally {
-    clearInterval(timer);
-  }
-}
-
 export async function runTranscriptionPipeline(
   request: PipelineRequest,
   deps: PipelineDeps,
@@ -104,65 +71,44 @@ export async function runTranscriptionPipeline(
 ): Promise<TranscribeResponse> {
   const { bvid, cid, title, signal } = request;
 
-  const cached = await deps.checkCache(bvid);
+  const cached = await deps.cacheGet(bvid);
   if (cached) {
     return { success: true, data: { ...cached, cached: true } };
-  }
-
-  const config = await deps.getAsrConfig();
-  if (!config.apiKey) {
-    return {
-      success: false,
-      error: {
-        code: 'ASR_INVALID_KEY',
-        message: 'ASR API key not configured',
-      },
-    };
   }
 
   try {
     onProgress(PROGRESS.START, 'start');
 
-    onProgress(PROGRESS.CONNECTIVITY_CHECK, 'connectivity');
-    await deps.ensureConnectivity(config.apiKey, config.baseUrl);
-    assertNotAborted(signal);
-
-    onProgress(PROGRESS.DOWNLOAD_BEGIN, 'extracting');
-    const audioUrl = await deps.extractAudioUrl(bvid, cid);
-
-    onProgress(PROGRESS.DOWNLOAD_BEGIN + 1, 'downloading');
-    const audioBlob = await deps.fetchAudio(audioUrl, signal, (p) =>
-      onProgress(p, 'downloading'),
-    );
-    assertNotAborted(signal);
-
-    await deps.checkAudioReuse(audioBlob, bvid);
-
-    let rows: SubtitleRow[];
-    if (audioBlob.size <= GROQ_MAX_AUDIO_BYTES) {
-      onProgress(PROGRESS.PREPARE_UPLOAD, 'uploading');
-      rows = await transcribeWithFakeProgress(
-        audioBlob,
-        config,
-        signal,
-        deps,
-        onProgress,
-      );
-    } else {
-      onProgress(PROGRESS.CHUNK_PREPARE, 'chunking');
-      rows = await deps.transcribeChunked(
-        audioUrl,
-        config.apiKey,
-        config.model,
-        title,
-        config.baseUrl,
-      );
+    onProgress(PROGRESS.SUBTITLE_CHECK, 'subtitle_check');
+    const official = await deps.fetchOfficialSubtitle(bvid, cid);
+    if (official) {
+      const rows = processSubtitles(official);
+      await deps.cacheSave(bvid, rows, 'bilibili');
+      onProgress(PROGRESS.DONE, 'done');
+      return { success: true, data: { rows, source: 'bilibili', cached: false } };
     }
 
-    onProgress(PROGRESS.PARSING, 'processing');
-    rows = deps.processSubtitles(rows);
+    assertNotAborted(signal);
 
-    await deps.saveCache(bvid, rows);
+    const config = await deps.getAsrConfig();
+    if (!config.apiKey) {
+      return {
+        success: false,
+        error: {
+          code: 'ASR_INVALID_KEY',
+          message: 'ASR API key not configured',
+        },
+      };
+    }
+
+    const rawRows = await deps.transcribeAudio({
+      bvid, cid, config, signal, title, onProgress,
+    });
+
+    onProgress(PROGRESS.PARSING, 'processing');
+    const rows = processSubtitles(rawRows);
+
+    await deps.cacheSave(bvid, rows, 'groq');
     onProgress(PROGRESS.DONE, 'done');
 
     return { success: true, data: { rows, source: 'groq', cached: false } };
