@@ -110,6 +110,19 @@ const en: Record<LocaleKeys, string> = {
   'card.sourceASR': 'ASR',
   'card.favAt': 'Saved {{date}}',
   'card.favYearsAgo': '{{years}}y ago',
+
+  'autoTranscribe.start': 'Auto Transcribe',
+  'autoTranscribe.stop': 'Stop',
+  'autoTranscribe.syncing': 'Syncing page {{current}}/{{total}}...',
+  'autoTranscribe.transcribing': 'Transcribing: {{title}}',
+  'autoTranscribe.waiting': 'Waiting {{seconds}}s...',
+  'autoTranscribe.paused': 'Rate limited, pausing {{seconds}}s...',
+  'autoTranscribe.done': 'Auto transcription complete',
+  'autoTranscribe.cancelled': 'Stopped',
+  'autoTranscribe.statsCC': 'CC {{count}}',
+  'autoTranscribe.statsASR': 'ASR {{count}}',
+  'autoTranscribe.statsSkipped': 'Skipped {{count}}',
+  'autoTranscribe.statsRemaining': 'Remaining {{count}}',
 };
 
 export default en;

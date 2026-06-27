@@ -108,6 +108,19 @@ const zhCN = {
   'card.sourceASR': 'ASR',
   'card.favAt': '收藏于 {{date}}',
   'card.favYearsAgo': '收藏于{{years}}年前',
+
+  'autoTranscribe.start': '自动转录',
+  'autoTranscribe.stop': '停止',
+  'autoTranscribe.syncing': '收录第 {{current}}/{{total}} 页...',
+  'autoTranscribe.transcribing': '转录中: {{title}}',
+  'autoTranscribe.waiting': '等待中 {{seconds}}s...',
+  'autoTranscribe.paused': '速率限制，暂停 {{seconds}}s...',
+  'autoTranscribe.done': '自动转录完成',
+  'autoTranscribe.cancelled': '已停止',
+  'autoTranscribe.statsCC': 'CC {{count}}',
+  'autoTranscribe.statsASR': 'ASR {{count}}',
+  'autoTranscribe.statsSkipped': '跳过 {{count}}',
+  'autoTranscribe.statsRemaining': '剩余 {{count}}',
 } as const;
 
 export type LocaleKeys = keyof typeof zhCN;

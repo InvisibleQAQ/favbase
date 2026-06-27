@@ -15,8 +15,10 @@ import { DashboardContent } from '../../layouts/dashboard';
 import { useBiliFavFolders } from './use-bili-fav-folders';
 import { useBiliFavVideos } from './use-bili-fav-videos';
 import { useVideoTranscribe } from './use-video-transcribe';
+import { useAutoTranscribe } from './use-auto-transcribe';
 import { VideoCard } from './video-card';
 import { FolderSidebar } from './folder-sidebar';
+import { AutoTranscribeBar } from './auto-transcribe-bar';
 
 // ---------------------------------------------------------------------------
 // State views shared between sidebar and content
@@ -126,12 +128,13 @@ function EmptyFolderState() {
 // Video grid panel (only rendered when a valid folder is selected)
 // ---------------------------------------------------------------------------
 
-function VideoGridPanel({ mediaId, totalCount, syncing, onSync, lastSyncedAt }: {
+function VideoGridPanel({ mediaId, totalCount, syncing, onSync, lastSyncedAt, autoTranscribe }: {
   mediaId: number;
   totalCount: number;
   syncing: boolean;
   onSync: () => void;
   lastSyncedAt: Date | null;
+  autoTranscribe: ReturnType<typeof useAutoTranscribe>;
 }) {
   const { videos, folderTitle, page, totalPages, loading, loginState, error, goToPage, retry } =
     useBiliFavVideos(mediaId);
@@ -146,34 +149,45 @@ function VideoGridPanel({ mediaId, totalCount, syncing, onSync, lastSyncedAt }: 
   return (
     <Box sx={{ flex: 1, minWidth: 0, overflow: 'auto' }}>
       {/* Title bar */}
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 3, gap: 2 }}>
-        <Typography variant="h5" sx={{ flexGrow: 1 }} noWrap>
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 2, flexWrap: 'wrap' }}>
+        <Typography variant="h5" sx={{ flexShrink: 0 }} noWrap>
           {loading ? <Skeleton width={200} /> : folderTitle}
         </Typography>
 
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
-          {!loading && (
-            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-              {totalCount > 0 && `${totalCount} 个视频`}
-              {lastSyncedAt && ` · 上次同步 ${lastSyncedAt.toLocaleTimeString()}`}
-            </Typography>
-          )}
-          <Button
-            variant="contained"
-            size="small"
-            startIcon={
-              syncing ? (
-                <CircularProgress size={16} color="inherit" />
-              ) : (
-                <Iconify icon="solar:restart-bold" width={18} />
-              )
-            }
-            onClick={onSync}
-            disabled={syncing}
-          >
-            {syncing ? '同步中...' : '同步'}
-          </Button>
-        </Box>
+        {!loading && (
+          <Typography variant="caption" sx={{ color: 'text.secondary', flexShrink: 0 }}>
+            {totalCount > 0 && `${totalCount} 个视频`}
+            {lastSyncedAt && ` · 上次同步 ${lastSyncedAt.toLocaleTimeString()}`}
+          </Typography>
+        )}
+
+        <Box sx={{ flex: 1 }} />
+
+        <Button
+          variant="contained"
+          size="small"
+          startIcon={
+            syncing ? (
+              <CircularProgress size={16} color="inherit" />
+            ) : (
+              <Iconify icon="solar:restart-bold" width={18} />
+            )
+          }
+          onClick={onSync}
+          disabled={syncing}
+        >
+          {syncing ? '同步中...' : '同步'}
+        </Button>
+      </Box>
+
+      {/* Auto-transcribe bar — full width below title */}
+      <Box sx={{ mb: 2.5 }}>
+        <AutoTranscribeBar
+          state={autoTranscribe.state}
+          running={autoTranscribe.running}
+          onStart={autoTranscribe.start}
+          onStop={autoTranscribe.stop}
+        />
       </Box>
 
       {/* Video content */}
@@ -230,6 +244,7 @@ export function CollectionsView() {
     useBiliFavFolders();
 
   const selectedId = mediaId ? Number(mediaId) : folders[0]?.id;
+  const autoTranscribe = useAutoTranscribe(selectedId);
   const selectedFolder = folders.find((f) => f.id === selectedId);
 
   useEffect(() => {
@@ -285,6 +300,7 @@ export function CollectionsView() {
               syncing={syncing}
               onSync={sync}
               lastSyncedAt={lastSyncedAt}
+              autoTranscribe={autoTranscribe}
             />
           ) : foldersLoading ? (
             <VideoGridSkeleton />
