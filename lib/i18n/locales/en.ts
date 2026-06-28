@@ -103,6 +103,7 @@ const en: Record<LocaleKeys, string> = {
   'error.ASR_NO_AUDIO_SOURCE': 'No audio track found',
   'error.DOWNLOAD_FAILED': 'Audio download failed (HTTP {{status}})',
   'error.ASR_UNKNOWN': 'Unknown error: {{detail}}',
+  'error.TRANSCRIBE_DUPLICATE': 'This video is already being transcribed',
 
   'card.transcribe': 'Transcribe',
   'card.sourceCC': 'CC Official',

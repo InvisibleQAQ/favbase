@@ -1,6 +1,8 @@
 import type { BackgroundContext } from './types';
 import type {
   SubtitleRow,
+  TranscribeRequest,
+  TranscribeAbort,
   TranscribeResponse,
   TranscribeStage,
   TranscribeStatusPush,
@@ -33,8 +35,7 @@ import {
   type OnProgress,
 } from '@/lib/transcription/pipeline';
 
-const tabBvids = new Map<number, string>();
-const sessionTabMap = new Map<string, number>();
+type MessageSender = { tab?: { id?: number } };
 
 function notifyTab(
   ctx: BackgroundContext,
@@ -136,7 +137,7 @@ function createTranscribeAudio(tabId: number, ctx: BackgroundContext) {
     onProgress(PROGRESS.CHUNK_PREPARE, 'chunking');
     await ctx.ensureOffscreen();
     const sessionId = `${bvid}_${Date.now()}`;
-    sessionTabMap.set(sessionId, tabId);
+    ctx.registerChunkSession(sessionId, tabId);
     try {
       const prepareRes: { success: boolean; error?: TranscribeErrorInfo } =
         await chrome.runtime.sendMessage({
@@ -168,43 +169,48 @@ function createTranscribeAudio(tabId: number, ctx: BackgroundContext) {
       if (!transcribeRes.success) throw transcribeRes.error!;
       return transcribeRes.rows!;
     } finally {
-      sessionTabMap.delete(sessionId);
+      ctx.unregisterChunkSession(sessionId);
     }
   };
 }
 
 export async function handleTranscribe(
-  msg: { bvid: string; cid?: number; title: string },
-  tabId: number,
+  msg: TranscribeRequest,
+  sender: MessageSender,
   ctx: BackgroundContext,
 ): Promise<TranscribeResponse> {
   const { bvid, title } = msg;
+  const tabId = sender.tab?.id ?? 0;
 
-  const auth = await getBiliAuth();
-  const cid = msg.cid || (await fetchCidByPageList(bvid, 1, auth ?? undefined));
-
-  const controller = new AbortController();
-  ctx.tabAbortControllers.set(tabId, controller);
-  tabBvids.set(tabId, bvid);
-
-  const deps = {
-    getAsrConfig: async () => {
-      const s = await settingsStorage.getValue();
-      return resolveAsrConfig(s);
-    },
-    fetchOfficialSubtitle: createFetchOfficialSubtitle(auth),
-    transcribeAudio: createTranscribeAudio(tabId, ctx),
-    cacheGet: async (id: string) => {
-      const entry = await getVideoCache(id);
-      if (!entry) return null;
-      return { rows: entry.rows, source: entry.source };
-    },
-    cacheSave: async (id: string, rows: SubtitleRow[], source: 'bilibili' | 'groq') => {
-      await mergeVideoCache(id, rows, source);
-    },
-  };
+  const controller = ctx.startTranscription(tabId, bvid);
+  if (!controller) {
+    return {
+      success: false,
+      error: createErrorInfo('TRANSCRIBE_DUPLICATE', `Already transcribing ${bvid}`),
+    };
+  }
 
   try {
+    const auth = await getBiliAuth();
+    const cid = msg.cid || (await fetchCidByPageList(bvid, 1, auth ?? undefined));
+
+    const deps = {
+      getAsrConfig: async () => {
+        const s = await settingsStorage.getValue();
+        return resolveAsrConfig(s);
+      },
+      fetchOfficialSubtitle: createFetchOfficialSubtitle(auth),
+      transcribeAudio: createTranscribeAudio(tabId, ctx),
+      cacheGet: async (id: string) => {
+        const entry = await getVideoCache(id);
+        if (!entry) return null;
+        return { rows: entry.rows, source: entry.source };
+      },
+      cacheSave: async (id: string, rows: SubtitleRow[], source: 'bilibili' | 'groq') => {
+        await mergeVideoCache(id, rows, source);
+      },
+    };
+
     const result = await runTranscriptionPipeline(
       { bvid, cid, title, signal: controller.signal },
       deps,
@@ -217,46 +223,38 @@ export async function handleTranscribe(
     }
     return result;
   } finally {
-    ctx.tabAbortControllers.delete(tabId);
-    tabBvids.delete(tabId);
+    ctx.finishTranscription(tabId);
   }
 }
 
 export function handleTranscribeAbort(
-  tabId: number | undefined,
+  _msg: TranscribeAbort,
+  sender: MessageSender,
   ctx: BackgroundContext,
 ): Promise<{ success: true }> {
-  if (tabId) {
-    const ctrl = ctx.tabAbortControllers.get(tabId);
-    if (ctrl) ctrl.abort();
-  }
+  const tabId = sender.tab?.id;
+  if (tabId) ctx.abortTranscription(tabId);
   return Promise.resolve({ success: true });
 }
 
 export function handleOffscreenProgress(
   msg: OffscreenProgressMessage,
+  _sender: MessageSender,
   ctx: BackgroundContext,
 ): void {
   const range = PROGRESS.CHUNK_TRANSCRIBE_END - PROGRESS.CHUNK_TRANSCRIBE_BEGIN;
   const progress =
     PROGRESS.CHUNK_TRANSCRIBE_BEGIN +
     Math.round((msg.chunkIndex / msg.totalChunks) * range);
+  const stageParams = { current: msg.chunkIndex + 1, total: msg.totalChunks };
 
-  const targetTabId = sessionTabMap.get(msg.sessionId);
-  if (targetTabId !== undefined) {
-    const bvid = tabBvids.get(targetTabId) ?? '';
-    notifyTab(ctx, targetTabId, bvid, progress, 'chunk_transcribing', undefined, {
-      current: msg.chunkIndex + 1,
-      total: msg.totalChunks,
-    });
+  const target = ctx.resolveProgressTarget(msg.sessionId);
+  if (target) {
+    notifyTab(ctx, target.tabId, target.bvid, progress, 'chunk_transcribing', undefined, stageParams);
     return;
   }
 
-  for (const [tId] of ctx.tabAbortControllers) {
-    const bvid = tabBvids.get(tId) ?? '';
-    notifyTab(ctx, tId, bvid, progress, 'chunk_transcribing', undefined, {
-      current: msg.chunkIndex + 1,
-      total: msg.totalChunks,
-    });
+  for (const t of ctx.getActiveTranscriptions()) {
+    notifyTab(ctx, t.tabId, t.bvid, progress, 'chunk_transcribing', undefined, stageParams);
   }
 }

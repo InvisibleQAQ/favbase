@@ -66,7 +66,8 @@ export type TranscribeErrorCode =
   | 'ASR_AUDIO_REUSED'
   | 'ASR_NO_AUDIO_SOURCE'
   | 'DOWNLOAD_FAILED'
-  | 'ASR_UNKNOWN';
+  | 'ASR_UNKNOWN'
+  | 'TRANSCRIBE_DUPLICATE';
 
 export interface TranscribeSuccess {
   success: true;

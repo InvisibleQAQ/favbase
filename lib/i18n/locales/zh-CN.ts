@@ -101,6 +101,7 @@ const zhCN = {
   'error.ASR_NO_AUDIO_SOURCE': '未提取到音轨地址',
   'error.DOWNLOAD_FAILED': '音频下载失败 (HTTP {{status}})',
   'error.ASR_UNKNOWN': '未知错误: {{detail}}',
+  'error.TRANSCRIBE_DUPLICATE': '该视频正在转录中，请勿重复发起',
 
   'card.transcribe': '转录',
   'card.sourceCC': 'CC 官方',

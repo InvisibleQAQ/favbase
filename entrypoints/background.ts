@@ -15,21 +15,84 @@ import {
   handleCacheSubtitle,
 } from '@/lib/background/cache-handlers';
 
-export default defineBackground(() => {
-  // Synchronous: register onConnect listener before any connection attempts (MV3 SW requirement)
-  initPortBridge(DB_CHANNEL_NAME, ensureOffscreen);
+function createBackgroundContext(): BackgroundContext {
+  const abortControllers = new Map<number, AbortController>();
+  const tabBvids = new Map<number, string>();
+  const activeBvids = new Set<string>();
+  const sessionTabMap = new Map<string, number>();
 
-  initCacheStorageListener();
-
-  const tabAbortControllers = new Map<number, AbortController>();
-
-  const ctx: BackgroundContext = {
-    tabAbortControllers,
+  return {
     sendToTab(tabId, message) {
       browser.tabs.sendMessage(tabId, message).catch(() => {});
     },
     ensureOffscreen,
+
+    startTranscription(tabId, bvid) {
+      const key = bvid.toLowerCase();
+      if (activeBvids.has(key)) return null;
+
+      // Clean up any stale transcription for this tab (e.g. previous request didn't finish)
+      const prevBvid = tabBvids.get(tabId);
+      if (prevBvid) activeBvids.delete(prevBvid.toLowerCase());
+
+      activeBvids.add(key);
+      const controller = new AbortController();
+      abortControllers.set(tabId, controller);
+      tabBvids.set(tabId, bvid);
+      return controller;
+    },
+
+    abortTranscription(tabId) {
+      const ctrl = abortControllers.get(tabId);
+      if (ctrl) ctrl.abort();
+      const bvid = tabBvids.get(tabId);
+      if (bvid) activeBvids.delete(bvid.toLowerCase());
+      abortControllers.delete(tabId);
+      tabBvids.delete(tabId);
+    },
+
+    finishTranscription(tabId) {
+      const bvid = tabBvids.get(tabId);
+      if (bvid) activeBvids.delete(bvid.toLowerCase());
+      abortControllers.delete(tabId);
+      tabBvids.delete(tabId);
+    },
+
+    getBvidForTab(tabId) {
+      return tabBvids.get(tabId);
+    },
+
+    registerChunkSession(sessionId, tabId) {
+      sessionTabMap.set(sessionId, tabId);
+    },
+
+    unregisterChunkSession(sessionId) {
+      sessionTabMap.delete(sessionId);
+    },
+
+    resolveProgressTarget(sessionId) {
+      const tabId = sessionTabMap.get(sessionId);
+      if (tabId === undefined) return null;
+      const bvid = tabBvids.get(tabId);
+      return { tabId, bvid: bvid ?? '' };
+    },
+
+    getActiveTranscriptions() {
+      const result: Array<{ tabId: number; bvid: string }> = [];
+      for (const [tabId, bvid] of tabBvids) {
+        result.push({ tabId, bvid });
+      }
+      return result;
+    },
   };
+}
+
+export default defineBackground(() => {
+  initPortBridge(DB_CHANNEL_NAME, ensureOffscreen);
+
+  initCacheStorageListener();
+
+  const ctx = createBackgroundContext();
 
   browser.runtime.onMessage.addListener(
     (
@@ -38,12 +101,12 @@ export default defineBackground(() => {
     ): void | Promise<unknown> => {
       switch (msg.type) {
         case 'OFFSCREEN_CHUNK_PROGRESS':
-          handleOffscreenProgress(msg, ctx);
+          handleOffscreenProgress(msg, sender, ctx);
           return;
         case 'TRANSCRIBE_ABORT':
-          return handleTranscribeAbort(sender.tab?.id, ctx);
+          return handleTranscribeAbort(msg, sender, ctx);
         case 'TRANSCRIBE_AUDIO':
-          return handleTranscribe(msg, sender.tab?.id ?? 0, ctx);
+          return handleTranscribe(msg, sender, ctx);
         case 'GET_VIDEO_CACHE':
           return handleGetVideoCache(msg);
         case 'CACHE_SUBTITLE':
@@ -54,8 +117,6 @@ export default defineBackground(() => {
     },
   );
 
-  // Ensure Offscreen Document exists on extension lifecycle events.
-  // Offscreen hosts PGlite — without it, DB RPC from app.html would queue forever.
   chrome.runtime.onInstalled.addListener(() => {
     ensureOffscreen().catch((err) =>
       console.error('[background] onInstalled: ensureOffscreen failed', err),
