@@ -9,7 +9,7 @@ import { items } from '@/lib/database/entities/items';
 import { itemSources } from '@/lib/database/entities/item-sources';
 import { normalizeCover } from './url-utils';
 import type { BiliFavFolder, BiliFavVideo } from './types';
-import type { SubtitleRow, SubtitleSource } from '@/lib/transcription/types';
+import type { SubtitleRow, SubtitleSource } from '@/lib/subtitle/types';
 
 export { BiliAuthError };
 

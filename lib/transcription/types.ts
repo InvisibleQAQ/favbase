@@ -1,17 +1,4 @@
-export type SubtitleSource = 'bilibili' | 'groq';
-
-export interface SubtitleRow {
-  start: number;
-  end: number;
-  text: string;
-}
-
-export interface SubtitleResult {
-  status: 'ok' | 'no_subtitle' | 'error';
-  rows: SubtitleRow[];
-  source?: SubtitleSource;
-  error?: string;
-}
+import type { SubtitleRow, SubtitleSource } from '@/lib/subtitle/types';
 
 export interface TranscribeRequest {
   type: 'TRANSCRIBE_AUDIO';

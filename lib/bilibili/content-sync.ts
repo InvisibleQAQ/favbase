@@ -2,7 +2,7 @@ import { eq, and } from 'drizzle-orm';
 import { items } from '@/lib/database/entities/items';
 import { itemContents } from '@/lib/database/entities/item-contents';
 import type { FavbaseDb } from '@/lib/database/db';
-import type { SubtitleRow, SubtitleSource } from '@/lib/transcription/types';
+import type { SubtitleRow, SubtitleSource } from '@/lib/subtitle/types';
 
 const PLATFORM = 'bilibili';
 

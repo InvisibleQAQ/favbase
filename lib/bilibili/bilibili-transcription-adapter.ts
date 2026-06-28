@@ -1,5 +1,5 @@
 import type { PipelineDeps } from '@/lib/transcription/pipeline';
-import type { SubtitleRow } from '@/lib/transcription/types';
+import type { SubtitleRow } from '@/lib/subtitle/types';
 import type { BiliAuthInfo } from './types';
 import {
   getBiliAuth,

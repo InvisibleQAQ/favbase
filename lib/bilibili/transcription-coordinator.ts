@@ -1,5 +1,5 @@
+import type { SubtitleSource } from '@/lib/subtitle/types';
 import type {
-  SubtitleSource,
   TranscribeStage,
   TranscribeErrorInfo,
 } from '@/lib/transcription/types';

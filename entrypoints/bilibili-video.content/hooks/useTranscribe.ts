@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { SubtitleRow } from '@/lib/subtitle/types';
 import type {
-  SubtitleRow,
   TranscribeResponse,
   TranscribeStatusPush,
   TranscribeStage,

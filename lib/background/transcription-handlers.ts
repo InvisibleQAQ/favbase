@@ -1,7 +1,6 @@
 import type { BackgroundContext } from './types';
+import type { SubtitleRow, SubtitleSource } from '@/lib/subtitle/types';
 import type {
-  SubtitleRow,
-  SubtitleSource,
   TranscribeRequest,
   TranscribeAbort,
   TranscribeResponse,

@@ -4,7 +4,7 @@
  * Adding a new API: add a function here + types in types.ts.
  */
 
-import type { SubtitleResult, SubtitleRow } from '../transcription/types';
+import type { SubtitleResult, SubtitleRow } from '@/lib/subtitle/types';
 import type { BiliAuthInfo, BiliFavFolder, BiliFavVideoListResponse, DashAudioStream, SubtitleTrack } from './types';
 
 // ---------------------------------------------------------------------------

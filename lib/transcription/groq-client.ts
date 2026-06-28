@@ -1,7 +1,7 @@
+import type { SubtitleRow } from '@/lib/subtitle/types';
 import {
   createErrorInfo,
   isTranscribeError,
-  type SubtitleRow,
 } from './types';
 import {
   GROQ_TRANSCRIPTION_PROMPT,

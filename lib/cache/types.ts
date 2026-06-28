@@ -1,4 +1,4 @@
-import type { SubtitleRow, SubtitleSource } from '@/lib/transcription/types';
+import type { SubtitleRow, SubtitleSource } from '@/lib/subtitle/types';
 
 export interface VideoCacheEntry {
   bvid: string;

@@ -1,4 +1,4 @@
-import type { SubtitleSource } from '@/lib/transcription/types';
+import type { SubtitleSource } from '@/lib/subtitle/types';
 import { Panel } from './components/Panel';
 import { useVideoDetect } from './hooks/useVideoDetect';
 import { useSubtitle } from './hooks/useSubtitle';

@@ -1,4 +1,5 @@
-import type { SubtitleRow, TranscribeErrorInfo } from '@/lib/transcription/types';
+import type { SubtitleRow } from '@/lib/subtitle/types';
+import type { TranscribeErrorInfo } from '@/lib/transcription/types';
 
 export type SubsystemState = 'pending' | 'ready' | 'failed';
 

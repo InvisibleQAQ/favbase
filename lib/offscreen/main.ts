@@ -1,6 +1,7 @@
 import { FFmpeg } from '@ffmpeg/ffmpeg';
+import type { SubtitleRow } from '@/lib/subtitle/types';
 import { createErrorInfo } from '@/lib/transcription/types';
-import type { SubtitleRow, TranscribeErrorInfo } from '@/lib/transcription/types';
+import type { TranscribeErrorInfo } from '@/lib/transcription/types';
 import type {
   OffscreenRequest,
   OffscreenPrepareRequest,

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
-import type { SubtitleRow, SubtitleSource } from '@/lib/transcription/types';
+import type { SubtitleRow, SubtitleSource } from '@/lib/subtitle/types';
 import { t } from '@/lib/i18n';
 import { useTranslation } from '@/lib/i18n/use-translation';
 

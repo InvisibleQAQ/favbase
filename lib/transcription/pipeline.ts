@@ -1,7 +1,6 @@
+import type { SubtitleRow, SubtitleSource } from '@/lib/subtitle/types';
 import {
   isTranscribeError,
-  type SubtitleRow,
-  type SubtitleSource,
   type TranscribeResponse,
   type TranscribeStage,
   type TranscribeErrorInfo,

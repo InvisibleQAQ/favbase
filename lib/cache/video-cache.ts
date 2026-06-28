@@ -1,5 +1,5 @@
 import { storage } from 'wxt/utils/storage';
-import type { SubtitleRow, SubtitleSource } from '@/lib/transcription/types';
+import type { SubtitleRow, SubtitleSource } from '@/lib/subtitle/types';
 import type { VideoCacheEntry } from './types';
 
 // ---------------------------------------------------------------------------
