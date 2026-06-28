@@ -5,6 +5,8 @@ import type {
   OffscreenRequest,
   OffscreenPrepareRequest,
   OffscreenTranscribeRequest,
+  OffscreenStatus,
+  SubsystemState,
   ChunkPlan,
 } from './types';
 import {
@@ -21,6 +23,21 @@ import { initDbMain } from '@/lib/database/db';
 
 const SESSION_TTL_MS = 10 * 60 * 1000;
 const SESSION_SWEEP_INTERVAL_MS = 60 * 1000;
+
+const subsystemStatus: OffscreenStatus = { ffmpeg: 'pending', pglite: 'pending' };
+
+function setSubsystemState(subsystem: keyof OffscreenStatus, state: SubsystemState): void {
+  subsystemStatus[subsystem] = state;
+}
+
+let ffmpegLock: Promise<void> = Promise.resolve();
+
+function withFfmpegLock<T>(fn: () => Promise<T>): Promise<T> {
+  const prev = ffmpegLock;
+  let resolve: () => void;
+  ffmpegLock = new Promise((r) => { resolve = r; });
+  return prev.catch(() => {}).then(fn).finally(() => { resolve!(); });
+}
 
 interface ChunkSession {
   chunks: { bytes: Uint8Array; plan: ChunkPlan }[];
@@ -49,6 +66,7 @@ let ffmpegPromise: Promise<FFmpeg> | null = null;
 
 function resetFFmpeg(): void {
   ffmpegPromise = null;
+  setSubsystemState('ffmpeg', 'pending');
 }
 
 function getFFmpeg(): Promise<FFmpeg> {
@@ -58,9 +76,11 @@ function getFFmpeg(): Promise<FFmpeg> {
       const coreURL = chrome.runtime.getURL('/ffmpeg/ffmpeg-core.js');
       const wasmURL = chrome.runtime.getURL('/ffmpeg/ffmpeg-core.wasm');
       await ffmpeg.load({ coreURL, wasmURL });
+      setSubsystemState('ffmpeg', 'ready');
       return ffmpeg;
     })().catch((err) => {
       ffmpegPromise = null;
+      setSubsystemState('ffmpeg', 'failed');
       throw err;
     });
   }
@@ -373,13 +393,20 @@ async function handleTranscribe(msg: OffscreenTranscribeRequest): Promise<Subtit
   return accumulated;
 }
 
-// PGlite initialization (runs alongside FFmpeg, no conflict — different IPC channels)
-// FFmpeg: chrome.runtime.onMessage (request/response)
-// PGlite RPC: chrome.runtime.onConnect (port-based)
-initDbMain().catch((err) => console.error('[offscreen] PGlite init failed:', err));
+initDbMain()
+  .then(() => { setSubsystemState('pglite', 'ready'); })
+  .catch((err) => {
+    setSubsystemState('pglite', 'failed');
+    console.error('[offscreen] PGlite init failed:', err);
+  });
 
 chrome.runtime.onMessage.addListener(
   (msg: OffscreenRequest, _sender: chrome.runtime.MessageSender, sendResponse: (response?: unknown) => void) => {
+    if (msg.type === 'OFFSCREEN_STATUS') {
+      sendResponse({ ...subsystemStatus });
+      return false;
+    }
+
     if (msg.type === 'OFFSCREEN_CHUNK_RELEASE') {
       sessions.delete(msg.sessionId);
       sendResponse({ success: true });
@@ -387,7 +414,7 @@ chrome.runtime.onMessage.addListener(
     }
 
     if (msg.type === 'OFFSCREEN_CHUNK_PREPARE') {
-      handlePrepare(msg)
+      withFfmpegLock(() => handlePrepare(msg))
         .then(() => sendResponse({ success: true }))
         .catch((err) =>
           sendResponse({ success: false, error: err as TranscribeErrorInfo }),
@@ -396,7 +423,7 @@ chrome.runtime.onMessage.addListener(
     }
 
     if (msg.type === 'OFFSCREEN_CHUNK_TRANSCRIBE') {
-      handleTranscribe(msg)
+      withFfmpegLock(() => handleTranscribe(msg))
         .then((rows) => sendResponse({ success: true, rows }))
         .catch((err) =>
           sendResponse({ success: false, error: err as TranscribeErrorInfo }),

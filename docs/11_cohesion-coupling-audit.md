@@ -125,7 +125,7 @@
 
 ## 严重程度：低
 
-### 9. Offscreen 双职责缺乏显式契约
+### 9. Offscreen 双职责缺乏显式契约 ✅ FIXED
 
 **文件**: `lib/offscreen/main.ts`, `lib/offscreen/lifecycle.ts`
 

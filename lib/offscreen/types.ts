@@ -1,5 +1,16 @@
 import type { SubtitleRow, TranscribeErrorInfo } from '@/lib/transcription/types';
 
+export type SubsystemState = 'pending' | 'ready' | 'failed';
+
+export interface OffscreenStatus {
+  ffmpeg: SubsystemState;
+  pglite: SubsystemState;
+}
+
+export interface OffscreenStatusRequest {
+  type: 'OFFSCREEN_STATUS';
+}
+
 export interface ChunkPlan {
   index: number;
   startSec: number;
@@ -50,7 +61,8 @@ export interface OffscreenErrorMessage {
 export type OffscreenRequest =
   | OffscreenPrepareRequest
   | OffscreenTranscribeRequest
-  | OffscreenReleaseRequest;
+  | OffscreenReleaseRequest
+  | OffscreenStatusRequest;
 
 export type OffscreenMessage =
   | OffscreenProgressMessage
