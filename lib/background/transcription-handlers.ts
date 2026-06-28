@@ -217,12 +217,9 @@ export function handleOffscreenProgress(
   const stageParams = { current: msg.chunkIndex + 1, total: msg.totalChunks };
 
   const target = ctx.resolveProgressTarget(msg.sessionId);
-  if (target) {
-    notifyTab(ctx, target.tabId, target.bvid, progress, 'chunk_transcribing', undefined, stageParams);
+  if (!target) {
+    console.warn(`[handleOffscreenProgress] unresolved sessionId=${msg.sessionId}, dropping progress`);
     return;
   }
-
-  for (const t of ctx.getActiveTranscriptions()) {
-    notifyTab(ctx, t.tabId, t.bvid, progress, 'chunk_transcribing', undefined, stageParams);
-  }
+  notifyTab(ctx, target.tabId, target.bvid, progress, 'chunk_transcribing', undefined, stageParams);
 }

@@ -76,14 +76,6 @@ function createBackgroundContext(): BackgroundContext {
       const bvid = tabBvids.get(tabId);
       return { tabId, bvid: bvid ?? '' };
     },
-
-    getActiveTranscriptions() {
-      const result: Array<{ tabId: number; bvid: string }> = [];
-      for (const [tabId, bvid] of tabBvids) {
-        result.push({ tabId, bvid });
-      }
-      return result;
-    },
   };
 }
 

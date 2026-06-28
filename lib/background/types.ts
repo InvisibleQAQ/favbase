@@ -10,5 +10,4 @@ export interface BackgroundContext {
   registerChunkSession(sessionId: string, tabId: number): void;
   unregisterChunkSession(sessionId: string): void;
   resolveProgressTarget(sessionId: string): { tabId: number; bvid: string } | null;
-  getActiveTranscriptions(): Array<{ tabId: number; bvid: string }>;
 }
