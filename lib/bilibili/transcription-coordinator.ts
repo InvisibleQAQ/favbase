@@ -1,4 +1,5 @@
 import type {
+  SubtitleSource,
   TranscribeStage,
   TranscribeErrorInfo,
 } from '@/lib/transcription/types';
@@ -97,7 +98,7 @@ export class TranscriptionCoordinator {
           .sendMessage({ type: 'GET_VIDEO_CACHE', bvid })
           .then((entry: unknown) => ({
             bvid,
-            entry: entry as { rows: unknown[]; source: 'bilibili' | 'groq' } | null,
+            entry: entry as { rows: unknown[]; source: SubtitleSource } | null,
           }))
           .catch(() => ({ bvid, entry: null })),
       ),

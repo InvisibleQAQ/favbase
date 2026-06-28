@@ -1,3 +1,5 @@
+export type SubtitleSource = 'bilibili' | 'groq';
+
 export interface SubtitleRow {
   start: number;
   end: number;
@@ -7,7 +9,7 @@ export interface SubtitleRow {
 export interface SubtitleResult {
   status: 'ok' | 'no_subtitle' | 'error';
   rows: SubtitleRow[];
-  source?: 'bilibili' | 'groq';
+  source?: SubtitleSource;
   error?: string;
 }
 
@@ -73,7 +75,7 @@ export interface TranscribeSuccess {
   success: true;
   data: {
     rows: SubtitleRow[];
-    source: 'bilibili' | 'groq';
+    source: SubtitleSource;
     cached: boolean;
   };
 }

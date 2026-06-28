@@ -128,7 +128,7 @@ MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRo
 
 3 层管线：Content Script → Background SW → Offscreen Document（FFmpeg WASM 分块）。
 
-- `lib/transcription/types.ts` — 转录核心类型：SubtitleRow, SubtitleResult, TranscribeRequest/Abort, TranscribeResponse(success|failure), TranscribeStage(13种 union，含 subtitle_check), TranscribeStatusPush(stage enum + stageParams), TranscribeErrorCode(12种) + TranscribeErrorInfo(code + debug message + params) + createErrorInfo(code, message, params?) 工厂函数 + isTranscribeError(err) 类型守卫。纯数据错误模型，无类继承，IPC 天然兼容
+- `lib/transcription/types.ts` — 转录核心类型：SubtitleSource(`'bilibili' | 'groq'`，字幕来源唯一类型定义，所有文件引用此类型), SubtitleRow, SubtitleResult, TranscribeRequest/Abort, TranscribeResponse(success|failure), TranscribeStage(13种 union，含 subtitle_check), TranscribeStatusPush(stage enum + stageParams), TranscribeErrorCode(12种) + TranscribeErrorInfo(code + debug message + params) + createErrorInfo(code, message, params?) 工厂函数 + isTranscribeError(err) 类型守卫。纯数据错误模型，无类继承，IPC 天然兼容
 - `lib/transcription/constants.ts` — GROQ_MAX_AUDIO_BYTES(24MB), CHUNK_SECONDS(600), OVERLAP(4s), SAFETY_RATIO(0.72), PROGRESS 阶段映射, 超时常量
 - `lib/transcription/groq-client.ts` — ensureGroqConnectivity(apiKey, baseUrl?)（6s pre-flight GET /models）+ requestGroqTranscription(blob, apiKey, model, signal?, baseUrl?)（FormData POST verbose_json+segment）+ mapTranscriptionToRows() + parseRetryAfter()。baseUrl 可选参数支持多 ASR Provider（Groq/SiliconFlow），默认 Groq。错误通过 createErrorInfo() 抛出 TranscribeErrorInfo 纯对象，isTranscribeError() 防双层包装。API 类型内聚于此文件，不导出
 - `lib/transcription/audio-extractor.ts` — 平台无关的音频下载：fetchAudioBlob(url, signal, onProgress)（streaming 下载，10% 粒度进度映射到 20-55%）。错误通过 createErrorInfo() 抛出。不含 B 站特定逻辑，音频 URL 提取已移至 bilibili-api.ts 的 extractBiliAudioUrl()

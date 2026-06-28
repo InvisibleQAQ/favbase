@@ -1,9 +1,9 @@
-import type { SubtitleRow } from '@/lib/transcription/types';
+import type { SubtitleRow, SubtitleSource } from '@/lib/transcription/types';
 
 export interface VideoCacheEntry {
   bvid: string;
   rows: SubtitleRow[];
-  source: 'bilibili' | 'groq';
+  source: SubtitleSource;
   rawHash: string;
   updatedAt: number;
 }
@@ -17,5 +17,5 @@ export interface CacheSubtitleRequest {
   type: 'CACHE_SUBTITLE';
   bvid: string;
   rows: SubtitleRow[];
-  source: 'bilibili' | 'groq';
+  source: SubtitleSource;
 }

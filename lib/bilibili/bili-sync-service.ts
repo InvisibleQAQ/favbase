@@ -9,7 +9,7 @@ import { items } from '@/lib/database/entities/items';
 import { itemSources } from '@/lib/database/entities/item-sources';
 import { normalizeCover } from './url-utils';
 import type { BiliFavFolder, BiliFavVideo } from './types';
-import type { SubtitleRow } from '@/lib/transcription/types';
+import type { SubtitleRow, SubtitleSource } from '@/lib/transcription/types';
 
 export { BiliAuthError };
 
@@ -174,7 +174,7 @@ export async function markVideoError(bvid: string): Promise<void> {
 export async function persistContent(
   bvid: string,
   rows: SubtitleRow[],
-  source: 'bilibili' | 'groq',
+  source: SubtitleSource,
 ): Promise<void> {
   try {
     const db = getDb();

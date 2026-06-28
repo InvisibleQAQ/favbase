@@ -1,3 +1,4 @@
+import type { SubtitleSource } from '@/lib/transcription/types';
 import { Panel } from './components/Panel';
 import { useVideoDetect } from './hooks/useVideoDetect';
 import { useSubtitle } from './hooks/useSubtitle';
@@ -25,7 +26,7 @@ export default function App() {
     transcribe.rows.length > 0 ? transcribe.rows : subtitle.rows;
   const effectiveStatus =
     transcribe.rows.length > 0 ? ('ok' as const) : subtitle.status;
-  const effectiveSource: 'bilibili' | 'groq' =
+  const effectiveSource: SubtitleSource =
     transcribe.rows.length > 0 ? 'groq' : (subtitle.source ?? 'bilibili');
   const effectiveCached =
     transcribe.rows.length > 0 ? transcribe.cached : subtitle.cached;

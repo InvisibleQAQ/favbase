@@ -1,6 +1,7 @@
 import type { BackgroundContext } from './types';
 import type {
   SubtitleRow,
+  SubtitleSource,
   TranscribeRequest,
   TranscribeAbort,
   TranscribeResponse,
@@ -204,7 +205,7 @@ export async function handleTranscribe(
         if (!entry) return null;
         return { rows: entry.rows, source: entry.source };
       },
-      cacheSave: async (id: string, rows: SubtitleRow[], source: 'bilibili' | 'groq') => {
+      cacheSave: async (id: string, rows: SubtitleRow[], source: SubtitleSource) => {
         await mergeVideoCache(id, rows, source);
       },
       postProcess: processSubtitles,

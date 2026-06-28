@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
-import type { SubtitleRow } from '@/lib/transcription/types';
+import type { SubtitleRow, SubtitleSource } from '@/lib/transcription/types';
 import { t } from '@/lib/i18n';
 import { useTranslation } from '@/lib/i18n/use-translation';
 
 interface SubtitleViewProps {
   rows: SubtitleRow[];
-  source: 'bilibili' | 'groq';
+  source: SubtitleSource;
   cached: boolean;
 }
 
@@ -47,7 +47,7 @@ function highlightText(text: string, term: string): ReactNode {
   );
 }
 
-function getSourceLabel(source: 'bilibili' | 'groq', cached: boolean): string {
+function getSourceLabel(source: SubtitleSource, cached: boolean): string {
   if (source === 'bilibili') return t('source.bilibili');
   return cached ? t('source.groqCached') : t('source.groq');
 }

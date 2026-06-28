@@ -3,14 +3,14 @@ import { fetchSubtitle } from '@/lib/bilibili/bilibili-api';
 import { processSubtitles } from '@/lib/bilibili/subtitle-processor';
 import { onBiliMessage } from '@/lib/bilibili/messaging';
 import { onVideoCacheChange } from '@/lib/cache/video-cache';
-import type { SubtitleRow } from '@/lib/transcription/types';
+import type { SubtitleRow, SubtitleSource } from '@/lib/transcription/types';
 
 export interface SubtitleState {
   rows: SubtitleRow[];
   loading: boolean;
   status: 'ok' | 'no_subtitle' | 'error' | null;
   error: string | null;
-  source: 'bilibili' | 'groq' | null;
+  source: SubtitleSource | null;
   cached: boolean;
 }
 
@@ -68,7 +68,7 @@ export function useSubtitle(
         (
           result: {
             rows: SubtitleRow[];
-            source: 'bilibili' | 'groq';
+            source: SubtitleSource;
             cached: true;
           } | null,
         ) => {

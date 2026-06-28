@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { SubtitleRow } from '@/lib/transcription/types';
+import type { SubtitleRow, SubtitleSource } from '@/lib/transcription/types';
 import type { LocaleKeys } from '@/lib/i18n/locales/zh-CN';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { StatusBar } from './StatusBar';
@@ -25,7 +25,7 @@ interface PanelProps {
   error: string | null;
   rows: SubtitleRow[];
   title: string;
-  source: 'bilibili' | 'groq';
+  source: SubtitleSource;
   cached: boolean;
   showTranscribe: boolean;
   transcribe: UseTranscribeReturn;

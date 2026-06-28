@@ -1,6 +1,7 @@
 import {
   isTranscribeError,
   type SubtitleRow,
+  type SubtitleSource,
   type TranscribeResponse,
   type TranscribeStage,
   type TranscribeErrorInfo,
@@ -29,11 +30,11 @@ export interface PipelineDeps {
   }): Promise<SubtitleRow[]>;
   cacheGet(
     bvid: string,
-  ): Promise<{ rows: SubtitleRow[]; source: 'bilibili' | 'groq' } | null>;
+  ): Promise<{ rows: SubtitleRow[]; source: SubtitleSource } | null>;
   cacheSave(
     bvid: string,
     rows: SubtitleRow[],
-    source: 'bilibili' | 'groq',
+    source: SubtitleSource,
   ): Promise<void>;
   postProcess(rows: SubtitleRow[]): SubtitleRow[];
 }

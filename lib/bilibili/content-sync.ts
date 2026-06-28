@@ -2,7 +2,7 @@ import { eq, and } from 'drizzle-orm';
 import { items } from '@/lib/database/entities/items';
 import { itemContents } from '@/lib/database/entities/item-contents';
 import type { FavbaseDb } from '@/lib/database/db';
-import type { SubtitleRow } from '@/lib/transcription/types';
+import type { SubtitleRow, SubtitleSource } from '@/lib/transcription/types';
 
 const PLATFORM = 'bilibili';
 
@@ -14,7 +14,7 @@ export async function persistSubtitleContent(
   db: FavbaseDb,
   bvid: string,
   rows: SubtitleRow[],
-  source: 'bilibili' | 'groq',
+  source: SubtitleSource,
 ): Promise<void> {
   try {
     // 1. Find the item by bvid

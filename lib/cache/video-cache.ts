@@ -1,5 +1,5 @@
 import { storage } from 'wxt/utils/storage';
-import type { SubtitleRow } from '@/lib/transcription/types';
+import type { SubtitleRow, SubtitleSource } from '@/lib/transcription/types';
 import type { VideoCacheEntry } from './types';
 
 // ---------------------------------------------------------------------------
@@ -151,7 +151,7 @@ const CACHE_DEFAULTS: Omit<VideoCacheEntry, 'bvid'> = {
 export async function mergeVideoCache(
   bvid: string,
   rows: SubtitleRow[],
-  source: 'bilibili' | 'groq',
+  source: SubtitleSource,
 ): Promise<VideoCacheEntry> {
   bvid = normalizeBvid(bvid);
   const rawHash = computeRowsHash(rows);
