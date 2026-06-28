@@ -2,8 +2,9 @@ export const STORAGE_KEYS = {
   settings: 'local:settings',
   sidebarPinned: 'local:sidebarPinned',
   locale: 'local:locale',
+  videoCacheLegacy: 'local:videoCache',
+} as const;
 
-  // Cache domain — managed internally by lib/cache/video-cache.ts (deep module)
-  // videoCachePrefix: 'local:vc:{bvid}'   (per-bvid dynamic keys)
-  // videoCache_legacy: 'local:videoCache'  (migration source, will be removed)
+export const STORAGE_PREFIXES = {
+  videoCache: 'vc:',
 } as const;

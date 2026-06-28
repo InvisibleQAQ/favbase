@@ -1,5 +1,6 @@
 import { storage } from 'wxt/utils/storage';
 import type { SubtitleRow, SubtitleSource } from '@/lib/subtitle/types';
+import { STORAGE_KEYS, STORAGE_PREFIXES } from '@/lib/storage/keys';
 import type { VideoCacheEntry } from './types';
 
 // ---------------------------------------------------------------------------
@@ -78,7 +79,7 @@ const memoryCache = new Map<string, VideoCacheEntry>();
 // ---------------------------------------------------------------------------
 
 const legacyStorage = storage.defineItem<Record<string, VideoCacheEntry>>(
-  'local:videoCache',
+  STORAGE_KEYS.videoCacheLegacy,
   { fallback: {} },
 );
 
@@ -86,10 +87,10 @@ const legacyStorage = storage.defineItem<Record<string, VideoCacheEntry>>(
 // Storage key helper
 // ---------------------------------------------------------------------------
 
-const CHROME_KEY_PREFIX = 'vc:';
+const CACHE_PREFIX = STORAGE_PREFIXES.videoCache;
 
 function storageKey(bvid: string): `local:vc:${string}` {
-  return `local:${CHROME_KEY_PREFIX}${bvid}`;
+  return `local:${CACHE_PREFIX}${bvid}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -203,8 +204,8 @@ export function initCacheStorageListener(): void {
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== 'local') return;
     for (const key of Object.keys(changes)) {
-      if (!key.startsWith(CHROME_KEY_PREFIX)) continue;
-      const bvid = key.slice(CHROME_KEY_PREFIX.length);
+      if (!key.startsWith(CACHE_PREFIX)) continue;
+      const bvid = key.slice(CACHE_PREFIX.length);
       const newValue = changes[key].newValue as VideoCacheEntry | undefined;
       if (newValue) {
         memoryCache.set(bvid, cloneData(newValue));
@@ -224,7 +225,7 @@ export function onVideoCacheChange(
   cb: (entry: VideoCacheEntry) => void,
 ): () => void {
   const normalized = normalizeBvid(bvid);
-  const targetKey = CHROME_KEY_PREFIX + normalized;
+  const targetKey = CACHE_PREFIX + normalized;
 
   const handler = (
     changes: Record<string, chrome.storage.StorageChange>,

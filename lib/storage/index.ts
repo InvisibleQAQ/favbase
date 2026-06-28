@@ -1,6 +1,6 @@
 import { migrateSettingsIfNeeded } from './settings';
 
-export { STORAGE_KEYS } from './keys';
+export { STORAGE_KEYS, STORAGE_PREFIXES } from './keys';
 
 export {
   type UserSettings,
