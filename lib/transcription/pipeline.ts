@@ -6,7 +6,6 @@ import {
   type TranscribeErrorInfo,
 } from './types';
 import { PROGRESS } from './constants';
-import { processSubtitles } from '@/lib/bilibili/subtitle-processor';
 
 export interface AsrConfig {
   apiKey: string;
@@ -36,6 +35,7 @@ export interface PipelineDeps {
     rows: SubtitleRow[],
     source: 'bilibili' | 'groq',
   ): Promise<void>;
+  postProcess(rows: SubtitleRow[]): SubtitleRow[];
 }
 
 export interface PipelineRequest {
@@ -82,7 +82,7 @@ export async function runTranscriptionPipeline(
     onProgress(PROGRESS.SUBTITLE_CHECK, 'subtitle_check');
     const official = await deps.fetchOfficialSubtitle(bvid, cid);
     if (official) {
-      const rows = processSubtitles(official);
+      const rows = deps.postProcess(official);
       await deps.cacheSave(bvid, rows, 'bilibili');
       onProgress(PROGRESS.DONE, 'done');
       return { success: true, data: { rows, source: 'bilibili', cached: false } };
@@ -106,7 +106,7 @@ export async function runTranscriptionPipeline(
     });
 
     onProgress(PROGRESS.PARSING, 'processing');
-    const rows = processSubtitles(rawRows);
+    const rows = deps.postProcess(rawRows);
 
     await deps.cacheSave(bvid, rows, 'groq');
     onProgress(PROGRESS.DONE, 'done');

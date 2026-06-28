@@ -25,6 +25,7 @@ import {
   fetchCidByPageList,
   fetchSubtitle,
 } from '@/lib/bilibili/bilibili-api';
+import { processSubtitles } from '@/lib/bilibili/subtitle-processor';
 import { assertAudioNotReused } from '@/lib/transcription/audio-fingerprint';
 import { createErrorInfo } from '@/lib/transcription/types';
 import { GROQ_MAX_AUDIO_BYTES, PROGRESS } from '@/lib/transcription/constants';
@@ -206,6 +207,7 @@ export async function handleTranscribe(
       cacheSave: async (id: string, rows: SubtitleRow[], source: 'bilibili' | 'groq') => {
         await mergeVideoCache(id, rows, source);
       },
+      postProcess: processSubtitles,
     };
 
     const result = await runTranscriptionPipeline(
