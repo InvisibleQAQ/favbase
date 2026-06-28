@@ -20,13 +20,7 @@ import {
   requestGroqTranscription,
 } from '@/lib/transcription/groq-client';
 import { fetchAudioBlob } from '@/lib/transcription/audio-extractor';
-import {
-  extractBiliAudioUrl,
-  getBiliAuth,
-  fetchCidByPageList,
-  fetchSubtitle,
-} from '@/lib/bilibili/bilibili-api';
-import { processSubtitles } from '@/lib/bilibili/subtitle-processor';
+import { prepareBiliTranscription } from '@/lib/bilibili/bilibili-transcription-adapter';
 import { assertAudioNotReused } from '@/lib/transcription/audio-fingerprint';
 import { createErrorInfo } from '@/lib/transcription/types';
 import { GROQ_MAX_AUDIO_BYTES, PROGRESS } from '@/lib/transcription/constants';
@@ -59,35 +53,11 @@ function notifyTab(
   ctx.sendToTab(tabId, msg);
 }
 
-const SUBTITLE_RETRY_DELAYS = [1000, 2000];
-
-function createFetchOfficialSubtitle(auth: Awaited<ReturnType<typeof getBiliAuth>>) {
-  return async (bvid: string, cid: number): Promise<SubtitleRow[] | null> => {
-    for (let attempt = 0; attempt <= SUBTITLE_RETRY_DELAYS.length; attempt++) {
-      try {
-        const result = await fetchSubtitle(bvid, cid, auth ?? undefined);
-        if (result.status === 'ok' && result.rows.length > 0) return result.rows;
-        if (result.status === 'no_subtitle') return null;
-        if (attempt < SUBTITLE_RETRY_DELAYS.length) {
-          console.warn(
-            `[handleTranscribe] Official subtitle error for ${bvid} (attempt ${attempt + 1}): ${result.error ?? 'unknown'} — retrying`,
-          );
-          await new Promise((r) => setTimeout(r, SUBTITLE_RETRY_DELAYS[attempt]));
-        }
-      } catch (err) {
-        if (attempt < SUBTITLE_RETRY_DELAYS.length) {
-          console.warn(
-            `[handleTranscribe] Official subtitle threw for ${bvid} (attempt ${attempt + 1}): ${err instanceof Error ? err.message : err} — retrying`,
-          );
-          await new Promise((r) => setTimeout(r, SUBTITLE_RETRY_DELAYS[attempt]));
-        }
-      }
-    }
-    return null;
-  };
-}
-
-function createTranscribeAudio(tabId: number, ctx: BackgroundContext) {
+function createTranscribeAudio(
+  tabId: number,
+  ctx: BackgroundContext,
+  extractAudioUrl: (bvid: string, cid: number) => Promise<string>,
+) {
   return async (params: {
     bvid: string;
     cid: number;
@@ -105,7 +75,7 @@ function createTranscribeAudio(tabId: number, ctx: BackgroundContext) {
     onProgress(PROGRESS.DOWNLOAD_BEGIN, 'extracting');
     let audioUrl: string;
     try {
-      audioUrl = await extractBiliAudioUrl(bvid, cid);
+      audioUrl = await extractAudioUrl(bvid, cid);
     } catch (err) {
       throw createErrorInfo('ASR_NO_AUDIO_SOURCE', err instanceof Error ? err.message : 'Audio extraction failed');
     }
@@ -193,13 +163,12 @@ export async function handleTranscribe(
   }
 
   try {
-    const auth = await getBiliAuth();
-    const cid = msg.cid || (await fetchCidByPageList(bvid, 1, auth ?? undefined));
+    const platform = await prepareBiliTranscription(bvid, msg.cid);
 
     const deps = {
       getAsrConfig: getAsrSettings,
-      fetchOfficialSubtitle: createFetchOfficialSubtitle(auth),
-      transcribeAudio: createTranscribeAudio(tabId, ctx),
+      fetchOfficialSubtitle: platform.fetchOfficialSubtitle,
+      transcribeAudio: createTranscribeAudio(tabId, ctx, platform.extractAudioUrl),
       cacheGet: async (id: string) => {
         const entry = await getVideoCache(id);
         if (!entry) return null;
@@ -208,11 +177,11 @@ export async function handleTranscribe(
       cacheSave: async (id: string, rows: SubtitleRow[], source: SubtitleSource) => {
         await mergeVideoCache(id, rows, source);
       },
-      postProcess: processSubtitles,
+      postProcess: platform.postProcess,
     };
 
     const result = await runTranscriptionPipeline(
-      { bvid, cid, title, signal: controller.signal },
+      { bvid, cid: platform.cid, title, signal: controller.signal },
       deps,
       (progress, stage, stageParams) => {
         notifyTab(ctx, tabId, bvid, progress, stage, undefined, stageParams);
