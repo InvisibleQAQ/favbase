@@ -137,15 +137,15 @@
 
 ---
 
-### 10. i18n 无动态切换
+### 10. i18n 无动态切换 ✅ FIXED
 
 **文件**: `lib/i18n/index.ts`
 
 **问题**: locale 在模块加载时一次性检测（`detectLocale()`），不可运行时切换。缺少复数/性别支持。missing key fallback 到 key 本身，无告警机制。
 
-**方案**: MVP 阶段可接受。后续需求出现时添加：settings 驱动的 locale 切换 + 开发模式 missing key 告警。
+**方案**: Observable singleton + `useSyncExternalStore`。`localeStorage`（`local:locale`）持久化用户偏好（`'auto' | 'zh-CN' | 'en'`），`t()` 读可变引用，`useTranslation()` hook 驱动 React re-render，`storage.watch()` 跨 context 同步，DEV 模式 missing key `console.warn`。
 
-**收益**: 当前成本低，不阻塞功能开发。
+**收益**: 运行时切换语言即时生效，跨 tab 同步，开发者可发现翻译遗漏。
 
 ---
 

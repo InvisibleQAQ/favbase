@@ -121,6 +121,11 @@ const zhCN = {
   'autoTranscribe.statsASR': 'ASR {{count}}',
   'autoTranscribe.statsSkipped': '跳过 {{count}}',
   'autoTranscribe.statsRemaining': '剩余 {{count}}',
+
+  'settings.language': '界面语言',
+  'settings.languageAuto': '跟随浏览器',
+  'settings.languageZhCN': '中文',
+  'settings.languageEn': 'English',
 } as const;
 
 export type LocaleKeys = keyof typeof zhCN;

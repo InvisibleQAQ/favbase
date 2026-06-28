@@ -9,6 +9,7 @@ import Chip from '@mui/material/Chip';
 import Tooltip from '@mui/material/Tooltip';
 
 import { t } from '@/lib/i18n';
+import { useTranslation } from '@/lib/i18n/use-translation';
 import type { LocaleKeys } from '@/lib/i18n/locales/zh-CN';
 import type { TranscribeErrorCode } from '@/lib/transcription/types';
 import { Iconify } from '../../components/iconify';
@@ -76,6 +77,7 @@ export function VideoCard({
   onCancel,
   disabled,
 }: VideoCardProps) {
+  useTranslation();
   const isInvalid = video.attr === INVALID_ATTR;
   const cover = video.cover?.startsWith('//') ? `https:${video.cover}` : video.cover;
 

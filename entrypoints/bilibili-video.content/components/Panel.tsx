@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { SubtitleRow } from '@/lib/transcription/types';
 import type { LocaleKeys } from '@/lib/i18n/locales/zh-CN';
-import { t } from '@/lib/i18n';
+import { useTranslation } from '@/lib/i18n/use-translation';
 import { StatusBar } from './StatusBar';
 import { SubtitleView } from './SubtitleView';
 import { SettingsView, type SettingsViewProps } from './SettingsView';
@@ -38,6 +38,7 @@ export function Panel({
   source, cached, showTranscribe, transcribe, hasApiKey,
   settingsProps,
 }: PanelProps) {
+  const { t } = useTranslation();
   const [collapsed, setCollapsed] = useState(false);
   const [activeTab, setActiveTab] = useState('cc');
   const toggle = () => setCollapsed((c) => !c);

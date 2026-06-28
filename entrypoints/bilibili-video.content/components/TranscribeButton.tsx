@@ -1,4 +1,5 @@
 import { t } from '@/lib/i18n';
+import { useTranslation } from '@/lib/i18n/use-translation';
 import type { LocaleKeys } from '@/lib/i18n/locales/zh-CN';
 import type { TranscribeErrorCode } from '@/lib/transcription/types';
 import type { UseTranscribeReturn } from '../hooks/useTranscribe';
@@ -26,6 +27,7 @@ interface TranscribeButtonProps {
 }
 
 export function TranscribeButton({ transcribe, hasApiKey }: TranscribeButtonProps) {
+  useTranslation();
   const {
     transcribing,
     progress,

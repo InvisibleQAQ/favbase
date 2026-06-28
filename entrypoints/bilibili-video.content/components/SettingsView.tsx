@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { LLM_PROVIDERS, ASR_PROVIDERS, type LLMProviderId, type ASRProviderId, type LLMProviderDef, type ASRProviderDef } from '@/lib/providers';
 import type { UserSettings } from '@/lib/storage';
 import type { LlmUpdate, AsrUpdate } from '@/lib/hooks/useSettings';
-import { t } from '@/lib/i18n';
+import { useTranslation } from '@/lib/i18n/use-translation';
+import type { LocalePreference } from '@/lib/storage';
 
 export interface SettingsViewProps {
   settings: UserSettings;
@@ -34,12 +35,27 @@ export function SettingsView({
   updateLlm,
   updateAsr,
 }: SettingsViewProps) {
+  const { t, preference, setLocale } = useTranslation();
   const [showLlmKey, setShowLlmKey] = useState(false);
   const [showAsrKey, setShowAsrKey] = useState(false);
 
   return (
     <div className="favbase-settings">
       {saved && <div className="favbase-settings-saved">{t('settings.saved')}</div>}
+
+      {/* --- Language Section --- */}
+      <div className="favbase-settings-section">
+        <div className="favbase-settings-section-title">{t('settings.language')}</div>
+        <select
+          className="favbase-settings-select"
+          value={preference}
+          onChange={(e) => setLocale(e.target.value as LocalePreference)}
+        >
+          <option value="auto">{t('settings.languageAuto')}</option>
+          <option value="zh-CN">{t('settings.languageZhCN')}</option>
+          <option value="en">{t('settings.languageEn')}</option>
+        </select>
+      </div>
 
       {/* --- LLM Section --- */}
       <div className="favbase-settings-section">

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import type { SubtitleRow } from '@/lib/transcription/types';
 import { t } from '@/lib/i18n';
+import { useTranslation } from '@/lib/i18n/use-translation';
 
 interface SubtitleViewProps {
   rows: SubtitleRow[];
@@ -55,6 +56,7 @@ const USER_SCROLL_TIMEOUT = 4000;
 const SEARCH_DEBOUNCE_MS = 100;
 
 export function SubtitleView({ rows, source, cached }: SubtitleViewProps) {
+  useTranslation();
   const [activeIndex, setActiveIndex] = useState(-1);
   const listRef = useRef<HTMLDivElement>(null);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);

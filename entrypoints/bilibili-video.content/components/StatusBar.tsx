@@ -1,4 +1,4 @@
-import { t } from '@/lib/i18n';
+import { useTranslation } from '@/lib/i18n/use-translation';
 
 interface StatusBarProps {
   loading: boolean;
@@ -7,6 +7,7 @@ interface StatusBarProps {
 }
 
 export function StatusBar({ loading, status, error }: StatusBarProps) {
+  const { t } = useTranslation();
   if (loading) {
     return <div className="favbase-status favbase-status--loading">{t('status.loading')}</div>;
   }

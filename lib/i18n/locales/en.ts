@@ -123,6 +123,11 @@ const en: Record<LocaleKeys, string> = {
   'autoTranscribe.statsASR': 'ASR {{count}}',
   'autoTranscribe.statsSkipped': 'Skipped {{count}}',
   'autoTranscribe.statsRemaining': 'Remaining {{count}}',
+
+  'settings.language': 'Language',
+  'settings.languageAuto': 'Follow browser',
+  'settings.languageZhCN': '中文',
+  'settings.languageEn': 'English',
 };
 
 export default en;
