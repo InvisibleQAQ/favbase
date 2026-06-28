@@ -1,6 +1,7 @@
 import { storage } from 'wxt/utils/storage';
-import type { LLMProviderId, ASRProviderId } from './providers';
-import { getAsrProviderDef } from './providers';
+import type { LLMProviderId, ASRProviderId } from '../providers';
+import { getAsrProviderDef } from '../providers';
+import { STORAGE_KEYS } from './keys';
 
 export interface UserSettings {
   // LLM
@@ -45,13 +46,8 @@ export const DEFAULT_SETTINGS: UserSettings = {
 };
 
 export const settingsStorage = storage.defineItem<UserSettings>(
-  'local:settings',
+  STORAGE_KEYS.settings,
   { fallback: DEFAULT_SETTINGS },
-);
-
-export const sidebarPinnedStorage = storage.defineItem<boolean>(
-  'local:sidebarPinned',
-  { fallback: true },
 );
 
 export function resolveAsrConfig(settings: UserSettings): { apiKey: string; model: string; baseUrl: string } {
@@ -64,23 +60,22 @@ export function resolveAsrConfig(settings: UserSettings): { apiKey: string; mode
   };
 }
 
-/**
- * One-time migration: flat ASR fields -> asrConfigs record.
- * Call from background.ts onInstalled/onStartup. Idempotent.
- */
+export async function getAsrSettings(): Promise<{ apiKey: string; model: string; baseUrl: string }> {
+  const settings = await settingsStorage.getValue();
+  return resolveAsrConfig(settings);
+}
+
 export async function migrateSettingsIfNeeded(): Promise<void> {
   const raw = await settingsStorage.getValue();
 
-  // Already migrated or fresh install (asrConfigs exists and has entries, or old fields absent)
   if (raw.asrConfigs && Object.keys(raw.asrConfigs).length > 0) return;
 
-  // Check for old flat fields
   const anyRaw = raw as unknown as Record<string, unknown>;
   const hasOldFields =
     anyRaw.groqApiKey || anyRaw.groqModel ||
     anyRaw.siliconFlowApiKey || anyRaw.siliconFlowAsrModel;
 
-  if (!hasOldFields) return; // fresh install, nothing to migrate
+  if (!hasOldFields) return;
 
   const asrConfigs: Record<string, { apiKey: string; model: string }> = {};
 

@@ -13,7 +13,7 @@ import type {
   OffscreenPrepareRequest,
   OffscreenTranscribeRequest,
 } from '@/lib/offscreen/types';
-import { settingsStorage, resolveAsrConfig } from '@/lib/storage';
+import { getAsrSettings } from '@/lib/storage';
 import {
   ensureGroqConnectivity,
   requestGroqTranscription,
@@ -195,10 +195,7 @@ export async function handleTranscribe(
     const cid = msg.cid || (await fetchCidByPageList(bvid, 1, auth ?? undefined));
 
     const deps = {
-      getAsrConfig: async () => {
-        const s = await settingsStorage.getValue();
-        return resolveAsrConfig(s);
-      },
+      getAsrConfig: getAsrSettings,
       fetchOfficialSubtitle: createFetchOfficialSubtitle(auth),
       transcribeAudio: createTranscribeAudio(tabId, ctx),
       cacheGet: async (id: string) => {

@@ -7,7 +7,7 @@ import {
 } from './bili-sync-service';
 import { transcribeAndPersist, createStatusListener } from './transcribe-utils';
 import { normalizeCover } from './url-utils';
-import { resolveAsrConfig, settingsStorage } from '@/lib/storage';
+import { getAsrSettings } from '@/lib/storage';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -237,8 +237,7 @@ export class AutoTranscribePipeline {
     try {
       await checkAuth();
 
-      const settings = await settingsStorage.getValue();
-      const asrConfig = resolveAsrConfig(settings);
+      const asrConfig = await getAsrSettings();
       const hasAsrKey = Boolean(asrConfig.apiKey);
 
       const firstResult = await fetchAndSyncVideos(targetMediaId, 1);

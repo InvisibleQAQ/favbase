@@ -109,7 +109,7 @@
 
 ---
 
-### 8. Storage 访问模式分散
+### 8. Storage 访问模式分散 ✅ FIXED
 
 **文件**: `lib/storage.ts`, `lib/cache/video-cache.ts`, `lib/hooks/useSettings.ts`, `entrypoints/app/sections/collections/use-auto-transcribe.ts`
 
