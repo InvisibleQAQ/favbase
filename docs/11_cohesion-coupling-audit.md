@@ -95,7 +95,7 @@
 
 ---
 
-### 7. Background 消息分发 — 松散类型 + handler 签名不一致
+### 7. Background 消息分发 — 松散类型 + handler 签名不一致 ✅ FIXED (2e61a64)
 
 **文件**: `entrypoints/background.ts`, `lib/background/messages.ts`, `lib/background/types.ts`
 
