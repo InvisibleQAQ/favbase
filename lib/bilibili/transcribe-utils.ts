@@ -7,7 +7,8 @@ export async function transcribeAndPersist(
 ): Promise<TranscribeResponse> {
   const response = (await browser.runtime.sendMessage({
     type: 'TRANSCRIBE_AUDIO',
-    bvid,
+    platform: 'bilibili',
+    videoId: bvid,
     title,
   })) as TranscribeResponse;
 
@@ -26,7 +27,7 @@ export function createStatusListener(
     const m = msg as TranscribeStatusPush;
     if (m?.type !== 'TRANSCRIBE_STATUS') return;
     const target = matchBvid();
-    if (!target || m.bvid.toLowerCase() !== target.toLowerCase()) return;
+    if (!target || m.videoId.toLowerCase() !== target.toLowerCase()) return;
     onStatus({ progress: m.progress, stage: m.stage, stageParams: m.stageParams, error: m.error });
   };
   browser.runtime.onMessage.addListener(handler);

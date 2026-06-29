@@ -2,14 +2,15 @@ import type { SubtitleRow, SubtitleSource } from '@/lib/subtitle/types';
 
 export interface TranscribeRequest {
   type: 'TRANSCRIBE_AUDIO';
-  bvid: string;
+  platform: string;
+  videoId: string;
   cid?: number;
   title: string;
 }
 
 export interface TranscribeAbort {
   type: 'TRANSCRIBE_ABORT';
-  bvid: string;
+  videoId: string;
 }
 
 export type TranscribeStage =
@@ -29,7 +30,7 @@ export type TranscribeStage =
 
 export interface TranscribeStatusPush {
   type: 'TRANSCRIBE_STATUS';
-  bvid: string;
+  videoId: string;
   progress: number;
   stage: TranscribeStage;
   stageParams?: Record<string, string | number>;
@@ -56,7 +57,8 @@ export type TranscribeErrorCode =
   | 'ASR_NO_AUDIO_SOURCE'
   | 'DOWNLOAD_FAILED'
   | 'ASR_UNKNOWN'
-  | 'TRANSCRIBE_DUPLICATE';
+  | 'TRANSCRIBE_DUPLICATE'
+  | 'UNSUPPORTED_PLATFORM';
 
 export interface TranscribeSuccess {
   success: true;

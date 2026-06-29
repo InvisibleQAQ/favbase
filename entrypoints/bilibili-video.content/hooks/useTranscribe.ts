@@ -48,7 +48,7 @@ export function useTranscribe(
 
     if (prevBvid && prevBvid !== bvid) {
       browser.runtime
-        .sendMessage({ type: 'TRANSCRIBE_ABORT', bvid: prevBvid })
+        .sendMessage({ type: 'TRANSCRIBE_ABORT', videoId: prevBvid })
         .catch(() => {});
     }
 
@@ -69,7 +69,7 @@ export function useTranscribe(
     const handler = (msg: unknown) => {
       const m = msg as TranscribeStatusPush;
       if (m?.type !== 'TRANSCRIBE_STATUS') return;
-      if (m.bvid && m.bvid.toLowerCase() !== bvid?.toLowerCase()) return;
+      if (m.videoId && m.videoId.toLowerCase() !== bvid?.toLowerCase()) return;
 
       setState((prev) => ({
         ...prev,
@@ -97,7 +97,7 @@ export function useTranscribe(
     resetCountdown();
 
     browser.runtime
-      .sendMessage({ type: 'TRANSCRIBE_AUDIO', bvid, cid, title })
+      .sendMessage({ type: 'TRANSCRIBE_AUDIO', platform: 'bilibili', videoId: bvid, cid, title })
       .then((response: unknown) => {
         if (bvidRef.current?.toLowerCase() !== bvid?.toLowerCase()) return;
         const res = response as TranscribeResponse;
@@ -141,7 +141,7 @@ export function useTranscribe(
 
   const cancelTranscribe = useCallback(() => {
     if (!bvid) return;
-    browser.runtime.sendMessage({ type: 'TRANSCRIBE_ABORT', bvid }).catch(() => {});
+    browser.runtime.sendMessage({ type: 'TRANSCRIBE_ABORT', videoId: bvid }).catch(() => {});
     setState((prev) => ({
       ...prev,
       transcribing: false,
