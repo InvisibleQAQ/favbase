@@ -1,57 +1,9 @@
-import {
-  checkAuth,
-  fetchAndSyncVideos,
-  getPendingBvids,
-  getPendingPreview,
-  markVideoError,
-} from './bili-sync-service';
-import { transcribeAndPersist, createStatusListener } from './transcribe-utils';
-import { normalizeCover } from './url-utils';
-import { getAsrSettings } from '@/lib/storage';
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-export type AutoTranscribePhase =
-  | 'idle'
-  | 'syncing'
-  | 'transcribing'
-  | 'waiting'
-  | 'paused'
-  | 'done'
-  | 'cancelled';
-
-export interface AutoTranscribeStats {
-  cc: number;
-  asr: number;
-  skipped: number;
-  remaining: number;
-}
-
-export interface AutoTranscribeCurrentVideo {
-  cover: string;
-  title: string;
-  upper: string;
-  duration: number;
-}
-
-export interface AutoTranscribeState {
-  phase: AutoTranscribePhase;
-  currentPage: number;
-  totalPages: number;
-  currentVideoTitle: string;
-  currentVideoBvid: string;
-  currentVideo: AutoTranscribeCurrentVideo | null;
-  totalVideos: number;
-  currentIndex: number;
-  videoProgress: number;
-  videoStage: string;
-  waitSeconds: number;
-  stats: AutoTranscribeStats;
-  previewVideo: AutoTranscribeCurrentVideo | null;
-  pendingCount: number;
-}
+import type {
+  AutoTranscribeAdapter,
+  AutoTranscribePhase,
+  AutoTranscribeState,
+  AutoTranscribeStats,
+} from './types';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -62,7 +14,7 @@ const INITIAL_STATE: AutoTranscribeState = {
   currentPage: 0,
   totalPages: 0,
   currentVideoTitle: '',
-  currentVideoBvid: '',
+  currentVideoId: '',
   currentVideo: null,
   totalVideos: 0,
   currentIndex: 0,
@@ -99,6 +51,7 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
 // ---------------------------------------------------------------------------
 
 export class AutoTranscribePipeline {
+  private readonly adapter: AutoTranscribeAdapter;
   private state: AutoTranscribeState = { ...INITIAL_STATE };
   private listeners = new Set<() => void>();
   private ac: AbortController | null = null;
@@ -106,6 +59,10 @@ export class AutoTranscribePipeline {
   private countdownTimer: ReturnType<typeof setInterval> | null = null;
   private statusCleanup: (() => void) | null = null;
   private previewGeneration = 0;
+
+  constructor(adapter: AutoTranscribeAdapter) {
+    this.adapter = adapter;
+  }
 
   // --- useSyncExternalStore contract ---
 
@@ -118,12 +75,12 @@ export class AutoTranscribePipeline {
 
   // --- Control ---
 
-  start(mediaId: number): void {
+  start(collectionId: string): void {
     if (this.running) return;
     this.state = { ...INITIAL_STATE, phase: 'syncing' };
     this.emit();
     this.installStatusListener();
-    this.runPipeline(mediaId);
+    this.runPipeline(collectionId);
   }
 
   stop(): void {
@@ -137,14 +94,14 @@ export class AutoTranscribePipeline {
     this.listeners.clear();
   }
 
-  // --- Preview query (called by hook when idle + mediaId available) ---
+  // --- Preview query (called by hook when idle + collectionId available) ---
 
-  async queryPreview(mediaId: number): Promise<void> {
+  async queryPreview(collectionId: string): Promise<void> {
     if (this.running) return;
     const gen = ++this.previewGeneration;
 
     try {
-      const preview = await getPendingPreview(mediaId);
+      const preview = await this.adapter.getPreview(collectionId);
       if (gen !== this.previewGeneration) return;
       this.patch({ previewVideo: preview.video, pendingCount: preview.pendingCount });
     } catch {
@@ -208,8 +165,8 @@ export class AutoTranscribePipeline {
 
   private installStatusListener(): void {
     this.uninstallStatusListener();
-    this.statusCleanup = createStatusListener(
-      () => this.state.currentVideoBvid,
+    this.statusCleanup = this.adapter.createStatusListener(
+      () => this.state.currentVideoId,
       ({ progress, stage }) => {
         if (!this.running) return;
         this.patch({ videoProgress: progress, videoStage: stage });
@@ -226,7 +183,7 @@ export class AutoTranscribePipeline {
 
   // --- Core pipeline ---
 
-  private async runPipeline(targetMediaId: number): Promise<void> {
+  private async runPipeline(collectionId: string): Promise<void> {
     const ac = new AbortController();
     this.ac = ac;
     this.running = true;
@@ -235,17 +192,16 @@ export class AutoTranscribePipeline {
     const stats: AutoTranscribeStats = { cc: 0, asr: 0, skipped: 0, remaining: 0 };
 
     try {
-      await checkAuth();
+      await this.adapter.checkAuth();
 
-      const asrConfig = await getAsrSettings();
-      const hasAsrKey = Boolean(asrConfig.apiKey);
+      const hasAsrKey = await this.adapter.hasAsrKey();
 
-      const firstResult = await fetchAndSyncVideos(targetMediaId, 1);
+      const firstResult = await this.adapter.fetchPage(collectionId, 1);
       signal.throwIfAborted();
       const totalPages = firstResult.totalPages;
 
       let processedIndex = 0;
-      this.patch({ totalPages, totalVideos: firstResult.mediaCount, currentPage: 0 });
+      this.patch({ totalPages, totalVideos: firstResult.totalCount, currentPage: 0 });
 
       for (let page = 1; page <= totalPages; page++) {
         signal.throwIfAborted();
@@ -253,41 +209,35 @@ export class AutoTranscribePipeline {
         // --- Sync phase ---
         this.patch({ phase: 'syncing', currentPage: page });
 
-        const pageResult = page === 1 ? firstResult : await fetchAndSyncVideos(targetMediaId, page);
+        const pageResult = page === 1 ? firstResult : await this.adapter.fetchPage(collectionId, page);
         signal.throwIfAborted();
         const videos = pageResult.videos;
 
-        const pageBvids = videos
-          .filter((v) => v.attr !== 9 && v.bvid)
-          .map((v) => v.bvid);
+        const validVideos = videos.filter((v) => !v.isInvalid);
+        const validIds = validVideos.map((v) => v.videoId);
 
-        const pendingBvids = await getPendingBvids(pageBvids);
+        const pendingIds = await this.adapter.getPendingIds(validIds);
 
-        stats.skipped += videos.filter((v) => v.attr === 9).length;
-        stats.cc += pageBvids.length - pendingBvids.length;
-        stats.remaining = pendingBvids.length + (totalPages - page) * PAGE_SIZE;
+        stats.skipped += videos.length - validVideos.length;
+        stats.cc += validIds.length - pendingIds.length;
+        stats.remaining = pendingIds.length + (totalPages - page) * PAGE_SIZE;
         this.patchStats({ ...stats });
 
         // --- Transcribe phase ---
         this.patch({ phase: 'transcribing' });
 
-        for (const bvid of pendingBvids) {
+        for (const videoId of pendingIds) {
           signal.throwIfAborted();
 
-          const video = videos.find((v) => v.bvid === bvid);
-          const title = video?.title ?? bvid;
+          const video = validVideos.find((v) => v.videoId === videoId);
+          const title = video?.title ?? videoId;
           processedIndex++;
 
           this.patch({
             currentVideoTitle: title,
-            currentVideoBvid: bvid,
+            currentVideoId: videoId,
             currentVideo: video
-              ? {
-                  cover: normalizeCover(video.cover),
-                  title: video.title,
-                  upper: video.upper.name,
-                  duration: video.duration,
-                }
+              ? { cover: video.cover, title: video.title, author: video.author, duration: video.duration }
               : null,
             currentIndex: processedIndex,
             videoProgress: 0,
@@ -295,7 +245,7 @@ export class AutoTranscribePipeline {
           });
 
           try {
-            const response = await transcribeAndPersist(bvid, title);
+            const response = await this.adapter.transcribe(videoId, title);
 
             if (response.success) {
               if (response.data.source === 'official') stats.cc++;
@@ -312,7 +262,7 @@ export class AutoTranscribePipeline {
 
               if (errorCode === 'ASR_RATE_LIMIT') {
                 await this.waitWithCountdown(RATE_LIMIT_PAUSE_MS, 'paused', signal);
-                const retryRes = await transcribeAndPersist(bvid, title);
+                const retryRes = await this.adapter.transcribe(videoId, title);
                 if (retryRes.success) {
                   if (retryRes.data.source === 'official') stats.cc++;
                   else stats.asr++;
@@ -323,7 +273,7 @@ export class AutoTranscribePipeline {
                 stats.skipped++;
               } else {
                 stats.skipped++;
-                await markVideoError(bvid);
+                await this.adapter.markError(videoId);
               }
 
               stats.remaining = Math.max(0, stats.remaining - 1);
@@ -348,7 +298,7 @@ export class AutoTranscribePipeline {
       this.patch({
         phase: 'done',
         currentVideoTitle: '',
-        currentVideoBvid: '',
+        currentVideoId: '',
         currentVideo: null,
         videoProgress: 0,
         videoStage: '',

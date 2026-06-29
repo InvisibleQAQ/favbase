@@ -16,9 +16,12 @@ import { useBiliFavFolders } from './use-bili-fav-folders';
 import { useBiliFavVideos } from './use-bili-fav-videos';
 import { useVideoTranscribe } from './use-video-transcribe';
 import { useAutoTranscribe } from './use-auto-transcribe';
+import { createBiliAutoTranscribeAdapter } from '@/lib/bilibili/auto-transcribe-adapter';
 import { VideoCard } from './video-card';
 import { FolderSidebar } from './folder-sidebar';
 import { AutoTranscribeBar } from './auto-transcribe-bar';
+
+const biliAdapter = createBiliAutoTranscribeAdapter();
 
 // ---------------------------------------------------------------------------
 // State views shared between sidebar and content
@@ -244,7 +247,7 @@ export function CollectionsView() {
     useBiliFavFolders();
 
   const selectedId = mediaId ? Number(mediaId) : folders[0]?.id;
-  const autoTranscribe = useAutoTranscribe(selectedId);
+  const autoTranscribe = useAutoTranscribe(selectedId, biliAdapter);
   const selectedFolder = folders.find((f) => f.id === selectedId);
 
   useEffect(() => {

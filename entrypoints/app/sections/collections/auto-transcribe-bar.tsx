@@ -7,7 +7,7 @@ import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 
 import { Iconify } from '../../components/iconify';
-import type { AutoTranscribeState } from './use-auto-transcribe';
+import type { AutoTranscribeState } from '@/lib/auto-transcribe/types';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -182,7 +182,7 @@ export function AutoTranscribeBar({ state, running, onStart, onStop }: AutoTrans
               >
                 {previewVideo.title}
                 <Typography component="span" variant="body2" sx={{ color: 'text.secondary', ml: 0.5 }}>
-                  · {previewVideo.upper}
+                  · {previewVideo.author}
                 </Typography>
               </Typography>
             )}
@@ -256,7 +256,7 @@ export function AutoTranscribeBar({ state, running, onStart, onStop }: AutoTrans
             {currentVideo && (
               <>
                 <Typography variant="body2" sx={{ color: 'text.secondary' }} noWrap>
-                  {currentVideo.upper}
+                  {currentVideo.author}
                 </Typography>
                 <Typography variant="body2" sx={{ color: 'text.disabled' }}>
                   {formatDuration(currentVideo.duration)}

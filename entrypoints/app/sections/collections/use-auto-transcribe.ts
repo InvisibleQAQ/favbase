@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
 import {
   AutoTranscribePipeline,
-  type AutoTranscribePhase,
-  type AutoTranscribeStats,
-  type AutoTranscribeCurrentVideo,
-  type AutoTranscribeState,
-} from '@/lib/bilibili/auto-transcribe-pipeline';
+} from '@/lib/auto-transcribe/pipeline';
+import type {
+  AutoTranscribeAdapter,
+  AutoTranscribePhase,
+  AutoTranscribeStats,
+  AutoTranscribeCurrentVideo,
+  AutoTranscribeState,
+} from '@/lib/auto-transcribe/types';
 
 export type { AutoTranscribePhase, AutoTranscribeStats, AutoTranscribeCurrentVideo, AutoTranscribeState };
 
@@ -16,10 +19,13 @@ export interface UseAutoTranscribeReturn {
   stop: () => void;
 }
 
-export function useAutoTranscribe(mediaId: number | undefined): UseAutoTranscribeReturn {
+export function useAutoTranscribe(
+  collectionId: number | undefined,
+  adapter: AutoTranscribeAdapter,
+): UseAutoTranscribeReturn {
   const pipelineRef = useRef<AutoTranscribePipeline>(null);
   if (!pipelineRef.current) {
-    pipelineRef.current = new AutoTranscribePipeline();
+    pipelineRef.current = new AutoTranscribePipeline(adapter);
   }
 
   const state = useSyncExternalStore(
@@ -28,14 +34,14 @@ export function useAutoTranscribe(mediaId: number | undefined): UseAutoTranscrib
   );
 
   useEffect(() => {
-    if (!mediaId) return;
-    pipelineRef.current!.queryPreview(mediaId);
-  }, [mediaId, state.phase]);
+    if (!collectionId) return;
+    pipelineRef.current!.queryPreview(String(collectionId));
+  }, [collectionId, state.phase]);
 
   const start = useCallback(() => {
-    if (!mediaId) return;
-    pipelineRef.current!.start(mediaId);
-  }, [mediaId]);
+    if (!collectionId) return;
+    pipelineRef.current!.start(String(collectionId));
+  }, [collectionId]);
 
   const stop = useCallback(() => {
     pipelineRef.current!.stop();
