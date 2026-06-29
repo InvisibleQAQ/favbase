@@ -27,7 +27,7 @@ export default function App() {
   const effectiveStatus =
     transcribe.rows.length > 0 ? ('ok' as const) : subtitle.status;
   const effectiveSource: SubtitleSource =
-    transcribe.rows.length > 0 ? 'groq' : (subtitle.source ?? 'bilibili');
+    transcribe.rows.length > 0 ? 'asr' : (subtitle.source ?? 'official');
   const effectiveCached =
     transcribe.rows.length > 0 ? transcribe.cached : subtitle.cached;
 

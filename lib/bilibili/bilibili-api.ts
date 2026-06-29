@@ -203,7 +203,7 @@ export async function fetchSubtitle(
     },
   );
 
-  return { status: 'ok', rows, source: 'bilibili' };
+  return { status: 'ok', rows, source: 'official' };
 }
 
 // ---------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-export type SubtitleSource = 'bilibili' | 'groq';
+export type SubtitleSource = 'official' | 'asr';
 
 export interface SubtitleRow {
   start: number;

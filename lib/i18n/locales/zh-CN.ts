@@ -12,9 +12,9 @@ const zhCN = {
   'search.clear': '清空',
   'search.noResults': '未找到匹配的字幕',
 
-  'source.bilibili': '官方AI字幕',
-  'source.groqCached': 'ASR 缓存',
-  'source.groq': 'ASR 转录',
+  'source.official': '官方AI字幕',
+  'source.asrCached': 'ASR 缓存',
+  'source.asr': 'ASR 转录',
 
   'sidebar.subtitles': '字幕',
   'sidebar.settings': '设置',

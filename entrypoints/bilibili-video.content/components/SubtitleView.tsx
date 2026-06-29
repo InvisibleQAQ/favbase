@@ -48,8 +48,8 @@ function highlightText(text: string, term: string): ReactNode {
 }
 
 function getSourceLabel(source: SubtitleSource, cached: boolean): string {
-  if (source === 'bilibili') return t('source.bilibili');
-  return cached ? t('source.groqCached') : t('source.groq');
+  if (source === 'official') return t('source.official');
+  return cached ? t('source.asrCached') : t('source.asr');
 }
 
 const USER_SCROLL_TIMEOUT = 4000;

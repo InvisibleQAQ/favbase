@@ -272,9 +272,9 @@ function ActionBar({
   }
 
   // Has content → source badge
-  if (contentStatus === 'has_bilibili' || contentStatus === 'has_groq') {
-    const label = contentStatus === 'has_bilibili' ? t('card.sourceCC') : t('card.sourceASR');
-    const color = contentStatus === 'has_bilibili' ? 'info' : 'success';
+  if (contentStatus === 'has_official' || contentStatus === 'has_asr') {
+    const label = contentStatus === 'has_official' ? t('card.sourceCC') : t('card.sourceASR');
+    const color = contentStatus === 'has_official' ? 'info' : 'success';
     return (
       <Box sx={{ px: 1.5, pb: 1.5 }}>
         <Chip

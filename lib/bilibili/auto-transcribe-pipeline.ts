@@ -298,12 +298,12 @@ export class AutoTranscribePipeline {
             const response = await transcribeAndPersist(bvid, title);
 
             if (response.success) {
-              if (response.data.source === 'bilibili') stats.cc++;
+              if (response.data.source === 'official') stats.cc++;
               else stats.asr++;
               stats.remaining = Math.max(0, stats.remaining - 1);
               this.patchStats({ ...stats });
 
-              const delayMs = response.data.source === 'bilibili'
+              const delayMs = response.data.source === 'official'
                 ? randomDelay(5, 10)
                 : randomDelay(10, 15);
               await this.waitWithCountdown(delayMs, 'waiting', signal);
@@ -314,7 +314,7 @@ export class AutoTranscribePipeline {
                 await this.waitWithCountdown(RATE_LIMIT_PAUSE_MS, 'paused', signal);
                 const retryRes = await transcribeAndPersist(bvid, title);
                 if (retryRes.success) {
-                  if (retryRes.data.source === 'bilibili') stats.cc++;
+                  if (retryRes.data.source === 'official') stats.cc++;
                   else stats.asr++;
                 } else {
                   stats.skipped++;

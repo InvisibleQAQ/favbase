@@ -10,7 +10,7 @@ import { transcribeAndPersist, createStatusListener } from './transcribe-utils';
 // Types
 // ---------------------------------------------------------------------------
 
-export type ContentStatus = 'unknown' | 'checking' | 'has_bilibili' | 'has_groq' | 'none';
+export type ContentStatus = 'unknown' | 'checking' | 'has_official' | 'has_asr' | 'none';
 
 export interface VideoTranscribeState {
   contentStatus: ContentStatus;
@@ -112,9 +112,9 @@ export class TranscriptionCoordinator {
 
         const contentStatus: ContentStatus =
           entry
-            ? entry.source === 'bilibili'
-              ? 'has_bilibili'
-              : 'has_groq'
+            ? entry.source === 'official'
+              ? 'has_official'
+              : 'has_asr'
             : 'none';
 
         this.stateMap.set(bvid, { ...(current ?? { ...DEFAULT_STATE }), contentStatus });
@@ -149,7 +149,7 @@ export class TranscriptionCoordinator {
             transcribing: false,
             progress: 100,
             stage: 'done',
-            contentStatus: res.data.source === 'bilibili' ? 'has_bilibili' : 'has_groq',
+            contentStatus: res.data.source === 'official' ? 'has_official' : 'has_asr',
             error: null,
           });
         } else {

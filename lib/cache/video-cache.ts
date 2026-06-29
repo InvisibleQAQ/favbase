@@ -94,6 +94,19 @@ function storageKey(bvid: string): `local:vc:${string}` {
 }
 
 // ---------------------------------------------------------------------------
+// source migration — normalize legacy 'bilibili'/'groq' → 'official'/'asr'
+// ---------------------------------------------------------------------------
+
+const SOURCE_MIGRATION: Record<string, SubtitleSource> = {
+  bilibili: 'official',
+  groq: 'asr',
+};
+
+function normalizeSource(source: string): SubtitleSource {
+  return SOURCE_MIGRATION[source] ?? (source as SubtitleSource);
+}
+
+// ---------------------------------------------------------------------------
 // getCached — read with memory + storage + legacy migration
 // ---------------------------------------------------------------------------
 
@@ -109,6 +122,7 @@ export async function getVideoCache(
   // 2. New per-bvid key
   const entry = await storage.getItem<VideoCacheEntry>(storageKey(bvid));
   if (entry && entry.rows.length > 0) {
+    entry.source = normalizeSource(entry.source);
     memoryCache.set(bvid, cloneData(entry));
     return cloneData(entry);
   }
@@ -119,6 +133,7 @@ export async function getVideoCache(
   if (legacyEntry && legacyEntry.rows.length > 0) {
     const migrated: VideoCacheEntry = {
       ...legacyEntry,
+      source: normalizeSource(legacyEntry.source),
       rawHash: legacyEntry.rawHash || computeRowsHash(legacyEntry.rows),
     };
 
@@ -144,7 +159,7 @@ export async function getVideoCache(
 
 const CACHE_DEFAULTS: Omit<VideoCacheEntry, 'bvid'> = {
   rows: [],
-  source: 'bilibili',
+  source: 'official',
   rawHash: '',
   updatedAt: 0,
 };
@@ -208,6 +223,7 @@ export function initCacheStorageListener(): void {
       const bvid = key.slice(CACHE_PREFIX.length);
       const newValue = changes[key].newValue as VideoCacheEntry | undefined;
       if (newValue) {
+        newValue.source = normalizeSource(newValue.source);
         memoryCache.set(bvid, cloneData(newValue));
       } else {
         memoryCache.delete(bvid);
@@ -235,6 +251,7 @@ export function onVideoCacheChange(
     if (!changes[targetKey]) return;
     const newValue = changes[targetKey].newValue as VideoCacheEntry | undefined;
     if (newValue && newValue.rows.length > 0) {
+      newValue.source = normalizeSource(newValue.source);
       cb(newValue);
     }
   };

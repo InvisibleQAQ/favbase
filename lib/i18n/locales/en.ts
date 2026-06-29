@@ -14,9 +14,9 @@ const en: Record<LocaleKeys, string> = {
   'search.clear': 'Clear',
   'search.noResults': 'No matching subtitles',
 
-  'source.bilibili': 'Official AI',
-  'source.groqCached': 'ASR Cached',
-  'source.groq': 'ASR Transcribed',
+  'source.official': 'Official AI',
+  'source.asrCached': 'ASR Cached',
+  'source.asr': 'ASR Transcribed',
 
   'sidebar.subtitles': 'Subtitles',
   'sidebar.settings': 'Settings',

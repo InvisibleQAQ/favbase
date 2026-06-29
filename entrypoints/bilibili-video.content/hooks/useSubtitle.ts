@@ -105,7 +105,7 @@ export function useSubtitle(
         loading: false,
         status: hasRows ? 'ok' : 'no_subtitle',
         error: null,
-        source: 'bilibili',
+        source: 'official',
         cached: false,
       });
 
@@ -116,7 +116,7 @@ export function useSubtitle(
             type: 'CACHE_SUBTITLE',
             bvid,
             rows: processed,
-            source: 'bilibili' as const,
+            source: 'official' as const,
           })
           .catch(() => {});
       }
@@ -145,7 +145,7 @@ export function useSubtitle(
                   loading: false,
                   status: hasRows ? 'ok' : 'no_subtitle',
                   error: null,
-                  source: 'bilibili',
+                  source: 'official',
                   cached: false,
                 });
 
@@ -156,7 +156,7 @@ export function useSubtitle(
                       type: 'CACHE_SUBTITLE',
                       bvid: bvid!,
                       rows: processed,
-                      source: 'bilibili' as const,
+                      source: 'official' as const,
                     })
                     .catch(() => {});
                 }
