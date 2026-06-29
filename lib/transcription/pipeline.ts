@@ -16,11 +16,11 @@ export interface AsrConfig {
 export interface PipelineDeps {
   getAsrConfig(): Promise<AsrConfig>;
   fetchOfficialSubtitle(
-    bvid: string,
+    videoId: string,
     cid: number,
   ): Promise<SubtitleRow[] | null>;
   transcribeAudio(params: {
-    bvid: string;
+    videoId: string;
     cid: number;
     config: AsrConfig;
     signal: AbortSignal;
@@ -28,10 +28,10 @@ export interface PipelineDeps {
     onProgress: OnProgress;
   }): Promise<SubtitleRow[]>;
   cacheGet(
-    bvid: string,
+    videoId: string,
   ): Promise<{ rows: SubtitleRow[]; source: SubtitleSource } | null>;
   cacheSave(
-    bvid: string,
+    videoId: string,
     rows: SubtitleRow[],
     source: SubtitleSource,
   ): Promise<void>;
@@ -39,7 +39,7 @@ export interface PipelineDeps {
 }
 
 export interface PipelineRequest {
-  bvid: string;
+  videoId: string;
   cid: number;
   title: string;
   signal: AbortSignal;
@@ -69,9 +69,9 @@ export async function runTranscriptionPipeline(
   deps: PipelineDeps,
   onProgress: OnProgress,
 ): Promise<TranscribeResponse> {
-  const { bvid, cid, title, signal } = request;
+  const { videoId, cid, title, signal } = request;
 
-  const cached = await deps.cacheGet(bvid);
+  const cached = await deps.cacheGet(videoId);
   if (cached) {
     return { success: true, data: { ...cached, cached: true } };
   }
@@ -80,10 +80,10 @@ export async function runTranscriptionPipeline(
     onProgress(PROGRESS.START, 'start');
 
     onProgress(PROGRESS.SUBTITLE_CHECK, 'subtitle_check');
-    const official = await deps.fetchOfficialSubtitle(bvid, cid);
+    const official = await deps.fetchOfficialSubtitle(videoId, cid);
     if (official) {
       const rows = deps.postProcess(official);
-      await deps.cacheSave(bvid, rows, 'bilibili');
+      await deps.cacheSave(videoId, rows, 'bilibili');
       onProgress(PROGRESS.DONE, 'done');
       return { success: true, data: { rows, source: 'bilibili', cached: false } };
     }
@@ -102,13 +102,13 @@ export async function runTranscriptionPipeline(
     }
 
     const rawRows = await deps.transcribeAudio({
-      bvid, cid, config, signal, title, onProgress,
+      videoId, cid, config, signal, title, onProgress,
     });
 
     onProgress(PROGRESS.PARSING, 'processing');
     const rows = deps.postProcess(rawRows);
 
-    await deps.cacheSave(bvid, rows, 'groq');
+    await deps.cacheSave(videoId, rows, 'groq');
     onProgress(PROGRESS.DONE, 'done');
 
     return { success: true, data: { rows, source: 'groq', cached: false } };

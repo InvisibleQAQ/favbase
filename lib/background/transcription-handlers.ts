@@ -55,17 +55,17 @@ function notifyTab(
 function createTranscribeAudio(
   tabId: number,
   ctx: BackgroundContext,
-  extractAudioUrl: (bvid: string, cid: number) => Promise<string>,
+  extractAudioUrl: (videoId: string, cid: number) => Promise<string>,
 ) {
   return async (params: {
-    bvid: string;
+    videoId: string;
     cid: number;
     config: AsrConfig;
     signal: AbortSignal;
     title: string;
     onProgress: OnProgress;
   }): Promise<SubtitleRow[]> => {
-    const { bvid, cid, config, signal, title, onProgress } = params;
+    const { videoId, cid, config, signal, title, onProgress } = params;
 
     onProgress(PROGRESS.CONNECTIVITY_CHECK, 'connectivity');
     await ensureGroqConnectivity(config.apiKey, config.baseUrl);
@@ -74,7 +74,7 @@ function createTranscribeAudio(
     onProgress(PROGRESS.DOWNLOAD_BEGIN, 'extracting');
     let audioUrl: string;
     try {
-      audioUrl = await extractAudioUrl(bvid, cid);
+      audioUrl = await extractAudioUrl(videoId, cid);
     } catch (err) {
       throw createErrorInfo('ASR_NO_AUDIO_SOURCE', err instanceof Error ? err.message : 'Audio extraction failed');
     }
@@ -85,7 +85,7 @@ function createTranscribeAudio(
     );
     if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
 
-    await assertAudioNotReused(audioBlob, bvid);
+    await assertAudioNotReused(audioBlob, videoId);
 
     if (audioBlob.size <= GROQ_MAX_AUDIO_BYTES) {
       onProgress(PROGRESS.PREPARE_UPLOAD, 'uploading');
@@ -107,7 +107,7 @@ function createTranscribeAudio(
 
     onProgress(PROGRESS.CHUNK_PREPARE, 'chunking');
     await ctx.ensureOffscreen();
-    const sessionId = `${bvid}_${Date.now()}`;
+    const sessionId = `${videoId}_${Date.now()}`;
     ctx.registerChunkSession(sessionId, tabId);
     try {
       const prepareRes: { success: boolean; error?: TranscribeErrorInfo } =
@@ -150,19 +150,19 @@ export async function handleTranscribe(
   sender: MessageSender,
   ctx: BackgroundContext,
 ): Promise<TranscribeResponse> {
-  const { bvid, title } = msg;
+  const { bvid: videoId, title } = msg;
   const tabId = sender.tab?.id ?? 0;
 
-  const controller = ctx.startTranscription(tabId, bvid);
+  const controller = ctx.startTranscription(tabId, videoId);
   if (!controller) {
     return {
       success: false,
-      error: createErrorInfo('TRANSCRIBE_DUPLICATE', `Already transcribing ${bvid}`),
+      error: createErrorInfo('TRANSCRIBE_DUPLICATE', `Already transcribing ${videoId}`),
     };
   }
 
   try {
-    const platform = await prepareBiliTranscription(bvid, msg.cid);
+    const platform = await prepareBiliTranscription(videoId, msg.cid);
 
     const deps = {
       getAsrConfig: getAsrSettings,
@@ -180,14 +180,14 @@ export async function handleTranscribe(
     };
 
     const result = await runTranscriptionPipeline(
-      { bvid, cid: platform.cid, title, signal: controller.signal },
+      { videoId, cid: platform.cid, title, signal: controller.signal },
       deps,
       (progress, stage, stageParams) => {
-        notifyTab(ctx, tabId, bvid, progress, stage, undefined, stageParams);
+        notifyTab(ctx, tabId, videoId, progress, stage, undefined, stageParams);
       },
     );
     if (!result.success) {
-      notifyTab(ctx, tabId, bvid, 0, 'failed', result.error);
+      notifyTab(ctx, tabId, videoId, 0, 'failed', result.error);
     }
     return result;
   } finally {

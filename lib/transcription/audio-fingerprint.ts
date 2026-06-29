@@ -3,7 +3,7 @@ import { createErrorInfo } from './types';
 
 interface FingerprintEntry {
   hash: string;
-  bvid: string;
+  videoId: string;
   usedAt: number;
 }
 
@@ -18,19 +18,19 @@ async function sha256(blob: Blob): Promise<string> {
 
 export async function assertAudioNotReused(
   blob: Blob,
-  bvid: string,
+  videoId: string,
 ): Promise<void> {
   const hash = await sha256(blob);
 
   const existing = lru.find((e) => e.hash === hash);
-  if (existing && existing.bvid !== bvid) {
-    throw createErrorInfo('ASR_AUDIO_REUSED', `Audio fingerprint collision (existing ${existing.bvid}, current ${bvid}), likely stale SPA navigation data`);
+  if (existing && existing.videoId !== videoId) {
+    throw createErrorInfo('ASR_AUDIO_REUSED', `Audio fingerprint collision (existing ${existing.videoId}, current ${videoId}), likely stale SPA navigation data`);
   }
 
   if (existing) {
     existing.usedAt = Date.now();
   } else {
-    lru.push({ hash, bvid, usedAt: Date.now() });
+    lru.push({ hash, videoId, usedAt: Date.now() });
     if (lru.length > AUDIO_FINGERPRINT_LRU_SIZE) {
       lru.sort((a, b) => a.usedAt - b.usedAt);
       lru.shift();
