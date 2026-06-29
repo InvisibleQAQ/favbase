@@ -43,6 +43,8 @@ export interface PipelineRequest {
   cid: number;
   title: string;
   signal: AbortSignal;
+  officialSourceLabel: SubtitleSource;
+  asrSourceLabel: SubtitleSource;
 }
 
 export type OnProgress = (
@@ -69,7 +71,7 @@ export async function runTranscriptionPipeline(
   deps: PipelineDeps,
   onProgress: OnProgress,
 ): Promise<TranscribeResponse> {
-  const { videoId, cid, title, signal } = request;
+  const { videoId, cid, title, signal, officialSourceLabel, asrSourceLabel } = request;
 
   const cached = await deps.cacheGet(videoId);
   if (cached) {
@@ -83,9 +85,9 @@ export async function runTranscriptionPipeline(
     const official = await deps.fetchOfficialSubtitle(videoId, cid);
     if (official) {
       const rows = deps.postProcess(official);
-      await deps.cacheSave(videoId, rows, 'bilibili');
+      await deps.cacheSave(videoId, rows, officialSourceLabel);
       onProgress(PROGRESS.DONE, 'done');
-      return { success: true, data: { rows, source: 'bilibili', cached: false } };
+      return { success: true, data: { rows, source: officialSourceLabel, cached: false } };
     }
 
     assertNotAborted(signal);
@@ -108,10 +110,10 @@ export async function runTranscriptionPipeline(
     onProgress(PROGRESS.PARSING, 'processing');
     const rows = deps.postProcess(rawRows);
 
-    await deps.cacheSave(videoId, rows, 'groq');
+    await deps.cacheSave(videoId, rows, asrSourceLabel);
     onProgress(PROGRESS.DONE, 'done');
 
-    return { success: true, data: { rows, source: 'groq', cached: false } };
+    return { success: true, data: { rows, source: asrSourceLabel, cached: false } };
   } catch (err) {
     return { success: false, error: toErrorInfo(err) };
   }

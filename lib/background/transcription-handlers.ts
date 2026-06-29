@@ -180,7 +180,8 @@ export async function handleTranscribe(
     };
 
     const result = await runTranscriptionPipeline(
-      { videoId, cid: platform.cid, title, signal: controller.signal },
+      { videoId, cid: platform.cid, title, signal: controller.signal,
+        officialSourceLabel: 'bilibili', asrSourceLabel: 'groq' },
       deps,
       (progress, stage, stageParams) => {
         notifyTab(ctx, tabId, videoId, progress, stage, undefined, stageParams);
