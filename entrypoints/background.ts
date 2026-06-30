@@ -17,8 +17,8 @@ import {
 
 function createBackgroundContext(): BackgroundContext {
   const abortControllers = new Map<number, AbortController>();
-  const tabBvids = new Map<number, string>();
-  const activeBvids = new Set<string>();
+  const tabVideoIds = new Map<number, string>();
+  const activeVideoIds = new Set<string>();
   const sessionTabMap = new Map<string, number>();
 
   return {
@@ -27,39 +27,38 @@ function createBackgroundContext(): BackgroundContext {
     },
     ensureOffscreen,
 
-    startTranscription(tabId, bvid) {
-      const key = bvid.toLowerCase();
-      if (activeBvids.has(key)) return null;
+    startTranscription(tabId, videoId) {
+      const key = videoId.toLowerCase();
+      if (activeVideoIds.has(key)) return null;
 
-      // Clean up any stale transcription for this tab (e.g. previous request didn't finish)
-      const prevBvid = tabBvids.get(tabId);
-      if (prevBvid) activeBvids.delete(prevBvid.toLowerCase());
+      const prevVideoId = tabVideoIds.get(tabId);
+      if (prevVideoId) activeVideoIds.delete(prevVideoId.toLowerCase());
 
-      activeBvids.add(key);
+      activeVideoIds.add(key);
       const controller = new AbortController();
       abortControllers.set(tabId, controller);
-      tabBvids.set(tabId, bvid);
+      tabVideoIds.set(tabId, videoId);
       return controller;
     },
 
     abortTranscription(tabId) {
       const ctrl = abortControllers.get(tabId);
       if (ctrl) ctrl.abort();
-      const bvid = tabBvids.get(tabId);
-      if (bvid) activeBvids.delete(bvid.toLowerCase());
+      const videoId = tabVideoIds.get(tabId);
+      if (videoId) activeVideoIds.delete(videoId.toLowerCase());
       abortControllers.delete(tabId);
-      tabBvids.delete(tabId);
+      tabVideoIds.delete(tabId);
     },
 
     finishTranscription(tabId) {
-      const bvid = tabBvids.get(tabId);
-      if (bvid) activeBvids.delete(bvid.toLowerCase());
+      const videoId = tabVideoIds.get(tabId);
+      if (videoId) activeVideoIds.delete(videoId.toLowerCase());
       abortControllers.delete(tabId);
-      tabBvids.delete(tabId);
+      tabVideoIds.delete(tabId);
     },
 
-    getBvidForTab(tabId) {
-      return tabBvids.get(tabId);
+    getVideoIdForTab(tabId) {
+      return tabVideoIds.get(tabId);
     },
 
     registerChunkSession(sessionId, tabId) {
@@ -73,8 +72,8 @@ function createBackgroundContext(): BackgroundContext {
     resolveProgressTarget(sessionId) {
       const tabId = sessionTabMap.get(sessionId);
       if (tabId === undefined) return null;
-      const bvid = tabBvids.get(tabId);
-      return { tabId, bvid: bvid ?? '' };
+      const videoId = tabVideoIds.get(tabId);
+      return { tabId, videoId: videoId ?? '' };
     },
   };
 }

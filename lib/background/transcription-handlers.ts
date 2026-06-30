@@ -81,5 +81,5 @@ export function handleOffscreenProgress(
     console.warn(`[handleOffscreenProgress] unresolved sessionId=${msg.sessionId}, dropping progress`);
     return;
   }
-  notifyTab(ctx, target.tabId, target.bvid, progress, 'chunk_transcribing', undefined, stageParams);
+  notifyTab(ctx, target.tabId, target.videoId, progress, 'chunk_transcribing', undefined, stageParams);
 }
