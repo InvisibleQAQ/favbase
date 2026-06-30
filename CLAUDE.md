@@ -84,7 +84,7 @@ MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRo
   - `use-bili-fav-videos.ts` — 收藏夹视频 hook：调用 `bili-sync-service.fetchAndSyncVideos(mediaId, page)` 获取视频 + goToPage 翻页 + loading/error/loginState 状态管理。auth + API fetch + source lookup + DB sync 全部由 service 内聚
   - `use-video-transcribe.ts` — 手动视频转录 `useSyncExternalStore` 薄 hook（~58 行）：持有 `TranscriptionCoordinator` ref + 订阅 snapshot + `setVideos` 触发缓存预加载 + start/cancel 透传 + dispose。类型 re-export `VideoTranscribeState`/`ContentStatus` from `lib/bilibili/transcription-coordinator.ts`
   - `use-auto-transcribe.ts` — 自动转录薄 hook（~55 行）：接收 `collectionId` + `AutoTranscribeAdapter`，创建 `AutoTranscribePipeline`（构造函数注入 adapter）+ `useSyncExternalStore` 订阅状态 + start/stop 透传 + collectionId 变更时触发 preview 查询 + unmount 时 dispose。类型 re-export from `lib/auto-transcribe/types.ts`
-  - `auto-transcribe-bar.tsx` — 自动转录进度 UI：全宽面板，独占 title bar 下方一行。idle 态显示预览视频缩略图（100x60）+ 标题/作者 + 待转录数 + "开始"按钮（全部已转录时显示 check 图标 + 提示文字）。运行时显示丰富进度面板（当前视频缩略图 100x60 + 标题/作者/时长/阶段文字 + N/Total 进度计数器 + CC/ASR/跳过统计 Chip + 停止 IconButton + LinearProgress 进度条）。完成/停止后显示摘要统计 + 重新开始按钮。面板有 border + background 视觉区分。类型从 `lib/auto-transcribe/types.ts` 导入
+  - `auto-transcribe-bar.tsx` — 自动转录进度 UI：全宽面板，独占 title bar 下方一行。idle 态显示预览视频缩略图（100x60）+ 标题/作者 + 待转录数 + "开始"按钮（全部已转录时显示 check 图标 + 提示文字）。运行时显示丰富进度面板（当前视频缩略图 100x60 + 标题/作者/时长/阶段文字 + N/Total 进度计数器（N = existing + cc + asr + skipped，从 stats 推导）+ 已有/CC/ASR/跳过统计 Chip + 停止 IconButton + LinearProgress 进度条）。完成/停止后显示摘要统计 + 重新开始按钮。面板有 border + background 视觉区分。类型从 `lib/auto-transcribe/types.ts` 导入
 
 ### B站字幕获取 (Step 1 — 已完成，Bilitato 对齐)
 

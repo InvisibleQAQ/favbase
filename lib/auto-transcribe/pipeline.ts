@@ -21,7 +21,7 @@ const INITIAL_STATE: AutoTranscribeState = {
   videoProgress: 0,
   videoStage: '',
   waitSeconds: 0,
-  stats: { cc: 0, asr: 0, skipped: 0, remaining: 0 },
+  stats: { existing: 0, cc: 0, asr: 0, skipped: 0, remaining: 0 },
   previewVideo: null,
   pendingCount: 0,
 };
@@ -117,7 +117,12 @@ export class AutoTranscribePipeline {
   }
 
   private patchStats(p: Partial<AutoTranscribeStats>): void {
-    this.state = { ...this.state, stats: { ...this.state.stats, ...p } };
+    const nextStats = { ...this.state.stats, ...p };
+    this.state = {
+      ...this.state,
+      stats: nextStats,
+      currentIndex: nextStats.existing + nextStats.cc + nextStats.asr + nextStats.skipped,
+    };
     this.emit();
   }
 
@@ -189,7 +194,7 @@ export class AutoTranscribePipeline {
     this.running = true;
     const { signal } = ac;
 
-    const stats: AutoTranscribeStats = { cc: 0, asr: 0, skipped: 0, remaining: 0 };
+    const stats: AutoTranscribeStats = { existing: 0, cc: 0, asr: 0, skipped: 0, remaining: 0 };
 
     try {
       await this.adapter.checkAuth();
@@ -200,7 +205,6 @@ export class AutoTranscribePipeline {
       signal.throwIfAborted();
       const totalPages = firstResult.totalPages;
 
-      let processedIndex = 0;
       this.patch({ totalPages, totalVideos: firstResult.totalCount, currentPage: 0 });
 
       for (let page = 1; page <= totalPages; page++) {
@@ -219,7 +223,7 @@ export class AutoTranscribePipeline {
         const pendingIds = await this.adapter.getPendingIds(validIds);
 
         stats.skipped += videos.length - validVideos.length;
-        stats.cc += validIds.length - pendingIds.length;
+        stats.existing += validIds.length - pendingIds.length;
         stats.remaining = pendingIds.length + (totalPages - page) * PAGE_SIZE;
         this.patchStats({ ...stats });
 
@@ -231,7 +235,6 @@ export class AutoTranscribePipeline {
 
           const video = validVideos.find((v) => v.videoId === videoId);
           const title = video?.title ?? videoId;
-          processedIndex++;
 
           this.patch({
             currentVideoTitle: title,
@@ -239,7 +242,6 @@ export class AutoTranscribePipeline {
             currentVideo: video
               ? { cover: video.cover, title: video.title, author: video.author, duration: video.duration }
               : null,
-            currentIndex: processedIndex,
             videoProgress: 0,
             videoStage: 'start',
           });

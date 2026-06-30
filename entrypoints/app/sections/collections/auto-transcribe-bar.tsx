@@ -41,7 +41,7 @@ function overallProgress(state: AutoTranscribeState): number {
   const { totalVideos, phase } = state;
   if (phase === 'done') return 100;
   if (totalVideos === 0) return 0;
-  const done = state.stats.cc + state.stats.asr + state.stats.skipped;
+  const done = state.stats.existing + state.stats.cc + state.stats.asr + state.stats.skipped;
   return Math.min(99, Math.round((done / totalVideos) * 100));
 }
 
@@ -91,6 +91,9 @@ function Thumbnail({ cover }: { cover?: string }) {
 function StatsChips({ stats }: { stats: AutoTranscribeState['stats'] }) {
   return (
     <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
+      {stats.existing > 0 && (
+        <Chip label={`已有 ${stats.existing}`} size="small" variant="outlined" />
+      )}
       {stats.cc > 0 && (
         <Chip label={`CC ${stats.cc}`} size="small" color="info" variant="outlined" />
       )}
@@ -206,7 +209,7 @@ export function AutoTranscribeBar({ state, running, onStart, onStop }: AutoTrans
 
   // ----- Done / Cancelled: summary panel -----
   if (isDone) {
-    const total = stats.cc + stats.asr + stats.skipped;
+    const total = stats.existing + stats.cc + stats.asr + stats.skipped;
     return (
       <Box sx={{ ...PANEL_SX }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>

@@ -38,6 +38,7 @@ export type AutoTranscribePhase =
   | 'cancelled';
 
 export interface AutoTranscribeStats {
+  existing: number;
   cc: number;
   asr: number;
   skipped: number;
