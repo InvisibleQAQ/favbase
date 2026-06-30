@@ -5,6 +5,7 @@ import type {
 } from '@/lib/transcription/types';
 import type { BiliFavVideo } from './types';
 import { transcribeAndPersist, createStatusListener } from './transcribe-utils';
+import { onVideoCacheChange } from '@/lib/cache/video-cache';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -50,6 +51,7 @@ export class TranscriptionCoordinator {
   private statusCleanup: (() => void) | null = null;
   private countdownTimer: ReturnType<typeof setInterval> | null = null;
   private countdownBvid: string | null = null;
+  private cacheUnsubscribes: Array<() => void> = [];
 
   // --- useSyncExternalStore contract ---
 
@@ -83,6 +85,9 @@ export class TranscriptionCoordinator {
     if (validVideos.length === 0) return;
 
     const bvids = validVideos.map((v) => v.bvid);
+
+    this.unsubscribeCache();
+    this.subscribeCacheChanges(bvids);
 
     this.stateMap = new Map(this.stateMap);
     for (const bvid of bvids) {
@@ -204,6 +209,7 @@ export class TranscriptionCoordinator {
   dispose(): void {
     this.removeStatusListener();
     this.clearCountdown();
+    this.unsubscribeCache();
     this.listeners.clear();
   }
 
@@ -253,6 +259,30 @@ export class TranscriptionCoordinator {
       clearInterval(this.countdownTimer);
       this.countdownTimer = null;
     }
+  }
+
+  // --- Private: cache change subscription ---
+
+  private subscribeCacheChanges(bvids: string[]): void {
+    for (const bvid of bvids) {
+      const unsub = onVideoCacheChange('bilibili', bvid, (entry) => {
+        const current = this.stateMap.get(bvid);
+        if (current?.transcribing) return;
+
+        const contentStatus: ContentStatus =
+          entry.source === 'official' ? 'has_official' : 'has_asr';
+
+        if (current?.contentStatus === contentStatus) return;
+
+        this.patchVideo(bvid, { contentStatus });
+      });
+      this.cacheUnsubscribes.push(unsub);
+    }
+  }
+
+  private unsubscribeCache(): void {
+    for (const unsub of this.cacheUnsubscribes) unsub();
+    this.cacheUnsubscribes = [];
   }
 
   // --- Private: TRANSCRIBE_STATUS listener ---
