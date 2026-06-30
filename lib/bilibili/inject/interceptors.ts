@@ -13,13 +13,14 @@ export function installInterceptors(sm: InjectStateMachine): void {
         : (args[0] as Request)?.url || '';
     const isSubtitle = isSubtitleCdnUrl(url);
     const gen = isSubtitle ? sm.generation : 0;
+    const capturedUrl = isSubtitle ? location.href : '';
     const response = await originalFetch.apply(this, args);
 
     if (isSubtitle) {
       response
         .clone()
         .text()
-        .then((text) => sm.markCaptured(gen, text, location.href))
+        .then((text) => sm.markCaptured(gen, text, capturedUrl))
         .catch(() => {});
     }
 
@@ -40,8 +41,9 @@ export function installInterceptors(sm: InjectStateMachine): void {
 
     if (isSubtitleCdnUrl(url)) {
       const gen = sm.generation;
+      const capturedUrl = location.href;
       this.addEventListener('load', () => {
-        sm.markCaptured(gen, this.responseText, location.href);
+        sm.markCaptured(gen, this.responseText, capturedUrl);
       });
     }
 

@@ -17,7 +17,7 @@ export interface InjectStateMachine {
   readonly generation: number;
   readonly phase: InjectPhase;
   bootstrap(): void;
-  markCaptured(gen: number, rawText: string, currentUrl: string): void;
+  markCaptured(gen: number, rawText: string, capturedUrl: string): void;
   resetForRoute(newBvid: string): void;
 }
 
@@ -92,6 +92,11 @@ export function createStateMachine(effects: InjectEffects): InjectStateMachine {
       if (ticks > 10) { stopReemit(); return; }
 
       if (phase === 'captured' && cachedSubtitleBody) {
+        const urlBvid = extractBvid(location.href);
+        if (capturedBvid && urlBvid
+            && capturedBvid.toLowerCase() !== urlBvid.toLowerCase()) {
+          return;
+        }
         const meta = effects.resolvePageMeta();
         if (meta.bvid) effects.postSubtitleData(meta.bvid, meta.cid, cachedSubtitleBody);
       } else {
@@ -110,10 +115,17 @@ export function createStateMachine(effects: InjectEffects): InjectStateMachine {
       startReemit();
     },
 
-    markCaptured(gen: number, rawText: string, currentUrl: string): void {
+    markCaptured(gen: number, rawText: string, capturedUrl: string): void {
       if (phase === 'captured') return;
       if (gen !== generation) return;
       if (!effects.isPageMetaConsistent()) return;
+
+      const fetchBvid = extractBvid(capturedUrl);
+      const currentUrlBvid = extractBvid(location.href);
+      if (fetchBvid && currentUrlBvid
+          && fetchBvid.toLowerCase() !== currentUrlBvid.toLowerCase()) {
+        return;
+      }
 
       let data: any;
       try { data = JSON.parse(rawText); } catch { return; }
@@ -128,7 +140,7 @@ export function createStateMachine(effects: InjectEffects): InjectStateMachine {
       if (!Array.isArray(body) || !body.length) return;
 
       phase = 'captured';
-      capturedBvid = extractBvid(currentUrl) ?? capturedBvid;
+      capturedBvid = fetchBvid ?? capturedBvid;
       cachedSubtitleBody = body;
 
       stopAutoTrigger();

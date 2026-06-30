@@ -120,7 +120,7 @@ function checkPageMetaConsistency(): boolean {
   const state = (window as any).__INITIAL_STATE__ || {};
   const stateBvid = String(state?.bvid || state?.videoData?.bvid || '');
   const urlBvid = extractBvid(location.href) || '';
-  if (!stateBvid || !urlBvid) return true;
+  if (!stateBvid || !urlBvid) return false;
   return stateBvid.toLowerCase() === urlBvid.toLowerCase();
 }
 
