@@ -6,9 +6,9 @@ import {
 } from '@/lib/cache/video-cache';
 
 export function handleGetVideoCache(
-  msg: { bvid: string },
+  msg: { platform: string; videoId: string },
 ): Promise<{ rows: SubtitleRow[]; source: string; cached: true } | null> {
-  return getVideoCache(msg.bvid).then((entry) => {
+  return getVideoCache(msg.platform, msg.videoId).then((entry) => {
     if (!entry) return null;
     return { rows: entry.rows, source: entry.source, cached: true as const };
   });
@@ -17,7 +17,7 @@ export function handleGetVideoCache(
 export function handleCacheSubtitle(
   msg: CacheSubtitleRequest,
 ): Promise<{ success: boolean }> {
-  return mergeVideoCache(msg.bvid, msg.rows, msg.source)
+  return mergeVideoCache(msg.platform, msg.videoId, msg.rows, msg.source)
     .then(() => ({ success: true }))
     .catch((err) => {
       console.warn('[background] CACHE_SUBTITLE failed:', err);

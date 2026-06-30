@@ -95,7 +95,7 @@ export class TranscriptionCoordinator {
     Promise.all(
       bvids.map((bvid) =>
         browser.runtime
-          .sendMessage({ type: 'GET_VIDEO_CACHE', bvid })
+          .sendMessage({ type: 'GET_VIDEO_CACHE', platform: 'bilibili', videoId: bvid })
           .then((entry: unknown) => ({
             bvid,
             entry: entry as { rows: unknown[]; source: SubtitleSource } | null,
@@ -189,7 +189,7 @@ export class TranscriptionCoordinator {
     const bvid = this.activeBvid;
 
     browser.runtime
-      .sendMessage({ type: 'TRANSCRIBE_ABORT', bvid })
+      .sendMessage({ type: 'TRANSCRIBE_ABORT', videoId: bvid })
       .catch(() => {});
 
     this.patchVideo(bvid, {

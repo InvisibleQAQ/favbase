@@ -63,7 +63,7 @@ export function useSubtitle(
 
     // Step 1: Check cache first (highest priority)
     browser.runtime
-      .sendMessage({ type: 'GET_VIDEO_CACHE', bvid })
+      .sendMessage({ type: 'GET_VIDEO_CACHE', platform: 'bilibili', videoId: bvid })
       .then(
         (
           result: {
@@ -114,7 +114,8 @@ export function useSubtitle(
         browser.runtime
           .sendMessage({
             type: 'CACHE_SUBTITLE',
-            bvid,
+            platform: 'bilibili',
+            videoId: bvid,
             rows: processed,
             source: 'official' as const,
           })
@@ -154,7 +155,8 @@ export function useSubtitle(
                   browser.runtime
                     .sendMessage({
                       type: 'CACHE_SUBTITLE',
-                      bvid: bvid!,
+                      platform: 'bilibili',
+                      videoId: bvid!,
                       rows: processed,
                       source: 'official' as const,
                     })
@@ -211,7 +213,7 @@ export function useSubtitle(
   useEffect(() => {
     if (!bvid) return;
 
-    return onVideoCacheChange(bvid, (entry) => {
+    return onVideoCacheChange('bilibili', bvid, (entry) => {
       setState({
         rows: entry.rows,
         loading: false,

@@ -1,7 +1,8 @@
 import type { SubtitleRow, SubtitleSource } from '@/lib/subtitle/types';
 
 export interface VideoCacheEntry {
-  bvid: string;
+  platform: string;
+  videoId: string;
   rows: SubtitleRow[];
   source: SubtitleSource;
   rawHash: string;
@@ -10,12 +11,14 @@ export interface VideoCacheEntry {
 
 export interface GetVideoCacheRequest {
   type: 'GET_VIDEO_CACHE';
-  bvid: string;
+  platform: string;
+  videoId: string;
 }
 
 export interface CacheSubtitleRequest {
   type: 'CACHE_SUBTITLE';
-  bvid: string;
+  platform: string;
+  videoId: string;
   rows: SubtitleRow[];
   source: SubtitleSource;
 }

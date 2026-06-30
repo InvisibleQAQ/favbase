@@ -28,12 +28,12 @@ export async function handleBiliTranscribe(
     fetchOfficialSubtitle: biliCtx.fetchOfficialSubtitle,
     transcribeAudio: createTranscribeAudio(tabId, ctx, biliCtx.extractAudioUrl),
     cacheGet: async (id: string) => {
-      const entry = await getVideoCache(id);
+      const entry = await getVideoCache('bilibili', id);
       if (!entry) return null;
       return { rows: entry.rows, source: entry.source };
     },
     cacheSave: async (id: string, rows: SubtitleRow[], source: SubtitleSource) => {
-      await mergeVideoCache(id, rows, source);
+      await mergeVideoCache('bilibili', id, rows, source);
     },
     postProcess: biliCtx.postProcess,
   };

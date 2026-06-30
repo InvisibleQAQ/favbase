@@ -4,13 +4,21 @@ import { STORAGE_KEYS, STORAGE_PREFIXES } from '@/lib/storage/keys';
 import type { VideoCacheEntry } from './types';
 
 // ---------------------------------------------------------------------------
-// BVID normalization — extractBvid preserves original case for API
-// compatibility; this function lowercases for cache key consistency
+// Video ID normalization — lowercase for cache key consistency.
+// Callers are responsible for passing clean IDs (already extracted by
+// platform-specific utilities like extractBvid).
 // ---------------------------------------------------------------------------
 
-export function normalizeBvid(bvid: string): string {
-  const match = bvid.match(/BV[0-9A-Za-z]+/i);
-  return match ? match[0].toLowerCase() : bvid.toLowerCase();
+export function normalizeVideoId(videoId: string): string {
+  return videoId.toLowerCase();
+}
+
+// ---------------------------------------------------------------------------
+// Compound cache key — includes platform to prevent cross-platform collisions
+// ---------------------------------------------------------------------------
+
+function cacheKey(platform: string, videoId: string): string {
+  return `${platform}:${normalizeVideoId(videoId)}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -46,26 +54,25 @@ function isQuotaError(err: unknown): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// Write lock — Promise-based per-bvid mutex
+// Write lock — Promise-based per-key mutex
 // ---------------------------------------------------------------------------
 
 const writeLocks = new Map<string, Promise<void>>();
 
-async function withWriteLock<T>(bvid: string, fn: () => Promise<T>): Promise<T> {
-  const prev = writeLocks.get(bvid) ?? Promise.resolve();
+function withWriteLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const prev = writeLocks.get(key) ?? Promise.resolve();
   const result = prev.catch(() => {}).then(fn);
   const thisLock = result.then(
     () => {},
     () => {},
   );
-  writeLocks.set(bvid, thisLock);
-  try {
-    return await result;
-  } finally {
-    if (writeLocks.get(bvid) === thisLock) {
-      writeLocks.delete(bvid);
+  writeLocks.set(key, thisLock);
+
+  return result.finally(() => {
+    if (writeLocks.get(key) === thisLock) {
+      writeLocks.delete(key);
     }
-  }
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -89,8 +96,8 @@ const legacyStorage = storage.defineItem<Record<string, VideoCacheEntry>>(
 
 const CACHE_PREFIX = STORAGE_PREFIXES.videoCache;
 
-function storageKey(bvid: string): `local:vc:${string}` {
-  return `local:${CACHE_PREFIX}${bvid}`;
+function storageKey(platform: string, videoId: string): `local:vc:${string}` {
+  return `local:${CACHE_PREFIX}${cacheKey(platform, videoId)}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -111,36 +118,40 @@ function normalizeSource(source: string): SubtitleSource {
 // ---------------------------------------------------------------------------
 
 export async function getVideoCache(
-  bvid: string,
+  platform: string,
+  videoId: string,
 ): Promise<VideoCacheEntry | null> {
-  bvid = normalizeBvid(bvid);
+  const key = cacheKey(platform, videoId);
 
   // 1. Memory cache hit
-  const mem = memoryCache.get(bvid);
+  const mem = memoryCache.get(key);
   if (mem && mem.rows.length > 0) return cloneData(mem);
 
-  // 2. New per-bvid key
-  const entry = await storage.getItem<VideoCacheEntry>(storageKey(bvid));
+  // 2. Per-video key (new format: vc:{platform}:{videoId})
+  const entry = await storage.getItem<VideoCacheEntry>(storageKey(platform, videoId));
   if (entry && entry.rows.length > 0) {
     entry.source = normalizeSource(entry.source);
-    memoryCache.set(bvid, cloneData(entry));
+    memoryCache.set(key, cloneData(entry));
     return cloneData(entry);
   }
 
-  // 3. Legacy migration
+  // 3. Legacy migration (old single-key format → new per-video key)
   const legacy = await legacyStorage.getValue();
-  const legacyEntry = legacy[bvid];
+  const normalized = normalizeVideoId(videoId);
+  const legacyEntry = legacy[normalized];
   if (legacyEntry && legacyEntry.rows.length > 0) {
     const migrated: VideoCacheEntry = {
       ...legacyEntry,
+      platform,
+      videoId: normalized,
       source: normalizeSource(legacyEntry.source),
       rawHash: legacyEntry.rawHash || computeRowsHash(legacyEntry.rows),
     };
 
-    await storage.setItem(storageKey(bvid), migrated);
-    memoryCache.set(bvid, cloneData(migrated));
+    await storage.setItem(storageKey(platform, videoId), migrated);
+    memoryCache.set(key, cloneData(migrated));
 
-    delete legacy[bvid];
+    delete legacy[normalized];
     if (Object.keys(legacy).length === 0) {
       await legacyStorage.removeValue();
     } else {
@@ -157,7 +168,7 @@ export async function getVideoCache(
 // mergeCache — write with lock + hash dedup + quota fallback
 // ---------------------------------------------------------------------------
 
-const CACHE_DEFAULTS: Omit<VideoCacheEntry, 'bvid'> = {
+const CACHE_DEFAULTS: Omit<VideoCacheEntry, 'platform' | 'videoId'> = {
   rows: [],
   source: 'official',
   rawHash: '',
@@ -165,24 +176,25 @@ const CACHE_DEFAULTS: Omit<VideoCacheEntry, 'bvid'> = {
 };
 
 export async function mergeVideoCache(
-  bvid: string,
+  platform: string,
+  videoId: string,
   rows: SubtitleRow[],
   source: SubtitleSource,
 ): Promise<VideoCacheEntry> {
-  bvid = normalizeBvid(bvid);
+  const key = cacheKey(platform, videoId);
   const rawHash = computeRowsHash(rows);
 
-  return withWriteLock(bvid, async () => {
-    const current = await storage.getItem<VideoCacheEntry>(storageKey(bvid));
+  return withWriteLock(key, async () => {
+    const current = await storage.getItem<VideoCacheEntry>(storageKey(platform, videoId));
 
-    // Hash dedup: skip write if content unchanged
     if (current?.rawHash && current.rawHash === rawHash) {
       return cloneData(current);
     }
 
     const merged: VideoCacheEntry = {
       ...CACHE_DEFAULTS,
-      bvid,
+      platform,
+      videoId: normalizeVideoId(videoId),
       ...current,
       rows,
       source,
@@ -190,21 +202,17 @@ export async function mergeVideoCache(
       updatedAt: Date.now(),
     };
 
-    // Attempt storage write
     try {
-      await storage.setItem(storageKey(bvid), merged);
+      await storage.setItem(storageKey(platform, videoId), merged);
     } catch (err) {
       if (isQuotaError(err)) {
-        // Quota fallback: for now entry is light, but future Step 3 fields
-        // (summary, segments) would be dropped here. Currently just rethrow
-        // since we only have rows + source + rawHash + updatedAt.
-        console.warn('[video-cache] Quota exceeded for', bvid, err);
+        console.warn('[video-cache] Quota exceeded for', key, err);
         throw err;
       }
       throw err;
     }
 
-    memoryCache.set(bvid, cloneData(merged));
+    memoryCache.set(key, cloneData(merged));
     return cloneData(merged);
   });
 }
@@ -214,34 +222,36 @@ export async function mergeVideoCache(
 // ---------------------------------------------------------------------------
 
 export function initCacheStorageListener(): void {
-  // WXT storage keys use `local:vc:{bvid}` in API, but chrome.storage.local
-  // stores them as `vc:{bvid}` (the `local:` prefix is stripped).
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== 'local') return;
-    for (const key of Object.keys(changes)) {
-      if (!key.startsWith(CACHE_PREFIX)) continue;
-      const bvid = key.slice(CACHE_PREFIX.length);
-      const newValue = changes[key].newValue as VideoCacheEntry | undefined;
+    for (const rawKey of Object.keys(changes)) {
+      if (!rawKey.startsWith(CACHE_PREFIX)) continue;
+      const suffix = rawKey.slice(CACHE_PREFIX.length);
+      // New format: vc:{platform}:{videoId} — suffix contains ':'
+      // Old format: vc:{bvid} — no ':', ignore gracefully
+      if (!suffix.includes(':')) continue;
+      const newValue = changes[rawKey].newValue as VideoCacheEntry | undefined;
       if (newValue) {
         newValue.source = normalizeSource(newValue.source);
-        memoryCache.set(bvid, cloneData(newValue));
+        memoryCache.set(suffix, cloneData(newValue));
       } else {
-        memoryCache.delete(bvid);
+        memoryCache.delete(suffix);
       }
     }
   });
 }
 
 // ---------------------------------------------------------------------------
-// Per-bvid storage change subscription (Content Script side)
+// Per-video storage change subscription (Content Script side)
 // ---------------------------------------------------------------------------
 
 export function onVideoCacheChange(
-  bvid: string,
+  platform: string,
+  videoId: string,
   cb: (entry: VideoCacheEntry) => void,
 ): () => void {
-  const normalized = normalizeBvid(bvid);
-  const targetKey = CACHE_PREFIX + normalized;
+  const key = cacheKey(platform, videoId);
+  const targetKey = CACHE_PREFIX + key;
 
   const handler = (
     changes: Record<string, chrome.storage.StorageChange>,
