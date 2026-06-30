@@ -36,10 +36,15 @@ export interface PendingPreview {
 // Internal: source lookup (the knowledge that was leaking everywhere)
 // ---------------------------------------------------------------------------
 
-async function resolveSourceId(mediaId: number): Promise<string | null> {
+interface ResolvedSource {
+  id: string;
+  platformMeta: Record<string, unknown>;
+}
+
+async function resolveSource(mediaId: number): Promise<ResolvedSource | null> {
   const db = getDb();
   const rows = await db
-    .select({ id: sources.id })
+    .select({ id: sources.id, platformMeta: sources.platformMeta })
     .from(sources)
     .where(and(eq(sources.platform, PLATFORM), eq(sources.platformSourceId, String(mediaId))))
     .limit(1);
@@ -48,7 +53,12 @@ async function resolveSourceId(mediaId: number): Promise<string | null> {
     console.warn('[bili-sync] Source not found for mediaId=%d, skipping', mediaId);
     return null;
   }
-  return rows[0].id;
+  return { id: rows[0].id, platformMeta: rows[0].platformMeta as Record<string, unknown> };
+}
+
+async function resolveSourceId(mediaId: number): Promise<string | null> {
+  const source = await resolveSource(mediaId);
+  return source?.id ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -118,12 +128,12 @@ export async function getPendingBvids(
 }
 
 export async function getPendingPreview(mediaId: number): Promise<PendingPreview> {
-  const sourceId = await resolveSourceId(mediaId);
-  if (!sourceId) return { video: null, pendingCount: null };
+  const source = await resolveSource(mediaId);
+  if (!source) return { video: null, pendingCount: null };
 
   const db = getDb();
   const sourceFilter = and(
-    eq(itemSources.sourceId, sourceId),
+    eq(itemSources.sourceId, source.id),
     eq(items.platform, PLATFORM),
   );
   const pendingFilter = and(sourceFilter, eq(items.contentState, 'pending'));
@@ -139,17 +149,26 @@ export async function getPendingPreview(mediaId: number): Promise<PendingPreview
     db
       .select({
         total: sql<number>`count(*)::int`,
-        pending: sql<number>`sum(case when ${items.contentState} = 'pending' then 1 else 0 end)::int`,
+        nonPending: sql<number>`sum(case when ${items.contentState} != 'pending' then 1 else 0 end)::int`,
       })
       .from(items)
       .innerJoin(itemSources, eq(items.id, itemSources.itemId))
       .where(sourceFilter),
   ]);
 
-  const totalItems = countRows[0]?.total ?? 0;
-  if (totalItems === 0) return { video: null, pendingCount: null };
+  const totalSynced = countRows[0]?.total ?? 0;
+  if (totalSynced === 0) return { video: null, pendingCount: null };
 
-  const pendingCount = countRows[0]?.pending ?? 0;
+  const nonPending = countRows[0]?.nonPending ?? 0;
+  const apiTotal = typeof source.platformMeta?.media_count === 'number'
+    ? source.platformMeta.media_count
+    : null;
+
+  // Use API total when available: pending = apiTotal - already transcribed.
+  // Fallback to DB-only count when media_count is missing (stale data).
+  const pendingCount = apiTotal !== null
+    ? Math.max(0, apiTotal - nonPending)
+    : totalSynced - nonPending;
 
   if (pendingRows.length === 0) return { video: null, pendingCount };
 
