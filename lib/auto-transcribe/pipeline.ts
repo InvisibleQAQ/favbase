@@ -23,7 +23,8 @@ const INITIAL_STATE: AutoTranscribeState = {
   waitSeconds: 0,
   stats: { existing: 0, cc: 0, asr: 0, skipped: 0, remaining: 0 },
   previewVideo: null,
-  pendingCount: 0,
+  pendingCount: null,
+  previewLoading: true,
 };
 
 const PAGE_SIZE = 20;
@@ -77,7 +78,7 @@ export class AutoTranscribePipeline {
 
   start(collectionId: string): void {
     if (this.running) return;
-    this.state = { ...INITIAL_STATE, phase: 'syncing' };
+    this.state = { ...INITIAL_STATE, phase: 'syncing', previewLoading: false };
     this.emit();
     this.installStatusListener();
     this.runPipeline(collectionId);
@@ -99,13 +100,23 @@ export class AutoTranscribePipeline {
   async queryPreview(collectionId: string): Promise<void> {
     if (this.running) return;
     const gen = ++this.previewGeneration;
+    this.patch({ previewLoading: true });
+    await this.queryPreviewAttempt(collectionId, gen, 0);
+  }
 
+  private async queryPreviewAttempt(collectionId: string, gen: number, attempt: number): Promise<void> {
     try {
       const preview = await this.adapter.getPreview(collectionId);
       if (gen !== this.previewGeneration) return;
-      this.patch({ previewVideo: preview.video, pendingCount: preview.pendingCount });
+      if (preview.pendingCount === null && attempt < 3) {
+        await new Promise((r) => setTimeout(r, 2000));
+        if (gen !== this.previewGeneration) return;
+        return this.queryPreviewAttempt(collectionId, gen, attempt + 1);
+      }
+      this.patch({ previewVideo: preview.video, pendingCount: preview.pendingCount, previewLoading: false });
     } catch {
-      // DB not ready
+      if (gen !== this.previewGeneration) return;
+      this.patch({ previewLoading: false });
     }
   }
 

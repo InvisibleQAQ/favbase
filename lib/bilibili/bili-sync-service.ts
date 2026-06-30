@@ -29,7 +29,7 @@ export interface SyncVideosResult {
 
 export interface PendingPreview {
   video: { cover: string; title: string; upper: string; duration: number } | null;
-  pendingCount: number;
+  pendingCount: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -119,14 +119,14 @@ export async function getPendingBvids(
 
 export async function getPendingPreview(mediaId: number): Promise<PendingPreview> {
   const sourceId = await resolveSourceId(mediaId);
-  if (!sourceId) return { video: null, pendingCount: 0 };
+  if (!sourceId) return { video: null, pendingCount: null };
 
   const db = getDb();
-  const pendingFilter = and(
+  const sourceFilter = and(
     eq(itemSources.sourceId, sourceId),
     eq(items.platform, PLATFORM),
-    eq(items.contentState, 'pending'),
   );
+  const pendingFilter = and(sourceFilter, eq(items.contentState, 'pending'));
 
   const [pendingRows, countRows] = await Promise.all([
     db
@@ -137,13 +137,19 @@ export async function getPendingPreview(mediaId: number): Promise<PendingPreview
       .orderBy(desc(items.createdAt))
       .limit(1),
     db
-      .select({ count: sql<number>`count(*)::int` })
+      .select({
+        total: sql<number>`count(*)::int`,
+        pending: sql<number>`sum(case when ${items.contentState} = 'pending' then 1 else 0 end)::int`,
+      })
       .from(items)
       .innerJoin(itemSources, eq(items.id, itemSources.itemId))
-      .where(pendingFilter),
+      .where(sourceFilter),
   ]);
 
-  const pendingCount = countRows[0]?.count ?? 0;
+  const totalItems = countRows[0]?.total ?? 0;
+  if (totalItems === 0) return { video: null, pendingCount: null };
+
+  const pendingCount = countRows[0]?.pending ?? 0;
 
   if (pendingRows.length === 0) return { video: null, pendingCount };
 

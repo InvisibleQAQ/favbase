@@ -5,6 +5,7 @@ import Typography from '@mui/material/Typography';
 import Chip from '@mui/material/Chip';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
+import CircularProgress from '@mui/material/CircularProgress';
 
 import { Iconify } from '../../components/iconify';
 import type { AutoTranscribeState } from '@/lib/auto-transcribe/types';
@@ -139,13 +140,28 @@ export interface AutoTranscribeBarProps {
 // ---------------------------------------------------------------------------
 
 export function AutoTranscribeBar({ state, running, onStart, onStop }: AutoTranscribeBarProps) {
-  const { phase, stats, currentVideo, currentIndex, totalVideos, previewVideo, pendingCount } = state;
+  const { phase, stats, currentVideo, currentIndex, totalVideos, previewVideo, pendingCount, previewLoading } = state;
   const isDone = phase === 'done' || phase === 'cancelled';
   const showProgress = running || isDone;
 
   // ----- Idle: full-width preview panel -----
   if (!showProgress) {
-    // All transcribed
+    if (previewLoading) {
+      return (
+        <Box sx={{ ...PANEL_SX }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <CircularProgress size={24} sx={{ flexShrink: 0 }} />
+            <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+              自动转录
+            </Typography>
+          </Box>
+        </Box>
+      );
+    }
+
+    if (pendingCount === null) return null;
+
+    // All transcribed (pendingCount is null when source not yet synced — don't treat as "done")
     if (pendingCount === 0 && !previewVideo) {
       return (
         <Box sx={{ ...PANEL_SX }}>

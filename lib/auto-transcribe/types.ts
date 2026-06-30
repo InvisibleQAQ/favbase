@@ -21,7 +21,7 @@ export interface AutoTranscribePageResult {
 
 export interface AutoTranscribePreview {
   video: AutoTranscribeCurrentVideo | null;
-  pendingCount: number;
+  pendingCount: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -66,7 +66,8 @@ export interface AutoTranscribeState {
   waitSeconds: number;
   stats: AutoTranscribeStats;
   previewVideo: AutoTranscribeCurrentVideo | null;
-  pendingCount: number;
+  pendingCount: number | null;
+  previewLoading: boolean;
 }
 
 // ---------------------------------------------------------------------------
