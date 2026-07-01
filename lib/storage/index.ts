@@ -7,6 +7,8 @@ export {
   DEFAULT_SETTINGS,
   settingsStorage,
   resolveAsrConfig,
+  getEnvApiKey,
+  getEnvModel,
   getAsrSettings,
   migrateSettingsIfNeeded,
 } from './settings';

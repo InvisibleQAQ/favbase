@@ -26,15 +26,15 @@ export interface UserSettings {
 
 export const DEFAULT_SETTINGS: UserSettings = {
   // LLM
-  provider: 'modelscope',
+  provider: (import.meta.env.VITE_LLM_PROVIDER as LLMProviderId) || 'modelscope',
   providerApiKeys: {},
   providerModels: {},
-  customBaseUrl: '',
+  customBaseUrl: (import.meta.env.VITE_LLM_BASE_URL as string) || '',
   customModel: '',
-  customProtocol: 'openai',
+  customProtocol: (import.meta.env.VITE_LLM_PROTOCOL as 'openai' | 'claude') || 'openai',
 
   // ASR
-  asrProvider: 'groq',
+  asrProvider: (import.meta.env.VITE_ASR_PROVIDER as ASRProviderId) || 'groq',
   asrConfigs: {},
 
   // Mode
@@ -50,12 +50,22 @@ export const settingsStorage = storage.defineItem<UserSettings>(
   { fallback: DEFAULT_SETTINGS },
 );
 
+export function getEnvApiKey(providerId: string): string {
+  const key = `VITE_${providerId.toUpperCase()}_API_KEY`;
+  return (import.meta.env[key] as string) ?? '';
+}
+
+export function getEnvModel(providerId: string): string {
+  const key = `VITE_${providerId.toUpperCase()}_MODEL`;
+  return (import.meta.env[key] as string) ?? '';
+}
+
 export function resolveAsrConfig(settings: UserSettings): { apiKey: string; model: string; baseUrl: string } {
   const cfg = settings.asrConfigs?.[settings.asrProvider];
   const def = getAsrProviderDef(settings.asrProvider);
   return {
-    apiKey: cfg?.apiKey ?? '',
-    model: cfg?.model || def.defaultModel,
+    apiKey: cfg?.apiKey || getEnvApiKey(settings.asrProvider),
+    model: cfg?.model || getEnvModel(settings.asrProvider) || def.defaultModel,
     baseUrl: def.baseUrl,
   };
 }

@@ -26,6 +26,8 @@ web-ext.config.ts
 *.sw?
 
 node_modules/
+.env.local
+
 .agents/
 .claude/
 .codex/

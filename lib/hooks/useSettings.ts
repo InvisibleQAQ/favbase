@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LLMProviderId, ASRProviderId, LLMProviderDef, ASRProviderDef } from '@/lib/providers';
 import { getProviderDef, ASR_PROVIDERS } from '@/lib/providers';
 import type { UserSettings } from '@/lib/storage';
-import { settingsStorage, DEFAULT_SETTINGS, resolveAsrConfig } from '@/lib/storage';
+import { settingsStorage, DEFAULT_SETTINGS, resolveAsrConfig, getEnvApiKey, getEnvModel } from '@/lib/storage';
 
 export type LlmUpdate =
   | { field: 'provider'; value: LLMProviderId }
@@ -99,9 +99,9 @@ export function useSettings(): UseSettingsReturn {
     () => getProviderDef(settings.provider),
     [settings.provider],
   );
-  const currentLlmApiKey = settings.providerApiKeys[settings.provider] ?? '';
+  const currentLlmApiKey = settings.providerApiKeys[settings.provider] || getEnvApiKey(settings.provider);
   const currentLlmModel =
-    settings.providerModels[settings.provider] ?? currentProviderDef.defaultModel;
+    settings.providerModels[settings.provider] || getEnvModel(settings.provider) || currentProviderDef.defaultModel;
   const isCustomProvider = settings.provider === 'custom';
 
   // --- ASR computed ---
