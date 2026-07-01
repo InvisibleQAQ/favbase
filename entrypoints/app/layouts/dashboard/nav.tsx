@@ -13,6 +13,7 @@ import Drawer, { drawerClasses } from '@mui/material/Drawer';
 
 import { useLocation, Link as RouterLink } from 'react-router-dom';
 
+import { useTranslation } from '@/lib/i18n/use-translation';
 import type { NavItem } from '../nav-config';
 
 export type NavContentProps = {
@@ -91,6 +92,7 @@ export function NavMobile({
 
 function NavContent({ data, sx, pinned = true }: NavContentProps) {
   const { pathname } = useLocation();
+  const { t } = useTranslation();
 
   return (
     <>
@@ -172,7 +174,7 @@ function NavContent({ data, sx, pinned = true }: NavContentProps) {
                 {pinned && (
                   <>
                     <Box component="span" sx={{ flexGrow: 1 }}>
-                      {item.title}
+                      {t(item.title)}
                     </Box>
                     {item.info && item.info}
                   </>
@@ -185,7 +187,7 @@ function NavContent({ data, sx, pinned = true }: NavContentProps) {
                 {pinned ? (
                   button
                 ) : (
-                  <Tooltip title={item.title} placement="right" arrow>
+                  <Tooltip title={t(item.title)} placement="right" arrow>
                     {button}
                   </Tooltip>
                 )}

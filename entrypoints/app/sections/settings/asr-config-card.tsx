@@ -8,6 +8,7 @@ import MenuItem from '@mui/material/MenuItem';
 import InputAdornment from '@mui/material/InputAdornment';
 import IconButton from '@mui/material/IconButton';
 
+import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify } from '../../components/iconify';
 import { ASR_PROVIDERS, type ASRProviderId, type ASRProviderDef } from '@/lib/providers';
 import type { UserSettings } from '@/lib/storage';
@@ -28,13 +29,14 @@ export function AsrConfigCard({
   currentAsrModel,
   updateAsr,
 }: AsrConfigCardProps) {
+  const { t } = useTranslation();
   const [showKey, setShowKey] = useState(false);
 
   return (
     <Card>
       <CardHeader
-        title="ASR 语音转录"
-        subheader="配置语音识别服务以转录视频音频"
+        title={t('settings.asrCard.title')}
+        subheader={t('settings.asrCard.description')}
       />
       <CardContent>
         <Grid container spacing={3}>
@@ -42,7 +44,7 @@ export function AsrConfigCard({
             <TextField
               select
               fullWidth
-              label="ASR 服务商"
+              label={t('settings.asrProvider')}
               value={settings.asrProvider}
               onChange={(e) => updateAsr({ field: 'provider', value: e.target.value as ASRProviderId })}
             >
@@ -55,9 +57,9 @@ export function AsrConfigCard({
           <Grid size={{ xs: 12, md: 6 }}>
             <TextField
               fullWidth
-              label="API Key"
+              label={t('settings.apiKey')}
               type={showKey ? 'text' : 'password'}
-              placeholder="输入 API Key"
+              placeholder={t('settings.apiKeyPlaceholder')}
               value={currentAsrApiKey}
               onChange={(e) => updateAsr({ field: 'apiKey', value: e.target.value })}
               slotProps={{
@@ -84,7 +86,7 @@ export function AsrConfigCard({
           <Grid size={{ xs: 12, md: 6 }}>
             <TextField
               fullWidth
-              label="模型"
+              label={t('settings.model')}
               placeholder={currentAsrDef.defaultModel}
               value={currentAsrModel}
               onChange={(e) => updateAsr({ field: 'model', value: e.target.value })}

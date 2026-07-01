@@ -7,6 +7,8 @@ import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 import CircularProgress from '@mui/material/CircularProgress';
 
+import { t } from '@/lib/i18n';
+import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify } from '../../components/iconify';
 import type { AutoTranscribeState } from '@/lib/auto-transcribe/types';
 
@@ -24,15 +26,15 @@ function stageLabel(state: AutoTranscribeState): string {
   const { phase, videoStage, videoProgress, waitSeconds } = state;
   switch (phase) {
     case 'syncing':
-      return `收录第 ${state.currentPage}/${state.totalPages} 页...`;
+      return t('autoTranscribe.syncing', { current: state.currentPage, total: state.totalPages });
     case 'transcribing':
-      if (videoStage === 'start') return '准备转录...';
-      if (videoStage) return `转录中 ${videoProgress}%`;
-      return '转录中...';
+      if (videoStage === 'start') return t('autoTranscribe.preparing');
+      if (videoStage) return t('autoTranscribe.transcribingPct', { progress: videoProgress });
+      return t('autoTranscribe.transcribingGeneric');
     case 'waiting':
-      return `转录中 ${waitSeconds}s...`;
+      return t('autoTranscribe.waitingTranscribe', { seconds: waitSeconds });
     case 'paused':
-      return `速率限制，暂停 ${waitSeconds}s...`;
+      return t('autoTranscribe.paused', { seconds: waitSeconds });
     default:
       return '';
   }
@@ -93,16 +95,16 @@ function StatsChips({ stats }: { stats: AutoTranscribeState['stats'] }) {
   return (
     <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
       {stats.existing > 0 && (
-        <Chip label={`已有 ${stats.existing}`} size="small" variant="outlined" />
+        <Chip label={t('autoTranscribe.statsExisting', { count: stats.existing })} size="small" variant="outlined" />
       )}
       {stats.cc > 0 && (
-        <Chip label={`CC ${stats.cc}`} size="small" color="info" variant="outlined" />
+        <Chip label={t('autoTranscribe.statsCC', { count: stats.cc })} size="small" color="info" variant="outlined" />
       )}
       {stats.asr > 0 && (
-        <Chip label={`ASR ${stats.asr}`} size="small" color="success" variant="outlined" />
+        <Chip label={t('autoTranscribe.statsASR', { count: stats.asr })} size="small" color="success" variant="outlined" />
       )}
       {stats.skipped > 0 && (
-        <Chip label={`跳过 ${stats.skipped}`} size="small" variant="outlined" />
+        <Chip label={t('autoTranscribe.statsSkipped', { count: stats.skipped })} size="small" variant="outlined" />
       )}
     </Box>
   );
@@ -140,6 +142,7 @@ export interface AutoTranscribeBarProps {
 // ---------------------------------------------------------------------------
 
 export function AutoTranscribeBar({ state, running, onStart, onStop }: AutoTranscribeBarProps) {
+  useTranslation();
   const { phase, stats, currentVideo, currentIndex, totalVideos, previewVideo, pendingCount, previewLoading } = state;
   const isDone = phase === 'done' || phase === 'cancelled';
   const showProgress = running || isDone;
@@ -152,7 +155,7 @@ export function AutoTranscribeBar({ state, running, onStart, onStop }: AutoTrans
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <CircularProgress size={24} sx={{ flexShrink: 0 }} />
             <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-              自动转录
+              {t('autoTranscribe.title')}
             </Typography>
           </Box>
         </Box>
@@ -173,10 +176,10 @@ export function AutoTranscribeBar({ state, running, onStart, onStop }: AutoTrans
             />
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                自动转录
+                {t('autoTranscribe.title')}
               </Typography>
               <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                所有视频已转录
+                {t('autoTranscribe.allDone')}
               </Typography>
             </Box>
           </Box>
@@ -190,7 +193,7 @@ export function AutoTranscribeBar({ state, running, onStart, onStop }: AutoTrans
           <Thumbnail cover={previewVideo?.cover} />
           <Box sx={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.4 }}>
-              自动转录
+              {t('autoTranscribe.title')}
             </Typography>
             {previewVideo && (
               <Typography
@@ -206,7 +209,7 @@ export function AutoTranscribeBar({ state, running, onStart, onStop }: AutoTrans
               </Typography>
             )}
             <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.25 }}>
-              共 {pendingCount} 个视频待转录
+              {t('autoTranscribe.pendingCount', { count: pendingCount })}
             </Typography>
           </Box>
 
@@ -216,7 +219,7 @@ export function AutoTranscribeBar({ state, running, onStart, onStop }: AutoTrans
             onClick={onStart}
             sx={{ flexShrink: 0, px: 3 }}
           >
-            开始
+            {t('autoTranscribe.startBtn')}
           </Button>
         </Box>
       </Box>
@@ -236,7 +239,7 @@ export function AutoTranscribeBar({ state, running, onStart, onStop }: AutoTrans
           />
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-              {phase === 'done' ? '转录完成' : '已停止'}
+              {phase === 'done' ? t('autoTranscribe.doneTitle') : t('autoTranscribe.cancelled')}
             </Typography>
             {total > 0 && <StatsChips stats={stats} />}
           </Box>
@@ -247,7 +250,7 @@ export function AutoTranscribeBar({ state, running, onStart, onStop }: AutoTrans
             onClick={onStart}
             sx={{ flexShrink: 0 }}
           >
-            重新开始
+            {t('autoTranscribe.restart')}
           </Button>
         </Box>
       </Box>
@@ -309,7 +312,7 @@ export function AutoTranscribeBar({ state, running, onStart, onStop }: AutoTrans
         <StatsChips stats={stats} />
 
         {/* Stop button */}
-        <Tooltip title="停止自动转录">
+        <Tooltip title={t('autoTranscribe.stopTooltip')}>
           <IconButton
             size="small"
             color="error"

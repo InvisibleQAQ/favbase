@@ -9,6 +9,7 @@ import Collapse from '@mui/material/Collapse';
 import Skeleton from '@mui/material/Skeleton';
 import { varAlpha } from 'minimal-shared/utils';
 
+import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify } from '../../components/iconify';
 import type { BiliFavFolder } from '@/lib/bilibili/types';
 
@@ -22,6 +23,7 @@ interface FolderSidebarProps {
 }
 
 export function FolderSidebar({ folders, selectedId, loading, onSelect }: FolderSidebarProps) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(true);
 
   return (
@@ -53,7 +55,7 @@ export function FolderSidebar({ folders, selectedId, loading, onSelect }: Folder
           sx={{ color: 'primary.main' }}
         />
         <ListItemText
-          primary="BiliBili 收藏夹"
+          primary={t('collections.sidebarTitle')}
           slotProps={{ primary: { variant: 'subtitle2', fontWeight: 700 } }}
         />
         <Iconify
@@ -73,7 +75,7 @@ export function FolderSidebar({ folders, selectedId, loading, onSelect }: Folder
         ) : folders.length === 0 ? (
           <Box sx={{ p: 2, textAlign: 'center' }}>
             <Typography variant="caption" sx={{ color: 'text.disabled' }}>
-              暂无收藏夹
+              {t('collections.noFolders')}
             </Typography>
           </Box>
         ) : (

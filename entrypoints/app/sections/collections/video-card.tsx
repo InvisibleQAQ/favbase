@@ -8,7 +8,7 @@ import IconButton from '@mui/material/IconButton';
 import Chip from '@mui/material/Chip';
 import Tooltip from '@mui/material/Tooltip';
 
-import { t } from '@/lib/i18n';
+import { t, formatCompactNumber } from '@/lib/i18n';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import type { LocaleKeys } from '@/lib/i18n/locales/zh-CN';
 import type { TranscribeErrorCode } from '@/lib/transcription/types';
@@ -20,11 +20,6 @@ function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
   return `${m}:${String(s).padStart(2, '0')}`;
-}
-
-function formatPlay(count: number): string {
-  if (count >= 10000) return `${(count / 10000).toFixed(1)}万`;
-  return String(count);
 }
 
 function formatFavTime(favTime: number): string {
@@ -141,7 +136,7 @@ export function VideoCard({
                 }}
               >
                 <Iconify icon="solar:play-bold" width={12} sx={{ color: '#fff' }} />
-                {formatPlay(video.cnt_info.play)}
+                {formatCompactNumber(video.cnt_info.play)}
               </Box>
               <Box
                 sx={{
@@ -167,10 +162,10 @@ export function VideoCard({
           <Typography
             variant="subtitle2"
             noWrap
-            title={isInvalid ? '已失效视频' : video.title}
+            title={isInvalid ? t('card.invalidVideo') : video.title}
             sx={{ fontWeight: 600, mb: 0.5 }}
           >
-            {isInvalid ? '已失效视频' : video.title}
+            {isInvalid ? t('card.invalidVideo') : video.title}
           </Typography>
 
           {!isInvalid && (

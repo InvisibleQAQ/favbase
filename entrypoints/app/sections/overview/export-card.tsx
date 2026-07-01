@@ -11,6 +11,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Box from '@mui/material/Box';
 import Alert from '@mui/material/Alert';
 
+import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify } from '../../components/iconify';
 import { getDb } from '../../../../lib/database/db';
 import { queryAllTables, isTableDataEmpty } from '../../../../lib/export/query';
@@ -21,6 +22,7 @@ import { triggerDownload, buildExportFilename } from '../../../../lib/export/dow
 type ExportFormat = 'json' | 'csv';
 
 export function ExportCard() {
+  const { t } = useTranslation();
   const [format, setFormat] = useState<ExportFormat>('json');
   const [includeEmbedding, setIncludeEmbedding] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -34,7 +36,7 @@ export function ExportCard() {
       const data = await queryAllTables(db, includeEmbedding);
 
       if (isTableDataEmpty(data)) {
-        setError('数据库为空，没有可导出的数据。');
+        setError(t('export.emptyDb'));
         return;
       }
 
@@ -50,8 +52,8 @@ export function ExportCard() {
     } catch (err) {
       const msg =
         err instanceof Error && err.message.includes('not initialized')
-          ? '数据库尚未就绪，请稍后重试。'
-          : '导出失败，请重试。';
+          ? t('export.dbNotReady')
+          : t('export.failed');
       setError(msg);
     } finally {
       setExporting(false);
@@ -60,7 +62,7 @@ export function ExportCard() {
 
   return (
     <Card>
-      <CardHeader title="数据导出" subheader="导出数据库中的全部数据" />
+      <CardHeader title={t('export.title')} subheader={t('export.subtitle')} />
       <CardContent>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <ToggleButtonGroup
@@ -81,7 +83,7 @@ export function ExportCard() {
                 size="small"
               />
             }
-            label="包含向量嵌入 (embedding)"
+            label={t('export.includeEmbedding')}
           />
 
           {error && <Alert severity="warning" onClose={() => setError(null)}>{error}</Alert>}
@@ -98,7 +100,7 @@ export function ExportCard() {
               )
             }
           >
-            {exporting ? '导出中...' : '导出'}
+            {exporting ? t('export.exporting') : t('export.exportBtn')}
           </Button>
         </Box>
       </CardContent>

@@ -10,6 +10,7 @@ import Card from '@mui/material/Card';
 import Skeleton from '@mui/material/Skeleton';
 import Pagination from '@mui/material/Pagination';
 
+import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify } from '../../components/iconify';
 import { DashboardContent } from '../../layouts/dashboard';
 import { useBiliFavFolders } from './use-bili-fav-folders';
@@ -28,6 +29,7 @@ const biliAdapter = createBiliAutoTranscribeAdapter();
 // ---------------------------------------------------------------------------
 
 function NotLoggedIn({ onRetry }: { onRetry: () => void }) {
+  const { t } = useTranslation();
   return (
     <Box
       sx={(theme) => ({
@@ -47,18 +49,19 @@ function NotLoggedIn({ onRetry }: { onRetry: () => void }) {
         width={64}
         sx={{ color: 'warning.main', mb: 1 }}
       />
-      <Typography variant="h6">未检测到 B 站登录状态</Typography>
+      <Typography variant="h6">{t('collections.notLoggedInTitle')}</Typography>
       <Typography variant="body2" sx={{ color: 'text.secondary', textAlign: 'center', maxWidth: 400 }}>
-        请先在浏览器中打开 bilibili.com 并登录你的账号，然后回到此页面点击重试。
+        {t('collections.notLoggedInDesc')}
       </Typography>
       <Button variant="outlined" onClick={onRetry} sx={{ mt: 1 }}>
-        重试
+        {t('collections.retry')}
       </Button>
     </Box>
   );
 }
 
 function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
+  const { t } = useTranslation();
   return (
     <Box
       sx={(theme) => ({
@@ -74,12 +77,12 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
       })}
     >
       <Iconify icon="solar:danger-triangle-bold-duotone" width={64} sx={{ color: 'error.main', mb: 1 }} />
-      <Typography variant="h6">加载失败</Typography>
+      <Typography variant="h6">{t('collections.loadFailed')}</Typography>
       <Typography variant="body2" sx={{ color: 'text.secondary', textAlign: 'center', maxWidth: 400 }}>
         {message}
       </Typography>
       <Button variant="outlined" onClick={onRetry} sx={{ mt: 1 }}>
-        重试
+        {t('collections.retry')}
       </Button>
     </Box>
   );
@@ -104,6 +107,7 @@ function VideoGridSkeleton() {
 }
 
 function EmptyFolderState() {
+  const { t } = useTranslation();
   return (
     <Box
       sx={(theme) => ({
@@ -118,10 +122,10 @@ function EmptyFolderState() {
       })}
     >
       <Typography variant="h6" sx={{ color: 'text.disabled' }}>
-        收藏夹为空
+        {t('collections.emptyFolderTitle')}
       </Typography>
       <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-        这个收藏夹还没有收藏任何视频
+        {t('collections.emptyFolderDesc')}
       </Typography>
     </Box>
   );
@@ -139,6 +143,7 @@ function VideoGridPanel({ mediaId, totalCount, syncing, onSync, lastSyncedAt, au
   lastSyncedAt: Date | null;
   autoTranscribe: ReturnType<typeof useAutoTranscribe>;
 }) {
+  const { t } = useTranslation();
   const { videos, folderTitle, page, totalPages, loading, loginState, error, goToPage, retry } =
     useBiliFavVideos(mediaId);
 
@@ -159,8 +164,8 @@ function VideoGridPanel({ mediaId, totalCount, syncing, onSync, lastSyncedAt, au
 
         {!loading && (
           <Typography variant="caption" sx={{ color: 'text.secondary', flexShrink: 0 }}>
-            {totalCount > 0 && `${totalCount} 个视频`}
-            {lastSyncedAt && ` · 上次同步 ${lastSyncedAt.toLocaleTimeString()}`}
+            {totalCount > 0 && t('collections.videoCount', { count: totalCount })}
+            {lastSyncedAt && ` · ${t('collections.lastSynced', { time: lastSyncedAt.toLocaleTimeString() })}`}
           </Typography>
         )}
 
@@ -179,7 +184,7 @@ function VideoGridPanel({ mediaId, totalCount, syncing, onSync, lastSyncedAt, au
           onClick={onSync}
           disabled={syncing}
         >
-          {syncing ? '同步中...' : '同步'}
+          {syncing ? t('collections.syncing') : t('collections.sync')}
         </Button>
       </Box>
 
@@ -240,6 +245,7 @@ function VideoGridPanel({ mediaId, totalCount, syncing, onSync, lastSyncedAt, au
 // ---------------------------------------------------------------------------
 
 export function CollectionsView() {
+  const { t } = useTranslation();
   const { mediaId } = useParams<{ mediaId: string }>();
   const navigate = useNavigate();
 
@@ -272,7 +278,7 @@ export function CollectionsView() {
     <DashboardContent maxWidth="xl">
       {error && (
         <Typography variant="body2" sx={{ color: 'error.main', mb: 2 }}>
-          同步失败: {error}
+          {t('collections.syncFailed', { error })}
         </Typography>
       )}
 
@@ -310,7 +316,7 @@ export function CollectionsView() {
           ) : (
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1 }}>
               <Typography variant="body1" sx={{ color: 'text.disabled' }}>
-                请选择一个收藏夹
+                {t('collections.selectFolder')}
               </Typography>
             </Box>
           )}

@@ -42,9 +42,21 @@ export function t(
   key: LocaleKeys,
   params?: Record<string, string | number>,
 ): string {
-  let text: string = currentMessages[key] ?? key;
+  // Plural resolution: when a `count` param is present, prefer a variant key
+  // `${key}.${category}` (e.g. `foo.one` / `foo.other`), falling back to
+  // `${key}.other`, then the base `key`. Non-count calls are unaffected.
+  let resolvedKey: string = key;
+  if (params?.count !== undefined) {
+    const category = new Intl.PluralRules(currentLocale).select(Number(params.count));
+    const variantKey = `${key}.${category}`;
+    const otherKey = `${key}.other`;
+    if (variantKey in currentMessages) resolvedKey = variantKey;
+    else if (otherKey in currentMessages) resolvedKey = otherKey;
+  }
 
-  if (import.meta.env.DEV && !(key in currentMessages)) {
+  let text: string = currentMessages[resolvedKey] ?? currentMessages[key] ?? key;
+
+  if (import.meta.env.DEV && !(resolvedKey in currentMessages) && !(key in currentMessages)) {
     console.warn(`[i18n] missing key: "${key}" for locale "${currentLocale}"`);
   }
 
@@ -55,6 +67,18 @@ export function t(
   }
 
   return text;
+}
+
+/**
+ * Locale-aware compact number formatting.
+ * zh-CN → `1.2万` / `1.2亿`, en → `1.2K` / `1.2M`.
+ * Consumers must subscribe via `useTranslation()` to re-render on locale change.
+ */
+export function formatCompactNumber(n: number): string {
+  return new Intl.NumberFormat(currentLocale, {
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  }).format(n);
 }
 
 export function subscribeLocale(cb: () => void): () => void {

@@ -1,7 +1,8 @@
+import type { LocaleKeys } from '@/lib/i18n/locales/zh-CN';
 import { Iconify } from '../components/iconify';
 
 export type NavItem = {
-  title: string;
+  title: LocaleKeys;
   path: string;
   icon: React.ReactNode;
   info?: React.ReactNode;
@@ -9,17 +10,17 @@ export type NavItem = {
 
 export const navData: NavItem[] = [
   {
-    title: 'Dashboard',
+    title: 'nav.dashboard',
     path: '/',
     icon: <Iconify icon="solar:home-angle-bold-duotone" width={24} />,
   },
   {
-    title: 'Collections',
+    title: 'nav.collections',
     path: '/collections',
     icon: <Iconify icon="solar:videocamera-record-bold-duotone" width={24} />,
   },
   {
-    title: 'Settings',
+    title: 'nav.settings',
     path: '/settings',
     icon: <Iconify icon="solar:settings-bold-duotone" width={24} />,
   },

@@ -18,6 +18,7 @@ import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import ToggleButton from '@mui/material/ToggleButton';
 import Divider from '@mui/material/Divider';
 
+import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify } from '../../components/iconify';
 import { LLM_PROVIDERS, type LLMProviderId, type LLMProviderDef } from '@/lib/providers';
 import type { UserSettings } from '@/lib/storage';
@@ -43,6 +44,7 @@ export function LlmConfigCard({
   saved,
   updateLlm,
 }: LlmConfigCardProps) {
+  const { t } = useTranslation();
   const [showKey, setShowKey] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<TestConnectionResult | null>(null);
@@ -107,8 +109,8 @@ export function LlmConfigCard({
   return (
     <Card>
       <CardHeader
-        title="LLM 服务配置"
-        subheader="配置大语言模型服务以实现视频内容总结"
+        title={t('settings.llmCard.title')}
+        subheader={t('settings.llmCard.description')}
       />
       <CardContent>
         <Grid container spacing={3}>
@@ -117,7 +119,7 @@ export function LlmConfigCard({
             <TextField
               select
               fullWidth
-              label="LLM 服务商"
+              label={t('settings.llmProvider')}
               value={settings.provider}
               onChange={(e) => updateLlm({ field: 'provider', value: e.target.value as LLMProviderId })}
             >
@@ -131,8 +133,8 @@ export function LlmConfigCard({
           <Grid size={{ xs: 12, md: isCustomProvider ? 6 : 12 }}>
             <TextField
               fullWidth
-              label="Base URL"
-              placeholder="https://your-endpoint.com/v1/"
+              label={t('settings.baseUrl')}
+              placeholder={t('settings.customBaseUrlPlaceholder')}
               value={isCustomProvider ? settings.customBaseUrl : currentProviderDef.baseUrl}
               onChange={isCustomProvider ? (e) => updateLlm({ field: 'customBaseUrl', value: e.target.value }) : undefined}
               slotProps={{
@@ -147,7 +149,7 @@ export function LlmConfigCard({
               <TextField
                 select
                 fullWidth
-                label="协议"
+                label={t('settings.customProtocol')}
                 value={settings.customProtocol}
                 onChange={(e) => updateLlm({ field: 'customProtocol', value: e.target.value as 'openai' | 'claude' })}
               >
@@ -161,7 +163,7 @@ export function LlmConfigCard({
           <Grid size={{ xs: 12, md: 6 }}>
             <TextField
               fullWidth
-              label="API Key"
+              label={t('settings.apiKey')}
               type={showKey ? 'text' : 'password'}
               placeholder="sk-..."
               value={currentLlmApiKey}
@@ -198,7 +200,7 @@ export function LlmConfigCard({
                   rel="noopener noreferrer"
                   sx={{ whiteSpace: 'nowrap', alignSelf: 'center' }}
                 >
-                  获取密钥
+                  {t('settings.getKey')}
                 </Button>
               )}
             </Box>
@@ -214,8 +216,8 @@ export function LlmConfigCard({
               renderInput={(params) => (
                 <TextField
                   {...params}
-                  label="模型"
-                  placeholder={currentProviderDef.defaultModel || '输入模型名称'}
+                  label={t('settings.model')}
+                  placeholder={currentProviderDef.defaultModel || t('settings.modelPlaceholder')}
                 />
               )}
             />
@@ -229,14 +231,14 @@ export function LlmConfigCard({
               startIcon={isFetchingModels ? <CircularProgress size={16} /> : undefined}
               sx={{ height: 56 }}
             >
-              {isFetchingModels ? '获取中...' : '获取模型列表'}
+              {isFetchingModels ? t('settings.fetchingModels') : t('settings.fetchModels')}
             </Button>
           </Grid>
 
           {remoteModels.length > 0 && (
             <Grid size={{ xs: 12 }}>
               <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                已获取 {remoteModels.length} 个可用模型
+                {t('settings.fetchModelsSuccess', { count: remoteModels.length })}
               </Typography>
             </Grid>
           )}
@@ -244,7 +246,7 @@ export function LlmConfigCard({
           {modelFetchError && (
             <Grid size={{ xs: 12 }}>
               <Alert severity="error" variant="outlined">
-                获取模型列表失败：{modelFetchError}
+                {t('settings.fetchModelsFailedDetail', { error: modelFetchError })}
               </Alert>
             </Grid>
           )}
@@ -258,11 +260,11 @@ export function LlmConfigCard({
                 disabled={isTesting || !canTest}
                 startIcon={isTesting ? <CircularProgress size={16} color="inherit" /> : undefined}
               >
-                {isTesting ? '测试中...' : '测试连接'}
+                {isTesting ? t('settings.testing') : t('settings.testConnection')}
               </Button>
               {saved && (
                 <Typography variant="body2" sx={{ color: 'success.main', fontWeight: 600 }}>
-                  已保存
+                  {t('settings.saved')}
                 </Typography>
               )}
             </Box>
@@ -274,7 +276,7 @@ export function LlmConfigCard({
                 severity="success"
                 icon={<Iconify icon="solar:check-circle-bold" width={22} />}
               >
-                连接成功 — {testResult.message}
+                {t('settings.testSuccessDetail', { message: testResult.message })}
               </Alert>
             </Grid>
           )}
@@ -282,7 +284,7 @@ export function LlmConfigCard({
           {testError && (
             <Grid size={{ xs: 12 }}>
               <Alert severity="error">
-                连接失败 — {testError}
+                {t('settings.testFailedDetail', { error: testError })}
               </Alert>
             </Grid>
           )}
@@ -291,21 +293,21 @@ export function LlmConfigCard({
           <Grid size={{ xs: 12 }}>
             <Divider sx={{ my: 1 }} />
             <Typography variant="subtitle1" sx={{ mt: 2, mb: 1, fontWeight: 600 }}>
-              高级设置
+              {t('settings.advancedCard.title')}
             </Typography>
           </Grid>
 
           <Grid size={{ xs: 12, md: 6 }}>
             <TextField
               fullWidth
-              label="Temperature"
+              label={t('settings.temperatureLabel')}
               type="number"
               value={settings.temperature}
               onChange={(e) => {
                 const v = parseFloat(e.target.value);
                 if (!isNaN(v) && v >= 0 && v <= 2) updateLlm({ field: 'temperature', value: v });
               }}
-              helperText="控制生成内容的随机性（0-2，推荐 0.3）"
+              helperText={t('settings.temperatureDesc')}
               slotProps={{
                 htmlInput: { step: 0.1, min: 0, max: 2 },
               }}
@@ -315,14 +317,14 @@ export function LlmConfigCard({
           <Grid size={{ xs: 12, md: 6 }}>
             <TextField
               fullWidth
-              label="最大 Token 数"
+              label={t('settings.maxTokens')}
               type="number"
               value={settings.maxTokens}
               onChange={(e) => {
                 const v = parseInt(e.target.value, 10);
                 if (!isNaN(v) && v > 0) updateLlm({ field: 'maxTokens', value: v });
               }}
-              helperText="单次请求最大生成 token 数量"
+              helperText={t('settings.maxTokensDesc')}
               slotProps={{
                 htmlInput: { min: 1, step: 100 },
               }}
@@ -332,7 +334,7 @@ export function LlmConfigCard({
           <Grid size={{ xs: 12 }}>
             <Box>
               <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                调用模式
+                {t('settings.mode')}
               </Typography>
               <ToggleButtonGroup
                 exclusive
@@ -342,17 +344,17 @@ export function LlmConfigCard({
               >
                 <ToggleButton value="quality" sx={{ px: 3 }}>
                   <Box sx={{ textAlign: 'left' }}>
-                    <Typography variant="subtitle2">质量优先</Typography>
+                    <Typography variant="subtitle2">{t('settings.modeQuality')}</Typography>
                     <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                      两次独立请求并行，结果更准确
+                      {t('settings.modeQualityDesc')}
                     </Typography>
                   </Box>
                 </ToggleButton>
                 <ToggleButton value="efficiency" sx={{ px: 3 }}>
                   <Box sx={{ textAlign: 'left' }}>
-                    <Typography variant="subtitle2">效率优先</Typography>
+                    <Typography variant="subtitle2">{t('settings.modeEfficiency')}</Typography>
                     <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                      单次请求合并，速度更快
+                      {t('settings.modeEfficiencyDesc')}
                     </Typography>
                   </Box>
                 </ToggleButton>
