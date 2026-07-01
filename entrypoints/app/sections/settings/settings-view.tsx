@@ -15,6 +15,7 @@ import { useTranslation } from '@/lib/i18n/use-translation';
 import type { LocalePreference } from '@/lib/storage';
 import { LlmConfigCard } from './llm-config-card';
 import { AsrConfigCard } from './asr-config-card';
+import { EmbeddingConfigCard } from './embedding-config-card';
 import { ExportCard } from '../overview/export-card';
 import { SettingsTabs, type SettingsTabItem } from './settings-tabs';
 
@@ -62,6 +63,17 @@ export function SettingsView() {
               currentAsrApiKey={s.currentAsrApiKey}
               currentAsrModel={s.currentAsrModel}
               updateAsr={s.updateAsr}
+            />
+          </Grid>
+
+          <Grid size={{ xs: 12 }}>
+            <EmbeddingConfigCard
+              embeddingEnabled={s.embeddingEnabled}
+              currentEmbeddingDef={s.currentEmbeddingDef}
+              currentEmbeddingApiKey={s.currentEmbeddingApiKey}
+              currentEmbeddingBaseUrl={s.currentEmbeddingBaseUrl}
+              currentEmbeddingModel={s.currentEmbeddingModel}
+              updateEmbedding={s.updateEmbedding}
             />
           </Grid>
         </Grid>

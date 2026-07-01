@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { LLMProviderId, ASRProviderId, LLMProviderDef, ASRProviderDef } from '@/lib/providers';
-import { getProviderDef, ASR_PROVIDERS } from '@/lib/providers';
+import type { LLMProviderId, ASRProviderId, LLMProviderDef, ASRProviderDef, EmbeddingProviderId, EmbeddingProviderDef } from '@/lib/providers';
+import { getProviderDef, ASR_PROVIDERS, getEmbeddingProviderDef } from '@/lib/providers';
 import type { UserSettings } from '@/lib/storage';
 import { settingsStorage, DEFAULT_SETTINGS, resolveAsrConfig, getEnvApiKey, getEnvModel } from '@/lib/storage';
 
@@ -19,6 +19,13 @@ export type AsrUpdate =
   | { field: 'apiKey'; value: string }
   | { field: 'model'; value: string };
 
+export type EmbeddingUpdate =
+  | { field: 'enabled'; value: boolean }
+  | { field: 'provider'; value: EmbeddingProviderId }
+  | { field: 'apiKey'; value: string }
+  | { field: 'baseUrl'; value: string }
+  | { field: 'model'; value: string };
+
 export interface UseSettingsReturn {
   settings: UserSettings;
   loading: boolean;
@@ -33,8 +40,15 @@ export interface UseSettingsReturn {
   currentAsrApiKey: string;
   currentAsrModel: string;
 
+  embeddingEnabled: boolean;
+  currentEmbeddingDef: EmbeddingProviderDef;
+  currentEmbeddingApiKey: string;
+  currentEmbeddingBaseUrl: string;
+  currentEmbeddingModel: string;
+
   updateLlm: (update: LlmUpdate) => void;
   updateAsr: (update: AsrUpdate) => void;
+  updateEmbedding: (update: EmbeddingUpdate) => void;
 }
 
 export function useSettings(): UseSettingsReturn {
@@ -113,6 +127,18 @@ export function useSettings(): UseSettingsReturn {
   const currentAsrApiKey = resolved.apiKey;
   const currentAsrModel = resolved.model;
 
+  // --- Embedding computed ---
+  const embeddingProvider = settings.embeddingProvider ?? DEFAULT_SETTINGS.embeddingProvider;
+  const embeddingEnabled = settings.embeddingEnabled ?? DEFAULT_SETTINGS.embeddingEnabled;
+  const currentEmbeddingDef = useMemo(
+    () => getEmbeddingProviderDef(embeddingProvider),
+    [embeddingProvider],
+  );
+  const embeddingCfg = settings.embeddingConfigs?.[embeddingProvider];
+  const currentEmbeddingApiKey = embeddingCfg?.apiKey ?? '';
+  const currentEmbeddingBaseUrl = embeddingCfg?.baseUrl || currentEmbeddingDef.baseUrl;
+  const currentEmbeddingModel = embeddingCfg?.model || currentEmbeddingDef.defaultModel;
+
   // --- LLM action ---
   const updateLlm = useCallback(
     (update: LlmUpdate) => {
@@ -165,6 +191,37 @@ export function useSettings(): UseSettingsReturn {
     [updateSettings, settings.asrConfigs, settings.asrProvider],
   );
 
+  // --- Embedding action ---
+  const updateEmbedding = useCallback(
+    (update: EmbeddingUpdate) => {
+      switch (update.field) {
+        case 'enabled':
+          return updateSettings({ embeddingEnabled: update.value });
+        case 'provider':
+          return updateSettings({ embeddingProvider: update.value });
+        case 'apiKey': {
+          const cur = settings.embeddingConfigs?.[embeddingProvider] ?? { apiKey: '' };
+          return updateSettings({
+            embeddingConfigs: { ...settings.embeddingConfigs, [embeddingProvider]: { ...cur, apiKey: update.value } },
+          });
+        }
+        case 'baseUrl': {
+          const cur = settings.embeddingConfigs?.[embeddingProvider] ?? { apiKey: '' };
+          return updateSettings({
+            embeddingConfigs: { ...settings.embeddingConfigs, [embeddingProvider]: { ...cur, baseUrl: update.value } },
+          });
+        }
+        case 'model': {
+          const cur = settings.embeddingConfigs?.[embeddingProvider] ?? { apiKey: '' };
+          return updateSettings({
+            embeddingConfigs: { ...settings.embeddingConfigs, [embeddingProvider]: { ...cur, model: update.value } },
+          });
+        }
+      }
+    },
+    [updateSettings, settings.embeddingConfigs, embeddingProvider],
+  );
+
   return {
     settings,
     loading,
@@ -179,7 +236,14 @@ export function useSettings(): UseSettingsReturn {
     currentAsrApiKey,
     currentAsrModel,
 
+    embeddingEnabled,
+    currentEmbeddingDef,
+    currentEmbeddingApiKey,
+    currentEmbeddingBaseUrl,
+    currentEmbeddingModel,
+
     updateLlm,
     updateAsr,
+    updateEmbedding,
   };
 }

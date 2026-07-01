@@ -123,3 +123,65 @@ export const ASR_PROVIDERS: ASRProviderDef[] = [
 export function getAsrProviderDef(id: ASRProviderId): ASRProviderDef {
   return ASR_PROVIDERS.find((p) => p.id === id) ?? ASR_PROVIDERS[0];
 }
+
+export const EMBEDDING_PROVIDER_IDS = [
+  'openai', 'gemini', 'zhipu', 'siliconflow', 'ollama', 'custom',
+] as const;
+export type EmbeddingProviderId = typeof EMBEDDING_PROVIDER_IDS[number];
+
+export interface EmbeddingProviderDef {
+  id: EmbeddingProviderId;
+  name: string;
+  baseUrl: string;
+  defaultModel: string;
+  regUrl: string;
+}
+
+export const EMBEDDING_PROVIDERS: EmbeddingProviderDef[] = [
+  {
+    id: 'openai',
+    name: 'OpenAI',
+    baseUrl: 'https://api.openai.com/v1/',
+    defaultModel: 'text-embedding-3-small',
+    regUrl: 'https://platform.openai.com/api-keys',
+  },
+  {
+    id: 'gemini',
+    name: 'Google Gemini',
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/',
+    defaultModel: 'text-embedding-004',
+    regUrl: 'https://aistudio.google.com/apikey',
+  },
+  {
+    id: 'zhipu',
+    name: 'ZhiPu AI',
+    baseUrl: 'https://open.bigmodel.cn/api/paas/v4/',
+    defaultModel: 'embedding-3',
+    regUrl: 'https://open.bigmodel.cn/usercenter/apikeys',
+  },
+  {
+    id: 'siliconflow',
+    name: 'SiliconFlow',
+    baseUrl: 'https://api.siliconflow.cn/v1',
+    defaultModel: 'BAAI/bge-m3',
+    regUrl: '',
+  },
+  {
+    id: 'ollama',
+    name: 'Ollama (Local)',
+    baseUrl: 'http://localhost:11434/v1',
+    defaultModel: 'nomic-embed-text',
+    regUrl: '',
+  },
+  {
+    id: 'custom',
+    name: 'Custom',
+    baseUrl: '',
+    defaultModel: '',
+    regUrl: '',
+  },
+];
+
+export function getEmbeddingProviderDef(id: EmbeddingProviderId): EmbeddingProviderDef {
+  return EMBEDDING_PROVIDERS.find((p) => p.id === id) ?? EMBEDDING_PROVIDERS[0];
+}

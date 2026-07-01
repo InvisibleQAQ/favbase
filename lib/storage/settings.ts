@@ -1,5 +1,5 @@
 import { storage } from 'wxt/utils/storage';
-import type { LLMProviderId, ASRProviderId } from '../providers';
+import type { LLMProviderId, ASRProviderId, EmbeddingProviderId } from '../providers';
 import { getAsrProviderDef } from '../providers';
 import { STORAGE_KEYS } from './keys';
 
@@ -15,6 +15,11 @@ export interface UserSettings {
   // ASR
   asrProvider: ASRProviderId;
   asrConfigs: Record<string, { apiKey: string; model: string }>;
+
+  // Embedding (semantic search)
+  embeddingEnabled: boolean;
+  embeddingProvider: EmbeddingProviderId;
+  embeddingConfigs: Record<string, { apiKey: string; baseUrl?: string; model?: string }>;
 
   // Mode
   prefMode: 'quality' | 'efficiency';
@@ -36,6 +41,11 @@ export const DEFAULT_SETTINGS: UserSettings = {
   // ASR
   asrProvider: (import.meta.env.VITE_ASR_PROVIDER as ASRProviderId) || 'groq',
   asrConfigs: {},
+
+  // Embedding (semantic search)
+  embeddingEnabled: false,
+  embeddingProvider: 'openai',
+  embeddingConfigs: {},
 
   // Mode
   prefMode: 'efficiency',

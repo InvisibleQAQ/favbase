@@ -5,7 +5,7 @@ Storage 统一管理目录（barrel `index.ts` re-export 全部 public API，imp
 ## 模块结构
 
 - `keys.ts` — STORAGE_KEYS 静态 key 注册表 + STORAGE_PREFIXES 动态 key 前缀注册表，新增 key/前缀先在此检查冲突
-- `settings.ts` — UserSettings 类型定义 + settingsStorage (WXT `storage.defineItem<UserSettings>`) + DEFAULT_SETTINGS + resolveAsrConfig(settings)（纯函数，ASR 配置解析唯一真实来源）+ getAsrSettings()（异步便利函数，内聚 getValue + resolveAsrConfig，非 React 消费者使用）+ migrateSettingsIfNeeded()（旧平铺 ASR 字段 → asrConfigs Record）
+- `settings.ts` — UserSettings 类型定义 + settingsStorage (WXT `storage.defineItem<UserSettings>`) + DEFAULT_SETTINGS + resolveAsrConfig(settings)（纯函数，ASR 配置解析唯一真实来源）+ getAsrSettings()（异步便利函数，内聚 getValue + resolveAsrConfig，非 React 消费者使用）+ migrateSettingsIfNeeded()（旧平铺 ASR 字段 → asrConfigs Record）。Embedding（语义搜索）字段：`embeddingEnabled` / `embeddingProvider` / `embeddingConfigs: Record<string, { apiKey, baseUrl?, model? }>`，默认 `false`/`'openai'`/`{}`（旧 settings 无此字段时 computed 端 `?? DEFAULT_SETTINGS` fallback，无需迁移）
 - `ui-state.ts` — sidebarPinnedStorage（`local:sidebarPinned`，布尔值，默认 true）
 - `index.ts` — barrel re-export + runStorageMigrations()（统一迁移入口，background.ts 只调这一个函数）
 
