@@ -45,7 +45,10 @@ const en: Record<LocaleKeys, string> = {
   'settings.show': 'Show',
   'settings.hide': 'Hide',
 
-  'settings.title': 'AI Service Configuration',
+  'settings.title': 'Settings',
+  'settings.tabAi': 'AI Config',
+  'settings.tabGeneral': 'General',
+  'settings.tabStorage': 'Storage',
   'settings.llmCard.title': 'LLM Service',
   'settings.llmCard.description': 'Configure LLM service for video content summarization',
   'settings.asrCard.title': 'ASR Transcription',

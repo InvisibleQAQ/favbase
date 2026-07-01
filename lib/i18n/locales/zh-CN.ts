@@ -43,7 +43,10 @@ const zhCN = {
   'settings.show': '显示',
   'settings.hide': '隐藏',
 
-  'settings.title': 'AI 服务配置',
+  'settings.title': '设置',
+  'settings.tabAi': 'AI 配置',
+  'settings.tabGeneral': '通用设置',
+  'settings.tabStorage': '存储管理',
   'settings.llmCard.title': 'LLM 服务配置',
   'settings.llmCard.description': '配置大语言模型服务以实现视频内容总结',
   'settings.asrCard.title': 'ASR 语音转录',

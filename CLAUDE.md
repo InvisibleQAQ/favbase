@@ -68,14 +68,14 @@ MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRo
   - `iconify.tsx` — styled(Icon) 包装，未注册图标 console.warn 提醒
 - `entrypoints/app/pages/` — 页面组件（lazy loaded）
   - `dashboard.tsx` → `sections/overview/overview-view.tsx`（统计卡片 + 活动列表 + 进度条）
-  - `settings.tsx` → `sections/settings/settings-view.tsx`（AI 服务配置：LLM/ASR/高级设置）
+  - `settings.tsx` → `sections/settings/settings-view.tsx`（设置：顶部分段 Tab — AI 配置/通用设置/存储管理）
   - `collections.tsx` → `sections/collections/collections-view.tsx`（B站收藏夹 sidebar+grid 单页布局）
 - `entrypoints/app/sections/overview/stat-widget.tsx` — 统计卡片：圆形图标背景 + varAlpha 色调 + title/total
-- `entrypoints/app/sections/settings/` — AI 设置页面组件
-  - `settings-view.tsx` — 设置页面主视图：DashboardContent + 3 Card 区块
+- `entrypoints/app/sections/settings/` — 设置页面组件（顶部分段 Tab + 三个 panel）
+  - `settings-view.tsx` — 设置页面主视图：DashboardContent + 标题"设置" + `SettingsTabs`（本地 `useState` 控制 `ai`/`general`/`storage`）+ 条件渲染三个 panel。AI 配置 panel = LlmConfigCard + AsrConfigCard；通用设置 panel = 语言选择 Card；存储管理 panel = 从 overview 复用的 `ExportCard`
+  - `settings-tabs.tsx` — 胶囊分段 Tab 控件：MUI `Tabs` 定制（隐藏 `.MuiTabs-indicator` + `fullWidth` + 选中项 `background.paper` 白底 + `customShadows.z1` + `varAlpha` grey 底色容器）。props `{ value, onChange, tabs: SettingsTabItem[] }`，`SettingsTabItem` = `{ value, label, icon: IconifyName }`。新增 tab 只需在 settings-view 的 tabs 数组加一项 + 对应 panel 条件块
   - `llm-config-card.tsx` — LLM 配置卡片：Provider 选择 + API Key（显示/隐藏）+ Get Key 链接 + Model（Autocomplete，支持远程获取模型列表）+ Custom 字段 + 测试连接（AI SDK `generateText`）
   - `asr-config-card.tsx` — ASR 配置卡片：Provider 选择 + API Key + Model
-  - `advanced-settings-card.tsx` — 高级设置：Temperature + MaxTokens + 调用模式（ToggleButtonGroup）
 - `entrypoints/app/sections/collections/` — B站收藏夹页面组件（sidebar+grid 单页布局）
   - `collections-view.tsx` — 收藏夹主视图：左侧 240px FolderSidebar + 右侧 VideoGridPanel。`/collections` 和 `/collections/bilibili/:mediaId` 共用组件，通过 useParams 获取 mediaId，无 mediaId 时自动 navigate(replace) 到第一个收藏夹。包含 NotLoggedIn/ErrorState/EmptyFolderState/VideoGridSkeleton 共享状态组件
   - `folder-sidebar.tsx` — 收藏夹侧边栏：固定 240px，单分组"BiliBili 收藏夹"标题可上下折叠/展开列表（MUI Collapse）。列表项显示收藏夹名称 + 视频数量，选中项 varAlpha primary 高亮
@@ -166,7 +166,7 @@ PGlite 全量导出（JSON / CSV+ZIP），纯 app.html 侧运行。高内聚 4 �
 - `lib/export/serialize-json.ts` — `toExportJson(data)` 纯函数，输出 `{ exported_at, version:1, tables }` JSON string
 - `lib/export/serialize-csv.ts` — `toExportCsvZip(data)` 纯函数，RFC 4180 CSV + fflate ZIP 打包，返回 Uint8Array
 - `lib/export/download.ts` — `triggerDownload(blob, filename)` 浏览器下载 + `buildExportFilename(format)` 文件名生成
-- `entrypoints/app/sections/overview/export-card.tsx` — MUI Card 导出 UI：格式切换（JSON/CSV）+ embedding Checkbox + 导出按钮 + 空数据/DB 未就绪错误处理
+- `entrypoints/app/sections/overview/export-card.tsx` — MUI Card 导出 UI：格式切换（JSON/CSV）+ embedding Checkbox + 导出按钮 + 空数据/DB 未就绪错误处理。文件留在 overview/ 目录，但渲染位置已移到 settings 页面"存储管理" tab（settings-view 从此处 import），不再挂在 Dashboard
 
 ### Vercel AI SDK 集成层
 
