@@ -1,0 +1,33 @@
+# lib/bilibili
+
+B站字幕获取 (Step 1 — 已完成，Bilitato 对齐)。双通道架构：Main World 脚本拦截优先，API 调用降级。
+
+## 模块结构
+
+- `messaging.ts` — BiliMessageMap（消息类型注册表）+ postBiliMessage()（类型安全发送，支持 defer 延迟）+ onBiliMessage()（类型安全订阅，返回 unsub，内部封装 source 校验）
+- `types.ts` — RawSubtitleItem, BiliAuthInfo, BiliFavFolder, BiliFavVideo, BiliFavVideoListResponse, SubtitleTrack, DashAudioStream 等 bilibili 领域类型
+- `url-utils.ts` — 纯 URL 工具函数（零 chrome.* 依赖，Main World 安全）：extractBvid()（保留原始大小写）, extractPageNum(), isSubtitleCdnUrl()
+- `bilibili-api.ts` — B站 API 层深模块：内部 ENDPOINTS URL builder + BiliAuthError + buildFetchInit(auth?) helper（有 auth 时显式 Cookie header，否则 credentials:'include'）。导出 getBiliAuth()（chrome.cookies 读 SESSDATA/DedeUserID）, fetchFavFolders(auth)（收藏夹列表）, fetchFavVideos(auth, mediaId, page, ps=20)（收藏夹视频分页列表，`/x/v3/fav/resource/list`）, fetchSubtitle(bvid, cid, auth?)（字幕 API + CDN，Content Script 省略 auth / Extension Page 传 auth）, fetchCidByPageList(bvid, pageNum, auth?)（CID 获取，同上）, fetchPlayUrl(bvid, cid)（DASH manifest）, extractBiliAudioUrl(bvid, cid)（DASH manifest 最优音频流 URL 提取，供 transcription-handlers.ts 注入 pipeline deps）
+- `bili-sync-service.ts` — Bilibili 领域同步深模块（DB schema 知识的唯一持有者）。6 个高层操作：`checkAuth()`（认证检查，抛 BiliAuthError）, `fetchAndSyncFolders()`（auth + API + fire-and-forget DB sync）, `fetchAndSyncVideos(mediaId, page)`（auth + API + source lookup + DB sync，内聚 sourceId）, `getPendingBvids(pageBvids)`（返回 pending 子集）, `getPendingPreview(mediaId)`（auto-transcribe bar 预览 + 计数，通过 `sources.platformMeta.media_count` 获取 API 总数减已转录数得真实 pendingCount，media_count 缺失时 fallback 到 DB 计数；source 无 items 时返回 `pendingCount:null` 防止竞态误报"全部已转录"）, `markVideoError(bvid)`（标记转录失败）, `persistContent(bvid, rows, source)`（转录结果持久化）。内部委托 favorites-sync/videos-sync/content-sync 实现，消费者（hooks/pipeline）零 drizzle/entity/getDb 导入
+- `favorites-sync.ts` — syncFavFoldersToDb(db, folders)：将 BiliFavFolder[] 批量 upsert 到 PGlite sources 表。**仅由 bili-sync-service 内部调用**
+- `videos-sync.ts` — syncFavVideosToDb(db, videos, sourceId)：将 BiliFavVideo[] 批量 upsert 到 PGlite authors + items + item_sources 表，返回 `SyncResult`。事务包裹，批量 INSERT + SELECT 映射。**仅由 bili-sync-service 内部调用**
+- `content-sync.ts` — persistSubtitleContent(db, bvid, rows, source)：字幕文本持久化到 item_contents 表 + 更新 content_state。**仅由 bili-sync-service 内部调用**
+- `bilibili-transcription-handler.ts` — B站平台转录 handler：`handleBiliTranscribe(msg, tabId, ctx, signal)` 完整处理 B 站转录请求（prepare → 组装 PipelineDeps → runTranscriptionPipeline → 进度/错误通知）。通过 `prepareBiliTranscription` 获取平台碎片，通过 `transcription-utils.ts` 共享 notifyTab/createTranscribeAudio。注册到 `transcription-handlers.ts` 的 `platformHandlers` registry
+- `transcribe-utils.ts` — 转录共享工具函数：`transcribeAndPersist(bvid, title)` 发送 TRANSCRIBE_AUDIO（`platform:'bilibili'`, `videoId:bvid`）+ 成功后调用 `bili-sync-service.persistContent()`；`createStatusListener(matchBvid, onProgress)` 安装 TRANSCRIBE_STATUS 监听器（匹配 `m.videoId`），返回 cleanup 函数
+- `transcription-coordinator.ts` — 手动转录状态协调器（纯 JS class，零 React 依赖）。`TranscriptionCoordinator` class：`subscribe()`/`getSnapshot()` 支持 `useSyncExternalStore`，`setVideos(videos)` 触发批量 GET_VIDEO_CACHE 缓存预加载 + 为每个 bvid 订阅 `onVideoCacheChange` 实时响应外部缓存变更（auto-transcribe / 其他 tab），`transcribe(video)` 单视频转录（串行控制 activeBvid），`cancel()` 取消，`dispose()` 清理（含缓存订阅）。内部管理 per-video 状态 Map + 重试倒计时（纯 JS setInterval）+ generation 防过期 + 缓存变更订阅数组。通过 `transcribe-utils.ts` 共享 transcribeAndPersist 和 createStatusListener，通过 `video-cache.ts` 的 `onVideoCacheChange` 订阅实时状态同步
+- `auto-transcribe-adapter.ts` — B站自动转录适配器：`createBiliAutoTranscribeAdapter()` 返回 `AutoTranscribeAdapter` 实现。封装 Bilibili 专属操作（auth、收藏夹分页同步、pending 查询、视频元数据映射（cover 协议补全、attr===9 失效判断、upper→author）、transcribeAndPersist 委托、markVideoError、ASR key 检查、status listener）。通过 `bili-sync-service` 操作数据，自身不持有 DB schema 知识
+- `bilibili-transcription-adapter.ts` — B站转录平台适配器：`prepareBiliTranscription(bvid, requestCid?)` 返回 `BiliTranscriptionContext`（`{ cid, fetchOfficialSubtitle, extractAudioUrl, postProcess }` 4 碎片）。内聚 bilibili-specific 转录准备逻辑（auth 获取、CID 解析、官方字幕 API 重试、DASH 音频 URL 提取、字幕后处理）。Background handler 通过此 adapter 获取平台碎片后组装 PipelineDeps，自身不直接 import bilibili-api/subtitle-processor
+- `subtitle-processor.ts` — processSubtitles() B 站特有四步管线：normalize -> filter（B 站交互关键词过滤：点赞/投币/一键三连等）-> filler removal -> deduplicate(Jaccard>0.85)。接受 B 站原始格式和 favbase 格式。每条字幕保持独立行，不合并。通过 PipelineDeps.postProcess 注入到平台无关的 pipeline，未来其他平台提供各自的 postProcess 实现
+
+## 约定
+
+- BVID 规范化: `extractBvid()` 保留原始大小写（B站 API 区分大小写），`normalizeVideoId()`（`lib/cache/video-cache.ts`）在缓存层做纯 lowercase 规范化（平台无关，无 BV 正则）。storage key 格式 `vc:{platform}:{videoId}` 含平台命名空间；API 调用和消息传递保留原始大小写，比较时用 `.toLowerCase()` 做大小写无关匹配
+- Step 1 字幕获取: 双通道架构 — Main World 脚本（`bilibili-inject.content.ts`）拦截 fetch/XHR 被动捕获字幕优先，3s 超时降级到 Content Script 同源 API 调用
+- CID 获取: Main World 读取 `window.__INITIAL_STATE__` 优先（定期重发直到 content script 接收），降级到 `/x/player/pagelist` API（轻量，不需要 WBI 签名）
+- postMessage 桥接: Main World -> Isolated World，通过 `lib/bilibili/messaging.ts` 统一收发。BiliMessageMap 定义所有消息类型，发送用 postBiliMessage()，接收用 onBiliMessage()。消息流：`BILI_ROUTE_SWITCH`(bvid, 路由变化即时通知) → `BILI_SUBTITLE_HANDSHAKE`(bvid+cid, 800ms延迟) → `BILI_SUBTITLE_DATA`(字幕数据, defer 发送)。新增消息类型只需在 BiliMessageMap 加一行
+- 字幕后处理: pipeline 通过 `PipelineDeps.postProcess` 注入平台特有的字幕后处理。B 站注入 `processSubtitles()`（四步管线，不合并，逐条独立）。Content Script 侧（useSubtitle）直接 import `processSubtitles`（同域，方向正确）
+- B 站认证: manifest 声明 `cookies` 权限。`lib/bilibili/bilibili-api.ts` 的 `getBiliAuth()` 通过 `chrome.cookies.get()` 读取 SESSDATA + DedeUserID，检查 expirationDate。需要认证的 API（如 fetchFavFolders）手动拼 `Cookie: SESSDATA=xxx` header，Content Script 侧 API 通过 `credentials: 'include'` 自动带 cookie
+- Bilibili 领域同步: `lib/bilibili/bili-sync-service.ts` 是 DB schema 知识的唯一持有者。所有消费者（`useBiliFavFolders`/`useBiliFavVideos`/`auto-transcribe-adapter`/`transcribe-utils`）通过 service 高层操作访问数据，零 drizzle/entity/getDb 导入。service 内部委托 `favorites-sync`/`videos-sync`/`content-sync` 三个实现模块。新增 B 站同步操作：在 service 添加函数，消费者不直接操作 DB
+- 字幕获取流程（主路径）: interceptors.ts 拦截 fetch/XHR → sm.markCaptured() 解析+桥接 → postMessage SUBTITLE_DATA → useSubtitle 接收 → processSubtitles()
+- 字幕获取流程（降级路径）: extractBvid() → fetchCidByPageList() → fetchSubtitle(bvid, cid) → processSubtitles()（失败自动重试最多 2 次）
+- 字幕 CDN (`aisubtitle.hdslb.com`) 跨域但 CORS 允许，Content Script 可直接 fetch（带 `credentials: 'include'`）

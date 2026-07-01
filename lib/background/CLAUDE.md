@@ -1,0 +1,18 @@
+# lib/background
+
+Background Service Worker dispatcher 层：消息路由、平台转录分发、缓存 handler、PortBridge 数据库中继。
+
+## 模块结构
+
+- `entrypoints/background.ts` — Background SW dispatcher：`createBackgroundContext()` 工厂函数创建深模块（内聚 3 个 Map：abortControllers/tabVideoIds/sessionTabMap + activeVideoIds Set 去重），`onMessage` switch 路由到独立 handler。有状态 handler 统一签名 `(msg, sender, ctx)`，无状态 handler 签名 `(msg)`。onInstalled/onStartup 确保 Offscreen 存活
+- `types.ts` — BackgroundContext 深模块接口：`startTranscription(tabId, videoId)` 返回 AbortController（同 videoId 已有 in-flight 返回 null 去重）/ `abortTranscription(tabId)` / `finishTranscription(tabId)` / `getVideoIdForTab(tabId)` / `registerChunkSession` / `unregisterChunkSession` / `resolveProgressTarget(sessionId)` + `sendToTab` / `ensureOffscreen`。零 Map 暴露
+- `messages.ts` — Background SW 消息注册表：BgClientMessage（TranscribeRequest/Abort + GetVideoCacheRequest/CacheSubtitleRequest）, BgInternalMessage（OffscreenProgressMessage）, BgMessage union。从各领域模块导入成员类型后组合
+- `port-bridge.ts` — PortBridge 双向 Chrome Port 中继：app.html → Background SW → Offscreen（3-hop 架构）。监听 `favbase-db` channel，为每个 Extension Page 连接创建到 Offscreen 的中继，指数退避重连（200ms-5s，最多 20 次）。Must 在 module load time 同步初始化（MV3 SW 要求）
+- `transcription-handlers.ts` — 平台分发层（瘦 dispatcher）：`platformHandlers: Record<string, PlatformHandler>` registry 按 `msg.platform` 分发到对应平台 handler。`handleTranscribe`：platform lookup → dedup 检查（`ctx.startTranscription`）→ 委托平台 handler → 清理（`ctx.finishTranscription`）。零平台模块直接 import（通过 registry 间接引用）。`handleTranscribeAbort` 委托 `ctx.abortTranscription`。`handleOffscreenProgress` 通过 `ctx.resolveProgressTarget` 精确路由（sessionId 无法解析时 warn + 丢弃）。re-export `notifyTab`/`createTranscribeAudio`/`MessageSender` from `transcription-utils.ts`
+- `transcription-utils.ts` — 平台无关的转录共享工具：`notifyTab(ctx, tabId, videoId, ...)` 构建 TranscribeStatusPush 并发送到 tab，`createTranscribeAudio(tabId, ctx, extractAudioUrl)` 平台无关 ASR 基础设施工厂（connectivity + download + fingerprint + direct/chunked + offscreen 会话管理），`extractAudioUrl` 由各平台 handler 注入。从 `transcription-handlers.ts` 和 `bilibili-transcription-handler.ts` 提取，消除循环依赖
+- `cache-handlers.ts` — handleGetVideoCache + handleCacheSubtitle，纯函数签名 `(msg)`，委托 lib/cache/video-cache.ts
+
+## 约定
+
+- Background 消息桥: Content Script ↔ Background 通过 browser.runtime.sendMessage/onMessage。消息类型定义在 `lib/background/messages.ts`（BgMessage = BgClientMessage | BgInternalMessage）。BgClientMessage 成员来自各领域模块（`lib/transcription/types.ts` 的 TranscribeRequest/Abort + `lib/cache/types.ts` 的 GetVideoCacheRequest/CacheSubtitleRequest），BgInternalMessage 来自 `lib/offscreen/types.ts`。TranscribeRequest 携带 `platform` 字段驱动 handler 分发。Background → Content Script 进度推送用 browser.tabs.sendMessage（TranscribeStatusPush 用 `videoId` 字段标识）。Background ↔ Offscreen 用 chrome.runtime.sendMessage（Chrome-specific API）。Handler 分三层：`background.ts` dispatcher（switch msg.type）→ `transcription-handlers.ts` platform dispatcher（switch msg.platform）→ 平台 handler（如 `bilibili-transcription-handler.ts`）。同 videoId 并发转录自动去重（`ctx.startTranscription` 返回 null → 返回 TRANSCRIBE_DUPLICATE 错误）。新增消息类型：在对应领域模块定义类型 + 在 `lib/background/messages.ts` 注册到 union + 在 `lib/background/` 对应领域 handler 文件添加 handler 函数 + `background.ts` dispatcher switch 添加 case
+- CDN 请求头: `declarativeNetRequest` 静态规则（`public/rules.json`）在网络栈层面为 bilivideo 域名设置 `Referer: https://www.bilibili.com/` + `Origin`。Background SW 的 fetch() 自身设置的 Referer 会被 Chrome MV3 剥离，必须用 declarativeNetRequest
