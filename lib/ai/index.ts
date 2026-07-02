@@ -6,6 +6,17 @@ import { generateText, type LanguageModel } from 'ai';
 import type { LLMProviderId, SdkType } from '@/lib/providers';
 import { getProviderDef } from '@/lib/providers';
 
+// Embedding provider/client infra (sibling module, re-exported for `@/lib/ai`).
+export {
+  EMBEDDING_DIMENSIONS,
+  createEmbeddingModel,
+  embedText,
+  embedTexts,
+  testEmbeddingConnection,
+  type CreateEmbeddingModelOptions,
+  type TestEmbeddingResult,
+} from './embedding';
+
 // ---------------------------------------------------------------------------
 // createLanguageModel
 // ---------------------------------------------------------------------------

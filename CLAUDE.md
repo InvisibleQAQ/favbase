@@ -74,7 +74,8 @@ WXT 入口点及运行时角色总览，详细结构见对应目录 `CLAUDE.md`�
 - `lib/database/migrations/CLAUDE.md` — 自定义迁移系统
 
 ### 基础设施
-- `lib/ai/CLAUDE.md` — Vercel AI SDK 集成 + Provider 定义（`lib/providers.ts`）
+- `lib/ai/CLAUDE.md` — Vercel AI SDK 集成（LLM + Embedding provider/client）+ Provider 定义（`lib/providers.ts`）
+- `lib/embedding/CLAUDE.md` — Embedding 领域层：pgvector 向量存储 + 语义检索 + 配置解析（接口层，无消费方）
 - `lib/export/CLAUDE.md` — PGlite 全量导出（JSON/CSV）
 - `lib/hooks/CLAUDE.md` — 共享 Hooks（useSettings/useRetryCountdown）
 - `lib/storage/CLAUDE.md` — 存储命名空间统一管理

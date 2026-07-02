@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Card from '@mui/material/Card';
 import CardHeader from '@mui/material/CardHeader';
 import CardContent from '@mui/material/CardContent';
@@ -8,17 +8,20 @@ import MenuItem from '@mui/material/MenuItem';
 import InputAdornment from '@mui/material/InputAdornment';
 import IconButton from '@mui/material/IconButton';
 import Button from '@mui/material/Button';
+import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
 import Switch from '@mui/material/Switch';
 import Divider from '@mui/material/Divider';
 import Typography from '@mui/material/Typography';
+import CircularProgress from '@mui/material/CircularProgress';
 import { varAlpha } from 'minimal-shared/utils';
 
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify } from '../../components/iconify';
 import { EMBEDDING_PROVIDERS, type EmbeddingProviderId, type EmbeddingProviderDef } from '@/lib/providers';
 import type { EmbeddingUpdate } from '@/lib/hooks/useSettings';
+import { testEmbeddingConnection, EMBEDDING_DIMENSIONS } from '@/lib/ai';
 
 interface EmbeddingConfigCardProps {
   embeddingEnabled: boolean;
@@ -40,7 +43,48 @@ export function EmbeddingConfigCard({
   const { t } = useTranslation();
   const [showKey, setShowKey] = useState(false);
 
+  const [isTesting, setIsTesting] = useState(false);
+  const [testDimensions, setTestDimensions] = useState<number | null>(null);
+  const [testError, setTestError] = useState<string | null>(null);
+
+  // Clear stale test feedback when the provider changes (mirrors llm-config-card),
+  // so a success/warning Alert for provider A never lingers on provider B.
+  const prevProviderRef = useRef(currentEmbeddingDef.id);
+  useEffect(() => {
+    if (prevProviderRef.current !== currentEmbeddingDef.id) {
+      prevProviderRef.current = currentEmbeddingDef.id;
+      setTestDimensions(null);
+      setTestError(null);
+    }
+  }, [currentEmbeddingDef.id]);
+
   const disabled = !embeddingEnabled;
+  const canTest = !!(currentEmbeddingApiKey && currentEmbeddingModel);
+
+  const handleTestConnection = useCallback(async () => {
+    setIsTesting(true);
+    setTestDimensions(null);
+    setTestError(null);
+
+    try {
+      const result = await testEmbeddingConnection({
+        providerId: currentEmbeddingDef.id,
+        apiKey: currentEmbeddingApiKey,
+        baseUrl: currentEmbeddingBaseUrl,
+        model: currentEmbeddingModel,
+      });
+      setTestDimensions(result.dimensions);
+    } catch (err) {
+      setTestError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsTesting(false);
+    }
+  }, [
+    currentEmbeddingDef.id,
+    currentEmbeddingApiKey,
+    currentEmbeddingBaseUrl,
+    currentEmbeddingModel,
+  ]);
 
   return (
     <Card>
@@ -146,16 +190,53 @@ export function EmbeddingConfigCard({
             />
           </Grid>
 
-          {/* Test Connection (UI placeholder — no network logic yet) */}
+          {/* Test Connection (wired to testEmbeddingConnection) */}
           <Grid size={{ xs: 12 }}>
             <Button
               variant="contained"
-              disabled={disabled}
-              startIcon={<Iconify icon="solar:check-circle-bold" width={20} />}
+              onClick={handleTestConnection}
+              disabled={disabled || isTesting || !canTest}
+              startIcon={
+                isTesting ? (
+                  <CircularProgress size={16} color="inherit" />
+                ) : (
+                  <Iconify icon="solar:check-circle-bold" width={20} />
+                )
+              }
             >
-              {t('settings.testConnection')}
+              {isTesting ? t('settings.testing') : t('settings.testConnection')}
             </Button>
           </Grid>
+
+          {testDimensions !== null && testDimensions === EMBEDDING_DIMENSIONS && (
+            <Grid size={{ xs: 12 }}>
+              <Alert
+                severity="success"
+                icon={<Iconify icon="solar:check-circle-bold" width={22} />}
+              >
+                {t('settings.embedding.testSuccess', { dimensions: testDimensions })}
+              </Alert>
+            </Grid>
+          )}
+
+          {testDimensions !== null && testDimensions !== EMBEDDING_DIMENSIONS && (
+            <Grid size={{ xs: 12 }}>
+              <Alert severity="warning">
+                {t('settings.embedding.dimensionWarning', {
+                  actual: testDimensions,
+                  expected: EMBEDDING_DIMENSIONS,
+                })}
+              </Alert>
+            </Grid>
+          )}
+
+          {testError && (
+            <Grid size={{ xs: 12 }}>
+              <Alert severity="error">
+                {t('settings.embedding.testFailed', { error: testError })}
+              </Alert>
+            </Grid>
+          )}
 
           {/* Vector Index management (UI placeholder — no vector logic yet) */}
           <Grid size={{ xs: 12 }}>

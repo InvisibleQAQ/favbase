@@ -132,6 +132,7 @@ export type EmbeddingProviderId = typeof EMBEDDING_PROVIDER_IDS[number];
 export interface EmbeddingProviderDef {
   id: EmbeddingProviderId;
   name: string;
+  sdkType: SdkType;
   baseUrl: string;
   defaultModel: string;
   regUrl: string;
@@ -141,6 +142,7 @@ export const EMBEDDING_PROVIDERS: EmbeddingProviderDef[] = [
   {
     id: 'openai',
     name: 'OpenAI',
+    sdkType: 'openai',
     baseUrl: 'https://api.openai.com/v1/',
     defaultModel: 'text-embedding-3-small',
     regUrl: 'https://platform.openai.com/api-keys',
@@ -148,6 +150,7 @@ export const EMBEDDING_PROVIDERS: EmbeddingProviderDef[] = [
   {
     id: 'gemini',
     name: 'Google Gemini',
+    sdkType: 'google',
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta/',
     defaultModel: 'text-embedding-004',
     regUrl: 'https://aistudio.google.com/apikey',
@@ -155,6 +158,7 @@ export const EMBEDDING_PROVIDERS: EmbeddingProviderDef[] = [
   {
     id: 'zhipu',
     name: 'ZhiPu AI',
+    sdkType: 'openai-compatible',
     baseUrl: 'https://open.bigmodel.cn/api/paas/v4/',
     defaultModel: 'embedding-3',
     regUrl: 'https://open.bigmodel.cn/usercenter/apikeys',
@@ -162,6 +166,7 @@ export const EMBEDDING_PROVIDERS: EmbeddingProviderDef[] = [
   {
     id: 'siliconflow',
     name: 'SiliconFlow',
+    sdkType: 'openai-compatible',
     baseUrl: 'https://api.siliconflow.cn/v1',
     defaultModel: 'BAAI/bge-m3',
     regUrl: '',
@@ -169,6 +174,7 @@ export const EMBEDDING_PROVIDERS: EmbeddingProviderDef[] = [
   {
     id: 'ollama',
     name: 'Ollama (Local)',
+    sdkType: 'openai-compatible',
     baseUrl: 'http://localhost:11434/v1',
     defaultModel: 'nomic-embed-text',
     regUrl: '',
@@ -176,6 +182,7 @@ export const EMBEDDING_PROVIDERS: EmbeddingProviderDef[] = [
   {
     id: 'custom',
     name: 'Custom',
+    sdkType: 'openai-compatible',
     baseUrl: '',
     defaultModel: '',
     regUrl: '',
