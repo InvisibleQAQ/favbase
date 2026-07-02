@@ -18,6 +18,7 @@ import { AsrConfigCard } from './asr-config-card';
 import { EmbeddingConfigCard } from './embedding-config-card';
 import { ExportCard } from '../overview/export-card';
 import { SettingsTabs, type SettingsTabItem } from './settings-tabs';
+import { AiConfigNav, type AiSection, type AiConfigNavItem } from './ai-config-nav';
 
 type SettingsTab = 'ai' | 'general' | 'storage';
 
@@ -25,11 +26,18 @@ export function SettingsView() {
   const s = useSettings();
   const { t, preference, setLocale } = useTranslation();
   const [tab, setTab] = useState<SettingsTab>('ai');
+  const [aiSection, setAiSection] = useState<AiSection>('llm');
 
   const tabs: SettingsTabItem[] = [
     { value: 'ai', label: t('settings.tabAi'), icon: 'solar:magic-stick-3-bold-duotone' },
     { value: 'general', label: t('settings.tabGeneral'), icon: 'solar:global-bold-duotone' },
     { value: 'storage', label: t('settings.tabStorage'), icon: 'solar:database-bold-duotone' },
+  ];
+
+  const aiNavItems: AiConfigNavItem[] = [
+    { value: 'llm', label: t('settings.aiNav.llm'), icon: 'solar:chat-round-dots-bold' },
+    { value: 'asr', label: t('settings.aiNav.asr'), icon: 'solar:subtitles-bold-duotone' },
+    { value: 'embedding', label: t('settings.aiNav.embedding'), icon: 'eva:search-fill' },
   ];
 
   return (
@@ -44,37 +52,43 @@ export function SettingsView() {
 
       {tab === 'ai' && (
         <Grid container spacing={3}>
-          <Grid size={{ xs: 12 }}>
-            <LlmConfigCard
-              settings={s.settings}
-              currentProviderDef={s.currentProviderDef}
-              currentLlmApiKey={s.currentLlmApiKey}
-              currentLlmModel={s.currentLlmModel}
-              isCustomProvider={s.isCustomProvider}
-              saved={s.saved}
-              updateLlm={s.updateLlm}
-            />
+          <Grid size={{ xs: 12, md: 3 }}>
+            <AiConfigNav value={aiSection} onChange={setAiSection} items={aiNavItems} />
           </Grid>
 
-          <Grid size={{ xs: 12 }}>
-            <AsrConfigCard
-              settings={s.settings}
-              currentAsrDef={s.currentAsrDef}
-              currentAsrApiKey={s.currentAsrApiKey}
-              currentAsrModel={s.currentAsrModel}
-              updateAsr={s.updateAsr}
-            />
-          </Grid>
+          <Grid size={{ xs: 12, md: 9 }}>
+            {aiSection === 'llm' && (
+              <LlmConfigCard
+                settings={s.settings}
+                currentProviderDef={s.currentProviderDef}
+                currentLlmApiKey={s.currentLlmApiKey}
+                currentLlmModel={s.currentLlmModel}
+                isCustomProvider={s.isCustomProvider}
+                saved={s.saved}
+                updateLlm={s.updateLlm}
+              />
+            )}
 
-          <Grid size={{ xs: 12 }}>
-            <EmbeddingConfigCard
-              embeddingEnabled={s.embeddingEnabled}
-              currentEmbeddingDef={s.currentEmbeddingDef}
-              currentEmbeddingApiKey={s.currentEmbeddingApiKey}
-              currentEmbeddingBaseUrl={s.currentEmbeddingBaseUrl}
-              currentEmbeddingModel={s.currentEmbeddingModel}
-              updateEmbedding={s.updateEmbedding}
-            />
+            {aiSection === 'asr' && (
+              <AsrConfigCard
+                settings={s.settings}
+                currentAsrDef={s.currentAsrDef}
+                currentAsrApiKey={s.currentAsrApiKey}
+                currentAsrModel={s.currentAsrModel}
+                updateAsr={s.updateAsr}
+              />
+            )}
+
+            {aiSection === 'embedding' && (
+              <EmbeddingConfigCard
+                embeddingEnabled={s.embeddingEnabled}
+                currentEmbeddingDef={s.currentEmbeddingDef}
+                currentEmbeddingApiKey={s.currentEmbeddingApiKey}
+                currentEmbeddingBaseUrl={s.currentEmbeddingBaseUrl}
+                currentEmbeddingModel={s.currentEmbeddingModel}
+                updateEmbedding={s.updateEmbedding}
+              />
+            )}
           </Grid>
         </Grid>
       )}
