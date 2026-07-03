@@ -44,7 +44,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
 
   // Embedding (semantic search)
   embeddingEnabled: false,
-  embeddingProvider: 'openai',
+  embeddingProvider: (import.meta.env.VITE_EMBEDDING_PROVIDER as EmbeddingProviderId) || 'openai',
   embeddingConfigs: {},
 
   // Mode

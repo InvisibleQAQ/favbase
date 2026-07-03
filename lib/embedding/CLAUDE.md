@@ -9,7 +9,7 @@ pgvector 向量存储 + 语义检索 + 配置解析。domain 层，依赖 `lib/a
 
 ## 模块结构
 
-- `config.ts` — `resolveEmbeddingConfig(settings)` 纯函数（镜像 `resolveAsrConfig`）：`UserSettings` → `{ providerId, apiKey, baseUrl, model, enabled }`，gap 从 provider def 补齐。`getEmbeddingSettings()` 异步便利（getValue + resolve，非 React 消费者用）
+- `config.ts` — `resolveEmbeddingConfig(settings)` 纯函数（镜像 `resolveAsrConfig`）：`UserSettings` → `{ providerId, apiKey, baseUrl, model, enabled }`。**优先级（apiKey/baseUrl/model）：用户填写 `embeddingConfigs[providerId]` > `.env.local` 的 `VITE_EMBEDDING_API_KEY/MODEL/BASE_URL` > provider def**；env 是"默认凭证包"，与激活 provider 无关（`import.meta.env` 构建期内联，改 `.env.local` 需重跑 build）。`getEmbeddingSettings()` 异步便利（getValue + resolve，非 React 消费者用）
 - `errors.ts` — `EmbeddingDimensionError`（携 expected/actual 维度）。向量长度 ≠ `EMBEDDING_DIMENSIONS`(1536) 时抛出（pgvector 固定列 + ANN 索引装不下异维）
 - `vector-store.ts` — `(db: FavbaseDb, ...)` 纯函数集，走现有 Drizzle RPC proxy（**不引入第二套 RPC**）：
   - `toSqlVector(vec)` → `'[a,b,c]'`（纯，可单测）

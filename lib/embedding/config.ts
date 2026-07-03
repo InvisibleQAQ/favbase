@@ -13,8 +13,10 @@ export interface ResolvedEmbeddingConfig {
 
 /**
  * Pure resolver: `UserSettings` → concrete embedding config. Mirrors
- * `resolveAsrConfig` in `lib/storage/settings.ts`. Fills gaps from the provider
- * def (baseUrl / defaultModel). No storage or network access.
+ * `resolveAsrConfig` in `lib/storage/settings.ts`. Priority per field:
+ * user-filled (`embeddingConfigs`) > `.env.local` (`VITE_EMBEDDING_*`) >
+ * provider def. The env bundle is a "default embedding credential" and applies
+ * regardless of the active provider. No storage or network access.
  */
 export function resolveEmbeddingConfig(settings: UserSettings): ResolvedEmbeddingConfig {
   const providerId = settings.embeddingProvider ?? 'openai';
@@ -23,9 +25,9 @@ export function resolveEmbeddingConfig(settings: UserSettings): ResolvedEmbeddin
 
   return {
     providerId,
-    apiKey: cfg?.apiKey ?? '',
-    baseUrl: cfg?.baseUrl || def.baseUrl,
-    model: cfg?.model || def.defaultModel,
+    apiKey: cfg?.apiKey || (import.meta.env.VITE_EMBEDDING_API_KEY as string) || '',
+    baseUrl: cfg?.baseUrl || (import.meta.env.VITE_EMBEDDING_BASE_URL as string) || def.baseUrl,
+    model: cfg?.model || (import.meta.env.VITE_EMBEDDING_MODEL as string) || def.defaultModel,
     enabled: settings.embeddingEnabled ?? false,
   };
 }
