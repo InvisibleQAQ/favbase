@@ -13,7 +13,9 @@ import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify } from '../../components/iconify';
 import type { BiliFavFolder } from '@/lib/bilibili/types';
 
-const SIDEBAR_WIDTH = 240;
+// Responsive stepped width — narrower on smaller viewports so the second-level
+// folder sidebar doesn't starve the video grid when stacked under the dashboard nav.
+const SIDEBAR_WIDTH = { xs: 160, sm: 200 };
 
 interface FolderSidebarProps {
   folders: BiliFavFolder[];
@@ -30,7 +32,7 @@ export function FolderSidebar({ folders, selectedId, loading, onSelect }: Folder
     <Box
       sx={(theme) => ({
         width: SIDEBAR_WIDTH,
-        minWidth: SIDEBAR_WIDTH,
+        flexShrink: 0,
         alignSelf: 'flex-start',
         borderRight: `1px solid ${theme.vars.palette.divider}`,
         borderBottom: `1px solid ${theme.vars.palette.divider}`,
