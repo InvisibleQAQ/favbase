@@ -47,6 +47,13 @@ export interface BiliFavVideo {
   attr: number;
 }
 
+/**
+ * Sort order for the favorite folder video list (`order` param of
+ * `/x/v3/fav/resource/list`). All server-side, descending, full-folder.
+ * `mtime` = 收藏时间, `view` = 播放量, `pubtime` = 投稿时间.
+ */
+export type BiliFavOrder = 'mtime' | 'view' | 'pubtime';
+
 /** Paginated response for favorite folder video list. */
 export interface BiliFavVideoListResponse {
   has_more: boolean;

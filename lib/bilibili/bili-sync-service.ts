@@ -8,7 +8,7 @@ import { sources } from '@/lib/database/entities/sources';
 import { items } from '@/lib/database/entities/items';
 import { itemSources } from '@/lib/database/entities/item-sources';
 import { normalizeCover } from './url-utils';
-import type { BiliFavFolder, BiliFavVideo } from './types';
+import type { BiliFavFolder, BiliFavOrder, BiliFavVideo } from './types';
 import type { SubtitleRow, SubtitleSource } from '@/lib/subtitle/types';
 
 export { BiliAuthError };
@@ -89,9 +89,10 @@ export async function fetchAndSyncFolders(): Promise<BiliFavFolder[]> {
 export async function fetchAndSyncVideos(
   mediaId: number,
   page: number,
+  order: BiliFavOrder = 'mtime',
 ): Promise<SyncVideosResult> {
   const auth = await checkAuth();
-  const data = await fetchFavVideos(auth, mediaId, page);
+  const data = await fetchFavVideos(auth, mediaId, page, PAGE_SIZE, order);
   const videos = data.medias ?? [];
 
   if (videos.length > 0) {

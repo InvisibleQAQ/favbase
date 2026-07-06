@@ -188,6 +188,9 @@ const en: Record<LocaleKeys, string> = {
   'collections.selectFolder': 'Select a folder',
   'collections.sidebarTitle': 'Bilibili Favorites',
   'collections.noFolders': 'No folders',
+  'collections.sortFavTime': 'Recently favorited',
+  'collections.sortPlay': 'Most played',
+  'collections.sortPubTime': 'Recently published',
 
   'export.title': 'Data Export',
   'export.subtitle': 'Export all data from the database',

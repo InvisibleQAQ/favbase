@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { fetchAndSyncVideos, BiliAuthError } from '@/lib/bilibili/bili-sync-service';
-import type { BiliFavVideo } from '@/lib/bilibili/types';
+import type { BiliFavOrder, BiliFavVideo } from '@/lib/bilibili/types';
 
 type LoginState = 'unknown' | 'logged_in' | 'not_logged_in';
 
@@ -12,6 +12,8 @@ interface UseFavVideosReturn {
   loading: boolean;
   loginState: LoginState;
   error: string | null;
+  order: BiliFavOrder;
+  setOrder: (o: BiliFavOrder) => void;
   goToPage: (p: number) => void;
   retry: () => void;
 }
@@ -24,12 +26,13 @@ export function useBiliFavVideos(mediaId: number): UseFavVideosReturn {
   const [loading, setLoading] = useState(true);
   const [loginState, setLoginState] = useState<LoginState>('unknown');
   const [error, setError] = useState<string | null>(null);
+  const [order, setOrder] = useState<BiliFavOrder>('mtime');
 
-  const fetchPage = useCallback(async (targetPage: number) => {
+  const fetchPage = useCallback(async (targetPage: number, targetOrder: BiliFavOrder) => {
     setLoading(true);
     setError(null);
     try {
-      const result = await fetchAndSyncVideos(mediaId, targetPage);
+      const result = await fetchAndSyncVideos(mediaId, targetPage, targetOrder);
       setLoginState('logged_in');
       setVideos(result.videos);
       setFolderTitle(result.folderTitle);
@@ -46,24 +49,25 @@ export function useBiliFavVideos(mediaId: number): UseFavVideosReturn {
     }
   }, [mediaId]);
 
+  // Initial load + refetch from page 1 whenever mediaId or sort order changes.
   useEffect(() => {
     let cancelled = false;
 
     (async () => {
-      await fetchPage(1);
+      await fetchPage(1, order);
       if (cancelled) return;
     })();
 
     return () => { cancelled = true; };
-  }, [fetchPage]);
+  }, [fetchPage, order]);
 
   const goToPage = useCallback((p: number) => {
-    fetchPage(p);
-  }, [fetchPage]);
+    fetchPage(p, order);
+  }, [fetchPage, order]);
 
   const retry = useCallback(() => {
-    fetchPage(page);
-  }, [fetchPage, page]);
+    fetchPage(page, order);
+  }, [fetchPage, page, order]);
 
-  return { videos, folderTitle, page, totalPages, loading, loginState, error, goToPage, retry };
+  return { videos, folderTitle, page, totalPages, loading, loginState, error, order, setOrder, goToPage, retry };
 }

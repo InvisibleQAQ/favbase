@@ -186,6 +186,9 @@ const zhCN = {
   'collections.selectFolder': '请选择一个收藏夹',
   'collections.sidebarTitle': 'BiliBili 收藏夹',
   'collections.noFolders': '暂无收藏夹',
+  'collections.sortFavTime': '最近收藏',
+  'collections.sortPlay': '最多播放',
+  'collections.sortPubTime': '最近投稿',
 
   'export.title': '数据导出',
   'export.subtitle': '导出数据库中的全部数据',

@@ -11,6 +11,7 @@ import Skeleton from '@mui/material/Skeleton';
 import Pagination from '@mui/material/Pagination';
 
 import { useTranslation } from '@/lib/i18n/use-translation';
+import type { BiliFavOrder } from '@/lib/bilibili/types';
 import { Iconify } from '../../components/iconify';
 import { DashboardContent } from '../../layouts/dashboard';
 import { useBiliFavFolders } from './use-bili-fav-folders';
@@ -132,6 +133,50 @@ function EmptyFolderState() {
 }
 
 // ---------------------------------------------------------------------------
+// Sort control — server-side order (mtime/view/pubtime), all descending
+// ---------------------------------------------------------------------------
+
+const SORT_OPTIONS = [
+  { value: 'mtime', labelKey: 'collections.sortFavTime', icon: 'solar:clock-circle-bold' },
+  { value: 'view', labelKey: 'collections.sortPlay', icon: 'solar:play-circle-bold' },
+  { value: 'pubtime', labelKey: 'collections.sortPubTime', icon: 'solar:calendar-bold' },
+] as const;
+
+function SortControl({ order, onChange }: { order: BiliFavOrder; onChange: (o: BiliFavOrder) => void }) {
+  const { t } = useTranslation();
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 2, flexWrap: 'wrap' }}>
+      {SORT_OPTIONS.map((opt) => {
+        const active = order === opt.value;
+        return (
+          <Button
+            key={opt.value}
+            size="small"
+            variant="text"
+            startIcon={<Iconify icon={opt.icon} width={18} />}
+            onClick={() => onChange(opt.value)}
+            sx={{
+              minWidth: 0,
+              px: 1,
+              color: active ? 'primary.main' : 'text.secondary',
+              fontWeight: active ? 600 : 400,
+              textDecoration: active ? 'underline' : 'none',
+              textUnderlineOffset: 4,
+              '&:hover': {
+                bgcolor: 'transparent',
+                color: active ? 'primary.dark' : 'text.primary',
+              },
+            }}
+          >
+            {t(opt.labelKey)}
+          </Button>
+        );
+      })}
+    </Box>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Video grid panel (only rendered when a valid folder is selected)
 // ---------------------------------------------------------------------------
 
@@ -144,7 +189,7 @@ function VideoGridPanel({ mediaId, totalCount, syncing, onSync, lastSyncedAt, au
   autoTranscribe: ReturnType<typeof useAutoTranscribe>;
 }) {
   const { t } = useTranslation();
-  const { videos, folderTitle, page, totalPages, loading, loginState, error, goToPage, retry } =
+  const { videos, folderTitle, page, totalPages, loading, loginState, error, order, setOrder, goToPage, retry } =
     useBiliFavVideos(mediaId);
 
   const { getState, startTranscribe, cancelTranscribe, activeBvid } =
@@ -197,6 +242,11 @@ function VideoGridPanel({ mediaId, totalCount, syncing, onSync, lastSyncedAt, au
           onStop={autoTranscribe.stop}
         />
       </Box>
+
+      {/* Sort control — between transcribe bar and video grid */}
+      {loginState !== 'not_logged_in' && !error && (
+        <SortControl order={order} onChange={setOrder} />
+      )}
 
       {/* Video content */}
       {loading ? (

@@ -5,7 +5,7 @@
  */
 
 import type { SubtitleResult, SubtitleRow } from '@/lib/subtitle/types';
-import type { BiliAuthInfo, BiliFavFolder, BiliFavVideoListResponse, DashAudioStream, SubtitleTrack } from './types';
+import type { BiliAuthInfo, BiliFavFolder, BiliFavOrder, BiliFavVideoListResponse, DashAudioStream, SubtitleTrack } from './types';
 
 // ---------------------------------------------------------------------------
 // Internal helpers (not exported)
@@ -20,8 +20,8 @@ const ENDPOINTS = {
     `https://api.bilibili.com/x/player/playurl?bvid=${encodeURIComponent(bvid)}&cid=${encodeURIComponent(String(cid))}&fnval=16&fnver=0&platform=html5&high_quality=1&otype=json`,
   favFolderListAll: (mid: string) =>
     `https://api.bilibili.com/x/v3/fav/folder/created/list-all?up_mid=${encodeURIComponent(mid)}`,
-  favResourceList: (mediaId: number, pn: number, ps: number = 20) =>
-    `https://api.bilibili.com/x/v3/fav/resource/list?media_id=${encodeURIComponent(String(mediaId))}&pn=${encodeURIComponent(String(pn))}&ps=${encodeURIComponent(String(ps))}&platform=web`,
+  favResourceList: (mediaId: number, pn: number, ps: number = 20, order: BiliFavOrder = 'mtime') =>
+    `https://api.bilibili.com/x/v3/fav/resource/list?media_id=${encodeURIComponent(String(mediaId))}&pn=${encodeURIComponent(String(pn))}&ps=${encodeURIComponent(String(ps))}&order=${order}&platform=web`,
 } as const;
 
 const BILI_COOKIE_URL = 'https://www.bilibili.com';
@@ -106,8 +106,9 @@ export async function fetchFavVideos(
   mediaId: number,
   page: number = 1,
   ps: number = 20,
+  order: BiliFavOrder = 'mtime',
 ): Promise<BiliFavVideoListResponse> {
-  const url = ENDPOINTS.favResourceList(mediaId, page, ps);
+  const url = ENDPOINTS.favResourceList(mediaId, page, ps, order);
   const res = await fetch(url, {
     headers: { Cookie: `SESSDATA=${auth.sessdata}` },
   });
