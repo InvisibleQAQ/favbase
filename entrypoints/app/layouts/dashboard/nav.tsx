@@ -178,22 +178,61 @@ function ExpandChevron({ expanded }: { expanded: boolean }) {
 
 // ---------------------------------------------------------------------------
 // Child leaf (second level, e.g. Bilibili Favorites): indented RouterLink text
-// hanging off the fishbone rail (drawn by the wrapper in CollectionsBranch),
-// primary highlight when its route is active.
+// wired to the parent via a fishbone connector — a vertical spine segment plus
+// a horizontal rib per leaf. The last leaf's spine stops at the rib midpoint to
+// form an L-corner instead of a hanging tail. Primary highlight when active.
 // ---------------------------------------------------------------------------
 
-function NavChildLeaf({ item, isActive }: { item: NavItem; isActive: boolean }) {
+const FISHBONE_RIB = 14; // px reach from spine to leaf
+
+function NavChildLeaf({
+  item,
+  isActive,
+  isLast,
+}: {
+  item: NavItem;
+  isActive: boolean;
+  isLast: boolean;
+}) {
   const { t } = useTranslation();
 
   return (
-    <ListItem disableGutters disablePadding>
+    <ListItem
+      disableGutters
+      disablePadding
+      sx={(theme) => {
+        const rail = varAlpha(theme.vars.palette.grey['500Channel'], 0.24);
+        return {
+          position: 'relative',
+          '&::before': {
+            content: '""',
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            width: 0,
+            height: isLast ? '50%' : '100%',
+            borderLeft: `1px solid ${rail}`,
+          },
+          '&::after': {
+            content: '""',
+            position: 'absolute',
+            left: 0,
+            top: '50%',
+            width: FISHBONE_RIB,
+            height: 0,
+            borderTop: `1px solid ${rail}`,
+          },
+        };
+      }}
+    >
       <ListItemButton
         disableGutters
         component={RouterLink}
         to={item.path}
         sx={[
           (theme) => ({
-            pl: 1.5,
+            ml: `${FISHBONE_RIB}px`,
+            pl: 1,
             py: 0.75,
             pr: 1,
             borderRadius: 0.75,
@@ -280,23 +319,22 @@ function CollectionsBranch({ item, pinned }: { item: NavItem; pinned: boolean })
 
       <Collapse in={expanded} unmountOnExit sx={{ width: 1 }}>
         <Box
-          sx={(theme) => ({
+          sx={{
             display: 'flex',
             flexDirection: 'column',
-            gap: 0.25,
             mt: 0.25,
-            // Fishbone rail: a continuous vertical guide line down the child group.
-            // Parent icon center = pl(16px) + icon(24px)/2 = 28px = ml 3.5, so the
-            // rail lines up with the parent icon's vertical midline.
+            // Fishbone spine sits under the parent icon's vertical midline:
+            // parent icon center = pl(16px) + icon(24px)/2 = 28px = ml 3.5.
+            // The spine + ribs themselves are drawn per-leaf in NavChildLeaf.
             ml: 3.5,
-            borderLeft: `1px solid ${varAlpha(theme.vars.palette.grey['500Channel'], 0.24)}`,
-          })}
+          }}
         >
-          {(item.children ?? []).map((child) => (
+          {(item.children ?? []).map((child, idx, arr) => (
             <NavChildLeaf
               key={child.title}
               item={child}
               isActive={pathname.startsWith(child.path)}
+              isLast={idx === arr.length - 1}
             />
           ))}
         </Box>
