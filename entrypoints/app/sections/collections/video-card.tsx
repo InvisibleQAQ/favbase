@@ -210,7 +210,7 @@ function ActionBar({
   onCancel?: () => void;
   disabled?: boolean;
 }) {
-  const { contentStatus, transcribing, progress, stage, stageParams, error, retryCountdown } = state;
+  const { contentStatus, transcribing, progress, stage, stageParams, error, retryCountdown, indexed } = state;
 
   // Transcribing → progress display
   if (transcribing) {
@@ -266,12 +266,12 @@ function ActionBar({
     );
   }
 
-  // Has content → source badge
+  // Has content → source badge (+ indexed badge when content_state = 'embedded')
   if (contentStatus === 'has_official' || contentStatus === 'has_asr') {
     const label = contentStatus === 'has_official' ? t('card.sourceCC') : t('card.sourceASR');
     const color = contentStatus === 'has_official' ? 'info' : 'success';
     return (
-      <Box sx={{ px: 1.5, pb: 1.5 }}>
+      <Box sx={{ px: 1.5, pb: 1.5, display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
         <Chip
           label={label}
           icon={<Iconify icon="solar:subtitles-bold-duotone" width={14} />}
@@ -280,6 +280,16 @@ function ActionBar({
           variant="outlined"
           sx={{ height: 24 }}
         />
+        {indexed && (
+          <Chip
+            label={t('card.indexed')}
+            icon={<Iconify icon="solar:database-bold-duotone" width={14} />}
+            size="small"
+            color="secondary"
+            variant="outlined"
+            sx={{ height: 24 }}
+          />
+        )}
       </Box>
     );
   }

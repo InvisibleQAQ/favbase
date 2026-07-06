@@ -5,6 +5,7 @@ import type {
 } from '@/lib/transcription/types';
 import type { BiliFavVideo } from './types';
 import { transcribeAndPersist, createStatusListener } from './transcribe-utils';
+import { getEmbeddedBvids, type PersistContentResult } from './bili-sync-service';
 import { onVideoCacheChange } from '@/lib/cache/video-cache';
 
 // ---------------------------------------------------------------------------
@@ -13,14 +14,22 @@ import { onVideoCacheChange } from '@/lib/cache/video-cache';
 
 export type ContentStatus = 'unknown' | 'checking' | 'has_official' | 'has_asr' | 'none';
 
+/**
+ * Background pipeline stages plus the local-only 'indexing' stage shown while
+ * chunk+embed runs in app.html after transcription (not pushed by background).
+ */
+export type LocalTranscribeStage = TranscribeStage | 'indexing';
+
 export interface VideoTranscribeState {
   contentStatus: ContentStatus;
   transcribing: boolean;
   progress: number;
-  stage: TranscribeStage | '';
+  stage: LocalTranscribeStage | '';
   stageParams?: Record<string, string | number>;
   error: TranscribeErrorInfo | null;
   retryCountdown: number;
+  /** True when the item's content_state is 'embedded' (RAG index built). */
+  indexed: boolean;
 }
 
 export interface CoordinatorSnapshot {
@@ -35,6 +44,7 @@ const DEFAULT_STATE: VideoTranscribeState = {
   stage: '',
   error: null,
   retryCountdown: 0,
+  indexed: false,
 };
 
 export { DEFAULT_STATE };
@@ -97,7 +107,7 @@ export class TranscriptionCoordinator {
     }
     this.emit();
 
-    Promise.all(
+    const cacheQuery = Promise.all(
       bvids.map((bvid) =>
         browser.runtime
           .sendMessage({ type: 'GET_VIDEO_CACHE', platform: 'bilibili', videoId: bvid })
@@ -107,9 +117,14 @@ export class TranscriptionCoordinator {
           }))
           .catch(() => ({ bvid, entry: null })),
       ),
-    ).then((results) => {
+    );
+    // Parallel DB query for the "indexed" chip (content_state = 'embedded').
+    const embeddedQuery = getEmbeddedBvids(bvids).catch(() => [] as string[]);
+
+    Promise.all([cacheQuery, embeddedQuery]).then(([results, embeddedBvids]) => {
       if (gen !== this.generation) return;
 
+      const embeddedSet = new Set(embeddedBvids);
       this.stateMap = new Map(this.stateMap);
       for (const { bvid, entry } of results) {
         const current = this.stateMap.get(bvid);
@@ -122,7 +137,11 @@ export class TranscriptionCoordinator {
               : 'has_asr'
             : 'none';
 
-        this.stateMap.set(bvid, { ...(current ?? { ...DEFAULT_STATE }), contentStatus });
+        this.stateMap.set(bvid, {
+          ...(current ?? { ...DEFAULT_STATE }),
+          contentStatus,
+          indexed: embeddedSet.has(bvid),
+        });
       }
       this.emit();
     });
@@ -147,7 +166,13 @@ export class TranscriptionCoordinator {
 
     this.installStatusListener();
 
-    transcribeAndPersist(bvid, title)
+    let indexResult: PersistContentResult = null;
+
+    transcribeAndPersist(bvid, title, {
+      // Local stage: shown while chunk+embed runs after the background 'done'.
+      onIndexing: () => this.patchVideo(bvid, { progress: 100, stage: 'indexing' }),
+      onIndexed: (result) => { indexResult = result; },
+    })
       .then((res) => {
         if (res.success) {
           this.patchVideo(bvid, {
@@ -155,6 +180,7 @@ export class TranscriptionCoordinator {
             progress: 100,
             stage: 'done',
             contentStatus: res.data.source === 'official' ? 'has_official' : 'has_asr',
+            indexed: indexResult === 'embedded',
             error: null,
           });
         } else {

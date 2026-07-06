@@ -28,6 +28,7 @@ function stageLabel(state: AutoTranscribeState): string {
     case 'syncing':
       return t('autoTranscribe.syncing', { current: state.currentPage, total: state.totalPages });
     case 'transcribing':
+      if (videoStage === 'indexing') return t('autoTranscribe.indexing');
       if (videoStage === 'start') return t('autoTranscribe.preparing');
       if (videoStage) return t('autoTranscribe.transcribingPct', { progress: videoProgress });
       return t('autoTranscribe.transcribingGeneric');

@@ -79,7 +79,11 @@ export interface AutoTranscribeAdapter {
   fetchPage(collectionId: string, page: number): Promise<AutoTranscribePageResult>;
   getPendingIds(videoIds: string[]): Promise<string[]>;
   getPreview(collectionId: string): Promise<AutoTranscribePreview>;
-  transcribe(videoId: string, title: string): Promise<TranscribeResponse>;
+  /**
+   * Transcribe + persist + index. `onIndexing` fires after transcription
+   * succeeds, while local chunk+embed indexing runs (UI "indexing" stage).
+   */
+  transcribe(videoId: string, title: string, onIndexing?: () => void): Promise<TranscribeResponse>;
   markError(videoId: string): Promise<void>;
   hasAsrKey(): Promise<boolean>;
   createStatusListener(

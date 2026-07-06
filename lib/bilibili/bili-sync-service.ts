@@ -3,6 +3,7 @@ import { getBiliAuth, fetchFavFolders, fetchFavVideos, BiliAuthError } from './b
 import { syncFavFoldersToDb } from './favorites-sync';
 import { syncFavVideosToDb } from './videos-sync';
 import { persistSubtitleContent } from './content-sync';
+import { chunkSubtitleRows, indexItemChunks } from '@/lib/embedding';
 import { getDb } from '@/lib/database';
 import { sources } from '@/lib/database/entities/sources';
 import { items } from '@/lib/database/entities/items';
@@ -197,15 +198,48 @@ export async function markVideoError(bvid: string): Promise<void> {
   } catch { /* fire-and-forget */ }
 }
 
+export type PersistContentResult = 'embedded' | 'chunked' | null;
+
+/**
+ * Persist transcription results and build the RAG index: item_contents +
+ * chunkSubtitleRows (subtitle chunker — the platform-level knowledge) +
+ * indexItemChunks (content-agnostic chunk store + best-effort embedding).
+ * Logs errors but never throws; returns the reached content state
+ * ('embedded' | 'chunked') or null when persist failed / item missing.
+ */
 export async function persistContent(
   bvid: string,
   rows: SubtitleRow[],
   source: SubtitleSource,
-): Promise<void> {
+): Promise<PersistContentResult> {
   try {
     const db = getDb();
-    await persistSubtitleContent(db, bvid, rows, source);
-  } catch { /* fire-and-forget */ }
+    const itemId = await persistSubtitleContent(db, bvid, rows, source);
+    if (!itemId) return null;
+
+    const chunks = chunkSubtitleRows(rows);
+    return await indexItemChunks(db, itemId, chunks);
+  } catch (err) {
+    console.error(`[bili-sync] Content indexing failed for bvid=${bvid}:`, err);
+    return null;
+  }
+}
+
+/** Subset of the given bvids whose content_state is 'embedded' (indexed chip). */
+export async function getEmbeddedBvids(pageBvids: string[]): Promise<string[]> {
+  if (pageBvids.length === 0) return [];
+  const db = getDb();
+  const rows = await db
+    .select({ platformItemId: items.platformItemId })
+    .from(items)
+    .where(
+      and(
+        eq(items.platform, PLATFORM),
+        inArray(items.platformItemId, pageBvids),
+        eq(items.contentState, 'embedded'),
+      ),
+    );
+  return rows.map((r) => r.platformItemId);
 }
 
 // ---------------------------------------------------------------------------

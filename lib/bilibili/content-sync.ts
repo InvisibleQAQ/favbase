@@ -8,14 +8,15 @@ const PLATFORM = 'bilibili';
 
 /**
  * Persist subtitle rows to PGlite: upsert item_contents + update content_state.
- * Fire-and-forget from UI — logs errors but never throws.
+ * Logs errors but never throws. Returns the item's id so the caller can chain
+ * chunk indexing, or null when the item is missing / persist failed.
  */
 export async function persistSubtitleContent(
   db: FavbaseDb,
   bvid: string,
   rows: SubtitleRow[],
   source: SubtitleSource,
-): Promise<void> {
+): Promise<string | null> {
   try {
     // 1. Find the item by bvid
     const existing = await db
@@ -31,7 +32,7 @@ export async function persistSubtitleContent(
 
     if (existing.length === 0) {
       console.warn(`[content-sync] No item found for bvid=${bvid}, skipping persist`);
-      return;
+      return null;
     }
 
     const itemId = existing[0].id;
@@ -55,7 +56,9 @@ export async function persistSubtitleContent(
       .where(eq(items.id, itemId));
 
     console.info(`[content-sync] Persisted ${rows.length} rows for bvid=${bvid} (source=${source})`);
+    return itemId;
   } catch (err) {
     console.error(`[content-sync] Failed to persist content for bvid=${bvid}:`, err);
+    return null;
   }
 }

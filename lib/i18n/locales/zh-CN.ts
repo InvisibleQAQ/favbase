@@ -116,6 +116,7 @@ const zhCN = {
   'stage.done': '转录完成',
   'stage.cancelled': '已取消',
   'stage.failed': '转录失败',
+  'stage.indexing': '正在建立索引…',
 
   'error.ASR_REQUEST_TIMEOUT': '操作已取消',
   'error.ASR_RATE_LIMIT': '转录服务速率限制',
@@ -137,6 +138,7 @@ const zhCN = {
   'card.favAt': '收藏于 {{date}}',
   'card.favYearsAgo': '收藏于{{years}}年前',
   'card.invalidVideo': '已失效视频',
+  'card.indexed': '已索引',
 
   'autoTranscribe.start': '自动转录',
   'autoTranscribe.stop': '停止',
@@ -154,6 +156,7 @@ const zhCN = {
   'autoTranscribe.preparing': '准备转录...',
   'autoTranscribe.transcribingPct': '转录中 {{progress}}%',
   'autoTranscribe.transcribingGeneric': '转录中...',
+  'autoTranscribe.indexing': '正在建立索引…',
   'autoTranscribe.waitingTranscribe': '转录中 {{seconds}}s...',
   'autoTranscribe.statsExisting': '已有 {{count}}',
   'autoTranscribe.allDone': '所有视频已转录',

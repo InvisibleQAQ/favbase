@@ -118,6 +118,7 @@ const en: Record<LocaleKeys, string> = {
   'stage.done': 'Transcription complete',
   'stage.cancelled': 'Cancelled',
   'stage.failed': 'Transcription failed',
+  'stage.indexing': 'Building index…',
 
   'error.ASR_REQUEST_TIMEOUT': 'Operation cancelled',
   'error.ASR_RATE_LIMIT': 'ASR rate limited',
@@ -139,6 +140,7 @@ const en: Record<LocaleKeys, string> = {
   'card.favAt': 'Saved {{date}}',
   'card.favYearsAgo': '{{years}}y ago',
   'card.invalidVideo': 'Unavailable video',
+  'card.indexed': 'Indexed',
 
   'autoTranscribe.start': 'Auto Transcribe',
   'autoTranscribe.stop': 'Stop',
@@ -156,6 +158,7 @@ const en: Record<LocaleKeys, string> = {
   'autoTranscribe.preparing': 'Preparing...',
   'autoTranscribe.transcribingPct': 'Transcribing {{progress}}%',
   'autoTranscribe.transcribingGeneric': 'Transcribing...',
+  'autoTranscribe.indexing': 'Building index…',
   'autoTranscribe.waitingTranscribe': 'Transcribing {{seconds}}s...',
   'autoTranscribe.statsExisting': 'Existing {{count}}',
   'autoTranscribe.allDone': 'All videos transcribed',

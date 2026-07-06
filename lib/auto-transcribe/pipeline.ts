@@ -258,7 +258,9 @@ export class AutoTranscribePipeline {
           });
 
           try {
-            const response = await this.adapter.transcribe(videoId, title);
+            const response = await this.adapter.transcribe(videoId, title, () =>
+              this.patch({ videoStage: 'indexing', videoProgress: 100 }),
+            );
 
             if (response.success) {
               if (response.data.source === 'official') stats.cc++;
@@ -275,7 +277,9 @@ export class AutoTranscribePipeline {
 
               if (errorCode === 'ASR_RATE_LIMIT') {
                 await this.waitWithCountdown(RATE_LIMIT_PAUSE_MS, 'paused', signal);
-                const retryRes = await this.adapter.transcribe(videoId, title);
+                const retryRes = await this.adapter.transcribe(videoId, title, () =>
+                  this.patch({ videoStage: 'indexing', videoProgress: 100 }),
+                );
                 if (retryRes.success) {
                   if (retryRes.data.source === 'official') stats.cc++;
                   else stats.asr++;

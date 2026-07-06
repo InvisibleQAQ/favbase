@@ -3,8 +3,54 @@ import type { FavbaseDb } from '@/lib/database';
 import { schema } from '@/lib/database';
 import { EMBEDDING_DIMENSIONS } from '@/lib/ai';
 import { EmbeddingDimensionError } from './errors';
+import type { ChunkInput } from './types';
 
 const { itemChunks } = schema;
+
+// ---------------------------------------------------------------------------
+// replaceItemChunks
+// ---------------------------------------------------------------------------
+
+export interface ReplacedChunk {
+  id: string;
+  chunkIndex: number;
+  chunkText: string;
+}
+
+/**
+ * Rebuild an item's chunks: transactional delete-by-item + batch insert with
+ * `chunk_index` numbered from 0 (satisfies `uq(item_id, chunk_index)` on
+ * repeat transcriptions). Time span goes into `start_sec`/`end_sec` (NULL for
+ * non-timed content). Returns the inserted rows so the caller can attach
+ * embeddings by id. Empty `chunks` just clears existing rows.
+ */
+export async function replaceItemChunks(
+  db: FavbaseDb,
+  itemId: string,
+  chunks: ChunkInput[],
+): Promise<ReplacedChunk[]> {
+  return db.transaction(async (tx) => {
+    await tx.delete(itemChunks).where(eq(itemChunks.itemId, itemId));
+    if (chunks.length === 0) return [];
+
+    return tx
+      .insert(itemChunks)
+      .values(
+        chunks.map((chunk, i) => ({
+          itemId,
+          chunkIndex: i,
+          chunkText: chunk.text,
+          startSec: chunk.startSec ?? null,
+          endSec: chunk.endSec ?? null,
+        })),
+      )
+      .returning({
+        id: itemChunks.id,
+        chunkIndex: itemChunks.chunkIndex,
+        chunkText: itemChunks.chunkText,
+      });
+  });
+}
 
 // ---------------------------------------------------------------------------
 // toSqlVector

@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, integer, timestamp, index, unique, vector } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, integer, real, timestamp, index, unique, vector } from 'drizzle-orm/pg-core';
 import { items } from './items';
 
 export const itemChunks = pgTable(
@@ -11,6 +11,10 @@ export const itemChunks = pgTable(
     chunkIndex: integer('chunk_index').notNull(),
     chunkText: text('chunk_text').notNull(),
     embedding: vector('embedding', { dimensions: 1536 }),
+    // Time span of subtitle-derived chunks (first row start / last row end).
+    // NULL for non-timed content and rows created before migration v003.
+    startSec: real('start_sec'),
+    endSec: real('end_sec'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },

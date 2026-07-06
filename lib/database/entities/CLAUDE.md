@@ -9,7 +9,7 @@ Per-table Drizzle schema 定义（entity-per-file）。
 - `items.ts` — items 表（核心条目，content_state 6 态 CHECK 约束，FK → authors）
 - `item-sources.ts` — item_sources 关联表（复合主键 item_id + source_id）
 - `item-contents.ts` — item_contents 表（1:1，PK = item_id FK → items）
-- `item-chunks.ts` — item_chunks 表（含 VECTOR(1536) embedding 列）
+- `item-chunks.ts` — item_chunks 表（含 VECTOR(1536) embedding 列 + nullable `start_sec`/`end_sec` real 列：字幕 chunk 时间跨度（首行 start/末行 end），图文内容与 v003 前旧行为 NULL；时间戳只存列不混入 chunk_text）
 
 ## 约定
 

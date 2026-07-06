@@ -1,6 +1,7 @@
 import type { PGlite } from '@electric-sql/pglite';
 import { up as v001Init } from './v001-init';
 import { up as v002VectorIndex } from './v002-vector-index';
+import { up as v003ChunkTimestamps } from './v003-chunk-timestamps';
 
 interface Migration {
   version: number;
@@ -11,6 +12,7 @@ interface Migration {
 const migrations: Migration[] = [
   { version: 1, name: 'v1_init', up: v001Init },
   { version: 2, name: 'v2_vector_index', up: v002VectorIndex },
+  { version: 3, name: 'v3_chunk_timestamps', up: v003ChunkTimestamps },
 ];
 
 const MIGRATIONS_DDL = `

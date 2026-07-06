@@ -54,8 +54,8 @@ export function createBiliAutoTranscribeAdapter(): AutoTranscribeAdapter {
       };
     },
 
-    async transcribe(videoId: string, title: string): Promise<TranscribeResponse> {
-      return transcribeAndPersist(videoId, title);
+    async transcribe(videoId: string, title: string, onIndexing?: () => void): Promise<TranscribeResponse> {
+      return transcribeAndPersist(videoId, title, { onIndexing });
     },
 
     markError: markVideoError,

@@ -21,13 +21,25 @@ export {
 
 export { EmbeddingDimensionError } from './errors';
 
+export type { ChunkInput } from './types';
+
+export { chunkSubtitleRows, type ChunkerOptions } from './chunker';
+
+export {
+  indexItemChunks,
+  type IndexingDeps,
+  type IndexedContentState,
+} from './indexing';
+
 export {
   toSqlVector,
+  replaceItemChunks,
   upsertChunkEmbeddings,
   semanticSearchChunks,
   deleteItemEmbeddings,
   clearAllEmbeddings,
   getEmbeddingStats,
+  type ReplacedChunk,
   type ChunkEmbeddingEntry,
   type SemanticSearchOptions,
   type SemanticSearchHit,
