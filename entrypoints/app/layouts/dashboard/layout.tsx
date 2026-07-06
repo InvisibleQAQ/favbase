@@ -12,6 +12,7 @@ import { sidebarPinnedStorage } from '@/lib/storage';
 import { Iconify } from '../../components/iconify';
 
 import { NavMobile, NavDesktop } from './nav';
+import { HeaderActions } from './header-actions';
 import { layoutClasses } from '../core/classes';
 import { dashboardLayoutVars } from './css-vars';
 import { navData } from '../nav-config';
@@ -31,7 +32,7 @@ export function DashboardLayout({
   sx,
   cssVars,
   children,
-  layoutQuery = 'lg',
+  layoutQuery = 'md',
 }: DashboardLayoutProps) {
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up(layoutQuery));
@@ -85,9 +86,7 @@ export function DashboardLayout({
             )}
           </Box>
         ),
-        rightArea: (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0, sm: 0.75 } }} />
-        ),
+        rightArea: <HeaderActions />,
       }}
     />
   );
