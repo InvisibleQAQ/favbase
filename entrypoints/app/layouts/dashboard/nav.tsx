@@ -1,11 +1,12 @@
 import type { Theme, SxProps, Breakpoint } from '@mui/material/styles';
 
-import { useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { varAlpha } from 'minimal-shared/utils';
 
 import Box from '@mui/material/Box';
 import ListItem from '@mui/material/ListItem';
 import Tooltip from '@mui/material/Tooltip';
+import Collapse from '@mui/material/Collapse';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 import ListItemButton from '@mui/material/ListItemButton';
@@ -14,6 +15,7 @@ import Drawer, { drawerClasses } from '@mui/material/Drawer';
 import { useLocation, Link as RouterLink } from 'react-router-dom';
 
 import { useTranslation } from '@/lib/i18n/use-translation';
+import { Iconify } from '../../components/iconify';
 import type { NavItem } from '../nav-config';
 
 export type NavContentProps = {
@@ -90,9 +92,221 @@ export function NavMobile({
   );
 }
 
+// ---------------------------------------------------------------------------
+// Shared leaf button (top-level: Dashboard / Collections / Settings)
+// ---------------------------------------------------------------------------
+
+function NavLeafButton({
+  item,
+  isActive,
+  pinned,
+}: {
+  item: NavItem;
+  isActive: boolean;
+  pinned: boolean;
+}) {
+  const { t } = useTranslation();
+
+  const button = (
+    <ListItemButton
+      disableGutters
+      component={RouterLink}
+      to={item.path}
+      sx={[
+        (theme) => ({
+          pl: pinned ? 2 : 0,
+          py: 1,
+          gap: pinned ? 2 : 0,
+          pr: pinned ? 1.5 : 0,
+          borderRadius: 0.75,
+          typography: 'body2',
+          fontWeight: 'fontWeightMedium',
+          color: theme.vars.palette.text.secondary,
+          minHeight: 44,
+          justifyContent: pinned ? 'flex-start' : 'center',
+          ...(isActive && {
+            fontWeight: 'fontWeightSemiBold',
+            color: theme.vars.palette.primary.main,
+            bgcolor: varAlpha(theme.vars.palette.primary.mainChannel, 0.08),
+            '&:hover': {
+              bgcolor: varAlpha(theme.vars.palette.primary.mainChannel, 0.16),
+            },
+          }),
+        }),
+      ]}
+    >
+      <Box component="span" sx={{ width: 24, height: 24, display: 'flex' }}>
+        {item.icon}
+      </Box>
+      {pinned && (
+        <>
+          <Box component="span" sx={{ flexGrow: 1 }}>
+            {t(item.title)}
+          </Box>
+          {item.info && item.info}
+        </>
+      )}
+    </ListItemButton>
+  );
+
+  return (
+    <ListItem disableGutters disablePadding>
+      {pinned ? (
+        button
+      ) : (
+        <Tooltip title={t(item.title)} placement="right" arrow>
+          {button}
+        </Tooltip>
+      )}
+    </ListItem>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Chevron indicator for expandable branches
+// ---------------------------------------------------------------------------
+
+function ExpandChevron({ expanded }: { expanded: boolean }) {
+  return (
+    <Iconify
+      icon={expanded ? 'eva:arrow-ios-upward-fill' : 'eva:arrow-ios-downward-fill'}
+      width={16}
+      sx={{ color: 'text.disabled', flexShrink: 0 }}
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Child leaf (second level, e.g. Bilibili Favorites): indented RouterLink text
+// hanging off the fishbone rail (drawn by the wrapper in CollectionsBranch),
+// primary highlight when its route is active.
+// ---------------------------------------------------------------------------
+
+function NavChildLeaf({ item, isActive }: { item: NavItem; isActive: boolean }) {
+  const { t } = useTranslation();
+
+  return (
+    <ListItem disableGutters disablePadding>
+      <ListItemButton
+        disableGutters
+        component={RouterLink}
+        to={item.path}
+        sx={[
+          (theme) => ({
+            pl: 1.5,
+            py: 0.75,
+            pr: 1,
+            borderRadius: 0.75,
+            minHeight: 36,
+            typography: 'body2',
+            color: theme.vars.palette.text.secondary,
+            ...(isActive && {
+              fontWeight: 'fontWeightSemiBold',
+              color: theme.vars.palette.primary.main,
+              bgcolor: varAlpha(theme.vars.palette.primary.mainChannel, 0.08),
+              '&:hover': {
+                bgcolor: varAlpha(theme.vars.palette.primary.mainChannel, 0.16),
+              },
+            }),
+          }),
+        ]}
+      >
+        <Box
+          component="span"
+          sx={{ flexGrow: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+        >
+          {t(item.title)}
+        </Box>
+      </ListItemButton>
+    </ListItem>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Collections branch: collapsible parent (pinned) or icon-only jump (unpinned)
+// ---------------------------------------------------------------------------
+
+function CollectionsBranch({ item, pinned }: { item: NavItem; pinned: boolean }) {
+  const { t } = useTranslation();
+  const { pathname } = useLocation();
+  const isActive = pathname.startsWith(item.path);
+  const [expanded, setExpanded] = useState(isActive);
+
+  // Auto-expand whenever we navigate into a matching route.
+  useEffect(() => {
+    if (pathname.startsWith(item.path)) setExpanded(true);
+  }, [pathname, item.path]);
+
+  // Unpinned (72px): icon-only, click jumps to /collections (RouterLink), no tree.
+  if (!pinned) {
+    return <NavLeafButton item={item} isActive={isActive} pinned={false} />;
+  }
+
+  return (
+    <ListItem disableGutters disablePadding sx={{ flexDirection: 'column', alignItems: 'stretch' }}>
+      <ListItemButton
+        disableGutters
+        onClick={() => setExpanded((prev) => !prev)}
+        sx={[
+          (theme) => ({
+            pl: 2,
+            py: 1,
+            gap: 2,
+            pr: 1.5,
+            borderRadius: 0.75,
+            typography: 'body2',
+            fontWeight: 'fontWeightMedium',
+            color: theme.vars.palette.text.secondary,
+            minHeight: 44,
+            ...(isActive && {
+              fontWeight: 'fontWeightSemiBold',
+              color: theme.vars.palette.primary.main,
+              bgcolor: varAlpha(theme.vars.palette.primary.mainChannel, 0.08),
+              '&:hover': {
+                bgcolor: varAlpha(theme.vars.palette.primary.mainChannel, 0.16),
+              },
+            }),
+          }),
+        ]}
+      >
+        <Box component="span" sx={{ width: 24, height: 24, display: 'flex' }}>
+          {item.icon}
+        </Box>
+        <Box component="span" sx={{ flexGrow: 1 }}>
+          {t(item.title)}
+        </Box>
+        <ExpandChevron expanded={expanded} />
+      </ListItemButton>
+
+      <Collapse in={expanded} unmountOnExit sx={{ width: 1 }}>
+        <Box
+          sx={(theme) => ({
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 0.25,
+            mt: 0.25,
+            // Fishbone rail: a continuous vertical guide line down the child group.
+            // Parent icon center = pl(16px) + icon(24px)/2 = 28px = ml 3.5, so the
+            // rail lines up with the parent icon's vertical midline.
+            ml: 3.5,
+            borderLeft: `1px solid ${varAlpha(theme.vars.palette.grey['500Channel'], 0.24)}`,
+          })}
+        >
+          {(item.children ?? []).map((child) => (
+            <NavChildLeaf
+              key={child.title}
+              item={child}
+              isActive={pathname.startsWith(child.path)}
+            />
+          ))}
+        </Box>
+      </Collapse>
+    </ListItem>
+  );
+}
+
 function NavContent({ data, sx, pinned = true }: NavContentProps) {
   const { pathname } = useLocation();
-  const { t } = useTranslation();
 
   return (
     <>
@@ -137,63 +351,18 @@ function NavContent({ data, sx, pinned = true }: NavContentProps) {
         ]}
       >
         <Box component="ul" sx={{ gap: 0.5, display: 'flex', flexDirection: 'column' }}>
-          {data.map((item) => {
-            const isActive = item.path === pathname;
-
-            const button = (
-              <ListItemButton
-                disableGutters
-                component={RouterLink}
-                to={item.path}
-                sx={[
-                  (theme) => ({
-                    pl: pinned ? 2 : 0,
-                    py: 1,
-                    gap: pinned ? 2 : 0,
-                    pr: pinned ? 1.5 : 0,
-                    borderRadius: 0.75,
-                    typography: 'body2',
-                    fontWeight: 'fontWeightMedium',
-                    color: theme.vars.palette.text.secondary,
-                    minHeight: 44,
-                    justifyContent: pinned ? 'flex-start' : 'center',
-                    ...(isActive && {
-                      fontWeight: 'fontWeightSemiBold',
-                      color: theme.vars.palette.primary.main,
-                      bgcolor: varAlpha(theme.vars.palette.primary.mainChannel, 0.08),
-                      '&:hover': {
-                        bgcolor: varAlpha(theme.vars.palette.primary.mainChannel, 0.16),
-                      },
-                    }),
-                  }),
-                ]}
-              >
-                <Box component="span" sx={{ width: 24, height: 24, display: 'flex' }}>
-                  {item.icon}
-                </Box>
-                {pinned && (
-                  <>
-                    <Box component="span" sx={{ flexGrow: 1 }}>
-                      {t(item.title)}
-                    </Box>
-                    {item.info && item.info}
-                  </>
-                )}
-              </ListItemButton>
-            );
-
-            return (
-              <ListItem disableGutters disablePadding key={item.title}>
-                {pinned ? (
-                  button
-                ) : (
-                  <Tooltip title={t(item.title)} placement="right" arrow>
-                    {button}
-                  </Tooltip>
-                )}
-              </ListItem>
-            );
-          })}
+          {data.map((item) =>
+            item.children ? (
+              <CollectionsBranch key={item.title} item={item} pinned={pinned} />
+            ) : (
+              <NavLeafButton
+                key={item.title}
+                item={item}
+                isActive={item.path === pathname}
+                pinned={pinned}
+              />
+            ),
+          )}
         </Box>
       </Box>
     </>

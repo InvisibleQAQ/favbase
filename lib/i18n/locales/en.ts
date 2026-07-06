@@ -168,6 +168,7 @@ const en: Record<LocaleKeys, string> = {
 
   'nav.dashboard': 'Dashboard',
   'nav.collections': 'Collections',
+  'nav.bilibiliFavorites': 'Bilibili Favorites',
   'nav.settings': 'Settings',
 
   'header.githubAria': 'View repository on GitHub',

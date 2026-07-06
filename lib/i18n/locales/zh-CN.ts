@@ -166,6 +166,7 @@ const zhCN = {
 
   'nav.dashboard': 'Dashboard',
   'nav.collections': '收藏夹',
+  'nav.bilibiliFavorites': 'B 站收藏夹',
   'nav.settings': '设置',
 
   'header.githubAria': '在 GitHub 上查看仓库',
