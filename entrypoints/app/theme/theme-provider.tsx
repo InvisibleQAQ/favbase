@@ -5,7 +5,7 @@ import { createTheme } from './create-theme';
 
 import type {} from './extend-theme-types';
 
-// Must match the inline FOUC guard in entrypoints/app/index.html.
+// Must match the FOUC guard key in public/theme-init.js.
 export const COLOR_MODE_STORAGE_KEY = 'favbase-color-mode';
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
