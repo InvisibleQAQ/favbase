@@ -24,7 +24,6 @@ function makeSettings(overrides: Partial<UserSettings> = {}): UserSettings {
     customProtocol: 'openai',
     asrProvider: 'groq',
     asrConfigs: {},
-    embeddingEnabled: false,
     embeddingProvider: 'openai',
     embeddingConfigs: {},
     prefMode: 'efficiency',
@@ -34,22 +33,21 @@ function makeSettings(overrides: Partial<UserSettings> = {}): UserSettings {
   } as UserSettings;
 }
 
-describe('resolveEmbeddingConfig — priority: env > user-filled > provider def', () => {
+describe('resolveEmbeddingConfig — priority: user-filled > env > provider def', () => {
   afterEach(() => vi.unstubAllEnvs());
 
   const def = getEmbeddingProviderDef('openai');
 
   // Hermetic: a developer's real .env.local (VITE_EMBEDDING_*) would leak in
-  // through import.meta.env otherwise — stub all five to empty explicitly.
+  // through import.meta.env otherwise — stub all four to empty explicitly.
   function stubEnvEmpty() {
     vi.stubEnv('VITE_EMBEDDING_PROVIDER', '');
     vi.stubEnv('VITE_EMBEDDING_API_KEY', '');
     vi.stubEnv('VITE_EMBEDDING_MODEL', '');
     vi.stubEnv('VITE_EMBEDDING_BASE_URL', '');
-    vi.stubEnv('VITE_EMBEDDING_ENABLE', '');
   }
 
-  it('falls back to provider def when both env and user config are empty', () => {
+  it('falls back to provider def when both user config and env are empty; enabled=false (no key)', () => {
     stubEnvEmpty();
     const r = resolveEmbeddingConfig(makeSettings());
     expect(r.providerId).toBe('openai');
@@ -59,21 +57,19 @@ describe('resolveEmbeddingConfig — priority: env > user-filled > provider def'
     expect(r.enabled).toBe(false);
   });
 
-  it('uses user-filled config when env is empty', () => {
+  it('uses env (VITE_EMBEDDING_*) as the default when the user left fields empty', () => {
     stubEnvEmpty();
-    const r = resolveEmbeddingConfig(
-      makeSettings({
-        embeddingConfigs: {
-          openai: { apiKey: 'sk-user', model: 'user-model', baseUrl: 'https://user.example/v1/' },
-        },
-      }),
-    );
-    expect(r.apiKey).toBe('sk-user');
-    expect(r.model).toBe('user-model');
-    expect(r.baseUrl).toBe('https://user.example/v1/');
+    vi.stubEnv('VITE_EMBEDDING_API_KEY', 'sk-env');
+    vi.stubEnv('VITE_EMBEDDING_MODEL', 'env-model');
+    vi.stubEnv('VITE_EMBEDDING_BASE_URL', 'https://env.example/v1/');
+    const r = resolveEmbeddingConfig(makeSettings());
+    expect(r.apiKey).toBe('sk-env');
+    expect(r.model).toBe('env-model');
+    expect(r.baseUrl).toBe('https://env.example/v1/');
+    expect(r.enabled).toBe(true); // key resolved → enabled
   });
 
-  it('.env.local (VITE_EMBEDDING_*) overrides user-filled config', () => {
+  it('user-filled config overrides env (env is only the default starting point)', () => {
     stubEnvEmpty();
     vi.stubEnv('VITE_EMBEDDING_API_KEY', 'sk-env');
     vi.stubEnv('VITE_EMBEDDING_MODEL', 'env-model');
@@ -85,9 +81,36 @@ describe('resolveEmbeddingConfig — priority: env > user-filled > provider def'
         },
       }),
     );
-    expect(r.apiKey).toBe('sk-env');
-    expect(r.model).toBe('env-model');
-    expect(r.baseUrl).toBe('https://env.example/v1/');
+    expect(r.apiKey).toBe('sk-user');
+    expect(r.model).toBe('user-model');
+    expect(r.baseUrl).toBe('https://user.example/v1/');
+    expect(r.enabled).toBe(true);
+  });
+
+  it('per-field fallback: user key wins, env fills the fields the user left blank', () => {
+    stubEnvEmpty();
+    vi.stubEnv('VITE_EMBEDDING_MODEL', 'env-model');
+    vi.stubEnv('VITE_EMBEDDING_BASE_URL', 'https://env.example/v1/');
+    const r = resolveEmbeddingConfig(
+      makeSettings({
+        embeddingConfigs: { openai: { apiKey: 'sk-user' } },
+      }),
+    );
+    expect(r.apiKey).toBe('sk-user'); // user
+    expect(r.model).toBe('env-model'); // env (user blank)
+    expect(r.baseUrl).toBe('https://env.example/v1/'); // env (user blank)
+  });
+
+  it('enabled is derived from the resolved apiKey (!!apiKey), not any toggle', () => {
+    stubEnvEmpty();
+    expect(resolveEmbeddingConfig(makeSettings()).enabled).toBe(false);
+    expect(
+      resolveEmbeddingConfig(
+        makeSettings({ embeddingConfigs: { openai: { apiKey: 'sk-user' } } }),
+      ).enabled,
+    ).toBe(true);
+    vi.stubEnv('VITE_EMBEDDING_API_KEY', 'sk-env');
+    expect(resolveEmbeddingConfig(makeSettings()).enabled).toBe(true);
   });
 
   it('env credential bundle applies regardless of the active provider', () => {
@@ -98,13 +121,12 @@ describe('resolveEmbeddingConfig — priority: env > user-filled > provider def'
     expect(r.apiKey).toBe('sk-env');
   });
 
-  it('valid VITE_EMBEDDING_PROVIDER overrides settings; cfg and def follow the resolved provider', () => {
+  it('settings.embeddingProvider drives cfg/def lookup; user cfg keyed by resolved provider', () => {
     stubEnvEmpty();
-    vi.stubEnv('VITE_EMBEDDING_PROVIDER', 'gemini');
     const geminiDef = getEmbeddingProviderDef('gemini');
     const r = resolveEmbeddingConfig(
       makeSettings({
-        embeddingProvider: 'openai',
+        embeddingProvider: 'gemini',
         embeddingConfigs: {
           openai: { apiKey: 'sk-openai-user' },
           gemini: { apiKey: 'sk-gemini-user' },
@@ -117,34 +139,33 @@ describe('resolveEmbeddingConfig — priority: env > user-filled > provider def'
     expect(r.model).toBe(geminiDef.defaultModel);
   });
 
-  it('invalid VITE_EMBEDDING_PROVIDER is ignored, falls through to settings', () => {
-    stubEnvEmpty();
+  it('valid VITE_EMBEDDING_PROVIDER seeds the provider only when settings has none', () => {
+    // settings.embeddingProvider is undefined → env provider is used as the seed.
+    vi.stubEnv('VITE_EMBEDDING_PROVIDER', 'gemini');
+    vi.stubEnv('VITE_EMBEDDING_API_KEY', '');
+    vi.stubEnv('VITE_EMBEDDING_MODEL', '');
+    vi.stubEnv('VITE_EMBEDDING_BASE_URL', '');
+    const s = makeSettings();
+    delete (s as { embeddingProvider?: unknown }).embeddingProvider;
+    const r = resolveEmbeddingConfig(s);
+    expect(r.providerId).toBe('gemini');
+  });
+
+  it('invalid VITE_EMBEDDING_PROVIDER is ignored, falls back to openai when settings has none', () => {
     vi.stubEnv('VITE_EMBEDDING_PROVIDER', 'not-a-provider');
+    vi.stubEnv('VITE_EMBEDDING_API_KEY', '');
+    vi.stubEnv('VITE_EMBEDDING_MODEL', '');
+    vi.stubEnv('VITE_EMBEDDING_BASE_URL', '');
+    const s = makeSettings();
+    delete (s as { embeddingProvider?: unknown }).embeddingProvider;
+    const r = resolveEmbeddingConfig(s);
+    expect(r.providerId).toBe('openai');
+  });
+
+  it('settings.embeddingProvider takes precedence over VITE_EMBEDDING_PROVIDER', () => {
+    stubEnvEmpty();
+    vi.stubEnv('VITE_EMBEDDING_PROVIDER', 'gemini');
     const r = resolveEmbeddingConfig(makeSettings({ embeddingProvider: 'zhipu' }));
     expect(r.providerId).toBe('zhipu');
-  });
-
-  it('VITE_EMBEDDING_ENABLE=true/1/TRUE force-enables regardless of the settings toggle', () => {
-    stubEnvEmpty();
-    vi.stubEnv('VITE_EMBEDDING_ENABLE', 'true');
-    expect(resolveEmbeddingConfig(makeSettings({ embeddingEnabled: false })).enabled).toBe(true);
-    vi.stubEnv('VITE_EMBEDDING_ENABLE', '1');
-    expect(resolveEmbeddingConfig(makeSettings({ embeddingEnabled: false })).enabled).toBe(true);
-    vi.stubEnv('VITE_EMBEDDING_ENABLE', 'TRUE');
-    expect(resolveEmbeddingConfig(makeSettings({ embeddingEnabled: false })).enabled).toBe(true);
-  });
-
-  it('VITE_EMBEDDING_ENABLE=false/0 force-disables even when the settings toggle is on', () => {
-    stubEnvEmpty();
-    vi.stubEnv('VITE_EMBEDDING_ENABLE', 'false');
-    expect(resolveEmbeddingConfig(makeSettings({ embeddingEnabled: true })).enabled).toBe(false);
-    vi.stubEnv('VITE_EMBEDDING_ENABLE', '0');
-    expect(resolveEmbeddingConfig(makeSettings({ embeddingEnabled: true })).enabled).toBe(false);
-  });
-
-  it('VITE_EMBEDDING_ENABLE unset falls back to the settings toggle', () => {
-    stubEnvEmpty();
-    expect(resolveEmbeddingConfig(makeSettings({ embeddingEnabled: true })).enabled).toBe(true);
-    expect(resolveEmbeddingConfig(makeSettings({ embeddingEnabled: false })).enabled).toBe(false);
   });
 });

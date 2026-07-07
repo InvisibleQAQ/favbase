@@ -81,7 +81,6 @@ export function SettingsView() {
 
             {aiSection === 'embedding' && (
               <EmbeddingConfigCard
-                embeddingEnabled={s.embeddingEnabled}
                 currentEmbeddingDef={s.currentEmbeddingDef}
                 currentEmbeddingApiKey={s.currentEmbeddingApiKey}
                 currentEmbeddingBaseUrl={s.currentEmbeddingBaseUrl}

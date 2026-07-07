@@ -3,6 +3,7 @@ import type { LLMProviderId, ASRProviderId, LLMProviderDef, ASRProviderDef, Embe
 import { getProviderDef, ASR_PROVIDERS, getEmbeddingProviderDef } from '@/lib/providers';
 import type { UserSettings } from '@/lib/storage';
 import { settingsStorage, DEFAULT_SETTINGS, resolveAsrConfig, getEnvApiKey, getEnvModel } from '@/lib/storage';
+import { resolveEmbeddingConfig } from '@/lib/embedding/config';
 
 export type LlmUpdate =
   | { field: 'provider'; value: LLMProviderId }
@@ -20,7 +21,6 @@ export type AsrUpdate =
   | { field: 'model'; value: string };
 
 export type EmbeddingUpdate =
-  | { field: 'enabled'; value: boolean }
   | { field: 'provider'; value: EmbeddingProviderId }
   | { field: 'apiKey'; value: string }
   | { field: 'baseUrl'; value: string }
@@ -40,7 +40,6 @@ export interface UseSettingsReturn {
   currentAsrApiKey: string;
   currentAsrModel: string;
 
-  embeddingEnabled: boolean;
   currentEmbeddingDef: EmbeddingProviderDef;
   currentEmbeddingApiKey: string;
   currentEmbeddingBaseUrl: string;
@@ -128,16 +127,17 @@ export function useSettings(): UseSettingsReturn {
   const currentAsrModel = resolved.model;
 
   // --- Embedding computed ---
-  const embeddingProvider = settings.embeddingProvider ?? DEFAULT_SETTINGS.embeddingProvider;
-  const embeddingEnabled = settings.embeddingEnabled ?? DEFAULT_SETTINGS.embeddingEnabled;
+  // Mirror ASR: derive UI values from the pure resolver so env (VITE_EMBEDDING_*)
+  // shows through as the default starting point until the user overrides a field.
+  const resolvedEmbedding = resolveEmbeddingConfig(settings);
+  const embeddingProvider = resolvedEmbedding.providerId;
   const currentEmbeddingDef = useMemo(
     () => getEmbeddingProviderDef(embeddingProvider),
     [embeddingProvider],
   );
-  const embeddingCfg = settings.embeddingConfigs?.[embeddingProvider];
-  const currentEmbeddingApiKey = embeddingCfg?.apiKey ?? '';
-  const currentEmbeddingBaseUrl = embeddingCfg?.baseUrl || currentEmbeddingDef.baseUrl;
-  const currentEmbeddingModel = embeddingCfg?.model || currentEmbeddingDef.defaultModel;
+  const currentEmbeddingApiKey = resolvedEmbedding.apiKey;
+  const currentEmbeddingBaseUrl = resolvedEmbedding.baseUrl;
+  const currentEmbeddingModel = resolvedEmbedding.model;
 
   // --- LLM action ---
   const updateLlm = useCallback(
@@ -195,8 +195,6 @@ export function useSettings(): UseSettingsReturn {
   const updateEmbedding = useCallback(
     (update: EmbeddingUpdate) => {
       switch (update.field) {
-        case 'enabled':
-          return updateSettings({ embeddingEnabled: update.value });
         case 'provider':
           return updateSettings({ embeddingProvider: update.value });
         case 'apiKey': {
@@ -236,7 +234,6 @@ export function useSettings(): UseSettingsReturn {
     currentAsrApiKey,
     currentAsrModel,
 
-    embeddingEnabled,
     currentEmbeddingDef,
     currentEmbeddingApiKey,
     currentEmbeddingBaseUrl,

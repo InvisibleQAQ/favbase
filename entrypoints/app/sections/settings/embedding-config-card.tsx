@@ -11,7 +11,6 @@ import Button from '@mui/material/Button';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
-import Switch from '@mui/material/Switch';
 import Divider from '@mui/material/Divider';
 import Typography from '@mui/material/Typography';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -24,7 +23,6 @@ import type { EmbeddingUpdate } from '@/lib/hooks/useSettings';
 import { testEmbeddingConnection, EMBEDDING_DIMENSIONS } from '@/lib/ai';
 
 interface EmbeddingConfigCardProps {
-  embeddingEnabled: boolean;
   currentEmbeddingDef: EmbeddingProviderDef;
   currentEmbeddingApiKey: string;
   currentEmbeddingBaseUrl: string;
@@ -33,7 +31,6 @@ interface EmbeddingConfigCardProps {
 }
 
 export function EmbeddingConfigCard({
-  embeddingEnabled,
   currentEmbeddingDef,
   currentEmbeddingApiKey,
   currentEmbeddingBaseUrl,
@@ -58,7 +55,6 @@ export function EmbeddingConfigCard({
     }
   }, [currentEmbeddingDef.id]);
 
-  const disabled = !embeddingEnabled;
   const canTest = !!(currentEmbeddingApiKey && currentEmbeddingModel);
 
   const handleTestConnection = useCallback(async () => {
@@ -91,13 +87,6 @@ export function EmbeddingConfigCard({
       <CardHeader
         title={t('settings.embeddingCard.title')}
         subheader={t('settings.embeddingCard.description')}
-        action={
-          <Switch
-            checked={embeddingEnabled}
-            onChange={(e) => updateEmbedding({ field: 'enabled', value: e.target.checked })}
-            slotProps={{ input: { 'aria-label': t('settings.embeddingEnabled') } }}
-          />
-        }
       />
       <CardContent>
         <Grid container spacing={3}>
@@ -106,7 +95,6 @@ export function EmbeddingConfigCard({
             <TextField
               select
               fullWidth
-              disabled={disabled}
               label={t('settings.embeddingProvider')}
               value={currentEmbeddingDef.id}
               onChange={(e) => updateEmbedding({ field: 'provider', value: e.target.value as EmbeddingProviderId })}
@@ -121,7 +109,6 @@ export function EmbeddingConfigCard({
           <Grid size={{ xs: 12, md: 6 }}>
             <TextField
               fullWidth
-              disabled={disabled}
               label={t('settings.apiKey')}
               type={showKey ? 'text' : 'password'}
               placeholder="sk-..."
@@ -135,7 +122,6 @@ export function EmbeddingConfigCard({
                         edge="end"
                         onClick={() => setShowKey((v) => !v)}
                         size="small"
-                        disabled={disabled}
                       >
                         <Iconify
                           icon={showKey ? 'solar:eye-bold' : 'solar:eye-closed-bold'}
@@ -158,7 +144,6 @@ export function EmbeddingConfigCard({
                 href={currentEmbeddingDef.regUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                disabled={disabled}
                 sx={{ whiteSpace: 'nowrap', alignSelf: 'center' }}
               >
                 {t('settings.getKey')}
@@ -170,7 +155,6 @@ export function EmbeddingConfigCard({
           <Grid size={{ xs: 12, md: 6 }}>
             <TextField
               fullWidth
-              disabled={disabled}
               label={t('settings.baseUrl')}
               placeholder={currentEmbeddingDef.baseUrl || t('settings.customBaseUrlPlaceholder')}
               value={currentEmbeddingBaseUrl}
@@ -182,7 +166,6 @@ export function EmbeddingConfigCard({
           <Grid size={{ xs: 12, md: 6 }}>
             <TextField
               fullWidth
-              disabled={disabled}
               label={t('settings.embeddingModel')}
               placeholder={currentEmbeddingDef.defaultModel}
               value={currentEmbeddingModel}
@@ -195,7 +178,7 @@ export function EmbeddingConfigCard({
             <Button
               variant="contained"
               onClick={handleTestConnection}
-              disabled={disabled || isTesting || !canTest}
+              disabled={isTesting || !canTest}
               startIcon={
                 isTesting ? (
                   <CircularProgress size={16} color="inherit" />
@@ -274,7 +257,7 @@ export function EmbeddingConfigCard({
               <Button
                 variant="outlined"
                 size="small"
-                disabled={disabled}
+                disabled
                 startIcon={<Iconify icon="solar:restart-bold" width={18} />}
               >
                 {t('settings.embedding.rebuildIncremental')}
@@ -283,7 +266,7 @@ export function EmbeddingConfigCard({
                 variant="outlined"
                 size="small"
                 color="warning"
-                disabled={disabled}
+                disabled
                 startIcon={<Iconify icon="solar:restart-bold" width={18} />}
               >
                 {t('settings.embedding.rebuildFull')}
@@ -292,7 +275,7 @@ export function EmbeddingConfigCard({
                 variant="text"
                 size="small"
                 color="error"
-                disabled={disabled}
+                disabled
                 startIcon={<Iconify icon="solar:trash-bin-trash-bold" width={18} />}
               >
                 {t('settings.embedding.clear')}

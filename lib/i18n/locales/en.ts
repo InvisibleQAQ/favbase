@@ -84,7 +84,6 @@ const en: Record<LocaleKeys, string> = {
 
   'settings.embeddingCard.title': 'Semantic Search',
   'settings.embeddingCard.description': 'Configure Embedding service to enable semantic search over your favorites',
-  'settings.embeddingEnabled': 'Enable Semantic Search',
   'settings.embeddingProvider': 'Embedding Provider',
   'settings.embeddingModel': 'Embedding Model',
   'settings.embedding.testSuccess': 'Connected — returned {{dimensions}}-dim vector',

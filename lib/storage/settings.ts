@@ -17,7 +17,6 @@ export interface UserSettings {
   asrConfigs: Record<string, { apiKey: string; model: string }>;
 
   // Embedding (semantic search)
-  embeddingEnabled: boolean;
   embeddingProvider: EmbeddingProviderId;
   embeddingConfigs: Record<string, { apiKey: string; baseUrl?: string; model?: string }>;
 
@@ -43,7 +42,6 @@ export const DEFAULT_SETTINGS: UserSettings = {
   asrConfigs: {},
 
   // Embedding (semantic search)
-  embeddingEnabled: false,
   embeddingProvider: (import.meta.env.VITE_EMBEDDING_PROVIDER as EmbeddingProviderId) || 'openai',
   embeddingConfigs: {},
 

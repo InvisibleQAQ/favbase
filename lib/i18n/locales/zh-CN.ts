@@ -82,7 +82,6 @@ const zhCN = {
 
   'settings.embeddingCard.title': 'Embedding 语义搜索',
   'settings.embeddingCard.description': '配置 Embedding 服务以启用收藏内容的语义搜索',
-  'settings.embeddingEnabled': '启用语义搜索',
   'settings.embeddingProvider': 'Embedding 服务商',
   'settings.embeddingModel': 'Embedding 模型',
   'settings.embedding.testSuccess': '连接成功 — 返回 {{dimensions}} 维向量',
