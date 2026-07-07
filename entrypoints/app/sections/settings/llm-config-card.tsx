@@ -24,6 +24,8 @@ import { LLM_PROVIDERS, type LLMProviderId, type LLMProviderDef } from '@/lib/pr
 import type { UserSettings } from '@/lib/storage';
 import type { LlmUpdate } from '@/lib/hooks/useSettings';
 import { testLlmConnection, fetchAvailableModels, type TestConnectionResult } from '@/lib/ai';
+import { useHostPermission } from './use-host-permission';
+import { permissionErrorKey } from './permission-error';
 
 interface LlmConfigCardProps {
   settings: UserSettings;
@@ -45,6 +47,7 @@ export function LlmConfigCard({
   updateLlm,
 }: LlmConfigCardProps) {
   const { t } = useTranslation();
+  const { ensure, dialog } = useHostPermission();
   const [showKey, setShowKey] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<TestConnectionResult | null>(null);
@@ -71,6 +74,12 @@ export function LlmConfigCard({
     setTestError(null);
 
     try {
+      const baseUrl = isCustomProvider ? settings.customBaseUrl : currentProviderDef.baseUrl;
+      const perm = await ensure(baseUrl);
+      if (!perm.ok) {
+        setTestError(t(permissionErrorKey(perm.reason)));
+        return;
+      }
       const result = await testLlmConnection({
         providerId: settings.provider,
         apiKey: currentLlmApiKey,
@@ -84,13 +93,19 @@ export function LlmConfigCard({
     } finally {
       setIsTesting(false);
     }
-  }, [settings.provider, currentLlmApiKey, currentLlmModel, settings.customBaseUrl, settings.customProtocol]);
+  }, [settings.provider, currentLlmApiKey, currentLlmModel, settings.customBaseUrl, settings.customProtocol, isCustomProvider, currentProviderDef.baseUrl, ensure, t]);
 
   const handleFetchModels = useCallback(async () => {
     setIsFetchingModels(true);
     setModelFetchError(null);
 
     try {
+      const baseUrl = isCustomProvider ? settings.customBaseUrl : currentProviderDef.baseUrl;
+      const perm = await ensure(baseUrl);
+      if (!perm.ok) {
+        setModelFetchError(t(permissionErrorKey(perm.reason)));
+        return;
+      }
       const result = await fetchAvailableModels({
         providerId: settings.provider,
         apiKey: currentLlmApiKey,
@@ -102,11 +117,12 @@ export function LlmConfigCard({
     } finally {
       setIsFetchingModels(false);
     }
-  }, [settings.provider, currentLlmApiKey, settings.customBaseUrl]);
+  }, [settings.provider, currentLlmApiKey, settings.customBaseUrl, isCustomProvider, currentProviderDef.baseUrl, ensure, t]);
 
   const canTest = !!(currentLlmApiKey && currentLlmModel);
 
   return (
+    <>
     <Card>
       <CardHeader
         title={t('settings.llmCard.title')}
@@ -364,5 +380,7 @@ export function LlmConfigCard({
         </Grid>
       </CardContent>
     </Card>
+    {dialog}
+    </>
   );
 }

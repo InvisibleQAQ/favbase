@@ -21,6 +21,8 @@ import { Iconify } from '../../components/iconify';
 import { EMBEDDING_PROVIDERS, type EmbeddingProviderId, type EmbeddingProviderDef } from '@/lib/providers';
 import type { EmbeddingUpdate } from '@/lib/hooks/useSettings';
 import { testEmbeddingConnection, EMBEDDING_DIMENSIONS } from '@/lib/ai';
+import { useHostPermission } from './use-host-permission';
+import { permissionErrorKey } from './permission-error';
 
 interface EmbeddingConfigCardProps {
   currentEmbeddingDef: EmbeddingProviderDef;
@@ -38,6 +40,7 @@ export function EmbeddingConfigCard({
   updateEmbedding,
 }: EmbeddingConfigCardProps) {
   const { t } = useTranslation();
+  const { ensure, dialog } = useHostPermission();
   const [showKey, setShowKey] = useState(false);
 
   const [isTesting, setIsTesting] = useState(false);
@@ -63,6 +66,12 @@ export function EmbeddingConfigCard({
     setTestError(null);
 
     try {
+      const baseUrl = currentEmbeddingBaseUrl || currentEmbeddingDef.baseUrl;
+      const perm = await ensure(baseUrl);
+      if (!perm.ok) {
+        setTestError(t(permissionErrorKey(perm.reason)));
+        return;
+      }
       const result = await testEmbeddingConnection({
         providerId: currentEmbeddingDef.id,
         apiKey: currentEmbeddingApiKey,
@@ -77,12 +86,16 @@ export function EmbeddingConfigCard({
     }
   }, [
     currentEmbeddingDef.id,
+    currentEmbeddingDef.baseUrl,
     currentEmbeddingApiKey,
     currentEmbeddingBaseUrl,
     currentEmbeddingModel,
+    ensure,
+    t,
   ]);
 
   return (
+    <>
     <Card>
       <CardHeader
         title={t('settings.embeddingCard.title')}
@@ -292,5 +305,7 @@ export function EmbeddingConfigCard({
         </Grid>
       </CardContent>
     </Card>
+    {dialog}
+    </>
   );
 }

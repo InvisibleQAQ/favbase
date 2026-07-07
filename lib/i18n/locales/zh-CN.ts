@@ -80,6 +80,14 @@ const zhCN = {
   'settings.testSuccessDetail': '连接成功 — {{message}}',
   'settings.testFailedDetail': '连接失败 — {{error}}',
 
+  'settings.permission.invalidUrl': 'Base URL 无效，无法授权该域名',
+  'settings.permission.unsupportedScheme': '只能授权 https 域名（本地 http 服务请在扩展权限中手动允许）',
+  'settings.permission.denied': '你取消了域名授权，无法访问该 API',
+  'settings.permission.dialogTitle': '授权自定义 API 域名',
+  'settings.permission.dialogDesc': '为了让插件访问你填写的自定义接口，需要单独授权这个域名。',
+  'settings.permission.grant': '允许访问此域名',
+  'settings.permission.cancel': '取消',
+
   'settings.embeddingCard.title': 'Embedding 语义搜索',
   'settings.embeddingCard.description': '配置 Embedding 服务以启用收藏内容的语义搜索',
   'settings.embeddingProvider': 'Embedding 服务商',

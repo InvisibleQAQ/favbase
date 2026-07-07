@@ -82,6 +82,14 @@ const en: Record<LocaleKeys, string> = {
   'settings.testSuccessDetail': 'Connected — {{message}}',
   'settings.testFailedDetail': 'Connection failed — {{error}}',
 
+  'settings.permission.invalidUrl': 'Invalid Base URL — cannot authorize this domain',
+  'settings.permission.unsupportedScheme': 'Only https domains can be authorized (allow local http services manually in extension permissions)',
+  'settings.permission.denied': 'Domain authorization was cancelled — cannot reach this API',
+  'settings.permission.dialogTitle': 'Authorize custom API domain',
+  'settings.permission.dialogDesc': 'To let the extension reach the custom API you entered, this domain needs to be authorized separately.',
+  'settings.permission.grant': 'Allow access to this domain',
+  'settings.permission.cancel': 'Cancel',
+
   'settings.embeddingCard.title': 'Semantic Search',
   'settings.embeddingCard.description': 'Configure Embedding service to enable semantic search over your favorites',
   'settings.embeddingProvider': 'Embedding Provider',
