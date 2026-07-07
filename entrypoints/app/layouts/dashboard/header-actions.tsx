@@ -10,6 +10,7 @@ import MenuItem from '@mui/material/MenuItem';
 import IconButton from '@mui/material/IconButton';
 import ListItemText from '@mui/material/ListItemText';
 import ListItemIcon from '@mui/material/ListItemIcon';
+import { useColorScheme } from '@mui/material/styles';
 
 import { useTranslation } from '@/lib/i18n/use-translation';
 
@@ -23,6 +24,28 @@ const LANGUAGE_OPTIONS: { value: LocalePreference; labelKey: LocaleKeys }[] = [
   { value: 'en', labelKey: 'settings.languageEn' },
 ];
 
+function ThemeToggleButton() {
+  const { t } = useTranslation();
+  const { mode, systemMode, setMode } = useColorScheme();
+
+  // Before mount MUI returns mode=undefined; fall back to the attribute the
+  // index.html FOUC guard already set, so the icon never flips post-mount.
+  const resolved =
+    (mode === 'system' ? systemMode : mode) ??
+    (document.documentElement.getAttribute('data-color-scheme') === 'dark' ? 'dark' : 'light');
+
+  return (
+    <Tooltip title={t('header.themeAria')}>
+      <IconButton
+        aria-label={t('header.themeAria')}
+        onClick={() => setMode(resolved === 'dark' ? 'light' : 'dark')}
+      >
+        <Iconify icon={resolved === 'dark' ? 'solar:sun-bold-duotone' : 'solar:moon-bold-duotone'} />
+      </IconButton>
+    </Tooltip>
+  );
+}
+
 export function HeaderActions() {
   const { t, preference, setLocale } = useTranslation();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -34,6 +57,8 @@ export function HeaderActions() {
 
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0, sm: 0.75 } }}>
+      <ThemeToggleButton />
+
       <Tooltip title={t('header.languageAria')}>
         <IconButton
           aria-label={t('header.languageAria')}

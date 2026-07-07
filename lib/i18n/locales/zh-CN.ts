@@ -181,6 +181,7 @@ const zhCN = {
 
   'header.githubAria': '在 GitHub 上查看仓库',
   'header.languageAria': '切换界面语言',
+  'header.themeAria': '切换深色模式',
 
   'collections.notLoggedInTitle': '未检测到 B 站登录状态',
   'collections.notLoggedInDesc': '请先在浏览器中打开 bilibili.com 并登录你的账号，然后回到此页面点击重试。',

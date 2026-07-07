@@ -183,6 +183,7 @@ const en: Record<LocaleKeys, string> = {
 
   'header.githubAria': 'View repository on GitHub',
   'header.languageAria': 'Switch interface language',
+  'header.themeAria': 'Toggle dark mode',
 
   'collections.notLoggedInTitle': 'Bilibili login not detected',
   'collections.notLoggedInDesc': 'Open bilibili.com in your browser and sign in, then return here and retry.',
