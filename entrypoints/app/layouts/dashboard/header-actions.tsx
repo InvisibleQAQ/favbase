@@ -1,6 +1,7 @@
 import type { LocaleKeys, SupportedLocale } from '@/lib/i18n';
 
 import { useState } from 'react';
+import { flushSync } from 'react-dom';
 
 import Box from '@mui/material/Box';
 import Menu from '@mui/material/Menu';
@@ -9,7 +10,8 @@ import MenuItem from '@mui/material/MenuItem';
 import IconButton from '@mui/material/IconButton';
 import ListItemText from '@mui/material/ListItemText';
 import ListItemIcon from '@mui/material/ListItemIcon';
-import { useColorScheme } from '@mui/material/styles';
+import Switch from '@mui/material/Switch';
+import { styled, useColorScheme } from '@mui/material/styles';
 
 import { useTranslation } from '@/lib/i18n/use-translation';
 
@@ -30,24 +32,90 @@ const LANGUAGE_OPTIONS: { value: SupportedLocale; labelKey: LocaleKeys; flag: Ic
   { value: 'en', labelKey: 'settings.languageEn', flag: 'flagpack:gb' },
 ];
 
-function ThemeToggleButton() {
+// iOS-style pill: checked (thumb right) = dark. Track turns indigo #5C6BC0 to
+// echo the moon's night hue (no indigo token — theme primary is coral #FC7E5B).
+const ThemeSwitch = styled(Switch)(({ theme }) => ({
+  width: 40,
+  height: 22,
+  padding: 0,
+  '& .MuiSwitch-switchBase': {
+    padding: 0,
+    margin: 2,
+    transitionDuration: '250ms',
+    '&.Mui-checked': {
+      transform: 'translateX(18px)',
+      color: '#fff',
+      '& + .MuiSwitch-track': {
+        backgroundColor: '#5C6BC0',
+        opacity: 1,
+        border: 0,
+      },
+    },
+  },
+  '& .MuiSwitch-thumb': {
+    boxSizing: 'border-box',
+    width: 18,
+    height: 18,
+    boxShadow: 'none',
+  },
+  '& .MuiSwitch-track': {
+    borderRadius: 11,
+    backgroundColor: theme.vars.palette.grey[400],
+    opacity: 1,
+  },
+}));
+
+function ThemeToggleSwitch() {
   const { t } = useTranslation();
   const { mode, systemMode, setMode } = useColorScheme();
 
   // Before mount MUI returns mode=undefined; fall back to the attribute the
-  // index.html FOUC guard already set, so the icon never flips post-mount.
+  // index.html FOUC guard already set, so the switch never flips post-mount.
   const resolved =
     (mode === 'system' ? systemMode : mode) ??
     (document.documentElement.getAttribute('data-color-scheme') === 'dark' ? 'dark' : 'light');
 
+  // Animate the swap with a circular reveal growing from the switch (View
+  // Transitions API, Chromium-only). flushSync forces MUI to commit the
+  // data-color-scheme flip *inside* the transition, so the "after" snapshot is
+  // the new theme. Falls back to an instant swap when unsupported / reduced-motion.
+  const handleToggle = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const next = resolved === 'dark' ? 'light' : 'dark';
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    if (!document.startViewTransition || reduceMotion) {
+      setMode(next);
+      return;
+    }
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    const endRadius = Math.hypot(
+      Math.max(x, window.innerWidth - x),
+      Math.max(y, window.innerHeight - y)
+    );
+
+    const transition = document.startViewTransition(() => flushSync(() => setMode(next)));
+    transition.ready.then(() => {
+      document.documentElement.animate(
+        { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${endRadius}px at ${x}px ${y}px)`] },
+        { duration: 420, easing: 'ease-in-out', pseudoElement: '::view-transition-new(root)' }
+      );
+    });
+  };
+
   return (
     <Tooltip title={t('header.themeAria')}>
-      <IconButton
-        aria-label={t('header.themeAria')}
-        onClick={() => setMode(resolved === 'dark' ? 'light' : 'dark')}
-      >
-        <Iconify icon={resolved === 'dark' ? 'solar:sun-bold-duotone' : 'solar:moon-bold-duotone'} />
-      </IconButton>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+        <Iconify icon="custom:sun-color" width={18} />
+        <ThemeSwitch
+          checked={resolved === 'dark'}
+          onChange={handleToggle}
+          slotProps={{ input: { 'aria-label': t('header.themeAria') } }}
+        />
+        <Iconify icon="custom:moon-color" width={18} />
+      </Box>
     </Tooltip>
   );
 }
@@ -66,7 +134,7 @@ export function HeaderActions() {
 
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0, sm: 0.75 } }}>
-      <ThemeToggleButton />
+      <ThemeToggleSwitch />
 
       <Tooltip title={t('header.languageAria')}>
         <IconButton

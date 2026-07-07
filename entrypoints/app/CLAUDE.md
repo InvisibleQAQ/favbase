@@ -6,7 +6,7 @@ MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRo
 
 - `main.tsx` — 入口：fire-and-forget `initDbProxy()` 建立 DB RPC 连接 + Hash Router + lazy 页面加载 + LoadingFallback
 - `App.tsx` — 根组件：ThemeProvider + Outlet
-- `global.css` — 全局样式：DM Sans Variable + Barlow 字体导入 + baseline reset
+- `global.css` — 全局样式：DM Sans Variable + Barlow 字体导入 + baseline reset + 主题切换 View Transition 的 `::view-transition-*(root)` 伪元素规则（供 `layouts/dashboard/header-actions.tsx` 的圆形揭示动画用）
 
 ## 约定
 

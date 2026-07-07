@@ -27,3 +27,18 @@ ul {
   padding: 0;
   list-style-type: none;
 }
+
+/* Theme-toggle circular reveal (View Transitions API, Chromium). The switch's
+   handler animates ::view-transition-new(root)'s clip-path; kill the default
+   cross-fade so the reveal is crisp, and stack the new snapshot above the old. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-old(root) {
+  z-index: 1;
+}
+::view-transition-new(root) {
+  z-index: 2;
+}
