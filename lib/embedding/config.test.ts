@@ -33,7 +33,7 @@ function makeSettings(overrides: Partial<UserSettings> = {}): UserSettings {
   } as UserSettings;
 }
 
-describe('resolveEmbeddingConfig — priority: user-filled > env > provider def', () => {
+describe('resolveEmbeddingConfig — priority: user-filled > env > provider def (env only for the target provider)', () => {
   afterEach(() => vi.unstubAllEnvs());
 
   const def = getEmbeddingProviderDef('openai');
@@ -59,6 +59,9 @@ describe('resolveEmbeddingConfig — priority: user-filled > env > provider def'
 
   it('uses env (VITE_EMBEDDING_*) as the default when the user left fields empty', () => {
     stubEnvEmpty();
+    // env bundle is gated to VITE_EMBEDDING_PROVIDER; pair it with the resolved
+    // provider (openai) so this reflects real usage (bundle targets that provider).
+    vi.stubEnv('VITE_EMBEDDING_PROVIDER', 'openai');
     vi.stubEnv('VITE_EMBEDDING_API_KEY', 'sk-env');
     vi.stubEnv('VITE_EMBEDDING_MODEL', 'env-model');
     vi.stubEnv('VITE_EMBEDDING_BASE_URL', 'https://env.example/v1/');
@@ -89,6 +92,7 @@ describe('resolveEmbeddingConfig — priority: user-filled > env > provider def'
 
   it('per-field fallback: user key wins, env fills the fields the user left blank', () => {
     stubEnvEmpty();
+    vi.stubEnv('VITE_EMBEDDING_PROVIDER', 'openai'); // env bundle targets the resolved provider
     vi.stubEnv('VITE_EMBEDDING_MODEL', 'env-model');
     vi.stubEnv('VITE_EMBEDDING_BASE_URL', 'https://env.example/v1/');
     const r = resolveEmbeddingConfig(
@@ -109,16 +113,39 @@ describe('resolveEmbeddingConfig — priority: user-filled > env > provider def'
         makeSettings({ embeddingConfigs: { openai: { apiKey: 'sk-user' } } }),
       ).enabled,
     ).toBe(true);
+    vi.stubEnv('VITE_EMBEDDING_PROVIDER', 'openai'); // env bundle targets the resolved provider
     vi.stubEnv('VITE_EMBEDDING_API_KEY', 'sk-env');
     expect(resolveEmbeddingConfig(makeSettings()).enabled).toBe(true);
   });
 
-  it('env credential bundle applies regardless of the active provider', () => {
+  it('env bundle does NOT leak to a provider other than VITE_EMBEDDING_PROVIDER', () => {
+    // env bundle targets `custom`; active provider is `gemini` → env must not apply.
     stubEnvEmpty();
+    const geminiDef = getEmbeddingProviderDef('gemini');
+    vi.stubEnv('VITE_EMBEDDING_PROVIDER', 'custom');
     vi.stubEnv('VITE_EMBEDDING_API_KEY', 'sk-env');
+    vi.stubEnv('VITE_EMBEDDING_MODEL', 'text-embedding-3-large');
+    vi.stubEnv('VITE_EMBEDDING_BASE_URL', 'https://api.gptgod.online/v1');
     const r = resolveEmbeddingConfig(makeSettings({ embeddingProvider: 'gemini' }));
     expect(r.providerId).toBe('gemini');
+    expect(r.apiKey).toBe(''); // env key does not follow onto gemini
+    expect(r.baseUrl).toBe(geminiDef.baseUrl); // gemini def, not gptgod
+    expect(r.model).toBe(geminiDef.defaultModel); // gemini def, not env model
+    expect(r.enabled).toBe(false);
+  });
+
+  it('env bundle fully applies to its designated provider (VITE_EMBEDDING_PROVIDER)', () => {
+    stubEnvEmpty();
+    vi.stubEnv('VITE_EMBEDDING_PROVIDER', 'custom');
+    vi.stubEnv('VITE_EMBEDDING_API_KEY', 'sk-env');
+    vi.stubEnv('VITE_EMBEDDING_MODEL', 'text-embedding-3-large');
+    vi.stubEnv('VITE_EMBEDDING_BASE_URL', 'https://api.gptgod.online/v1');
+    const r = resolveEmbeddingConfig(makeSettings({ embeddingProvider: 'custom' }));
+    expect(r.providerId).toBe('custom');
     expect(r.apiKey).toBe('sk-env');
+    expect(r.model).toBe('text-embedding-3-large');
+    expect(r.baseUrl).toBe('https://api.gptgod.online/v1');
+    expect(r.enabled).toBe(true);
   });
 
   it('settings.embeddingProvider drives cfg/def lookup; user cfg keyed by resolved provider', () => {

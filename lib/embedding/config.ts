@@ -16,14 +16,27 @@ export interface ResolvedEmbeddingConfig {
  * `resolveAsrConfig` in `lib/storage/settings.ts`. Priority per field:
  * user-filled (`embeddingConfigs`, non-empty wins) > `.env.local`
  * (`VITE_EMBEDDING_*`) > provider def. `.env.local` is only a default starting
- * point — the user can override it and their value wins. `providerId`:
- * `settings.embeddingProvider` (which already defaults to `VITE_EMBEDDING_PROVIDER`
- * via `DEFAULT_SETTINGS`) > valid `VITE_EMBEDDING_PROVIDER` > `'openai'`;
- * invalid `VITE_EMBEDDING_PROVIDER` is ignored. def fallbacks for baseUrl/model
- * come from the resolved provider. `enabled` is derived — there is no toggle;
- * semantic search is enabled whenever an apiKey is resolved (user or env), so a
- * fully-unconfigured install silently skips embedding instead of spamming errors.
- * No storage or network access.
+ * point — the user can override it and their value wins.
+ *
+ * The `.env.local` credential bundle (`VITE_EMBEDDING_API_KEY/BASE_URL/MODEL`)
+ * describes a SINGLE provider — the one named by `VITE_EMBEDDING_PROVIDER`. It is
+ * gated to that provider: env values only seed the resolved config when
+ * `providerId === envProvider`; for any other provider the env fields are treated
+ * as empty and resolution falls back to the provider def (so a provider the user
+ * switches to in the UI does NOT inherit gptgod's baseUrl/model/key). This
+ * integrates cleanly because `DEFAULT_SETTINGS.embeddingProvider =
+ * VITE_EMBEDDING_PROVIDER || 'openai'`, so a fresh install has
+ * `providerId === envProvider` and the env bundle applies to the designated
+ * provider; once the user switches providers it no longer matches → no leak.
+ *
+ * `providerId`: `settings.embeddingProvider` (which already defaults to
+ * `VITE_EMBEDDING_PROVIDER` via `DEFAULT_SETTINGS`) > valid
+ * `VITE_EMBEDDING_PROVIDER` > `'openai'`; invalid `VITE_EMBEDDING_PROVIDER` is
+ * ignored. def fallbacks for baseUrl/model come from the resolved provider.
+ * `enabled` is derived — there is no toggle; semantic search is enabled whenever
+ * an apiKey is resolved (user or env), so a fully-unconfigured install (or a
+ * provider with no user key that isn't the env-designated one) silently skips
+ * embedding instead of spamming errors. No storage or network access.
  */
 export function resolveEmbeddingConfig(settings: UserSettings): ResolvedEmbeddingConfig {
   const envProvider = (import.meta.env.VITE_EMBEDDING_PROVIDER as string) || '';
@@ -35,13 +48,23 @@ export function resolveEmbeddingConfig(settings: UserSettings): ResolvedEmbeddin
   const def = getEmbeddingProviderDef(providerId);
   const cfg = settings.embeddingConfigs?.[providerId];
 
-  const apiKey = cfg?.apiKey || (import.meta.env.VITE_EMBEDDING_API_KEY as string) || '';
+  // env bundle only applies to the provider it was configured for.
+  const isEnvProvider = providerId === envProvider;
+  const env = isEnvProvider
+    ? {
+        apiKey: (import.meta.env.VITE_EMBEDDING_API_KEY as string) || '',
+        baseUrl: (import.meta.env.VITE_EMBEDDING_BASE_URL as string) || '',
+        model: (import.meta.env.VITE_EMBEDDING_MODEL as string) || '',
+      }
+    : { apiKey: '', baseUrl: '', model: '' };
+
+  const apiKey = cfg?.apiKey || env.apiKey;
 
   return {
     providerId,
     apiKey,
-    baseUrl: cfg?.baseUrl || (import.meta.env.VITE_EMBEDDING_BASE_URL as string) || def.baseUrl,
-    model: cfg?.model || (import.meta.env.VITE_EMBEDDING_MODEL as string) || def.defaultModel,
+    baseUrl: cfg?.baseUrl || env.baseUrl || def.baseUrl,
+    model: cfg?.model || env.model || def.defaultModel,
     enabled: !!apiKey,
   };
 }
