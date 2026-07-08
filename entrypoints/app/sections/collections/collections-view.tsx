@@ -9,6 +9,8 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Card from '@mui/material/Card';
 import Skeleton from '@mui/material/Skeleton';
 import Pagination from '@mui/material/Pagination';
+import TextField from '@mui/material/TextField';
+import InputAdornment from '@mui/material/InputAdornment';
 
 import { useTranslation } from '@/lib/i18n/use-translation';
 import type { BiliFavOrder } from '@/lib/bilibili/types';
@@ -20,13 +22,13 @@ import { useVideoTranscribe } from './use-video-transcribe';
 import { useAutoTranscribe } from './use-auto-transcribe';
 import { createBiliAutoTranscribeAdapter } from '@/lib/bilibili/auto-transcribe-adapter';
 import { VideoCard } from './video-card';
-import { FolderSidebar } from './folder-sidebar';
+import { FolderChips } from './folder-chips';
 import { AutoTranscribeBar } from './auto-transcribe-bar';
 
 const biliAdapter = createBiliAutoTranscribeAdapter();
 
 // ---------------------------------------------------------------------------
-// State views shared between sidebar and content
+// Shared state views (not-logged-in / error / empty / skeleton)
 // ---------------------------------------------------------------------------
 
 function NotLoggedIn({ onRetry }: { onRetry: () => void }) {
@@ -200,7 +202,7 @@ function VideoGridPanel({ mediaId, totalCount, syncing, onSync, lastSyncedAt, au
   };
 
   return (
-    <Box sx={{ flex: 1, minWidth: 0, overflow: 'auto' }}>
+    <Box sx={{ minWidth: 0 }}>
       {/* Title bar */}
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 2, flexWrap: 'wrap' }}>
         <Typography variant="h5" sx={{ flexShrink: 0 }} noWrap>
@@ -291,7 +293,7 @@ function VideoGridPanel({ mediaId, totalCount, syncing, onSync, lastSyncedAt, au
 }
 
 // ---------------------------------------------------------------------------
-// Main view: sidebar + video grid
+// Main view: search box + folder chips + video grid (flat vertical stack)
 // ---------------------------------------------------------------------------
 
 export function CollectionsView() {
@@ -332,46 +334,51 @@ export function CollectionsView() {
         </Typography>
       )}
 
-      <Box
-        sx={(theme) => ({
-          display: 'flex',
-          border: `1px solid ${theme.vars.palette.divider}`,
-          borderRadius: 2,
-          overflow: 'hidden',
-          minHeight: 480,
-          bgcolor: 'background.paper',
-          boxShadow: theme.vars.customShadows.card,
-        })}
-      >
-        <FolderSidebar
-          folders={folders}
-          selectedId={selectedId}
-          loading={foldersLoading}
-          onSelect={handleSelectFolder}
-        />
+      {/* Search box — UI-only placeholder, no search logic */}
+      <TextField
+        fullWidth
+        disabled
+        placeholder={t('collections.searchPlaceholder')}
+        sx={{ mb: 3 }}
+        slotProps={{
+          input: {
+            startAdornment: (
+              <InputAdornment position="start">
+                <Iconify icon="eva:search-fill" width={20} sx={{ color: 'text.disabled' }} />
+              </InputAdornment>
+            ),
+          },
+        }}
+      />
 
-        <Box sx={{ flex: 1, minWidth: 0, p: 3, display: 'flex', flexDirection: 'column' }}>
-          {selectedId ? (
-            <VideoGridPanel
-              key={selectedId}
-              mediaId={selectedId}
-              totalCount={selectedFolder?.media_count ?? 0}
-              syncing={syncing}
-              onSync={sync}
-              lastSyncedAt={lastSyncedAt}
-              autoTranscribe={autoTranscribe}
-            />
-          ) : foldersLoading ? (
-            <VideoGridSkeleton />
-          ) : (
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1 }}>
-              <Typography variant="body1" sx={{ color: 'text.disabled' }}>
-                {t('collections.selectFolder')}
-              </Typography>
-            </Box>
-          )}
+      {/* Folder chips — horizontal filter */}
+      <FolderChips
+        folders={folders}
+        selectedId={selectedId}
+        loading={foldersLoading}
+        onSelect={handleSelectFolder}
+      />
+
+      {/* Folder content */}
+      {selectedId ? (
+        <VideoGridPanel
+          key={selectedId}
+          mediaId={selectedId}
+          totalCount={selectedFolder?.media_count ?? 0}
+          syncing={syncing}
+          onSync={sync}
+          lastSyncedAt={lastSyncedAt}
+          autoTranscribe={autoTranscribe}
+        />
+      ) : foldersLoading ? (
+        <VideoGridSkeleton />
+      ) : (
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 240 }}>
+          <Typography variant="body1" sx={{ color: 'text.disabled' }}>
+            {t('collections.selectFolder')}
+          </Typography>
         </Box>
-      </Box>
+      )}
     </DashboardContent>
   );
 }
