@@ -10,10 +10,10 @@ import IconButton from '@mui/material/IconButton';
 import Button from '@mui/material/Button';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
-import Stack from '@mui/material/Stack';
 import Divider from '@mui/material/Divider';
 import Typography from '@mui/material/Typography';
 import CircularProgress from '@mui/material/CircularProgress';
+import LinearProgress from '@mui/material/LinearProgress';
 import { varAlpha } from 'minimal-shared/utils';
 
 import { useTranslation } from '@/lib/i18n/use-translation';
@@ -21,7 +21,15 @@ import { Iconify } from '../../components/iconify';
 import { EMBEDDING_PROVIDERS, type EmbeddingProviderId, type EmbeddingProviderDef } from '@/lib/providers';
 import type { EmbeddingUpdate } from '@/lib/hooks/useSettings';
 import { testEmbeddingConnection } from '@/lib/ai';
-import { MAX_INDEXABLE_DIMENSIONS } from '@/lib/embedding';
+import { initDbProxy } from '@/lib/database';
+import {
+  MAX_INDEXABLE_DIMENSIONS,
+  getEmbeddingStats,
+  rebuildPendingEmbeddings,
+  type EmbeddingStats,
+  type RebuildOutcome,
+  type RebuildProgress,
+} from '@/lib/embedding';
 import { useHostPermission } from './use-host-permission';
 import { permissionErrorKey } from './permission-error';
 
@@ -50,6 +58,34 @@ export function EmbeddingConfigCard({
   const [isTesting, setIsTesting] = useState(false);
   const [testDimensions, setTestDimensions] = useState<number | null>(null);
   const [testError, setTestError] = useState<string | null>(null);
+
+  const [stats, setStats] = useState<EmbeddingStats | null>(null);
+  const [isRebuilding, setIsRebuilding] = useState(false);
+  const [rebuildProgress, setRebuildProgress] = useState<RebuildProgress | null>(null);
+  const [rebuildOutcome, setRebuildOutcome] = useState<RebuildOutcome | null>(null);
+  const [rebuildError, setRebuildError] = useState<string | null>(null);
+
+  // `initDbProxy()` is idempotent (joins main.tsx's in-flight init), so this
+  // waits for DB readiness instead of racing `getDb()` on first paint.
+  const fetchStats = useCallback(async (): Promise<EmbeddingStats | null> => {
+    try {
+      const db = await initDbProxy();
+      return await getEmbeddingStats(db);
+    } catch (err) {
+      console.error('[settings] embedding stats load failed:', err);
+      return null;
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchStats().then((s) => {
+      if (!cancelled && s) setStats(s);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchStats]);
 
   // Clear stale test feedback when the provider changes (mirrors llm-config-card),
   // so a success/warning Alert for provider A never lingers on provider B.
@@ -114,6 +150,51 @@ export function EmbeddingConfigCard({
     currentEmbeddingModel,
     currentEmbeddingDimensions,
     ensure,
+    t,
+  ]);
+
+  // Manual rebuild: re-embed the 'chunked' backlog in this page's context.
+  // Failure stops the loop (finished items stay 'embedded'), so clicking again
+  // resumes with only the remainder — no cancel button or queue needed.
+  const handleRebuild = useCallback(async () => {
+    setIsRebuilding(true);
+    setRebuildProgress(null);
+    setRebuildOutcome(null);
+    setRebuildError(null);
+
+    try {
+      // Not-configured is decidable locally: this prop IS the resolved apiKey
+      // (`resolveEmbeddingConfig`), the same value rebuild derives `enabled`
+      // from — so bail out first and never pop a host-permission dialog for a
+      // provider that cannot embed anything anyway. The library keeps its own
+      // gate as the invariant.
+      if (!currentEmbeddingApiKey) {
+        setRebuildOutcome({ status: 'not-configured' });
+        return;
+      }
+      // Same CORS gate as the test-connection button: embeds are fetches from
+      // this page, so the (custom) API origin must be granted first.
+      const baseUrl = currentEmbeddingBaseUrl || currentEmbeddingDef.baseUrl;
+      const perm = await ensure(baseUrl);
+      if (!perm.ok) {
+        setRebuildError(t(permissionErrorKey(perm.reason)));
+        return;
+      }
+      const db = await initDbProxy();
+      const outcome = await rebuildPendingEmbeddings(db, undefined, setRebuildProgress);
+      setRebuildOutcome(outcome);
+    } catch (err) {
+      setRebuildError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsRebuilding(false);
+      void fetchStats().then((s) => s && setStats(s));
+    }
+  }, [
+    currentEmbeddingApiKey,
+    currentEmbeddingBaseUrl,
+    currentEmbeddingDef.baseUrl,
+    ensure,
+    fetchStats,
     t,
   ]);
 
@@ -281,7 +362,7 @@ export function EmbeddingConfigCard({
             </Grid>
           )}
 
-          {/* Vector Index management (UI placeholder — no vector logic yet) */}
+          {/* Vector Index: coverage stats + manual rebuild of the 'chunked' backlog */}
           <Grid size={{ xs: 12 }}>
             <Divider sx={{ my: 1 }} />
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 2, mb: 2 }}>
@@ -293,8 +374,14 @@ export function EmbeddingConfigCard({
 
             <Grid container spacing={2} sx={{ mb: 2 }}>
               {[
-                { label: t('settings.embedding.indexedCount'), value: '—' },
-                { label: t('settings.embedding.storageUsed'), value: '—' },
+                {
+                  label: t('settings.embedding.indexedCount'),
+                  value: stats ? String(stats.embeddedChunks) : '—',
+                },
+                {
+                  label: t('settings.embedding.totalChunks'),
+                  value: stats ? String(stats.totalChunks) : '—',
+                },
               ].map((stat) => (
                 <Grid key={stat.label} size={{ xs: 6 }}>
                   <Box
@@ -313,41 +400,65 @@ export function EmbeddingConfigCard({
               ))}
             </Grid>
 
-            <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap>
-              <Button
-                variant="outlined"
-                size="small"
-                disabled
-                startIcon={<Iconify icon="solar:restart-bold" width={18} />}
-              >
-                {t('settings.embedding.rebuildIncremental')}
-              </Button>
-              <Button
-                variant="outlined"
-                size="small"
-                color="warning"
-                disabled
-                startIcon={<Iconify icon="solar:restart-bold" width={18} />}
-              >
-                {t('settings.embedding.rebuildFull')}
-              </Button>
-              <Button
-                variant="text"
-                size="small"
-                color="error"
-                disabled
-                startIcon={<Iconify icon="solar:trash-bin-trash-bold" width={18} />}
-              >
-                {t('settings.embedding.clear')}
-              </Button>
-            </Stack>
-
-            <Typography
-              variant="caption"
-              sx={{ display: 'block', mt: 2, color: 'text.secondary', fontStyle: 'italic' }}
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={handleRebuild}
+              disabled={isRebuilding}
+              startIcon={
+                isRebuilding ? (
+                  <CircularProgress size={16} color="inherit" />
+                ) : (
+                  <Iconify icon="solar:restart-bold" width={18} />
+                )
+              }
             >
-              {t('settings.embedding.notImplemented')}
-            </Typography>
+              {t('settings.embedding.rebuild')}
+            </Button>
+
+            {isRebuilding && (
+              <Box sx={{ mt: 2 }}>
+                <LinearProgress
+                  variant={rebuildProgress ? 'determinate' : 'indeterminate'}
+                  value={
+                    rebuildProgress && rebuildProgress.total > 0
+                      ? (rebuildProgress.completed / rebuildProgress.total) * 100
+                      : 0
+                  }
+                />
+                {rebuildProgress && (
+                  <Typography
+                    variant="caption"
+                    sx={{ display: 'block', mt: 0.5, color: 'text.secondary' }}
+                  >
+                    {t('settings.embedding.rebuildProgress', {
+                      completed: rebuildProgress.completed,
+                      total: rebuildProgress.total,
+                    })}
+                  </Typography>
+                )}
+              </Box>
+            )}
+
+            {rebuildOutcome?.status === 'completed' && (
+              <Alert severity="success" sx={{ mt: 2 }}>
+                {rebuildOutcome.total === 0
+                  ? t('settings.embedding.rebuildNoPending')
+                  : t('settings.embedding.rebuildDone', { count: rebuildOutcome.total })}
+              </Alert>
+            )}
+
+            {rebuildOutcome?.status === 'not-configured' && (
+              <Alert severity="info" sx={{ mt: 2 }}>
+                {t('settings.embedding.rebuildNotConfigured')}
+              </Alert>
+            )}
+
+            {rebuildError && (
+              <Alert severity="error" sx={{ mt: 2 }}>
+                {t('settings.embedding.rebuildFailed', { error: rebuildError })}
+              </Alert>
+            )}
           </Grid>
         </Grid>
       </CardContent>

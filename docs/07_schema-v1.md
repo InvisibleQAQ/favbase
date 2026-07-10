@@ -9,7 +9,7 @@ authors ←(1:N)— items —(N:M via item_sources)→ sources
                   ↓ (1:1)
              item_contents
                   ↓ (1:N)
-             item_chunks (含 embedding VECTOR(1536))
+             item_chunks (含 embedding VECTOR(N)，维度跟随当前模型，初始 1536)
 ```
 
 ## 初始化
@@ -24,7 +24,7 @@ authors ←(1:N)— items —(N:M via item_sources)→ sources
 -------------------------------------------------------------------------------
 
 -- pgvector: 向量相似度搜索（余弦距离 <=>、L2 距离 <->）
--- 用于知识库语义搜索，embedding 列类型 VECTOR(1536)
+-- 用于知识库语义搜索，embedding 列维度跟随当前模型（初始 1536）
 CREATE EXTENSION IF NOT EXISTS vector;
 
 -- uuid-ossp: UUID 生成函数
@@ -369,7 +369,7 @@ CREATE TABLE item_contents (
 -- 每个 chunk 附带一个 nullable 的 embedding 向量列。
 --
 -- embedding 为什么不用独立的 item_embeddings 表？
--- Decision 3 锁定 VECTOR(1536)，换模型全量重建——任何时刻一个 chunk
+-- 单一活跃维度（列维度跟随当前模型），换模型全量重建——任何时刻一个 chunk
 -- 最多一个有效 embedding（1:0..1 关系）。独立表是过度正规化，
 -- 且搜索热路径多一次 JOIN。
 --
@@ -406,7 +406,9 @@ CREATE TABLE item_chunks (
   --   ALTER TABLE item_chunks ALTER COLUMN embedding
   --     TYPE vector(N) USING NULL::vector(N)
   -- （清空旧向量 + 换维度 + HNSW 索引自动重建三合一，PGlite + pgvector 0.8.1
-  -- 实测验证），并把 'embedded' item 回退 'chunked' 等待重嵌入。
+  -- 实测验证），并把 'embedded' item 回退 'chunked'；积压通过设置页嵌入卡片
+  -- 「重建向量」按钮（lib/embedding rebuildPendingEmbeddings）批量重嵌入，
+  -- 失败即停 + 幂等续跑。
   -- 当前列维度唯一真相是 pg catalog（pg_attribute.atttypmod = 维度原值），
   -- 不在 WXT storage 维护副本。
   -- HNSW 索引上限 2000 维：超限模型（如 text-embedding-3-large 3072 未裁剪）
@@ -468,7 +470,7 @@ embedding 部分完成（部分 chunk 有向量、部分没有）的精确状态
 
 ```sql
 -- 语义搜索：将用户查询文本转为 embedding 后，找最相似的 chunk
--- $1: 查询向量（由 Embedding API 生成的 1536 维浮点数组，JSON.stringify 后传入）
+-- $1: 查询向量（由当前 embedding 模型生成，维度须与列维度一致；'[...]' 文本形式传入）
 -- $2: 返回条数上限
 -- <=> 是 pgvector 的余弦距离运算符，1 - distance = similarity (0~1)
 -- WHERE embedding IS NOT NULL 跳过未嵌入的 chunk
@@ -549,4 +551,4 @@ INSERT INTO _migrations (version, name) VALUES (1, 'v1_init');
 | 12 表（含 QA/digests/jobs/search_history） | 7 表 | MVP 精简，后续迁移添加 |
 | WebDAV 同步字段（deleted_at/content_hash 等） | 延后 | 先做本地闭环 |
 | content_state 4 状态 | 6 状态（+embedded, +error） | 审查补充，覆盖异常和统计需求 |
-| 向量维度 1536 | 不变 | — |
+| 向量维度固定 1536 | 列维度跟随当前模型（惰性 ALTER + 设置页手动重建） | 固定维度锁死非 1536 provider；换模型本就要全量重算 |

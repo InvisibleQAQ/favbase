@@ -32,8 +32,11 @@ export { chunkSubtitleRows, type ChunkerOptions } from './chunker';
 
 export {
   indexItemChunks,
+  rebuildPendingEmbeddings,
   type IndexingDeps,
   type IndexedContentState,
+  type RebuildProgress,
+  type RebuildOutcome,
 } from './indexing';
 
 export {
