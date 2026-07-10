@@ -23,6 +23,7 @@ import type { EmbeddingUpdate } from '@/lib/hooks/useSettings';
 import { testEmbeddingConnection } from '@/lib/ai';
 import { initDbProxy } from '@/lib/database';
 import {
+  COMMON_EMBEDDING_DIMENSIONS,
   MAX_INDEXABLE_DIMENSIONS,
   getEmbeddingStats,
   rebuildPendingEmbeddings,
@@ -38,7 +39,7 @@ interface EmbeddingConfigCardProps {
   currentEmbeddingApiKey: string;
   currentEmbeddingBaseUrl: string;
   currentEmbeddingModel: string;
-  /** Raw user-entered value (may be invalid) so the error state can render. */
+  /** One of COMMON_EMBEDDING_DIMENSIONS, or undefined = auto (model native). */
   currentEmbeddingDimensions: number | undefined;
   updateEmbedding: (update: EmbeddingUpdate) => void;
 }
@@ -100,17 +101,9 @@ export function EmbeddingConfigCard({
 
   const canTest = !!(currentEmbeddingApiKey && currentEmbeddingModel);
 
-  // Invalid dimensions shows an inline error but never blocks other fields.
-  // Two-tier handling downstream: resolveEmbeddingConfig/embeddingProviderOptions
-  // only drop values that can't be sent at all (non-finite / <= 0); UI-invalid
-  // but sendable values (fractional, > cap) are transmitted on purpose and get
-  // rejected loudly (probe dimensionLimitError / upsert dimension guard / API
-  // 400) — silently ignoring a configured truncation would be worse.
-  const dimensionsInvalid =
-    currentEmbeddingDimensions !== undefined &&
-    (!Number.isInteger(currentEmbeddingDimensions) ||
-      currentEmbeddingDimensions <= 0 ||
-      currentEmbeddingDimensions > MAX_INDEXABLE_DIMENSIONS);
+  // Dimensions is a Select over COMMON_EMBEDDING_DIMENSIONS — the UI cannot
+  // produce an invalid value. lib-layer resolveEmbeddingConfig keeps its own
+  // filter for unsendable values (non-finite / <= 0) as the invariant.
 
   const handleTestConnection = useCallback(async () => {
     setIsTesting(true);
@@ -129,11 +122,8 @@ export function EmbeddingConfigCard({
         apiKey: currentEmbeddingApiKey,
         baseUrl: currentEmbeddingBaseUrl,
         model: currentEmbeddingModel,
-        // Probe with the RAW configured truncation so the reported dimension
-        // matches what indexing would actually do: non-finite/<=0 values are
-        // dropped inside embeddingProviderOptions (probe = native dim, same as
-        // real embeds), sendable-but-invalid values (e.g. 3000) go through and
-        // surface as dimensionLimitError / testFailed — mirroring indexing.
+        // Probe with the configured truncation so the reported dimension
+        // matches what indexing would actually do (undefined = native dim).
         dimensions: currentEmbeddingDimensions,
       });
       setTestDimensions(result.dimensions);
@@ -290,13 +280,12 @@ export function EmbeddingConfigCard({
             />
           </Grid>
 
-          {/* Dimensions (optional Matryoshka truncation) */}
+          {/* Dimensions (optional Matryoshka truncation, preset Select) */}
           <Grid size={{ xs: 12, md: 6 }}>
             <TextField
+              select
               fullWidth
-              type="number"
               label={t('settings.embedding.dimensions')}
-              placeholder={t('settings.embedding.dimensionsPlaceholder')}
               value={currentEmbeddingDimensions ?? ''}
               onChange={(e) =>
                 updateEmbedding({
@@ -304,14 +293,13 @@ export function EmbeddingConfigCard({
                   value: e.target.value === '' ? undefined : Number(e.target.value),
                 })
               }
-              error={dimensionsInvalid}
-              helperText={
-                dimensionsInvalid
-                  ? t('settings.embedding.dimensionsInvalid', { limit: MAX_INDEXABLE_DIMENSIONS })
-                  : t('settings.embedding.dimensionsHelper', { limit: MAX_INDEXABLE_DIMENSIONS })
-              }
-              slotProps={{ htmlInput: { min: 1, max: MAX_INDEXABLE_DIMENSIONS, step: 1 } }}
-            />
+              helperText={t('settings.embedding.dimensionsHelper', { limit: MAX_INDEXABLE_DIMENSIONS })}
+            >
+              <MenuItem value="">{t('settings.embedding.dimensionsAuto')}</MenuItem>
+              {COMMON_EMBEDDING_DIMENSIONS.map((d) => (
+                <MenuItem key={d} value={d}>{d}</MenuItem>
+              ))}
+            </TextField>
           </Grid>
 
           {/* Test Connection (wired to testEmbeddingConnection) */}

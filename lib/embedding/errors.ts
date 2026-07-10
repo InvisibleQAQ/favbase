@@ -6,6 +6,14 @@
 export const MAX_INDEXABLE_DIMENSIONS = 2000;
 
 /**
+ * Common embedding dimensions / Matryoshka truncation targets across major
+ * providers (OpenAI v3, Gemini, ZhiPu, BGE-M3, Qwen3, nomic...), filtered to
+ * values <= MAX_INDEXABLE_DIMENSIONS. Single source for the settings-page
+ * dimensions Select. Research: task 07-10 restrict-embedding-dimensions.
+ */
+export const COMMON_EMBEDDING_DIMENSIONS = [256, 512, 768, 1024, 1536] as const;
+
+/**
  * Thrown when a vector's length does not match the expected dimension —
  * either the current `item_chunks.embedding` column width (search path) or
  * the batch's leading vector (a mixed-dimension batch is a caller bug).

@@ -46,9 +46,10 @@ export interface UseSettingsReturn {
   currentEmbeddingBaseUrl: string;
   currentEmbeddingModel: string;
   /**
-   * RAW user-entered dimensions (may be invalid — the input needs it to render
-   * the error state). Embed consumers use `resolveEmbeddingConfig(...).dimensions`,
-   * which filters invalid values to undefined.
+   * RAW stored dimensions (the settings Select restricts input to
+   * COMMON_EMBEDDING_DIMENSIONS or undefined = auto). Embed consumers use
+   * `resolveEmbeddingConfig(...).dimensions`, which keeps its own filter for
+   * unsendable values as the invariant.
    */
   currentEmbeddingDimensions: number | undefined;
 
@@ -145,8 +146,8 @@ export function useSettings(): UseSettingsReturn {
   const currentEmbeddingApiKey = resolvedEmbedding.apiKey;
   const currentEmbeddingBaseUrl = resolvedEmbedding.baseUrl;
   const currentEmbeddingModel = resolvedEmbedding.model;
-  // Raw (unfiltered) so the UI can render the invalid-input error state;
-  // resolveEmbeddingConfig would silently drop e.g. 0 or -5.
+  // Raw (unfiltered) so the Select reflects exactly what's stored;
+  // resolveEmbeddingConfig keeps its own filter for unsendable values.
   const currentEmbeddingDimensions =
     settings.embeddingConfigs?.[embeddingProvider]?.dimensions;
 

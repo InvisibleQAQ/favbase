@@ -24,6 +24,7 @@ export {
   EmbeddingDimensionError,
   EmbeddingDimensionLimitError,
   MAX_INDEXABLE_DIMENSIONS,
+  COMMON_EMBEDDING_DIMENSIONS,
 } from './errors';
 
 export type { ChunkInput } from './types';
