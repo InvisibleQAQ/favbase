@@ -11,8 +11,11 @@ export {
   createEmbeddingModel,
   embedText,
   embedTexts,
+  embeddingProviderOptions,
   testEmbeddingConnection,
   type CreateEmbeddingModelOptions,
+  type EmbedOptions,
+  type TestEmbeddingOptions,
   type TestEmbeddingResult,
 } from './embedding';
 

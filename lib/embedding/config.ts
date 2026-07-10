@@ -9,6 +9,14 @@ export interface ResolvedEmbeddingConfig {
   baseUrl: string;
   model: string;
   enabled: boolean;
+  /**
+   * Optional output truncation (Matryoshka), forwarded to providers that
+   * support it. `undefined` = model native dimension. Single source: the
+   * user's `embeddingConfigs[providerId].dimensions` — no env fallback, no
+   * provider-def fallback. Only finite numbers > 0 pass through; anything
+   * else resolves to `undefined` (the UI shows the error state separately).
+   */
+  dimensions?: number;
 }
 
 /**
@@ -60,12 +68,22 @@ export function resolveEmbeddingConfig(settings: UserSettings): ResolvedEmbeddin
 
   const apiKey = cfg?.apiKey || env.apiKey;
 
+  // dimensions has exactly one source: explicit user config. Filter invalid
+  // values (non-number / NaN / Infinity / <= 0) to undefined so downstream
+  // embed calls fall back to the model's native dimension.
+  const rawDimensions = cfg?.dimensions;
+  const dimensions =
+    typeof rawDimensions === 'number' && Number.isFinite(rawDimensions) && rawDimensions > 0
+      ? rawDimensions
+      : undefined;
+
   return {
     providerId,
     apiKey,
     baseUrl: cfg?.baseUrl || env.baseUrl || def.baseUrl,
     model: cfg?.model || env.model || def.defaultModel,
     enabled: !!apiKey,
+    dimensions,
   };
 }
 

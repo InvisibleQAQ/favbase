@@ -196,3 +196,57 @@ describe('resolveEmbeddingConfig — priority: user-filled > env > provider def 
     expect(r.providerId).toBe('zhipu');
   });
 });
+
+describe('resolveEmbeddingConfig — dimensions (user config only, no env/def fallback)', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  function stubEnvEmpty() {
+    vi.stubEnv('VITE_EMBEDDING_PROVIDER', '');
+    vi.stubEnv('VITE_EMBEDDING_API_KEY', '');
+    vi.stubEnv('VITE_EMBEDDING_MODEL', '');
+    vi.stubEnv('VITE_EMBEDDING_BASE_URL', '');
+  }
+
+  it('passes through a user-configured positive number', () => {
+    stubEnvEmpty();
+    const r = resolveEmbeddingConfig(
+      makeSettings({ embeddingConfigs: { openai: { apiKey: 'k', dimensions: 1024 } } }),
+    );
+    expect(r.dimensions).toBe(1024);
+  });
+
+  it('resolves to undefined when not configured', () => {
+    stubEnvEmpty();
+    const r = resolveEmbeddingConfig(
+      makeSettings({ embeddingConfigs: { openai: { apiKey: 'k' } } }),
+    );
+    expect(r.dimensions).toBeUndefined();
+  });
+
+  it('filters invalid values (0 / negative / NaN / Infinity / non-number) to undefined', () => {
+    stubEnvEmpty();
+    const invalid: unknown[] = [0, -5, Number.NaN, Number.POSITIVE_INFINITY, '1024'];
+    for (const dimensions of invalid) {
+      const r = resolveEmbeddingConfig(
+        makeSettings({
+          embeddingConfigs: { openai: { apiKey: 'k', dimensions: dimensions as number } },
+        }),
+      );
+      expect(r.dimensions, `dimensions=${String(dimensions)}`).toBeUndefined();
+    }
+  });
+
+  it('dimensions is keyed by the resolved provider, not leaked across providers', () => {
+    stubEnvEmpty();
+    const r = resolveEmbeddingConfig(
+      makeSettings({
+        embeddingProvider: 'gemini',
+        embeddingConfigs: {
+          openai: { apiKey: 'k', dimensions: 1024 },
+          gemini: { apiKey: 'k' },
+        },
+      }),
+    );
+    expect(r.dimensions).toBeUndefined();
+  });
+});

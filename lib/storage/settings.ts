@@ -18,7 +18,17 @@ export interface UserSettings {
 
   // Embedding (semantic search)
   embeddingProvider: EmbeddingProviderId;
-  embeddingConfigs: Record<string, { apiKey: string; baseUrl?: string; model?: string }>;
+  /**
+   * `dimensions`: optional output truncation (Matryoshka). Forwarded to
+   * providers that support it (OpenAI v3 `dimensions`, Gemini
+   * `outputDimensionality`, openai-compatible passthrough); unset = model
+   * native dimension. Raw user input — validation/filtering happens in
+   * `resolveEmbeddingConfig` (`lib/embedding/config.ts`).
+   */
+  embeddingConfigs: Record<
+    string,
+    { apiKey: string; baseUrl?: string; model?: string; dimensions?: number }
+  >;
 
   // Mode
   prefMode: 'quality' | 'efficiency';

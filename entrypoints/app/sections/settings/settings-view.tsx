@@ -85,6 +85,7 @@ export function SettingsView() {
                 currentEmbeddingApiKey={s.currentEmbeddingApiKey}
                 currentEmbeddingBaseUrl={s.currentEmbeddingBaseUrl}
                 currentEmbeddingModel={s.currentEmbeddingModel}
+                currentEmbeddingDimensions={s.currentEmbeddingDimensions}
                 updateEmbedding={s.updateEmbedding}
               />
             )}

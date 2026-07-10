@@ -24,7 +24,8 @@ export type EmbeddingUpdate =
   | { field: 'provider'; value: EmbeddingProviderId }
   | { field: 'apiKey'; value: string }
   | { field: 'baseUrl'; value: string }
-  | { field: 'model'; value: string };
+  | { field: 'model'; value: string }
+  | { field: 'dimensions'; value: number | undefined };
 
 export interface UseSettingsReturn {
   settings: UserSettings;
@@ -44,6 +45,12 @@ export interface UseSettingsReturn {
   currentEmbeddingApiKey: string;
   currentEmbeddingBaseUrl: string;
   currentEmbeddingModel: string;
+  /**
+   * RAW user-entered dimensions (may be invalid — the input needs it to render
+   * the error state). Embed consumers use `resolveEmbeddingConfig(...).dimensions`,
+   * which filters invalid values to undefined.
+   */
+  currentEmbeddingDimensions: number | undefined;
 
   updateLlm: (update: LlmUpdate) => void;
   updateAsr: (update: AsrUpdate) => void;
@@ -138,6 +145,10 @@ export function useSettings(): UseSettingsReturn {
   const currentEmbeddingApiKey = resolvedEmbedding.apiKey;
   const currentEmbeddingBaseUrl = resolvedEmbedding.baseUrl;
   const currentEmbeddingModel = resolvedEmbedding.model;
+  // Raw (unfiltered) so the UI can render the invalid-input error state;
+  // resolveEmbeddingConfig would silently drop e.g. 0 or -5.
+  const currentEmbeddingDimensions =
+    settings.embeddingConfigs?.[embeddingProvider]?.dimensions;
 
   // --- LLM action ---
   const updateLlm = useCallback(
@@ -215,6 +226,12 @@ export function useSettings(): UseSettingsReturn {
             embeddingConfigs: { ...settings.embeddingConfigs, [embeddingProvider]: { ...cur, model: update.value } },
           });
         }
+        case 'dimensions': {
+          const cur = settings.embeddingConfigs?.[embeddingProvider] ?? { apiKey: '' };
+          return updateSettings({
+            embeddingConfigs: { ...settings.embeddingConfigs, [embeddingProvider]: { ...cur, dimensions: update.value } },
+          });
+        }
       }
     },
     [updateSettings, settings.embeddingConfigs, embeddingProvider],
@@ -238,6 +255,7 @@ export function useSettings(): UseSettingsReturn {
     currentEmbeddingApiKey,
     currentEmbeddingBaseUrl,
     currentEmbeddingModel,
+    currentEmbeddingDimensions,
 
     updateLlm,
     updateAsr,

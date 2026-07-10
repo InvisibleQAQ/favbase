@@ -30,6 +30,8 @@ interface EmbeddingConfigCardProps {
   currentEmbeddingApiKey: string;
   currentEmbeddingBaseUrl: string;
   currentEmbeddingModel: string;
+  /** Raw user-entered value (may be invalid) so the error state can render. */
+  currentEmbeddingDimensions: number | undefined;
   updateEmbedding: (update: EmbeddingUpdate) => void;
 }
 
@@ -38,6 +40,7 @@ export function EmbeddingConfigCard({
   currentEmbeddingApiKey,
   currentEmbeddingBaseUrl,
   currentEmbeddingModel,
+  currentEmbeddingDimensions,
   updateEmbedding,
 }: EmbeddingConfigCardProps) {
   const { t } = useTranslation();
@@ -61,6 +64,18 @@ export function EmbeddingConfigCard({
 
   const canTest = !!(currentEmbeddingApiKey && currentEmbeddingModel);
 
+  // Invalid dimensions shows an inline error but never blocks other fields.
+  // Two-tier handling downstream: resolveEmbeddingConfig/embeddingProviderOptions
+  // only drop values that can't be sent at all (non-finite / <= 0); UI-invalid
+  // but sendable values (fractional, > cap) are transmitted on purpose and get
+  // rejected loudly (probe dimensionLimitError / upsert dimension guard / API
+  // 400) — silently ignoring a configured truncation would be worse.
+  const dimensionsInvalid =
+    currentEmbeddingDimensions !== undefined &&
+    (!Number.isInteger(currentEmbeddingDimensions) ||
+      currentEmbeddingDimensions <= 0 ||
+      currentEmbeddingDimensions > MAX_INDEXABLE_DIMENSIONS);
+
   const handleTestConnection = useCallback(async () => {
     setIsTesting(true);
     setTestDimensions(null);
@@ -78,6 +93,12 @@ export function EmbeddingConfigCard({
         apiKey: currentEmbeddingApiKey,
         baseUrl: currentEmbeddingBaseUrl,
         model: currentEmbeddingModel,
+        // Probe with the RAW configured truncation so the reported dimension
+        // matches what indexing would actually do: non-finite/<=0 values are
+        // dropped inside embeddingProviderOptions (probe = native dim, same as
+        // real embeds), sendable-but-invalid values (e.g. 3000) go through and
+        // surface as dimensionLimitError / testFailed — mirroring indexing.
+        dimensions: currentEmbeddingDimensions,
       });
       setTestDimensions(result.dimensions);
     } catch (err) {
@@ -91,6 +112,7 @@ export function EmbeddingConfigCard({
     currentEmbeddingApiKey,
     currentEmbeddingBaseUrl,
     currentEmbeddingModel,
+    currentEmbeddingDimensions,
     ensure,
     t,
   ]);
@@ -184,6 +206,30 @@ export function EmbeddingConfigCard({
               placeholder={currentEmbeddingDef.defaultModel}
               value={currentEmbeddingModel}
               onChange={(e) => updateEmbedding({ field: 'model', value: e.target.value })}
+            />
+          </Grid>
+
+          {/* Dimensions (optional Matryoshka truncation) */}
+          <Grid size={{ xs: 12, md: 6 }}>
+            <TextField
+              fullWidth
+              type="number"
+              label={t('settings.embedding.dimensions')}
+              placeholder={t('settings.embedding.dimensionsPlaceholder')}
+              value={currentEmbeddingDimensions ?? ''}
+              onChange={(e) =>
+                updateEmbedding({
+                  field: 'dimensions',
+                  value: e.target.value === '' ? undefined : Number(e.target.value),
+                })
+              }
+              error={dimensionsInvalid}
+              helperText={
+                dimensionsInvalid
+                  ? t('settings.embedding.dimensionsInvalid', { limit: MAX_INDEXABLE_DIMENSIONS })
+                  : t('settings.embedding.dimensionsHelper', { limit: MAX_INDEXABLE_DIMENSIONS })
+              }
+              slotProps={{ htmlInput: { min: 1, max: MAX_INDEXABLE_DIMENSIONS, step: 1 } }}
             />
           </Grid>
 

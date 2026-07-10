@@ -37,7 +37,12 @@ const defaultDeps: IndexingDeps = {
       baseUrl: config.baseUrl,
       model: config.model,
     });
-    return embedTexts(model, texts);
+    // Forward the optional user-configured truncation (Matryoshka) so the
+    // stored dimension matches what testEmbeddingConnection probes.
+    return embedTexts(model, texts, {
+      providerId: config.providerId,
+      dimensions: config.dimensions,
+    });
   },
 };
 

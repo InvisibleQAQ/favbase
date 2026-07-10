@@ -14,13 +14,27 @@ import type { ChunkInput } from './types';
 
 // config.ts (pulled in by indexing.ts) value-imports `settingsStorage`, whose
 // barrel eagerly touches `@wxt-dev/storage` (chrome.runtime) at load. Stub it
-// out — every test here injects explicit IndexingDeps. Mirrors config.test.ts.
+// out with a mutable state so the defaultDeps test can feed real settings;
+// all other tests inject explicit IndexingDeps. Mirrors config.test.ts.
+const mockSettings = vi.hoisted(() => ({ value: {} as Record<string, unknown> }));
 vi.mock('@/lib/storage', () => ({
   settingsStorage: {
-    getValue: () => Promise.resolve({}),
+    getValue: () => Promise.resolve(mockSettings.value),
     setValue: () => Promise.resolve(),
     watch: () => () => {},
   },
+}));
+
+// Mock the AI infra so the defaultDeps path (no injected IndexingDeps) can be
+// exercised without network: assert createEmbeddingModel/embedTexts receive
+// the resolved config's providerId + dimensions.
+const aiMock = vi.hoisted(() => ({
+  createEmbeddingModel: vi.fn(() => ({ __mock: 'model' })),
+  embedTexts: vi.fn(),
+}));
+vi.mock('@/lib/ai', () => ({
+  createEmbeddingModel: aiMock.createEmbeddingModel,
+  embedTexts: aiMock.embedTexts,
 }));
 
 // ---------------------------------------------------------------------------
@@ -221,5 +235,57 @@ describe('indexItemChunks', () => {
     expect(state).toBe('chunked');
     expect(await getChunks(itemId)).toHaveLength(0);
     expect(deps.embed).not.toHaveBeenCalled();
+  });
+
+  it('resolved config (incl. dimensions) flows intact through the injected embed dep', async () => {
+    const itemId = await seedItem('i-di-dims');
+    const config: ResolvedEmbeddingConfig = { ...fakeConfig(true), dimensions: 1024 };
+    const embed = vi.fn(async (_c: ResolvedEmbeddingConfig, texts: string[]) =>
+      fakeVectors(texts.length),
+    );
+
+    const state = await indexItemChunks(db, itemId, CHUNKS, {
+      getConfig: async () => config,
+      embed,
+    });
+
+    expect(state).toBe('embedded');
+    expect(embed).toHaveBeenCalledWith(config, ['chunk zero', 'chunk one']);
+  });
+
+  it('default deps forward providerId + dimensions from the resolved config into embedTexts', async () => {
+    const itemId = await seedItem('i-default-deps-dims');
+    // Hermetic: a developer's real .env.local (VITE_EMBEDDING_*) must not leak
+    // into resolveEmbeddingConfig here.
+    vi.stubEnv('VITE_EMBEDDING_PROVIDER', '');
+    vi.stubEnv('VITE_EMBEDDING_API_KEY', '');
+    vi.stubEnv('VITE_EMBEDDING_MODEL', '');
+    vi.stubEnv('VITE_EMBEDDING_BASE_URL', '');
+    mockSettings.value = {
+      embeddingProvider: 'openai',
+      embeddingConfigs: { openai: { apiKey: 'k', model: 'm', dimensions: 1024 } },
+    };
+    aiMock.embedTexts.mockImplementation(async (_model: unknown, texts: string[]) =>
+      fakeVectors(texts.length),
+    );
+
+    try {
+      // No deps injected → real defaultDeps: getEmbeddingSettings → resolver →
+      // createEmbeddingModel + embedTexts (both mocked at the @/lib/ai seam).
+      const state = await indexItemChunks(db, itemId, CHUNKS);
+
+      expect(state).toBe('embedded');
+      expect(aiMock.createEmbeddingModel).toHaveBeenCalledWith(
+        expect.objectContaining({ providerId: 'openai', apiKey: 'k', model: 'm' }),
+      );
+      expect(aiMock.embedTexts).toHaveBeenCalledWith(
+        expect.anything(),
+        ['chunk zero', 'chunk one'],
+        { providerId: 'openai', dimensions: 1024 },
+      );
+    } finally {
+      mockSettings.value = {};
+      vi.unstubAllEnvs();
+    }
   });
 });

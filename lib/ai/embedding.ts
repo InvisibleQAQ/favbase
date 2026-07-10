@@ -69,12 +69,74 @@ function createModelBySdkType(
 // embedText / embedTexts
 // ---------------------------------------------------------------------------
 
+/** Per-call options for `embedText` / `embedTexts`. */
+export interface EmbedOptions {
+  providerId: EmbeddingProviderId;
+  /**
+   * Optional output truncation (Matryoshka). `undefined` = model native
+   * dimension. Forwarded via providerOptions to providers that support it;
+   * see `embeddingProviderOptions`.
+   */
+  dimensions?: number;
+}
+
+/**
+ * Build the per-call `providerOptions` that forward the optional `dimensions`
+ * truncation. Key/field per sdkType, verified against local SDK sources:
+ *
+ * - `openai` → `{ openai: { dimensions } }` — @ai-sdk/openai puts it verbatim
+ *   into the POST /embeddings body (`dist/index.mjs`, ~L1719 in 3.0.73).
+ * - `google` → `{ google: { outputDimensionality } }` — @ai-sdk/google parses
+ *   `providerOptions.google` and sends `outputDimensionality` (truncates the
+ *   output embedding from the end). Google does NOT re-normalize truncated
+ *   vectors — harmless here: pgvector's `<=>` cosine distance divides by the
+ *   norms internally, so ranking is scale-invariant. Do not switch semantic
+ *   search to inner product (`<#>`) without re-normalizing.
+ * - `openai-compatible` (and the anthropic fallback) →
+ *   `{ [providerId]: { dimensions } }` — @ai-sdk/openai-compatible 2.0.51
+ *   parses `providerOptions[config.provider.split('.')[0]]`, and
+ *   `createOpenAICompatible({ name })` sets `config.provider =
+ *   "${name}.embedding"`, so the key is exactly our providerId.
+ *
+ * Invalid values (undefined / non-positive / non-finite) return `undefined`
+ * so the request carries no truncation — same filter as
+ * `resolveEmbeddingConfig`, guarding direct callers too.
+ */
+export function embeddingProviderOptions(
+  providerId: EmbeddingProviderId,
+  dimensions?: number,
+): Record<string, Record<string, number>> | undefined {
+  if (
+    dimensions === undefined ||
+    typeof dimensions !== 'number' ||
+    !Number.isFinite(dimensions) ||
+    dimensions <= 0
+  ) {
+    return undefined;
+  }
+
+  const def = getEmbeddingProviderDef(providerId);
+  switch (def.sdkType) {
+    case 'openai':
+      return { openai: { dimensions } };
+    case 'google':
+      return { google: { outputDimensionality: dimensions } };
+    case 'anthropic':
+    case 'openai-compatible':
+      return { [providerId]: { dimensions } };
+  }
+}
+
 /** Embed a single string. Empty/blank input is rejected (no wasted request). */
 export async function embedText(
   model: EmbeddingModel,
   text: string,
+  options?: EmbedOptions,
 ): Promise<number[]> {
-  const { embedding } = await embed({ model, value: text });
+  const providerOptions = options
+    ? embeddingProviderOptions(options.providerId, options.dimensions)
+    : undefined;
+  const { embedding } = await embed({ model, value: text, providerOptions });
   return embedding;
 }
 
@@ -82,15 +144,29 @@ export async function embedText(
 export async function embedTexts(
   model: EmbeddingModel,
   texts: string[],
+  options?: EmbedOptions,
 ): Promise<number[][]> {
   if (texts.length === 0) return [];
-  const { embeddings } = await embedMany({ model, values: texts });
+  const providerOptions = options
+    ? embeddingProviderOptions(options.providerId, options.dimensions)
+    : undefined;
+  const { embeddings } = await embedMany({ model, values: texts, providerOptions });
   return embeddings;
 }
 
 // ---------------------------------------------------------------------------
 // testEmbeddingConnection
 // ---------------------------------------------------------------------------
+
+export interface TestEmbeddingOptions extends CreateEmbeddingModelOptions {
+  /**
+   * Optional output truncation — MUST match what indexing will actually send,
+   * otherwise the probe reports the native dimension while real embeds store
+   * the truncated one (e.g. 3-large: probe says 3072 > cap, but indexing
+   * would store a valid 1024).
+   */
+  dimensions?: number;
+}
 
 export interface TestEmbeddingResult {
   success: boolean;
@@ -103,13 +179,17 @@ export interface TestEmbeddingResult {
  * Probe a provider by embedding a short string. Returns the real vector length
  * so the UI can validate it against the HNSW index cap (2000, see
  * `MAX_INDEXABLE_DIMENSIONS` in `lib/embedding`). Mirrors `testLlmConnection`
- * but adds `dimensions`.
+ * but adds `dimensions`. The probe carries the configured truncation so it
+ * reflects the dimension that would actually be stored.
  */
 export async function testEmbeddingConnection(
-  options: CreateEmbeddingModelOptions,
+  options: TestEmbeddingOptions,
 ): Promise<TestEmbeddingResult> {
   const model = createEmbeddingModel(options);
-  const vector = await embedText(model, 'favbase connection test');
+  const vector = await embedText(model, 'favbase connection test', {
+    providerId: options.providerId,
+    dimensions: options.dimensions,
+  });
 
   return {
     success: true,
