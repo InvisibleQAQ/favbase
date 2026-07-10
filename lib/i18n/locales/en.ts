@@ -7,6 +7,9 @@ const en: Record<LocaleKeys, string> = {
   'status.noSubtitle': 'No subtitles detected, transcription available',
   'panel.expand': 'Expand panel',
   'panel.collapse': 'Collapse panel',
+  'panel.aiConfig': 'AI Config',
+  'panel.settingsMoved': 'AI service configuration has moved to the favbase settings page — save manually after a successful connection test.',
+  'panel.openSettings': 'Open Settings',
 
   'subtitle.jumpTo': 'Jump to {{time}}',
 
@@ -21,19 +24,17 @@ const en: Record<LocaleKeys, string> = {
   'sidebar.subtitles': 'Subtitles',
   'sidebar.settings': 'Settings',
 
-  'settings.llm': 'LLM Settings',
   'settings.llmProvider': 'LLM Provider',
   'settings.apiKey': 'API Key',
   'settings.apiKeyPlaceholder': 'Enter API Key',
   'settings.model': 'Model',
   'settings.modelPlaceholder': 'Enter model name',
   'settings.getKey': 'Get Key',
-  'settings.customBaseUrl': 'Custom Base URL',
   'settings.customBaseUrlPlaceholder': 'https://your-endpoint.com/v1/',
   'settings.customProtocol': 'Protocol',
 
-  'settings.asr': 'ASR Settings',
   'settings.asrProvider': 'ASR Provider',
+  'settings.asrTestSuccess': 'Connection successful — API key is valid',
 
   'settings.mode': 'Call Mode',
   'settings.modeQuality': 'Quality',
@@ -41,9 +42,9 @@ const en: Record<LocaleKeys, string> = {
   'settings.modeEfficiency': 'Efficiency',
   'settings.modeEfficiencyDesc': 'Single merged request, faster speed',
 
-  'settings.saved': 'Saved',
-  'settings.show': 'Show',
-  'settings.hide': 'Hide',
+  'settings.save': 'Save',
+  'settings.savedAt': 'Saved {{time}}',
+  'settings.testBeforeSave': 'Connection settings changed — test the connection before saving',
 
   'settings.title': 'Settings',
   'settings.tabAi': 'AI Config',

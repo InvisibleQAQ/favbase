@@ -14,6 +14,7 @@ import {
   handleGetVideoCache,
   handleCacheSubtitle,
 } from '@/lib/background/cache-handlers';
+import { handleOpenAppPage } from '@/lib/background/app-handlers';
 
 function createBackgroundContext(): BackgroundContext {
   const abortControllers = new Map<number, AbortController>();
@@ -102,6 +103,8 @@ export default defineBackground(() => {
           return handleGetVideoCache(msg);
         case 'CACHE_SUBTITLE':
           return handleCacheSubtitle(msg);
+        case 'OPEN_APP_PAGE':
+          return handleOpenAppPage(msg);
         default:
           return;
       }

@@ -27,7 +27,7 @@ describe('t() interpolation', () => {
   });
 
   it('returns the raw string when no params', () => {
-    expect(t('settings.saved')).toBe('Saved');
+    expect(t('settings.save')).toBe('Save');
   });
 
   it('falls back to the key when missing', () => {

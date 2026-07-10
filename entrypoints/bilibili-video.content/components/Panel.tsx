@@ -4,7 +4,7 @@ import type { LocaleKeys } from '@/lib/i18n/locales/zh-CN';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { StatusBar } from './StatusBar';
 import { SubtitleView } from './SubtitleView';
-import { SettingsView, type SettingsViewProps } from './SettingsView';
+import { SettingsView } from './SettingsView';
 import { TranscribeButton } from './TranscribeButton';
 import type { UseTranscribeReturn } from '../hooks/useTranscribe';
 
@@ -30,13 +30,11 @@ interface PanelProps {
   showTranscribe: boolean;
   transcribe: UseTranscribeReturn;
   hasApiKey: boolean;
-  settingsProps: SettingsViewProps;
 }
 
 export function Panel({
   loading, status, error, rows, title,
   source, cached, showTranscribe, transcribe, hasApiKey,
-  settingsProps,
 }: PanelProps) {
   const { t } = useTranslation();
   const [collapsed, setCollapsed] = useState(false);
@@ -97,7 +95,7 @@ export function Panel({
             </>
           )}
           {activeTab === 'settings' && (
-            <SettingsView {...settingsProps} />
+            <SettingsView />
           )}
         </div>
       </div>

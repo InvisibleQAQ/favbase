@@ -3,8 +3,8 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { generateText, type LanguageModel } from 'ai';
-import type { LLMProviderId, SdkType } from '@/lib/providers';
-import { getProviderDef } from '@/lib/providers';
+import type { ASRProviderId, LLMProviderId, SdkType } from '@/lib/providers';
+import { getAsrProviderDef, getProviderDef } from '@/lib/providers';
 
 // Embedding provider/client infra (sibling module, re-exported for `@/lib/ai`).
 export {
@@ -110,6 +110,37 @@ export async function testLlmConnection(options: {
     success: true,
     message: text.trim() || 'Connection successful',
   };
+}
+
+// ---------------------------------------------------------------------------
+// testAsrConnection
+// ---------------------------------------------------------------------------
+
+/**
+ * Validates the API key + endpoint reachability via `GET {baseUrl}/models`
+ * (both ASR providers are OpenAI-compatible). A real transcription probe
+ * would need an audio file; the models endpoint is free and instant. Note it
+ * cannot validate a specific model name — only the credential.
+ */
+export async function testAsrConnection(options: {
+  providerId: ASRProviderId;
+  apiKey: string;
+}): Promise<TestConnectionResult> {
+  const def = getAsrProviderDef(options.providerId);
+  const endpoint = `${def.baseUrl.replace(/\/+$/, '')}/models`;
+
+  const response = await fetch(endpoint, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${options.apiKey}` },
+    signal: AbortSignal.timeout(15000),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw new Error(`HTTP ${response.status}: ${text.slice(0, 200)}`);
+  }
+
+  return { success: true, message: 'API key valid' };
 }
 
 // ---------------------------------------------------------------------------

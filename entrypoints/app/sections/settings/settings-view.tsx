@@ -58,36 +58,15 @@ export function SettingsView() {
 
           <Grid size={{ xs: 12, md: 9 }}>
             {aiSection === 'llm' && (
-              <LlmConfigCard
-                settings={s.settings}
-                currentProviderDef={s.currentProviderDef}
-                currentLlmApiKey={s.currentLlmApiKey}
-                currentLlmModel={s.currentLlmModel}
-                isCustomProvider={s.isCustomProvider}
-                saved={s.saved}
-                updateLlm={s.updateLlm}
-              />
+              <LlmConfigCard settings={s.settings} saveLlm={s.saveLlm} />
             )}
 
             {aiSection === 'asr' && (
-              <AsrConfigCard
-                settings={s.settings}
-                currentAsrDef={s.currentAsrDef}
-                currentAsrApiKey={s.currentAsrApiKey}
-                currentAsrModel={s.currentAsrModel}
-                updateAsr={s.updateAsr}
-              />
+              <AsrConfigCard settings={s.settings} saveAsr={s.saveAsr} />
             )}
 
             {aiSection === 'embedding' && (
-              <EmbeddingConfigCard
-                currentEmbeddingDef={s.currentEmbeddingDef}
-                currentEmbeddingApiKey={s.currentEmbeddingApiKey}
-                currentEmbeddingBaseUrl={s.currentEmbeddingBaseUrl}
-                currentEmbeddingModel={s.currentEmbeddingModel}
-                currentEmbeddingDimensions={s.currentEmbeddingDimensions}
-                updateEmbedding={s.updateEmbedding}
-              />
+              <EmbeddingConfigCard settings={s.settings} saveEmbedding={s.saveEmbedding} />
             )}
           </Grid>
         </Grid>

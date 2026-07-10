@@ -1,70 +1,101 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { LLMProviderId, ASRProviderId, LLMProviderDef, ASRProviderDef, EmbeddingProviderId, EmbeddingProviderDef } from '@/lib/providers';
-import { getProviderDef, ASR_PROVIDERS, getEmbeddingProviderDef } from '@/lib/providers';
+import { useCallback, useEffect, useState } from 'react';
+import type { LLMProviderId, ASRProviderId, EmbeddingProviderId } from '@/lib/providers';
+import { getProviderDef } from '@/lib/providers';
 import type { UserSettings } from '@/lib/storage';
 import { settingsStorage, DEFAULT_SETTINGS, resolveAsrConfig, getEnvApiKey, getEnvModel } from '@/lib/storage';
 import { resolveEmbeddingConfig } from '@/lib/embedding/config';
 
-export type LlmUpdate =
-  | { field: 'provider'; value: LLMProviderId }
-  | { field: 'apiKey'; value: string }
-  | { field: 'model'; value: string }
-  | { field: 'customBaseUrl'; value: string }
-  | { field: 'customProtocol'; value: 'openai' | 'claude' }
-  | { field: 'temperature'; value: number }
-  | { field: 'maxTokens'; value: number }
-  | { field: 'prefMode'; value: 'quality' | 'efficiency' };
+// ---------------------------------------------------------------------------
+// Draft shapes + derivation (pure)
+//
+// Settings cards hold a local draft; nothing touches storage until the user
+// clicks Save (gated on a successful connection test). `deriveXxxDraft` is
+// the single translation from stored `UserSettings` (per-provider records +
+// env fallbacks) to the flat editable shape a card renders.
+// ---------------------------------------------------------------------------
 
-export type AsrUpdate =
-  | { field: 'provider'; value: ASRProviderId }
-  | { field: 'apiKey'; value: string }
-  | { field: 'model'; value: string };
+export interface LlmDraft {
+  provider: LLMProviderId;
+  apiKey: string;
+  model: string;
+  customBaseUrl: string;
+  customProtocol: 'openai' | 'claude';
+  temperature: number;
+  maxTokens: number;
+  prefMode: 'quality' | 'efficiency';
+}
 
-export type EmbeddingUpdate =
-  | { field: 'provider'; value: EmbeddingProviderId }
-  | { field: 'apiKey'; value: string }
-  | { field: 'baseUrl'; value: string }
-  | { field: 'model'; value: string }
-  | { field: 'dimensions'; value: number | undefined };
+export interface AsrDraft {
+  provider: ASRProviderId;
+  apiKey: string;
+  model: string;
+}
+
+export interface EmbeddingDraft {
+  provider: EmbeddingProviderId;
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+  dimensions: number | undefined;
+}
+
+export function deriveLlmDraft(settings: UserSettings, provider?: LLMProviderId): LlmDraft {
+  const p = provider ?? settings.provider;
+  const def = getProviderDef(p);
+  return {
+    provider: p,
+    apiKey: settings.providerApiKeys[p] || getEnvApiKey(p),
+    model: settings.providerModels[p] || getEnvModel(p) || def.defaultModel,
+    customBaseUrl: settings.customBaseUrl,
+    customProtocol: settings.customProtocol,
+    temperature: settings.temperature,
+    maxTokens: settings.maxTokens,
+    prefMode: settings.prefMode,
+  };
+}
+
+export function deriveAsrDraft(settings: UserSettings, provider?: ASRProviderId): AsrDraft {
+  const p = provider ?? settings.asrProvider;
+  const resolved = resolveAsrConfig({ ...settings, asrProvider: p });
+  return { provider: p, apiKey: resolved.apiKey, model: resolved.model };
+}
+
+export function deriveEmbeddingDraft(
+  settings: UserSettings,
+  provider?: EmbeddingProviderId,
+): EmbeddingDraft {
+  const p = provider ?? resolveEmbeddingConfig(settings).providerId;
+  const resolved = resolveEmbeddingConfig({ ...settings, embeddingProvider: p });
+  return {
+    provider: p,
+    apiKey: resolved.apiKey,
+    baseUrl: resolved.baseUrl,
+    model: resolved.model,
+    // Raw stored value (not the resolver's filtered one) so the dimensions
+    // Select reflects exactly what's stored.
+    dimensions: settings.embeddingConfigs?.[p]?.dimensions,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// useSettings
+// ---------------------------------------------------------------------------
 
 export interface UseSettingsReturn {
   settings: UserSettings;
   loading: boolean;
-  saved: boolean;
 
-  currentProviderDef: LLMProviderDef;
-  currentLlmApiKey: string;
-  currentLlmModel: string;
-  isCustomProvider: boolean;
-
-  currentAsrDef: ASRProviderDef;
+  /** Resolved ASR key for non-settings consumers (content script panel). */
   currentAsrApiKey: string;
-  currentAsrModel: string;
 
-  currentEmbeddingDef: EmbeddingProviderDef;
-  currentEmbeddingApiKey: string;
-  currentEmbeddingBaseUrl: string;
-  currentEmbeddingModel: string;
-  /**
-   * RAW stored dimensions (the settings Select restricts input to
-   * COMMON_EMBEDDING_DIMENSIONS or undefined = auto). Embed consumers use
-   * `resolveEmbeddingConfig(...).dimensions`, which keeps its own filter for
-   * unsendable values as the invariant.
-   */
-  currentEmbeddingDimensions: number | undefined;
-
-  updateLlm: (update: LlmUpdate) => void;
-  updateAsr: (update: AsrUpdate) => void;
-  updateEmbedding: (update: EmbeddingUpdate) => void;
+  saveLlm: (draft: LlmDraft) => Promise<void>;
+  saveAsr: (draft: AsrDraft) => Promise<void>;
+  saveEmbedding: (draft: EmbeddingDraft) => Promise<void>;
 }
 
 export function useSettings(): UseSettingsReturn {
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
-  const [saved, setSaved] = useState(false);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingRef = useRef<UserSettings | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -85,181 +116,77 @@ export function useSettings(): UseSettingsReturn {
     };
   }, []);
 
-  const updateSettings = useCallback((patch: Partial<UserSettings>) => {
-    setSettings((prev) => {
-      const next = { ...prev, ...patch };
-      pendingRef.current = next;
-
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-
-      saveTimerRef.current = setTimeout(() => {
-        pendingRef.current = null;
-        settingsStorage.setValue(next).then(() => {
-          setSaved(true);
-          if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
-          savedTimerRef.current = setTimeout(() => setSaved(false), 1500);
-        });
-      }, 500);
-
-      return next;
-    });
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (saveTimerRef.current) {
-        clearTimeout(saveTimerRef.current);
-        if (pendingRef.current) settingsStorage.setValue(pendingRef.current);
-      }
-      if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
-    };
-  }, []);
-
-  // --- LLM computed ---
-  const currentProviderDef = useMemo(
-    () => getProviderDef(settings.provider),
-    [settings.provider],
-  );
-  const currentLlmApiKey = settings.providerApiKeys[settings.provider] || getEnvApiKey(settings.provider);
-  const currentLlmModel =
-    settings.providerModels[settings.provider] || getEnvModel(settings.provider) || currentProviderDef.defaultModel;
-  const isCustomProvider = settings.provider === 'custom';
-
-  // --- ASR computed ---
-  const currentAsrDef = useMemo(
-    () => ASR_PROVIDERS.find((p) => p.id === settings.asrProvider) ?? ASR_PROVIDERS[0],
-    [settings.asrProvider],
-  );
-  const resolved = resolveAsrConfig(settings);
-  const currentAsrApiKey = resolved.apiKey;
-  const currentAsrModel = resolved.model;
-
-  // --- Embedding computed ---
-  // Mirror ASR: derive UI values from the pure resolver so env (VITE_EMBEDDING_*)
-  // shows through as the default starting point until the user overrides a field.
-  const resolvedEmbedding = resolveEmbeddingConfig(settings);
-  const embeddingProvider = resolvedEmbedding.providerId;
-  const currentEmbeddingDef = useMemo(
-    () => getEmbeddingProviderDef(embeddingProvider),
-    [embeddingProvider],
-  );
-  const currentEmbeddingApiKey = resolvedEmbedding.apiKey;
-  const currentEmbeddingBaseUrl = resolvedEmbedding.baseUrl;
-  const currentEmbeddingModel = resolvedEmbedding.model;
-  // Raw (unfiltered) so the Select reflects exactly what's stored;
-  // resolveEmbeddingConfig keeps its own filter for unsendable values.
-  const currentEmbeddingDimensions =
-    settings.embeddingConfigs?.[embeddingProvider]?.dimensions;
-
-  // --- LLM action ---
-  const updateLlm = useCallback(
-    (update: LlmUpdate) => {
-      switch (update.field) {
-        case 'provider':
-          return updateSettings({ provider: update.value });
-        case 'apiKey':
-          return updateSettings({
-            providerApiKeys: { ...settings.providerApiKeys, [settings.provider]: update.value },
-          });
-        case 'model':
-          return updateSettings({
-            providerModels: { ...settings.providerModels, [settings.provider]: update.value },
-          });
-        case 'customBaseUrl':
-          return updateSettings({ customBaseUrl: update.value });
-        case 'customProtocol':
-          return updateSettings({ customProtocol: update.value });
-        case 'temperature':
-          return updateSettings({ temperature: update.value });
-        case 'maxTokens':
-          return updateSettings({ maxTokens: update.value });
-        case 'prefMode':
-          return updateSettings({ prefMode: update.value });
-      }
+  // Saves merge onto the freshly-read stored value (not React state) so two
+  // sections saving near-simultaneously in different contexts don't clobber
+  // each other's fields.
+  const persist = useCallback(
+    async (patch: (cur: UserSettings) => UserSettings) => {
+      const cur = await settingsStorage.getValue();
+      const next = patch(cur);
+      await settingsStorage.setValue(next);
+      setSettings(next);
     },
-    [updateSettings, settings.providerApiKeys, settings.providerModels, settings.provider],
+    [],
   );
 
-  // --- ASR action ---
-  const updateAsr = useCallback(
-    (update: AsrUpdate) => {
-      switch (update.field) {
-        case 'provider':
-          return updateSettings({ asrProvider: update.value });
-        case 'apiKey': {
-          const cur = settings.asrConfigs?.[settings.asrProvider] ?? { apiKey: '', model: '' };
-          return updateSettings({
-            asrConfigs: { ...settings.asrConfigs, [settings.asrProvider]: { ...cur, apiKey: update.value } },
-          });
-        }
-        case 'model': {
-          const cur = settings.asrConfigs?.[settings.asrProvider] ?? { apiKey: '', model: '' };
-          return updateSettings({
-            asrConfigs: { ...settings.asrConfigs, [settings.asrProvider]: { ...cur, model: update.value } },
-          });
-        }
-      }
-    },
-    [updateSettings, settings.asrConfigs, settings.asrProvider],
+  const saveLlm = useCallback(
+    (draft: LlmDraft) =>
+      persist((cur) => ({
+        ...cur,
+        provider: draft.provider,
+        providerApiKeys: { ...cur.providerApiKeys, [draft.provider]: draft.apiKey },
+        providerModels: { ...cur.providerModels, [draft.provider]: draft.model },
+        customBaseUrl: draft.customBaseUrl,
+        customProtocol: draft.customProtocol,
+        temperature: draft.temperature,
+        maxTokens: draft.maxTokens,
+        prefMode: draft.prefMode,
+        configSavedAt: { ...cur.configSavedAt, llm: Date.now() },
+      })),
+    [persist],
   );
 
-  // --- Embedding action ---
-  const updateEmbedding = useCallback(
-    (update: EmbeddingUpdate) => {
-      switch (update.field) {
-        case 'provider':
-          return updateSettings({ embeddingProvider: update.value });
-        case 'apiKey': {
-          const cur = settings.embeddingConfigs?.[embeddingProvider] ?? { apiKey: '' };
-          return updateSettings({
-            embeddingConfigs: { ...settings.embeddingConfigs, [embeddingProvider]: { ...cur, apiKey: update.value } },
-          });
-        }
-        case 'baseUrl': {
-          const cur = settings.embeddingConfigs?.[embeddingProvider] ?? { apiKey: '' };
-          return updateSettings({
-            embeddingConfigs: { ...settings.embeddingConfigs, [embeddingProvider]: { ...cur, baseUrl: update.value } },
-          });
-        }
-        case 'model': {
-          const cur = settings.embeddingConfigs?.[embeddingProvider] ?? { apiKey: '' };
-          return updateSettings({
-            embeddingConfigs: { ...settings.embeddingConfigs, [embeddingProvider]: { ...cur, model: update.value } },
-          });
-        }
-        case 'dimensions': {
-          const cur = settings.embeddingConfigs?.[embeddingProvider] ?? { apiKey: '' };
-          return updateSettings({
-            embeddingConfigs: { ...settings.embeddingConfigs, [embeddingProvider]: { ...cur, dimensions: update.value } },
-          });
-        }
-      }
-    },
-    [updateSettings, settings.embeddingConfigs, embeddingProvider],
+  const saveAsr = useCallback(
+    (draft: AsrDraft) =>
+      persist((cur) => ({
+        ...cur,
+        asrProvider: draft.provider,
+        asrConfigs: {
+          ...cur.asrConfigs,
+          [draft.provider]: { apiKey: draft.apiKey, model: draft.model },
+        },
+        configSavedAt: { ...cur.configSavedAt, asr: Date.now() },
+      })),
+    [persist],
   );
+
+  const saveEmbedding = useCallback(
+    (draft: EmbeddingDraft) =>
+      persist((cur) => ({
+        ...cur,
+        embeddingProvider: draft.provider,
+        embeddingConfigs: {
+          ...cur.embeddingConfigs,
+          [draft.provider]: {
+            apiKey: draft.apiKey,
+            baseUrl: draft.baseUrl,
+            model: draft.model,
+            dimensions: draft.dimensions,
+          },
+        },
+        configSavedAt: { ...cur.configSavedAt, embedding: Date.now() },
+      })),
+    [persist],
+  );
+
+  const currentAsrApiKey = resolveAsrConfig(settings).apiKey;
 
   return {
     settings,
     loading,
-    saved,
-
-    currentProviderDef,
-    currentLlmApiKey,
-    currentLlmModel,
-    isCustomProvider,
-
-    currentAsrDef,
     currentAsrApiKey,
-    currentAsrModel,
-
-    currentEmbeddingDef,
-    currentEmbeddingApiKey,
-    currentEmbeddingBaseUrl,
-    currentEmbeddingModel,
-    currentEmbeddingDimensions,
-
-    updateLlm,
-    updateAsr,
-    updateEmbedding,
+    saveLlm,
+    saveAsr,
+    saveEmbedding,
   };
 }

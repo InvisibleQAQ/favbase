@@ -81,6 +81,17 @@ export function formatCompactNumber(n: number): string {
   }).format(n);
 }
 
+/**
+ * Locale-aware date-time formatting (short date + short time).
+ * Consumers must subscribe via `useTranslation()` to re-render on locale change.
+ */
+export function formatDateTime(timestamp: number): string {
+  return new Intl.DateTimeFormat(currentLocale, {
+    dateStyle: 'short',
+    timeStyle: 'short',
+  }).format(timestamp);
+}
+
 export function subscribeLocale(cb: () => void): () => void {
   listeners.add(cb);
   return () => listeners.delete(cb);

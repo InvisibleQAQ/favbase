@@ -8,14 +8,13 @@ import { useTranscribe } from './hooks/useTranscribe';
 export default function App() {
   const video = useVideoDetect();
   const subtitle = useSubtitle(video.bvid, video.cid);
-  const settingsHook = useSettings();
-  const { loading: _, ...settingsProps } = settingsHook;
+  const { currentAsrApiKey } = useSettings();
 
   const transcribe = useTranscribe(
     video.bvid,
     video.cid,
     video.title,
-    !!settingsHook.currentAsrApiKey,
+    !!currentAsrApiKey,
   );
 
   const showTranscribe =
@@ -46,8 +45,7 @@ export default function App() {
       cached={effectiveCached}
       showTranscribe={showTranscribe}
       transcribe={transcribe}
-      hasApiKey={!!settingsHook.currentAsrApiKey}
-      settingsProps={settingsProps}
+      hasApiKey={!!currentAsrApiKey}
     />
   );
 }

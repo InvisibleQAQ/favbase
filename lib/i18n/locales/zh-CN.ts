@@ -5,6 +5,9 @@ const zhCN = {
   'status.noSubtitle': '未检测到字幕，可开启在线转录',
   'panel.expand': '展开面板',
   'panel.collapse': '收起面板',
+  'panel.aiConfig': 'AI 配置',
+  'panel.settingsMoved': 'AI 服务配置已移至 favbase 设置页，测试连接通过后手动保存。',
+  'panel.openSettings': '打开设置页',
 
   'subtitle.jumpTo': '跳转到 {{time}}',
 
@@ -19,19 +22,17 @@ const zhCN = {
   'sidebar.subtitles': '字幕',
   'sidebar.settings': '设置',
 
-  'settings.llm': 'LLM 设置',
   'settings.llmProvider': 'LLM 服务商',
   'settings.apiKey': 'API Key',
   'settings.apiKeyPlaceholder': '输入 API Key',
   'settings.model': '模型',
   'settings.modelPlaceholder': '输入模型名称',
   'settings.getKey': '获取密钥',
-  'settings.customBaseUrl': '自定义 Base URL',
   'settings.customBaseUrlPlaceholder': 'https://your-endpoint.com/v1/',
   'settings.customProtocol': '协议',
 
-  'settings.asr': 'ASR 设置',
   'settings.asrProvider': 'ASR 服务商',
+  'settings.asrTestSuccess': '连接成功 — API Key 有效',
 
   'settings.mode': '调用模式',
   'settings.modeQuality': '质量优先',
@@ -39,9 +40,9 @@ const zhCN = {
   'settings.modeEfficiency': '效率优先',
   'settings.modeEfficiencyDesc': '单次请求合并，速度更快',
 
-  'settings.saved': '已保存',
-  'settings.show': '显示',
-  'settings.hide': '隐藏',
+  'settings.save': '保存',
+  'settings.savedAt': '已保存 {{time}}',
+  'settings.testBeforeSave': '连接配置有改动，测试连接通过后才能保存',
 
   'settings.title': '设置',
   'settings.tabAi': 'AI 配置',

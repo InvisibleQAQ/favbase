@@ -18,8 +18,9 @@ import { varAlpha } from 'minimal-shared/utils';
 
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify } from '../../components/iconify';
-import { EMBEDDING_PROVIDERS, type EmbeddingProviderId, type EmbeddingProviderDef } from '@/lib/providers';
-import type { EmbeddingUpdate } from '@/lib/hooks/useSettings';
+import { EMBEDDING_PROVIDERS, getEmbeddingProviderDef, type EmbeddingProviderId } from '@/lib/providers';
+import type { UserSettings } from '@/lib/storage';
+import { deriveEmbeddingDraft, type EmbeddingDraft } from '@/lib/hooks/useSettings';
 import { testEmbeddingConnection } from '@/lib/ai';
 import { initDbProxy } from '@/lib/database';
 import {
@@ -27,36 +28,38 @@ import {
   MAX_INDEXABLE_DIMENSIONS,
   getEmbeddingStats,
   rebuildPendingEmbeddings,
+  resolveEmbeddingConfig,
   type EmbeddingStats,
   type RebuildOutcome,
   type RebuildProgress,
 } from '@/lib/embedding';
 import { useHostPermission } from './use-host-permission';
 import { permissionErrorKey } from './permission-error';
+import { useConfigDraft } from './use-config-draft';
+import { SaveActions } from './save-actions';
+
+// Every field affects what the probe embeds (dimensions changes the reported
+// truncation), so the whole draft is connection-relevant.
+const EMBEDDING_CONNECTION_KEYS = [
+  'provider',
+  'apiKey',
+  'baseUrl',
+  'model',
+  'dimensions',
+] as const satisfies readonly (keyof EmbeddingDraft)[];
 
 interface EmbeddingConfigCardProps {
-  currentEmbeddingDef: EmbeddingProviderDef;
-  currentEmbeddingApiKey: string;
-  currentEmbeddingBaseUrl: string;
-  currentEmbeddingModel: string;
-  /** One of COMMON_EMBEDDING_DIMENSIONS, or undefined = auto (model native). */
-  currentEmbeddingDimensions: number | undefined;
-  updateEmbedding: (update: EmbeddingUpdate) => void;
+  settings: UserSettings;
+  saveEmbedding: (draft: EmbeddingDraft) => Promise<void>;
 }
 
-export function EmbeddingConfigCard({
-  currentEmbeddingDef,
-  currentEmbeddingApiKey,
-  currentEmbeddingBaseUrl,
-  currentEmbeddingModel,
-  currentEmbeddingDimensions,
-  updateEmbedding,
-}: EmbeddingConfigCardProps) {
+export function EmbeddingConfigCard({ settings, saveEmbedding }: EmbeddingConfigCardProps) {
   const { t } = useTranslation();
   const { ensure, dialog } = useHostPermission();
   const [showKey, setShowKey] = useState(false);
 
   const [isTesting, setIsTesting] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [testDimensions, setTestDimensions] = useState<number | null>(null);
   const [testError, setTestError] = useState<string | null>(null);
 
@@ -65,6 +68,15 @@ export function EmbeddingConfigCard({
   const [rebuildProgress, setRebuildProgress] = useState<RebuildProgress | null>(null);
   const [rebuildOutcome, setRebuildOutcome] = useState<RebuildOutcome | null>(null);
   const [rebuildError, setRebuildError] = useState<string | null>(null);
+
+  const derive = useCallback(
+    (provider?: EmbeddingProviderId) => deriveEmbeddingDraft(settings, provider),
+    [settings],
+  );
+  const d = useConfigDraft<EmbeddingDraft>({ derive, connectionKeys: EMBEDDING_CONNECTION_KEYS });
+  const { draft, setField } = d;
+
+  const currentDef = getEmbeddingProviderDef(draft.provider);
 
   // `initDbProxy()` is idempotent (joins main.tsx's in-flight init), so this
   // waits for DB readiness instead of racing `getDb()` on first paint.
@@ -88,64 +100,68 @@ export function EmbeddingConfigCard({
     };
   }, [fetchStats]);
 
-  // Clear stale test feedback when the provider changes (mirrors llm-config-card),
-  // so a success/warning Alert for provider A never lingers on provider B.
-  const prevProviderRef = useRef(currentEmbeddingDef.id);
+  // Stale test feedback never survives a connection-field edit (which here is
+  // any field — the whole draft is connection-relevant).
+  const prevConnSigRef = useRef(d.connSig);
   useEffect(() => {
-    if (prevProviderRef.current !== currentEmbeddingDef.id) {
-      prevProviderRef.current = currentEmbeddingDef.id;
+    if (prevConnSigRef.current !== d.connSig) {
+      prevConnSigRef.current = d.connSig;
       setTestDimensions(null);
       setTestError(null);
     }
-  }, [currentEmbeddingDef.id]);
+  }, [d.connSig]);
 
-  const canTest = !!(currentEmbeddingApiKey && currentEmbeddingModel);
-
-  // Dimensions is a Select over COMMON_EMBEDDING_DIMENSIONS — the UI cannot
-  // produce an invalid value. lib-layer resolveEmbeddingConfig keeps its own
-  // filter for unsendable values (non-finite / <= 0) as the invariant.
+  const canTest = !!(draft.apiKey && draft.model);
 
   const handleTestConnection = useCallback(async () => {
     setIsTesting(true);
     setTestDimensions(null);
     setTestError(null);
+    const testedSig = d.connSig;
 
     try {
-      const baseUrl = currentEmbeddingBaseUrl || currentEmbeddingDef.baseUrl;
+      const baseUrl = draft.baseUrl || currentDef.baseUrl;
       const perm = await ensure(baseUrl);
       if (!perm.ok) {
         setTestError(t(permissionErrorKey(perm.reason)));
         return;
       }
       const result = await testEmbeddingConnection({
-        providerId: currentEmbeddingDef.id,
-        apiKey: currentEmbeddingApiKey,
-        baseUrl: currentEmbeddingBaseUrl,
-        model: currentEmbeddingModel,
+        providerId: draft.provider,
+        apiKey: draft.apiKey,
+        baseUrl: draft.baseUrl,
+        model: draft.model,
         // Probe with the configured truncation so the reported dimension
         // matches what indexing would actually do (undefined = native dim).
-        dimensions: currentEmbeddingDimensions,
+        dimensions: draft.dimensions,
       });
       setTestDimensions(result.dimensions);
+      // A probe that exceeds the HNSW index limit is NOT a verification —
+      // saving that config would only produce un-indexable vectors.
+      if (result.dimensions <= MAX_INDEXABLE_DIMENSIONS) {
+        d.markVerified(testedSig);
+      }
     } catch (err) {
       setTestError(err instanceof Error ? err.message : String(err));
     } finally {
       setIsTesting(false);
     }
-  }, [
-    currentEmbeddingDef.id,
-    currentEmbeddingDef.baseUrl,
-    currentEmbeddingApiKey,
-    currentEmbeddingBaseUrl,
-    currentEmbeddingModel,
-    currentEmbeddingDimensions,
-    ensure,
-    t,
-  ]);
+  }, [draft, d, currentDef.baseUrl, ensure, t]);
+
+  const handleSave = useCallback(async () => {
+    setIsSaving(true);
+    try {
+      await saveEmbedding(draft);
+      d.markSaved();
+    } finally {
+      setIsSaving(false);
+    }
+  }, [saveEmbedding, draft, d]);
 
   // Manual rebuild: re-embed the 'chunked' backlog in this page's context.
-  // Failure stops the loop (finished items stay 'embedded'), so clicking again
-  // resumes with only the remainder — no cancel button or queue needed.
+  // It always runs against the SAVED config (what indexing actually uses),
+  // never the unsaved draft. Failure stops the loop (finished items stay
+  // 'embedded'), so clicking again resumes with only the remainder.
   const handleRebuild = useCallback(async () => {
     setIsRebuilding(true);
     setRebuildProgress(null);
@@ -153,19 +169,17 @@ export function EmbeddingConfigCard({
     setRebuildError(null);
 
     try {
-      // Not-configured is decidable locally: this prop IS the resolved apiKey
-      // (`resolveEmbeddingConfig`), the same value rebuild derives `enabled`
-      // from — so bail out first and never pop a host-permission dialog for a
-      // provider that cannot embed anything anyway. The library keeps its own
-      // gate as the invariant.
-      if (!currentEmbeddingApiKey) {
+      const saved = resolveEmbeddingConfig(settings);
+      // Not-configured is decidable locally (same `enabled` derivation the
+      // rebuild uses internally) — bail out before popping a host-permission
+      // dialog for a provider that cannot embed anything anyway.
+      if (!saved.enabled) {
         setRebuildOutcome({ status: 'not-configured' });
         return;
       }
       // Same CORS gate as the test-connection button: embeds are fetches from
       // this page, so the (custom) API origin must be granted first.
-      const baseUrl = currentEmbeddingBaseUrl || currentEmbeddingDef.baseUrl;
-      const perm = await ensure(baseUrl);
+      const perm = await ensure(saved.baseUrl);
       if (!perm.ok) {
         setRebuildError(t(permissionErrorKey(perm.reason)));
         return;
@@ -179,14 +193,7 @@ export function EmbeddingConfigCard({
       setIsRebuilding(false);
       void fetchStats().then((s) => s && setStats(s));
     }
-  }, [
-    currentEmbeddingApiKey,
-    currentEmbeddingBaseUrl,
-    currentEmbeddingDef.baseUrl,
-    ensure,
-    fetchStats,
-    t,
-  ]);
+  }, [settings, ensure, fetchStats, t]);
 
   return (
     <>
@@ -203,8 +210,8 @@ export function EmbeddingConfigCard({
               select
               fullWidth
               label={t('settings.embeddingProvider')}
-              value={currentEmbeddingDef.id}
-              onChange={(e) => updateEmbedding({ field: 'provider', value: e.target.value as EmbeddingProviderId })}
+              value={draft.provider}
+              onChange={(e) => d.switchProvider(e.target.value as EmbeddingProviderId)}
             >
               {EMBEDDING_PROVIDERS.map((p) => (
                 <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>
@@ -219,8 +226,8 @@ export function EmbeddingConfigCard({
               label={t('settings.apiKey')}
               type={showKey ? 'text' : 'password'}
               placeholder="sk-..."
-              value={currentEmbeddingApiKey}
-              onChange={(e) => updateEmbedding({ field: 'apiKey', value: e.target.value })}
+              value={draft.apiKey}
+              onChange={(e) => setField('apiKey', e.target.value)}
               slotProps={{
                 input: {
                   endAdornment: (
@@ -244,11 +251,11 @@ export function EmbeddingConfigCard({
 
           {/* Get Key link */}
           <Grid size={{ xs: 12, md: 6 }}>
-            {currentEmbeddingDef.regUrl && (
+            {currentDef.regUrl && (
               <Button
                 variant="outlined"
                 size="small"
-                href={currentEmbeddingDef.regUrl}
+                href={currentDef.regUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 sx={{ whiteSpace: 'nowrap', alignSelf: 'center' }}
@@ -263,9 +270,9 @@ export function EmbeddingConfigCard({
             <TextField
               fullWidth
               label={t('settings.baseUrl')}
-              placeholder={currentEmbeddingDef.baseUrl || t('settings.customBaseUrlPlaceholder')}
-              value={currentEmbeddingBaseUrl}
-              onChange={(e) => updateEmbedding({ field: 'baseUrl', value: e.target.value })}
+              placeholder={currentDef.baseUrl || t('settings.customBaseUrlPlaceholder')}
+              value={draft.baseUrl}
+              onChange={(e) => setField('baseUrl', e.target.value)}
             />
           </Grid>
 
@@ -274,9 +281,9 @@ export function EmbeddingConfigCard({
             <TextField
               fullWidth
               label={t('settings.embeddingModel')}
-              placeholder={currentEmbeddingDef.defaultModel}
-              value={currentEmbeddingModel}
-              onChange={(e) => updateEmbedding({ field: 'model', value: e.target.value })}
+              placeholder={currentDef.defaultModel}
+              value={draft.model}
+              onChange={(e) => setField('model', e.target.value)}
             />
           </Grid>
 
@@ -286,43 +293,36 @@ export function EmbeddingConfigCard({
               select
               fullWidth
               label={t('settings.embedding.dimensions')}
-              value={currentEmbeddingDimensions ?? 'auto'}
+              value={draft.dimensions ?? 'auto'}
               onChange={(e) =>
-                updateEmbedding({
-                  field: 'dimensions',
-                  value: e.target.value === 'auto' ? undefined : Number(e.target.value),
-                })
+                setField('dimensions', e.target.value === 'auto' ? undefined : Number(e.target.value))
               }
               helperText={t('settings.embedding.dimensionsHelper', { limit: MAX_INDEXABLE_DIMENSIONS })}
             >
               {/* MUI Select treats '' as "no selection" and renders nothing, so
                   auto needs a real sentinel value instead of the empty string. */}
               <MenuItem value="auto">{t('settings.embedding.dimensionsAuto')}</MenuItem>
-              {COMMON_EMBEDDING_DIMENSIONS.map((d) => (
-                <MenuItem key={d} value={d}>{d}</MenuItem>
+              {COMMON_EMBEDDING_DIMENSIONS.map((dim) => (
+                <MenuItem key={dim} value={dim}>{dim}</MenuItem>
               ))}
             </TextField>
           </Grid>
 
-          {/* Test Connection (wired to testEmbeddingConnection) */}
+          {/* Test Connection + Save + persistent saved badge */}
           <Grid size={{ xs: 12 }}>
-            <Button
-              variant="contained"
-              onClick={handleTestConnection}
-              disabled={isTesting || !canTest}
-              startIcon={
-                isTesting ? (
-                  <CircularProgress size={16} color="inherit" />
-                ) : (
-                  <Iconify icon="solar:check-circle-bold" width={20} />
-                )
-              }
-            >
-              {isTesting ? t('settings.testing') : t('settings.testConnection')}
-            </Button>
+            <SaveActions
+              onTest={handleTestConnection}
+              testDisabled={!canTest}
+              testing={isTesting}
+              onSave={handleSave}
+              saveDisabled={!d.canSave}
+              saving={isSaving}
+              savedAt={settings.configSavedAt?.embedding}
+              showTestHint={d.connectionDirty && !d.verified}
+            />
           </Grid>
 
-          {testDimensions !== null && testDimensions <= MAX_INDEXABLE_DIMENSIONS && (
+          {testDimensions !== null && testDimensions <= MAX_INDEXABLE_DIMENSIONS && d.verified && (
             <Grid size={{ xs: 12 }}>
               <Alert
                 severity="success"

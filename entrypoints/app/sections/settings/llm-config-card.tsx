@@ -20,36 +20,34 @@ import Divider from '@mui/material/Divider';
 
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify } from '../../components/iconify';
-import { LLM_PROVIDERS, type LLMProviderId, type LLMProviderDef } from '@/lib/providers';
+import { LLM_PROVIDERS, getProviderDef, type LLMProviderId } from '@/lib/providers';
 import type { UserSettings } from '@/lib/storage';
-import type { LlmUpdate } from '@/lib/hooks/useSettings';
+import { deriveLlmDraft, type LlmDraft } from '@/lib/hooks/useSettings';
 import { testLlmConnection, fetchAvailableModels, type TestConnectionResult } from '@/lib/ai';
 import { useHostPermission } from './use-host-permission';
 import { permissionErrorKey } from './permission-error';
+import { useConfigDraft } from './use-config-draft';
+import { SaveActions } from './save-actions';
+
+const LLM_CONNECTION_KEYS = [
+  'provider',
+  'apiKey',
+  'model',
+  'customBaseUrl',
+  'customProtocol',
+] as const satisfies readonly (keyof LlmDraft)[];
 
 interface LlmConfigCardProps {
   settings: UserSettings;
-  currentProviderDef: LLMProviderDef;
-  currentLlmApiKey: string;
-  currentLlmModel: string;
-  isCustomProvider: boolean;
-  saved: boolean;
-  updateLlm: (update: LlmUpdate) => void;
+  saveLlm: (draft: LlmDraft) => Promise<void>;
 }
 
-export function LlmConfigCard({
-  settings,
-  currentProviderDef,
-  currentLlmApiKey,
-  currentLlmModel,
-  isCustomProvider,
-  saved,
-  updateLlm,
-}: LlmConfigCardProps) {
+export function LlmConfigCard({ settings, saveLlm }: LlmConfigCardProps) {
   const { t } = useTranslation();
   const { ensure, dialog } = useHostPermission();
   const [showKey, setShowKey] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [testResult, setTestResult] = useState<TestConnectionResult | null>(null);
   const [testError, setTestError] = useState<string | null>(null);
 
@@ -57,59 +55,92 @@ export function LlmConfigCard({
   const [remoteModels, setRemoteModels] = useState<string[]>([]);
   const [modelFetchError, setModelFetchError] = useState<string | null>(null);
 
-  const prevProviderRef = useRef(settings.provider);
+  const derive = useCallback(
+    (provider?: LLMProviderId) => deriveLlmDraft(settings, provider),
+    [settings],
+  );
+  const d = useConfigDraft<LlmDraft>({ derive, connectionKeys: LLM_CONNECTION_KEYS });
+  const { draft, setField } = d;
+
+  const currentProviderDef = getProviderDef(draft.provider);
+  const isCustomProvider = draft.provider === 'custom';
+
+  // Stale feedback never survives a connection-field edit: test alerts follow
+  // the connection signature; the fetched model list follows the provider.
+  const prevConnSigRef = useRef(d.connSig);
   useEffect(() => {
-    if (prevProviderRef.current !== settings.provider) {
-      prevProviderRef.current = settings.provider;
+    if (prevConnSigRef.current !== d.connSig) {
+      prevConnSigRef.current = d.connSig;
       setTestResult(null);
       setTestError(null);
+    }
+  }, [d.connSig]);
+
+  const prevProviderRef = useRef(draft.provider);
+  useEffect(() => {
+    if (prevProviderRef.current !== draft.provider) {
+      prevProviderRef.current = draft.provider;
       setRemoteModels([]);
       setModelFetchError(null);
     }
-  }, [settings.provider]);
+  }, [draft.provider]);
 
   const handleTestConnection = useCallback(async () => {
     setIsTesting(true);
     setTestResult(null);
     setTestError(null);
+    // Captured before the await: if the user edits a connection field while
+    // the test is in flight, this stale signature never verifies the new draft.
+    const testedSig = d.connSig;
 
     try {
-      const baseUrl = isCustomProvider ? settings.customBaseUrl : currentProviderDef.baseUrl;
+      const baseUrl = isCustomProvider ? draft.customBaseUrl : currentProviderDef.baseUrl;
       const perm = await ensure(baseUrl);
       if (!perm.ok) {
         setTestError(t(permissionErrorKey(perm.reason)));
         return;
       }
       const result = await testLlmConnection({
-        providerId: settings.provider,
-        apiKey: currentLlmApiKey,
-        model: currentLlmModel,
-        customBaseUrl: settings.customBaseUrl,
-        customProtocol: settings.customProtocol,
+        providerId: draft.provider,
+        apiKey: draft.apiKey,
+        model: draft.model,
+        customBaseUrl: draft.customBaseUrl,
+        customProtocol: draft.customProtocol,
       });
       setTestResult(result);
+      d.markVerified(testedSig);
     } catch (err) {
       setTestError(err instanceof Error ? err.message : String(err));
     } finally {
       setIsTesting(false);
     }
-  }, [settings.provider, currentLlmApiKey, currentLlmModel, settings.customBaseUrl, settings.customProtocol, isCustomProvider, currentProviderDef.baseUrl, ensure, t]);
+  }, [draft, d, isCustomProvider, currentProviderDef.baseUrl, ensure, t]);
+
+  const handleSave = useCallback(async () => {
+    setIsSaving(true);
+    try {
+      await saveLlm(draft);
+      d.markSaved();
+    } finally {
+      setIsSaving(false);
+    }
+  }, [saveLlm, draft, d]);
 
   const handleFetchModels = useCallback(async () => {
     setIsFetchingModels(true);
     setModelFetchError(null);
 
     try {
-      const baseUrl = isCustomProvider ? settings.customBaseUrl : currentProviderDef.baseUrl;
+      const baseUrl = isCustomProvider ? draft.customBaseUrl : currentProviderDef.baseUrl;
       const perm = await ensure(baseUrl);
       if (!perm.ok) {
         setModelFetchError(t(permissionErrorKey(perm.reason)));
         return;
       }
       const result = await fetchAvailableModels({
-        providerId: settings.provider,
-        apiKey: currentLlmApiKey,
-        customBaseUrl: settings.customBaseUrl,
+        providerId: draft.provider,
+        apiKey: draft.apiKey,
+        customBaseUrl: draft.customBaseUrl,
       });
       setRemoteModels(result.models);
     } catch (err) {
@@ -117,9 +148,9 @@ export function LlmConfigCard({
     } finally {
       setIsFetchingModels(false);
     }
-  }, [settings.provider, currentLlmApiKey, settings.customBaseUrl, isCustomProvider, currentProviderDef.baseUrl, ensure, t]);
+  }, [draft.provider, draft.apiKey, draft.customBaseUrl, isCustomProvider, currentProviderDef.baseUrl, ensure, t]);
 
-  const canTest = !!(currentLlmApiKey && currentLlmModel);
+  const canTest = !!(draft.apiKey && draft.model);
 
   return (
     <>
@@ -136,8 +167,8 @@ export function LlmConfigCard({
               select
               fullWidth
               label={t('settings.llmProvider')}
-              value={settings.provider}
-              onChange={(e) => updateLlm({ field: 'provider', value: e.target.value as LLMProviderId })}
+              value={draft.provider}
+              onChange={(e) => d.switchProvider(e.target.value as LLMProviderId)}
             >
               {LLM_PROVIDERS.map((p) => (
                 <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>
@@ -151,8 +182,8 @@ export function LlmConfigCard({
               fullWidth
               label={t('settings.baseUrl')}
               placeholder={t('settings.customBaseUrlPlaceholder')}
-              value={isCustomProvider ? settings.customBaseUrl : currentProviderDef.baseUrl}
-              onChange={isCustomProvider ? (e) => updateLlm({ field: 'customBaseUrl', value: e.target.value }) : undefined}
+              value={isCustomProvider ? draft.customBaseUrl : currentProviderDef.baseUrl}
+              onChange={isCustomProvider ? (e) => setField('customBaseUrl', e.target.value) : undefined}
               slotProps={{
                 input: { readOnly: !isCustomProvider },
               }}
@@ -166,8 +197,8 @@ export function LlmConfigCard({
                 select
                 fullWidth
                 label={t('settings.customProtocol')}
-                value={settings.customProtocol}
-                onChange={(e) => updateLlm({ field: 'customProtocol', value: e.target.value as 'openai' | 'claude' })}
+                value={draft.customProtocol}
+                onChange={(e) => setField('customProtocol', e.target.value as 'openai' | 'claude')}
               >
                 <MenuItem value="openai">OpenAI</MenuItem>
                 <MenuItem value="claude">Claude</MenuItem>
@@ -182,8 +213,8 @@ export function LlmConfigCard({
               label={t('settings.apiKey')}
               type={showKey ? 'text' : 'password'}
               placeholder="sk-..."
-              value={currentLlmApiKey}
-              onChange={(e) => updateLlm({ field: 'apiKey', value: e.target.value })}
+              value={draft.apiKey}
+              onChange={(e) => setField('apiKey', e.target.value)}
               slotProps={{
                 input: {
                   endAdornment: (
@@ -227,8 +258,8 @@ export function LlmConfigCard({
             <Autocomplete
               freeSolo
               options={remoteModels}
-              value={currentLlmModel}
-              onInputChange={(_e, value) => updateLlm({ field: 'model', value })}
+              value={draft.model}
+              onInputChange={(_e, value) => setField('model', value)}
               renderInput={(params) => (
                 <TextField
                   {...params}
@@ -243,7 +274,7 @@ export function LlmConfigCard({
             <Button
               variant="outlined"
               onClick={handleFetchModels}
-              disabled={isFetchingModels || !currentLlmApiKey}
+              disabled={isFetchingModels || !draft.apiKey}
               startIcon={isFetchingModels ? <CircularProgress size={16} /> : undefined}
               sx={{ height: 56 }}
             >
@@ -267,26 +298,21 @@ export function LlmConfigCard({
             </Grid>
           )}
 
-          {/* Test Connection + Saved indicator */}
+          {/* Test Connection + Save + persistent saved badge */}
           <Grid size={{ xs: 12 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <Button
-                variant="contained"
-                onClick={handleTestConnection}
-                disabled={isTesting || !canTest}
-                startIcon={isTesting ? <CircularProgress size={16} color="inherit" /> : undefined}
-              >
-                {isTesting ? t('settings.testing') : t('settings.testConnection')}
-              </Button>
-              {saved && (
-                <Typography variant="body2" sx={{ color: 'success.main', fontWeight: 600 }}>
-                  {t('settings.saved')}
-                </Typography>
-              )}
-            </Box>
+            <SaveActions
+              onTest={handleTestConnection}
+              testDisabled={!canTest}
+              testing={isTesting}
+              onSave={handleSave}
+              saveDisabled={!d.canSave}
+              saving={isSaving}
+              savedAt={settings.configSavedAt?.llm}
+              showTestHint={d.connectionDirty && !d.verified}
+            />
           </Grid>
 
-          {testResult && (
+          {testResult && d.verified && (
             <Grid size={{ xs: 12 }}>
               <Alert
                 severity="success"
@@ -318,10 +344,10 @@ export function LlmConfigCard({
               fullWidth
               label={t('settings.temperatureLabel')}
               type="number"
-              value={settings.temperature}
+              value={draft.temperature}
               onChange={(e) => {
                 const v = parseFloat(e.target.value);
-                if (!isNaN(v) && v >= 0 && v <= 2) updateLlm({ field: 'temperature', value: v });
+                if (!isNaN(v) && v >= 0 && v <= 2) setField('temperature', v);
               }}
               helperText={t('settings.temperatureDesc')}
               slotProps={{
@@ -335,10 +361,10 @@ export function LlmConfigCard({
               fullWidth
               label={t('settings.maxTokens')}
               type="number"
-              value={settings.maxTokens}
+              value={draft.maxTokens}
               onChange={(e) => {
                 const v = parseInt(e.target.value, 10);
-                if (!isNaN(v) && v > 0) updateLlm({ field: 'maxTokens', value: v });
+                if (!isNaN(v) && v > 0) setField('maxTokens', v);
               }}
               helperText={t('settings.maxTokensDesc')}
               slotProps={{
@@ -354,8 +380,8 @@ export function LlmConfigCard({
               </Typography>
               <ToggleButtonGroup
                 exclusive
-                value={settings.prefMode}
-                onChange={(_e, val) => { if (val) updateLlm({ field: 'prefMode', value: val }); }}
+                value={draft.prefMode}
+                onChange={(_e, val) => { if (val) setField('prefMode', val); }}
                 sx={{ gap: 1 }}
               >
                 <ToggleButton value="quality" sx={{ px: 3 }}>

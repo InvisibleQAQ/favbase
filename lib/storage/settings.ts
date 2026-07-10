@@ -36,6 +36,13 @@ export interface UserSettings {
   // Advanced
   temperature: number;
   maxTokens: number;
+
+  /**
+   * Per-section manual-save timestamps (ms epoch). Written only by the
+   * explicit save actions in `useSettings`; absence = the section was never
+   * manually saved (pre-feature installs need no migration).
+   */
+  configSavedAt?: Partial<Record<'llm' | 'asr' | 'embedding', number>>;
 }
 
 export const DEFAULT_SETTINGS: UserSettings = {
