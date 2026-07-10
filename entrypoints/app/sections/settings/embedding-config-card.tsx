@@ -286,16 +286,18 @@ export function EmbeddingConfigCard({
               select
               fullWidth
               label={t('settings.embedding.dimensions')}
-              value={currentEmbeddingDimensions ?? ''}
+              value={currentEmbeddingDimensions ?? 'auto'}
               onChange={(e) =>
                 updateEmbedding({
                   field: 'dimensions',
-                  value: e.target.value === '' ? undefined : Number(e.target.value),
+                  value: e.target.value === 'auto' ? undefined : Number(e.target.value),
                 })
               }
               helperText={t('settings.embedding.dimensionsHelper', { limit: MAX_INDEXABLE_DIMENSIONS })}
             >
-              <MenuItem value="">{t('settings.embedding.dimensionsAuto')}</MenuItem>
+              {/* MUI Select treats '' as "no selection" and renders nothing, so
+                  auto needs a real sentinel value instead of the empty string. */}
+              <MenuItem value="auto">{t('settings.embedding.dimensionsAuto')}</MenuItem>
               {COMMON_EMBEDDING_DIMENSIONS.map((d) => (
                 <MenuItem key={d} value={d}>{d}</MenuItem>
               ))}
