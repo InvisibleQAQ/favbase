@@ -60,7 +60,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
 
   // Advanced
   temperature: 0.3,
-  maxTokens: 1000,
+  maxTokens: 100000,
 };
 
 export const settingsStorage = storage.defineItem<UserSettings>(
