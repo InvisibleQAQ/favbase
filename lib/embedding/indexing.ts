@@ -14,8 +14,10 @@ const { items } = schema;
  * platform service chose (subtitle rows today, article text tomorrow).
  *
  * Policy: chunking is free and always persisted ('chunked'); embedding is
- * best-effort — disabled config, dimension mismatch, or network failure logs
- * and leaves the item at 'chunked' without throwing.
+ * best-effort — disabled config, un-indexable dimension (HNSW cap), or network
+ * failure logs and leaves the item at 'chunked' without throwing. Dimension
+ * changes across model switches are handled inside `upsertChunkEmbeddings`
+ * (lazy column re-dimensioning), not here.
  */
 
 export type IndexedContentState = 'chunked' | 'embedded';
@@ -35,7 +37,7 @@ const defaultDeps: IndexingDeps = {
       baseUrl: config.baseUrl,
       model: config.model,
     });
-    return embedTexts(model, texts, config.providerId);
+    return embedTexts(model, texts);
   },
 };
 

@@ -397,16 +397,21 @@ CREATE TABLE item_chunks (
   -- 所有平台统一管线，不区分 chunk_type
   chunk_text  TEXT NOT NULL,
 
-  -- embedding 向量（1536 维，对应 OpenAI text-embedding-3-small 等主流模型）
-  -- NULL = 未嵌入（用户未配置 API Key，或 embedding 排队/失败）
+  -- embedding 向量。列维度跟随当前 embedding 模型（初始 1536，运行时可变）
+  -- NULL = 未嵌入（用户未配置 API Key、embedding 排队/失败，或维度切换后待重建）
   -- 非 NULL = 已嵌入，可参与向量余弦搜索
   --
-  -- VECTOR(1536) 维度创建后不可变。用户切换到不同维度的 embedding 模型时，
-  -- 应用层清空所有 embedding（SET embedding = NULL）+ 全量 re-embed，
-  -- 或通过迁移脚本 DROP + ADD COLUMN 修改维度。
-  -- 当前 embedding 配置（provider + model + dimension）存在 WXT storage
-  -- (local:embeddingProfile)，不在数据库中。
-  embedding   VECTOR(1536),
+  -- 维度惰性自适应（lib/embedding/vector-store.ts）：upsert 发现新向量维度
+  -- ≠ 当前列维度时，自动执行单条
+  --   ALTER TABLE item_chunks ALTER COLUMN embedding
+  --     TYPE vector(N) USING NULL::vector(N)
+  -- （清空旧向量 + 换维度 + HNSW 索引自动重建三合一，PGlite + pgvector 0.8.1
+  -- 实测验证），并把 'embedded' item 回退 'chunked' 等待重嵌入。
+  -- 当前列维度唯一真相是 pg catalog（pg_attribute.atttypmod = 维度原值），
+  -- 不在 WXT storage 维护副本。
+  -- HNSW 索引上限 2000 维：超限模型（如 text-embedding-3-large 3072 未裁剪）
+  -- 在 upsert 前被拒绝（EmbeddingDimensionLimitError），不静默退化为无索引。
+  embedding   VECTOR(1536),  -- 初始迁移建为 1536，运行时可 ALTER
 
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),

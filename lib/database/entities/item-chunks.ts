@@ -10,6 +10,10 @@ export const itemChunks = pgTable(
       .references(() => items.id, { onDelete: 'cascade' }),
     chunkIndex: integer('chunk_index').notNull(),
     chunkText: text('chunk_text').notNull(),
+    // NOMINAL dimensions: drizzle requires the config, but it only feeds
+    // drizzle-kit DDL generation (unused here — DDL lives in migrations/).
+    // The REAL column dimension follows the active embedding model via runtime
+    // ALTER (lib/embedding/vector-store.ts); read it from pg_attribute.atttypmod.
     embedding: vector('embedding', { dimensions: 1536 }),
     // Time span of subtitle-derived chunks (first row start / last row end).
     // NULL for non-timed content and rows created before migration v003.

@@ -95,7 +95,7 @@ const en: Record<LocaleKeys, string> = {
   'settings.embeddingProvider': 'Embedding Provider',
   'settings.embeddingModel': 'Embedding Model',
   'settings.embedding.testSuccess': 'Connected — returned {{dimensions}}-dim vector',
-  'settings.embedding.dimensionWarning': 'Dimension warning — this model returns {{actual}} dims, but the vector store is fixed at {{expected}} dims and cannot store them yet',
+  'settings.embedding.dimensionLimitError': 'Dimension limit exceeded — this model returns {{actual}} dims, above the {{limit}}-dim vector index cap, and cannot be stored. Use a smaller-dimension model or configure dimension truncation',
   'settings.embedding.testFailed': 'Connection failed — {{error}}',
   'settings.embedding.vectorIndex': 'Vector Index',
   'settings.embedding.indexedCount': 'Indexed Vectors',

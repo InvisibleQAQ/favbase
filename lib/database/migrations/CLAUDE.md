@@ -12,3 +12,4 @@
 ## 约定
 
 - 数据库迁移: 自定义迁移系统（非 drizzle-kit），`_migrations` 表追踪版本。迁移脚本直接写 SQL（不用 Drizzle 内部 Symbol 反射）。`runMigrations(pg)` 在 `initDbMain()` 内自动执行。新增迁移：在 `lib/database/migrations/` 添加 `vNNN-*.ts`，在 `index.ts` 的 `migrations` 数组追加条目
+- embedding 列维度不归迁移系统管：v001 建列为 vector(1536) 只是初始值，运行时由 `lib/embedding/vector-store.ts` 的惰性维度切换（`ALTER ... TYPE vector(N) USING NULL::vector(N)`）跟随当前模型改动，v002 的 HNSW 索引在 ALTER 时被 PostgreSQL 自动重建（opclass 保留）。当前维度真相在 pg catalog（`atttypmod`），迁移脚本不感知

@@ -1,10 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { EMBEDDING_PROVIDER_IDS } from '@/lib/providers';
-import {
-  createEmbeddingModel,
-  embedText,
-  EMBEDDING_DIMENSIONS,
-} from './embedding';
+import { createEmbeddingModel } from './embedding';
 
 // Spy on the SDK constructors so we can assert which one each provider routes to
 // without any network access. Each returns an object with the two factory
@@ -56,32 +52,5 @@ describe('createEmbeddingModel provider mapping', () => {
       }) as unknown as { __sdk: string };
       expect(model.__sdk).toBe(expected[providerId]);
     }
-  });
-});
-
-describe('embedText provider options', () => {
-  it('passes dimensions option for the openai family only', async () => {
-    // Fake embedding model that records the providerOptions it receives via the
-    // AI SDK `embed` call. We capture through a stub model's doEmbed.
-    const seen: Array<Record<string, unknown> | undefined> = [];
-    const fakeModel = {
-      specificationVersion: 'v3' as const,
-      provider: 'test',
-      modelId: 'test',
-      maxEmbeddingsPerCall: 1,
-      supportsParallelCalls: false,
-      async doEmbed({ providerOptions }: { providerOptions?: Record<string, unknown> }) {
-        seen.push(providerOptions);
-        return { embeddings: [[0.1, 0.2, 0.3]] };
-      },
-    };
-
-    // openai provider -> providerOptions.openai.dimensions present
-    await embedText(fakeModel as never, 'hi', 'openai');
-    expect(seen[0]).toEqual({ openai: { dimensions: EMBEDDING_DIMENSIONS } });
-
-    // non-openai provider -> no providerOptions
-    await embedText(fakeModel as never, 'hi', 'ollama');
-    expect(seen[1]).toBeUndefined();
   });
 });

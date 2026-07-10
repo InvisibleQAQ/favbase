@@ -8,7 +8,6 @@ import { getProviderDef } from '@/lib/providers';
 
 // Embedding provider/client infra (sibling module, re-exported for `@/lib/ai`).
 export {
-  EMBEDDING_DIMENSIONS,
   createEmbeddingModel,
   embedText,
   embedTexts,

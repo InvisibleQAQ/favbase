@@ -8,7 +8,6 @@ import { asc, eq, isNotNull, and } from 'drizzle-orm';
 import * as schema from '@/lib/database/schema';
 import { runMigrations } from '@/lib/database/migrations';
 import type { FavbaseDb } from '@/lib/database';
-import { EMBEDDING_DIMENSIONS } from '@/lib/ai';
 import type { ResolvedEmbeddingConfig } from './config';
 import { indexItemChunks, type IndexingDeps } from './indexing';
 import type { ChunkInput } from './types';
@@ -32,9 +31,13 @@ function fakeConfig(enabled: boolean): ResolvedEmbeddingConfig {
   return { providerId: 'openai', apiKey: 'k', baseUrl: '', model: 'm', enabled };
 }
 
+// Matches the initial column width from migration v001; any dimension <= 2000
+// would work now that upsert lazily re-dimensions the column.
+const DIM = 1536;
+
 function fakeVectors(count: number): number[][] {
   return Array.from({ length: count }, (_, i) => {
-    const v = new Array(EMBEDDING_DIMENSIONS).fill(0);
+    const v = new Array(DIM).fill(0);
     v[i] = 1;
     return v;
   });

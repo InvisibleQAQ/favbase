@@ -1,21 +1,46 @@
-import { EMBEDDING_DIMENSIONS } from '@/lib/ai';
+/**
+ * HNSW index hard cap for `vector` columns (pgvector 0.8.1: "column cannot
+ * have more than 2000 dimensions for hnsw index"). Vectors wider than this
+ * cannot be ANN-indexed, so the store rejects them before any DDL or write.
+ */
+export const MAX_INDEXABLE_DIMENSIONS = 2000;
 
 /**
- * Thrown when a vector's length does not match the fixed `item_chunks.embedding`
- * column width (`EMBEDDING_DIMENSIONS`). pgvector's fixed-dimension column + ANN
- * index cannot hold off-dimension vectors, so upsert rejects them early.
+ * Thrown when a vector's length does not match the expected dimension —
+ * either the current `item_chunks.embedding` column width (search path) or
+ * the batch's leading vector (a mixed-dimension batch is a caller bug).
+ * `expected` is always explicit; there is no canonical dimension anymore —
+ * the column follows the active embedding model.
  */
 export class EmbeddingDimensionError extends Error {
   readonly expected: number;
   readonly actual: number;
 
-  constructor(actual: number, expected: number = EMBEDDING_DIMENSIONS) {
-    super(
-      `Embedding dimension mismatch: expected ${expected}, got ${actual}. ` +
-        `The vector store column is fixed at VECTOR(${expected}).`,
-    );
+  constructor(actual: number, expected: number) {
+    super(`Embedding dimension mismatch: expected ${expected}, got ${actual}.`);
     this.name = 'EmbeddingDimensionError';
     this.expected = expected;
+    this.actual = actual;
+  }
+}
+
+/**
+ * Thrown when a requested embedding dimension cannot back the HNSW index
+ * (outside 1..MAX_INDEXABLE_DIMENSIONS). Silent degradation to an unindexed
+ * column is forbidden — the user should switch to a smaller-dimension model
+ * or configure dimension truncation (e.g. OpenAI's `dimensions` option).
+ */
+export class EmbeddingDimensionLimitError extends Error {
+  readonly actual: number;
+  readonly limit = MAX_INDEXABLE_DIMENSIONS;
+
+  constructor(actual: number) {
+    super(
+      `Embedding dimension ${actual} is outside the indexable range ` +
+        `1..${MAX_INDEXABLE_DIMENSIONS} (pgvector HNSW cap). Switch to a ` +
+        `smaller-dimension model or configure dimension truncation.`,
+    );
+    this.name = 'EmbeddingDimensionLimitError';
     this.actual = actual;
   }
 }

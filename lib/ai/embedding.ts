@@ -5,22 +5,11 @@ import { embed, embedMany, type EmbeddingModel } from 'ai';
 import type { EmbeddingProviderId, SdkType } from '@/lib/providers';
 import { getEmbeddingProviderDef } from '@/lib/providers';
 
-// `ProviderOptions` is not re-exported by `ai`; derive it from `embed`'s params
-// so it stays in sync with the installed SDK without a direct provider-utils dep.
-type EmbedProviderOptions = NonNullable<Parameters<typeof embed>[0]['providerOptions']>;
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-/**
- * Canonical embedding dimension. The `item_chunks.embedding` column is fixed at
- * VECTOR(1536) with an ANN index, so all vectors written to the store MUST be
- * this length. OpenAI-family models are asked for this dimension explicitly via
- * `providerOptions.openai.dimensions`; other providers return their model's
- * native dimension and are validated at the VectorStore boundary.
- */
-export const EMBEDDING_DIMENSIONS = 1536;
+// NOTE: There is no canonical embedding dimension anymore. The
+// `item_chunks.embedding` column follows the active model — the vector store
+// (`lib/embedding/vector-store.ts`) lazily re-dimensions the column when a new
+// batch's dimension differs, and rejects anything above the HNSW index cap
+// (`MAX_INDEXABLE_DIMENSIONS`, 2000).
 
 // ---------------------------------------------------------------------------
 // createEmbeddingModel
@@ -77,25 +66,6 @@ function createModelBySdkType(
 }
 
 // ---------------------------------------------------------------------------
-// providerOptions (dimension pinning for openai-family)
-// ---------------------------------------------------------------------------
-
-/**
- * Ask openai-family models to return `EMBEDDING_DIMENSIONS`-length vectors.
- * Only OpenAI's text-embedding-3-* models honor the `dimensions` option; other
- * SDKs ignore an unknown key, so passing it is harmless.
- */
-function embeddingProviderOptions(
-  providerId: EmbeddingProviderId,
-): EmbedProviderOptions | undefined {
-  const def = getEmbeddingProviderDef(providerId);
-  if (def.sdkType === 'openai') {
-    return { openai: { dimensions: EMBEDDING_DIMENSIONS } };
-  }
-  return undefined;
-}
-
-// ---------------------------------------------------------------------------
 // embedText / embedTexts
 // ---------------------------------------------------------------------------
 
@@ -103,14 +73,8 @@ function embeddingProviderOptions(
 export async function embedText(
   model: EmbeddingModel,
   text: string,
-  providerId?: EmbeddingProviderId,
 ): Promise<number[]> {
-  const providerOptions = providerId ? embeddingProviderOptions(providerId) : undefined;
-  const { embedding } = await embed({
-    model,
-    value: text,
-    ...(providerOptions ? { providerOptions } : {}),
-  });
+  const { embedding } = await embed({ model, value: text });
   return embedding;
 }
 
@@ -118,15 +82,9 @@ export async function embedText(
 export async function embedTexts(
   model: EmbeddingModel,
   texts: string[],
-  providerId?: EmbeddingProviderId,
 ): Promise<number[][]> {
   if (texts.length === 0) return [];
-  const providerOptions = providerId ? embeddingProviderOptions(providerId) : undefined;
-  const { embeddings } = await embedMany({
-    model,
-    values: texts,
-    ...(providerOptions ? { providerOptions } : {}),
-  });
+  const { embeddings } = await embedMany({ model, values: texts });
   return embeddings;
 }
 
@@ -143,14 +101,15 @@ export interface TestEmbeddingResult {
 
 /**
  * Probe a provider by embedding a short string. Returns the real vector length
- * so the UI can warn when `dimensions !== EMBEDDING_DIMENSIONS` (the fixed
- * pgvector column width). Mirrors `testLlmConnection` but adds `dimensions`.
+ * so the UI can validate it against the HNSW index cap (2000, see
+ * `MAX_INDEXABLE_DIMENSIONS` in `lib/embedding`). Mirrors `testLlmConnection`
+ * but adds `dimensions`.
  */
 export async function testEmbeddingConnection(
   options: CreateEmbeddingModelOptions,
 ): Promise<TestEmbeddingResult> {
   const model = createEmbeddingModel(options);
-  const vector = await embedText(model, 'favbase connection test', options.providerId);
+  const vector = await embedText(model, 'favbase connection test');
 
   return {
     success: true,

@@ -20,7 +20,8 @@ import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify } from '../../components/iconify';
 import { EMBEDDING_PROVIDERS, type EmbeddingProviderId, type EmbeddingProviderDef } from '@/lib/providers';
 import type { EmbeddingUpdate } from '@/lib/hooks/useSettings';
-import { testEmbeddingConnection, EMBEDDING_DIMENSIONS } from '@/lib/ai';
+import { testEmbeddingConnection } from '@/lib/ai';
+import { MAX_INDEXABLE_DIMENSIONS } from '@/lib/embedding';
 import { useHostPermission } from './use-host-permission';
 import { permissionErrorKey } from './permission-error';
 
@@ -204,7 +205,7 @@ export function EmbeddingConfigCard({
             </Button>
           </Grid>
 
-          {testDimensions !== null && testDimensions === EMBEDDING_DIMENSIONS && (
+          {testDimensions !== null && testDimensions <= MAX_INDEXABLE_DIMENSIONS && (
             <Grid size={{ xs: 12 }}>
               <Alert
                 severity="success"
@@ -215,12 +216,12 @@ export function EmbeddingConfigCard({
             </Grid>
           )}
 
-          {testDimensions !== null && testDimensions !== EMBEDDING_DIMENSIONS && (
+          {testDimensions !== null && testDimensions > MAX_INDEXABLE_DIMENSIONS && (
             <Grid size={{ xs: 12 }}>
-              <Alert severity="warning">
-                {t('settings.embedding.dimensionWarning', {
+              <Alert severity="error">
+                {t('settings.embedding.dimensionLimitError', {
                   actual: testDimensions,
-                  expected: EMBEDDING_DIMENSIONS,
+                  limit: MAX_INDEXABLE_DIMENSIONS,
                 })}
               </Alert>
             </Grid>

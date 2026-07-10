@@ -93,7 +93,7 @@ const zhCN = {
   'settings.embeddingProvider': 'Embedding 服务商',
   'settings.embeddingModel': 'Embedding 模型',
   'settings.embedding.testSuccess': '连接成功 — 返回 {{dimensions}} 维向量',
-  'settings.embedding.dimensionWarning': '维度警告 — 该模型返回 {{actual}} 维，但向量库固定为 {{expected}} 维，暂无法入库',
+  'settings.embedding.dimensionLimitError': '维度超限 — 该模型返回 {{actual}} 维，超过向量索引 {{limit}} 维上限，无法入库。请换用更小维度的模型，或配置维度裁剪',
   'settings.embedding.testFailed': '连接失败 — {{error}}',
   'settings.embedding.vectorIndex': '向量索引',
   'settings.embedding.indexedCount': '已索引向量',
