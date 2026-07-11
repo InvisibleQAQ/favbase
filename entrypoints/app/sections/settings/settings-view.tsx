@@ -15,7 +15,7 @@ import { useTranslation } from '@/lib/i18n/use-translation';
 import type { LocalePreference } from '@/lib/storage';
 import { LlmConfigCard } from './llm-config-card';
 import { AsrConfigCard } from './asr-config-card';
-import { EmbeddingConfigCard } from './embedding-config-card';
+import { EmbeddingConfigCard } from './embedding/embedding-config-card';
 import { ExportCard } from '../overview/export-card';
 import { SettingsTabs, type SettingsTabItem } from './settings-tabs';
 import { AiConfigNav, type AiSection, type AiConfigNavItem } from './ai-config-nav';

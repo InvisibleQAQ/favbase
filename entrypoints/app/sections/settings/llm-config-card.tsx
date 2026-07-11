@@ -46,10 +46,6 @@ export function LlmConfigCard({ settings, saveLlm }: LlmConfigCardProps) {
   const { t } = useTranslation();
   const { ensure, dialog } = useHostPermission();
   const [showKey, setShowKey] = useState(false);
-  const [isTesting, setIsTesting] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [testResult, setTestResult] = useState<TestConnectionResult | null>(null);
-  const [testError, setTestError] = useState<string | null>(null);
 
   const [isFetchingModels, setIsFetchingModels] = useState(false);
   const [remoteModels, setRemoteModels] = useState<string[]>([]);
@@ -59,23 +55,35 @@ export function LlmConfigCard({ settings, saveLlm }: LlmConfigCardProps) {
     (provider?: LLMProviderId) => deriveLlmDraft(settings, provider),
     [settings],
   );
-  const d = useConfigDraft<LlmDraft>({ derive, connectionKeys: LLM_CONNECTION_KEYS });
+  const runTest = useCallback(
+    async (dr: LlmDraft): Promise<TestConnectionResult> => {
+      const baseUrl = dr.provider === 'custom' ? dr.customBaseUrl : getProviderDef(dr.provider).baseUrl;
+      const perm = await ensure(baseUrl);
+      // Denial surfaces as testError via the hook's catch — same rendering as before.
+      if (!perm.ok) throw new Error(t(permissionErrorKey(perm.reason)));
+      return testLlmConnection({
+        providerId: dr.provider,
+        apiKey: dr.apiKey,
+        model: dr.model,
+        customBaseUrl: dr.customBaseUrl,
+        customProtocol: dr.customProtocol,
+      });
+    },
+    [ensure, t],
+  );
+  const d = useConfigDraft<LlmDraft, TestConnectionResult>({
+    derive,
+    connectionKeys: LLM_CONNECTION_KEYS,
+    runTest,
+    save: saveLlm,
+  });
   const { draft, setField } = d;
 
   const currentProviderDef = getProviderDef(draft.provider);
   const isCustomProvider = draft.provider === 'custom';
 
-  // Stale feedback never survives a connection-field edit: test alerts follow
-  // the connection signature; the fetched model list follows the provider.
-  const prevConnSigRef = useRef(d.connSig);
-  useEffect(() => {
-    if (prevConnSigRef.current !== d.connSig) {
-      prevConnSigRef.current = d.connSig;
-      setTestResult(null);
-      setTestError(null);
-    }
-  }, [d.connSig]);
-
+  // The fetched model list follows the provider (test alerts follow the
+  // connection signature inside useConfigDraft).
   const prevProviderRef = useRef(draft.provider);
   useEffect(() => {
     if (prevProviderRef.current !== draft.provider) {
@@ -84,47 +92,6 @@ export function LlmConfigCard({ settings, saveLlm }: LlmConfigCardProps) {
       setModelFetchError(null);
     }
   }, [draft.provider]);
-
-  const handleTestConnection = useCallback(async () => {
-    setIsTesting(true);
-    setTestResult(null);
-    setTestError(null);
-    // Captured before the await: if the user edits a connection field while
-    // the test is in flight, this stale signature never verifies the new draft.
-    const testedSig = d.connSig;
-
-    try {
-      const baseUrl = isCustomProvider ? draft.customBaseUrl : currentProviderDef.baseUrl;
-      const perm = await ensure(baseUrl);
-      if (!perm.ok) {
-        setTestError(t(permissionErrorKey(perm.reason)));
-        return;
-      }
-      const result = await testLlmConnection({
-        providerId: draft.provider,
-        apiKey: draft.apiKey,
-        model: draft.model,
-        customBaseUrl: draft.customBaseUrl,
-        customProtocol: draft.customProtocol,
-      });
-      setTestResult(result);
-      d.markVerified(testedSig);
-    } catch (err) {
-      setTestError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setIsTesting(false);
-    }
-  }, [draft, d, isCustomProvider, currentProviderDef.baseUrl, ensure, t]);
-
-  const handleSave = useCallback(async () => {
-    setIsSaving(true);
-    try {
-      await saveLlm(draft);
-      d.markSaved();
-    } finally {
-      setIsSaving(false);
-    }
-  }, [saveLlm, draft, d]);
 
   const handleFetchModels = useCallback(async () => {
     setIsFetchingModels(true);
@@ -301,32 +268,32 @@ export function LlmConfigCard({ settings, saveLlm }: LlmConfigCardProps) {
           {/* Test Connection + Save + persistent saved badge */}
           <Grid size={{ xs: 12 }}>
             <SaveActions
-              onTest={handleTestConnection}
+              onTest={d.handleTest}
               testDisabled={!canTest}
-              testing={isTesting}
-              onSave={handleSave}
+              testing={d.isTesting}
+              onSave={d.handleSave}
               saveDisabled={!d.canSave}
-              saving={isSaving}
+              saving={d.isSaving}
               savedAt={settings.configSavedAt?.llm}
               showTestHint={d.connectionDirty && !d.verified}
             />
           </Grid>
 
-          {testResult && d.verified && (
+          {d.testResult && d.verified && (
             <Grid size={{ xs: 12 }}>
               <Alert
                 severity="success"
                 icon={<Iconify icon="solar:check-circle-bold" width={22} />}
               >
-                {t('settings.testSuccessDetail', { message: testResult.message })}
+                {t('settings.testSuccessDetail', { message: d.testResult.message })}
               </Alert>
             </Grid>
           )}
 
-          {testError && (
+          {d.testError && (
             <Grid size={{ xs: 12 }}>
               <Alert severity="error">
-                {t('settings.testFailedDetail', { error: testError })}
+                {t('settings.testFailedDetail', { error: d.testError })}
               </Alert>
             </Grid>
           )}

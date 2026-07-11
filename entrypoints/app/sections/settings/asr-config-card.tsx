@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback } from 'react';
 import Card from '@mui/material/Card';
 import CardHeader from '@mui/material/CardHeader';
 import CardContent from '@mui/material/CardContent';
@@ -30,57 +30,26 @@ interface AsrConfigCardProps {
 export function AsrConfigCard({ settings, saveAsr }: AsrConfigCardProps) {
   const { t } = useTranslation();
   const [showKey, setShowKey] = useState(false);
-  const [isTesting, setIsTesting] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [testSuccess, setTestSuccess] = useState(false);
-  const [testError, setTestError] = useState<string | null>(null);
 
   const derive = useCallback(
     (provider?: ASRProviderId) => deriveAsrDraft(settings, provider),
     [settings],
   );
-  const d = useConfigDraft<AsrDraft>({ derive, connectionKeys: ASR_CONNECTION_KEYS });
+  // Both ASR providers use built-in domains (static host_permissions), so no
+  // useHostPermission gate is needed — unlike the LLM/Embedding cards.
+  const runTest = useCallback(async (dr: AsrDraft) => {
+    await testAsrConnection({ providerId: dr.provider, apiKey: dr.apiKey });
+    return true as const;
+  }, []);
+  const d = useConfigDraft<AsrDraft, boolean>({
+    derive,
+    connectionKeys: ASR_CONNECTION_KEYS,
+    runTest,
+    save: saveAsr,
+  });
   const { draft, setField } = d;
 
   const currentAsrDef = getAsrProviderDef(draft.provider);
-
-  const prevConnSigRef = useRef(d.connSig);
-  useEffect(() => {
-    if (prevConnSigRef.current !== d.connSig) {
-      prevConnSigRef.current = d.connSig;
-      setTestSuccess(false);
-      setTestError(null);
-    }
-  }, [d.connSig]);
-
-  // Both ASR providers use built-in domains (static host_permissions), so no
-  // useHostPermission gate is needed — unlike the LLM/Embedding cards.
-  const handleTestConnection = useCallback(async () => {
-    setIsTesting(true);
-    setTestSuccess(false);
-    setTestError(null);
-    const testedSig = d.connSig;
-
-    try {
-      await testAsrConnection({ providerId: draft.provider, apiKey: draft.apiKey });
-      setTestSuccess(true);
-      d.markVerified(testedSig);
-    } catch (err) {
-      setTestError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setIsTesting(false);
-    }
-  }, [draft.provider, draft.apiKey, d]);
-
-  const handleSave = useCallback(async () => {
-    setIsSaving(true);
-    try {
-      await saveAsr(draft);
-      d.markSaved();
-    } finally {
-      setIsSaving(false);
-    }
-  }, [saveAsr, draft, d]);
 
   return (
     <Card>
@@ -145,18 +114,18 @@ export function AsrConfigCard({ settings, saveAsr }: AsrConfigCardProps) {
 
           <Grid size={{ xs: 12 }}>
             <SaveActions
-              onTest={handleTestConnection}
+              onTest={d.handleTest}
               testDisabled={!draft.apiKey}
-              testing={isTesting}
-              onSave={handleSave}
+              testing={d.isTesting}
+              onSave={d.handleSave}
               saveDisabled={!d.canSave}
-              saving={isSaving}
+              saving={d.isSaving}
               savedAt={settings.configSavedAt?.asr}
               showTestHint={d.connectionDirty && !d.verified}
             />
           </Grid>
 
-          {testSuccess && d.verified && (
+          {d.testResult && d.verified && (
             <Grid size={{ xs: 12 }}>
               <Alert
                 severity="success"
@@ -167,10 +136,10 @@ export function AsrConfigCard({ settings, saveAsr }: AsrConfigCardProps) {
             </Grid>
           )}
 
-          {testError && (
+          {d.testError && (
             <Grid size={{ xs: 12 }}>
               <Alert severity="error">
-                {t('settings.testFailedDetail', { error: testError })}
+                {t('settings.testFailedDetail', { error: d.testError })}
               </Alert>
             </Grid>
           )}

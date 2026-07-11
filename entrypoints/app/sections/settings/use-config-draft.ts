@@ -46,32 +46,50 @@ export function computeDraftGate<T extends object>(
 // useConfigDraft
 // ---------------------------------------------------------------------------
 
-export interface ConfigDraftState<T extends { provider: string }> extends DraftGate {
+export interface ConfigDraftState<T extends { provider: string }, R> extends DraftGate {
   draft: T;
   setField: <K extends keyof T>(field: K, value: T[K]) => void;
   /** Reloads the draft with the given provider's saved values. */
   switchProvider: (provider: T['provider']) => void;
-  /** Signature of the draft's current connection fields — capture it before an async test starts. */
-  connSig: string;
-  /** Record a successful test against the signature captured at test start. */
-  markVerified: (sig: string) => void;
-  /** After a successful save: reset touched (external syncs resume) and clear the verified signature (Save returns to disabled, success Alert yields to the persistent badge). */
-  markSaved: () => void;
+  /** Runs `runTest(draft)`; an accepted result verifies the signature captured at test start. */
+  handleTest: () => Promise<void>;
+  isTesting: boolean;
+  /** Last test result — cleared when a connection field changes. */
+  testResult: R | null;
+  /** Last test failure message — cleared when a connection field changes. */
+  testError: string | null;
+  /** Runs `save(draft)`; on success resets touched (external syncs resume) and clears the verified signature (Save returns to disabled, success Alert yields to the persistent badge). */
+  handleSave: () => Promise<void>;
+  isSaving: boolean;
 }
+
+const acceptAlways = () => true;
 
 /**
  * Local draft for a settings card: edits never touch storage; `derive` maps
  * stored settings to the flat draft shape (`derive()` = the saved active
  * config, `derive(p)` = provider p's saved values for provider switching).
+ * The test→verify→save state machine lives here; cards only supply the
+ * card-specific probe (`runTest`) and persistence (`save`).
  */
-export function useConfigDraft<T extends { provider: string }>(options: {
+export function useConfigDraft<T extends { provider: string }, R>(options: {
   derive: (provider?: T['provider']) => T;
   connectionKeys: readonly (keyof T)[];
-}): ConfigDraftState<T> {
-  const { derive, connectionKeys } = options;
+  /** Card-specific connection probe; thrown errors surface as `testError`. */
+  runTest: (draft: T) => Promise<R>;
+  /** Result gate: only an accepted result verifies (default: always accept). */
+  acceptResult?: (result: R) => boolean;
+  save: (draft: T) => Promise<void>;
+}): ConfigDraftState<T, R> {
+  const { derive, connectionKeys, runTest, acceptResult = acceptAlways, save } = options;
   const [draft, setDraft] = useState<T>(() => derive());
   const [verifiedSig, setVerifiedSig] = useState<string | null>(null);
   const touchedRef = useRef(false);
+
+  const [isTesting, setIsTesting] = useState(false);
+  const [testResult, setTestResult] = useState<R | null>(null);
+  const [testError, setTestError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Adopt external changes (initial storage load, saves from other contexts)
   // only while the user hasn't edited — never clobber an in-progress draft.
@@ -97,14 +115,63 @@ export function useConfigDraft<T extends { provider: string }>(options: {
     [derive],
   );
 
-  const markVerified = useCallback((sig: string) => setVerifiedSig(sig), []);
-  const markSaved = useCallback(() => {
-    touchedRef.current = false;
-    setVerifiedSig(null);
-  }, []);
-
-  const gate = computeDraftGate(draft, derive(), connectionKeys, verifiedSig);
   const connSig = connectionSignature(draft, connectionKeys);
 
-  return { draft, setField, switchProvider, connSig, markVerified, markSaved, ...gate };
+  // Stale test feedback never survives a connection-field edit: the verified
+  // gate already follows the signature; the visible Alerts must follow too.
+  const prevConnSigRef = useRef(connSig);
+  useEffect(() => {
+    if (prevConnSigRef.current !== connSig) {
+      prevConnSigRef.current = connSig;
+      setTestResult(null);
+      setTestError(null);
+    }
+  }, [connSig]);
+
+  const handleTest = useCallback(async () => {
+    setIsTesting(true);
+    setTestResult(null);
+    setTestError(null);
+    // Captured before the await: if the user edits a connection field while
+    // the test is in flight, this stale signature never verifies the new draft.
+    const testedSig = connSig;
+
+    try {
+      const result = await runTest(draft);
+      setTestResult(result);
+      if (acceptResult(result)) setVerifiedSig(testedSig);
+    } catch (err) {
+      setTestError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsTesting(false);
+    }
+  }, [connSig, draft, runTest, acceptResult]);
+
+  const handleSave = useCallback(async () => {
+    setIsSaving(true);
+    try {
+      await save(draft);
+      // Reset touched (external syncs resume) and clear the verified signature
+      // (Save returns to disabled, the success Alert yields to the saved badge).
+      touchedRef.current = false;
+      setVerifiedSig(null);
+    } finally {
+      setIsSaving(false);
+    }
+  }, [save, draft]);
+
+  const gate = computeDraftGate(draft, derive(), connectionKeys, verifiedSig);
+
+  return {
+    draft,
+    setField,
+    switchProvider,
+    handleTest,
+    isTesting,
+    testResult,
+    testError,
+    handleSave,
+    isSaving,
+    ...gate,
+  };
 }

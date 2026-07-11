@@ -21,7 +21,7 @@ MV3 扩展页只对 `host_permissions`（静态声明 or 运行时授予的 opti
 ## 约定
 
 - 遵守 i18n seam：`host-access.ts` 只返回结构化状态/`reason`，**不引 `t()`**。UI 侧 `permission-error.ts` 把 `reason` map 到 `settings.permission.*` locale key；`use-host-permission.tsx` 的弹窗文案走 `settings.permission.{dialogTitle,dialogDesc,grant,cancel}`。
-- 消费方：`llm-config-card.tsx`（测试连接 + 获取模型两处）/ `embedding-config-card.tsx`（测试连接一处）用 `useHostPermission()`，handler 起始处 `await ensure(baseUrl)`，`!ok` 显示本地化错误并 return，并在 JSX 里渲染 `{dialog}`。
+- 消费方：`llm-config-card.tsx`（测试连接 + 获取模型两处）/ `embedding/embedding-config-card.tsx`（测试连接 + 重建两处，单实例 hook，`ensure` 传入 `use-embedding-rebuild.ts`）用 `useHostPermission()`，操作起始处 `await ensure(baseUrl)`，`!ok` 显示本地化错误（测试流程在 `runTest` 内 throw → `useConfigDraft` 的 testError；fetchModels/rebuild 直接 set error state），并在 JSX 里渲染 `{dialog}`。
 - 授权全局持久 → 一次授权后 background/offscreen 的 embedding/RAG 管线复用同一权限（SW 无用户手势，无法自行 request，授权入口只能在 UI）。
 
 ## 测试
