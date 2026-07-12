@@ -1,21 +1,15 @@
+import { getTableColumns, getTableName } from 'drizzle-orm';
 import type { FavbaseDb } from '../database/db';
-import {
-  authors,
-  sources,
-  items,
-  itemSources,
-  itemContents,
-  itemChunks,
-} from '../database/schema';
+import * as schema from '../database/schema';
 
-export interface TableData {
-  authors: Record<string, unknown>[];
-  sources: Record<string, unknown>[];
-  items: Record<string, unknown>[];
-  item_sources: Record<string, unknown>[];
-  item_contents: Record<string, unknown>[];
-  item_chunks: Record<string, unknown>[];
-}
+type Tables = typeof schema;
+
+export type TableData = {
+  [K in keyof Tables as Tables[K]['_']['name']]: Record<string, unknown>[];
+};
+
+// schema.ts 是表清单唯一真相源：加表后导出自动纳入，无需改本模块
+export const EXPORT_TABLES = Object.values(schema);
 
 function serializeRow(row: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
@@ -35,24 +29,18 @@ export async function queryAllTables(
   db: FavbaseDb,
   includeEmbedding: boolean,
 ): Promise<TableData> {
-  const [a, s, i, is, ic, ik] = await Promise.all([
-    db.select().from(authors),
-    db.select().from(sources),
-    db.select().from(items),
-    db.select().from(itemSources),
-    db.select().from(itemContents),
-    db.select().from(itemChunks),
-  ]);
-
-  const chunkRows = ik.map(serializeRow);
-  return {
-    authors: a.map(serializeRow),
-    sources: s.map(serializeRow),
-    items: i.map(serializeRow),
-    item_sources: is.map(serializeRow),
-    item_contents: ic.map(serializeRow),
-    item_chunks: includeEmbedding ? chunkRows : stripEmbedding(chunkRows),
-  };
+  const entries = await Promise.all(
+    EXPORT_TABLES.map(async (table) => {
+      const rows = (await db.select().from(table)).map(serializeRow);
+      const keepEmbedding =
+        includeEmbedding || !('embedding' in getTableColumns(table));
+      return [
+        getTableName(table),
+        keepEmbedding ? rows : stripEmbedding(rows),
+      ] as const;
+    }),
+  );
+  return Object.fromEntries(entries) as TableData;
 }
 
 export function isTableDataEmpty(data: TableData): boolean {
