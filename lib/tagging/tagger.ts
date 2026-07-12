@@ -1,6 +1,6 @@
 import { generateObject } from 'ai';
 import { z } from 'zod';
-import { createLanguageModel } from '@/lib/ai';
+import { createLanguageModel, supportsSchemaDelivery } from '@/lib/ai';
 import type { ResolvedTaggingConfig } from './config';
 import { TAGGING_SYSTEM_PROMPT, buildTaggingPrompt, MAX_TAGS, type TaggingInput } from './prompt';
 
@@ -34,13 +34,32 @@ export async function generateTags(
     customProtocol: config.customProtocol,
   });
 
+  const system = TAGGING_SYSTEM_PROMPT;
+  const prompt = buildTaggingPrompt(input, existingTags);
+
+  if (supportsSchemaDelivery(config.providerId, config.customProtocol)) {
+    // Schema actually reaches the model (native structured outputs / json_schema).
+    const { object } = await generateObject({
+      model,
+      schema: tagsSchema,
+      system,
+      prompt,
+      temperature: 0.2,
+    });
+    return normalizeTags(object.tags);
+  }
+
+  // json_object mode: the schema never reaches the model — the prompt is the
+  // only schema carrier (prompt.ts spells out the JSON shape). 'no-schema'
+  // avoids the SDK's responseFormat warning while keeping the exact same
+  // request body (`response_format: json_object`). Zod parse is the client-side
+  // safety net; a malformed shape throws and the service layer decides.
   const { object } = await generateObject({
     model,
-    schema: tagsSchema,
-    system: TAGGING_SYSTEM_PROMPT,
-    prompt: buildTaggingPrompt(input, existingTags),
+    output: 'no-schema',
+    system,
+    prompt,
     temperature: 0.2,
   });
-
-  return normalizeTags(object.tags);
+  return normalizeTags(tagsSchema.parse(object).tags);
 }

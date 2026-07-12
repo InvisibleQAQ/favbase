@@ -16,6 +16,8 @@ export interface LLMProviderDef {
   baseUrl: string;
   defaultModel: string;
   regUrl: string;
+  /** Endpoint accepts `response_format: json_schema` (unset = conservative json_object). */
+  supportsJsonSchema?: boolean;
 }
 
 export interface ASRProviderDef {
@@ -65,13 +67,17 @@ export const LLM_PROVIDERS: LLMProviderDef[] = [
     baseUrl: 'https://openrouter.ai/api/v1/',
     defaultModel: 'openrouter/auto',
     regUrl: 'https://openrouter.ai/settings/keys',
+    // Gateway natively accepts json_schema and silently downgrades to
+    // json_object for upstreams that lack it (never 400s).
+    supportsJsonSchema: true,
   },
   {
     id: 'deepseek',
     name: 'DeepSeek',
     sdkType: 'openai-compatible',
     baseUrl: 'https://api.deepseek.com/',
-    defaultModel: 'deepseek-chat',
+    // Legacy 'deepseek-chat' alias retires 2026-07-24; it already routes here.
+    defaultModel: 'deepseek-v4-flash',
     regUrl: 'https://platform.deepseek.com/api_keys',
   },
   {

@@ -1,15 +1,27 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { UserSettings } from '@/lib/storage';
 import { getProviderDef } from '@/lib/providers';
-import { buildTaggingPrompt, MAX_CONTENT_CHARS, MAX_EXISTING_TAGS } from './prompt';
-import { normalizeTags } from './tagger';
-import { resolveTaggingConfig } from './config';
+import {
+  buildTaggingPrompt,
+  MAX_CONTENT_CHARS,
+  MAX_EXISTING_TAGS,
+  TAGGING_SYSTEM_PROMPT,
+} from './prompt';
+import { generateTags, normalizeTags } from './tagger';
+import { resolveTaggingConfig, type ResolvedTaggingConfig } from './config';
 
 // The storage barrel touches chrome.runtime at load time (wxt storage).
 vi.mock('@/lib/storage', () => ({
   settingsStorage: { getValue: vi.fn() },
   getEnvApiKey: () => '',
   getEnvModel: () => '',
+}));
+
+// Intercept only the LLM call; createLanguageModel/prompt building run real.
+const { generateObjectMock } = vi.hoisted(() => ({ generateObjectMock: vi.fn() }));
+vi.mock('ai', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('ai')>()),
+  generateObject: generateObjectMock,
 }));
 
 function makeSettings(overrides?: Partial<UserSettings>): UserSettings {
@@ -93,6 +105,66 @@ describe('buildTaggingPrompt', () => {
     const prompt = buildTaggingPrompt({ title: 'T' }, existing);
     expect(prompt).toContain(`t${MAX_EXISTING_TAGS - 1}`);
     expect(prompt).not.toContain(`t${MAX_EXISTING_TAGS}、`);
+  });
+
+  // OpenAI-spec json_object mode 400s unless the prompt contains "json",
+  // and never sends the Zod schema — the prompt must carry both the word
+  // and the expected shape.
+  it('mentions JSON and the expected output shape (json_object hard constraint)', () => {
+    const prompt = buildTaggingPrompt({ title: 'T' }, []);
+    expect(prompt).toMatch(/json/i);
+    expect(prompt).toContain('{"tags":');
+    expect(TAGGING_SYSTEM_PROMPT).toMatch(/json/i);
+  });
+});
+
+describe('generateTags', () => {
+  beforeEach(() => generateObjectMock.mockReset());
+
+  const input = { title: 'T' };
+
+  function makeTaggingConfig(overrides?: Partial<ResolvedTaggingConfig>): ResolvedTaggingConfig {
+    return {
+      providerId: 'deepseek',
+      apiKey: 'sk-test',
+      model: 'deepseek-v4-flash',
+      enabled: true,
+      ...overrides,
+    };
+  }
+
+  it('uses no-schema for json_object-only providers (no responseFormat warning)', async () => {
+    generateObjectMock.mockResolvedValue({ object: { tags: ['前端', 'React'] } });
+    const tags = await generateTags(makeTaggingConfig(), input, []);
+    expect(tags).toEqual(['前端', 'React']);
+    const args = generateObjectMock.mock.calls[0][0];
+    expect(args.output).toBe('no-schema');
+    expect(args.schema).toBeUndefined();
+  });
+
+  it('sends the Zod schema for schema-delivery providers', async () => {
+    generateObjectMock.mockResolvedValue({ object: { tags: ['React'] } });
+    await generateTags(
+      makeTaggingConfig({ providerId: 'openai', model: 'gpt-4o-mini' }),
+      input,
+      [],
+    );
+    const args = generateObjectMock.mock.calls[0][0];
+    expect(args.schema).toBeDefined();
+    expect(args.output).toBeUndefined();
+  });
+
+  it('no-schema path rejects malformed output via Zod parse', async () => {
+    generateObjectMock.mockResolvedValue({ object: { tags: 'not-an-array' } });
+    await expect(generateTags(makeTaggingConfig(), input, [])).rejects.toThrow();
+  });
+
+  it('no-schema path normalizes valid output (trim + blank drop + dedupe)', async () => {
+    generateObjectMock.mockResolvedValue({
+      object: { tags: [' 前端 ', '前端', 'React', ' ', 'Vue'] },
+    });
+    const tags = await generateTags(makeTaggingConfig(), input, []);
+    expect(tags).toEqual(['前端', 'React', 'Vue']);
   });
 });
 

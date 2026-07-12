@@ -53,12 +53,19 @@ export function createLanguageModel(options: CreateModelOptions): LanguageModel 
     apiKey,
     model,
     baseUrl: def.baseUrl,
+    supportsJsonSchema: def.supportsJsonSchema,
   });
 }
 
 function createModelBySdkType(
   sdkType: SdkType,
-  opts: { providerId: string; apiKey: string; model: string; baseUrl: string },
+  opts: {
+    providerId: string;
+    apiKey: string;
+    model: string;
+    baseUrl: string;
+    supportsJsonSchema?: boolean;
+  },
 ): LanguageModel {
   switch (sdkType) {
     case 'openai':
@@ -77,8 +84,28 @@ function createModelBySdkType(
         headers: opts.apiKey
           ? { Authorization: `Bearer ${opts.apiKey}` }
           : {},
+        // Provider-level is the only working switch in @2.0.51 — the
+        // `languageModel(id, config)` second arg is dropped by the impl.
+        supportsStructuredOutputs: opts.supportsJsonSchema === true,
       }).chatModel(opts.model);
   }
+}
+
+/**
+ * Whether a Zod schema passed to `generateObject` actually reaches the model
+ * for this provider. Native SDKs (openai/anthropic/google, incl. custom+claude)
+ * always deliver it; openai-compatible endpoints only when the provider def
+ * opts in via `supportsJsonSchema` (otherwise the SDK downgrades to
+ * `response_format: json_object` and silently drops the schema).
+ */
+export function supportsSchemaDelivery(
+  providerId: LLMProviderId,
+  customProtocol?: 'openai' | 'claude',
+): boolean {
+  if (providerId === 'custom') return customProtocol === 'claude';
+  const def = getProviderDef(providerId);
+  if (def.sdkType !== 'openai-compatible') return true;
+  return def.supportsJsonSchema === true;
 }
 
 // ---------------------------------------------------------------------------

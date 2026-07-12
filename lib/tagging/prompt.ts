@@ -13,9 +13,12 @@ export interface TaggingInput {
   content?: string;
 }
 
+// OpenAI-spec hard constraint: response_format json_object rejects requests
+// unless the prompt contains the word "json" — the JSON mentions below are
+// load-bearing, do not remove (guarded by tagging.test.ts).
 export const TAGGING_SYSTEM_PROMPT =
   '你是一个专业的内容分析专家。你的任务是阅读给定的内容素材，提取最核心的主题，生成关键词标签。' +
-  '请保持客观、准确，严格按照所要求的格式输出。';
+  '请保持客观、准确，严格按照要求以 JSON 对象格式输出。';
 
 export function buildTaggingPrompt(input: TaggingInput, existingTags: string[]): string {
   const lines = ['请分析以下内容，生成 3-5 个核心关键词标签。', '', '内容信息：'];
@@ -36,6 +39,7 @@ export function buildTaggingPrompt(input: TaggingInput, existingTags: string[]):
     '3. 【强制优先】：优先复用「已有标签」中语义匹配的标签，其次才创建新标签',
     '4. 【防重策略】：不生成与已有标签语义重复的新标签' +
       '（如已有"前端"，绝不生成"前端开发"；已有"React"，绝不生成"ReactJS"）',
+    '5. 输出格式：JSON 对象，形如 {"tags": ["标签1", "标签2"]}',
   );
 
   return lines.join('\n');
