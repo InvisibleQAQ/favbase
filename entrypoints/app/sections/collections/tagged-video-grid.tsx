@@ -5,6 +5,7 @@ import Grid from '@mui/material/Grid';
 import Typography from '@mui/material/Typography';
 
 import { initDbProxy } from '@/lib/database';
+import { onDomainEvent } from '@/lib/events';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { getItemsByTags, type TaggedItem } from '@/lib/tagging';
 import type { BiliFavVideo } from '@/lib/bilibili/types';
@@ -58,9 +59,14 @@ export function TaggedVideoGrid({ tagIds, onTagsChanged }: TaggedVideoGridProps)
   const { editing, open: openTagEditor, close: closeTagEditor } = useTagEditState();
   const key = tagIds.join(',');
 
+  // Only a filter change resets to the skeleton; version bumps (tag edits /
+  // background AI tagging) re-query in place without visual churn.
+  useEffect(() => {
+    setItems(null);
+  }, [key]);
+
   useEffect(() => {
     let cancelled = false;
-    setItems(null);
 
     (async () => {
       try {
@@ -79,6 +85,10 @@ export function TaggedVideoGrid({ tagIds, onTagsChanged }: TaggedVideoGridProps)
       cancelled = true;
     };
   }, [key, version]);
+
+  // A freshly AI-tagged video may now match the active filter — re-query so
+  // it appears without any manual action.
+  useEffect(() => onDomainEvent('item-tagged', () => setVersion((v) => v + 1)), []);
 
   // Removing a tag can drop the item out of the AND filter; its card unmounts,
   // so close the popover instead of leaving it anchored to a detached node.

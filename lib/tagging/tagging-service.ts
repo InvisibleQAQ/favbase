@@ -1,5 +1,6 @@
 import { and, eq, inArray, sql, desc } from 'drizzle-orm';
 import { getDb, type FavbaseDb } from '@/lib/database';
+import { emitDomainEvent } from '@/lib/events';
 import { items } from '@/lib/database/entities/items';
 import { itemContents } from '@/lib/database/entities/item-contents';
 import { tags } from '@/lib/database/entities/tags';
@@ -116,6 +117,7 @@ export async function tagPlatformItem(
     if (names.length === 0) return 'skipped';
 
     await linkTagsToItem(db, item.id, names);
+    emitDomainEvent('item-tagged', { platform, platformItemId });
     return 'tagged';
   } catch (err) {
     console.error('[tagging] Tagging failed for %s:%s:', platform, platformItemId, err);

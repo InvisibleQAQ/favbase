@@ -8,6 +8,7 @@ import { eq } from 'drizzle-orm';
 import * as schema from '@/lib/database/schema';
 import { runMigrations } from '@/lib/database/migrations';
 import type { FavbaseDb } from '@/lib/database';
+import { onDomainEvent } from '@/lib/events';
 import type { ResolvedTaggingConfig } from './config';
 import type { TaggingInput } from './prompt';
 import {
@@ -228,6 +229,46 @@ describe('tagging-service (in-memory PGlite)', () => {
       await tagPlatformItem('bilibili', 'BV8NOCONTENT', d);
 
       expect(d.generate.mock.calls[0][1].content).toBeUndefined();
+    });
+
+    it("emits 'item-tagged' once on success; the idempotent skip does not re-emit", async () => {
+      await seedItem('BV14EVENT');
+      const events: Array<{ platform: string; platformItemId: string }> = [];
+      const off = onDomainEvent('item-tagged', (e) => events.push(e));
+      try {
+        await tagPlatformItem('bilibili', 'BV14EVENT', deps());
+        expect(events).toEqual([{ platform: 'bilibili', platformItemId: 'BV14EVENT' }]);
+
+        await tagPlatformItem('bilibili', 'BV14EVENT', deps());
+        expect(events).toHaveLength(1);
+      } finally {
+        off();
+      }
+    });
+
+    it("does not emit 'item-tagged' on skip (unconfigured) or failure", async () => {
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const listener = vi.fn();
+      const off = onDomainEvent('item-tagged', listener);
+      try {
+        await seedItem('BV15NOEVENT');
+        await tagPlatformItem('bilibili', 'BV15NOEVENT', deps({ getConfig: async () => disabledConfig }));
+
+        await tagPlatformItem(
+          'bilibili',
+          'BV15NOEVENT',
+          deps({
+            generate: vi.fn<GenerateFn>(async () => {
+              throw new Error('LLM boom');
+            }),
+          }),
+        );
+
+        expect(listener).not.toHaveBeenCalled();
+      } finally {
+        off();
+        errSpy.mockRestore();
+      }
     });
   });
 

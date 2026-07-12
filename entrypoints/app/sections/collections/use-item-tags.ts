@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { initDbProxy } from '@/lib/database';
+import { onDomainEvent } from '@/lib/events';
 import { getAllUsedTags, getTagsForPlatformItems, type TagRef, type UsedTag } from '@/lib/tagging';
 
 /** Platform key for all tag operations in this (bilibili-only) section. */
@@ -45,6 +46,18 @@ export function useItemTags(bvids: string[]): {
     };
   }, [key, version]);
 
+  // Auto-refresh when AI tagging lands for a video on the current page
+  // (fires seconds after the transcription itself reports done).
+  useEffect(() => {
+    if (!key) return;
+    const bvidSet = new Set(key.toLowerCase().split(','));
+    return onDomainEvent('item-tagged', (e) => {
+      if (e.platform === BILI_PLATFORM && bvidSet.has(e.platformItemId.toLowerCase())) {
+        setVersion((v) => v + 1);
+      }
+    });
+  }, [key]);
+
   const refresh = useCallback(() => setVersion((v) => v + 1), []);
 
   return { tagsByBvid, refresh };
@@ -77,6 +90,9 @@ export function useUsedTags(): { usedTags: UsedTag[]; refresh: () => void } {
       cancelled = true;
     };
   }, [version]);
+
+  // New AI tags / count changes must reach the filter chips as they happen.
+  useEffect(() => onDomainEvent('item-tagged', () => setVersion((v) => v + 1)), []);
 
   const refresh = useCallback(() => setVersion((v) => v + 1), []);
 
