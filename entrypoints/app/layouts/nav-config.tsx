@@ -26,6 +26,10 @@ export const navData: NavItem[] = [
         title: 'nav.bilibiliFavorites',
         path: '/collections',
       },
+      {
+        title: 'nav.githubStars',
+        path: '/collections/github',
+      },
     ],
   },
   {

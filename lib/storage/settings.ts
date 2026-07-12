@@ -30,6 +30,10 @@ export interface UserSettings {
     { apiKey: string; baseUrl?: string; model?: string; dimensions?: number }
   >;
 
+  // Platform connections
+  /** GitHub Personal Access Token (Connections tab). Absent/empty = not connected. */
+  githubToken?: string;
+
   // Mode
   prefMode: 'quality' | 'efficiency';
 
@@ -42,7 +46,7 @@ export interface UserSettings {
    * explicit save actions in `useSettings`; absence = the section was never
    * manually saved (pre-feature installs need no migration).
    */
-  configSavedAt?: Partial<Record<'llm' | 'asr' | 'embedding', number>>;
+  configSavedAt?: Partial<Record<'llm' | 'asr' | 'embedding' | 'github', number>>;
 }
 
 export const DEFAULT_SETTINGS: UserSettings = {

@@ -33,13 +33,15 @@ const bilibiliHostPermissions = [
   'https://*.bilivideo.cn/*',
 ];
 
+const githubHostPermissions = ['https://api.github.com/*'];
+
 export default defineConfig({
   modules: ['@wxt-dev/module-react'],
   manifest: {
     name: 'favbase',
     description: 'Turn your social media bookmarks into a searchable knowledge base',
     permissions: ['storage', 'unlimitedStorage', 'offscreen', 'declarativeNetRequest', 'cookies'],
-    host_permissions: [...bilibiliHostPermissions, ...providerHostPermissions],
+    host_permissions: [...bilibiliHostPermissions, ...githubHostPermissions, ...providerHostPermissions],
     // Custom (user-entered) API domains are unknown at build time; grant them at
     // runtime via lib/permissions/host-access.ts (must run in a user gesture).
     optional_host_permissions: ['https://*/*'],

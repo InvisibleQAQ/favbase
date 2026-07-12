@@ -16,11 +16,12 @@ import type { LocalePreference } from '@/lib/storage';
 import { LlmConfigCard } from './llm-config-card';
 import { AsrConfigCard } from './asr-config-card';
 import { EmbeddingConfigCard } from './embedding/embedding-config-card';
+import { GithubConnectionCard } from './github-connection-card';
 import { ExportCard } from '../overview/export-card';
 import { SettingsTabs, type SettingsTabItem } from './settings-tabs';
 import { AiConfigNav, type AiSection, type AiConfigNavItem } from './ai-config-nav';
 
-type SettingsTab = 'ai' | 'general' | 'storage';
+type SettingsTab = 'ai' | 'connections' | 'general' | 'storage';
 
 export function SettingsView() {
   const s = useSettings();
@@ -30,6 +31,7 @@ export function SettingsView() {
 
   const tabs: SettingsTabItem[] = [
     { value: 'ai', label: t('settings.tabAi'), icon: 'solar:magic-stick-3-bold-duotone' },
+    { value: 'connections', label: t('settings.tabConnections'), icon: 'solar:shield-keyhole-bold-duotone' },
     { value: 'general', label: t('settings.tabGeneral'), icon: 'solar:global-bold-duotone' },
     { value: 'storage', label: t('settings.tabStorage'), icon: 'solar:database-bold-duotone' },
   ];
@@ -68,6 +70,14 @@ export function SettingsView() {
             {aiSection === 'embedding' && (
               <EmbeddingConfigCard settings={s.settings} saveEmbedding={s.saveEmbedding} />
             )}
+          </Grid>
+        </Grid>
+      )}
+
+      {tab === 'connections' && (
+        <Grid container spacing={3}>
+          <Grid size={{ xs: 12, md: 8 }}>
+            <GithubConnectionCard settings={s.settings} saveGithub={s.saveGithub} />
           </Grid>
         </Grid>
       )}

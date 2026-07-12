@@ -16,6 +16,7 @@ import { useLocation, Link as RouterLink } from 'react-router-dom';
 
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify } from '../../components/iconify';
+import { findActiveChildPath } from '../nav-active';
 import type { NavItem } from '../nav-config';
 
 export type NavContentProps = {
@@ -271,6 +272,15 @@ function CollectionsBranch({ item, pinned }: { item: NavItem; pinned: boolean })
   const isActive = pathname.startsWith(item.path);
   const [expanded, setExpanded] = useState(isActive);
 
+  const children = item.children ?? [];
+  // Longest-prefix match: sibling leaves highlight mutually exclusively even
+  // when one leaf's path ('/collections') prefixes another's
+  // ('/collections/github'). See nav-active.ts.
+  const activeChildPath = findActiveChildPath(
+    pathname,
+    children.map((child) => child.path),
+  );
+
   // Auto-expand whenever we navigate into a matching route.
   useEffect(() => {
     if (pathname.startsWith(item.path)) setExpanded(true);
@@ -329,11 +339,11 @@ function CollectionsBranch({ item, pinned }: { item: NavItem; pinned: boolean })
             ml: 3.5,
           }}
         >
-          {(item.children ?? []).map((child, idx, arr) => (
+          {children.map((child, idx, arr) => (
             <NavChildLeaf
               key={child.title}
               item={child}
-              isActive={pathname.startsWith(child.path)}
+              isActive={child.path === activeChildPath}
               isLast={idx === arr.length - 1}
             />
           ))}
