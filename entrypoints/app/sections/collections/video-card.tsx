@@ -14,6 +14,7 @@ import type { LocaleKeys } from '@/lib/i18n/locales/zh-CN';
 import type { TranscribeErrorCode } from '@/lib/transcription/types';
 import { Iconify } from '../../components/iconify';
 import type { BiliFavVideo } from '@/lib/bilibili/types';
+import type { TagRef } from '@/lib/tagging';
 import type { VideoTranscribeState } from './use-video-transcribe';
 
 function formatDuration(seconds: number): string {
@@ -55,7 +56,7 @@ function translateError(
   return t(key, params);
 }
 
-const INVALID_ATTR = 9;
+export const INVALID_ATTR = 9;
 
 export interface VideoCardProps {
   video: BiliFavVideo;
@@ -63,6 +64,9 @@ export interface VideoCardProps {
   onTranscribe?: () => void;
   onCancel?: () => void;
   disabled?: boolean;
+  /** undefined = tag UI hidden entirely (backward compatible); [] = no tags yet, edit button only. */
+  tags?: TagRef[];
+  onEditTags?: (anchor: HTMLElement) => void;
 }
 
 export function VideoCard({
@@ -71,6 +75,8 @@ export function VideoCard({
   onTranscribe,
   onCancel,
   disabled,
+  tags,
+  onEditTags,
 }: VideoCardProps) {
   useTranslation();
   const isInvalid = video.attr === INVALID_ATTR;
@@ -183,6 +189,9 @@ export function VideoCard({
         </Box>
       </CardActionArea>
 
+      {/* Tag row — outside CardActionArea so chips/edit don't trigger navigation */}
+      {!isInvalid && tags && <TagRow tags={tags} onEditTags={onEditTags} />}
+
       {!isInvalid && transcribeState && (
         <ActionBar
           state={transcribeState}
@@ -192,6 +201,55 @@ export function VideoCard({
         />
       )}
     </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Tag Row
+// ---------------------------------------------------------------------------
+
+function TagRow({
+  tags,
+  onEditTags,
+}: {
+  tags: TagRef[];
+  onEditTags?: (anchor: HTMLElement) => void;
+}) {
+  // No tags and no edit entry — nothing to show, no empty placeholder row.
+  if (tags.length === 0 && !onEditTags) return null;
+
+  return (
+    <Box
+      sx={{
+        px: 1.5,
+        pb: 1,
+        display: 'flex',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: 0.5,
+      }}
+    >
+      {tags.map((tag) => (
+        <Chip
+          key={tag.id}
+          label={tag.name}
+          size="small"
+          variant="outlined"
+          sx={{ height: 20, fontSize: '0.6875rem' }}
+        />
+      ))}
+      {onEditTags && (
+        <Tooltip title={t('tags.editTooltip')}>
+          <IconButton
+            size="small"
+            onClick={(e) => onEditTags(e.currentTarget)}
+            sx={{ p: 0.25 }}
+          >
+            <Iconify icon="mdi:tag" width={14} sx={{ color: 'text.disabled' }} />
+          </IconButton>
+        </Tooltip>
+      )}
+    </Box>
   );
 }
 

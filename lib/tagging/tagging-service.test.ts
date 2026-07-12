@@ -1,0 +1,340 @@
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi, type Mock } from 'vitest';
+import { PGlite } from '@electric-sql/pglite';
+import { vector } from '@electric-sql/pglite-pgvector';
+import { uuid_ossp } from '@electric-sql/pglite/contrib/uuid_ossp';
+import { pg_trgm } from '@electric-sql/pglite/contrib/pg_trgm';
+import { drizzle } from 'drizzle-orm/pglite';
+import { eq } from 'drizzle-orm';
+import * as schema from '@/lib/database/schema';
+import { runMigrations } from '@/lib/database/migrations';
+import type { FavbaseDb } from '@/lib/database';
+import type { ResolvedTaggingConfig } from './config';
+import type { TaggingInput } from './prompt';
+import {
+  tagPlatformItem,
+  getAllUsedTags,
+  getTagsForPlatformItems,
+  getItemsByTags,
+  addTagToPlatformItem,
+  removeTagFromPlatformItem,
+} from './tagging-service';
+
+// config.ts (pulled in by tagging-service.ts) value-imports `settingsStorage`,
+// whose barrel eagerly touches chrome.runtime at load. All tests inject
+// explicit deps, so the stubs are never actually called.
+vi.mock('@/lib/storage', () => ({
+  settingsStorage: { getValue: vi.fn() },
+  getEnvApiKey: () => '',
+  getEnvModel: () => '',
+}));
+
+// ---------------------------------------------------------------------------
+// Fixtures
+// ---------------------------------------------------------------------------
+
+const enabledConfig: ResolvedTaggingConfig = {
+  providerId: 'modelscope',
+  apiKey: 'k',
+  model: 'm',
+  customBaseUrl: '',
+  customProtocol: 'openai',
+  enabled: true,
+};
+
+const disabledConfig: ResolvedTaggingConfig = { ...enabledConfig, apiKey: '', enabled: false };
+
+type GenerateFn = (
+  config: ResolvedTaggingConfig,
+  input: TaggingInput,
+  existingTags: string[],
+) => Promise<string[]>;
+
+function makeGenerate(names: string[] = ['前端', 'React']) {
+  return vi.fn<GenerateFn>(async () => names);
+}
+
+describe('tagging-service (in-memory PGlite)', () => {
+  let pg: PGlite;
+  let db: FavbaseDb;
+  let authorSeq = 0;
+
+  beforeAll(async () => {
+    pg = await PGlite.create({ extensions: { vector, uuid_ossp, pg_trgm } });
+    await runMigrations(pg);
+    db = drizzle({ client: pg, schema }) as unknown as FavbaseDb;
+  });
+
+  afterAll(async () => {
+    await pg.close();
+  });
+
+  // FK-safe cleanup order — no state leaks across tests.
+  afterEach(async () => {
+    await db.delete(schema.itemTags);
+    await db.delete(schema.tags);
+    await db.delete(schema.itemContents);
+    await db.delete(schema.items);
+    await db.delete(schema.authors);
+  });
+
+  async function seedItem(bvid: string): Promise<string> {
+    const authorRows = await db
+      .insert(schema.authors)
+      .values({ platform: 'bilibili', platformAuthorId: `mid-${++authorSeq}`, name: 'Alice' })
+      .returning({ id: schema.authors.id });
+
+    const itemRows = await db
+      .insert(schema.items)
+      .values({
+        platform: 'bilibili',
+        platformItemId: bvid,
+        authorId: authorRows[0].id,
+        title: `Title of ${bvid}`,
+        authorName: 'Alice',
+        originalUrl: `https://www.bilibili.com/video/${bvid}`,
+        contentState: 'embedded',
+        platformMeta: { intro: 'intro text' },
+      })
+      .returning({ id: schema.items.id });
+    return itemRows[0].id;
+  }
+
+  function deps(overrides?: {
+    getConfig?: () => Promise<ResolvedTaggingConfig>;
+    generate?: Mock<GenerateFn>;
+  }) {
+    return {
+      db: () => db,
+      getConfig: async () => enabledConfig,
+      generate: makeGenerate(),
+      ...overrides,
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // tagPlatformItem
+  // -------------------------------------------------------------------------
+
+  describe('tagPlatformItem', () => {
+    it('tags an item: creates tag rows and links (happy path)', async () => {
+      const itemId = await seedItem('BV1HAPPY');
+
+      const result = await tagPlatformItem('bilibili', 'BV1HAPPY', deps());
+      expect(result).toBe('tagged');
+
+      const tagRows = await db.select().from(schema.tags);
+      expect(tagRows.map((t) => t.name).sort()).toEqual(['React', '前端']);
+
+      const links = await db
+        .select()
+        .from(schema.itemTags)
+        .where(eq(schema.itemTags.itemId, itemId));
+      expect(links).toHaveLength(2);
+    });
+
+    it('reuses an existing same-name tag row instead of duplicating', async () => {
+      const existing = await db
+        .insert(schema.tags)
+        .values({ name: '前端' })
+        .returning({ id: schema.tags.id });
+      const itemId = await seedItem('BV2REUSE');
+
+      await tagPlatformItem('bilibili', 'BV2REUSE', deps());
+
+      const frontendRows = await db
+        .select()
+        .from(schema.tags)
+        .where(eq(schema.tags.name, '前端'));
+      expect(frontendRows).toHaveLength(1);
+      expect(frontendRows[0].id).toBe(existing[0].id);
+
+      const links = await db
+        .select()
+        .from(schema.itemTags)
+        .where(eq(schema.itemTags.itemId, itemId));
+      expect(links.map((l) => l.tagId)).toContain(existing[0].id);
+    });
+
+    it('is idempotent: an already-tagged item is skipped without a second LLM call', async () => {
+      await seedItem('BV3IDEM');
+      const d = deps();
+
+      expect(await tagPlatformItem('bilibili', 'BV3IDEM', d)).toBe('tagged');
+      expect(await tagPlatformItem('bilibili', 'BV3IDEM', d)).toBe('skipped');
+      expect(d.generate).toHaveBeenCalledTimes(1);
+    });
+
+    it('skips silently when tagging is not configured (no LLM call, no rows)', async () => {
+      await seedItem('BV4NOCFG');
+      const d = deps({ getConfig: async () => disabledConfig });
+
+      expect(await tagPlatformItem('bilibili', 'BV4NOCFG', d)).toBe('skipped');
+      expect(d.generate).not.toHaveBeenCalled();
+      expect(await db.select().from(schema.tags)).toHaveLength(0);
+      expect(await db.select().from(schema.itemTags)).toHaveLength(0);
+    });
+
+    it('skips when the item does not exist', async () => {
+      const d = deps();
+      expect(await tagPlatformItem('bilibili', 'BV5MISSING', d)).toBe('skipped');
+      expect(d.generate).not.toHaveBeenCalled();
+    });
+
+    it('returns failed and leaves no rows when the LLM call throws', async () => {
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      await seedItem('BV6FAIL');
+      const d = deps({
+        generate: vi.fn<GenerateFn>(async () => {
+          throw new Error('LLM boom');
+        }),
+      });
+
+      expect(await tagPlatformItem('bilibili', 'BV6FAIL', d)).toBe('failed');
+      expect(await db.select().from(schema.tags)).toHaveLength(0);
+      expect(await db.select().from(schema.itemTags)).toHaveLength(0);
+      expect(errSpy).toHaveBeenCalled();
+      errSpy.mockRestore();
+    });
+
+    it('feeds already-used tag names into the LLM as existing tags', async () => {
+      await seedItem('BV7SEEDED');
+      await tagPlatformItem('bilibili', 'BV7SEEDED', deps({ generate: makeGenerate(['算法']) }));
+
+      await seedItem('BV7TARGET');
+      const d = deps();
+      await tagPlatformItem('bilibili', 'BV7TARGET', d);
+
+      const existingArg = d.generate.mock.calls[0][2];
+      expect(existingArg).toContain('算法');
+    });
+
+    it('passes the transcript plainText as input.content, plus title/author/intro', async () => {
+      const itemId = await seedItem('BV8CONTENT');
+      await db.insert(schema.itemContents).values({ itemId, plainText: '转录内容...' });
+
+      const d = deps();
+      await tagPlatformItem('bilibili', 'BV8CONTENT', d);
+
+      const input = d.generate.mock.calls[0][1];
+      expect(input.content).toBe('转录内容...');
+      expect(input.title).toBe('Title of BV8CONTENT');
+      expect(input.author).toBe('Alice');
+      expect(input.description).toBe('intro text');
+    });
+
+    it('passes undefined content when the item has no transcript row', async () => {
+      await seedItem('BV8NOCONTENT');
+      const d = deps();
+      await tagPlatformItem('bilibili', 'BV8NOCONTENT', d);
+
+      expect(d.generate.mock.calls[0][1].content).toBeUndefined();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // getAllUsedTags
+  // -------------------------------------------------------------------------
+
+  describe('getAllUsedTags', () => {
+    it('returns tags most-used first and hides orphan tags', async () => {
+      await seedItem('BV9A');
+      await seedItem('BV9B');
+      await tagPlatformItem('bilibili', 'BV9A', deps({ generate: makeGenerate(['共享', '独占']) }));
+      await tagPlatformItem('bilibili', 'BV9B', deps({ generate: makeGenerate(['共享']) }));
+
+      const used = await getAllUsedTags(db);
+      expect(used.map((t) => ({ name: t.name, count: t.count }))).toEqual([
+        { name: '共享', count: 2 },
+        { name: '独占', count: 1 },
+      ]);
+
+      // Remove every link of 独占 — it must vanish from the used list (orphan).
+      const soloTag = used.find((t) => t.name === '独占')!;
+      await db.delete(schema.itemTags).where(eq(schema.itemTags.tagId, soloTag.id));
+
+      const after = await getAllUsedTags(db);
+      expect(after.map((t) => t.name)).toEqual(['共享']);
+      // Tag row itself survives — only the used list hides it.
+      expect(await db.select().from(schema.tags).where(eq(schema.tags.id, soloTag.id))).toHaveLength(1);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // getItemsByTags (AND semantics)
+  // -------------------------------------------------------------------------
+
+  describe('getItemsByTags', () => {
+    it('narrows with AND semantics and returns complete tags per item', async () => {
+      await seedItem('BV10BOTH');
+      await seedItem('BV10ONE');
+      await tagPlatformItem('bilibili', 'BV10BOTH', deps({ generate: makeGenerate(['a', 'b']) }));
+      await tagPlatformItem('bilibili', 'BV10ONE', deps({ generate: makeGenerate(['a']) }));
+
+      const used = await getAllUsedTags(db);
+      const tagA = used.find((t) => t.name === 'a')!;
+      const tagB = used.find((t) => t.name === 'b')!;
+
+      const byA = await getItemsByTags([tagA.id], db);
+      expect(byA.map((i) => i.platformItemId).sort()).toEqual(['BV10BOTH', 'BV10ONE']);
+
+      const byAB = await getItemsByTags([tagA.id, tagB.id], db);
+      expect(byAB.map((i) => i.platformItemId)).toEqual(['BV10BOTH']);
+      // tags field carries ALL tags of the item, name-sorted.
+      expect(byAB[0].tags.map((t) => t.name)).toEqual(['a', 'b']);
+      expect(byAB[0].title).toBe('Title of BV10BOTH');
+      expect(byAB[0].platform).toBe('bilibili');
+
+      expect(await getItemsByTags([], db)).toEqual([]);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // getTagsForPlatformItems
+  // -------------------------------------------------------------------------
+
+  describe('getTagsForPlatformItems', () => {
+    it('maps platformItemId → name-sorted tags, omitting untagged items', async () => {
+      await seedItem('BV11TAGGED');
+      await seedItem('BV11BARE');
+      await tagPlatformItem('bilibili', 'BV11TAGGED', deps({ generate: makeGenerate(['b', 'a']) }));
+
+      const map = await getTagsForPlatformItems('bilibili', ['BV11TAGGED', 'BV11BARE'], db);
+      expect(Object.keys(map)).toEqual(['BV11TAGGED']);
+      expect(map.BV11TAGGED.map((t) => t.name)).toEqual(['a', 'b']);
+
+      expect(await getTagsForPlatformItems('bilibili', [], db)).toEqual({});
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Manual edit round trip
+  // -------------------------------------------------------------------------
+
+  describe('addTagToPlatformItem / removeTagFromPlatformItem', () => {
+    it('creates a tag on first use, reuses it by name, rejects blanks/unknown items', async () => {
+      await seedItem('BV12EDIT');
+
+      const created = await addTagToPlatformItem('bilibili', 'BV12EDIT', ' 新标签 ', db);
+      expect(created).toMatchObject({ name: '新标签' });
+
+      await seedItem('BV12OTHER');
+      const reused = await addTagToPlatformItem('bilibili', 'BV12OTHER', '新标签', db);
+      expect(reused?.id).toBe(created?.id);
+
+      expect(await addTagToPlatformItem('bilibili', 'BV12EDIT', '   ', db)).toBeNull();
+      expect(await addTagToPlatformItem('bilibili', 'BVUNKNOWN', 'x', db)).toBeNull();
+    });
+
+    it('removing the last link makes the tag disappear from getAllUsedTags', async () => {
+      await seedItem('BV13RM');
+      const ref = await addTagToPlatformItem('bilibili', 'BV13RM', '临时', db);
+      expect((await getAllUsedTags(db)).map((t) => t.name)).toContain('临时');
+
+      await removeTagFromPlatformItem('bilibili', 'BV13RM', ref!.id, db);
+      expect((await getAllUsedTags(db)).map((t) => t.name)).not.toContain('临时');
+
+      // Unknown item is a silent no-op.
+      await removeTagFromPlatformItem('bilibili', 'BVUNKNOWN', ref!.id, db);
+    });
+  });
+});

@@ -1,4 +1,5 @@
 import type { TranscribeResponse, TranscribeStatusPush } from '@/lib/transcription/types';
+import { tagPlatformItem } from '@/lib/tagging';
 import { persistContent, type PersistContentResult } from './bili-sync-service';
 
 export interface TranscribePersistHooks {
@@ -29,6 +30,10 @@ export async function transcribeAndPersist(
     hooks?.onIndexing?.();
     const result = await persistContent(bvid, response.data.rows, response.data.source);
     hooks?.onIndexed?.(result);
+    // AI tagging seam — the ONLY coupling point between lib/tagging and the
+    // transcription pipeline. Fire-and-forget (never throws, never blocks the
+    // indexing stage); remove this line to detach the tagging feature.
+    if (result) void tagPlatformItem('bilibili', bvid);
   }
 
   return response;

@@ -4,3 +4,5 @@ export { items } from './entities/items';
 export { itemSources } from './entities/item-sources';
 export { itemContents } from './entities/item-contents';
 export { itemChunks } from './entities/item-chunks';
+export { tags } from './entities/tags';
+export { itemTags } from './entities/item-tags';

@@ -210,6 +210,12 @@ const zhCN = {
   'collections.sortPlay': '最多播放',
   'collections.sortPubTime': '最近投稿',
 
+  'tags.sectionTitle': '标签',
+  'tags.editTooltip': '编辑标签',
+  'tags.addPlaceholder': '输入标签，回车添加',
+  'tags.clearFilter': '清除',
+  'tags.noMatches': '没有匹配所选标签的视频',
+
   'export.title': '数据导出',
   'export.subtitle': '导出数据库中的全部数据',
   'export.includeEmbedding': '包含向量嵌入 (embedding)',

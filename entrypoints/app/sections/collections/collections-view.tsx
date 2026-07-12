@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 
 import Typography from '@mui/material/Typography';
@@ -6,7 +6,6 @@ import Box from '@mui/material/Box';
 import Grid from '@mui/material/Grid';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
-import Card from '@mui/material/Card';
 import Skeleton from '@mui/material/Skeleton';
 import Pagination from '@mui/material/Pagination';
 import TextField from '@mui/material/TextField';
@@ -20,9 +19,14 @@ import { useBiliFavFolders } from './use-bili-fav-folders';
 import { useBiliFavVideos } from './use-bili-fav-videos';
 import { useVideoTranscribe } from './use-video-transcribe';
 import { useAutoTranscribe } from './use-auto-transcribe';
+import { useItemTags, useUsedTags } from './use-item-tags';
 import { createBiliAutoTranscribeAdapter } from '@/lib/bilibili/auto-transcribe-adapter';
-import { VideoCard } from './video-card';
+import { VideoCard, INVALID_ATTR } from './video-card';
+import { VideoGridSkeleton } from './video-grid-skeleton';
 import { FolderChips } from './folder-chips';
+import { TagFilterChips } from './tag-filter-chips';
+import { TaggedVideoGrid } from './tagged-video-grid';
+import { TagEditPopover, useTagEditState } from './tag-edit-popover';
 import { AutoTranscribeBar } from './auto-transcribe-bar';
 
 const biliAdapter = createBiliAutoTranscribeAdapter();
@@ -88,24 +92,6 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
         {t('collections.retry')}
       </Button>
     </Box>
-  );
-}
-
-function VideoGridSkeleton() {
-  return (
-    <Grid container spacing={2.5}>
-      {Array.from({ length: 8 }).map((_, i) => (
-        <Grid key={i} size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
-          <Card sx={{ overflow: 'hidden' }}>
-            <Skeleton variant="rectangular" height={130} />
-            <Box sx={{ p: 1.5 }}>
-              <Skeleton variant="text" width="80%" />
-              <Skeleton variant="text" width="50%" />
-            </Box>
-          </Card>
-        </Grid>
-      ))}
-    </Grid>
   );
 }
 
@@ -182,13 +168,14 @@ function SortControl({ order, onChange }: { order: BiliFavOrder; onChange: (o: B
 // Video grid panel (only rendered when a valid folder is selected)
 // ---------------------------------------------------------------------------
 
-function VideoGridPanel({ mediaId, totalCount, syncing, onSync, lastSyncedAt, autoTranscribe }: {
+function VideoGridPanel({ mediaId, totalCount, syncing, onSync, lastSyncedAt, autoTranscribe, onTagsChanged }: {
   mediaId: number;
   totalCount: number;
   syncing: boolean;
   onSync: () => void;
   lastSyncedAt: Date | null;
   autoTranscribe: ReturnType<typeof useAutoTranscribe>;
+  onTagsChanged?: () => void;
 }) {
   const { t } = useTranslation();
   const { videos, folderTitle, page, totalPages, loading, loginState, error, order, setOrder, goToPage, retry } =
@@ -196,6 +183,14 @@ function VideoGridPanel({ mediaId, totalCount, syncing, onSync, lastSyncedAt, au
 
   const { getState, startTranscribe, cancelTranscribe, activeBvid } =
     useVideoTranscribe(videos);
+
+  const { tagsByBvid, refresh: refreshItemTags } = useItemTags(videos.map((v) => v.bvid));
+  const { editing, open: openTagEditor, close: closeTagEditor } = useTagEditState();
+
+  const handleTagsChanged = () => {
+    refreshItemTags();
+    onTagsChanged?.();
+  };
 
   const handlePageChange = (_: React.ChangeEvent<unknown>, value: number) => {
     goToPage(value);
@@ -262,18 +257,33 @@ function VideoGridPanel({ mediaId, totalCount, syncing, onSync, lastSyncedAt, au
       ) : (
         <>
           <Grid container spacing={2.5}>
-            {videos.map((video) => (
-              <Grid key={video.id} size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
-                <VideoCard
-                  video={video}
-                  transcribeState={getState(video.bvid)}
-                  onTranscribe={() => startTranscribe(video)}
-                  onCancel={cancelTranscribe}
-                  disabled={Boolean(activeBvid && activeBvid !== video.bvid)}
-                />
-              </Grid>
-            ))}
+            {videos.map((video) => {
+              const isInvalid = video.attr === INVALID_ATTR;
+              return (
+                <Grid key={video.id} size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
+                  <VideoCard
+                    video={video}
+                    transcribeState={getState(video.bvid)}
+                    onTranscribe={() => startTranscribe(video)}
+                    onCancel={cancelTranscribe}
+                    disabled={Boolean(activeBvid && activeBvid !== video.bvid)}
+                    tags={isInvalid ? undefined : (tagsByBvid[video.bvid] ?? [])}
+                    onEditTags={
+                      isInvalid ? undefined : (anchor) => openTagEditor(video.bvid, anchor)
+                    }
+                  />
+                </Grid>
+              );
+            })}
           </Grid>
+
+          <TagEditPopover
+            anchorEl={editing?.anchorEl ?? null}
+            platformItemId={editing?.platformItemId ?? null}
+            tags={editing ? (tagsByBvid[editing.platformItemId] ?? []) : []}
+            onClose={closeTagEditor}
+            onChanged={handleTagsChanged}
+          />
 
           {totalPages > 1 && (
             <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
@@ -307,6 +317,27 @@ export function CollectionsView() {
   const selectedId = mediaId ? Number(mediaId) : folders[0]?.id;
   const autoTranscribe = useAutoTranscribe(selectedId, biliAdapter);
   const selectedFolder = folders.find((f) => f.id === selectedId);
+
+  const { usedTags, refresh: refreshUsedTags } = useUsedTags();
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+
+  const toggleTag = (tagId: string) => {
+    setSelectedTagIds((prev) =>
+      prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId],
+    );
+  };
+
+  // Prune selections whose tag became orphaned (last link removed via edit):
+  // an orphan renders no chip — and when it was the ONLY used tag, TagFilterChips
+  // vanishes entirely (no Clear button), trapping the user in an un-clearable
+  // "no matches" grid.
+  useEffect(() => {
+    setSelectedTagIds((prev) => {
+      const valid = new Set(usedTags.map((tag) => tag.id));
+      const next = prev.filter((id) => valid.has(id));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [usedTags]);
 
   useEffect(() => {
     if (!mediaId && !foldersLoading && folders.length > 0) {
@@ -359,8 +390,18 @@ export function CollectionsView() {
         onSelect={handleSelectFolder}
       />
 
-      {/* Folder content */}
-      {selectedId ? (
+      {/* Tag filter chips — cross-folder, multi-select AND; hidden when no used tags */}
+      <TagFilterChips
+        tags={usedTags}
+        selectedIds={selectedTagIds}
+        onToggle={toggleTag}
+        onClear={() => setSelectedTagIds([])}
+      />
+
+      {/* Content: tag-filtered cross-folder grid takes over while filters are active */}
+      {selectedTagIds.length > 0 ? (
+        <TaggedVideoGrid tagIds={selectedTagIds} onTagsChanged={refreshUsedTags} />
+      ) : selectedId ? (
         <VideoGridPanel
           key={selectedId}
           mediaId={selectedId}
@@ -369,6 +410,7 @@ export function CollectionsView() {
           onSync={sync}
           lastSyncedAt={lastSyncedAt}
           autoTranscribe={autoTranscribe}
+          onTagsChanged={refreshUsedTags}
         />
       ) : foldersLoading ? (
         <VideoGridSkeleton />

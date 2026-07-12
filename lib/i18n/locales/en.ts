@@ -212,6 +212,12 @@ const en: Record<LocaleKeys, string> = {
   'collections.sortPlay': 'Most played',
   'collections.sortPubTime': 'Recently published',
 
+  'tags.sectionTitle': 'Tags',
+  'tags.editTooltip': 'Edit tags',
+  'tags.addPlaceholder': 'Type a tag, press Enter',
+  'tags.clearFilter': 'Clear',
+  'tags.noMatches': 'No videos match the selected tags',
+
   'export.title': 'Data Export',
   'export.subtitle': 'Export all data from the database',
   'export.includeEmbedding': 'Include vector embeddings',
