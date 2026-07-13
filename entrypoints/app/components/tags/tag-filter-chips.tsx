@@ -5,7 +5,7 @@ import Typography from '@mui/material/Typography';
 
 import { useTranslation } from '@/lib/i18n/use-translation';
 import type { UsedTag } from '@/lib/tagging';
-import { Iconify } from '../../components/iconify';
+import { Iconify } from '../iconify';
 
 interface TagFilterChipsProps {
   tags: UsedTag[];
@@ -15,8 +15,8 @@ interface TagFilterChipsProps {
 }
 
 /**
- * Cross-folder tag filter (multi-select, AND semantics). Renders nothing when
- * no tag is linked to any item — orphan tags are invisible by construction.
+ * Tag filter chips (multi-select, AND semantics). Renders nothing when no tag
+ * is linked to any item — orphan tags are invisible by construction.
  */
 export function TagFilterChips({ tags, selectedIds, onToggle, onClear }: TagFilterChipsProps) {
   const { t } = useTranslation();

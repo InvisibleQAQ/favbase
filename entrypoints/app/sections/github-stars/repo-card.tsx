@@ -7,10 +7,19 @@ import Typography from '@mui/material/Typography';
 import { formatCompactNumber, formatDateTime } from '@/lib/i18n';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify } from '../../components/iconify';
+import { TagRow } from '../../components/tags';
 import type { GithubRepoItem } from '@/lib/github/github-sync-service';
+import type { TagRef } from '@/lib/tagging';
 import { languageColor } from './language-colors';
 
-export function RepoCard({ repo }: { repo: GithubRepoItem }) {
+export interface RepoCardProps {
+  repo: GithubRepoItem;
+  /** undefined = tag UI hidden entirely (backward compatible); [] = no tags yet, edit button only. */
+  tags?: TagRef[];
+  onEditTags?: (anchor: HTMLElement) => void;
+}
+
+export function RepoCard({ repo, tags, onEditTags }: RepoCardProps) {
   // Subscribe to locale changes so formatCompactNumber/formatDateTime re-render.
   useTranslation();
 
@@ -23,6 +32,8 @@ export function RepoCard({ repo }: { repo: GithubRepoItem }) {
       sx={(theme) => ({
         height: 1,
         overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
         boxShadow: theme.vars.customShadows.card,
         transition: 'box-shadow 0.2s',
         '&:hover': { boxShadow: theme.vars.customShadows.z8 },
@@ -30,7 +41,7 @@ export function RepoCard({ repo }: { repo: GithubRepoItem }) {
     >
       <CardActionArea
         onClick={handleClick}
-        sx={{ height: 1, display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}
+        sx={{ flex: '1 1 auto', display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}
       >
         <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1, flex: '1 1 auto' }}>
           {/* Owner avatar + full name */}
@@ -106,6 +117,9 @@ export function RepoCard({ repo }: { repo: GithubRepoItem }) {
           </Box>
         </Box>
       </CardActionArea>
+
+      {/* Tag row — outside CardActionArea so chips/edit don't trigger navigation */}
+      {tags && <TagRow tags={tags} onEditTags={onEditTags} />}
     </Card>
   );
 }

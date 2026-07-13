@@ -8,7 +8,6 @@ import TextField from '@mui/material/TextField';
 import { initDbProxy } from '@/lib/database';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { addTagToPlatformItem, removeTagFromPlatformItem, type TagRef } from '@/lib/tagging';
-import { BILI_PLATFORM } from './use-item-tags';
 
 /**
  * Shared anchor state for the single popover instance each grid renders:
@@ -30,6 +29,8 @@ export function useTagEditState() {
 }
 
 interface TagEditPopoverProps {
+  /** Platform discriminator for (platform, platformItemId) tag addressing. */
+  platform: string;
   anchorEl: HTMLElement | null;
   platformItemId: string | null;
   tags: TagRef[];
@@ -39,6 +40,7 @@ interface TagEditPopoverProps {
 }
 
 export function TagEditPopover({
+  platform,
   anchorEl,
   platformItemId,
   tags,
@@ -61,7 +63,7 @@ export function TagEditPopover({
     try {
       // Joins the in-flight init instead of racing getDb() on first click after page load.
       await initDbProxy();
-      await addTagToPlatformItem(BILI_PLATFORM, platformItemId, name);
+      await addTagToPlatformItem(platform, platformItemId, name);
       setInput('');
       onChanged();
     } catch (err) {
@@ -76,7 +78,7 @@ export function TagEditPopover({
     setBusy(true);
     try {
       await initDbProxy();
-      await removeTagFromPlatformItem(BILI_PLATFORM, platformItemId, tagId);
+      await removeTagFromPlatformItem(platform, platformItemId, tagId);
       onChanged();
     } catch (err) {
       console.error('[tags] Failed to remove tag:', err);

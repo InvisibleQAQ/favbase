@@ -15,10 +15,23 @@ import Skeleton from '@mui/material/Skeleton';
 import { t, formatDateTime } from '@/lib/i18n';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify } from '../../components/iconify';
+import {
+  useItemTags,
+  useUsedTags,
+  useTagFilter,
+  TagFilterChips,
+  TaggedItemGrid,
+  TagEditPopover,
+  useTagEditState,
+} from '../../components/tags';
 import { DashboardContent } from '../../layouts/dashboard';
 import { useGithubStars, type GithubSyncError, type SyncProgress } from './use-github-stars';
 import { LanguageChips } from './language-chips';
 import { RepoCard } from './repo-card';
+import { TaggedRepoCard } from './tagged-repo-card';
+
+/** Platform key for all tag operations in this (github-only) section. */
+const PLATFORM = 'github';
 
 // ---------------------------------------------------------------------------
 // i18n seam: structured sync errors from the hook → user-facing copy here.
@@ -182,6 +195,21 @@ export function GithubStarsView() {
   const navigate = useNavigate();
   const gh = useGithubStars();
 
+  // Manual tagging — batch-load tags for the current page, single popover
+  // instance, platform-scoped filter chips. Hooks stay above the early return.
+  const { tagsById, refresh: refreshItemTags } = useItemTags(
+    PLATFORM,
+    gh.repos.map((repo) => repo.repoId),
+  );
+  const { editing, open: openTagEditor, close: closeTagEditor } = useTagEditState();
+  const { usedTags, refresh: refreshUsedTags } = useUsedTags(PLATFORM);
+  const { selectedTagIds, toggleTag, clearTags } = useTagFilter(usedTags);
+
+  const handleTagsChanged = () => {
+    refreshItemTags();
+    refreshUsedTags();
+  };
+
   // No token: the whole page short-circuits into the connect guide.
   if (!gh.settingsLoading && !gh.hasToken) {
     return (
@@ -272,8 +300,28 @@ export function GithubStarsView() {
         />
       )}
 
-      {/* Content */}
-      {gh.queryError ? (
+      {/* Tag filter chips — github-scoped, multi-select AND; hidden when no used tags */}
+      <TagFilterChips
+        tags={usedTags}
+        selectedIds={selectedTagIds}
+        onToggle={toggleTag}
+        onClear={clearTags}
+      />
+
+      {/* Content: tag-filtered grid takes over while filters are active */}
+      {selectedTagIds.length > 0 ? (
+        <TaggedItemGrid
+          platform={PLATFORM}
+          tagIds={selectedTagIds}
+          renderCard={(item, openEditor) => <TaggedRepoCard item={item} onEditTags={openEditor} />}
+          skeleton={<RepoGridSkeleton />}
+          // handleTagsChanged (not just refreshUsedTags): unlike collections,
+          // useItemTags lives at this view's top level and never unmounts while
+          // the filter is active — edits made in the tagged grid must also
+          // refresh tagsById or the normal grid shows stale tags after clearing.
+          onTagsChanged={handleTagsChanged}
+        />
+      ) : gh.queryError ? (
         <ErrorState message={gh.queryError} onRetry={gh.retryQuery} />
       ) : gh.syncError && gh.libraryCount === 0 ? (
         <ErrorState message={syncErrorMessage(gh.syncError)} onRetry={gh.sync} />
@@ -290,10 +338,23 @@ export function GithubStarsView() {
           <Grid container spacing={2.5}>
             {gh.repos.map((repo) => (
               <Grid key={repo.id} size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
-                <RepoCard repo={repo} />
+                <RepoCard
+                  repo={repo}
+                  tags={tagsById[repo.repoId] ?? []}
+                  onEditTags={(anchor) => openTagEditor(repo.repoId, anchor)}
+                />
               </Grid>
             ))}
           </Grid>
+
+          <TagEditPopover
+            platform={PLATFORM}
+            anchorEl={editing?.anchorEl ?? null}
+            platformItemId={editing?.platformItemId ?? null}
+            tags={editing ? (tagsById[editing.platformItemId] ?? []) : []}
+            onClose={closeTagEditor}
+            onChanged={handleTagsChanged}
+          />
 
           {gh.totalPages > 1 && (
             <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>

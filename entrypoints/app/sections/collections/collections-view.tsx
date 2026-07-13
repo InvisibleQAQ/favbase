@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 
 import Typography from '@mui/material/Typography';
@@ -15,19 +15,28 @@ import { useTranslation } from '@/lib/i18n/use-translation';
 import type { BiliFavOrder } from '@/lib/bilibili/types';
 import { Iconify } from '../../components/iconify';
 import { DashboardContent } from '../../layouts/dashboard';
+import {
+  useItemTags,
+  useUsedTags,
+  useTagFilter,
+  TagFilterChips,
+  TaggedItemGrid,
+  TagEditPopover,
+  useTagEditState,
+} from '../../components/tags';
 import { useBiliFavFolders } from './use-bili-fav-folders';
 import { useBiliFavVideos } from './use-bili-fav-videos';
 import { useVideoTranscribe } from './use-video-transcribe';
 import { useAutoTranscribe } from './use-auto-transcribe';
-import { useItemTags, useUsedTags } from './use-item-tags';
 import { createBiliAutoTranscribeAdapter } from '@/lib/bilibili/auto-transcribe-adapter';
 import { VideoCard, INVALID_ATTR } from './video-card';
+import { TaggedVideoCard } from './tagged-video-card';
 import { VideoGridSkeleton } from './video-grid-skeleton';
 import { FolderChips } from './folder-chips';
-import { TagFilterChips } from './tag-filter-chips';
-import { TaggedVideoGrid } from './tagged-video-grid';
-import { TagEditPopover, useTagEditState } from './tag-edit-popover';
 import { AutoTranscribeBar } from './auto-transcribe-bar';
+
+/** Platform key for all tag operations in this (bilibili-only) section. */
+const PLATFORM = 'bilibili';
 
 const biliAdapter = createBiliAutoTranscribeAdapter();
 
@@ -184,7 +193,10 @@ function VideoGridPanel({ mediaId, totalCount, syncing, onSync, lastSyncedAt, au
   const { getState, startTranscribe, cancelTranscribe, activeBvid } =
     useVideoTranscribe(videos);
 
-  const { tagsByBvid, refresh: refreshItemTags } = useItemTags(videos.map((v) => v.bvid));
+  const { tagsById: tagsByBvid, refresh: refreshItemTags } = useItemTags(
+    PLATFORM,
+    videos.map((v) => v.bvid),
+  );
   const { editing, open: openTagEditor, close: closeTagEditor } = useTagEditState();
 
   const handleTagsChanged = () => {
@@ -278,6 +290,7 @@ function VideoGridPanel({ mediaId, totalCount, syncing, onSync, lastSyncedAt, au
           </Grid>
 
           <TagEditPopover
+            platform={PLATFORM}
             anchorEl={editing?.anchorEl ?? null}
             platformItemId={editing?.platformItemId ?? null}
             tags={editing ? (tagsByBvid[editing.platformItemId] ?? []) : []}
@@ -318,26 +331,8 @@ export function CollectionsView() {
   const autoTranscribe = useAutoTranscribe(selectedId, biliAdapter);
   const selectedFolder = folders.find((f) => f.id === selectedId);
 
-  const { usedTags, refresh: refreshUsedTags } = useUsedTags();
-  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
-
-  const toggleTag = (tagId: string) => {
-    setSelectedTagIds((prev) =>
-      prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId],
-    );
-  };
-
-  // Prune selections whose tag became orphaned (last link removed via edit):
-  // an orphan renders no chip — and when it was the ONLY used tag, TagFilterChips
-  // vanishes entirely (no Clear button), trapping the user in an un-clearable
-  // "no matches" grid.
-  useEffect(() => {
-    setSelectedTagIds((prev) => {
-      const valid = new Set(usedTags.map((tag) => tag.id));
-      const next = prev.filter((id) => valid.has(id));
-      return next.length === prev.length ? prev : next;
-    });
-  }, [usedTags]);
+  const { usedTags, refresh: refreshUsedTags } = useUsedTags(PLATFORM);
+  const { selectedTagIds, toggleTag, clearTags } = useTagFilter(usedTags);
 
   useEffect(() => {
     if (!mediaId && !foldersLoading && folders.length > 0) {
@@ -395,12 +390,20 @@ export function CollectionsView() {
         tags={usedTags}
         selectedIds={selectedTagIds}
         onToggle={toggleTag}
-        onClear={() => setSelectedTagIds([])}
+        onClear={clearTags}
       />
 
       {/* Content: tag-filtered cross-folder grid takes over while filters are active */}
       {selectedTagIds.length > 0 ? (
-        <TaggedVideoGrid tagIds={selectedTagIds} onTagsChanged={refreshUsedTags} />
+        <TaggedItemGrid
+          platform={PLATFORM}
+          tagIds={selectedTagIds}
+          renderCard={(item, openTagEditor) => (
+            <TaggedVideoCard item={item} onEditTags={openTagEditor} />
+          )}
+          skeleton={<VideoGridSkeleton />}
+          onTagsChanged={refreshUsedTags}
+        />
       ) : selectedId ? (
         <VideoGridPanel
           key={selectedId}

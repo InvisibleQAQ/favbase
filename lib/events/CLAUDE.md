@@ -11,7 +11,7 @@
 
 | 事件 | payload | 发射点 | 消费者 |
 |------|---------|--------|--------|
-| `item-tagged` | `{ platform, platformItemId }` | `lib/tagging/tagging-service.ts` `tagPlatformItem` 成功落库后 | `useItemTags`/`useUsedTags`（`sections/collections/use-item-tags.ts`）+ `TaggedVideoGrid` |
+| `item-tagged` | `{ platform, platformItemId }` | `lib/tagging/tagging-service.ts` `tagPlatformItem` 成功落库后 | `useItemTags`/`useUsedTags`/`TaggedItemGrid`（`entrypoints/app/components/tags/`，均按 `e.platform` 过滤） |
 
 ## 约定
 

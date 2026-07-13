@@ -28,6 +28,8 @@ export interface TaggedItem {
   platformItemId: string;
   title: string;
   authorName: string;
+  /** items.originalUrl — lets platform card adapters link out without re-deriving URLs. */
+  originalUrl: string;
   platformMeta: Record<string, unknown>;
   tags: TagRef[];
 }
@@ -102,7 +104,9 @@ export async function tagPlatformItem(
       .where(eq(itemContents.itemId, item.id))
       .limit(1);
 
-    const existing = await getAllUsedTags(db);
+    // Existing tags stay library-wide (no platform filter): the LLM should
+    // reuse tag names across platforms, not fork per-platform duplicates.
+    const existing = await getAllUsedTags(undefined, db);
     const meta = item.platformMeta as Record<string, unknown>;
     const names = await d.generate(
       config,
@@ -132,8 +136,13 @@ export async function tagPlatformItem(
 /**
  * All tags linked to at least one item, most-used first. Orphan tags (all
  * links removed) are invisible here by construction — no cleanup job needed.
+ * Optional `platform` restricts both the tag list and the counts to that
+ * platform's items (page-scoped filter chips); omit for the whole library.
  */
-export async function getAllUsedTags(db: FavbaseDb = getDb()): Promise<UsedTag[]> {
+export async function getAllUsedTags(
+  platform?: string,
+  db: FavbaseDb = getDb(),
+): Promise<UsedTag[]> {
   const rows = await db
     .select({
       id: tags.id,
@@ -142,6 +151,8 @@ export async function getAllUsedTags(db: FavbaseDb = getDb()): Promise<UsedTag[]
     })
     .from(tags)
     .innerJoin(itemTags, eq(itemTags.tagId, tags.id))
+    .innerJoin(items, eq(items.id, itemTags.itemId))
+    .where(platform ? eq(items.platform, platform) : undefined)
     .groupBy(tags.id, tags.name)
     .orderBy(sql`count(${itemTags.itemId}) desc`, tags.name);
   return rows;
@@ -172,10 +183,12 @@ export async function getTagsForPlatformItems(
 /**
  * Items carrying ALL of the given tags (AND semantics — multi-select narrows),
  * newest first. Cross-folder by design: tags are a knowledge-base dimension,
- * not a folder dimension.
+ * not a folder dimension. Optional `platform` restricts results to that
+ * platform's items (page-scoped tag grids); omit for cross-platform results.
  */
 export async function getItemsByTags(
   tagIds: string[],
+  platform?: string,
   db: FavbaseDb = getDb(),
 ): Promise<TaggedItem[]> {
   if (tagIds.length === 0) return [];
@@ -187,11 +200,17 @@ export async function getItemsByTags(
       platformItemId: items.platformItemId,
       title: items.title,
       authorName: items.authorName,
+      originalUrl: items.originalUrl,
       platformMeta: items.platformMeta,
     })
     .from(items)
     .innerJoin(itemTags, eq(itemTags.itemId, items.id))
-    .where(inArray(itemTags.tagId, tagIds))
+    .where(
+      and(
+        inArray(itemTags.tagId, tagIds),
+        platform ? eq(items.platform, platform) : undefined,
+      ),
+    )
     .groupBy(items.id)
     .having(sql`count(distinct ${itemTags.tagId}) = ${tagIds.length}`)
     .orderBy(desc(items.createdAt));

@@ -78,21 +78,21 @@ describe('tagging-service (in-memory PGlite)', () => {
     await db.delete(schema.authors);
   });
 
-  async function seedItem(bvid: string): Promise<string> {
+  async function seedItem(platformItemId: string, platform = 'bilibili'): Promise<string> {
     const authorRows = await db
       .insert(schema.authors)
-      .values({ platform: 'bilibili', platformAuthorId: `mid-${++authorSeq}`, name: 'Alice' })
+      .values({ platform, platformAuthorId: `mid-${++authorSeq}`, name: 'Alice' })
       .returning({ id: schema.authors.id });
 
     const itemRows = await db
       .insert(schema.items)
       .values({
-        platform: 'bilibili',
-        platformItemId: bvid,
+        platform,
+        platformItemId,
         authorId: authorRows[0].id,
-        title: `Title of ${bvid}`,
+        title: `Title of ${platformItemId}`,
         authorName: 'Alice',
-        originalUrl: `https://www.bilibili.com/video/${bvid}`,
+        originalUrl: `https://example.test/${platform}/${platformItemId}`,
         contentState: 'embedded',
         platformMeta: { intro: 'intro text' },
       })
@@ -283,7 +283,7 @@ describe('tagging-service (in-memory PGlite)', () => {
       await tagPlatformItem('bilibili', 'BV9A', deps({ generate: makeGenerate(['共享', '独占']) }));
       await tagPlatformItem('bilibili', 'BV9B', deps({ generate: makeGenerate(['共享']) }));
 
-      const used = await getAllUsedTags(db);
+      const used = await getAllUsedTags(undefined, db);
       expect(used.map((t) => ({ name: t.name, count: t.count }))).toEqual([
         { name: '共享', count: 2 },
         { name: '独占', count: 1 },
@@ -293,7 +293,7 @@ describe('tagging-service (in-memory PGlite)', () => {
       const soloTag = used.find((t) => t.name === '独占')!;
       await db.delete(schema.itemTags).where(eq(schema.itemTags.tagId, soloTag.id));
 
-      const after = await getAllUsedTags(db);
+      const after = await getAllUsedTags(undefined, db);
       expect(after.map((t) => t.name)).toEqual(['共享']);
       // Tag row itself survives — only the used list hides it.
       expect(await db.select().from(schema.tags).where(eq(schema.tags.id, soloTag.id))).toHaveLength(1);
@@ -311,21 +311,75 @@ describe('tagging-service (in-memory PGlite)', () => {
       await tagPlatformItem('bilibili', 'BV10BOTH', deps({ generate: makeGenerate(['a', 'b']) }));
       await tagPlatformItem('bilibili', 'BV10ONE', deps({ generate: makeGenerate(['a']) }));
 
-      const used = await getAllUsedTags(db);
+      const used = await getAllUsedTags(undefined, db);
       const tagA = used.find((t) => t.name === 'a')!;
       const tagB = used.find((t) => t.name === 'b')!;
 
-      const byA = await getItemsByTags([tagA.id], db);
+      const byA = await getItemsByTags([tagA.id], undefined, db);
       expect(byA.map((i) => i.platformItemId).sort()).toEqual(['BV10BOTH', 'BV10ONE']);
 
-      const byAB = await getItemsByTags([tagA.id, tagB.id], db);
+      const byAB = await getItemsByTags([tagA.id, tagB.id], undefined, db);
       expect(byAB.map((i) => i.platformItemId)).toEqual(['BV10BOTH']);
       // tags field carries ALL tags of the item, name-sorted.
       expect(byAB[0].tags.map((t) => t.name)).toEqual(['a', 'b']);
       expect(byAB[0].title).toBe('Title of BV10BOTH');
       expect(byAB[0].platform).toBe('bilibili');
+      // originalUrl rides along so card adapters can link out directly.
+      expect(byAB[0].originalUrl).toBe('https://example.test/bilibili/BV10BOTH');
 
-      expect(await getItemsByTags([], db)).toEqual([]);
+      expect(await getItemsByTags([], undefined, db)).toEqual([]);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Platform filtering (page-scoped tag chips / grids)
+  // -------------------------------------------------------------------------
+
+  describe('platform filtering', () => {
+    async function seedTwoPlatforms() {
+      await seedItem('BVPLAT');
+      await seedItem('987654', 'github');
+      await addTagToPlatformItem('bilibili', 'BVPLAT', '共享', db);
+      await addTagToPlatformItem('github', '987654', '共享', db);
+      await addTagToPlatformItem('github', '987654', '仓库', db);
+    }
+
+    it('getAllUsedTags scopes tags and counts to the given platform', async () => {
+      await seedTwoPlatforms();
+
+      // No platform → whole library.
+      const all = await getAllUsedTags(undefined, db);
+      expect(all.map((t) => ({ name: t.name, count: t.count }))).toEqual([
+        { name: '共享', count: 2 },
+        { name: '仓库', count: 1 },
+      ]);
+
+      // bilibili → shared tag counts only bilibili links; github-only tag hidden.
+      const bili = await getAllUsedTags('bilibili', db);
+      expect(bili.map((t) => ({ name: t.name, count: t.count }))).toEqual([
+        { name: '共享', count: 1 },
+      ]);
+
+      const gh = await getAllUsedTags('github', db);
+      expect(gh.map((t) => ({ name: t.name, count: t.count }))).toEqual([
+        { name: '仓库', count: 1 },
+        { name: '共享', count: 1 },
+      ]);
+    });
+
+    it('getItemsByTags returns only the given platform’s items', async () => {
+      await seedTwoPlatforms();
+      const shared = (await getAllUsedTags(undefined, db)).find((t) => t.name === '共享')!;
+
+      const all = await getItemsByTags([shared.id], undefined, db);
+      expect(all.map((i) => i.platformItemId).sort()).toEqual(['987654', 'BVPLAT']);
+
+      const bili = await getItemsByTags([shared.id], 'bilibili', db);
+      expect(bili.map((i) => i.platformItemId)).toEqual(['BVPLAT']);
+
+      const gh = await getItemsByTags([shared.id], 'github', db);
+      expect(gh.map((i) => i.platformItemId)).toEqual(['987654']);
+      expect(gh[0].originalUrl).toBe('https://example.test/github/987654');
     });
   });
 
@@ -369,10 +423,10 @@ describe('tagging-service (in-memory PGlite)', () => {
     it('removing the last link makes the tag disappear from getAllUsedTags', async () => {
       await seedItem('BV13RM');
       const ref = await addTagToPlatformItem('bilibili', 'BV13RM', '临时', db);
-      expect((await getAllUsedTags(db)).map((t) => t.name)).toContain('临时');
+      expect((await getAllUsedTags(undefined, db)).map((t) => t.name)).toContain('临时');
 
       await removeTagFromPlatformItem('bilibili', 'BV13RM', ref!.id, db);
-      expect((await getAllUsedTags(db)).map((t) => t.name)).not.toContain('临时');
+      expect((await getAllUsedTags(undefined, db)).map((t) => t.name)).not.toContain('临时');
 
       // Unknown item is a silent no-op.
       await removeTagFromPlatformItem('bilibili', 'BVUNKNOWN', ref!.id, db);
