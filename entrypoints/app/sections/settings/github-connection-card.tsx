@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import CardHeader from '@mui/material/CardHeader';
 import CardContent from '@mui/material/CardContent';
@@ -10,6 +11,7 @@ import Alert from '@mui/material/Alert';
 import Avatar from '@mui/material/Avatar';
 import Link from '@mui/material/Link';
 import Typography from '@mui/material/Typography';
+import { varAlpha } from 'minimal-shared/utils';
 
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { formatDateTime } from '@/lib/i18n';
@@ -29,6 +31,13 @@ import { SaveActions } from './save-actions';
 const GITHUB_CONNECTION_KEYS = ['provider', 'token'] as const satisfies readonly (keyof GithubDraft)[];
 
 const GITHUB_TOKEN_SETTINGS_URL = 'https://github.com/settings/tokens';
+
+const GUIDE_STEP_KEYS = [
+  'settings.github.guideStep1',
+  'settings.github.guideStep2',
+  'settings.github.guideStep3',
+  'settings.github.guideStep4',
+] as const;
 
 interface GithubConnectionCardProps {
   settings: UserSettings;
@@ -110,12 +119,39 @@ export function GithubConnectionCard({ settings, saveGithub }: GithubConnectionC
                 },
               }}
             />
-            <Typography variant="caption" sx={{ display: 'block', mt: 1, color: 'text.secondary' }}>
-              {t('settings.github.hint')}{' '}
-              <Link href={GITHUB_TOKEN_SETTINGS_URL} target="_blank" rel="noopener noreferrer">
+            <Box
+              sx={(theme) => ({
+                mt: 2,
+                p: 2,
+                borderRadius: 1.5,
+                bgcolor: varAlpha(theme.vars.palette.grey['500Channel'], 0.08),
+              })}
+            >
+              <Typography
+                variant="caption"
+                sx={{ display: 'block', mb: 0.5, fontWeight: 'fontWeightSemiBold', color: 'text.primary' }}
+              >
+                {t('settings.github.guideTitle')}
+              </Typography>
+              <Typography
+                component="ol"
+                variant="caption"
+                sx={{ m: 0, pl: 2.5, color: 'text.secondary', listStyleType: 'decimal', '& li': { mb: 0.25 } }}
+              >
+                {GUIDE_STEP_KEYS.map((key) => (
+                  <li key={key}>{t(key)}</li>
+                ))}
+              </Typography>
+              <Link
+                href={GITHUB_TOKEN_SETTINGS_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                variant="caption"
+                sx={{ display: 'inline-block', mt: 1 }}
+              >
                 {t('settings.github.createToken')}
               </Link>
-            </Typography>
+            </Box>
           </Grid>
 
           <Grid size={{ xs: 12 }}>
