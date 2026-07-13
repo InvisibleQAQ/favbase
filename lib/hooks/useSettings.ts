@@ -39,6 +39,16 @@ export interface EmbeddingDraft {
   dimensions: number | undefined;
 }
 
+/**
+ * GitHub is a platform connection, not an AI provider — there is exactly one
+ * "provider". The constant `provider: 'github'` field only satisfies the
+ * `useConfigDraft` generic constraint (`T extends { provider: string }`).
+ */
+export interface GithubDraft {
+  provider: 'github';
+  token: string;
+}
+
 export function deriveLlmDraft(settings: UserSettings, provider?: LLMProviderId): LlmDraft {
   const p = provider ?? settings.provider;
   const def = getProviderDef(p);
@@ -77,6 +87,10 @@ export function deriveEmbeddingDraft(
   };
 }
 
+export function deriveGithubDraft(settings: UserSettings): GithubDraft {
+  return { provider: 'github', token: settings.githubToken ?? '' };
+}
+
 // ---------------------------------------------------------------------------
 // useSettings
 // ---------------------------------------------------------------------------
@@ -91,6 +105,7 @@ export interface UseSettingsReturn {
   saveLlm: (draft: LlmDraft) => Promise<void>;
   saveAsr: (draft: AsrDraft) => Promise<void>;
   saveEmbedding: (draft: EmbeddingDraft) => Promise<void>;
+  saveGithub: (draft: GithubDraft) => Promise<void>;
 }
 
 export function useSettings(): UseSettingsReturn {
@@ -179,6 +194,16 @@ export function useSettings(): UseSettingsReturn {
     [persist],
   );
 
+  const saveGithub = useCallback(
+    (draft: GithubDraft) =>
+      persist((cur) => ({
+        ...cur,
+        githubToken: draft.token,
+        configSavedAt: { ...cur.configSavedAt, github: Date.now() },
+      })),
+    [persist],
+  );
+
   const currentAsrApiKey = resolveAsrConfig(settings).apiKey;
 
   return {
@@ -188,5 +213,6 @@ export function useSettings(): UseSettingsReturn {
     saveLlm,
     saveAsr,
     saveEmbedding,
+    saveGithub,
   };
 }
