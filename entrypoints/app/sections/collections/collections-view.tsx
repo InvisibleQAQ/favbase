@@ -3,18 +3,21 @@ import { useParams, useNavigate } from 'react-router-dom';
 
 import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
-import Grid from '@mui/material/Grid';
 import Button from '@mui/material/Button';
-import CircularProgress from '@mui/material/CircularProgress';
 import Skeleton from '@mui/material/Skeleton';
-import Pagination from '@mui/material/Pagination';
-import TextField from '@mui/material/TextField';
-import InputAdornment from '@mui/material/InputAdornment';
 
 import { useTranslation } from '@/lib/i18n/use-translation';
 import type { BiliFavOrder } from '@/lib/bilibili/types';
 import { Iconify } from '../../components/iconify';
 import { DashboardContent } from '../../layouts/dashboard';
+import {
+  StateBox,
+  SectionTitleBar,
+  SearchField,
+  CardGrid,
+  CardGridItem,
+  CardGridPagination,
+} from '../../components/collection';
 import {
   useItemTags,
   useUsedTags,
@@ -47,85 +50,58 @@ const biliAdapter = createBiliAutoTranscribeAdapter();
 function NotLoggedIn({ onRetry }: { onRetry: () => void }) {
   const { t } = useTranslation();
   return (
-    <Box
-      sx={(theme) => ({
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: 320,
-        gap: 2,
-        borderRadius: 2,
-        border: `2px dashed ${theme.vars.palette.grey[300]}`,
-        p: 4,
-      })}
-    >
-      <Iconify
-        icon="solar:shield-keyhole-bold-duotone"
-        width={64}
-        sx={{ color: 'warning.main', mb: 1 }}
-      />
-      <Typography variant="h6">{t('collections.notLoggedInTitle')}</Typography>
-      <Typography variant="body2" sx={{ color: 'text.secondary', textAlign: 'center', maxWidth: 400 }}>
-        {t('collections.notLoggedInDesc')}
-      </Typography>
-      <Button variant="outlined" onClick={onRetry} sx={{ mt: 1 }}>
-        {t('collections.retry')}
-      </Button>
-    </Box>
+    <StateBox
+      icon={
+        <Iconify
+          icon="solar:shield-keyhole-bold-duotone"
+          width={64}
+          sx={{ color: 'warning.main', mb: 1 }}
+        />
+      }
+      title={t('collections.notLoggedInTitle')}
+      description={t('collections.notLoggedInDesc')}
+      action={
+        <Button variant="outlined" onClick={onRetry} sx={{ mt: 1 }}>
+          {t('collections.retry')}
+        </Button>
+      }
+    />
   );
 }
 
 function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
   const { t } = useTranslation();
   return (
-    <Box
-      sx={(theme) => ({
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: 320,
-        gap: 2,
-        borderRadius: 2,
-        border: `2px dashed ${theme.vars.palette.grey[300]}`,
-        p: 4,
-      })}
-    >
-      <Iconify icon="solar:danger-triangle-bold-duotone" width={64} sx={{ color: 'error.main', mb: 1 }} />
-      <Typography variant="h6">{t('collections.loadFailed')}</Typography>
-      <Typography variant="body2" sx={{ color: 'text.secondary', textAlign: 'center', maxWidth: 400 }}>
-        {message}
-      </Typography>
-      <Button variant="outlined" onClick={onRetry} sx={{ mt: 1 }}>
-        {t('collections.retry')}
-      </Button>
-    </Box>
+    <StateBox
+      icon={
+        <Iconify
+          icon="solar:danger-triangle-bold-duotone"
+          width={64}
+          sx={{ color: 'error.main', mb: 1 }}
+        />
+      }
+      title={t('collections.loadFailed')}
+      description={message}
+      action={
+        <Button variant="outlined" onClick={onRetry} sx={{ mt: 1 }}>
+          {t('collections.retry')}
+        </Button>
+      }
+    />
   );
 }
 
 function EmptyFolderState() {
   const { t } = useTranslation();
   return (
-    <Box
-      sx={(theme) => ({
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: 320,
-        gap: 2,
-        borderRadius: 2,
-        border: `2px dashed ${theme.vars.palette.grey[300]}`,
-      })}
-    >
+    <StateBox>
       <Typography variant="h6" sx={{ color: 'text.disabled' }}>
         {t('collections.emptyFolderTitle')}
       </Typography>
       <Typography variant="body2" sx={{ color: 'text.secondary' }}>
         {t('collections.emptyFolderDesc')}
       </Typography>
-    </Box>
+    </StateBox>
   );
 }
 
@@ -204,43 +180,24 @@ function VideoGridPanel({ mediaId, totalCount, syncing, onSync, lastSyncedAt, au
     onTagsChanged?.();
   };
 
-  const handlePageChange = (_: React.ChangeEvent<unknown>, value: number) => {
-    goToPage(value);
-  };
+  const captionParts: string[] = [];
+  if (totalCount > 0) {
+    captionParts.push(t('collections.videoCount', { count: totalCount }));
+  }
+  if (lastSyncedAt) {
+    captionParts.push(t('collections.lastSynced', { time: lastSyncedAt.toLocaleTimeString() }));
+  }
 
   return (
     <Box sx={{ minWidth: 0 }}>
-      {/* Title bar */}
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 2, flexWrap: 'wrap' }}>
-        <Typography variant="h5" sx={{ flexShrink: 0 }} noWrap>
-          {loading ? <Skeleton width={200} /> : folderTitle}
-        </Typography>
-
-        {!loading && (
-          <Typography variant="caption" sx={{ color: 'text.secondary', flexShrink: 0 }}>
-            {totalCount > 0 && t('collections.videoCount', { count: totalCount })}
-            {lastSyncedAt && ` · ${t('collections.lastSynced', { time: lastSyncedAt.toLocaleTimeString() })}`}
-          </Typography>
-        )}
-
-        <Box sx={{ flex: 1 }} />
-
-        <Button
-          variant="contained"
-          size="small"
-          startIcon={
-            syncing ? (
-              <CircularProgress size={16} color="inherit" />
-            ) : (
-              <Iconify icon="solar:restart-bold" width={18} />
-            )
-          }
-          onClick={onSync}
-          disabled={syncing}
-        >
-          {syncing ? t('collections.syncing') : t('collections.sync')}
-        </Button>
-      </Box>
+      <SectionTitleBar
+        title={loading ? <Skeleton width={200} /> : folderTitle}
+        caption={!loading && captionParts.length > 0 ? captionParts.join(' · ') : undefined}
+        syncing={syncing}
+        onSync={onSync}
+        syncLabel={t('collections.sync')}
+        syncingLabel={t('collections.syncing')}
+      />
 
       {/* Auto-transcribe bar — full width below title */}
       <Box sx={{ mb: 2.5 }}>
@@ -268,11 +225,11 @@ function VideoGridPanel({ mediaId, totalCount, syncing, onSync, lastSyncedAt, au
         <EmptyFolderState />
       ) : (
         <>
-          <Grid container spacing={2.5}>
+          <CardGrid>
             {videos.map((video) => {
               const isInvalid = video.attr === INVALID_ATTR;
               return (
-                <Grid key={video.id} size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
+                <CardGridItem key={video.id}>
                   <VideoCard
                     video={video}
                     transcribeState={getState(video.bvid)}
@@ -284,10 +241,10 @@ function VideoGridPanel({ mediaId, totalCount, syncing, onSync, lastSyncedAt, au
                       isInvalid ? undefined : (anchor) => openTagEditor(video.bvid, anchor)
                     }
                   />
-                </Grid>
+                </CardGridItem>
               );
             })}
-          </Grid>
+          </CardGrid>
 
           <TagEditPopover
             platform={PLATFORM}
@@ -298,17 +255,7 @@ function VideoGridPanel({ mediaId, totalCount, syncing, onSync, lastSyncedAt, au
             onChanged={handleTagsChanged}
           />
 
-          {totalPages > 1 && (
-            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
-              <Pagination
-                count={totalPages}
-                page={page}
-                onChange={handlePageChange}
-                color="primary"
-                shape="rounded"
-              />
-            </Box>
-          )}
+          <CardGridPagination page={page} totalPages={totalPages} onChange={goToPage} />
         </>
       )}
     </Box>
@@ -361,21 +308,7 @@ export function CollectionsView() {
       )}
 
       {/* Search box — UI-only placeholder, no search logic */}
-      <TextField
-        fullWidth
-        disabled
-        placeholder={t('collections.searchPlaceholder')}
-        sx={{ mb: 3 }}
-        slotProps={{
-          input: {
-            startAdornment: (
-              <InputAdornment position="start">
-                <Iconify icon="eva:search-fill" width={20} sx={{ color: 'text.disabled' }} />
-              </InputAdornment>
-            ),
-          },
-        }}
-      />
+      <SearchField disabled placeholder={t('collections.searchPlaceholder')} />
 
       {/* Folder chips — horizontal filter */}
       <FolderChips

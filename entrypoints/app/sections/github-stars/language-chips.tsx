@@ -1,9 +1,8 @@
 import Box from '@mui/material/Box';
-import Chip from '@mui/material/Chip';
-import Typography from '@mui/material/Typography';
 
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify } from '../../components/iconify';
+import { ChipRowShell, FilterChip } from '../../components/collection';
 import type { LanguageCount } from '@/lib/github/github-sync-service';
 import { languageColor } from './language-colors';
 
@@ -35,45 +34,25 @@ export function LanguageChips({ languages, totalCount, selected, onSelect }: Lan
   const { t } = useTranslation();
 
   return (
-    <Box sx={{ mb: 3 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-        <Iconify icon="mdi:github" width={20} sx={{ color: 'primary.main' }} />
-        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-          {t('githubStars.languagesTitle')}
-        </Typography>
-      </Box>
-
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-        <Chip
-          label={`${t('githubStars.allLanguages')} (${totalCount})`}
-          clickable
-          onClick={() => onSelect(null)}
-          color={selected === null ? 'primary' : 'default'}
-          variant={selected === null ? 'filled' : 'outlined'}
+    <ChipRowShell
+      icon={<Iconify icon="mdi:github" width={20} sx={{ color: 'primary.main' }} />}
+      title={t('githubStars.languagesTitle')}
+    >
+      <FilterChip
+        label={`${t('githubStars.allLanguages')} (${totalCount})`}
+        selected={selected === null}
+        onClick={() => onSelect(null)}
+      />
+      {languages.map(({ language, count }) => (
+        <FilterChip
+          key={language}
+          icon={<LanguageDot language={language} />}
+          label={`${language} (${count})`}
+          selected={language === selected}
+          onClick={() => onSelect(language)}
+          maxWidth={220}
         />
-        {languages.map(({ language, count }) => {
-          const isSelected = language === selected;
-          return (
-            <Chip
-              key={language}
-              icon={<LanguageDot language={language} />}
-              label={`${language} (${count})`}
-              clickable
-              onClick={() => onSelect(language)}
-              color={isSelected ? 'primary' : 'default'}
-              variant={isSelected ? 'filled' : 'outlined'}
-              sx={{
-                maxWidth: 220,
-                '& .MuiChip-label': {
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                },
-              }}
-            />
-          );
-        })}
-      </Box>
-    </Box>
+      ))}
+    </ChipRowShell>
   );
 }

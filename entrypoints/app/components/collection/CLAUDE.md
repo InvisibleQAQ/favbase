@@ -1,0 +1,26 @@
+# app/components/collection
+
+平台 section 共享展示哑组件（app.html 内共享，同层先例 `components/tags/`、`components/iconify/`）。来源：`docs/14_multi-platform-cohesion-audit.md` HIGH-2——两个平台 view 之间 ~200 行结构等价脚手架复制且已分叉（暗色修复只落 github 一侧），抽哑组件收敛。**只抽哑组件，不做 `CollectionPageFrame` 大一统框架**（审计明确反对：两 view 内容分支顺序/chips 显隐/进度条种类不同，强行统一会造出接口和实现一样宽的浅模块）。各平台 view 保留自己的编排，只消费哑组件。
+
+## 铁律（沿用 components/tags）
+
+- 零平台字面量（'bilibili'/'github'）、零平台 lib 导入（grep 可查，prd 验收项）
+- 零 `t()` 调用——所有文案（按钮 label、标题、占位符）由消费方翻译后经 props 传入
+- 暗色安全：虚线边框用 `varAlpha(grey['500Channel'], 0.24)`，禁止静态 `grey[300]`
+
+## 模块结构
+
+- `state-box.tsx` — `StateBox`：虚线空态/错误框。结构化 props `icon`（ReactNode，调用方控制颜色/边距）/ `title`（包 h6）/ `description`（包 body2 secondary 居中 maxWidth 400）/ `action`（ReactNode，调用方控制按钮 variant/loading）+ `minHeight`（默认 320）+ `children` 逃生口（纯文字空态如 NoMatches、EmptyFolder 的自定义 Typography）
+- `section-title-bar.tsx` — `SectionTitleBar`：标题行（h5 title——loading 时传 Skeleton——+ caption + spacer + 同步按钮）。同步按钮三态：syncing 时 CircularProgress+syncingLabel+disabled，否则 restart 图标+syncLabel
+- `search-field.tsx` — `SearchField`：全宽搜索框 + `eva:search-fill` adornment。受控（value+onChange）或禁用占位（disabled）两态
+- `card-grid.tsx` — `CardGrid`（container spacing 2.5）+ `CardGridItem`（断点 xs12/sm6/md4/lg3 唯一事实源 `CARD_SIZE`）+ `CardGridPagination`（居中分页，totalPages≤1 返回 null）+ `CardGridSkeleton({ card })`（grid-of-8 外壳，卡片内部由各平台传入——保留平台骨架形态差异）
+- `chip-row.tsx` — `ChipRowShell`（icon+subtitle2 加粗标题头部 + 可选 `headerExtra`（如清除按钮）+ flexWrap chip 行容器）+ `FilterChip`（选中 filled primary / 未选 outlined default + 可选 `maxWidth` 省略号截断 + 可选 `icon`（如语言色点））
+- `index.ts` — barrel，消费方单一 import 面
+
+## 消费方（3 组 adapter）
+
+- `sections/collections/`（B站）：collections-view（StateBox×3 / SectionTitleBar / SearchField disabled / CardGrid+分页）、folder-chips（ChipRowShell+FilterChip，保留 loading 骨架/空态逻辑）、video-grid-skeleton（CardGridSkeleton + Card 媒体骨架）
+- `sections/github-stars/`：github-stars-view（StateBox×4 / SectionTitleBar / SearchField 受控 / CardGrid+分页 / CardGridSkeleton + rounded 平板）、language-chips（ChipRowShell+FilterChip，保留 All chip+色点逻辑）
+- `components/tags/`：tagged-item-grid（StateBox minHeight 240 空态 + CardGrid）、tag-filter-chips（ChipRowShell headerExtra 清除按钮 + FilterChip）
+
+平台 N 接入 = 编排自己的 view + 提供平台卡片，脚手架零复制。

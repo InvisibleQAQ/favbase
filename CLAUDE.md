@@ -45,6 +45,7 @@ WXT 入口点及运行时角色总览，详细结构见对应目录 `CLAUDE.md`�
 - `entrypoints/app/theme/CLAUDE.md` — MUI v7 主题系统（palette/typography/shadows/components）
 - `entrypoints/app/layouts/CLAUDE.md` — 仪表盘布局系统 + 侧边栏 Pin/Unpin
 - `entrypoints/app/components/iconify/CLAUDE.md` — Iconify 离线图标系统
+- `entrypoints/app/components/collection/CLAUDE.md` — 平台 section 共享展示哑组件（StateBox/标题栏/搜索框/卡片网格+分页/chip 行外壳）
 - `entrypoints/app/components/tags/CLAUDE.md` — 平台无关标签 UI 子系统（hooks + popover + 筛选 chips + render-prop 网格）
 - `entrypoints/app/pages/CLAUDE.md` — 页面组件（lazy loaded）
 - `entrypoints/app/sections/overview/CLAUDE.md` — Dashboard 概览卡片 + 数据导出 UI

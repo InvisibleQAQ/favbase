@@ -1,15 +1,10 @@
 import { useNavigate } from 'react-router-dom';
-import { varAlpha } from 'minimal-shared/utils';
 
 import Box from '@mui/material/Box';
-import Grid from '@mui/material/Grid';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
-import TextField from '@mui/material/TextField';
-import InputAdornment from '@mui/material/InputAdornment';
 import LinearProgress from '@mui/material/LinearProgress';
 import CircularProgress from '@mui/material/CircularProgress';
-import Pagination from '@mui/material/Pagination';
 import Skeleton from '@mui/material/Skeleton';
 
 import { t, formatDateTime } from '@/lib/i18n';
@@ -25,6 +20,15 @@ import {
   useTagEditState,
 } from '../../components/tags';
 import { DashboardContent } from '../../layouts/dashboard';
+import {
+  StateBox,
+  SectionTitleBar,
+  SearchField,
+  CardGrid,
+  CardGridItem,
+  CardGridPagination,
+  CardGridSkeleton,
+} from '../../components/collection';
 import { useGithubStars, type GithubSyncError, type SyncProgress } from './use-github-stars';
 import { LanguageChips } from './language-chips';
 import { RepoCard } from './repo-card';
@@ -52,43 +56,23 @@ function syncErrorMessage(error: GithubSyncError): string {
 }
 
 // ---------------------------------------------------------------------------
-// Shared state views (dashed-box states, mirroring the bilibili collections page)
+// Dashed-box states — shared StateBox shell, github copy/actions here
 // ---------------------------------------------------------------------------
-
-function StateBox({ children }: { children: React.ReactNode }) {
-  return (
-    <Box
-      sx={(theme) => ({
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: 320,
-        gap: 2,
-        borderRadius: 2,
-        border: `2px dashed ${varAlpha(theme.vars.palette.grey['500Channel'], 0.24)}`,
-        p: 4,
-      })}
-    >
-      {children}
-    </Box>
-  );
-}
 
 /** No token configured — guide the user to Settings → Connections. */
 function NoTokenState({ onGoToSettings }: { onGoToSettings: () => void }) {
   const { t } = useTranslation();
   return (
-    <StateBox>
-      <Iconify icon="mdi:github" width={64} sx={{ color: 'text.secondary', mb: 1 }} />
-      <Typography variant="h6">{t('githubStars.noTokenTitle')}</Typography>
-      <Typography variant="body2" sx={{ color: 'text.secondary', textAlign: 'center', maxWidth: 400 }}>
-        {t('githubStars.noTokenDesc')}
-      </Typography>
-      <Button variant="contained" onClick={onGoToSettings} sx={{ mt: 1 }}>
-        {t('githubStars.goToSettings')}
-      </Button>
-    </StateBox>
+    <StateBox
+      icon={<Iconify icon="mdi:github" width={64} sx={{ color: 'text.secondary', mb: 1 }} />}
+      title={t('githubStars.noTokenTitle')}
+      description={t('githubStars.noTokenDesc')}
+      action={
+        <Button variant="contained" onClick={onGoToSettings} sx={{ mt: 1 }}>
+          {t('githubStars.goToSettings')}
+        </Button>
+      }
+    />
   );
 }
 
@@ -96,44 +80,50 @@ function NoTokenState({ onGoToSettings }: { onGoToSettings: () => void }) {
 function EmptyLibraryState({ syncing, onSync }: { syncing: boolean; onSync: () => void }) {
   const { t } = useTranslation();
   return (
-    <StateBox>
-      <Iconify icon="mdi:star" width={64} sx={{ color: 'warning.main', mb: 1 }} />
-      <Typography variant="h6">{t('githubStars.emptyTitle')}</Typography>
-      <Typography variant="body2" sx={{ color: 'text.secondary', textAlign: 'center', maxWidth: 400 }}>
-        {t('githubStars.emptyDesc')}
-      </Typography>
-      <Button
-        variant="contained"
-        onClick={onSync}
-        disabled={syncing}
-        startIcon={
-          syncing ? (
-            <CircularProgress size={16} color="inherit" />
-          ) : (
-            <Iconify icon="solar:restart-bold" width={18} />
-          )
-        }
-        sx={{ mt: 1 }}
-      >
-        {t('githubStars.syncNow')}
-      </Button>
-    </StateBox>
+    <StateBox
+      icon={<Iconify icon="mdi:star" width={64} sx={{ color: 'warning.main', mb: 1 }} />}
+      title={t('githubStars.emptyTitle')}
+      description={t('githubStars.emptyDesc')}
+      action={
+        <Button
+          variant="contained"
+          onClick={onSync}
+          disabled={syncing}
+          startIcon={
+            syncing ? (
+              <CircularProgress size={16} color="inherit" />
+            ) : (
+              <Iconify icon="solar:restart-bold" width={18} />
+            )
+          }
+          sx={{ mt: 1 }}
+        >
+          {t('githubStars.syncNow')}
+        </Button>
+      }
+    />
   );
 }
 
 function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
   const { t } = useTranslation();
   return (
-    <StateBox>
-      <Iconify icon="solar:danger-triangle-bold-duotone" width={64} sx={{ color: 'error.main', mb: 1 }} />
-      <Typography variant="h6">{t('githubStars.loadFailed')}</Typography>
-      <Typography variant="body2" sx={{ color: 'text.secondary', textAlign: 'center', maxWidth: 400 }}>
-        {message}
-      </Typography>
-      <Button variant="outlined" onClick={onRetry} sx={{ mt: 1 }}>
-        {t('githubStars.retry')}
-      </Button>
-    </StateBox>
+    <StateBox
+      icon={
+        <Iconify
+          icon="solar:danger-triangle-bold-duotone"
+          width={64}
+          sx={{ color: 'error.main', mb: 1 }}
+        />
+      }
+      title={t('githubStars.loadFailed')}
+      description={message}
+      action={
+        <Button variant="outlined" onClick={onRetry} sx={{ mt: 1 }}>
+          {t('githubStars.retry')}
+        </Button>
+      }
+    />
   );
 }
 
@@ -150,15 +140,7 @@ function NoMatchesState() {
 }
 
 function RepoGridSkeleton() {
-  return (
-    <Grid container spacing={2.5}>
-      {Array.from({ length: 8 }).map((_, i) => (
-        <Grid key={i} size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
-          <Skeleton variant="rounded" height={148} />
-        </Grid>
-      ))}
-    </Grid>
-  );
+  return <CardGridSkeleton card={<Skeleton variant="rounded" height={148} />} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -231,36 +213,14 @@ export function GithubStarsView() {
 
   return (
     <DashboardContent maxWidth="xl">
-      {/* Title bar */}
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 2, flexWrap: 'wrap' }}>
-        <Typography variant="h5" sx={{ flexShrink: 0 }} noWrap>
-          {t('githubStars.title')}
-        </Typography>
-
-        {captionParts.length > 0 && (
-          <Typography variant="caption" sx={{ color: 'text.secondary', flexShrink: 0 }}>
-            {captionParts.join(' · ')}
-          </Typography>
-        )}
-
-        <Box sx={{ flex: 1 }} />
-
-        <Button
-          variant="contained"
-          size="small"
-          startIcon={
-            gh.syncing ? (
-              <CircularProgress size={16} color="inherit" />
-            ) : (
-              <Iconify icon="solar:restart-bold" width={18} />
-            )
-          }
-          onClick={gh.sync}
-          disabled={gh.syncing}
-        >
-          {gh.syncing ? t('githubStars.syncing') : t('githubStars.sync')}
-        </Button>
-      </Box>
+      <SectionTitleBar
+        title={t('githubStars.title')}
+        caption={captionParts.length > 0 ? captionParts.join(' · ') : undefined}
+        syncing={gh.syncing}
+        onSync={gh.sync}
+        syncLabel={t('githubStars.sync')}
+        syncingLabel={t('githubStars.syncing')}
+      />
 
       {/* Sync progress — full width below the title bar */}
       {gh.syncing && <SyncProgressBar progress={gh.syncProgress} />}
@@ -273,21 +233,10 @@ export function GithubStarsView() {
       )}
 
       {/* Search — debounced ILIKE over full_name/description (PGlite) */}
-      <TextField
-        fullWidth
+      <SearchField
         value={gh.searchInput}
-        onChange={(e) => gh.setSearchInput(e.target.value)}
+        onChange={gh.setSearchInput}
         placeholder={t('githubStars.searchPlaceholder')}
-        sx={{ mb: 3 }}
-        slotProps={{
-          input: {
-            startAdornment: (
-              <InputAdornment position="start">
-                <Iconify icon="eva:search-fill" width={20} sx={{ color: 'text.disabled' }} />
-              </InputAdornment>
-            ),
-          },
-        }}
       />
 
       {/* Language chips — hidden until the library has content */}
@@ -335,17 +284,17 @@ export function GithubStarsView() {
         <NoMatchesState />
       ) : (
         <>
-          <Grid container spacing={2.5}>
+          <CardGrid>
             {gh.repos.map((repo) => (
-              <Grid key={repo.id} size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
+              <CardGridItem key={repo.id}>
                 <RepoCard
                   repo={repo}
                   tags={tagsById[repo.repoId] ?? []}
                   onEditTags={(anchor) => openTagEditor(repo.repoId, anchor)}
                 />
-              </Grid>
+              </CardGridItem>
             ))}
-          </Grid>
+          </CardGrid>
 
           <TagEditPopover
             platform={PLATFORM}
@@ -356,17 +305,7 @@ export function GithubStarsView() {
             onChanged={handleTagsChanged}
           />
 
-          {gh.totalPages > 1 && (
-            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
-              <Pagination
-                count={gh.totalPages}
-                page={gh.page}
-                onChange={(_, value) => gh.goToPage(value)}
-                color="primary"
-                shape="rounded"
-              />
-            </Box>
-          )}
+          <CardGridPagination page={gh.page} totalPages={gh.totalPages} onChange={gh.goToPage} />
         </>
       )}
     </DashboardContent>

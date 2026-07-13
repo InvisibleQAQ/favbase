@@ -1,13 +1,12 @@
 import { useEffect, useState, type ReactNode } from 'react';
 
-import Box from '@mui/material/Box';
-import Grid from '@mui/material/Grid';
 import Typography from '@mui/material/Typography';
 
 import { initDbProxy } from '@/lib/database';
 import { onDomainEvent } from '@/lib/events';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { getItemsByTags, type TaggedItem } from '@/lib/tagging';
+import { StateBox, CardGrid, CardGridItem } from '../collection';
 import { TagEditPopover, useTagEditState } from './tag-edit-popover';
 
 export interface TaggedItemGridProps {
@@ -104,20 +103,11 @@ export function TaggedItemGrid({
 
   if (items.length === 0) {
     return (
-      <Box
-        sx={(theme) => ({
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          minHeight: 240,
-          borderRadius: 2,
-          border: `2px dashed ${theme.vars.palette.grey[300]}`,
-        })}
-      >
+      <StateBox minHeight={240}>
         <Typography variant="body1" sx={{ color: 'text.disabled' }}>
           {t('tags.noMatches')}
         </Typography>
-      </Box>
+      </StateBox>
     );
   }
 
@@ -127,13 +117,13 @@ export function TaggedItemGrid({
 
   return (
     <>
-      <Grid container spacing={2.5}>
+      <CardGrid>
         {items.map((item) => (
-          <Grid key={item.itemId} size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
+          <CardGridItem key={item.itemId}>
             {renderCard(item, (anchor) => openTagEditor(item.platformItemId, anchor))}
-          </Grid>
+          </CardGridItem>
         ))}
-      </Grid>
+      </CardGrid>
 
       <TagEditPopover
         platform={platform}
