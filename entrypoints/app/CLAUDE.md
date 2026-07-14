@@ -1,6 +1,6 @@
 # Extension Page Dashboard (app.html)
 
-MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRouter`（Chrome 扩展页面不支持路径路由）。路由结构：`/`(Dashboard), `/collections`(通用命名空间，redirect 到 `/collections/bilibili`), `/collections/bilibili`(B站收藏夹概览), `/collections/bilibili/:mediaId`(B站收藏夹视频列表), `/collections/github`(GitHub Stars 收藏页), `/settings`。多平台模式：`/collections` 保留给将来跨平台聚合页，每个平台一条 `/collections/<platform>` 路由 + 对应 section（未来 `/collections/zhihu/:id` 等）。
+MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRouter`（Chrome 扩展页面不支持路径路由）。路由结构：`/`(Dashboard), `/collections`(通用命名空间，redirect 到 `/collections/bilibili`), `/collections/bilibili`(B站收藏夹概览), `/collections/bilibili/:mediaId`(B站收藏夹视频列表), `/collections/github`(GitHub Stars 收藏页), `/collections/bookmarks`(浏览器书签「全部」), `/collections/bookmarks/:folderId`(书签按文件夹), `/settings`。多平台模式：`/collections` 保留给将来跨平台聚合页，每个平台一条 `/collections/<platform>` 路由 + 对应 section（未来 `/collections/zhihu/:id` 等）。
 
 ## 模块结构
 

@@ -30,6 +30,10 @@ export const navData: NavItem[] = [
         title: 'nav.githubStars',
         path: '/collections/github',
       },
+      {
+        title: 'nav.bookmarks',
+        path: '/collections/bookmarks',
+      },
     ],
   },
   {

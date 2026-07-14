@@ -11,7 +11,7 @@
 ## 模块结构
 
 - `state-box.tsx` — `StateBox`：虚线空态/错误框。结构化 props `icon`（ReactNode，调用方控制颜色/边距）/ `title`（包 h6）/ `description`（包 body2 secondary 居中 maxWidth 400）/ `action`（ReactNode，调用方控制按钮 variant/loading）+ `minHeight`（默认 320）+ `children` 逃生口（纯文字空态如 NoMatches、EmptyFolder 的自定义 Typography）
-- `section-title-bar.tsx` — `SectionTitleBar`：标题行（h5 title——loading 时传 Skeleton——+ caption + spacer + 同步按钮）。同步按钮三态：syncing 时 CircularProgress+syncingLabel+disabled，否则 restart 图标+syncLabel
+- `section-title-bar.tsx` — `SectionTitleBar`：标题行（h5 title——loading 时传 Skeleton——+ caption + spacer + **可选**同步按钮）。同步三件套 `onSync/syncLabel/syncingLabel` 全可选：传 `onSync` 才渲染按钮（三态：syncing 时 CircularProgress+syncingLabel+disabled，否则 restart 图标+syncLabel）；省略则无按钮（如 bookmarks 挂载自动同步）
 - `search-field.tsx` — `SearchField`：全宽搜索框 + `eva:search-fill` adornment。受控（value+onChange）或禁用占位（disabled）两态
 - `card-grid.tsx` — `CardGrid`（container spacing 2.5）+ `CardGridItem`（断点 xs12/sm6/md4/lg3 唯一事实源 `CARD_SIZE`）+ `CardGridPagination`（居中分页，totalPages≤1 返回 null）+ `CardGridSkeleton({ card })`（grid-of-8 外壳，卡片内部由各平台传入——保留平台骨架形态差异）
 - `chip-row.tsx` — `ChipRowShell`（icon+subtitle2 加粗标题头部 + 可选 `headerExtra`（如清除按钮）+ flexWrap chip 行容器）+ `FilterChip`（选中 filled primary / 未选 outlined default + 可选 `maxWidth` 省略号截断 + 可选 `icon`（如语言色点））
@@ -21,6 +21,7 @@
 
 - `sections/bilibili/`（B站）：bilibili-view（StateBox×3 / SectionTitleBar / SearchField disabled / CardGrid+分页）、folder-chips（ChipRowShell+FilterChip，保留 loading 骨架/空态逻辑）、video-grid-skeleton（CardGridSkeleton + Card 媒体骨架）
 - `sections/github-stars/`：github-stars-view（StateBox×4 / SectionTitleBar / SearchField 受控 / CardGrid+分页 / CardGridSkeleton + rounded 平板）、language-chips（ChipRowShell+FilterChip，保留 All chip+色点逻辑）
+- `sections/bookmarks/`：bookmarks-view（StateBox×3 / SectionTitleBar **无 onSync 无按钮** / SearchField 受控 / CardGrid+分页）、folder-chips（ChipRowShell+FilterChip，All chip+文件夹名）、bookmark-grid-skeleton（CardGridSkeleton + rounded 96）
 - `components/tags/`：tagged-item-grid（StateBox minHeight 240 空态 + CardGrid）、tag-filter-chips（ChipRowShell headerExtra 清除按钮 + FilterChip）
 
 平台 N 接入 = 编排自己的 view + 提供平台卡片，脚手架零复制。

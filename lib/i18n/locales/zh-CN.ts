@@ -201,6 +201,7 @@ const zhCN = {
   'nav.collections': '收藏夹',
   'nav.bilibiliFavorites': 'B 站收藏夹',
   'nav.githubStars': 'GitHub Stars',
+  'nav.bookmarks': '浏览器书签',
   'nav.settings': '设置',
 
   'header.githubAria': '在 GitHub 上查看仓库',
@@ -247,6 +248,20 @@ const zhCN = {
   'githubStars.loadFailed': '加载失败',
   'githubStars.retry': '重试',
   'githubStars.noMatches': '没有匹配的仓库',
+
+  'bookmarks.title': '浏览器书签',
+  'bookmarks.count': '{{count}} 个书签',
+  'bookmarks.count.one': '{{count}} 个书签',
+  'bookmarks.lastSynced': '上次同步 {{time}}',
+  'bookmarks.searchPlaceholder': '搜索书签标题或域名…',
+  'bookmarks.foldersTitle': '文件夹',
+  'bookmarks.allFolders': '全部 ({{count}})',
+  'bookmarks.emptyTitle': '没有可收录的书签',
+  'bookmarks.emptyDesc': '在浏览器中添加网页书签后，回到此页面即可自动收录。',
+  'bookmarks.loadFailed': '加载失败',
+  'bookmarks.retry': '重试',
+  'bookmarks.noMatches': '没有匹配的书签',
+  'bookmarks.syncFailed': '同步失败: {{error}}',
 
   'tags.sectionTitle': '标签',
   'tags.editTooltip': '编辑标签',

@@ -12,18 +12,20 @@ export interface SectionTitleBarProps {
   title: ReactNode;
   /** Caption next to the title (count / last-synced); omit to hide. */
   caption?: ReactNode;
-  syncing: boolean;
-  onSync: () => void;
+  syncing?: boolean;
+  /** Omit the sync trio (onSync/syncLabel/syncingLabel) to render no sync button
+   *  — e.g. platforms that auto-sync on mount (bookmarks). */
+  onSync?: () => void;
   /** Pre-translated button labels — this component carries no i18n keys. */
-  syncLabel: string;
-  syncingLabel: string;
+  syncLabel?: string;
+  syncingLabel?: string;
 }
 
-/** Title row shared by platform sections: title + caption + spacer + sync button. */
+/** Title row shared by platform sections: title + caption + spacer + optional sync button. */
 export function SectionTitleBar({
   title,
   caption,
-  syncing,
+  syncing = false,
   onSync,
   syncLabel,
   syncingLabel,
@@ -42,21 +44,23 @@ export function SectionTitleBar({
 
       <Box sx={{ flex: 1 }} />
 
-      <Button
-        variant="contained"
-        size="small"
-        startIcon={
-          syncing ? (
-            <CircularProgress size={16} color="inherit" />
-          ) : (
-            <Iconify icon="solar:restart-bold" width={18} />
-          )
-        }
-        onClick={onSync}
-        disabled={syncing}
-      >
-        {syncing ? syncingLabel : syncLabel}
-      </Button>
+      {onSync && (
+        <Button
+          variant="contained"
+          size="small"
+          startIcon={
+            syncing ? (
+              <CircularProgress size={16} color="inherit" />
+            ) : (
+              <Iconify icon="solar:restart-bold" width={18} />
+            )
+          }
+          onClick={onSync}
+          disabled={syncing}
+        >
+          {syncing ? syncingLabel : syncLabel}
+        </Button>
+      )}
     </Box>
   );
 }

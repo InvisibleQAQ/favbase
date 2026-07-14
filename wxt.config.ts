@@ -40,7 +40,17 @@ export default defineConfig({
   manifest: {
     name: 'favbase',
     description: 'Turn your social media bookmarks into a searchable knowledge base',
-    permissions: ['storage', 'unlimitedStorage', 'offscreen', 'declarativeNetRequest', 'cookies'],
+    permissions: [
+      'storage',
+      'unlimitedStorage',
+      'offscreen',
+      'declarativeNetRequest',
+      'cookies',
+      // bookmarks: read the local bookmark tree (ingestion). favicon: MV3
+      // _favicon API to render bookmark icons locally (no third-party leak).
+      'bookmarks',
+      'favicon',
+    ],
     host_permissions: [...bilibiliHostPermissions, ...githubHostPermissions, ...providerHostPermissions],
     // Custom (user-entered) API domains are unknown at build time; grant them at
     // runtime via lib/permissions/host-access.ts (must run in a user gesture).

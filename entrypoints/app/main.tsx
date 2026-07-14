@@ -19,6 +19,7 @@ initDbProxy().catch((err) =>
 const DashboardPage = lazy(() => import('./pages/dashboard'));
 const BilibiliPage = lazy(() => import('./pages/bilibili'));
 const GithubStarsPage = lazy(() => import('./pages/github-stars'));
+const BookmarksPage = lazy(() => import('./pages/bookmarks'));
 const SettingsPage = lazy(() => import('./pages/settings'));
 
 function LoadingFallback() {
@@ -61,6 +62,8 @@ const router = createHashRouter([
           { path: 'collections/bilibili', element: <BilibiliPage /> },
           { path: 'collections/bilibili/:mediaId', element: <BilibiliPage /> },
           { path: 'collections/github', element: <GithubStarsPage /> },
+          { path: 'collections/bookmarks', element: <BookmarksPage /> },
+          { path: 'collections/bookmarks/:folderId', element: <BookmarksPage /> },
           { path: 'settings', element: <SettingsPage /> },
         ],
       },

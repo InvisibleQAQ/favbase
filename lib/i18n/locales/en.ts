@@ -203,6 +203,7 @@ const en: Record<LocaleKeys, string> = {
   'nav.collections': 'Collections',
   'nav.bilibiliFavorites': 'Bilibili Favorites',
   'nav.githubStars': 'GitHub Stars',
+  'nav.bookmarks': 'Bookmarks',
   'nav.settings': 'Settings',
 
   'header.githubAria': 'View repository on GitHub',
@@ -250,6 +251,20 @@ const en: Record<LocaleKeys, string> = {
   'githubStars.loadFailed': 'Load failed',
   'githubStars.retry': 'Retry',
   'githubStars.noMatches': 'No matching repositories',
+
+  'bookmarks.title': 'Bookmarks',
+  'bookmarks.count': '{{count}} bookmarks',
+  'bookmarks.count.one': '{{count}} bookmark',
+  'bookmarks.lastSynced': 'Last synced {{time}}',
+  'bookmarks.searchPlaceholder': 'Search by title or domain…',
+  'bookmarks.foldersTitle': 'Folders',
+  'bookmarks.allFolders': 'All ({{count}})',
+  'bookmarks.emptyTitle': 'No bookmarks to collect',
+  'bookmarks.emptyDesc': 'Add web bookmarks in your browser, then return here — they will be collected automatically.',
+  'bookmarks.loadFailed': 'Load failed',
+  'bookmarks.retry': 'Retry',
+  'bookmarks.noMatches': 'No matching bookmarks',
+  'bookmarks.syncFailed': 'Sync failed: {{error}}',
 
   'tags.sectionTitle': 'Tags',
   'tags.editTooltip': 'Edit tags',
