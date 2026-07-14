@@ -273,9 +273,10 @@ function CollectionsBranch({ item, pinned }: { item: NavItem; pinned: boolean })
   const [expanded, setExpanded] = useState(isActive);
 
   const children = item.children ?? [];
-  // Longest-prefix match: sibling leaves highlight mutually exclusively even
-  // when one leaf's path ('/collections') prefixes another's
-  // ('/collections/github'). See nav-active.ts.
+  // Longest-prefix match: sibling leaves ('/collections/bilibili',
+  // '/collections/github') are non-overlapping, so highlighting is mutually
+  // exclusive by construction; longest-wins resolves nested detail routes
+  // ('/collections/bilibili/:id') to their platform leaf. See nav-active.ts.
   const activeChildPath = findActiveChildPath(
     pathname,
     children.map((child) => child.path),

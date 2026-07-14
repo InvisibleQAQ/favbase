@@ -1,6 +1,6 @@
 # app/components/tags
 
-平台无关的标签 UI 子系统（app.html 内共享，同层先例 `components/iconify/`）。platform 全部为**参数**，本目录零平台字面量、零 `@/lib/bilibili`/`@/lib/github` 导入——平台知识归各 section 的卡片 adapter（`sections/collections/tagged-video-card.tsx`、`sections/github-stars/tagged-repo-card.tsx`）。数据一律经 `@/lib/tagging`（(platform, platformItemId) 寻址，零 drizzle/entity/getDb 导入）。
+平台无关的标签 UI 子系统（app.html 内共享，同层先例 `components/iconify/`）。platform 全部为**参数**，本目录零平台字面量、零 `@/lib/bilibili`/`@/lib/github` 导入——平台知识归各 section 的卡片 adapter（`sections/bilibili/tagged-video-card.tsx`、`sections/github-stars/tagged-repo-card.tsx`）。数据一律经 `@/lib/tagging`（(platform, platformItemId) 寻址，零 drizzle/entity/getDb 导入）。
 
 ## 模块结构
 

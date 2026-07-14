@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { findActiveChildPath } from './nav-active';
 
-const PATHS = ['/collections', '/collections/github'];
+const PATHS = ['/collections/bilibili', '/collections/github'];
 
 describe('findActiveChildPath', () => {
-  it('resolves /collections to the bilibili leaf', () => {
-    expect(findActiveChildPath('/collections', PATHS)).toBe('/collections');
+  it('resolves /collections/bilibili to the bilibili leaf', () => {
+    expect(findActiveChildPath('/collections/bilibili', PATHS)).toBe('/collections/bilibili');
   });
 
   it('resolves /collections/bilibili/:id to the bilibili leaf', () => {
-    expect(findActiveChildPath('/collections/bilibili/123', PATHS)).toBe('/collections');
+    expect(findActiveChildPath('/collections/bilibili/123', PATHS)).toBe('/collections/bilibili');
   });
 
   it('resolves /collections/github to the github leaf only (regression: bilibili mis-highlight)', () => {

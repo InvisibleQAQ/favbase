@@ -1,6 +1,6 @@
 import { StrictMode, Suspense, lazy } from 'react';
 import { createRoot } from 'react-dom/client';
-import { createHashRouter, RouterProvider, Outlet } from 'react-router-dom';
+import { createHashRouter, RouterProvider, Outlet, Navigate } from 'react-router-dom';
 
 import Box from '@mui/material/Box';
 import LinearProgress, { linearProgressClasses } from '@mui/material/LinearProgress';
@@ -17,7 +17,7 @@ initDbProxy().catch((err) =>
 );
 
 const DashboardPage = lazy(() => import('./pages/dashboard'));
-const CollectionsPage = lazy(() => import('./pages/collections'));
+const BilibiliPage = lazy(() => import('./pages/bilibili'));
 const GithubStarsPage = lazy(() => import('./pages/github-stars'));
 const SettingsPage = lazy(() => import('./pages/settings'));
 
@@ -57,8 +57,9 @@ const router = createHashRouter([
         ),
         children: [
           { index: true, element: <DashboardPage /> },
-          { path: 'collections', element: <CollectionsPage /> },
-          { path: 'collections/bilibili/:mediaId', element: <CollectionsPage /> },
+          { path: 'collections', element: <Navigate to="/collections/bilibili" replace /> },
+          { path: 'collections/bilibili', element: <BilibiliPage /> },
+          { path: 'collections/bilibili/:mediaId', element: <BilibiliPage /> },
           { path: 'collections/github', element: <GithubStarsPage /> },
           { path: 'settings', element: <SettingsPage /> },
         ],

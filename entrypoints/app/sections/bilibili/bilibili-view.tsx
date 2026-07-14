@@ -266,7 +266,7 @@ function VideoGridPanel({ mediaId, totalCount, syncing, onSync, lastSyncedAt, au
 // Main view: search box + folder chips + video grid (flat vertical stack)
 // ---------------------------------------------------------------------------
 
-export function CollectionsView() {
+export function BilibiliView() {
   const { t } = useTranslation();
   const { mediaId } = useParams<{ mediaId: string }>();
   const navigate = useNavigate();

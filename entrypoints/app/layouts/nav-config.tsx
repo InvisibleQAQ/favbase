@@ -24,7 +24,7 @@ export const navData: NavItem[] = [
     children: [
       {
         title: 'nav.bilibiliFavorites',
-        path: '/collections',
+        path: '/collections/bilibili',
       },
       {
         title: 'nav.githubStars',

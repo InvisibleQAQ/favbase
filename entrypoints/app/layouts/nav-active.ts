@@ -2,11 +2,11 @@
  * Resolve which sibling nav child leaf is active for the current pathname.
  *
  * Matching is prefix-based on path segments (exact match or `${path}/...`),
- * and the LONGEST matching path wins. This makes overlapping sibling paths
- * mutually exclusive: '/collections' (Bilibili leaf) no longer highlights
- * under '/collections/github' because the GitHub leaf's longer path takes
- * priority, while '/collections' and '/collections/bilibili/:id' still
- * resolve to the Bilibili leaf.
+ * and the LONGEST matching path wins. After the collections rename the sibling
+ * leaves ('/collections/bilibili', '/collections/github') no longer prefix each
+ * other, so they are mutually exclusive by construction. Longest-wins now serves
+ * to resolve nested detail routes: '/collections/bilibili/:id' still resolves to
+ * the Bilibili leaf ('/collections/bilibili').
  */
 export function findActiveChildPath(pathname: string, childPaths: string[]): string | null {
   let best: string | null = null;
