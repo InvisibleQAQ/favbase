@@ -91,9 +91,10 @@ export async function fetchAndSyncVideos(
   mediaId: number,
   page: number,
   order: BiliFavOrder = 'mtime',
+  keyword: string = '',
 ): Promise<SyncVideosResult> {
   const auth = await checkAuth();
-  const data = await fetchFavVideos(auth, mediaId, page, PAGE_SIZE, order);
+  const data = await fetchFavVideos(auth, mediaId, page, PAGE_SIZE, order, keyword);
   const videos = data.medias ?? [];
 
   if (videos.length > 0) {

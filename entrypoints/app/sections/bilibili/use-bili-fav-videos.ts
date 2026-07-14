@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { fetchAndSyncVideos, BiliAuthError } from '@/lib/bilibili/bili-sync-service';
 import type { BiliFavOrder, BiliFavVideo } from '@/lib/bilibili/types';
 
@@ -18,7 +18,7 @@ interface UseFavVideosReturn {
   retry: () => void;
 }
 
-export function useBiliFavVideos(mediaId: number): UseFavVideosReturn {
+export function useBiliFavVideos(mediaId: number, keyword: string = ''): UseFavVideosReturn {
   const [videos, setVideos] = useState<BiliFavVideo[]>([]);
   const [folderTitle, setFolderTitle] = useState('');
   const [page, setPage] = useState(1);
@@ -28,46 +28,49 @@ export function useBiliFavVideos(mediaId: number): UseFavVideosReturn {
   const [error, setError] = useState<string | null>(null);
   const [order, setOrder] = useState<BiliFavOrder>('mtime');
 
-  const fetchPage = useCallback(async (targetPage: number, targetOrder: BiliFavOrder) => {
+  // Guards against stale responses (rapid keyword/order/folder changes): only
+  // the latest fetch is allowed to write state. Bumped per fetch, captured at
+  // call time, re-checked after every await.
+  const fetchIdRef = useRef(0);
+
+  const fetchPage = useCallback(async (targetPage: number, targetOrder: BiliFavOrder, targetKeyword: string) => {
+    const fetchId = ++fetchIdRef.current;
     setLoading(true);
     setError(null);
     try {
-      const result = await fetchAndSyncVideos(mediaId, targetPage, targetOrder);
+      const result = await fetchAndSyncVideos(mediaId, targetPage, targetOrder, targetKeyword);
+      if (fetchId !== fetchIdRef.current) return;
       setLoginState('logged_in');
       setVideos(result.videos);
       setFolderTitle(result.folderTitle);
       setTotalPages(result.totalPages);
       setPage(targetPage);
     } catch (err) {
+      if (fetchId !== fetchIdRef.current) return;
       if (err instanceof BiliAuthError) {
         setLoginState('not_logged_in');
       } else {
         setError(err instanceof Error ? err.message : 'Failed to fetch videos');
       }
     } finally {
-      setLoading(false);
+      if (fetchId === fetchIdRef.current) setLoading(false);
     }
   }, [mediaId]);
 
-  // Initial load + refetch from page 1 whenever mediaId or sort order changes.
+  // Initial load + refetch from page 1 whenever mediaId, sort order, or the
+  // search keyword changes. Stale-response protection lives in fetchPage
+  // (fetchIdRef), so no cleanup flag is needed here.
   useEffect(() => {
-    let cancelled = false;
-
-    (async () => {
-      await fetchPage(1, order);
-      if (cancelled) return;
-    })();
-
-    return () => { cancelled = true; };
-  }, [fetchPage, order]);
+    fetchPage(1, order, keyword);
+  }, [fetchPage, order, keyword]);
 
   const goToPage = useCallback((p: number) => {
-    fetchPage(p, order);
-  }, [fetchPage, order]);
+    fetchPage(p, order, keyword);
+  }, [fetchPage, order, keyword]);
 
   const retry = useCallback(() => {
-    fetchPage(page, order);
-  }, [fetchPage, page, order]);
+    fetchPage(page, order, keyword);
+  }, [fetchPage, page, order, keyword]);
 
   return { videos, folderTitle, page, totalPages, loading, loginState, error, order, setOrder, goToPage, retry };
 }

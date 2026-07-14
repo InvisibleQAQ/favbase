@@ -20,8 +20,11 @@ const ENDPOINTS = {
     `https://api.bilibili.com/x/player/playurl?bvid=${encodeURIComponent(bvid)}&cid=${encodeURIComponent(String(cid))}&fnval=16&fnver=0&platform=html5&high_quality=1&otype=json`,
   favFolderListAll: (mid: string) =>
     `https://api.bilibili.com/x/v3/fav/folder/created/list-all?up_mid=${encodeURIComponent(mid)}`,
-  favResourceList: (mediaId: number, pn: number, ps: number = 20, order: BiliFavOrder = 'mtime') =>
-    `https://api.bilibili.com/x/v3/fav/resource/list?media_id=${encodeURIComponent(String(mediaId))}&pn=${encodeURIComponent(String(pn))}&ps=${encodeURIComponent(String(ps))}&order=${order}&platform=web`,
+  favResourceList: (mediaId: number, pn: number, ps: number = 20, order: BiliFavOrder = 'mtime', keyword: string = '') => {
+    const base = `https://api.bilibili.com/x/v3/fav/resource/list?media_id=${encodeURIComponent(String(mediaId))}&pn=${encodeURIComponent(String(pn))}&ps=${encodeURIComponent(String(ps))}&order=${order}&platform=web`;
+    // type=0 pins the search to the current folder (vs 1 = all folders).
+    return keyword ? `${base}&type=0&keyword=${encodeURIComponent(keyword)}` : base;
+  },
 } as const;
 
 const BILI_COOKIE_URL = 'https://www.bilibili.com';
@@ -100,15 +103,17 @@ export async function fetchFavFolders(
   return json.data?.list ?? [];
 }
 
-/** Fetch paginated video list for a favorite folder. */
+/** Fetch paginated video list for a favorite folder. A non-empty keyword
+ *  searches video titles within that folder (server-side, type=0). */
 export async function fetchFavVideos(
   auth: BiliAuthInfo,
   mediaId: number,
   page: number = 1,
   ps: number = 20,
   order: BiliFavOrder = 'mtime',
+  keyword: string = '',
 ): Promise<BiliFavVideoListResponse> {
-  const url = ENDPOINTS.favResourceList(mediaId, page, ps, order);
+  const url = ENDPOINTS.favResourceList(mediaId, page, ps, order, keyword);
   const res = await fetch(url, {
     headers: { Cookie: `SESSDATA=${auth.sessdata}` },
   });

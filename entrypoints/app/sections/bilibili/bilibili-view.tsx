@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 
 import Typography from '@mui/material/Typography';
@@ -40,6 +40,9 @@ import { AutoTranscribeBar } from './auto-transcribe-bar';
 
 /** Platform key for all tag operations in this (bilibili-only) section. */
 const PLATFORM = 'bilibili';
+
+/** Search debounce — mirrors the github-stars search field (300ms). */
+const SEARCH_DEBOUNCE_MS = 300;
 
 const biliAdapter = createBiliAutoTranscribeAdapter();
 
@@ -105,6 +108,18 @@ function EmptyFolderState() {
   );
 }
 
+/** Search returned no videos in this folder (distinct from an empty folder). */
+function NoMatchesState() {
+  const { t } = useTranslation();
+  return (
+    <StateBox>
+      <Typography variant="body1" sx={{ color: 'text.disabled' }}>
+        {t('collections.noMatches')}
+      </Typography>
+    </StateBox>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Sort control — server-side order (mtime/view/pubtime), all descending
 // ---------------------------------------------------------------------------
@@ -153,8 +168,9 @@ function SortControl({ order, onChange }: { order: BiliFavOrder; onChange: (o: B
 // Video grid panel (only rendered when a valid folder is selected)
 // ---------------------------------------------------------------------------
 
-function VideoGridPanel({ mediaId, totalCount, syncing, onSync, lastSyncedAt, autoTranscribe, onTagsChanged }: {
+function VideoGridPanel({ mediaId, keyword, totalCount, syncing, onSync, lastSyncedAt, autoTranscribe, onTagsChanged }: {
   mediaId: number;
+  keyword: string;
   totalCount: number;
   syncing: boolean;
   onSync: () => void;
@@ -164,7 +180,7 @@ function VideoGridPanel({ mediaId, totalCount, syncing, onSync, lastSyncedAt, au
 }) {
   const { t } = useTranslation();
   const { videos, folderTitle, page, totalPages, loading, loginState, error, order, setOrder, goToPage, retry } =
-    useBiliFavVideos(mediaId);
+    useBiliFavVideos(mediaId, keyword);
 
   const { getState, startTranscribe, cancelTranscribe, activeBvid } =
     useVideoTranscribe(videos);
@@ -222,7 +238,7 @@ function VideoGridPanel({ mediaId, totalCount, syncing, onSync, lastSyncedAt, au
       ) : error ? (
         <ErrorState message={error} onRetry={retry} />
       ) : videos.length === 0 ? (
-        <EmptyFolderState />
+        keyword.trim() ? <NoMatchesState /> : <EmptyFolderState />
       ) : (
         <>
           <CardGrid>
@@ -281,6 +297,22 @@ export function BilibiliView() {
   const { usedTags, refresh: refreshUsedTags } = useUsedTags(PLATFORM);
   const { selectedTagIds, toggleTag, clearTags } = useTagFilter(usedTags);
 
+  // Search — debounced server-side keyword search over the current folder's
+  // video titles. Input state lives here (the SearchField renders above the
+  // folder chips); the debounced keyword flows down into VideoGridPanel.
+  const [searchInput, setSearchInput] = useState('');
+  const [keyword, setKeyword] = useState('');
+  const keywordRef = useRef('');
+  useEffect(() => {
+    const id = setTimeout(() => {
+      const next = searchInput.trim();
+      if (next === keywordRef.current) return;
+      keywordRef.current = next;
+      setKeyword(next);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(id);
+  }, [searchInput]);
+
   useEffect(() => {
     if (!mediaId && !foldersLoading && folders.length > 0) {
       navigate(`/collections/bilibili/${folders[0].id}`, { replace: true });
@@ -288,6 +320,11 @@ export function BilibiliView() {
   }, [mediaId, foldersLoading, folders, navigate]);
 
   const handleSelectFolder = (folderId: number) => {
+    // Search is folder-scoped — clear input + debounced keyword synchronously so
+    // the remounting panel loads the new folder's full list, not the stale query.
+    setSearchInput('');
+    setKeyword('');
+    keywordRef.current = '';
     navigate(`/collections/bilibili/${folderId}`);
   };
 
@@ -307,8 +344,12 @@ export function BilibiliView() {
         </Typography>
       )}
 
-      {/* Search box — UI-only placeholder, no search logic */}
-      <SearchField disabled placeholder={t('collections.searchPlaceholder')} />
+      {/* Search box — debounced server-side keyword search (current folder) */}
+      <SearchField
+        value={searchInput}
+        onChange={setSearchInput}
+        placeholder={t('collections.searchPlaceholder')}
+      />
 
       {/* Folder chips — horizontal filter */}
       <FolderChips
@@ -341,6 +382,7 @@ export function BilibiliView() {
         <VideoGridPanel
           key={selectedId}
           mediaId={selectedId}
+          keyword={keyword}
           totalCount={selectedFolder?.media_count ?? 0}
           syncing={syncing}
           onSync={sync}

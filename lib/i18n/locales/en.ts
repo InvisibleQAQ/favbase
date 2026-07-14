@@ -226,6 +226,7 @@ const en: Record<LocaleKeys, string> = {
   'collections.sidebarTitle': 'Bilibili Favorites',
   'collections.noFolders': 'No folders',
   'collections.searchPlaceholder': 'Search video titles…',
+  'collections.noMatches': 'No matching videos',
   'collections.sortFavTime': 'Recently favorited',
   'collections.sortPlay': 'Most played',
   'collections.sortPubTime': 'Recently published',

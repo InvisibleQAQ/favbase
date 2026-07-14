@@ -224,6 +224,7 @@ const zhCN = {
   'collections.sidebarTitle': 'BiliBili 收藏夹',
   'collections.noFolders': '暂无收藏夹',
   'collections.searchPlaceholder': '搜索视频标题…',
+  'collections.noMatches': '没有匹配的视频',
   'collections.sortFavTime': '最近收藏',
   'collections.sortPlay': '最多播放',
   'collections.sortPubTime': '最近投稿',
