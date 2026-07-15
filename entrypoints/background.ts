@@ -15,6 +15,7 @@ import {
   handleCacheSubtitle,
 } from '@/lib/background/cache-handlers';
 import { handleOpenAppPage } from '@/lib/background/app-handlers';
+import { captureXTokens } from '@/lib/x/x-auth';
 
 function createBackgroundContext(): BackgroundContext {
   const abortControllers = new Map<number, AbortController>();
@@ -83,6 +84,19 @@ export default defineBackground(() => {
   initPortBridge(DB_CHANNEL_NAME, ensureOffscreen);
 
   initCacheStorageListener();
+
+  // Capture X (Twitter) auth headers from the logged-in web client's own
+  // requests (observational webRequest — returns nothing). x-api.ts replays
+  // them verbatim to read bookmarks; see lib/x/x-auth.ts. host_permission for
+  // x.com is required for the headers to be visible.
+  browser.webRequest.onBeforeSendHeaders.addListener(
+    (details) => {
+      captureXTokens(details).catch(() => {});
+      return undefined;
+    },
+    { urls: ['*://x.com/*'] },
+    ['requestHeaders', 'extraHeaders'],
+  );
 
   const ctx = createBackgroundContext();
 

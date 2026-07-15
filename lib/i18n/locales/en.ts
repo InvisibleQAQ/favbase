@@ -280,7 +280,7 @@ const en: Record<LocaleKeys, string> = {
   'x.authorsTitle': 'Authors',
   'x.allAuthors': 'All',
   'x.notLoggedInTitle': 'X login not detected',
-  'x.notLoggedInDesc': 'Open x.com in your browser and sign in, then return here and click Sync.',
+  'x.notLoggedInDesc': 'Open x.com in your browser, sign in and browse for a moment (e.g. open your bookmarks) so the extension can capture your session, then return here and click Sync.',
   'x.openX': 'Open x.com',
   'x.emptyTitle': 'No bookmarks collected yet',
   'x.emptyDesc': 'Click Sync to fetch every tweet you bookmarked on X.',

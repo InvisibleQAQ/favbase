@@ -1,14 +1,16 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   parseTweets,
   extractBottomCursor,
   mapTweetToRow,
   buildBookmarksUrl,
-  parseQueryIdFromBundle,
+  fetchPageWithBackoff,
+  XRateLimitError,
+  XAuthError,
 } from './x-api';
 
 // ---------------------------------------------------------------------------
-// Fixtures — minimal slices of the BookmarkSearchTimeline response shape.
+// Fixtures — minimal slices of the Bookmarks timeline response shape.
 // ---------------------------------------------------------------------------
 
 function tweetResult(id: string, handle = 'alice', name = 'Alice') {
@@ -155,40 +157,141 @@ describe('extractBottomCursor', () => {
 });
 
 describe('buildBookmarksUrl', () => {
-  it('builds first-page url (no cursor) with only true features + PAGE_SIZE', () => {
-    const url = buildBookmarksUrl('QID');
-    expect(url.startsWith('https://x.com/i/api/graphql/QID/BookmarkSearchTimeline?')).toBe(true);
+  it('builds first-page url (no cursor) with the hardcoded queryId + static features, NO fieldToggles', () => {
+    const url = buildBookmarksUrl();
+    expect(
+      url.startsWith('https://x.com/i/api/graphql/xLjCVTqYWz8CGSprLU349w/Bookmarks?'),
+    ).toBe(true);
 
     const params = new URL(url).searchParams;
     const variables = JSON.parse(params.get('variables')!);
-    expect(variables).toEqual({ count: 20, querySource: '', rawQuery: '' });
+    // Mirrors the real bookmarks page: count 100, promoted content off, no
+    // cursor on page 1. NO querySource/rawQuery (search-op only).
+    expect(variables).toEqual({ count: 100, includePromotedContent: false });
     expect(variables.cursor).toBeUndefined();
 
+    // Static features map — a couple of known keys must be present (a missing
+    // key is an HTTP 400 "features cannot be null").
     const features = JSON.parse(params.get('features')!);
-    // 414-trap: every emitted feature must be true (false ones omitted).
-    expect(Object.values(features).every((v) => v === true)).toBe(true);
     expect(features.graphql_timeline_v2_bookmark_timeline).toBe(true);
-    expect(features.responsive_web_enhance_cards_enabled).toBeUndefined();
+    expect(features.view_counts_everywhere_api_enabled).toBe(true);
+
+    // supermemory omits fieldToggles entirely — the param must be absent.
+    expect(params.get('fieldToggles')).toBeNull();
   });
 
   it('includes cursor + custom count when provided', () => {
-    const url = buildBookmarksUrl('QID', { count: 50, cursor: 'CUR' });
+    const url = buildBookmarksUrl({ count: 50, cursor: 'CUR' });
     const variables = JSON.parse(new URL(url).searchParams.get('variables')!);
     expect(variables.count).toBe(50);
     expect(variables.cursor).toBe('CUR');
   });
 });
 
-describe('parseQueryIdFromBundle', () => {
-  it('parses operationName → queryId (both orderings)', () => {
-    const b1 = 'foo{queryId:"abc123-QID",operationName:"BookmarkSearchTimeline"}bar';
-    expect(parseQueryIdFromBundle(b1, 'BookmarkSearchTimeline')).toBe('abc123-QID');
+// ---------------------------------------------------------------------------
+// fetchPageWithBackoff — never swallow a server-side rejection into a silent []
+// (regression for the "抓取数为0 with no error" bug). Drives a mocked global
+// fetch; no network is touched.
+// ---------------------------------------------------------------------------
 
-    const b2 = 'foo{operationName:"BookmarkSearchTimeline",queryId:"zzz-999"}bar';
-    expect(parseQueryIdFromBundle(b2, 'BookmarkSearchTimeline')).toBe('zzz-999');
+describe('fetchPageWithBackoff — error surfacing', () => {
+  const URL_ = 'https://x.com/i/api/graphql/xLjCVTqYWz8CGSprLU349w/Bookmarks?x=1';
+  const HEADERS = { authorization: 'Bearer test' };
+
+  function mockFetchOnce(body: unknown, init: ResponseInit = { status: 200 }) {
+    global.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(body), init));
+  }
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
-  it('returns null when the operation is absent', () => {
-    expect(parseQueryIdFromBundle('nothing here', 'BookmarkSearchTimeline')).toBeNull();
+  it('throws (does NOT return []) on a 200 carrying GraphQL errors[] with code ≠ 88', async () => {
+    mockFetchOnce({ errors: [{ code: 73, message: 'BadRequest' }] });
+    await expect(fetchPageWithBackoff(URL_, HEADERS)).rejects.toThrow(/GraphQL errors/);
+    // The thrown message must carry the code, the message, and the queryId diagnostic.
+    mockFetchOnce({ errors: [{ code: 73, message: 'BadRequest' }] });
+    await expect(fetchPageWithBackoff(URL_, HEADERS)).rejects.toThrow(/code 73/);
+    mockFetchOnce({ errors: [{ code: 73, message: 'BadRequest' }] });
+    await expect(fetchPageWithBackoff(URL_, HEADERS)).rejects.toThrow(
+      /queryId=xLjCVTqYWz8CGSprLU349w/,
+    );
+  });
+
+  it('still yields XRateLimitError on a 200 with code:88 (unchanged)', async () => {
+    // The retry loop sleeps to reset between attempts; fake timers keep it fast
+    // and deterministic instead of burning 5 real seconds of MIN_SLEEP floors.
+    vi.useFakeTimers();
+    try {
+      const reset = String(Math.floor(Date.now() / 1000) - 10); // past → MIN_SLEEP floor
+      // Fresh Response per call — the retry loop consumes each body once.
+      global.fetch = vi.fn().mockImplementation(
+        async () =>
+          new Response(JSON.stringify({ errors: [{ code: 88, message: 'RateLimited' }] }), {
+            status: 200,
+            headers: { 'x-rate-limit-reset': reset },
+          }),
+      );
+      const p = fetchPageWithBackoff(URL_, HEADERS);
+      // Drive the awaited sleeps to completion, then assert the rejection.
+      const assertion = expect(p).rejects.toBeInstanceOf(XRateLimitError);
+      await vi.runAllTimersAsync();
+      await assertion;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('parses the happy path: 200 + bookmark_timeline_v2 with one tweet', async () => {
+    mockFetchOnce({
+      data: {
+        bookmark_timeline_v2: {
+          timeline: {
+            instructions: [
+              {
+                type: 'TimelineAddEntries',
+                entries: [itemEntry('42', 'carol', 'Carol')],
+              },
+            ],
+          },
+        },
+      },
+    });
+    const { json } = await fetchPageWithBackoff(URL_, HEADERS);
+    const rows = parseTweets(
+      (json as { data: { bookmark_timeline_v2: { timeline: { instructions: RawInst[] } } } }).data
+        .bookmark_timeline_v2.timeline.instructions,
+    );
+    expect(rows.map((r) => r.id)).toEqual(['42']);
+  });
+
+  it('returns the response WITHOUT throwing on an empty (zero-bookmarks) timeline', async () => {
+    mockFetchOnce({
+      data: { bookmark_timeline_v2: { timeline: { instructions: [] } } },
+    });
+    const { json } = await fetchPageWithBackoff(URL_, HEADERS);
+    expect(json).toBeTruthy();
+    // No throw = the empty case is a legit result, not swallowed error.
+  });
+
+  it('throws on a 200 with NEITHER errors NOR a timeline (unexpected shape)', async () => {
+    mockFetchOnce({ data: { something_else: {} } });
+    await expect(fetchPageWithBackoff(URL_, HEADERS)).rejects.toThrow(
+      /unexpected X response shape/,
+    );
+    mockFetchOnce({ data: { something_else: {} } });
+    await expect(fetchPageWithBackoff(URL_, HEADERS)).rejects.toThrow(
+      /queryId=xLjCVTqYWz8CGSprLU349w/,
+    );
+  });
+
+  it('maps 401 → XAuthError and 403 → XAuthError (no regression)', async () => {
+    global.fetch = vi.fn().mockResolvedValue(new Response('unauthorized', { status: 401 }));
+    await expect(fetchPageWithBackoff(URL_, HEADERS)).rejects.toBeInstanceOf(XAuthError);
+
+    global.fetch = vi.fn().mockResolvedValue(new Response('forbidden', { status: 403 }));
+    await expect(fetchPageWithBackoff(URL_, HEADERS)).rejects.toBeInstanceOf(XAuthError);
   });
 });
+
+type RawInst = Parameters<typeof parseTweets>[0][number];

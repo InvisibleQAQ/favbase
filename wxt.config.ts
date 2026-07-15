@@ -35,11 +35,11 @@ const bilibiliHostPermissions = [
 
 const githubHostPermissions = ['https://api.github.com/*'];
 
-// X (Twitter) bookmarks: the private GraphQL endpoint on x.com + the client-web
-// JS bundle host (abs.twimg.com) for runtime queryId resolution. Cookies are
-// read via chrome.cookies (perm already present); Origin/Referer are rewritten
-// by the DNR rule (rules.json id:2).
-const xHostPermissions = ['*://x.com/*', 'https://abs.twimg.com/*'];
+// X (Twitter) bookmarks: the private GraphQL endpoint on x.com. Auth headers
+// (full Cookie + csrf + bearer) are captured from the logged-in web client's
+// own requests via the background webRequest listener (see lib/x/x-auth.ts);
+// Origin/Referer are rewritten by the DNR rule (rules.json id:2).
+const xHostPermissions = ['*://x.com/*'];
 
 export default defineConfig({
   modules: ['@wxt-dev/module-react'],
@@ -52,6 +52,9 @@ export default defineConfig({
       'offscreen',
       'declarativeNetRequest',
       'cookies',
+      // webRequest (observational, non-blocking): capture the X web client's
+      // own auth headers on *://x.com/* to read bookmarks. See lib/x/x-auth.ts.
+      'webRequest',
       // bookmarks: read the local bookmark tree (ingestion). favicon: MV3
       // _favicon API to render bookmark icons locally (no third-party leak).
       'bookmarks',

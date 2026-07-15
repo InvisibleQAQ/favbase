@@ -1,6 +1,6 @@
 # sections/x
 
-X (Twitter) 书签收藏页（`/collections/x`，扁平单集合无详情路由，第四个平台）。视觉结构对齐 GitHub Stars 收藏页（`sections/github-stars/`）：顶栏（标题+计数+lastSynced+同步按钮）→ 同步进度条 → 搜索框 → 作者 chips → 卡片 grid（xs12/sm6/md4/lg3）+ Pagination。**数据一律从 PGlite 经 `lib/x/x-sync-service` 查询方法读取（UI 零 drizzle 导入），不直读 X GraphQL API**；同步（`syncBookmarks`）在 app.html context 跑，经 RPC proxy 写 Offscreen PGlite。**凭据无 UI 半（D6）**：无 Connections 卡、无 `UserSettings.xToken`——cookie 同步时静默读，缺失/过期由 lib 层抛 `XAuthError`，UI 映射为「登录 x.com」空态。
+X (Twitter) 书签收藏页（`/collections/x`，扁平单集合无详情路由，第四个平台）。视觉结构对齐 GitHub Stars 收藏页（`sections/github-stars/`）：顶栏（标题+计数+lastSynced+同步按钮）→ 同步进度条 → 搜索框 → 作者 chips → 卡片 grid（xs12/sm6/md4/lg3）+ Pagination。**数据一律从 PGlite 经 `lib/x/x-sync-service` 查询方法读取（UI 零 drizzle 导入），不直读 X GraphQL API**；同步（`syncBookmarks`）在 app.html context 跑，经 RPC proxy 写 Offscreen PGlite。**凭据无 UI 半（D6）**：无 Connections 卡、无 `UserSettings.xToken`——认证由 background `webRequest` 从用户浏览 x.com 的真实请求中捕获完整 `Cookie`+csrf+bearer（见 `lib/x/x-auth.ts`），同步时 `getXAuth` 读 session 存储；未捕获到（用户本 session 没访问过 x.com）由 lib 层抛 `XAuthError`，UI 映射为「打开 x.com 并浏览一下」空态。
 
 ## 模块结构
 

@@ -277,7 +277,7 @@ const zhCN = {
   'x.authorsTitle': '作者',
   'x.allAuthors': '全部',
   'x.notLoggedInTitle': '未检测到 X 登录状态',
-  'x.notLoggedInDesc': '请先在浏览器中打开 x.com 并登录你的账号，然后回到此页面点击同步。',
+  'x.notLoggedInDesc': '请先在浏览器中打开 x.com 并登录、随意浏览一下（例如打开书签页），让扩展捕获你的登录会话，然后回到此页面点击同步。',
   'x.openX': '打开 x.com',
   'x.emptyTitle': '还没有收录任何书签',
   'x.emptyDesc': '点击同步，一键拉取你在 X 上收藏的所有推文。',

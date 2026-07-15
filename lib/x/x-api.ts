@@ -1,49 +1,90 @@
 /**
  * X (Twitter) "API" layer — reads the user's bookmarks from X's PRIVATE
- * GraphQL endpoint in their logged-in session. Mirrors the role of
- * lib/github/github-api.ts + lib/bilibili/bilibili-api.ts (URL builders,
- * response normalization, structured errors, NO DB imports, NO UI copy — the
- * i18n seam lives at the UI boundary).
+ * GraphQL endpoint by replaying the logged-in web client's own request
+ * (headers captured by the background webRequest listener, see x-auth.ts).
+ * Mirrors the role of lib/github/github-api.ts + lib/bilibili/bilibili-api.ts
+ * (URL builders, response normalization, structured errors, NO DB imports, NO
+ * UI copy — the i18n seam lives at the UI boundary).
  *
- * X has no free official API, so this reads the internal `BookmarkSearchTimeline`
- * GraphQL operation used by the web client. Anti-detection ("防风控") is a
- * first-class concern: serial cursor pagination with jittered pacing, proactive
- * rate-limit-remaining pausing, and 429 reset-respecting backoff.
+ * Request construction mirrors supermemory's browser-extension (utils/
+ * twitter-utils.ts): a hardcoded `Bookmarks` queryId + a static `features`
+ * object, `variables = {count, includePromotedContent:false, cursor?}`, and NO
+ * `fieldToggles`. Auth is the FULL captured `Cookie` + `x-csrf-token` +
+ * `authorization` replayed verbatim (see x-auth.ts for why the old
+ * `chrome.cookies.get(auth_token, ct0)` approach returned nothing).
  *
- * Auth mirrors bilibili: cookies read via `chrome.cookies.get` and a hand-built
- * `Cookie` header (Chrome lets extension pages with host_permissions set the
- * otherwise-forbidden `Cookie` header). Origin/Referer are set by a DNR rule
- * (see public/rules.json rule id:2 — Chrome strips fetch-set Origin/Referer from
- * an extension page context).
+ * Origin/Referer are set by a DNR rule (public/rules.json rule id:2 — Chrome
+ * strips fetch-set Origin/Referer from an extension page context).
  *
  * Pure helpers (parseTweets / extractBottomCursor / mapTweetToRow /
- * buildBookmarksUrl / parseQueryIdFromBundle) are exported for unit tests.
+ * buildBookmarksUrl) are exported for unit tests.
  */
+
+import { getXAuth, type XAuth } from './x-auth';
+
+// Auth lives in x-auth.ts (session-storage-backed capture); re-export so the
+// sync service keeps a single `./x-api` import surface.
+export { getXAuth, type XAuth } from './x-auth';
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-const X_COOKIE_URL = 'https://x.com';
 const GRAPHQL_BASE = 'https://x.com/i/api/graphql';
+const BOOKMARKS_OPERATION = 'Bookmarks';
 
-/** X's shared PUBLIC web-client bearer (same for all logged-in web requests —
- *  NOT an OAuth token). Verbatim from the PRD Technical Notes. */
-const PUBLIC_WEB_BEARER =
-  'AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA';
+/**
+ * The `Bookmarks` list-all queryId. Hardcoded (mirrors supermemory) — X rotates
+ * queryIds per web release, but stale ids empirically keep working server-side
+ * for this operation. NOT `BookmarkSearchTimeline` (that's the SEARCH op, whose
+ * server-validated `querySource` enum rejects the list-all use case). If a sync
+ * throws a 404/queryId error, refresh this from a live x.com bookmarks request.
+ */
+const BOOKMARKS_QUERY_ID = 'xLjCVTqYWz8CGSprLU349w';
 
-/** The current operation name (renamed ~2026-02 from `Bookmarks`). */
-const BOOKMARKS_OPERATION = 'BookmarkSearchTimeline';
-
-/** Last-resort fallback queryId (VOLATILE — X rotates these per client release;
- *  resolveBookmarksQueryId() attempts a runtime lookup first, see D7). */
-const FALLBACK_QUERY_ID = 'fHKoSa-2dbV1UbhUy3EvcA';
+/**
+ * Static `features` map for the Bookmarks operation (verbatim from supermemory
+ * utils/twitter-utils.ts TWITTER_API_FEATURES). Every key the operation
+ * declares must be present (a missing key is an HTTP 400 "features cannot be
+ * null"); values only shape the response. Paired with BOOKMARKS_QUERY_ID above
+ * — refresh both together if X starts rejecting the request.
+ */
+const TWITTER_API_FEATURES: Record<string, boolean> = {
+  graphql_timeline_v2_bookmark_timeline: true,
+  responsive_web_graphql_exclude_directive_enabled: true,
+  responsive_web_graphql_skip_user_profile_image_extensions_enabled: false,
+  responsive_web_graphql_timeline_navigation_enabled: true,
+  responsive_web_enhance_cards_enabled: false,
+  rweb_tipjar_consumption_enabled: true,
+  responsive_web_twitter_article_notes_tab_enabled: true,
+  creator_subscriptions_tweet_preview_api_enabled: true,
+  freedom_of_speech_not_reach_fetch_enabled: true,
+  standardized_nudges_misinfo: true,
+  tweet_with_visibility_results_prefer_gql_limited_actions_policy_enabled: true,
+  longform_notetweets_rich_text_read_enabled: true,
+  longform_notetweets_inline_media_enabled: true,
+  responsive_web_media_download_video_enabled: false,
+  responsive_web_text_conversations_enabled: false,
+  creator_subscriptions_quote_tweet_preview_enabled: true,
+  view_counts_everywhere_api_enabled: true,
+  c9s_tweet_anatomy_moderator_badge_enabled: true,
+  graphql_is_translatable_rweb_tweet_is_translatable_enabled: true,
+  tweetypie_unmention_optimization_enabled: true,
+  responsive_web_twitter_article_tweet_consumption_enabled: true,
+  tweet_awards_web_tipping_enabled: true,
+  communities_web_enable_tweet_community_results_fetch: true,
+  responsive_web_edit_tweet_api_enabled: true,
+  longform_notetweets_consumption_enabled: true,
+  articles_preview_enabled: true,
+  rweb_video_timestamps_enabled: true,
+  verified_phone_label_enabled: true,
+};
 
 // --- Anti-detection pacing constants (research/anti-detection-strategy.md §2) ---
-/** Matches the real web client exactly = lowest fingerprint risk. */
-const PAGE_SIZE = 20;
+/** Rows per page. supermemory uses 100 (fewer requests → faster full sync). */
+const PAGE_SIZE = 100;
 /** Per-page base delay before the next request. */
-const BASE_DELAY_MS = 500;
+const BASE_DELAY_MS = 1000;
 /** Added as `Math.random() * JITTER_MS` to simulate human scroll cadence. */
 const JITTER_MS = 500;
 /** Pause until reset when `x-rate-limit-remaining` drops to/below this. */
@@ -55,38 +96,8 @@ const BACKOFF_BASE_MS = 1000;
 /** Floor when `x-rate-limit-reset` is in the past (clock skew). */
 const MIN_SLEEP_ON_RESET_MS = 1000;
 
-/**
- * GraphQL `features` — ONLY `true`-valued keys (X treats missing keys as false).
- * Keeping this minimal avoids the 414 URI-Too-Long trap (the GET query string
- * bloats fast). `graphql_timeline_v2_bookmark_timeline` is the bookmark-specific
- * toggle; the rest are the responsive_web set the endpoint requires.
- */
-const BOOKMARK_FEATURES: Record<string, boolean> = {
-  graphql_timeline_v2_bookmark_timeline: true,
-  rweb_tipjar_consumption_enabled: true,
-  responsive_web_graphql_exclude_directive_enabled: true,
-  responsive_web_graphql_skip_user_profile_image_extensions_enabled: true,
-  responsive_web_graphql_timeline_navigation_enabled: true,
-  creator_subscriptions_tweet_preview_api_enabled: true,
-  communities_web_enable_tweet_community_results_fetch: true,
-  c9s_tweet_anatomy_moderator_badge_enabled: true,
-  articles_preview_enabled: true,
-  tweetypie_unmention_optimization_enabled: true,
-  responsive_web_edit_tweet_api_enabled: true,
-  graphql_is_translatable_rweb_tweet_is_translatable_enabled: true,
-  view_counts_everywhere_api_enabled: true,
-  longform_notetweets_consumption_enabled: true,
-  responsive_web_twitter_article_tweet_consumption_enabled: true,
-  tweet_awards_web_tipping_enabled: true,
-  creator_subscriptions_quote_tweet_preview_enabled: true,
-  freedom_of_speech_not_reach_fetch_enabled: true,
-  standardized_nudges_misinfo: true,
-  tweet_with_visibility_results_prefer_gql_limited_actions_policy_enabled: true,
-  rweb_video_timestamps_enabled: true,
-  longform_notetweets_rich_text_read_enabled: true,
-  longform_notetweets_inline_media_enabled: true,
-  responsive_web_enhance_cards_enabled: false, // deliberately false → omitted
-};
+/** Appended to thrown error messages so a live failure names the queryId used. */
+const DIAG_SUFFIX = ` [queryId=${BOOKMARKS_QUERY_ID}]`;
 
 // ---------------------------------------------------------------------------
 // Errors — structured, no UI copy (i18n seam is at the UI boundary)
@@ -113,13 +124,6 @@ export class XRateLimitError extends Error {
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-export interface XAuth {
-  /** ct0 cookie — doubles as the x-csrf-token (X double-submit CSRF check). */
-  ct0: string;
-  /** auth_token cookie — the login session. */
-  authToken: string;
-}
 
 /** Media attached to a bookmarked tweet (photo/video/animated_gif). */
 export interface XMedia {
@@ -153,124 +157,44 @@ export interface FetchBookmarksOptions {
 }
 
 // ---------------------------------------------------------------------------
-// Auth — requires chrome.cookies (Extension Page / Background SW)
-// ---------------------------------------------------------------------------
-
-/** Read ct0 + auth_token from x.com cookies. Null if either missing/expired. */
-export async function getXAuth(): Promise<XAuth | null> {
-  const [ct0Cookie, authCookie] = await Promise.all([
-    chrome.cookies.get({ url: X_COOKIE_URL, name: 'ct0' }),
-    chrome.cookies.get({ url: X_COOKIE_URL, name: 'auth_token' }),
-  ]);
-
-  if (!ct0Cookie?.value || !authCookie?.value) return null;
-
-  const now = Date.now() / 1000;
-  if (ct0Cookie.expirationDate && ct0Cookie.expirationDate < now) return null;
-  if (authCookie.expirationDate && authCookie.expirationDate < now) return null;
-
-  return { ct0: ct0Cookie.value, authToken: authCookie.value };
-}
-
-// ---------------------------------------------------------------------------
-// queryId resolution (runtime, D7) — mirrors bird's update-query-ids.ts
-// ---------------------------------------------------------------------------
-
-/**
- * Parse `{ operationName ↔ queryId }` pairs out of an X client-web JS bundle.
- * The bundle contains fragments like `queryId:"abc123",operationName:"BookmarkSearchTimeline"`
- * (order varies), so we match both orderings. Pure — exported for unit tests.
- */
-export function parseQueryIdFromBundle(bundle: string, operation: string): string | null {
-  // operationName then queryId
-  const re1 = new RegExp(
-    `operationName:"${operation}"[^}]*?queryId:"([\\w-]+)"`,
-  );
-  // queryId then operationName
-  const re2 = new RegExp(
-    `queryId:"([\\w-]+)"[^}]*?operationName:"${operation}"`,
-  );
-  return bundle.match(re1)?.[1] ?? bundle.match(re2)?.[1] ?? null;
-}
-
-/**
- * Best-effort runtime resolution of the BookmarkSearchTimeline queryId.
- * Fetches the x.com home HTML, finds a client-web JS bundle, and greps the
- * operation↔queryId pair. ANY failure degrades gracefully to the hardcoded
- * fallback (D7 — never rely solely on the hardcode; also never crash sync).
- */
-export async function resolveBookmarksQueryId(): Promise<string> {
-  try {
-    const homeRes = await fetch('https://x.com/', { credentials: 'include' });
-    if (!homeRes.ok) return FALLBACK_QUERY_ID;
-    const html = await homeRes.text();
-
-    // Client-web bundles are referenced on abs.twimg.com. Collect candidates
-    // that plausibly carry GraphQL operation maps (main/api bundles).
-    const bundleUrls = [
-      ...new Set(
-        html.match(/https:\/\/abs\.twimg\.com\/responsive-web\/[^"']+\.js/g) ?? [],
-      ),
-    ].filter((u) => /(main|api|bundle)/.test(u));
-
-    for (const url of bundleUrls.slice(0, 8)) {
-      const res = await fetch(url, { credentials: 'omit' });
-      if (!res.ok) continue;
-      const code = await res.text();
-      const id = parseQueryIdFromBundle(code, BOOKMARKS_OPERATION);
-      if (id) return id;
-    }
-  } catch (err) {
-    console.warn('[x-api] queryId runtime resolution failed, using fallback:', err);
-  }
-  return FALLBACK_QUERY_ID;
-}
-
-// ---------------------------------------------------------------------------
 // URL / header builders (pure where possible)
 // ---------------------------------------------------------------------------
 
-/** Only the `true`-valued feature keys (414 trap mitigation). */
-function trueFeatures(): Record<string, boolean> {
-  const out: Record<string, boolean> = {};
-  for (const [k, v] of Object.entries(BOOKMARK_FEATURES)) if (v) out[k] = true;
-  return out;
-}
-
 /**
- * Build the BookmarkSearchTimeline GET URL. `variables` is isomorphic to
- * SearchTimeline: empty rawQuery = all bookmarks newest-first; first page omits
- * cursor. `features` carries only true keys. Pure — exported for unit tests.
+ * Build the Bookmarks GET URL. Variables mirror the real bookmarks page:
+ * `{count, includePromotedContent:false}` + cursor from page 2 on. `features`
+ * carries the full static map the operation declares (missing keys are an HTTP
+ * 400, not "false"); NO fieldToggles (supermemory omits them). Pure — exported
+ * for unit tests.
  */
-export function buildBookmarksUrl(
-  queryId: string,
-  opts: { count?: number; cursor?: string } = {},
-): string {
+export function buildBookmarksUrl(opts: { count?: number; cursor?: string } = {}): string {
   const variables: Record<string, unknown> = {
     count: opts.count ?? PAGE_SIZE,
-    querySource: '',
-    rawQuery: '',
+    includePromotedContent: false,
   };
   if (opts.cursor) variables.cursor = opts.cursor;
 
   const params = new URLSearchParams({
+    features: JSON.stringify(TWITTER_API_FEATURES),
     variables: JSON.stringify(variables),
-    features: JSON.stringify(trueFeatures()),
   });
-  return `${GRAPHQL_BASE}/${queryId}/${BOOKMARKS_OPERATION}?${params.toString()}`;
+  return `${GRAPHQL_BASE}/${BOOKMARKS_QUERY_ID}/${BOOKMARKS_OPERATION}?${params.toString()}`;
 }
 
+/**
+ * Replay the captured web-client headers verbatim (mirrors supermemory
+ * createTwitterAPIHeaders). Chrome lets extension pages (with host permission)
+ * set the otherwise-forbidden Cookie header; Origin/Referer are set by the DNR
+ * rule.
+ */
 function buildHeaders(auth: XAuth): Record<string, string> {
   return {
-    authorization: `Bearer ${PUBLIC_WEB_BEARER}`,
+    authorization: auth.auth,
     'content-type': 'application/json',
-    'x-csrf-token': auth.ct0,
-    'x-twitter-auth-type': 'OAuth2Session',
-    'x-twitter-active-user': 'yes',
-    'x-twitter-client-language': 'en',
-    // Chrome lets extension pages (with host permission) set the otherwise
-    // forbidden Cookie header; Origin/Referer are set by the DNR rule.
-    Cookie: `auth_token=${auth.authToken}; ct0=${auth.ct0}`,
+    'x-csrf-token': auth.csrf,
+    Cookie: auth.cookie,
+    Accept: '*/*',
+    'Accept-Language': 'en-US,en;q=0.9',
   };
 }
 
@@ -398,20 +322,18 @@ export function extractBottomCursor(instructions: RawInstruction[]): string | nu
   return null;
 }
 
-/** Navigate to `data.search_by_raw_query.bookmarks_search_timeline.timeline.instructions`. */
+/** Navigate to `data.bookmark_timeline_v2.timeline.instructions`. */
 function extractInstructions(json: unknown): RawInstruction[] {
   const timeline = (json as {
     data?: {
       bookmark_timeline_v2?: { timeline?: { instructions?: RawInstruction[] } };
-      search_by_raw_query?: {
-        bookmarks_search_timeline?: { timeline?: { instructions?: RawInstruction[] } };
-      };
+      bookmark_collection_timeline?: { timeline?: { instructions?: RawInstruction[] } };
     };
   })?.data;
   return (
-    timeline?.search_by_raw_query?.bookmarks_search_timeline?.timeline?.instructions ??
-    // Defensive: tolerate the old Bookmarks wrapper shape too.
     timeline?.bookmark_timeline_v2?.timeline?.instructions ??
+    // Defensive: tolerate the bookmark-folder wrapper shape too.
+    timeline?.bookmark_collection_timeline?.timeline?.instructions ??
     []
   );
 }
@@ -424,6 +346,15 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** First 300 chars of the response body, for diagnosable thrown errors. */
+async function bodySnippet(res: Response): Promise<string> {
+  try {
+    return (await res.text()).slice(0, 300);
+  } catch {
+    return '';
+  }
+}
+
 /** Milliseconds until the reset timestamp header, floored (clock-skew safe). */
 function sleepUntilReset(resetHeader: string | null): number {
   const reset = resetHeader ? Number(resetHeader) * 1000 : NaN;
@@ -431,10 +362,32 @@ function sleepUntilReset(resetHeader: string | null): number {
   return Math.max(reset - Date.now(), MIN_SLEEP_ON_RESET_MS);
 }
 
-/** GraphQL 200-with-error: errors[].code === 88 = rate limited (code:88). */
-function isRateLimitBody(json: unknown): boolean {
-  const errs = (json as { errors?: { code?: number }[] })?.errors;
-  return Array.isArray(errs) && errs.some((e) => e.code === 88);
+/** A GraphQL error entry as it appears in a 200-with-errors body. */
+interface GraphQLError {
+  code?: number;
+  message?: string;
+}
+
+/** The `errors[]` array of a 200-with-errors body, or [] when absent. */
+function graphqlErrors(json: unknown): GraphQLError[] {
+  const errs = (json as { errors?: GraphQLError[] })?.errors;
+  return Array.isArray(errs) ? errs : [];
+}
+
+/**
+ * True when the 200 body carries the timeline wrapper we parse. An
+ * empty-instructions timeline is still true — a legit "zero bookmarks" result.
+ */
+function hasTimelineShape(json: unknown): boolean {
+  const data = (json as {
+    data?: {
+      bookmark_timeline_v2?: unknown;
+      bookmark_collection_timeline?: unknown;
+    };
+  })?.data;
+  return (
+    data?.bookmark_timeline_v2 !== undefined || data?.bookmark_collection_timeline !== undefined
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -452,7 +405,6 @@ export async function fetchAllBookmarks(
   onProgress?: BookmarksProgressCallback,
   opts: FetchBookmarksOptions = {},
 ): Promise<XRawBookmark[]> {
-  const queryId = await resolveBookmarksQueryId();
   const headers = buildHeaders(auth);
 
   const all: XRawBookmark[] = [];
@@ -461,7 +413,7 @@ export async function fetchAllBookmarks(
 
   while (true) {
     page += 1;
-    const url = buildBookmarksUrl(queryId, { count: PAGE_SIZE, cursor });
+    const url = buildBookmarksUrl({ count: PAGE_SIZE, cursor });
     const { json, res } = await fetchPageWithBackoff(url, headers);
 
     const instructions = extractInstructions(json);
@@ -502,15 +454,22 @@ export async function fetchAllBookmarks(
  * Fetch one page. On 429 / code:88 → sleep to reset, retry the SAME page. On
  * transient 5xx → capped exponential backoff + jitter. 401/403 → XAuthError.
  * Exhausted rate-limit retries → XRateLimitError.
+ *
+ * A HTTP 200 is NOT trusted blindly: X returns server-side rejections as 200
+ * bodies carrying a GraphQL `errors[]` array (any code ≠ 88), and a wrong
+ * queryId/features set can yield a 200 whose body has no timeline at all.
+ * Either case is thrown (never returned as an empty result) so the sync
+ * surfaces the real reason instead of a silent "0 fetched, success" (the
+ * 07-16 root cause). Exported for isolated fetch-mock tests.
  */
-async function fetchPageWithBackoff(
+export async function fetchPageWithBackoff(
   url: string,
   headers: Record<string, string>,
 ): Promise<{ json: unknown; res: Response }> {
   let attempt = 0;
 
   while (true) {
-    const res = await fetch(url, { headers, credentials: 'include' });
+    const res = await fetch(url, { headers, credentials: 'omit' });
 
     if (res.status === 401) {
       throw new XAuthError('X session invalid or expired (401)');
@@ -534,18 +493,32 @@ async function fetchPageWithBackoff(
     }
 
     if (res.status >= 500) {
-      if (attempt >= MAX_RETRIES) throw new Error(`X API HTTP ${res.status}`);
+      if (attempt >= MAX_RETRIES) {
+        throw new Error(`X API HTTP ${res.status}: ${await bodySnippet(res)}${DIAG_SUFFIX}`);
+      }
       attempt += 1;
       await sleep(BACKOFF_BASE_MS * 2 ** (attempt - 1) + Math.random() * JITTER_MS);
       continue;
     }
 
-    if (!res.ok) throw new Error(`X API HTTP ${res.status}`);
+    // X's error bodies carry the actual diagnosis (e.g. "The following
+    // features cannot be null: …", stale-queryId 404/422) — never discard them.
+    if (!res.ok) throw new Error(`X API HTTP ${res.status}: ${await bodySnippet(res)}${DIAG_SUFFIX}`);
 
-    const json = await res.json();
+    // Read the body ONCE (Response body is single-use) so both the JSON parse
+    // and the raw-snippet diagnostic below can see it.
+    const rawBody = await res.text();
+    let json: unknown;
+    try {
+      json = JSON.parse(rawBody);
+    } catch {
+      throw new Error(`X API 200 with non-JSON body: ${rawBody.slice(0, 300)}${DIAG_SUFFIX}`);
+    }
+
+    const errors = graphqlErrors(json);
 
     // 200 with body-level rate limit (code:88) — treat like 429.
-    if (isRateLimitBody(json)) {
+    if (errors.some((e) => e.code === 88)) {
       const resetHeader = res.headers.get('x-rate-limit-reset');
       if (attempt >= MAX_RETRIES) {
         throw new XRateLimitError(
@@ -556,6 +529,28 @@ async function fetchPageWithBackoff(
       attempt += 1;
       await sleep(sleepUntilReset(resetHeader));
       continue;
+    }
+
+    // 200 carrying a GraphQL rejection (any code ≠ 88) — X returns server-side
+    // errors as HTTP 200. Surface it instead of letting extractInstructions
+    // silently yield [] → a lying "0 fetched" sync.
+    if (errors.length > 0) {
+      const detail = errors
+        .map((e) => `code ${e.code ?? '?'}: ${e.message ?? '(no message)'}`)
+        .join('; ');
+      throw new Error(
+        `X API 200 with GraphQL errors — ${detail}. Body: ${rawBody.slice(0, 300)}${DIAG_SUFFIX}`,
+      );
+    }
+
+    // 200 with NEITHER errors NOR the timeline wrapper — an unexpected shape
+    // (e.g. a stale queryId/features silently degraded). Throw, don't return [].
+    // A 200 WITH the timeline but empty instructions is a legit "zero
+    // bookmarks" result and passes this guard (hasTimelineShape is true).
+    if (!hasTimelineShape(json)) {
+      throw new Error(
+        `unexpected X response shape (no bookmark_timeline_v2, no errors): ${rawBody.slice(0, 300)}${DIAG_SUFFIX}`,
+      );
     }
 
     return { json, res };
