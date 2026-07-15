@@ -53,6 +53,7 @@ WXT 入口点及运行时角色总览，详细结构见对应目录 `CLAUDE.md`�
 - `entrypoints/app/sections/bilibili/CLAUDE.md` — B站收藏夹页（sidebar+grid）
 - `entrypoints/app/sections/github-stars/CLAUDE.md` — GitHub Stars 收藏页（语言 chips + 仓库卡片 grid + 一键全量同步）
 - `entrypoints/app/sections/bookmarks/CLAUDE.md` — 浏览器书签收藏页（文件夹 chips + 书签卡片 grid + 挂载自动同步，无同步按钮）
+- `entrypoints/app/sections/x/CLAUDE.md` — X（Twitter）书签收藏页（作者 chips + 推文卡片 grid + 手动同步按钮 + 未登录空态，凭据无 UI 半 D6）
 
 ### B站视频页 Content Script
 - `entrypoints/bilibili-video.content/CLAUDE.md` — 右侧栏面板 UI 挂载 + Shadow DOM 约定
@@ -64,6 +65,7 @@ WXT 入口点及运行时角色总览，详细结构见对应目录 `CLAUDE.md`�
 - `lib/bilibili/inject/CLAUDE.md` — Main World 注入状态机 + SPA 路由监控
 - `lib/github/CLAUDE.md` — GitHub Star 收录领域（REST API + 同步/查询服务，insert-only）
 - `lib/bookmarks/CLAUDE.md` — 浏览器书签收录领域（`chrome.bookmarks` 本地读取 + normalizeUrl 去重 + 同步/查询，insert-only，无远程凭证）
+- `lib/x/CLAUDE.md` — X（Twitter）书签收录领域（私有 GraphQL `BookmarkSearchTimeline` + cookie 认证 + 防风控游标分页 + 同步/查询，insert-only，tweet 文本 chunk）
 
 ### 转录 / 后台
 - `lib/subtitle/CLAUDE.md` — 通用字幕共享类型（平台无关）

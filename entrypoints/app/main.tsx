@@ -20,6 +20,7 @@ const DashboardPage = lazy(() => import('./pages/dashboard'));
 const BilibiliPage = lazy(() => import('./pages/bilibili'));
 const GithubStarsPage = lazy(() => import('./pages/github-stars'));
 const BookmarksPage = lazy(() => import('./pages/bookmarks'));
+const XPage = lazy(() => import('./pages/x'));
 const SettingsPage = lazy(() => import('./pages/settings'));
 
 function LoadingFallback() {
@@ -64,6 +65,7 @@ const router = createHashRouter([
           { path: 'collections/github', element: <GithubStarsPage /> },
           { path: 'collections/bookmarks', element: <BookmarksPage /> },
           { path: 'collections/bookmarks/:folderId', element: <BookmarksPage /> },
+          { path: 'collections/x', element: <XPage /> },
           { path: 'settings', element: <SettingsPage /> },
         ],
       },

@@ -34,6 +34,10 @@ export const navData: NavItem[] = [
         title: 'nav.bookmarks',
         path: '/collections/bookmarks',
       },
+      {
+        title: 'nav.xBookmarks',
+        path: '/collections/x',
+      },
     ],
   },
   {

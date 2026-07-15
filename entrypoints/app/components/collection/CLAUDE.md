@@ -22,6 +22,7 @@
 - `sections/bilibili/`（B站）：bilibili-view（StateBox×3 / SectionTitleBar / SearchField 受控（服务端 keyword 搜当前夹）/ CardGrid+分页）、folder-chips（ChipRowShell+FilterChip，保留 loading 骨架/空态逻辑）、video-grid-skeleton（CardGridSkeleton + Card 媒体骨架）
 - `sections/github-stars/`：github-stars-view（StateBox×4 / SectionTitleBar / SearchField 受控 / CardGrid+分页 / CardGridSkeleton + rounded 平板）、language-chips（ChipRowShell+FilterChip，保留 All chip+色点逻辑）
 - `sections/bookmarks/`：bookmarks-view（StateBox×3 / SectionTitleBar **无 onSync 无按钮** / SearchField 受控 / CardGrid+分页）、folder-chips（ChipRowShell+FilterChip，All chip+文件夹名）、bookmark-grid-skeleton（CardGridSkeleton + rounded 96）
+- `sections/x/`：x-view（StateBox×4 / SectionTitleBar 手动 onSync / SearchField 受控 / CardGrid+分页 / SyncProgressBar 恒 indeterminate）、author-chips（ChipRowShell+FilterChip，All chip+作者名 count）、tweet-grid-skeleton（CardGridSkeleton + rounded 200）
 - `components/tags/`：tagged-item-grid（StateBox minHeight 240 空态 + CardGrid）、tag-filter-chips（ChipRowShell headerExtra 清除按钮 + FilterChip）
 
 平台 N 接入 = 编排自己的 view + 提供平台卡片，脚手架零复制。

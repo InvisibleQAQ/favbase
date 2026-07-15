@@ -35,6 +35,12 @@ const bilibiliHostPermissions = [
 
 const githubHostPermissions = ['https://api.github.com/*'];
 
+// X (Twitter) bookmarks: the private GraphQL endpoint on x.com + the client-web
+// JS bundle host (abs.twimg.com) for runtime queryId resolution. Cookies are
+// read via chrome.cookies (perm already present); Origin/Referer are rewritten
+// by the DNR rule (rules.json id:2).
+const xHostPermissions = ['*://x.com/*', 'https://abs.twimg.com/*'];
+
 export default defineConfig({
   modules: ['@wxt-dev/module-react'],
   manifest: {
@@ -51,7 +57,12 @@ export default defineConfig({
       'bookmarks',
       'favicon',
     ],
-    host_permissions: [...bilibiliHostPermissions, ...githubHostPermissions, ...providerHostPermissions],
+    host_permissions: [
+      ...bilibiliHostPermissions,
+      ...githubHostPermissions,
+      ...xHostPermissions,
+      ...providerHostPermissions,
+    ],
     // Custom (user-entered) API domains are unknown at build time; grant them at
     // runtime via lib/permissions/host-access.ts (must run in a user gesture).
     optional_host_permissions: ['https://*/*'],
