@@ -34,7 +34,9 @@ import { TweetGridSkeleton } from './tweet-grid-skeleton';
 
 /** Platform key for all tag operations in this (x-only) section. */
 const PLATFORM = 'x';
-const X_URL = 'https://x.com';
+// Deep-link to the bookmarks page: logged-out users get X's own login flow
+// first, logged-in users land right where the floating fetch button lives.
+const X_BOOKMARKS_URL = 'https://x.com/i/bookmarks';
 
 // ---------------------------------------------------------------------------
 // i18n seam: structured sync errors from the hook → user-facing copy here.
@@ -57,8 +59,46 @@ function syncErrorMessage(error: XSyncError): string {
 // Dashed-box states — shared StateBox shell, x copy/actions here
 // ---------------------------------------------------------------------------
 
+/** Primary action of both empty states: open x.com/i/bookmarks (login-gated by
+ *  X itself), where the floating fetch button does the import in place. */
+function OpenBookmarksButton() {
+  const { t } = useTranslation();
+  return (
+    <Button
+      component={Link}
+      href={X_BOOKMARKS_URL}
+      target="_blank"
+      rel="noopener"
+      variant="contained"
+      startIcon={<Iconify icon="mdi:twitter" width={18} />}
+    >
+      {t('x.openBookmarksPage')}
+    </Button>
+  );
+}
+
+function SyncNowButton({ syncing, onSync }: { syncing: boolean; onSync: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <Button
+      variant="outlined"
+      onClick={onSync}
+      disabled={syncing}
+      startIcon={
+        syncing ? (
+          <CircularProgress size={16} color="inherit" />
+        ) : (
+          <Iconify icon="solar:restart-bold" width={18} />
+        )
+      }
+    >
+      {t('x.syncNow')}
+    </Button>
+  );
+}
+
 /** No valid x.com session (surfaced when a sync throws XAuthError) — guide the
- *  user to log in on x.com, then sync again. */
+ *  user to log in on X and use the on-page fetch button. */
 function NotLoggedInState({ syncing, onSync }: { syncing: boolean; onSync: () => void }) {
   const { t } = useTranslation();
   return (
@@ -68,30 +108,16 @@ function NotLoggedInState({ syncing, onSync }: { syncing: boolean; onSync: () =>
       description={t('x.notLoggedInDesc')}
       action={
         <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
-          <Button component={Link} href={X_URL} target="_blank" rel="noopener" variant="outlined">
-            {t('x.openX')}
-          </Button>
-          <Button
-            variant="contained"
-            onClick={onSync}
-            disabled={syncing}
-            startIcon={
-              syncing ? (
-                <CircularProgress size={16} color="inherit" />
-              ) : (
-                <Iconify icon="solar:restart-bold" width={18} />
-              )
-            }
-          >
-            {t('x.syncNow')}
-          </Button>
+          <OpenBookmarksButton />
+          <SyncNowButton syncing={syncing} onSync={onSync} />
         </Box>
       }
     />
   );
 }
 
-/** Never synced (or synced empty) — guide the user to sync. */
+/** Never synced (or synced empty) — guide the user to the X bookmarks page
+ *  (floating fetch button), with in-app sync as the secondary path. */
 function EmptyLibraryState({ syncing, onSync }: { syncing: boolean; onSync: () => void }) {
   const { t } = useTranslation();
   return (
@@ -100,21 +126,10 @@ function EmptyLibraryState({ syncing, onSync }: { syncing: boolean; onSync: () =
       title={t('x.emptyTitle')}
       description={t('x.emptyDesc')}
       action={
-        <Button
-          variant="contained"
-          onClick={onSync}
-          disabled={syncing}
-          startIcon={
-            syncing ? (
-              <CircularProgress size={16} color="inherit" />
-            ) : (
-              <Iconify icon="solar:restart-bold" width={18} />
-            )
-          }
-          sx={{ mt: 1 }}
-        >
-          {t('x.syncNow')}
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+          <OpenBookmarksButton />
+          <SyncNowButton syncing={syncing} onSync={onSync} />
+        </Box>
       }
     />
   );

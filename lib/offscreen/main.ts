@@ -2,6 +2,7 @@ import type { OffscreenRequest } from './types';
 import type { TranscribeErrorInfo } from '@/lib/transcription/types';
 import * as ffmpeg from './ffmpeg-subsystem';
 import * as db from './db-subsystem';
+import { runXSync } from './x-sync';
 
 ffmpeg.start();
 db.start();
@@ -34,6 +35,12 @@ chrome.runtime.onMessage.addListener(
         .catch((err) =>
           sendResponse({ success: false, error: err as TranscribeErrorInfo }),
         );
+      return true;
+    }
+
+    if (msg.type === 'OFFSCREEN_X_SYNC') {
+      // runXSync never rejects — it returns a discriminated success/error result.
+      runXSync(msg.sessionId, msg.auth).then(sendResponse);
       return true;
     }
 

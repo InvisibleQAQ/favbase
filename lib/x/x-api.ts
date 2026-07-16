@@ -13,14 +13,17 @@
  * `authorization` replayed verbatim (see x-auth.ts for why the old
  * `chrome.cookies.get(auth_token, ct0)` approach returned nothing).
  *
- * Origin/Referer are set by a DNR rule (public/rules.json rule id:2 — Chrome
- * strips fetch-set Origin/Referer from an extension page context).
+ * No DNR / Origin / Referer tricks (supermemory has none and works): a
+ * host-permitted extension-context fetch gets same-site treatment (no
+ * browser-set Origin) and Chromium never sends chrome-extension:// referrers
+ * to web origins. The fetch also passes NO `credentials` option — 'omit'
+ * strips the Cookie header (see fetchPageWithBackoff).
  *
  * Pure helpers (parseTweets / extractBottomCursor / mapTweetToRow /
  * buildBookmarksUrl) are exported for unit tests.
  */
 
-import { getXAuth, type XAuth } from './x-auth';
+import type { XAuth } from './x-auth';
 
 // Auth lives in x-auth.ts (session-storage-backed capture); re-export so the
 // sync service keeps a single `./x-api` import surface.
@@ -103,10 +106,22 @@ const DIAG_SUFFIX = ` [queryId=${BOOKMARKS_QUERY_ID}]`;
 // Errors — structured, no UI copy (i18n seam is at the UI boundary)
 // ---------------------------------------------------------------------------
 
+/**
+ * Why auth failed — the two modes need different user actions:
+ * - 'no-token': nothing captured yet (session storage empty) → refresh x.com
+ *   so the web client fires an API request the webRequest listener can capture.
+ * - 'rejected': we HAD tokens but X returned 401/403 → the session is stale or
+ *   the replay is broken → re-login to x.com / re-capture.
+ */
+export type XAuthFailReason = 'no-token' | 'rejected';
+
 export class XAuthError extends Error {
-  constructor(message: string) {
+  readonly reason: XAuthFailReason;
+
+  constructor(message: string, reason: XAuthFailReason) {
     super(message);
     this.name = 'XAuthError';
+    this.reason = reason;
   }
 }
 
@@ -183,9 +198,11 @@ export function buildBookmarksUrl(opts: { count?: number; cursor?: string } = {}
 
 /**
  * Replay the captured web-client headers verbatim (mirrors supermemory
- * createTwitterAPIHeaders). Chrome lets extension pages (with host permission)
- * set the otherwise-forbidden Cookie header; Origin/Referer are set by the DNR
- * rule.
+ * createTwitterAPIHeaders). Chrome lets extension contexts (with host
+ * permission) set the otherwise-forbidden Cookie header. No Origin/Referer
+ * games needed: host-permitted extension fetches get same-site treatment (no
+ * browser-set Origin) and Chromium never sends chrome-extension:// referrers
+ * to web origins — exactly the profile supermemory's working requests have.
  */
 function buildHeaders(auth: XAuth): Record<string, string> {
   return {
@@ -469,14 +486,20 @@ export async function fetchPageWithBackoff(
   let attempt = 0;
 
   while (true) {
-    const res = await fetch(url, { headers, credentials: 'omit' });
+    // Mirror supermemory's fetch verbatim: NO `credentials` option. Do NOT use
+    // `credentials:'omit'` — omit means "exclude credentials (cookies) from
+    // this request", which makes Chromium drop the Cookie header entirely, so
+    // X received a cookieless request and answered 401/403 (2026-07 root
+    // cause). The explicit Cookie header is allowed here because extension
+    // contexts with host permission may set forbidden headers.
+    const res = await fetch(url, { method: 'GET', headers, redirect: 'follow' });
 
     if (res.status === 401) {
-      throw new XAuthError('X session invalid or expired (401)');
+      throw new XAuthError('X session invalid or expired (401)', 'rejected');
     }
     if (res.status === 403) {
       // 403 = ct0/csrf mismatch or auth_token expired — do not retry blindly.
-      throw new XAuthError('X CSRF/auth rejected (403) — re-login to x.com');
+      throw new XAuthError('X CSRF/auth rejected (403) — re-login to x.com', 'rejected');
     }
 
     if (res.status === 429) {

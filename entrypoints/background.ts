@@ -15,6 +15,7 @@ import {
   handleCacheSubtitle,
 } from '@/lib/background/cache-handlers';
 import { handleOpenAppPage } from '@/lib/background/app-handlers';
+import { handleXSyncStart, handleXSyncProgress } from '@/lib/background/x-handlers';
 import { captureXTokens } from '@/lib/x/x-auth';
 
 function createBackgroundContext(): BackgroundContext {
@@ -22,6 +23,7 @@ function createBackgroundContext(): BackgroundContext {
   const tabVideoIds = new Map<number, string>();
   const activeVideoIds = new Set<string>();
   const sessionTabMap = new Map<string, number>();
+  const xSyncTabMap = new Map<string, number>();
 
   return {
     sendToTab(tabId, message) {
@@ -77,6 +79,18 @@ function createBackgroundContext(): BackgroundContext {
       const videoId = tabVideoIds.get(tabId);
       return { tabId, videoId: videoId ?? '' };
     },
+
+    registerXSyncSession(sessionId, tabId) {
+      xSyncTabMap.set(sessionId, tabId);
+    },
+
+    unregisterXSyncSession(sessionId) {
+      xSyncTabMap.delete(sessionId);
+    },
+
+    resolveXSyncTab(sessionId) {
+      return xSyncTabMap.get(sessionId) ?? null;
+    },
   };
 }
 
@@ -91,7 +105,13 @@ export default defineBackground(() => {
   // x.com is required for the headers to be visible.
   browser.webRequest.onBeforeSendHeaders.addListener(
     (details) => {
-      captureXTokens(details).catch(() => {});
+      captureXTokens(details)
+        .then((captured) => {
+          // One log per (deduped) token set — diagnoses "no-token" sync errors:
+          // if this never appears, the capture chain itself is broken.
+          if (captured) console.log('[favbase x-auth] captured X session headers');
+        })
+        .catch((err) => console.warn('[favbase x-auth] token capture failed:', err));
       return undefined;
     },
     { urls: ['*://x.com/*'] },
@@ -109,6 +129,11 @@ export default defineBackground(() => {
         case 'OFFSCREEN_CHUNK_PROGRESS':
           handleOffscreenProgress(msg, sender, ctx);
           return;
+        case 'OFFSCREEN_X_SYNC_PROGRESS':
+          handleXSyncProgress(msg, ctx);
+          return;
+        case 'X_SYNC_START':
+          return handleXSyncStart(msg, sender, ctx);
         case 'TRANSCRIBE_ABORT':
           return handleTranscribeAbort(msg, sender, ctx);
         case 'TRANSCRIBE_AUDIO':

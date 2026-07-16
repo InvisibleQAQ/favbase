@@ -37,8 +37,9 @@ const githubHostPermissions = ['https://api.github.com/*'];
 
 // X (Twitter) bookmarks: the private GraphQL endpoint on x.com. Auth headers
 // (full Cookie + csrf + bearer) are captured from the logged-in web client's
-// own requests via the background webRequest listener (see lib/x/x-auth.ts);
-// Origin/Referer are rewritten by the DNR rule (rules.json id:2).
+// own requests via the background webRequest listener (see lib/x/x-auth.ts) and
+// replayed verbatim — no DNR / Origin / Referer rewrite (a host-permitted
+// extension-context fetch is treated as same-site, mirroring supermemory).
 const xHostPermissions = ['*://x.com/*'];
 
 export default defineConfig({

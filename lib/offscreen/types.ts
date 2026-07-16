@@ -1,5 +1,6 @@
 import type { SubtitleRow } from '@/lib/subtitle/types';
 import type { TranscribeErrorInfo } from '@/lib/transcription/types';
+import type { XAuth } from '@/lib/x/x-auth';
 
 export type SubsystemState = 'pending' | 'ready' | 'failed';
 
@@ -40,6 +41,26 @@ export interface OffscreenReleaseRequest {
   sessionId: string;
 }
 
+/** bg → offscreen: run the X bookmarks sync (offscreen holds PGlite directly). */
+export interface OffscreenXSyncRequest {
+  type: 'OFFSCREEN_X_SYNC';
+  sessionId: string;
+  /**
+   * Captured x.com auth, resolved by the background SW — offscreen documents
+   * have no `chrome.storage`, so tokens ride the message (same pattern as
+   * `apiKey` on OFFSCREEN_CHUNK_TRANSCRIBE).
+   */
+  auth: XAuth;
+}
+
+/** offscreen → bg: running fetched count during an X sync (cursor pagination). */
+export interface OffscreenXSyncProgressMessage {
+  type: 'OFFSCREEN_X_SYNC_PROGRESS';
+  sessionId: string;
+  fetchedCount: number;
+  page: number;
+}
+
 export interface OffscreenProgressMessage {
   type: 'OFFSCREEN_CHUNK_PROGRESS';
   sessionId: string;
@@ -63,9 +84,11 @@ export type OffscreenRequest =
   | OffscreenPrepareRequest
   | OffscreenTranscribeRequest
   | OffscreenReleaseRequest
-  | OffscreenStatusRequest;
+  | OffscreenStatusRequest
+  | OffscreenXSyncRequest;
 
 export type OffscreenMessage =
   | OffscreenProgressMessage
   | OffscreenResultMessage
-  | OffscreenErrorMessage;
+  | OffscreenErrorMessage
+  | OffscreenXSyncProgressMessage;

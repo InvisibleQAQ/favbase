@@ -6,11 +6,15 @@ import {
   getBookmarks,
   getAuthorCounts,
   getLastSyncedAt,
-  XAuthError,
-  XRateLimitError,
   type XBookmarkItem,
   type AuthorCount,
 } from '@/lib/x/x-sync-service';
+import { getXAuth } from '@/lib/x/x-auth';
+import { classifyXSyncError, type XSyncError } from '@/lib/x/x-messages';
+
+// Re-exported so the view keeps importing XSyncError from the hook; the type +
+// classifier now live in lib/x (shared with the x.com content-script path).
+export type { XSyncError };
 
 const PAGE_SIZE = 24;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -21,12 +25,6 @@ export interface XSyncProgress {
   fetchedCount: number;
   page: number;
 }
-
-/** Structured sync error — the view maps kinds to locale keys (i18n seam at UI). */
-export type XSyncError =
-  | { kind: 'auth' }
-  | { kind: 'rate-limit'; resetAt: Date | null }
-  | { kind: 'unknown'; message: string };
 
 export interface UseXBookmarksReturn {
   // Paged query results (from PGlite via x-sync-service — no API reads)
@@ -56,12 +54,6 @@ export interface UseXBookmarksReturn {
   syncProgress: XSyncProgress | null;
   syncError: XSyncError | null;
   sync: () => Promise<void>;
-}
-
-function classifySyncError(err: unknown): XSyncError {
-  if (err instanceof XAuthError) return { kind: 'auth' };
-  if (err instanceof XRateLimitError) return { kind: 'rate-limit', resetAt: err.resetAt };
-  return { kind: 'unknown', message: err instanceof Error ? err.message : String(err) };
 }
 
 export function useXBookmarks(): UseXBookmarksReturn {
@@ -186,7 +178,11 @@ export function useXBookmarks(): UseXBookmarksReturn {
     setSyncProgress(null);
     try {
       await initDbProxy();
-      await syncBookmarks((fetchedCount, pg) => {
+      // Auth is resolved HERE (app.html is a storage-capable trusted context);
+      // syncBookmarks itself never touches storage — it also runs in the
+      // offscreen document, which has no chrome.storage.
+      const auth = await getXAuth();
+      await syncBookmarks(auth, (fetchedCount, pg) => {
         if (!mountedRef.current) return;
         setSyncProgress({ fetchedCount, page: pg });
       });
@@ -196,7 +192,7 @@ export function useXBookmarks(): UseXBookmarksReturn {
     } catch (err) {
       console.error('[x-bookmarks] sync failed:', err);
       if (!mountedRef.current) return;
-      setSyncError(classifySyncError(err));
+      setSyncError(classifyXSyncError(err));
     } finally {
       if (mountedRef.current) {
         setSyncing(false);

@@ -23,7 +23,7 @@ pgvector 向量存储 + 语义检索 + 配置解析 + RAG 数据准备（chunker
   - `semanticSearchChunks(db, queryVec, { topK, minScore? })` — `ORDER BY embedding <=> $vec LIMIT topK`（cosine），`score = 1 - distance`，`minScore` 过滤。查询向量维度 ≠ 当前列维度抛 `EmbeddingDimensionError`（expected=列维度；查询向量来自当前模型天然匹配，不匹配 = 配置错乱，显式报错优于静默空结果）。向量作 `'[...]'::vector` 字符串参数（过 PortBridge 只是文本，RPC 安全）。返回 `{ chunkId, itemId, chunkText, score }[]`
   - `deleteItemEmbeddings(db, itemId)` / `clearAllEmbeddings(db)` — 置 embedding NULL
   - `getEmbeddingStats(db)` → `{ embeddedChunks, totalChunks }`
-- `index.ts` — barrel：re-export infra（from `@/lib/ai`）+ types + chunker + indexing + config + errors + vector-store，单一 import 面
+- `index.ts` — barrel：re-export infra（from `@/lib/ai`）+ types + chunker + indexing + config + errors + vector-store，单一 import 面。**注意 barrel 带 storage 副作用**：re-export `./config` → `@/lib/storage`，其模块加载期 `storage.defineItem` 会 eagerly `getItem`——**无 `chrome.storage` 的 context（offscreen 文档）可达的代码必须 leaf import**（如 `lib/x/x-sync-service.ts` 直接 import `./vector-store`）；type-only import barrel 无害（编译期擦除）
 
 ## 约定
 

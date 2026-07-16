@@ -28,11 +28,15 @@ import { authors } from '@/lib/database/entities/authors';
 import { items } from '@/lib/database/entities/items';
 import { itemSources } from '@/lib/database/entities/item-sources';
 import { itemContents } from '@/lib/database/entities/item-contents';
-import { replaceItemChunks } from '@/lib/embedding';
+// Leaf import (not the '@/lib/embedding' barrel): the barrel re-exports
+// ./config → '@/lib/storage', whose module-load `storage.defineItem` calls
+// eagerly hit chrome.storage — which offscreen documents (where this sync also
+// runs) don't have. Same rule as x-auth.ts importing '@/lib/storage/keys'.
+import { replaceItemChunks } from '@/lib/embedding/vector-store';
 import {
-  getXAuth,
   fetchAllBookmarks,
   XAuthError,
+  type XAuth,
   type XRawBookmark,
   type XMedia,
   type BookmarksProgressCallback,
@@ -119,15 +123,18 @@ export interface AuthorCount {
 // ---------------------------------------------------------------------------
 
 /**
- * One-shot bookmarks sync: read cookies → fetch ALL bookmarks (paged, paced,
- * incremental stop-on-known-id) → persist insert-only. Throws XAuthError when
- * no valid x.com session; fetch/rate-limit errors propagate to the caller.
+ * One-shot bookmarks sync: fetch ALL bookmarks (paged, paced, incremental
+ * stop-on-known-id) → persist insert-only. `auth` must be resolved by the
+ * CALLER via `getXAuth()` — offscreen documents have no `chrome.storage`, so
+ * only storage-capable contexts (app.html page, background SW) can read the
+ * captured tokens. Throws XAuthError when auth is null (not logged in / not
+ * captured yet); fetch/rate-limit errors propagate to the caller.
  */
 export async function syncBookmarks(
+  auth: XAuth | null,
   onProgress?: BookmarksProgressCallback,
 ): Promise<SyncBookmarksResult> {
-  const auth = await getXAuth();
-  if (!auth) throw new XAuthError('Not logged in to x.com');
+  if (!auth) throw new XAuthError('Not logged in to x.com', 'no-token');
 
   const db = getDb();
 

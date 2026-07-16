@@ -10,4 +10,8 @@ export interface BackgroundContext {
   registerChunkSession(sessionId: string, tabId: number): void;
   unregisterChunkSession(sessionId: string): void;
   resolveProgressTarget(sessionId: string): { tabId: number; videoId: string } | null;
+
+  registerXSyncSession(sessionId: string, tabId: number): void;
+  unregisterXSyncSession(sessionId: string): void;
+  resolveXSyncTab(sessionId: string): number | null;
 }

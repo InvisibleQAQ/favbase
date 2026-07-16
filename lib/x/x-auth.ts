@@ -13,9 +13,12 @@
  * cause).
  *
  * Tokens are session-scoped (chrome.storage.session — cleared on browser
- * close): the background webRequest listener writes them, x-api.ts (app.html
- * context) reads them. Requires the user to have x.com open/browsed at least
- * once this session before a sync can run (surfaced as the "login" empty state).
+ * close): the background webRequest listener writes them; `getXAuth()` is read
+ * from storage-capable contexts only (app.html page, background SW). Offscreen
+ * documents have NO chrome.storage — the SW resolves auth and passes it into
+ * `syncBookmarks` via the OFFSCREEN_X_SYNC message. Requires the user to have
+ * x.com open/browsed at least once this session before a sync can run
+ * (surfaced as the "login" empty state).
  */
 
 import { storage } from 'wxt/utils/storage';
