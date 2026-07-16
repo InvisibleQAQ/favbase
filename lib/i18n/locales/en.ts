@@ -279,6 +279,8 @@ const en: Record<LocaleKeys, string> = {
   'x.searchPlaceholder': 'Search tweet text or author…',
   'x.authorsTitle': 'Authors',
   'x.allAuthors': 'All',
+  'x.showMoreAuthors': 'Show {{n}} more',
+  'x.showLessAuthors': 'Show less',
   'x.notLoggedInTitle': 'X login not detected',
   'x.notLoggedInDesc': 'Open your X bookmarks page and sign in, then click the "Fetch bookmarks" button at the bottom-right corner of the page; or come back here and click Sync now.',
   'x.openBookmarksPage': 'Open X bookmarks',

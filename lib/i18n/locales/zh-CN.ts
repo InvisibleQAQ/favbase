@@ -276,6 +276,8 @@ const zhCN = {
   'x.searchPlaceholder': '搜索推文内容或作者…',
   'x.authorsTitle': '作者',
   'x.allAuthors': '全部',
+  'x.showMoreAuthors': '展开 (+{{n}})',
+  'x.showLessAuthors': '收起',
   'x.notLoggedInTitle': '未检测到 X 登录状态',
   'x.notLoggedInDesc': '打开 X 书签页并登录，点击页面右下角的「获取书签」按钮即可收录；也可以回到此页面点击立即同步。',
   'x.openBookmarksPage': '打开 X 书签页',
