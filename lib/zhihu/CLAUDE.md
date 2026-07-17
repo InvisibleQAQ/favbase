@@ -30,6 +30,7 @@
 
 ## 约定
 
+- **共享骨架（docs/15 MEDIUM-3）**：`chunk`/`escapeLike` 自 `lib/database/sql-utils.ts`，`getFavorites` 走 `pagedItemsQuery`、`getLastSyncedAt` 走 `getPlatformLastSyncedAt`（`lib/database/collection-queries.ts`）——本文件只留平台特有 filter/orderBy/mapRow，勿再拷贝
 - **Insert-only（与全平台同 ADR）**：items/authors/item_sources 只 insert（`onConflictDoNothing`，first-write-wins）。取消收藏不删行；条目跨夹收藏 = 1 item + N link（对齐 bookmarks 文件夹模型）。唯一例外：`sources` 收藏夹行 upsert 刷新 `title`/`lastFetchedAt`
 - **content_state**：answer/article/pin（有正文）→ Markdown 落 `item_contents.plainText` + `chunkZhihuMarkdown` 切块 → `'chunked'`（**不 inline embed**，D3——向量化推迟到设置页「重建向量」）；zvideo/空正文 → `'no_content'`（**不用 `'pending'`**——那会喂给 auto-transcribe）
 - **两段式事务**：主插入单事务；content+chunks 对新 item 在事务**外**逐条写（`replaceItemChunks` 自开事务，单连接 proxy 嵌套死锁）。`replaceItemChunks` 从 `@/lib/embedding/vector-store` **leaf 导入**（barrel 有 storage 模块加载副作用，同 x-sync-service）

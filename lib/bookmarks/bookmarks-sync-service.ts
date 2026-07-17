@@ -16,9 +16,11 @@
  * bookmark moved between folders keeps both links (same as bilibili).
  */
 
-import { and, desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm';
+import { eq, ilike, or, sql, type SQL } from 'drizzle-orm';
 import { getDb } from '@/lib/database';
 import type { FavbaseDb } from '@/lib/database';
+import { chunk, escapeLike } from '@/lib/database/sql-utils';
+import { getPlatformLastSyncedAt, pagedItemsQuery } from '@/lib/database/collection-queries';
 import { sources } from '@/lib/database/entities/sources';
 import { authors } from '@/lib/database/entities/authors';
 import { items } from '@/lib/database/entities/items';
@@ -250,31 +252,13 @@ export async function getBookmarks(
       )`,
     );
   }
-  const where = and(...conditions);
-
-  const [rows, countRows] = await Promise.all([
-    db
-      .select({
-        id: items.id,
-        platformItemId: items.platformItemId,
-        title: items.title,
-        authorName: items.authorName,
-        originalUrl: items.originalUrl,
-        publishedAt: items.publishedAt,
-        platformMeta: items.platformMeta,
-      })
-      .from(items)
-      .where(where)
-      .orderBy(sql`${items.publishedAt} DESC NULLS LAST`)
-      .limit(query.pageSize)
-      .offset((query.page - 1) * query.pageSize),
-    db.select({ total: sql<number>`count(*)::int` }).from(items).where(where),
-  ]);
-
-  return {
-    rows: rows.map(toBookmarkItem),
-    total: countRows[0]?.total ?? 0,
-  };
+  return pagedItemsQuery(db, {
+    conditions,
+    orderBy: sql`${items.publishedAt} DESC NULLS LAST`,
+    page: query.page,
+    pageSize: query.pageSize,
+    mapRow: toBookmarkItem,
+  });
 }
 
 /** Folders that have bookmarks, in first-seen (tree) order — the chip row. */
@@ -297,27 +281,12 @@ export async function getFolders(db: FavbaseDb = getDb()): Promise<BookmarkFolde
 
 /** Latest folder sync time; null = never synced. */
 export async function getLastSyncedAt(db: FavbaseDb = getDb()): Promise<Date | null> {
-  const rows = await db
-    .select({ last: sql<Date | null>`max(${sources.lastFetchedAt})` })
-    .from(sources)
-    .where(eq(sources.platform, PLATFORM));
-  return rows[0]?.last ?? null;
+  return getPlatformLastSyncedAt(PLATFORM, db);
 }
 
 // ---------------------------------------------------------------------------
 // Internal
 // ---------------------------------------------------------------------------
-
-function chunk<T>(arr: T[], size: number): T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-  return out;
-}
-
-/** Escape LIKE/ILIKE metacharacters in user input (default `\` escape char). */
-function escapeLike(input: string): string {
-  return input.replace(/[\\%_]/g, '\\$&');
-}
 
 function readPath(meta: unknown): string {
   const path = (meta as { path?: unknown } | null)?.path;

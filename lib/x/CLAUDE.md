@@ -28,6 +28,7 @@ X (Twitter) 书签收录领域（第四个平台，镜像 `lib/github/` 分层�
 
 ## 约定
 
+- **共享骨架（docs/15 MEDIUM-3）**：`chunk`/`escapeLike` 自 `lib/database/sql-utils.ts`，`getBookmarks` 走 `pagedItemsQuery`、`getLastSyncedAt` 走 `getPlatformLastSyncedAt`（`lib/database/collection-queries.ts`）——本文件只留平台特有 filter/orderBy/mapRow，勿再拷贝
 - **Insert-only（与 B站/github/bookmarks 同 ADR）**：items/authors/item_sources 只 insert（`onConflictDoNothing`，first-write-wins），不 update 不 delete。重新同步只追加新书签；metadata 不刷新；取消书签不删行。唯一例外：`sources` 单行（`platformSourceId='bookmarks'`）upsert 刷新 `lastFetchedAt`。完整 ADR 见 `.trellis/spec/frontend/database-bridge.md`
 - **content_state='chunked' + 延迟 embed（D3）**：tweet `full_text` 即内容，同步时写 `item_contents` + `chunkTweetText` 切块 → item `content_state='chunked'`，**但不 inline embed**（数千书签会打爆 embedding provider）。向量化推迟到设置页「重建向量」`rebuildPendingEmbeddings`（现有约定，见 `lib/embedding/CLAUDE.md`）。同步后全文（ILIKE on title/text）即可搜；语义检索需先重建
 - **两段式事务**：主插入（sources/authors/items/item_sources）在单事务内 insert-only；content+chunks 对**新插入的 item** 在事务**外**逐条写（`replaceItemChunks` 自开事务，单连接 proxy 上嵌套会死锁——同 bili content-sync 在同步事务外的做法）
