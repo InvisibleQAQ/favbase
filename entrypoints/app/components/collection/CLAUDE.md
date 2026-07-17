@@ -15,7 +15,13 @@
 - `search-field.tsx` — `SearchField`：全宽搜索框 + `eva:search-fill` adornment。受控（value+onChange）或禁用占位（disabled）两态
 - `card-grid.tsx` — `CardGrid`（container spacing 2.5）+ `CardGridItem`（断点 xs12/sm6/md4/lg3 唯一事实源 `CARD_SIZE`）+ `CardGridPagination`（居中分页，totalPages≤1 返回 null）+ `CardGridSkeleton({ card })`（grid-of-8 外壳，卡片内部由各平台传入——保留平台骨架形态差异）
 - `chip-row.tsx` — `ChipRowShell`（icon+subtitle2 加粗标题头部 + 可选 `headerExtra`（如清除按钮）+ flexWrap chip 行容器）+ `FilterChip`（选中 filled primary / 未选 outlined default + 可选 `maxWidth` 省略号截断 + 可选 `icon`（如语言色点））
+- `error-state.tsx` — `ErrorState { title, message, retryLabel, onRetry }`：danger-triangle 图标 + StateBox + outlined 重试按钮。query/sync 失败共用（github/x/zhihu）
+- `no-matches-state.tsx` — `NoMatchesState { message }`：StateBox + disabled Typography 单行。`message` 平台特有名词由调用方传（`t('x.noMatches')` 等），维持零 `t()`
+- `sync-now-button.tsx` — `SyncNowButton { syncing, onSync, label, variant?='outlined' }`：空态/未登录态内的手动同步按钮（三态 restart 图标 / CircularProgress+disabled）。`contained` 用于同步即主路径的空态（zhihu/github），`outlined` 用于次要（x）
+- `sync-progress-bar.tsx` — `SyncProgressBar { value?, caption? }`：顶栏下方进度条。`value==null` → indeterminate（x/zhihu 游标分页），传 0–100 → determinate（github page/totalPages）；`caption` 平台文案由调用方翻译后传入
 - `index.ts` — barrel，消费方单一 import 面
+
+**分支链不在本目录**：8 分支内容 phase 的顺序（tag-filtered→query-error→auth-failed→sync-error→skeleton→empty-library→no-matches→grid）由纯函数 `resolveCollectionPhase`（`app/hooks/collection-phase.ts`）持有并单测锁定，各 view `switch(phase)` 映射到本目录哑组件 + 平台卡片。本目录仍只出哑组件，不做 `CollectionPageFrame` 大一统 frame。
 
 ## 消费方（3 组 adapter）
 

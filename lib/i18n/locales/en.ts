@@ -212,10 +212,14 @@ const en: Record<LocaleKeys, string> = {
   'header.languageAria': 'Switch interface language',
   'header.themeAria': 'Toggle dark mode',
 
+  // Shared collection-page copy (identical across all platforms) — platform
+  // prefixes keep only platform-specific nouns (see *.noMatches).
+  'common.retry': 'Retry',
+  'common.syncNow': 'Sync now',
+  'common.loadFailed': 'Load failed',
+
   'collections.notLoggedInTitle': 'Bilibili login not detected',
   'collections.notLoggedInDesc': 'Open bilibili.com in your browser and sign in, then return here and retry.',
-  'collections.retry': 'Retry',
-  'collections.loadFailed': 'Load failed',
   'collections.emptyFolderTitle': 'Folder is empty',
   'collections.emptyFolderDesc': 'This folder has no videos yet',
   'collections.videoCount': '{{count}} videos',
@@ -250,9 +254,6 @@ const en: Record<LocaleKeys, string> = {
   'githubStars.goToSettings': 'Go to Settings',
   'githubStars.emptyTitle': 'No repositories collected yet',
   'githubStars.emptyDesc': 'Click Sync to fetch every repository you starred on GitHub.',
-  'githubStars.syncNow': 'Sync now',
-  'githubStars.loadFailed': 'Load failed',
-  'githubStars.retry': 'Retry',
   'githubStars.noMatches': 'No matching repositories',
 
   'bookmarks.title': 'Bookmarks',
@@ -264,8 +265,6 @@ const en: Record<LocaleKeys, string> = {
   'bookmarks.allFolders': 'All ({{count}})',
   'bookmarks.emptyTitle': 'No bookmarks to collect',
   'bookmarks.emptyDesc': 'Add web bookmarks in your browser, then return here — they will be collected automatically.',
-  'bookmarks.loadFailed': 'Load failed',
-  'bookmarks.retry': 'Retry',
   'bookmarks.noMatches': 'No matching bookmarks',
   'bookmarks.syncFailed': 'Sync failed: {{error}}',
 
@@ -287,9 +286,6 @@ const en: Record<LocaleKeys, string> = {
   'x.openBookmarksPage': 'Open X bookmarks',
   'x.emptyTitle': 'No bookmarks collected yet',
   'x.emptyDesc': 'Open your X bookmarks page and click the "Fetch bookmarks" button at the bottom-right corner to import every tweet you saved; or just click Sync now here.',
-  'x.syncNow': 'Sync now',
-  'x.loadFailed': 'Load failed',
-  'x.retry': 'Retry',
   'x.noMatches': 'No matching bookmarks',
   'x.rateLimited': 'X rate limit hit — retry after {{reset}}',
   'x.rateLimitedNoReset': 'X rate limit hit — please retry later',
@@ -321,9 +317,6 @@ const en: Record<LocaleKeys, string> = {
   'zhihu.openZhihu': 'Open Zhihu',
   'zhihu.emptyTitle': 'No favorites collected yet',
   'zhihu.emptyDesc': 'Click Sync to fetch every answer, article, pin and video from all your public Zhihu collections.',
-  'zhihu.syncNow': 'Sync now',
-  'zhihu.loadFailed': 'Load failed',
-  'zhihu.retry': 'Retry',
   'zhihu.noMatches': 'No matching favorites',
   'zhihu.rateLimited': 'Zhihu rate limit hit — please retry later',
   'zhihu.type.answer': 'Answer',

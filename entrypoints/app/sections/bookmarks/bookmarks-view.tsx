@@ -67,11 +67,11 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
           sx={{ color: 'error.main', mb: 1 }}
         />
       }
-      title={t('bookmarks.loadFailed')}
+      title={t('common.loadFailed')}
       description={message}
       action={
         <Button variant="outlined" onClick={onRetry} sx={{ mt: 1 }}>
-          {t('bookmarks.retry')}
+          {t('common.retry')}
         </Button>
       }
     />

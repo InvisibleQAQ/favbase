@@ -210,10 +210,14 @@ const zhCN = {
   'header.languageAria': '切换界面语言',
   'header.themeAria': '切换深色模式',
 
+  // Shared collection-page copy (identical across all platforms) — platform
+  // prefixes keep only platform-specific nouns (see *.noMatches).
+  'common.retry': '重试',
+  'common.syncNow': '立即同步',
+  'common.loadFailed': '加载失败',
+
   'collections.notLoggedInTitle': '未检测到 B 站登录状态',
   'collections.notLoggedInDesc': '请先在浏览器中打开 bilibili.com 并登录你的账号，然后回到此页面点击重试。',
-  'collections.retry': '重试',
-  'collections.loadFailed': '加载失败',
   'collections.emptyFolderTitle': '收藏夹为空',
   'collections.emptyFolderDesc': '这个收藏夹还没有收藏任何视频',
   'collections.videoCount': '{{count}} 个视频',
@@ -247,9 +251,6 @@ const zhCN = {
   'githubStars.goToSettings': '前往设置',
   'githubStars.emptyTitle': '还没有收录任何仓库',
   'githubStars.emptyDesc': '点击同步，一键拉取你在 GitHub 上 Star 的所有仓库。',
-  'githubStars.syncNow': '立即同步',
-  'githubStars.loadFailed': '加载失败',
-  'githubStars.retry': '重试',
   'githubStars.noMatches': '没有匹配的仓库',
 
   'bookmarks.title': '浏览器书签',
@@ -261,8 +262,6 @@ const zhCN = {
   'bookmarks.allFolders': '全部 ({{count}})',
   'bookmarks.emptyTitle': '没有可收录的书签',
   'bookmarks.emptyDesc': '在浏览器中添加网页书签后，回到此页面即可自动收录。',
-  'bookmarks.loadFailed': '加载失败',
-  'bookmarks.retry': '重试',
   'bookmarks.noMatches': '没有匹配的书签',
   'bookmarks.syncFailed': '同步失败: {{error}}',
 
@@ -284,9 +283,6 @@ const zhCN = {
   'x.openBookmarksPage': '打开 X 书签页',
   'x.emptyTitle': '还没有收录任何书签',
   'x.emptyDesc': '打开 X 书签页，点击页面右下角的「获取书签」按钮一键收录你在 X 上收藏的所有推文；也可以直接点击立即同步。',
-  'x.syncNow': '立即同步',
-  'x.loadFailed': '加载失败',
-  'x.retry': '重试',
   'x.noMatches': '没有匹配的书签',
   'x.rateLimited': '触发 X 限流，请于 {{reset}} 后重试',
   'x.rateLimitedNoReset': '触发 X 限流，请稍后重试',
@@ -318,9 +314,6 @@ const zhCN = {
   'zhihu.openZhihu': '打开知乎',
   'zhihu.emptyTitle': '还没有收录任何收藏',
   'zhihu.emptyDesc': '点击同步，一键拉取你在知乎全部公开收藏夹里的回答、文章、想法和视频。',
-  'zhihu.syncNow': '立即同步',
-  'zhihu.loadFailed': '加载失败',
-  'zhihu.retry': '重试',
   'zhihu.noMatches': '没有匹配的收藏',
   'zhihu.rateLimited': '触发知乎限流，请稍后重试',
   'zhihu.type.answer': '回答',

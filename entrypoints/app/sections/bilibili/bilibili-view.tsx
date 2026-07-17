@@ -65,7 +65,7 @@ function NotLoggedIn({ onRetry }: { onRetry: () => void }) {
       description={t('collections.notLoggedInDesc')}
       action={
         <Button variant="outlined" onClick={onRetry} sx={{ mt: 1 }}>
-          {t('collections.retry')}
+          {t('common.retry')}
         </Button>
       }
     />
@@ -83,11 +83,11 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
           sx={{ color: 'error.main', mb: 1 }}
         />
       }
-      title={t('collections.loadFailed')}
+      title={t('common.loadFailed')}
       description={message}
       action={
         <Button variant="outlined" onClick={onRetry} sx={{ mt: 1 }}>
-          {t('collections.retry')}
+          {t('common.retry')}
         </Button>
       }
     />

@@ -5,6 +5,7 @@ app.html 专用共享 hooks（跨 section 复用；平台无关）。与 `lib/ho
 ## 模块结构
 
 - `use-collection-library.ts` — `useCollectionLibrary<TItem, TFacet, TProgress, TError>`：「单列表 + facet chips + 手动同步」收藏页的平台无关状态机（audit docs/15 HIGH-1 的收敛产物）。持有全部编排逻辑：搜索 300ms 防抖（`searchRef` 值比对，真变化才重置 page=1）、分页查询 effect（`cancelled` 旗标 + `initDbProxy()` 幂等 join + queryVersion 重查）、库元信息 `refreshMeta`（`Promise.all` facets/lastSynced/无筛选 total + `mountedRef` 守卫）、sync 编排（syncing 互斥 + 进度回调 + refreshMeta + queryVersion 递增 + finally 清 progress）、`totalPages = max(1, ceil(total/pageSize))`（默认 pageSize=24）。平台注入点 5 个：`queryFn`（吃归一化 `CollectionQueryParams { filter, search, page, pageSize }`）、`facetsFn`、`lastSyncedFn`、`syncFn`、`classifyError`（+`logTag` console 前缀）。返回泛化字段名（items/filter/setFilter/facets/...），平台 adapter 负责映射回领域命名
+- `collection-phase.ts` — `resolveCollectionPhase(state): CollectionPhase`（audit docs/15 HIGH-2 的收敛产物）：收藏页内容区的 8 分支优先级阶梯纯函数。返回 discriminated union `'tag-filtered' | 'query-error' | 'auth-failed' | 'sync-error' | 'skeleton' | 'empty-library' | 'no-matches' | 'grid'`。**分支顺序即契约**——顺序封在这一处，各 view 只做 `switch(phase)` → 平台节点映射，view 不再各自维持顺序（消除「某平台漏 authFailed 短路」类静默 bug）。入参是布尔旗标对象（tagFiltered/queryError/authFailed/syncErrorEmpty/metaLoading/syncingEmpty/libraryEmpty/loading/noMatches）；无 authFailed 概念的平台（github：token 缺失走 NoTokenState 整页短路）传 `authFailed:false`。`collection-phase.test.ts` 逐分支 + 全旗标叠加锁死顺序
 
 ## 约定
 
