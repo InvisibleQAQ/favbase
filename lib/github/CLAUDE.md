@@ -9,6 +9,7 @@ GitHub Star 收录领域（第二个平台，镜像 `lib/bilibili/` 分层）。
 
 ## 约定
 
+- **共享骨架（docs/15 MEDIUM-3）**：`chunk`/`escapeLike` 自 `lib/database/sql-utils.ts`，`getStarredRepos` 走 `pagedItemsQuery`、`getLastSyncedAt` 走 `getPlatformLastSyncedAt`（`lib/database/collection-queries.ts`）——本文件只留平台特有 filter/orderBy/mapRow，勿再拷贝
 - **Insert-only（与 B站同 ADR）**：items/authors/item_sources 只 insert（`onConflictDoNothing`，first-write-wins），不 update 不 delete。重新同步只追加新 star 的仓库；metadata 不刷新；unstar 不删行（知识资产保留）。唯一例外：`sources` 单行（`platformSourceId='stars'`）upsert 刷新 `lastFetchedAt`。完整 ADR 见 `.trellis/spec/frontend/database-bridge.md`
 - **platformMeta 形状**（items，写入方即本目录，读取方按此解读）：`{ description, language, stargazersCount, forksCount, topics, pushedAt, starredAt, ownerAvatarUrl }`（camelCase；starredAt/pushedAt 为 ISO 字符串）
 - token 来源：`UserSettings.githubToken`（`lib/storage/settings.ts`），由调用方（UI hook）读出后作参数传入，本目录不 import `@/lib/storage`

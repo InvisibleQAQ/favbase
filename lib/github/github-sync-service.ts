@@ -14,6 +14,8 @@
 import { and, desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm';
 import { getDb } from '@/lib/database';
 import type { FavbaseDb } from '@/lib/database';
+import { chunk, escapeLike } from '@/lib/database/sql-utils';
+import { getPlatformLastSyncedAt, pagedItemsQuery } from '@/lib/database/collection-queries';
 import { sources } from '@/lib/database/entities/sources';
 import { authors } from '@/lib/database/entities/authors';
 import { items } from '@/lib/database/entities/items';
@@ -295,30 +297,13 @@ export async function getStarredRepos(
     );
   }
 
-  const where = and(...conditions);
-
-  const [rows, countRows] = await Promise.all([
-    db
-      .select({
-        id: items.id,
-        platformItemId: items.platformItemId,
-        title: items.title,
-        authorName: items.authorName,
-        originalUrl: items.originalUrl,
-        platformMeta: items.platformMeta,
-      })
-      .from(items)
-      .where(where)
-      .orderBy(desc(sql`${items.platformMeta}->>'starredAt'`))
-      .limit(query.pageSize)
-      .offset((query.page - 1) * query.pageSize),
-    db.select({ total: sql<number>`count(*)::int` }).from(items).where(where),
-  ]);
-
-  return {
-    rows: rows.map(toRepoItem),
-    total: countRows[0]?.total ?? 0,
-  };
+  return pagedItemsQuery(db, {
+    conditions,
+    orderBy: desc(sql`${items.platformMeta}->>'starredAt'`),
+    page: query.page,
+    pageSize: query.pageSize,
+    mapRow: toRepoItem,
+  });
 }
 
 /** Distinct languages with repo counts, descending — data for the chip row. */
@@ -338,28 +323,12 @@ export async function getLanguageCounts(db: FavbaseDb = getDb()): Promise<Langua
 
 /** When the stars source was last synced; null = never synced. */
 export async function getLastSyncedAt(db: FavbaseDb = getDb()): Promise<Date | null> {
-  const rows = await db
-    .select({ lastFetchedAt: sources.lastFetchedAt })
-    .from(sources)
-    .where(and(eq(sources.platform, PLATFORM), eq(sources.platformSourceId, STARS_SOURCE_ID)))
-    .limit(1);
-  return rows[0]?.lastFetchedAt ?? null;
+  return getPlatformLastSyncedAt(PLATFORM, db);
 }
 
 // ---------------------------------------------------------------------------
 // Internal
 // ---------------------------------------------------------------------------
-
-function chunk<T>(arr: T[], size: number): T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-  return out;
-}
-
-/** Escape LIKE/ILIKE metacharacters in user input (default `\` escape char). */
-function escapeLike(input: string): string {
-  return input.replace(/[\\%_]/g, '\\$&');
-}
 
 function toRepoItem(row: {
   id: string;

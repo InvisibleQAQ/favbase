@@ -9,6 +9,7 @@
 
 ## 约定
 
+- **共享骨架（docs/15 MEDIUM-3）**：`chunk`/`escapeLike` 自 `lib/database/sql-utils.ts`，`getBookmarks` 走 `pagedItemsQuery`、`getLastSyncedAt` 走 `getPlatformLastSyncedAt`（`lib/database/collection-queries.ts`）——本文件只留平台特有 filter/orderBy/mapRow，勿再拷贝
 - **Insert-only（与 B站/github 同 ADR）**：items/authors/item_sources 只 insert（`onConflictDoNothing`，first-write-wins），不 update 不 delete。重新同步（每次访问自动触发）只追加新书签；标题/元数据不刷新；删除的书签不删行；书签跨文件夹移动**保留双 link**（与 bilibili 一致）。唯一例外：`sources` 文件夹行 upsert 刷新 `title`/`platformMeta.path`/`lastFetchedAt`（文件夹重命名经此反映）。完整 ADR 见 `.trellis/spec/frontend/database-bridge.md`
 - **items 行映射**：`platformItemId=normalizedUrl`（稳定去重键，非 chrome 节点 id——节点 id 跨设备不稳定）、`title=bookmark.title`（空回退 url）、`authorName=domain`、`originalUrl=bookmark.url`、`publishedAt=new Date(dateAdded)`、`contentState='no_content'`（书签暂无抽取内容；defuddle 网页转 markdown 内容管线是**后续任务**，届时把此 seam 翻成 `pending`）
 - **platformMeta 形状**（items）：`{ domain, dateAdded }`（dateAdded 为 ms epoch，与 publishedAt 冗余保无损）。favicon **不入库**，UI 用 MV3 本地 `_favicon` API 渲染（`sections/bookmarks/bookmark-card.tsx`）
