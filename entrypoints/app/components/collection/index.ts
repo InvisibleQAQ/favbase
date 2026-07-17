@@ -13,3 +13,7 @@ export {
   type CardGridPaginationProps,
 } from './card-grid';
 export { ChipRowShell, FilterChip, type ChipRowShellProps, type FilterChipProps } from './chip-row';
+export {
+  CollapsibleChipRow,
+  type CollapsibleChipRowProps,
+} from './collapsible-chip-row';
