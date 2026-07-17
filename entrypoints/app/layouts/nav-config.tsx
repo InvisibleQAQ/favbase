@@ -38,6 +38,10 @@ export const navData: NavItem[] = [
         title: 'nav.xBookmarks',
         path: '/collections/x',
       },
+      {
+        title: 'nav.zhihuFavorites',
+        path: '/collections/zhihu',
+      },
     ],
   },
   {

@@ -42,6 +42,13 @@ const githubHostPermissions = ['https://api.github.com/*'];
 // extension-context fetch is treated as same-site, mirroring supermemory).
 const xHostPermissions = ['*://x.com/*'];
 
+// Zhihu favorites: web v4 items API (www.zhihu.com) + App API collections list
+// (api.zhihu.com). Auth is bilibili-style — the extension-context fetch runs
+// with `credentials:'include'` and the host permission makes the browser
+// attach the user's real zhihu session cookies (no webRequest capture, no
+// chrome.cookies, no Connections card). See lib/zhihu/zhihu-api.ts.
+const zhihuHostPermissions = ['https://www.zhihu.com/*', 'https://api.zhihu.com/*'];
+
 export default defineConfig({
   modules: ['@wxt-dev/module-react'],
   manifest: {
@@ -65,6 +72,7 @@ export default defineConfig({
       ...bilibiliHostPermissions,
       ...githubHostPermissions,
       ...xHostPermissions,
+      ...zhihuHostPermissions,
       ...providerHostPermissions,
     ],
     // Custom (user-entered) API domains are unknown at build time; grant them at
