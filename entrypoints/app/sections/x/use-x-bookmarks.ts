@@ -1,6 +1,3 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-
-import { initDbProxy } from '@/lib/database';
 import {
   syncBookmarks,
   getBookmarks,
@@ -12,12 +9,14 @@ import {
 import { getXAuth } from '@/lib/x/x-auth';
 import { classifyXSyncError, type XSyncError } from '@/lib/x/x-messages';
 
-// Re-exported so the view keeps importing XSyncError from the hook; the type +
-// classifier now live in lib/x (shared with the x.com content-script path).
-export type { XSyncError };
+import {
+  useCollectionLibrary,
+  type CollectionQueryParams,
+} from '../../hooks/use-collection-library';
 
-const PAGE_SIZE = 24;
-const SEARCH_DEBOUNCE_MS = 300;
+// Re-exported so the view keeps importing XSyncError from the hook; the type +
+// classifier live in lib/x (shared with the x.com content-script path).
+export type { XSyncError };
 
 /** Progress for the (cursor-paginated) X sync — total is unknowable, so this is
  *  always indeterminate; we surface the running fetched count + page number. */
@@ -56,171 +55,56 @@ export interface UseXBookmarksReturn {
   sync: () => Promise<void>;
 }
 
+function queryFn({ filter, search, page, pageSize }: CollectionQueryParams) {
+  return getBookmarks({
+    author: filter ?? undefined,
+    search: search || undefined,
+    page,
+    pageSize,
+  });
+}
+
+async function syncFn(onProgress: (progress: XSyncProgress) => void) {
+  // Auth is resolved HERE (app.html is a storage-capable trusted context);
+  // syncBookmarks itself never touches storage — it also runs in the
+  // offscreen document, which has no chrome.storage.
+  const auth = await getXAuth();
+  await syncBookmarks(auth, (fetchedCount, page) => {
+    onProgress({ fetchedCount, page });
+  });
+}
+
+/** Thin adapter over the shared collection-library state machine. */
 export function useXBookmarks(): UseXBookmarksReturn {
-  // Filters
-  const [author, setAuthorState] = useState<string | null>(null);
-  const [searchInput, setSearchInput] = useState('');
-  const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
-  const [queryVersion, setQueryVersion] = useState(0);
-
-  // Paged query results
-  const [bookmarks, setBookmarks] = useState<XBookmarkItem[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [queryError, setQueryError] = useState<string | null>(null);
-
-  // Library meta
-  const [authors, setAuthors] = useState<AuthorCount[]>([]);
-  const [libraryCount, setLibraryCount] = useState(0);
-  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
-  const [metaLoading, setMetaLoading] = useState(true);
-
-  // Sync
-  const [syncing, setSyncing] = useState(false);
-  const [syncProgress, setSyncProgress] = useState<XSyncProgress | null>(null);
-  const [syncError, setSyncError] = useState<XSyncError | null>(null);
-
-  // Staleness guard for user-triggered async (sync) — no context id drifts on
-  // this page (single global bookmarks source), only unmount to protect against.
-  const mountedRef = useRef(true);
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
-
-  // Debounce search input; reset to page 1 only on an actual value change.
-  const searchRef = useRef('');
-  useEffect(() => {
-    const id = setTimeout(() => {
-      const next = searchInput.trim();
-      if (next === searchRef.current) return;
-      searchRef.current = next;
-      setSearch(next);
-      setPage(1);
-    }, SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(id);
-  }, [searchInput]);
-
-  const setAuthor = useCallback((handle: string | null) => {
-    setAuthorState(handle);
-    setPage(1);
-  }, []);
-
-  const goToPage = useCallback((p: number) => setPage(p), []);
-  const retryQuery = useCallback(() => setQueryVersion((v) => v + 1), []);
-
-  // Paged query — refetch on filter/page change and after sync (queryVersion).
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setQueryError(null);
-
-    (async () => {
-      try {
-        await initDbProxy();
-        const result = await getBookmarks({
-          author: author ?? undefined,
-          search: search || undefined,
-          page,
-          pageSize: PAGE_SIZE,
-        });
-        if (cancelled) return;
-        setBookmarks(result.rows);
-        setTotal(result.total);
-      } catch (err) {
-        if (cancelled) return;
-        setQueryError(err instanceof Error ? err.message : 'Query failed');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [author, search, page, queryVersion]);
-
-  // Library meta: author counts + last sync time + unfiltered total.
-  const refreshMeta = useCallback(async () => {
-    await initDbProxy();
-    const [authorRows, syncedAt, countResult] = await Promise.all([
-      getAuthorCounts(),
-      getLastSyncedAt(),
-      // Unfiltered total = library size.
-      getBookmarks({ page: 1, pageSize: 1 }),
-    ]);
-    if (!mountedRef.current) return;
-    setAuthors(authorRows);
-    setLastSyncedAt(syncedAt);
-    setLibraryCount(countResult.total);
-  }, []);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        await refreshMeta();
-      } catch (err) {
-        console.error('[x-bookmarks] meta load failed:', err);
-      } finally {
-        if (mountedRef.current) setMetaLoading(false);
-      }
-    })();
-  }, [refreshMeta]);
-
-  const sync = useCallback(async () => {
-    if (syncing) return;
-
-    setSyncing(true);
-    setSyncError(null);
-    setSyncProgress(null);
-    try {
-      await initDbProxy();
-      // Auth is resolved HERE (app.html is a storage-capable trusted context);
-      // syncBookmarks itself never touches storage — it also runs in the
-      // offscreen document, which has no chrome.storage.
-      const auth = await getXAuth();
-      await syncBookmarks(auth, (fetchedCount, pg) => {
-        if (!mountedRef.current) return;
-        setSyncProgress({ fetchedCount, page: pg });
-      });
-      await refreshMeta();
-      if (!mountedRef.current) return;
-      setQueryVersion((v) => v + 1);
-    } catch (err) {
-      console.error('[x-bookmarks] sync failed:', err);
-      if (!mountedRef.current) return;
-      setSyncError(classifyXSyncError(err));
-    } finally {
-      if (mountedRef.current) {
-        setSyncing(false);
-        setSyncProgress(null);
-      }
-    }
-  }, [syncing, refreshMeta]);
+  const lib = useCollectionLibrary<XBookmarkItem, AuthorCount, XSyncProgress, XSyncError>({
+    queryFn,
+    facetsFn: getAuthorCounts,
+    lastSyncedFn: getLastSyncedAt,
+    syncFn,
+    classifyError: classifyXSyncError,
+    logTag: 'x-bookmarks',
+  });
 
   return {
-    bookmarks,
-    total,
-    totalPages: Math.max(1, Math.ceil(total / PAGE_SIZE)),
-    loading,
-    queryError,
-    retryQuery,
-    author,
-    setAuthor,
-    searchInput,
-    setSearchInput,
-    page,
-    goToPage,
-    authors,
-    libraryCount,
-    lastSyncedAt,
-    metaLoading,
-    syncing,
-    syncProgress,
-    syncError,
-    sync,
+    bookmarks: lib.items,
+    total: lib.total,
+    totalPages: lib.totalPages,
+    loading: lib.loading,
+    queryError: lib.queryError,
+    retryQuery: lib.retryQuery,
+    author: lib.filter,
+    setAuthor: lib.setFilter,
+    searchInput: lib.searchInput,
+    setSearchInput: lib.setSearchInput,
+    page: lib.page,
+    goToPage: lib.goToPage,
+    authors: lib.facets,
+    libraryCount: lib.libraryCount,
+    lastSyncedAt: lib.lastSyncedAt,
+    metaLoading: lib.metaLoading,
+    syncing: lib.syncing,
+    syncProgress: lib.syncProgress,
+    syncError: lib.syncError,
+    sync: lib.sync,
   };
 }

@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback } from 'react';
 
-import { initDbProxy } from '@/lib/database';
 import { useSettings } from '@/lib/hooks/useSettings';
 import {
   syncStars,
@@ -13,8 +12,10 @@ import {
   type LanguageCount,
 } from '@/lib/github/github-sync-service';
 
-const PAGE_SIZE = 24;
-const SEARCH_DEBOUNCE_MS = 300;
+import {
+  useCollectionLibrary,
+  type CollectionQueryParams,
+} from '../../hooks/use-collection-library';
 
 export interface SyncProgress {
   page: number;
@@ -70,179 +71,76 @@ function classifySyncError(err: unknown): GithubSyncError {
   return { kind: 'unknown', message: err instanceof Error ? err.message : String(err) };
 }
 
+function queryFn({ filter, search, page, pageSize }: CollectionQueryParams) {
+  return getStarredRepos({
+    language: filter ?? undefined,
+    search: search || undefined,
+    page,
+    pageSize,
+  });
+}
+
+/** Thin adapter over the shared collection-library state machine. */
 export function useGithubStars(): UseGithubStarsReturn {
   const { settings, loading: settingsLoading } = useSettings();
-  const hasToken = Boolean(settings.githubToken);
+  const token = settings.githubToken;
+  const hasToken = Boolean(token);
 
-  // Filters
-  const [language, setLanguageState] = useState<string | null>(null);
-  const [searchInput, setSearchInput] = useState('');
-  const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
-  const [queryVersion, setQueryVersion] = useState(0);
-
-  // Paged query results
-  const [repos, setRepos] = useState<GithubRepoItem[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [queryError, setQueryError] = useState<string | null>(null);
-
-  // Library meta
-  const [languages, setLanguages] = useState<LanguageCount[]>([]);
-  const [libraryCount, setLibraryCount] = useState(0);
-  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
-  const [metaLoading, setMetaLoading] = useState(true);
-
-  // Sync
-  const [syncing, setSyncing] = useState(false);
-  const [syncProgress, setSyncProgress] = useState<SyncProgress | null>(null);
-  const [syncError, setSyncError] = useState<GithubSyncError | null>(null);
-
-  // Staleness guard for user-triggered async (sync) — no context id drifts on
-  // this page (single global stars source), only unmount to protect against.
-  const mountedRef = useRef(true);
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
-
-  // Debounce search input; reset to page 1 only on an actual value change.
-  const searchRef = useRef('');
-  useEffect(() => {
-    const id = setTimeout(() => {
-      const next = searchInput.trim();
-      if (next === searchRef.current) return;
-      searchRef.current = next;
-      setSearch(next);
-      setPage(1);
-    }, SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(id);
-  }, [searchInput]);
-
-  const setLanguage = useCallback((lang: string | null) => {
-    setLanguageState(lang);
-    setPage(1);
-  }, []);
-
-  const goToPage = useCallback((p: number) => setPage(p), []);
-  const retryQuery = useCallback(() => setQueryVersion((v) => v + 1), []);
-
-  // Paged query — refetch on filter/page change and after sync (queryVersion).
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setQueryError(null);
-
-    (async () => {
-      try {
-        await initDbProxy();
-        const result = await getStarredRepos({
-          language: language ?? undefined,
-          search: search || undefined,
+  const syncFn = useCallback(
+    async (onProgress: (progress: SyncProgress) => void) => {
+      if (!token) return;
+      await syncStars(token, (page, totalPages, fetchedCount) => {
+        onProgress({
           page,
-          pageSize: PAGE_SIZE,
-        });
-        if (cancelled) return;
-        setRepos(result.rows);
-        setTotal(result.total);
-      } catch (err) {
-        if (cancelled) return;
-        setQueryError(err instanceof Error ? err.message : 'Query failed');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [language, search, page, queryVersion]);
-
-  // Library meta: language counts + last sync time + unfiltered total.
-  const refreshMeta = useCallback(async () => {
-    await initDbProxy();
-    const [langs, syncedAt, countResult] = await Promise.all([
-      getLanguageCounts(),
-      getLastSyncedAt(),
-      // Unfiltered total = library size (includes repos with null language,
-      // which getLanguageCounts excludes).
-      getStarredRepos({ page: 1, pageSize: 1 }),
-    ]);
-    if (!mountedRef.current) return;
-    setLanguages(langs);
-    setLastSyncedAt(syncedAt);
-    setLibraryCount(countResult.total);
-  }, []);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        await refreshMeta();
-      } catch (err) {
-        console.error('[github-stars] meta load failed:', err);
-      } finally {
-        if (mountedRef.current) setMetaLoading(false);
-      }
-    })();
-  }, [refreshMeta]);
-
-  const sync = useCallback(async () => {
-    const token = settings.githubToken;
-    if (!token || syncing) return;
-
-    setSyncing(true);
-    setSyncError(null);
-    setSyncProgress(null);
-    try {
-      await initDbProxy();
-      await syncStars(token, (pg, totalPages, fetchedCount) => {
-        if (!mountedRef.current) return;
-        setSyncProgress({
-          page: pg,
           totalPages,
           fetchedCount,
-          estimatedTotal: Math.round((fetchedCount / pg) * totalPages),
+          estimatedTotal: Math.round((fetchedCount / page) * totalPages),
         });
       });
-      await refreshMeta();
-      if (!mountedRef.current) return;
-      setQueryVersion((v) => v + 1);
-    } catch (err) {
-      console.error('[github-stars] sync failed:', err);
-      if (!mountedRef.current) return;
-      setSyncError(classifySyncError(err));
-    } finally {
-      if (mountedRef.current) {
-        setSyncing(false);
-        setSyncProgress(null);
-      }
-    }
-  }, [settings.githubToken, syncing, refreshMeta]);
+    },
+    [token],
+  );
+
+  const lib = useCollectionLibrary<GithubRepoItem, LanguageCount, SyncProgress, GithubSyncError>({
+    queryFn,
+    facetsFn: getLanguageCounts,
+    lastSyncedFn: getLastSyncedAt,
+    syncFn,
+    classifyError: classifySyncError,
+    logTag: 'github-stars',
+  });
+
+  const { sync: syncInner } = lib;
+
+  // Token gate outside the generic sync: without a token this is a silent
+  // no-op (no syncing state flip), matching the pre-extraction behavior.
+  const sync = useCallback(async () => {
+    if (!token) return;
+    await syncInner();
+  }, [token, syncInner]);
 
   return {
-    repos,
-    total,
-    totalPages: Math.max(1, Math.ceil(total / PAGE_SIZE)),
-    loading,
-    queryError,
-    retryQuery,
-    language,
-    setLanguage,
-    searchInput,
-    setSearchInput,
-    page,
-    goToPage,
-    languages,
-    libraryCount,
-    lastSyncedAt,
-    metaLoading,
+    repos: lib.items,
+    total: lib.total,
+    totalPages: lib.totalPages,
+    loading: lib.loading,
+    queryError: lib.queryError,
+    retryQuery: lib.retryQuery,
+    language: lib.filter,
+    setLanguage: lib.setFilter,
+    searchInput: lib.searchInput,
+    setSearchInput: lib.setSearchInput,
+    page: lib.page,
+    goToPage: lib.goToPage,
+    languages: lib.facets,
+    libraryCount: lib.libraryCount,
+    lastSyncedAt: lib.lastSyncedAt,
+    metaLoading: lib.metaLoading,
     hasToken,
     settingsLoading,
-    syncing,
-    syncProgress,
-    syncError,
+    syncing: lib.syncing,
+    syncProgress: lib.syncProgress,
+    syncError: lib.syncError,
     sync,
   };
 }

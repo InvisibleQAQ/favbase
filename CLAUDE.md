@@ -48,6 +48,7 @@ WXT 入口点及运行时角色总览，详细结构见对应目录 `CLAUDE.md`�
 - `entrypoints/app/components/iconify/CLAUDE.md` — Iconify 离线图标系统
 - `entrypoints/app/components/collection/CLAUDE.md` — 平台 section 共享展示哑组件（StateBox/标题栏/搜索框/卡片网格+分页/chip 行外壳）
 - `entrypoints/app/components/tags/CLAUDE.md` — 平台无关标签 UI 子系统（hooks + popover + 筛选 chips + render-prop 网格）
+- `entrypoints/app/hooks/CLAUDE.md` — app.html 共享 hooks（useCollectionLibrary 平台无关收藏页状态机，github/x/zhihu 数据 hook 的底座）
 - `entrypoints/app/pages/CLAUDE.md` — 页面组件（lazy loaded）
 - `entrypoints/app/sections/overview/CLAUDE.md` — Dashboard 概览卡片 + 数据导出 UI
 - `entrypoints/app/sections/settings/CLAUDE.md` — 设置页（AI 配置/账号连接/通用/存储 Tab）
