@@ -1,6 +1,6 @@
 # Extension Page Dashboard (app.html)
 
-MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRouter`（Chrome 扩展页面不支持路径路由）。路由结构：`/`(Dashboard), `/collections`(通用命名空间，redirect 到 `/collections/bilibili`), `/collections/bilibili`(B站收藏夹概览), `/collections/bilibili/:mediaId`(B站收藏夹视频列表), `/collections/github`(GitHub Stars 收藏页), `/collections/bookmarks`(浏览器书签「全部」), `/collections/bookmarks/:folderId`(书签按文件夹), `/collections/x`(X/Twitter 书签，扁平单集合无详情路由), `/collections/zhihu`(知乎收藏，收藏夹经 chips 筛选无详情路由), `/settings`。多平台模式：`/collections` 保留给将来跨平台聚合页，每个平台一条 `/collections/<platform>` 路由 + 对应 section。
+MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRouter`（Chrome 扩展页面不支持路径路由）。路由结构：`/`(Dashboard), `/collections`(通用命名空间，redirect 到 `/collections/bilibili`), `/collections/bilibili`(B站收藏夹概览), `/collections/bilibili/:mediaId`(B站收藏夹视频列表), `/collections/github`(GitHub Stars 收藏页), `/collections/bookmarks`(浏览器书签「全部」), `/collections/bookmarks/:folderId`(书签按文件夹), `/collections/x`(X/Twitter 书签，扁平单集合无详情路由), `/collections/zhihu`(知乎收藏，收藏夹经 chips 筛选无详情路由), `/collections/youtube`(YouTube 公开播放列表，播放列表经 chips 筛选无详情路由), `/settings`。多平台模式：`/collections` 保留给将来跨平台聚合页，每个平台一条 `/collections/<platform>` 路由 + 对应 section。
 
 ## 模块结构
 

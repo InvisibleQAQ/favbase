@@ -128,6 +128,30 @@ const en: Record<LocaleKeys, string> = {
   'settings.github.rateLimited': 'GitHub API rate limit reached — try again after {{reset}}',
   'settings.github.rateLimitedNoReset': 'GitHub API rate limit reached — try again later',
 
+  'settings.youtube.title': 'YouTube',
+  'settings.youtube.description':
+    'Connect YouTube to collect your public playlists into the knowledge base (bring your own Data API key)',
+  'settings.youtube.apiKeyLabel': 'API key',
+  'settings.youtube.apiKeyPlaceholder': 'AIzaSy...',
+  'settings.youtube.channelLabel': 'Channel',
+  'settings.youtube.channelPlaceholder': '@handle or UC… channel ID',
+  'settings.youtube.channelNote':
+    'Accepts an @handle, a UC… channel ID, or a channel URL. Only the channel\'s PUBLIC playlists are collected (private/unlisted are not accessible).',
+  'settings.youtube.guideTitle': 'How to create a YouTube API key',
+  'settings.youtube.freeQuotaNote':
+    'The YouTube Data API v3 is free (no billing account needed) — the default 10,000 units/day quota is far more than personal sync needs.',
+  'settings.youtube.guideStep1': 'Go to Google Cloud Console and create (or select) a project',
+  'settings.youtube.guideStep2': 'Enable the YouTube Data API v3 under "APIs & Services"',
+  'settings.youtube.guideStep3': 'On the Credentials page click "Create Credentials" → "API key"',
+  'settings.youtube.guideStep4':
+    'Paste the API key above, fill in your channel, then click "Test connection"',
+  'settings.youtube.openConsole': 'Open Google Cloud Console →',
+  'settings.youtube.testSuccess': 'Connected — found channel {{title}}',
+  'settings.youtube.invalidKey': 'Invalid API key — check it and try again',
+  'settings.youtube.channelNotFound': 'Channel not found — check the handle or channel ID',
+  'settings.youtube.rateLimited':
+    'YouTube API quota exhausted — try again later (quota resets at midnight Pacific Time)',
+
   'transcribe.button': 'Start Transcription',
   'transcribe.cancel': 'Cancel',
   'transcribe.retry': 'Retry',
@@ -206,6 +230,7 @@ const en: Record<LocaleKeys, string> = {
   'nav.bookmarks': 'Bookmarks',
   'nav.xBookmarks': 'X Bookmarks',
   'nav.zhihuFavorites': 'Zhihu Favorites',
+  'nav.youtubePlaylists': 'YouTube Playlists',
   'nav.settings': 'Settings',
 
   'header.githubAria': 'View repository on GitHub',
@@ -323,6 +348,30 @@ const en: Record<LocaleKeys, string> = {
   'zhihu.type.article': 'Article',
   'zhihu.type.pin': 'Pin',
   'zhihu.type.zvideo': 'Video',
+
+  'youtube.title': 'YouTube Playlists',
+  'youtube.count': '{{count}} videos',
+  'youtube.count.one': '{{count}} video',
+  'youtube.lastSynced': 'Last synced {{time}}',
+  'youtube.sync': 'Sync',
+  'youtube.syncing': 'Syncing...',
+  'youtube.syncProgress': 'Fetched {{fetched}} (playlist {{current}}/{{total}})',
+  'youtube.syncFailed': 'Sync failed: {{error}}',
+  'youtube.searchPlaceholder': 'Search video title or description…',
+  'youtube.playlistsTitle': 'Playlists',
+  'youtube.allPlaylists': 'All',
+  'youtube.showMorePlaylists': 'Show {{n}} more',
+  'youtube.showLessPlaylists': 'Show less',
+  'youtube.notConnectedTitle': 'YouTube not configured',
+  'youtube.notConnectedDesc':
+    'Go to Settings → Connections, fill in your Data API key and channel — then collect your public playlists with one click.',
+  'youtube.goToSettings': 'Go to Settings',
+  'youtube.authFailedTitle': 'YouTube API key invalid',
+  'youtube.authFailedDesc':
+    'The API key was rejected — check it on the Settings page, then come back and sync again.',
+  'youtube.emptyTitle': 'No videos collected yet',
+  'youtube.emptyDesc': 'Click Sync to fetch the public playlists you created on YouTube.',
+  'youtube.noMatches': 'No matching videos',
 
   'tags.sectionTitle': 'Tags',
   'tags.editTooltip': 'Edit tags',

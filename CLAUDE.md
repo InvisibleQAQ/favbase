@@ -48,7 +48,8 @@ WXT 入口点及运行时角色总览，详细结构见对应目录 `CLAUDE.md`�
 - `entrypoints/app/components/iconify/CLAUDE.md` — Iconify 离线图标系统
 - `entrypoints/app/components/collection/CLAUDE.md` — 平台 section 共享展示哑组件（StateBox/标题栏/搜索框/卡片网格+分页/chip 行外壳）
 - `entrypoints/app/components/tags/CLAUDE.md` — 平台无关标签 UI 子系统（hooks + popover + 筛选 chips + render-prop 网格）
-- `entrypoints/app/hooks/CLAUDE.md` — app.html 共享 hooks（useCollectionLibrary 平台无关收藏页状态机，github/x/zhihu 数据 hook 的底座）
+- `entrypoints/app/hooks/CLAUDE.md` — app.html 共享 hooks（useCollectionLibrary 平台无关收藏页状态机，github/x/zhihu/youtube 数据 hook 的底座）
+- `entrypoints/app/utils/CLAUDE.md` — app.html 共享纯函数工具（formatDuration 时长格式化）
 - `entrypoints/app/pages/CLAUDE.md` — 页面组件（lazy loaded）
 - `entrypoints/app/sections/overview/CLAUDE.md` — Dashboard 概览卡片 + 数据导出 UI
 - `entrypoints/app/sections/settings/CLAUDE.md` — 设置页（AI 配置/账号连接/通用/存储 Tab）
@@ -57,6 +58,7 @@ WXT 入口点及运行时角色总览，详细结构见对应目录 `CLAUDE.md`�
 - `entrypoints/app/sections/bookmarks/CLAUDE.md` — 浏览器书签收藏页（文件夹 chips + 书签卡片 grid + 挂载自动同步，无同步按钮）
 - `entrypoints/app/sections/x/CLAUDE.md` — X（Twitter）书签收藏页（作者 chips + 推文卡片 grid + 手动同步按钮 + 未登录空态，凭据无 UI 半 D6）
 - `entrypoints/app/sections/zhihu/CLAUDE.md` — 知乎收藏页（收藏夹 chips + 4 类型卡片 grid + 手动同步按钮 + 未登录空态，cookie 直读无 Connections 卡）
+- `entrypoints/app/sections/youtube/CLAUDE.md` — YouTube 公开播放列表收藏页（播放列表 chips + 视频卡片 grid + 手动同步按钮 + 未配置空态，API key + 频道经 Connections 卡配置）
 
 ### B站视频页 Content Script
 - `entrypoints/bilibili-video.content/CLAUDE.md` — 右侧栏面板 UI 挂载 + Shadow DOM 约定
@@ -73,6 +75,7 @@ WXT 入口点及运行时角色总览，详细结构见对应目录 `CLAUDE.md`�
 - `lib/bookmarks/CLAUDE.md` — 浏览器书签收录领域（`chrome.bookmarks` 本地读取 + normalizeUrl 去重 + 同步/查询，insert-only，无远程凭证）
 - `lib/x/CLAUDE.md` — X（Twitter）书签收录领域（私有 GraphQL `Bookmarks` 操作 + webRequest 捕获认证 header + 防风控游标分页 + 同步/查询，insert-only，tweet 文本 chunk）
 - `lib/zhihu/CLAUDE.md` — 知乎收藏收录领域（公开收藏夹 v4 API + cookie 直读认证 + 串行防限流分页 + 4 类型归一化 + turndown 转 Markdown + 同步/查询，insert-only，Markdown chunk）
+- `lib/youtube/CLAUDE.md` — YouTube 公开播放列表收录领域（官方 Data API v3 `playlists.list?channelId=` + API key（无 OAuth，`@handle`/`UC...` ID 经 `channels.list` 解析）+ 全量重拉（位置序无增量游标）+ 多列表 membership（1 item + N link，镜像 zhihu）+ 同步/查询，insert-only，description chunk）
 
 ### 转录 / 后台
 - `lib/subtitle/CLAUDE.md` — 通用字幕共享类型（平台无关）

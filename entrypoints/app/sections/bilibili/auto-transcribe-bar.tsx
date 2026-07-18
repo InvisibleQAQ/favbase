@@ -10,17 +10,12 @@ import CircularProgress from '@mui/material/CircularProgress';
 import { t } from '@/lib/i18n';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify } from '../../components/iconify';
+import { formatDuration } from '../../utils/format-duration';
 import type { AutoTranscribeState } from '@/lib/auto-transcribe/types';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function formatDuration(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m}:${String(s).padStart(2, '0')}`;
-}
 
 function stageLabel(state: AutoTranscribeState): string {
   const { phase, videoStage, videoProgress, waitSeconds } = state;

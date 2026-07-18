@@ -33,6 +33,15 @@ export interface UserSettings {
   // Platform connections
   /** GitHub Personal Access Token (Connections tab). Absent/empty = not connected. */
   githubToken?: string;
+  /**
+   * YouTube Data API v3 key + channel (Connections tab). Public-playlists
+   * sync needs no OAuth — an API key reads public data. `youtubeChannel` is
+   * the RAW user input (@handle, UC… id, or a channel URL); resolution to a
+   * channelId happens at probe/sync time (lib/youtube). Absent/empty = not
+   * configured.
+   */
+  youtubeApiKey?: string;
+  youtubeChannel?: string;
 
   // Mode
   prefMode: 'quality' | 'efficiency';
@@ -46,7 +55,7 @@ export interface UserSettings {
    * explicit save actions in `useSettings`; absence = the section was never
    * manually saved (pre-feature installs need no migration).
    */
-  configSavedAt?: Partial<Record<'llm' | 'asr' | 'embedding' | 'github', number>>;
+  configSavedAt?: Partial<Record<'llm' | 'asr' | 'embedding' | 'github' | 'youtube', number>>;
 }
 
 export const DEFAULT_SETTINGS: UserSettings = {

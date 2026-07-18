@@ -14,15 +14,10 @@ import type { LocaleKeys } from '@/lib/i18n/locales/zh-CN';
 import type { TranscribeErrorCode } from '@/lib/transcription/types';
 import { Iconify } from '../../components/iconify';
 import { TagRow } from '../../components/tags';
+import { formatDuration } from '../../utils/format-duration';
 import type { BiliFavVideo } from '@/lib/bilibili/types';
 import type { TagRef } from '@/lib/tagging';
 import type { VideoTranscribeState } from './use-video-transcribe';
-
-function formatDuration(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m}:${String(s).padStart(2, '0')}`;
-}
 
 function formatFavTime(favTime: number): string {
   if (!favTime) return '';

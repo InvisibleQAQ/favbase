@@ -15,7 +15,7 @@
 - `search-field.tsx` — `SearchField`：全宽搜索框 + `eva:search-fill` adornment。受控（value+onChange）或禁用占位（disabled）两态
 - `card-grid.tsx` — `CardGrid`（container spacing 2.5）+ `CardGridItem`（断点 xs12/sm6/md4/lg3 唯一事实源 `CARD_SIZE`）+ `CardGridPagination`（居中分页，totalPages≤1 返回 null）+ `CardGridSkeleton({ card })`（grid-of-8 外壳，卡片内部由各平台传入——保留平台骨架形态差异）
 - `chip-row.tsx` — `ChipRowShell`（icon+subtitle2 加粗标题头部 + 可选 `headerExtra`（如清除按钮）+ flexWrap chip 行容器）+ `FilterChip`（选中 filled primary / 未选 outlined default + 可选 `maxWidth` 省略号截断 + 可选 `icon`（如语言色点））
-- `collapsible-chip-row.tsx` — `CollapsibleChipRow<T>`：无界 chip 行（作者/收藏夹类）。ChipRowShell + "All" chip + 每项 FilterChip，超过 `collapsedCount`（默认 12）折叠并出 show-more/less 切换；选中项被折叠时补渲一枚保持可达。泛型注入 `items/getKey/getLabel/icon/title/allLabel/selected/onSelect/showMoreLabel(overflow)/showLessLabel`，维持零 `t()`（文案调用方翻译后传入，`showMoreLabel` 是 `(n)=>string` 承接 `{n}`）。消费方：x `author-chips`、zhihu `collection-chips`
+- `collapsible-chip-row.tsx` — `CollapsibleChipRow<T>`：无界 chip 行（作者/收藏夹类）。ChipRowShell + "All" chip + 每项 FilterChip，超过 `collapsedCount`（默认 12）折叠并出 show-more/less 切换；选中项被折叠时补渲一枚保持可达。泛型注入 `items/getKey/getLabel/icon/title/allLabel/selected/onSelect/showMoreLabel(overflow)/showLessLabel`，维持零 `t()`（文案调用方翻译后传入，`showMoreLabel` 是 `(n)=>string` 承接 `{n}`）。消费方：x `author-chips`、zhihu `collection-chips`、youtube `playlist-chips`
 - `error-state.tsx` — `ErrorState { title, message, retryLabel, onRetry }`：danger-triangle 图标 + StateBox + outlined 重试按钮。query/sync 失败共用（github/x/zhihu）
 - `no-matches-state.tsx` — `NoMatchesState { message }`：StateBox + disabled Typography 单行。`message` 平台特有名词由调用方传（`t('x.noMatches')` 等），维持零 `t()`
 - `sync-now-button.tsx` — `SyncNowButton { syncing, onSync, label, variant?='outlined' }`：空态/未登录态内的手动同步按钮（三态 restart 图标 / CircularProgress+disabled）。`contained` 用于同步即主路径的空态（zhihu/github），`outlined` 用于次要（x）
@@ -24,13 +24,14 @@
 
 **分支链不在本目录**：8 分支内容 phase 的顺序（tag-filtered→query-error→auth-failed→sync-error→skeleton→empty-library→no-matches→grid）由纯函数 `resolveCollectionPhase`（`app/hooks/collection-phase.ts`）持有并单测锁定，各 view `switch(phase)` 映射到本目录哑组件 + 平台卡片。本目录仍只出哑组件，不做 `CollectionPageFrame` 大一统 frame。
 
-## 消费方（3 组 adapter）
+## 消费方（各平台 section adapter）
 
 - `sections/bilibili/`（B站）：bilibili-view（StateBox×3 / SectionTitleBar / SearchField 受控（服务端 keyword 搜当前夹）/ CardGrid+分页）、folder-chips（ChipRowShell+FilterChip，保留 loading 骨架/空态逻辑）、video-grid-skeleton（CardGridSkeleton + Card 媒体骨架）
 - `sections/github-stars/`：github-stars-view（StateBox×4 / SectionTitleBar / SearchField 受控 / CardGrid+分页 / CardGridSkeleton + rounded 平板）、language-chips（ChipRowShell+FilterChip，保留 All chip+色点逻辑）
 - `sections/bookmarks/`：bookmarks-view（StateBox×3 / SectionTitleBar **无 onSync 无按钮** / SearchField 受控 / CardGrid+分页）、folder-chips（ChipRowShell+FilterChip，All chip+文件夹名）、bookmark-grid-skeleton（CardGridSkeleton + rounded 96）
 - `sections/x/`：x-view（StateBox×4 / SectionTitleBar 手动 onSync / SearchField 受控 / CardGrid+分页 / SyncProgressBar 恒 indeterminate）、author-chips（CollapsibleChipRow 薄 adapter，注入作者类型/twitter icon/x.* i18n key/label）、tweet-grid-skeleton（CardGridSkeleton + rounded 200）
 - `sections/zhihu/`：zhihu-view、collection-chips（CollapsibleChipRow 薄 adapter，注入收藏夹类型/zhihu icon/zhihu.* i18n key/label）
+- `sections/youtube/`：youtube-view（StateBox×4 / SectionTitleBar 手动 onSync / SearchField 受控 / CardGrid+分页 / SyncProgressBar 恒 indeterminate）、playlist-chips（CollapsibleChipRow 薄 adapter，注入播放列表类型/youtube icon/youtube.* i18n key/label）、youtube-grid-skeleton（CardGridSkeleton + 16:9 媒体块卡片骨架）
 - `components/tags/`：tagged-item-grid（StateBox minHeight 240 空态 + CardGrid）、tag-filter-chips（ChipRowShell headerExtra 清除按钮 + FilterChip）
 
 平台 N 接入 = 编排自己的 view + 提供平台卡片，脚手架零复制。

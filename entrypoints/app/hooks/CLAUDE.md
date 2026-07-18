@@ -11,4 +11,4 @@ app.html 专用共享 hooks（跨 section 复用；平台无关）。与 `lib/ho
 
 - **config 函数必须引用稳定**（模块级常量或 useCallback）——它们在 effect 依赖数组里，不稳定引用会每 render 重查。
 - **泛型层零 storage / 零平台导入**：唯一依赖 `@/lib/database` 的 `initDbProxy`。auth 解析（如 X 的 `getXAuth()`）必须留在各平台 adapter 的 `syncFn` 闭包内。
-- 消费方（薄 adapter）：`sections/github-stars/use-github-stars.ts`（唯一带 useSettings token 门 + estimatedTotal 进度计算）、`sections/x/use-x-bookmarks.ts`、`sections/zhihu/use-zhihu-favorites.ts`。**不适用**：bookmarks（auto-on-mount 同步）、bilibili（folders+videos 双 hook）——形态不同，不强行塞进该抽象（docs/15 HIGH-1 范围圈定）。
+- 消费方（薄 adapter）：`sections/github-stars/use-github-stars.ts`（useSettings token 门 + estimatedTotal 进度计算）、`sections/x/use-x-bookmarks.ts`、`sections/zhihu/use-zhihu-favorites.ts`、`sections/youtube/use-youtube-playlists.ts`（useSettings 凭据门（github 模式）：apiKey+channel 同步读 `hasConfig`，无异步授权探针——API key 形态单维度）。**不适用**：bookmarks（auto-on-mount 同步）、bilibili（folders+videos 双 hook）——形态不同，不强行塞进该抽象（docs/15 HIGH-1 范围圈定）。

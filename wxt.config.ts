@@ -49,6 +49,10 @@ const xHostPermissions = ['*://x.com/*'];
 // chrome.cookies, no Connections card). See lib/zhihu/zhihu-api.ts.
 const zhihuHostPermissions = ['https://www.zhihu.com/*', 'https://api.zhihu.com/*'];
 
+// YouTube public playlists: official Data API v3 with the user's own API key
+// (public data needs no OAuth — see lib/youtube/youtube-api.ts).
+const youtubeHostPermissions = ['https://www.googleapis.com/*'];
+
 export default defineConfig({
   modules: ['@wxt-dev/module-react'],
   manifest: {
@@ -73,6 +77,7 @@ export default defineConfig({
       ...githubHostPermissions,
       ...xHostPermissions,
       ...zhihuHostPermissions,
+      ...youtubeHostPermissions,
       ...providerHostPermissions,
     ],
     // Custom (user-entered) API domains are unknown at build time; grant them at

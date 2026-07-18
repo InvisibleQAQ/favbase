@@ -42,6 +42,10 @@ export const navData: NavItem[] = [
         title: 'nav.zhihuFavorites',
         path: '/collections/zhihu',
       },
+      {
+        title: 'nav.youtubePlaylists',
+        path: '/collections/youtube',
+      },
     ],
   },
   {

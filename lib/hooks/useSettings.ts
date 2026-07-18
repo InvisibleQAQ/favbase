@@ -91,6 +91,27 @@ export function deriveGithubDraft(settings: UserSettings): GithubDraft {
   return { provider: 'github', token: settings.githubToken ?? '' };
 }
 
+/**
+ * YouTube is a platform connection (Data API key + channel), not an AI
+ * provider — same rationale as GithubDraft: the constant `provider: 'youtube'`
+ * field only satisfies the `useConfigDraft` generic constraint. `channel` is
+ * raw user input (@handle / UC… id / channel URL); resolution happens at
+ * probe/sync time in lib/youtube.
+ */
+export interface YoutubeDraft {
+  provider: 'youtube';
+  apiKey: string;
+  channel: string;
+}
+
+export function deriveYoutubeDraft(settings: UserSettings): YoutubeDraft {
+  return {
+    provider: 'youtube',
+    apiKey: settings.youtubeApiKey ?? '',
+    channel: settings.youtubeChannel ?? '',
+  };
+}
+
 // ---------------------------------------------------------------------------
 // useSettings
 // ---------------------------------------------------------------------------
@@ -106,6 +127,7 @@ export interface UseSettingsReturn {
   saveAsr: (draft: AsrDraft) => Promise<void>;
   saveEmbedding: (draft: EmbeddingDraft) => Promise<void>;
   saveGithub: (draft: GithubDraft) => Promise<void>;
+  saveYoutube: (draft: YoutubeDraft) => Promise<void>;
 }
 
 export function useSettings(): UseSettingsReturn {
@@ -204,6 +226,17 @@ export function useSettings(): UseSettingsReturn {
     [persist],
   );
 
+  const saveYoutube = useCallback(
+    (draft: YoutubeDraft) =>
+      persist((cur) => ({
+        ...cur,
+        youtubeApiKey: draft.apiKey,
+        youtubeChannel: draft.channel,
+        configSavedAt: { ...cur.configSavedAt, youtube: Date.now() },
+      })),
+    [persist],
+  );
+
   const currentAsrApiKey = resolveAsrConfig(settings).apiKey;
 
   return {
@@ -214,5 +247,6 @@ export function useSettings(): UseSettingsReturn {
     saveAsr,
     saveEmbedding,
     saveGithub,
+    saveYoutube,
   };
 }

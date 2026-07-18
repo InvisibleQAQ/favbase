@@ -17,6 +17,7 @@ import { LlmConfigCard } from './llm-config-card';
 import { AsrConfigCard } from './asr-config-card';
 import { EmbeddingConfigCard } from './embedding/embedding-config-card';
 import { GithubConnectionCard } from './github-connection-card';
+import { YoutubeConnectionCard } from './youtube-connection-card';
 import { ExportCard } from '../overview/export-card';
 import { SettingsTabs, type SettingsTabItem } from './settings-tabs';
 import { AiConfigNav, type AiSection, type AiConfigNavItem } from './ai-config-nav';
@@ -78,6 +79,9 @@ export function SettingsView() {
         <Grid container spacing={3}>
           <Grid size={{ xs: 12, md: 8 }}>
             <GithubConnectionCard settings={s.settings} saveGithub={s.saveGithub} />
+          </Grid>
+          <Grid size={{ xs: 12, md: 8 }}>
+            <YoutubeConnectionCard settings={s.settings} saveYoutube={s.saveYoutube} />
           </Grid>
         </Grid>
       )}
