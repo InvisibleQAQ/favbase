@@ -19,19 +19,17 @@
 import { eq, ilike, or, sql, type SQL } from 'drizzle-orm';
 import { getDb } from '@/lib/database';
 import type { FavbaseDb } from '@/lib/database';
-import { chunk, escapeLike } from '@/lib/database/sql-utils';
+import { escapeLike } from '@/lib/database/sql-utils';
 import { getPlatformLastSyncedAt, pagedItemsQuery } from '@/lib/database/collection-queries';
 import { sources } from '@/lib/database/entities/sources';
-import { authors } from '@/lib/database/entities/authors';
 import { items } from '@/lib/database/entities/items';
 import { itemSources } from '@/lib/database/entities/item-sources';
+import { ingestCollection } from '@/lib/ingest/ingest';
 import { readBookmarkTree, type BookmarkTree } from './bookmarks-api';
 
 export type { BookmarkTree, BookmarkFolder, BookmarkEntry } from './bookmarks-api';
 
 const PLATFORM = 'bookmarks';
-/** Rows per INSERT batch — keeps bind-param count well under the PG 65535 limit. */
-const INSERT_CHUNK_SIZE = 500;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -97,128 +95,66 @@ export async function syncBookmarks(): Promise<SyncBookmarksResult> {
 
 /**
  * Persist a bookmark tree. Exported for tests — production goes through
- * `syncBookmarks`. Single transaction, five steps mirroring the github flow:
- * sources upsert → authors insert → items insert → links insert.
+ * `syncBookmarks`. The transaction skeleton (sources upsert → authors → items
+ * → links) is delegated to the shared `ingestCollection` pipeline; this
+ * function only declares the normalized rows.
  */
 export async function syncBookmarkTreeToDb(
   db: FavbaseDb,
   tree: BookmarkTree,
 ): Promise<SyncBookmarksResult> {
-  return db.transaction(async (tx) => {
-    if (tree.bookmarks.length === 0) {
-      return { totalBookmarks: 0, syncedItems: 0, folders: 0 };
-    }
+  if (tree.bookmarks.length === 0) {
+    return { totalBookmarks: 0, syncedItems: 0, folders: 0 };
+  }
 
-    const now = new Date();
+  // Only folders with ≥1 DIRECT bookmark become sources (skip empty +
+  // subfolder-only folders — they'd be empty chips). Upsert refreshes title +
+  // path + lastFetchedAt (folder renames flow through).
+  const usedFolderIds = new Set(tree.bookmarks.map((b) => b.folderId));
+  const usedFolders = tree.folders.filter((f) => usedFolderIds.has(f.id));
 
-    // 1. Only folders with ≥1 DIRECT bookmark become sources (skip empty +
-    //    subfolder-only folders — they'd be empty chips). Upsert refreshes
-    //    title + path + lastFetchedAt (folder renames flow through).
-    const usedFolderIds = new Set(tree.bookmarks.map((b) => b.folderId));
-    const usedFolders = tree.folders.filter((f) => usedFolderIds.has(f.id));
+  // items = distinct by normalized URL (first-write-wins).
+  const itemByUrl = new Map<string, (typeof tree.bookmarks)[number]>();
+  for (const b of tree.bookmarks) {
+    if (!itemByUrl.has(b.normalizedUrl)) itemByUrl.set(b.normalizedUrl, b);
+  }
 
-    const sourceValues = usedFolders.map((f) => ({
-      platform: PLATFORM,
+  await ingestCollection(db, {
+    platform: PLATFORM,
+    sources: usedFolders.map((f) => ({
       platformSourceId: f.id,
       title: f.title,
       platformMeta: { path: f.path },
-      lastFetchedAt: now,
-    }));
-    for (const batch of chunk(sourceValues, INSERT_CHUNK_SIZE)) {
-      await tx
-        .insert(sources)
-        .values(batch)
-        .onConflictDoUpdate({
-          target: [sources.platform, sources.platformSourceId],
-          set: {
-            title: sql`excluded.title`,
-            platformMeta: sql`excluded.platform_meta`,
-            lastFetchedAt: sql`excluded.last_fetched_at`,
-            updatedAt: sql`NOW()`,
-          },
-        });
-    }
-
-    const sourceRows = await tx
-      .select({ id: sources.id, platformSourceId: sources.platformSourceId })
-      .from(sources)
-      .where(eq(sources.platform, PLATFORM));
-    const sourceIdMap = new Map(sourceRows.map((r) => [r.platformSourceId, r.id]));
-
-    // 2. authors = distinct domains, insert-only.
-    const domainSet = new Set(tree.bookmarks.map((b) => b.domain));
-    const authorValues = [...domainSet].map((domain) => ({
-      platform: PLATFORM,
+    })),
+    // authors = distinct domains.
+    authors: [...new Set(tree.bookmarks.map((b) => b.domain))].map((domain) => ({
       platformAuthorId: domain,
       name: domain,
       avatarUrl: null,
-    }));
-    for (const batch of chunk(authorValues, INSERT_CHUNK_SIZE)) {
-      await tx
-        .insert(authors)
-        .values(batch)
-        .onConflictDoNothing({ target: [authors.platform, authors.platformAuthorId] });
-    }
-
-    const authorRows = await tx
-      .select({ id: authors.id, platformAuthorId: authors.platformAuthorId })
-      .from(authors)
-      .where(eq(authors.platform, PLATFORM));
-    const authorIdMap = new Map(authorRows.map((r) => [r.platformAuthorId, r.id]));
-
-    // 3. items = distinct by normalized URL (first-write-wins), insert-only.
-    const itemByUrl = new Map<string, (typeof tree.bookmarks)[number]>();
-    for (const b of tree.bookmarks) {
-      if (!itemByUrl.has(b.normalizedUrl)) itemByUrl.set(b.normalizedUrl, b);
-    }
-
-    const itemValues = [...itemByUrl.values()].map((b) => ({
-      platform: PLATFORM,
+    })),
+    items: [...itemByUrl.values()].map((b) => ({
       platformItemId: b.normalizedUrl,
-      authorId: authorIdMap.get(b.domain)!,
+      platformAuthorId: b.domain,
       title: b.title,
       authorName: b.domain,
       originalUrl: b.url,
       publishedAt: b.dateAdded ? new Date(b.dateAdded) : null,
       contentState: 'no_content' as const,
       platformMeta: { domain: b.domain, dateAdded: b.dateAdded } satisfies BookmarkItemMeta,
-    }));
-    for (const batch of chunk(itemValues, INSERT_CHUNK_SIZE)) {
-      await tx
-        .insert(items)
-        .values(batch)
-        .onConflictDoNothing({ target: [items.platform, items.platformItemId] });
-    }
-
-    const itemRows = await tx
-      .select({ id: items.id, platformItemId: items.platformItemId })
-      .from(items)
-      .where(eq(items.platform, PLATFORM));
-    const itemIdMap = new Map(itemRows.map((r) => [r.platformItemId, r.id]));
-
-    // 4. item_sources links — one per (bookmark, folder) pair, deduped. A URL
-    //    in multiple folders → one item, multiple links.
-    const seen = new Set<string>();
-    const linkValues: Array<{ itemId: string; sourceId: string }> = [];
-    for (const b of tree.bookmarks) {
-      const itemId = itemIdMap.get(b.normalizedUrl);
-      const sourceId = sourceIdMap.get(b.folderId);
-      if (!itemId || !sourceId) continue;
-      const key = `${itemId}::${sourceId}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      linkValues.push({ itemId, sourceId });
-    }
-    for (const batch of chunk(linkValues, INSERT_CHUNK_SIZE)) {
-      await tx.insert(itemSources).values(batch).onConflictDoNothing();
-    }
-
-    return {
-      totalBookmarks: tree.bookmarks.length,
-      syncedItems: itemValues.length,
-      folders: usedFolders.length,
-    };
+    })),
+    // One link per (bookmark, folder) pair — a URL in multiple folders → one
+    // item, multiple links.
+    links: tree.bookmarks.map((b) => ({
+      platformItemId: b.normalizedUrl,
+      platformSourceId: b.folderId,
+    })),
   });
+
+  return {
+    totalBookmarks: tree.bookmarks.length,
+    syncedItems: itemByUrl.size,
+    folders: usedFolders.length,
+  };
 }
 
 // ---------------------------------------------------------------------------

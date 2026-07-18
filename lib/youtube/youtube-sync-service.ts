@@ -28,21 +28,16 @@
 import { desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm';
 import { getDb } from '@/lib/database';
 import type { FavbaseDb } from '@/lib/database';
-import { chunk, escapeLike } from '@/lib/database/sql-utils';
+import { escapeLike } from '@/lib/database/sql-utils';
 import {
   getPlatformLastSyncedAt,
   pagedItemsQuery,
   type PagedItemRow,
 } from '@/lib/database/collection-queries';
 import { sources } from '@/lib/database/entities/sources';
-import { authors } from '@/lib/database/entities/authors';
 import { items } from '@/lib/database/entities/items';
 import { itemSources } from '@/lib/database/entities/item-sources';
-import { itemContents } from '@/lib/database/entities/item-contents';
-// Leaf import (not the '@/lib/embedding' barrel): the barrel re-exports
-// ./config → '@/lib/storage', whose module-load `storage.defineItem` calls
-// eagerly hit chrome.storage. Same rule as x-sync-service.
-import { replaceItemChunks } from '@/lib/embedding/vector-store';
+import { ingestCollection } from '@/lib/ingest/ingest';
 import {
   resolveChannel,
   fetchPlaylists,
@@ -60,8 +55,6 @@ export { YoutubeAuthError, YoutubeRateLimitError } from './youtube-api';
 export type { YoutubePlaylist, YoutubePlaylistVideo } from './youtube-api';
 
 const PLATFORM = 'youtube';
-/** Rows per INSERT batch — keeps bind-param count well under the PG 65535 limit. */
-const INSERT_CHUNK_SIZE = 500;
 /** platformMeta keeps a card-sized description slice; full text → item_contents. */
 const META_DESCRIPTION_MAX_CHARS = 500;
 
@@ -221,200 +214,87 @@ async function getKnownVideoIds(db: FavbaseDb): Promise<Set<string>> {
 
 /**
  * Persist playlist batches. Exported for tests — production goes through
- * `syncYoutubePlaylists`. Structure mirrors the zhihu flow: a single
- * insert-only transaction (per-playlist sources upsert → authors → items →
- * links), then content + chunks for the NEWLY inserted items OUTSIDE the tx
- * (replaceItemChunks opens its own transaction — nesting on the
- * single-connection proxy would deadlock).
+ * `syncYoutubePlaylists`. The transaction skeleton (per-playlist sources
+ * upsert → authors → items → links → two-phase content write) is delegated to
+ * the shared `ingestCollection` pipeline; this function only declares the
+ * normalized rows.
  */
 export async function syncPlaylistsToDb(
   db: FavbaseDb,
   batches: PlaylistBatch[],
 ): Promise<SyncPlaylistsResult> {
   const entryCount = batches.reduce((n, b) => n + b.entries.length, 0);
+  if (batches.length === 0) return { playlists: 0, entries: 0, inserted: 0 };
 
-  const insertedItems = await db.transaction(async (tx) => {
-    if (batches.length === 0) return [];
-
-    // 1. Upsert one source per playlist (ADR-allowed exception: title +
-    //    lastFetchedAt freshness). Runs even for empty playlists so the UI can
-    //    distinguish "never synced" from "synced, empty".
-    const sourceIdMap = new Map<string, string>();
-    for (const { playlist } of batches) {
-      const rows = await tx
-        .insert(sources)
-        .values({
-          platform: PLATFORM,
-          platformSourceId: playlist.playlistId,
-          title: playlist.title || playlist.playlistId,
-          lastFetchedAt: new Date(),
-        })
-        .onConflictDoUpdate({
-          target: [sources.platform, sources.platformSourceId],
-          set: {
-            title: sql`excluded.title`,
-            lastFetchedAt: sql`excluded.last_fetched_at`,
-            updatedAt: sql`NOW()`,
-          },
-        })
-        .returning({ id: sources.id });
-      sourceIdMap.set(playlist.playlistId, rows[0].id);
+  // Dedupe across playlists in batch order: the first-seen playlist supplies
+  // addedAt + the display membership (playlistId/playlistTitle in platformMeta).
+  const byId = new Map<string, { video: YoutubePlaylistVideo; playlist: YoutubePlaylist }>();
+  for (const { playlist, videos } of batches) {
+    for (const v of videos) {
+      if (!byId.has(v.videoId)) byId.set(v.videoId, { video: v, playlist });
     }
-
-    // 2. Uploader channels deduped by channelId, insert-only. (Data API v3
-    //    video responses carry no channel avatar — avatarUrl stays null.)
-    const channelMap = new Map<string, YoutubePlaylistVideo>();
-    for (const { videos } of batches) {
-      for (const v of videos) {
-        if (v.channelId && !channelMap.has(v.channelId)) channelMap.set(v.channelId, v);
-      }
-    }
-    const authorValues = [...channelMap.values()].map((v) => ({
-      platform: PLATFORM,
-      platformAuthorId: v.channelId,
-      name: v.channelTitle || v.channelId,
-      avatarUrl: null,
-    }));
-    for (const batch of chunk(authorValues, INSERT_CHUNK_SIZE)) {
-      await tx
-        .insert(authors)
-        .values(batch)
-        .onConflictDoNothing({ target: [authors.platform, authors.platformAuthorId] });
-    }
-
-    const authorRows = await tx
-      .select({ id: authors.id, platformAuthorId: authors.platformAuthorId })
-      .from(authors)
-      .where(eq(authors.platform, PLATFORM));
-    const authorIdMap = new Map(authorRows.map((r) => [r.platformAuthorId, r.id]));
-
-    // 3. Items — insert-only, first-write-wins. Dedupe across playlists in
-    //    batch order: the first-seen playlist supplies addedAt + the display
-    //    membership (playlistId/playlistTitle in platformMeta).
-    const existingRows = await tx
-      .select({ platformItemId: items.platformItemId })
-      .from(items)
-      .where(eq(items.platform, PLATFORM));
-    const preExisting = new Set(existingRows.map((r) => r.platformItemId));
-
-    const byId = new Map<string, { video: YoutubePlaylistVideo; playlist: YoutubePlaylist }>();
-    for (const { playlist, videos } of batches) {
-      for (const v of videos) {
-        if (!byId.has(v.videoId)) byId.set(v.videoId, { video: v, playlist });
-      }
-    }
-
-    const itemValues = [...byId.values()]
-      .map(({ video: v, playlist }) => {
-        const authorId = authorIdMap.get(v.channelId);
-        if (!authorId) return null;
-        return {
-          platform: PLATFORM,
-          platformItemId: v.videoId,
-          authorId,
-          title: v.title || v.videoId,
-          authorName: v.channelTitle || v.channelId,
-          originalUrl: `https://www.youtube.com/watch?v=${v.videoId}`,
-          publishedAt: v.videoPublishedAt ? new Date(v.videoPublishedAt) : null,
-          contentState: (v.description.trim() ? 'chunked' : 'no_content') as
-            | 'chunked'
-            | 'no_content',
-          platformMeta: {
-            description: v.description.slice(0, META_DESCRIPTION_MAX_CHARS),
-            channelId: v.channelId,
-            channelTitle: v.channelTitle,
-            thumbnailUrl: v.thumbnailUrl,
-            durationSeconds: v.durationSeconds,
-            viewCount: v.viewCount,
-            likeCount: v.likeCount,
-            addedAt: v.addedAt,
-            videoPublishedAt: v.videoPublishedAt,
-            playlistId: playlist.playlistId,
-            playlistTitle: playlist.title,
-          } satisfies YoutubeItemMeta,
-        };
-      })
-      .filter((v): v is NonNullable<typeof v> => v !== null);
-
-    for (const batch of chunk(itemValues, INSERT_CHUNK_SIZE)) {
-      await tx
-        .insert(items)
-        .values(batch)
-        .onConflictDoNothing({ target: [items.platform, items.platformItemId] });
-    }
-
-    // 4. Links from ALL membership entries (not just detail-filled videos):
-    //    a known video newly added to another playlist still gets its link.
-    //    Entries whose video never got an item row (deleted/private, never
-    //    stored) resolve to no itemId and drop out naturally.
-    const itemRows = await tx
-      .select({ id: items.id, platformItemId: items.platformItemId })
-      .from(items)
-      .where(eq(items.platform, PLATFORM));
-    const itemIdMap = new Map(itemRows.map((r) => [r.platformItemId, r.id]));
-
-    const seenLinks = new Set<string>();
-    const linkValues: Array<{ itemId: string; sourceId: string }> = [];
-    for (const { playlist, entries } of batches) {
-      const sourceId = sourceIdMap.get(playlist.playlistId);
-      if (!sourceId) continue;
-      for (const entry of entries) {
-        const itemId = itemIdMap.get(entry.videoId);
-        if (!itemId) continue;
-        const key = `${itemId}::${sourceId}`;
-        if (seenLinks.has(key)) continue;
-        seenLinks.add(key);
-        linkValues.push({ itemId, sourceId });
-      }
-    }
-    for (const batch of chunk(linkValues, INSERT_CHUNK_SIZE)) {
-      await tx.insert(itemSources).values(batch).onConflictDoNothing();
-    }
-
-    const inserted: Array<{ itemId: string; description: string }> = [];
-    for (const [videoId, { video }] of byId) {
-      if (preExisting.has(videoId)) continue;
-      const itemId = itemIdMap.get(videoId);
-      if (!itemId) continue;
-      inserted.push({ itemId, description: video.description });
-    }
-    return inserted;
-  });
-
-  // 5. Persist content + chunks for NEW items only, OUTSIDE the tx (each
-  //    replaceItemChunks opens its own transaction; nesting deadlocks the
-  //    single-connection proxy). content_state='chunked' — embedding deferred.
-  for (const { itemId, description } of insertedItems) {
-    await persistDescriptionContent(db, itemId, description);
   }
+
+  const result = await ingestCollection(db, {
+    platform: PLATFORM,
+    // One source per playlist — empty playlists still get a row so the UI can
+    // distinguish "never synced" from "synced, empty".
+    sources: batches.map(({ playlist }) => ({
+      platformSourceId: playlist.playlistId,
+      title: playlist.title || playlist.playlistId,
+    })),
+    // Uploader channels (Data API v3 video responses carry no channel avatar
+    // — avatarUrl stays null).
+    authors: [...byId.values()]
+      .filter(({ video }) => video.channelId)
+      .map(({ video }) => ({
+        platformAuthorId: video.channelId,
+        name: video.channelTitle || video.channelId,
+        avatarUrl: null,
+      })),
+    items: [...byId.values()].map(({ video: v, playlist }) => ({
+      platformItemId: v.videoId,
+      platformAuthorId: v.channelId,
+      title: v.title || v.videoId,
+      authorName: v.channelTitle || v.channelId,
+      originalUrl: `https://www.youtube.com/watch?v=${v.videoId}`,
+      publishedAt: v.videoPublishedAt ? new Date(v.videoPublishedAt) : null,
+      contentState: v.description.trim() ? ('chunked' as const) : ('no_content' as const),
+      platformMeta: {
+        description: v.description.slice(0, META_DESCRIPTION_MAX_CHARS),
+        channelId: v.channelId,
+        channelTitle: v.channelTitle,
+        thumbnailUrl: v.thumbnailUrl,
+        durationSeconds: v.durationSeconds,
+        viewCount: v.viewCount,
+        likeCount: v.likeCount,
+        addedAt: v.addedAt,
+        videoPublishedAt: v.videoPublishedAt,
+        playlistId: playlist.playlistId,
+        playlistTitle: playlist.title,
+      } satisfies YoutubeItemMeta,
+    })),
+    // Links from ALL membership entries (not just detail-filled videos): a
+    // known video newly added to another playlist still gets its link.
+    // Entries whose video never got an item row (deleted/private, never
+    // stored) resolve to no itemId and drop out naturally.
+    links: batches.flatMap(({ playlist, entries }) =>
+      entries.map((entry) => ({
+        platformItemId: entry.videoId,
+        platformSourceId: playlist.playlistId,
+      })),
+    ),
+    content: {
+      textOf: (videoId) => byId.get(videoId)?.video.description ?? '',
+      chunk: chunkDescription,
+    },
+  });
 
   return {
     playlists: batches.length,
     entries: entryCount,
-    inserted: insertedItems.length,
+    inserted: result.inserted.length,
   };
-}
-
-/**
- * Persist one video's full description → item_contents + item_chunks, leaving
- * the item at content_state='chunked' (already set at insert). No-op for empty
- * descriptions (those items are 'no_content'). Embedding is deferred to the
- * settings 「重建向量」batch (D3).
- */
-async function persistDescriptionContent(
-  db: FavbaseDb,
-  itemId: string,
-  description: string,
-): Promise<void> {
-  const plainText = description.trim();
-  if (!plainText) return;
-
-  await db
-    .insert(itemContents)
-    .values({ itemId, plainText })
-    .onConflictDoUpdate({ target: itemContents.itemId, set: { plainText, updatedAt: new Date() } });
-
-  await replaceItemChunks(db, itemId, chunkDescription(plainText));
 }
 
 // ---------------------------------------------------------------------------

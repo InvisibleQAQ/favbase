@@ -23,18 +23,13 @@
 import { and, desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm';
 import { getDb } from '@/lib/database';
 import type { FavbaseDb } from '@/lib/database';
-import { chunk, escapeLike } from '@/lib/database/sql-utils';
+import { escapeLike } from '@/lib/database/sql-utils';
 import { getPlatformLastSyncedAt, pagedItemsQuery } from '@/lib/database/collection-queries';
-import { sources } from '@/lib/database/entities/sources';
-import { authors } from '@/lib/database/entities/authors';
 import { items } from '@/lib/database/entities/items';
-import { itemSources } from '@/lib/database/entities/item-sources';
-import { itemContents } from '@/lib/database/entities/item-contents';
-// Leaf import (not the '@/lib/embedding' barrel): the barrel re-exports
-// ./config → '@/lib/storage', whose module-load `storage.defineItem` calls
-// eagerly hit chrome.storage — which offscreen documents (where this sync also
-// runs) don't have. Same rule as x-auth.ts importing '@/lib/storage/keys'.
-import { replaceItemChunks } from '@/lib/embedding/vector-store';
+// The ingest pipeline is offscreen-safe (leaf-imports vector-store, zero
+// '@/lib/storage' reach) — this sync also runs in offscreen documents, which
+// have no chrome.storage. Same rule as x-auth.ts importing '@/lib/storage/keys'.
+import { ingestCollection } from '@/lib/ingest/ingest';
 import {
   fetchAllBookmarks,
   XAuthError,
@@ -53,8 +48,6 @@ export type { XRawBookmark, BookmarksProgressCallback } from './x-api';
 const PLATFORM = 'x';
 const BOOKMARKS_SOURCE_ID = 'bookmarks';
 const BOOKMARKS_SOURCE_TITLE = 'X Bookmarks';
-/** Rows per INSERT batch — keeps bind-param count well under the PG 65535 limit. */
-const INSERT_CHUNK_SIZE = 500;
 /** Card title = first N chars of the tweet text (full text lives in platformMeta). */
 const TITLE_MAX_CHARS = 140;
 
@@ -159,161 +152,62 @@ async function getKnownTweetIds(db: FavbaseDb): Promise<Set<string>> {
 
 /**
  * Persist bookmarks. Exported for tests — production goes through
- * `syncBookmarks`. Structure mirrors the github flow: a single insert-only
- * transaction (sources upsert → authors → items → links), then content +
- * chunks for the NEWLY inserted items OUTSIDE the tx (replaceItemChunks opens
- * its own transaction — nesting on the single-connection proxy would deadlock).
+ * `syncBookmarks`. The transaction skeleton (sources upsert → authors → items
+ * → links → two-phase content write) is delegated to the shared
+ * `ingestCollection` pipeline; this function only declares the normalized rows.
  */
 export async function syncBookmarksToDb(
   db: FavbaseDb,
   bookmarks: XRawBookmark[],
 ): Promise<SyncBookmarksResult> {
-  const insertedItemIds = await db.transaction(async (tx) => {
-    // 1. Upsert the single "bookmarks" source (ADR-allowed exception:
-    //    lastFetchedAt freshness). Runs even for an empty list so the UI can
-    //    distinguish "never synced" from "synced, empty".
-    const sourceRows = await tx
-      .insert(sources)
-      .values({
-        platform: PLATFORM,
-        platformSourceId: BOOKMARKS_SOURCE_ID,
-        title: BOOKMARKS_SOURCE_TITLE,
-        lastFetchedAt: new Date(),
-      })
-      .onConflictDoUpdate({
-        target: [sources.platform, sources.platformSourceId],
-        set: { lastFetchedAt: sql`excluded.last_fetched_at`, updatedAt: sql`NOW()` },
-      })
-      .returning({ id: sources.id });
-    const sourceId = sourceRows[0].id;
+  // Dedupe within this batch (a tweet can appear once, but be defensive).
+  const byId = new Map<string, XRawBookmark>();
+  for (const b of bookmarks) if (!byId.has(b.id)) byId.set(b.id, b);
 
-    if (bookmarks.length === 0) return [];
-
-    // 2. Authors deduped by rest_id, insert-only.
-    const authorMap = new Map<string, XRawBookmark['author']>();
-    for (const b of bookmarks) {
-      if (b.author.restId && !authorMap.has(b.author.restId)) {
-        authorMap.set(b.author.restId, b.author);
-      }
-    }
-    const authorValues = [...authorMap.values()].map((a) => ({
-      platform: PLATFORM,
-      platformAuthorId: a.restId,
-      name: a.name || a.handle,
-      avatarUrl: a.avatarUrl || null,
-    }));
-    for (const batch of chunk(authorValues, INSERT_CHUNK_SIZE)) {
-      await tx
-        .insert(authors)
-        .values(batch)
-        .onConflictDoNothing({ target: [authors.platform, authors.platformAuthorId] });
-    }
-
-    const authorRows = await tx
-      .select({ id: authors.id, platformAuthorId: authors.platformAuthorId })
-      .from(authors)
-      .where(eq(authors.platform, PLATFORM));
-    const authorIdMap = new Map(authorRows.map((r) => [r.platformAuthorId, r.id]));
-
-    // 3. Items — insert-only, first-write-wins. Track which platformItemIds are
-    //    new (existed before this run = not new) so we only persist content for
-    //    fresh rows.
-    const existingRows = await tx
-      .select({ platformItemId: items.platformItemId })
-      .from(items)
-      .where(eq(items.platform, PLATFORM));
-    const preExisting = new Set(existingRows.map((r) => r.platformItemId));
-
-    // Dedupe within this batch (a tweet can appear once, but be defensive).
-    const byId = new Map<string, XRawBookmark>();
-    for (const b of bookmarks) if (!byId.has(b.id)) byId.set(b.id, b);
-
-    const itemValues = [...byId.values()]
-      .map((b) => {
-        const authorId = authorIdMap.get(b.author.restId);
-        if (!authorId) return null;
-        return {
-          platform: PLATFORM,
-          platformItemId: b.id,
-          authorId,
-          title: b.text.slice(0, TITLE_MAX_CHARS) || b.author.handle,
-          authorName: b.author.name || b.author.handle,
-          originalUrl: b.url,
-          publishedAt: b.createdAt ? new Date(b.createdAt) : null,
-          contentState: 'chunked' as const,
-          platformMeta: {
-            text: b.text,
-            authorHandle: b.author.handle,
-            authorName: b.author.name,
-            avatarUrl: b.author.avatarUrl,
-            media: b.media,
-            likeCount: b.likeCount,
-            retweetCount: b.retweetCount,
-            replyCount: b.replyCount,
-            lang: b.lang,
-          } satisfies XItemMeta,
-        };
-      })
-      .filter((v): v is NonNullable<typeof v> => v !== null);
-
-    for (const batch of chunk(itemValues, INSERT_CHUNK_SIZE)) {
-      await tx
-        .insert(items)
-        .values(batch)
-        .onConflictDoNothing({ target: [items.platform, items.platformItemId] });
-    }
-
-    // 4. Build tweetId → item id map, insert item_sources links.
-    const itemRows = await tx
-      .select({ id: items.id, platformItemId: items.platformItemId })
-      .from(items)
-      .where(eq(items.platform, PLATFORM));
-    const itemIdMap = new Map(itemRows.map((r) => [r.platformItemId, r.id]));
-
-    const linkValues: Array<{ itemId: string; sourceId: string }> = [];
-    const inserted: Array<{ itemId: string; text: string }> = [];
-    for (const b of byId.values()) {
-      const itemId = itemIdMap.get(b.id);
-      if (!itemId) continue;
-      linkValues.push({ itemId, sourceId });
-      if (!preExisting.has(b.id)) inserted.push({ itemId, text: b.text });
-    }
-    for (const batch of chunk(linkValues, INSERT_CHUNK_SIZE)) {
-      await tx.insert(itemSources).values(batch).onConflictDoNothing();
-    }
-
-    return inserted;
+  const result = await ingestCollection(db, {
+    platform: PLATFORM,
+    // The single "bookmarks" source upserts even for an empty list so the UI
+    // can distinguish "never synced" from "synced, empty".
+    sources: [{ platformSourceId: BOOKMARKS_SOURCE_ID, title: BOOKMARKS_SOURCE_TITLE }],
+    authors: [...byId.values()]
+      .filter((b) => b.author.restId)
+      .map((b) => ({
+        platformAuthorId: b.author.restId,
+        name: b.author.name || b.author.handle,
+        avatarUrl: b.author.avatarUrl || null,
+      })),
+    items: [...byId.values()].map((b) => ({
+      platformItemId: b.id,
+      platformAuthorId: b.author.restId,
+      title: b.text.slice(0, TITLE_MAX_CHARS) || b.author.handle,
+      authorName: b.author.name || b.author.handle,
+      originalUrl: b.url,
+      publishedAt: b.createdAt ? new Date(b.createdAt) : null,
+      contentState: 'chunked' as const,
+      platformMeta: {
+        text: b.text,
+        authorHandle: b.author.handle,
+        authorName: b.author.name,
+        avatarUrl: b.author.avatarUrl,
+        media: b.media,
+        likeCount: b.likeCount,
+        retweetCount: b.retweetCount,
+        replyCount: b.replyCount,
+        lang: b.lang,
+      } satisfies XItemMeta,
+    })),
+    links: [...byId.keys()].map((tweetId) => ({
+      platformItemId: tweetId,
+      platformSourceId: BOOKMARKS_SOURCE_ID,
+    })),
+    content: { textOf: (tweetId) => byId.get(tweetId)?.text ?? '', chunk: chunkTweetText },
   });
-
-  // 5. Persist content + chunks for NEW items only, OUTSIDE the tx (each
-  //    replaceItemChunks opens its own transaction; nesting deadlocks the
-  //    single-connection proxy). content_state='chunked' — embedding deferred.
-  for (const { itemId, text } of insertedItemIds) {
-    await persistTweetContent(db, itemId, text);
-  }
 
   return {
     total: bookmarks.length,
     synced: bookmarks.length,
-    inserted: insertedItemIds.length,
+    inserted: result.inserted.length,
   };
-}
-
-/**
- * Persist one tweet's text → item_contents + item_chunks, leaving the item at
- * content_state='chunked' (already set at insert; re-affirmed defensively).
- * Embedding is deferred to the settings 「重建向量」batch (D3).
- */
-async function persistTweetContent(db: FavbaseDb, itemId: string, text: string): Promise<void> {
-  const plainText = text.trim();
-  if (!plainText) return;
-
-  await db
-    .insert(itemContents)
-    .values({ itemId, plainText })
-    .onConflictDoUpdate({ target: itemContents.itemId, set: { plainText, updatedAt: new Date() } });
-
-  await replaceItemChunks(db, itemId, chunkTweetText(plainText));
 }
 
 // ---------------------------------------------------------------------------

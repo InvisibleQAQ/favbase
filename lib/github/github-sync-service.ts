@@ -14,12 +14,10 @@
 import { and, desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm';
 import { getDb } from '@/lib/database';
 import type { FavbaseDb } from '@/lib/database';
-import { chunk, escapeLike } from '@/lib/database/sql-utils';
+import { escapeLike } from '@/lib/database/sql-utils';
 import { getPlatformLastSyncedAt, pagedItemsQuery } from '@/lib/database/collection-queries';
-import { sources } from '@/lib/database/entities/sources';
-import { authors } from '@/lib/database/entities/authors';
 import { items } from '@/lib/database/entities/items';
-import { itemSources } from '@/lib/database/entities/item-sources';
+import { ingestCollection } from '@/lib/ingest/ingest';
 import { fetchAllStarred, type GithubStarredRepo, type StarsProgressCallback } from './github-api';
 
 // Re-export only what service consumers actually need: the structured errors
@@ -32,8 +30,6 @@ export type { GithubStarredRepo, StarsProgressCallback } from './github-api';
 const PLATFORM = 'github';
 const STARS_SOURCE_ID = 'stars';
 const STARS_SOURCE_TITLE = 'GitHub Stars';
-/** Rows per INSERT batch — keeps bind-param count well under the PG 65535 limit. */
-const INSERT_CHUNK_SIZE = 500;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -111,162 +107,71 @@ export async function syncStars(
 
 /**
  * Persist starred repos. Exported for tests — production code goes through
- * `syncStars`. Single transaction, five steps mirroring videos-sync:
- * sources upsert → authors insert → author map → items insert → links insert.
+ * `syncStars`. The transaction skeleton (sources upsert → authors → items →
+ * links) is delegated to the shared `ingestCollection` pipeline; this function
+ * only declares the normalized rows and reports dropped repos.
  */
 export async function syncStarsToDb(
   db: FavbaseDb,
   repos: GithubStarredRepo[],
 ): Promise<SyncStarsResult> {
-  return db.transaction(async (tx) => {
-    // 1. Upsert the single "stars" source row (ADR-allowed exception:
-    //    lastFetchedAt freshness). Runs even for an empty star list so the
-    //    UI can distinguish "never synced" from "synced, empty".
-    const sourceRows = await tx
-      .insert(sources)
-      .values({
-        platform: PLATFORM,
-        platformSourceId: STARS_SOURCE_ID,
-        title: STARS_SOURCE_TITLE,
-        lastFetchedAt: new Date(),
-      })
-      .onConflictDoUpdate({
-        target: [sources.platform, sources.platformSourceId],
-        set: {
-          lastFetchedAt: sql`excluded.last_fetched_at`,
-          updatedAt: sql`NOW()`,
-        },
-      })
-      .returning({ id: sources.id });
-    const sourceId = sourceRows[0].id;
-
-    if (repos.length === 0) {
-      return { total: 0, synced: 0, dropped: 0, droppedRepoIds: [] };
-    }
-
-    // 2. Deduplicate owners by login, insert-only.
-    const ownerMap = new Map<string, GithubStarredRepo['owner']>();
-    for (const r of repos) {
-      if (!ownerMap.has(r.owner.login)) ownerMap.set(r.owner.login, r.owner);
-    }
-
-    const authorValues = [...ownerMap.values()].map((owner) => ({
-      platform: PLATFORM,
-      platformAuthorId: owner.login,
-      name: owner.login,
-      avatarUrl: owner.avatarUrl || null,
-    }));
-
-    for (const batch of chunk(authorValues, INSERT_CHUNK_SIZE)) {
-      await tx
-        .insert(authors)
-        .values(batch)
-        .onConflictDoNothing({ target: [authors.platform, authors.platformAuthorId] });
-    }
-
-    // 3. Build login → author id map (select by platform: avoids giant
-    //    inArray param lists; the github author set IS the set we need).
-    const authorRows = await tx
-      .select({ id: authors.id, platformAuthorId: authors.platformAuthorId })
-      .from(authors)
-      .where(eq(authors.platform, PLATFORM));
-    const authorIdMap = new Map(authorRows.map((r) => [r.platformAuthorId, r.id]));
-
-    // 4. Insert items — insert-only, first-write-wins.
-    const droppedByAuthor: string[] = [];
-    const itemValues: Array<{
-      platform: string;
-      platformItemId: string;
-      authorId: string;
-      title: string;
-      authorName: string;
-      originalUrl: string;
-      publishedAt: Date | null;
-      contentState: 'no_content';
-      platformMeta: GithubItemMeta;
-    }> = [];
-
-    for (const r of repos) {
-      const authorId = authorIdMap.get(r.owner.login);
-      if (!authorId) {
-        droppedByAuthor.push(String(r.id));
-        continue;
-      }
-      itemValues.push({
-        platform: PLATFORM,
-        platformItemId: String(r.id),
-        authorId,
-        title: r.fullName,
-        authorName: r.owner.login,
-        originalUrl: r.htmlUrl,
-        publishedAt: r.createdAt ? new Date(r.createdAt) : null,
-        contentState: 'no_content' as const,
-        platformMeta: {
-          description: r.description,
-          language: r.language,
-          stargazersCount: r.stargazersCount,
-          forksCount: r.forksCount,
-          topics: r.topics,
-          pushedAt: r.pushedAt,
-          starredAt: r.starredAt,
-          ownerAvatarUrl: r.owner.avatarUrl,
-        },
-      });
-    }
-
-    if (droppedByAuthor.length > 0) {
-      console.warn(
-        '[github-sync] %d repos dropped (author mapping miss):',
-        droppedByAuthor.length,
-        droppedByAuthor,
-      );
-    }
-
-    for (const batch of chunk(itemValues, INSERT_CHUNK_SIZE)) {
-      await tx
-        .insert(items)
-        .values(batch)
-        .onConflictDoNothing({ target: [items.platform, items.platformItemId] });
-    }
-
-    // 5. Build repoId → item id map, insert item_sources links.
-    const itemRows = await tx
-      .select({ id: items.id, platformItemId: items.platformItemId })
-      .from(items)
-      .where(eq(items.platform, PLATFORM));
-    const itemIdMap = new Map(itemRows.map((r) => [r.platformItemId, r.id]));
-
-    const droppedByItem: string[] = [];
-    const linkValues: Array<{ itemId: string; sourceId: string }> = [];
-    for (const r of repos) {
-      const itemId = itemIdMap.get(String(r.id));
-      if (!itemId) {
-        if (!droppedByAuthor.includes(String(r.id))) droppedByItem.push(String(r.id));
-        continue;
-      }
-      linkValues.push({ itemId, sourceId });
-    }
-
-    if (droppedByItem.length > 0) {
-      console.warn(
-        '[github-sync] %d item_sources dropped (item mapping miss):',
-        droppedByItem.length,
-        droppedByItem,
-      );
-    }
-
-    for (const batch of chunk(linkValues, INSERT_CHUNK_SIZE)) {
-      await tx.insert(itemSources).values(batch).onConflictDoNothing();
-    }
-
-    const droppedRepoIds = [...new Set([...droppedByAuthor, ...droppedByItem])];
-    return {
-      total: repos.length,
-      synced: linkValues.length,
-      dropped: droppedRepoIds.length,
-      droppedRepoIds,
-    };
+  const result = await ingestCollection(db, {
+    platform: PLATFORM,
+    // The single "stars" source upserts even for an empty star list so the UI
+    // can distinguish "never synced" from "synced, empty".
+    sources: [{ platformSourceId: STARS_SOURCE_ID, title: STARS_SOURCE_TITLE }],
+    authors: repos.map((r) => ({
+      platformAuthorId: r.owner.login,
+      name: r.owner.login,
+      avatarUrl: r.owner.avatarUrl || null,
+    })),
+    items: repos.map((r) => ({
+      platformItemId: String(r.id),
+      platformAuthorId: r.owner.login,
+      title: r.fullName,
+      authorName: r.owner.login,
+      originalUrl: r.htmlUrl,
+      publishedAt: r.createdAt ? new Date(r.createdAt) : null,
+      contentState: 'no_content' as const,
+      platformMeta: {
+        description: r.description,
+        language: r.language,
+        stargazersCount: r.stargazersCount,
+        forksCount: r.forksCount,
+        topics: r.topics,
+        pushedAt: r.pushedAt,
+        starredAt: r.starredAt,
+        ownerAvatarUrl: r.owner.avatarUrl,
+      } satisfies GithubItemMeta,
+    })),
+    links: repos.map((r) => ({
+      platformItemId: String(r.id),
+      platformSourceId: STARS_SOURCE_ID,
+    })),
   });
+
+  if (result.droppedItemIds.length > 0) {
+    console.warn(
+      '[github-sync] %d repos dropped (author mapping miss):',
+      result.droppedItemIds.length,
+      result.droppedItemIds,
+    );
+  }
+  if (result.droppedLinkItemIds.length > 0) {
+    console.warn(
+      '[github-sync] %d item_sources dropped (item mapping miss):',
+      result.droppedLinkItemIds.length,
+      result.droppedLinkItemIds,
+    );
+  }
+
+  const droppedRepoIds = [...new Set([...result.droppedItemIds, ...result.droppedLinkItemIds])];
+  return {
+    total: repos.length,
+    synced: result.linkCount,
+    dropped: droppedRepoIds.length,
+    droppedRepoIds,
+  };
 }
 
 // ---------------------------------------------------------------------------

@@ -12,7 +12,7 @@ RPC Proxy 架构（参考 memorall 3-hop PortBridge 模式）：Offscreen Docume
 - `bridges/` — RPC 桥接层
 - `migrations/` — 自定义迁移系统
 - `index.ts` — Public API barrel
-- `sql-utils.ts` — 平台无关纯函数（零导入零副作用，offscreen 安全）：`chunk<T>(arr, size)`（INSERT 分批，bind-param < 65535）、`escapeLike(input)`（LIKE/ILIKE 元字符转义，ILIKE 注入唯一防线）。github/bookmarks/x/zhihu 四个 sync-service 共用，勿再各自拷贝（docs/15 MEDIUM-3）
+- `sql-utils.ts` — 平台无关纯函数（零导入零副作用，offscreen 安全）：`chunk<T>(arr, size)`（INSERT 分批，bind-param < 65535，主要消费方 `lib/ingest/ingest.ts`）、`escapeLike(input)`（LIKE/ILIKE 元字符转义，ILIKE 注入唯一防线，各平台 sync-service 查询共用）。勿再各自拷贝（docs/15 MEDIUM-3）
 - `collection-queries.ts` — 收藏页共享读骨架：`pagedItemsQuery(db, {conditions, orderBy, page, pageSize, mapRow})`（固定 7 列 select + 并行 `count(*)` + 分页 + 行映射，返回 `{rows, total}`）、`getPlatformLastSyncedAt(platform, db)`（`max(lastFetchedAt)` over sources，统一单源/多源两种旧写法）。各平台 getX 只声明 filter 条件 + orderBy + mapRow（docs/15 MEDIUM-3）
 
 ## 约定

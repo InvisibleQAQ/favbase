@@ -29,16 +29,12 @@
 import { desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm';
 import { getDb } from '@/lib/database';
 import type { FavbaseDb } from '@/lib/database';
-import { chunk, escapeLike } from '@/lib/database/sql-utils';
+import { escapeLike } from '@/lib/database/sql-utils';
 import { getPlatformLastSyncedAt, pagedItemsQuery } from '@/lib/database/collection-queries';
 import { sources } from '@/lib/database/entities/sources';
-import { authors } from '@/lib/database/entities/authors';
 import { items } from '@/lib/database/entities/items';
 import { itemSources } from '@/lib/database/entities/item-sources';
-import { itemContents } from '@/lib/database/entities/item-contents';
-// Leaf import (not the '@/lib/embedding' barrel) — same rule as x-sync-service:
-// the barrel's ./config re-export touches '@/lib/storage' at module load.
-import { replaceItemChunks } from '@/lib/embedding/vector-store';
+import { ingestCollection } from '@/lib/ingest/ingest';
 import {
   fetchAllFavorites,
   type ZhihuCollection,
@@ -55,8 +51,6 @@ export { ZhihuAuthError, ZhihuRateLimitError } from './zhihu-api';
 export type { ZhihuCollection, ZhihuItemType, ZhihuProgressCallback, ZhihuRawFavorite };
 
 const PLATFORM = 'zhihu';
-/** Rows per INSERT batch — keeps bind-param count well under the PG 65535 limit. */
-const INSERT_CHUNK_SIZE = 500;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -141,11 +135,10 @@ export async function syncFavorites(onProgress?: ZhihuProgressCallback): Promise
 
 /**
  * Persist collections + favorites. Exported for tests — production goes
- * through `syncFavorites`. Structure mirrors the x flow: markdown conversion
- * up front (outside the tx — turndown is CPU work), then a single insert-only
- * transaction (sources upsert → authors → items → links), then content +
- * chunks for the NEWLY inserted items OUTSIDE the tx (replaceItemChunks opens
- * its own transaction — nesting on the single-connection proxy would deadlock).
+ * through `syncFavorites`. Markdown conversion happens up front (outside the
+ * tx — turndown is CPU work); the transaction skeleton (sources upsert →
+ * authors → items → links → two-phase content write) is delegated to the
+ * shared `ingestCollection` pipeline.
  */
 export async function syncFavoritesToDb(
   db: FavbaseDb,
@@ -164,170 +157,60 @@ export async function syncFavoritesToDb(
     markdownById.set(pid, favorite.contentHtml ? htmlToMarkdown(favorite.contentHtml) : '');
   }
 
-  const insertedItems = await db.transaction(async (tx) => {
-    if (collections.length === 0) return [];
+  if (collections.length === 0) {
+    return { total: favorites.length, synced: byId.size, inserted: 0, collections: 0 };
+  }
 
-    // 1. Upsert ALL public collections as sources (ADR-allowed exception:
-    //    title + lastFetchedAt freshness). Empty collections still get a row
-    //    so max(lastFetchedAt) can answer "when was the last sync".
-    const now = new Date();
-    const sourceValues = collections.map((collection) => ({
-      platform: PLATFORM,
+  const result = await ingestCollection(db, {
+    platform: PLATFORM,
+    // ALL public collections become sources — empty collections still get a
+    // row so max(lastFetchedAt) can answer "when was the last sync".
+    sources: collections.map((collection) => ({
       platformSourceId: collection.id,
       title: collection.title,
-      lastFetchedAt: now,
-    }));
-    for (const batch of chunk(sourceValues, INSERT_CHUNK_SIZE)) {
-      await tx
-        .insert(sources)
-        .values(batch)
-        .onConflictDoUpdate({
-          target: [sources.platform, sources.platformSourceId],
-          set: {
-            title: sql`excluded.title`,
-            lastFetchedAt: sql`excluded.last_fetched_at`,
-            updatedAt: sql`NOW()`,
-          },
-        });
-    }
-
-    const sourceRows = await tx
-      .select({ id: sources.id, platformSourceId: sources.platformSourceId })
-      .from(sources)
-      .where(eq(sources.platform, PLATFORM));
-    const sourceIdMap = new Map(sourceRows.map((r) => [r.platformSourceId, r.id]));
-
-    if (favorites.length === 0) return [];
-
-    // 2. Authors deduped by author id, insert-only.
-    const authorMap = new Map<string, ZhihuRawFavorite['author']>();
-    for (const favorite of byId.values()) {
-      if (!authorMap.has(favorite.author.id)) authorMap.set(favorite.author.id, favorite.author);
-    }
-    const authorValues = [...authorMap.values()].map((a) => ({
-      platform: PLATFORM,
-      platformAuthorId: a.id,
-      name: a.name,
-      avatarUrl: a.avatarUrl || null,
-    }));
-    for (const batch of chunk(authorValues, INSERT_CHUNK_SIZE)) {
-      await tx
-        .insert(authors)
-        .values(batch)
-        .onConflictDoNothing({ target: [authors.platform, authors.platformAuthorId] });
-    }
-
-    const authorRows = await tx
-      .select({ id: authors.id, platformAuthorId: authors.platformAuthorId })
-      .from(authors)
-      .where(eq(authors.platform, PLATFORM));
-    const authorIdMap = new Map(authorRows.map((r) => [r.platformAuthorId, r.id]));
-
-    // 3. Items — insert-only, first-write-wins. Track which platformItemIds
-    //    are new so we only persist content for fresh rows.
-    const existingRows = await tx
-      .select({ platformItemId: items.platformItemId })
-      .from(items)
-      .where(eq(items.platform, PLATFORM));
-    const preExisting = new Set(existingRows.map((r) => r.platformItemId));
-
-    const itemValues = [...byId.entries()]
-      .map(([pid, favorite]) => {
-        const authorId = authorIdMap.get(favorite.author.id);
-        if (!authorId) return null;
-        const markdown = markdownById.get(pid) ?? '';
-        return {
-          platform: PLATFORM,
-          platformItemId: pid,
-          authorId,
-          title: favorite.title,
-          authorName: favorite.author.name,
-          originalUrl: favorite.url,
-          publishedAt: favorite.createdAt ? new Date(favorite.createdAt * 1000) : null,
-          // Text-native platform (D3): body present → chunked; zvideo/empty →
-          // no_content (NOT pending — pending feeds auto-transcribe).
-          contentState: (markdown ? 'chunked' : 'no_content') as 'chunked' | 'no_content',
-          platformMeta: {
-            type: favorite.type,
-            excerpt: favorite.excerpt,
-            authorName: favorite.author.name,
-            avatarUrl: favorite.author.avatarUrl,
-            thumbnailUrl: favorite.thumbnailUrl,
-            collectionId: favorite.collectionId,
-            collectionTitle: favorite.collectionTitle,
-          } satisfies ZhihuItemMeta,
-        };
-      })
-      .filter((v): v is NonNullable<typeof v> => v !== null);
-
-    for (const batch of chunk(itemValues, INSERT_CHUNK_SIZE)) {
-      await tx
-        .insert(items)
-        .values(batch)
-        .onConflictDoNothing({ target: [items.platform, items.platformItemId] });
-    }
-
-    // 4. Links — one per (item, collection) membership, deduped. An item in
-    //    two collections → one item row, two links.
-    const itemRows = await tx
-      .select({ id: items.id, platformItemId: items.platformItemId })
-      .from(items)
-      .where(eq(items.platform, PLATFORM));
-    const itemIdMap = new Map(itemRows.map((r) => [r.platformItemId, r.id]));
-
-    const seenLinks = new Set<string>();
-    const linkValues: Array<{ itemId: string; sourceId: string }> = [];
-    for (const favorite of favorites) {
-      const itemId = itemIdMap.get(platformItemIdOf(favorite));
-      const sourceId = sourceIdMap.get(favorite.collectionId);
-      if (!itemId || !sourceId) continue;
-      const key = `${itemId}::${sourceId}`;
-      if (seenLinks.has(key)) continue;
-      seenLinks.add(key);
-      linkValues.push({ itemId, sourceId });
-    }
-    for (const batch of chunk(linkValues, INSERT_CHUNK_SIZE)) {
-      await tx.insert(itemSources).values(batch).onConflictDoNothing();
-    }
-
-    const inserted: Array<{ itemId: string; markdown: string }> = [];
-    for (const [pid] of byId) {
-      if (preExisting.has(pid)) continue;
-      const itemId = itemIdMap.get(pid);
-      // Every new item counts as inserted; empty markdown (zvideo) simply
-      // skips the content persist below.
-      if (itemId) inserted.push({ itemId, markdown: markdownById.get(pid) ?? '' });
-    }
-    return inserted;
+    })),
+    authors: [...byId.values()].map((favorite) => ({
+      platformAuthorId: favorite.author.id,
+      name: favorite.author.name,
+      avatarUrl: favorite.author.avatarUrl || null,
+    })),
+    items: [...byId.entries()].map(([pid, favorite]) => ({
+      platformItemId: pid,
+      platformAuthorId: favorite.author.id,
+      title: favorite.title,
+      authorName: favorite.author.name,
+      originalUrl: favorite.url,
+      publishedAt: favorite.createdAt ? new Date(favorite.createdAt * 1000) : null,
+      // Text-native platform (D3): body present → chunked; zvideo/empty →
+      // no_content (NOT pending — pending feeds auto-transcribe).
+      contentState: markdownById.get(pid) ? ('chunked' as const) : ('no_content' as const),
+      platformMeta: {
+        type: favorite.type,
+        excerpt: favorite.excerpt,
+        authorName: favorite.author.name,
+        avatarUrl: favorite.author.avatarUrl,
+        thumbnailUrl: favorite.thumbnailUrl,
+        collectionId: favorite.collectionId,
+        collectionTitle: favorite.collectionTitle,
+      } satisfies ZhihuItemMeta,
+    })),
+    // One link per (item, collection) membership — an item in two collections
+    // → one item row, two links.
+    links: favorites.map((favorite) => ({
+      platformItemId: platformItemIdOf(favorite),
+      platformSourceId: favorite.collectionId,
+    })),
+    // Empty markdown (zvideo) still counts as inserted; the pipeline skips
+    // the content persist for it.
+    content: { textOf: (pid) => markdownById.get(pid) ?? '', chunk: chunkZhihuMarkdown },
   });
-
-  // 5. Persist content + chunks for NEW items only, OUTSIDE the tx (each
-  //    replaceItemChunks opens its own transaction; nesting deadlocks the
-  //    single-connection proxy). content_state='chunked' set at insert;
-  //    embedding deferred (D3).
-  for (const { itemId, markdown } of insertedItems) {
-    await persistZhihuContent(db, itemId, markdown);
-  }
 
   return {
     total: favorites.length,
     synced: byId.size,
-    inserted: insertedItems.length,
+    inserted: result.inserted.length,
     collections: collections.length,
   };
-}
-
-/** Persist one item's Markdown body → item_contents + item_chunks. */
-async function persistZhihuContent(db: FavbaseDb, itemId: string, markdown: string): Promise<void> {
-  const plainText = markdown.trim();
-  if (!plainText) return;
-
-  await db
-    .insert(itemContents)
-    .values({ itemId, plainText })
-    .onConflictDoUpdate({ target: itemContents.itemId, set: { plainText, updatedAt: new Date() } });
-
-  await replaceItemChunks(db, itemId, chunkZhihuMarkdown(plainText));
 }
 
 // ---------------------------------------------------------------------------

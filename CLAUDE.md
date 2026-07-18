@@ -69,6 +69,7 @@ WXT 入口点及运行时角色总览，详细结构见对应目录 `CLAUDE.md`�
 - `entrypoints/x-bookmarks.content/CLAUDE.md` — 右下角「获取书签」浮层按钮（CS 纯 UI → background → Offscreen 跑 `syncBookmarks`，镜像转录管线路由）
 
 ### 平台领域（lib）
+- `lib/ingest/CLAUDE.md` — 共享收藏收录管线（`ingestCollection` 五阶段 insert-only 事务骨架 + 两段式 content 写入，github/bookmarks/x/zhihu/youtube 五平台 sync-service 共用）
 - `lib/bilibili/CLAUDE.md` — B站 API、字幕获取、领域同步服务
 - `lib/bilibili/inject/CLAUDE.md` — Main World 注入状态机 + SPA 路由监控
 - `lib/github/CLAUDE.md` — GitHub Star 收录领域（REST API + 同步/查询服务，insert-only）
