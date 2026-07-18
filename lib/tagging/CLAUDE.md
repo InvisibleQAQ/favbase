@@ -1,6 +1,6 @@
 # Tagging 领域层
 
-AI 标签：转录完成后自动打标 + 标签 CRUD（UI 消费）。深模块，tags/item_tags schema 知识的唯一持有者。依赖 `lib/ai`（createLanguageModel）+ `lib/database`（Drizzle RPC proxy）。LLM 管线首个落地场景（`generateObject` 用法为后续 LLM 总结铺路）。
+AI 标签：转录/收藏同步完成后自动打标 + 标签 CRUD（UI 消费）。深模块，tags/item_tags schema 知识的唯一持有者。依赖 `lib/ai`（createLanguageModel）+ `lib/database`（Drizzle RPC proxy）。LLM 管线首个落地场景（`generateObject` 用法为后续 LLM 总结铺路）。
 
 ## 模块结构
 
@@ -9,6 +9,7 @@ AI 标签：转录完成后自动打标 + 标签 CRUD（UI 消费）。深模块
 - `tagger.ts` — `generateTags(config, input, existingTags)`：按 `supportsSchemaDelivery(providerId, customProtocol)`（`lib/ai`）能力分叉——true（openai/claude/gemini/openrouter/custom+claude）走 `generateObject({schema: tagsSchema})`（schema 真正下发）；false（deepseek/zhipu/kimi/modelscope/custom+openai）走 `generateObject({output:'no-schema'})` + `tagsSchema.parse` 客户端校验（schema 为 null 消除 SDK responseFormat 警告，请求体仍 `response_format: json_object`，prompt 是唯一 schema 载体）。Zod schema `tags: z.array(z.string()).max(5)`，温度 0.2。抛错不吞（失败语义由 service 层决定；no-schema 路径非法结构抛 ZodError，同语义）。`normalizeTags(raw)`：trim + Set 去重 + 截 5，prompt 规则之外的代码层兜底
 - `tagging-service.ts` — 核心服务，全部以 (platform, platformItemId) 寻址（调用方不接触 DB uuid）：
   - `tagPlatformItem(platform, platformItemId, deps?)` → `'tagged'|'skipped'|'failed'`：管线入口，**never throws**（fire-and-forget 设计）。幂等检查（已有链接即 'skipped'——重复转录不重打）→ 取 item + item_contents.plainText → 已有标签喂 prompt → LLM → 落库（tag upsert by name + 链接 onConflictDoNothing，事务）→ 成功后 `emitDomainEvent('item-tagged', { platform, platformItemId })`（`lib/events`，UI 借此实时刷新；'skipped'/'failed' 不发）。失败只 console.error，item 保持无标签——**无重试、无关键词 fallback、无存量回填，均为有意决策**（宁缺毋滥，见任务 ADR）。`TaggingDeps { db, getConfig, generate }` 可注入测试（镜像 IndexingDeps DI 风格）
+  - `tagNewItems(platform, platformItemIds, deps?)` → `void`：收藏同步的批量入口（docs/16 MEDIUM-2）——串行逐条 `await tagPlatformItem`（串行即限速：首同步可能数百条，不并发打爆 LLM API），继承 never-throws/幂等/未配置静默语义，单条失败不中断后续。调用方 `void tagNewItems(…)` fire-and-forget；批量无上限，中途关页剩余项永久无标签（与无回填决策一致）
   - `getAllUsedTags(platform?, db?)` → `UsedTag[]`（含 count，降序）：inner join item_tags——**孤儿 tag（链接全删）自然隐身，无需清理任务**；tag 行本身保留。传 `platform` 时列表与计数限定该平台的 items（页面级筛选 chips，计数真实）；省略 = 全库（`tagPlatformItem` 内部喂 prompt 用全库——LLM 应跨平台复用标签名，不分叉重复）
   - `getTagsForPlatformItems(platform, ids, db?)` → `Record<platformItemId, TagRef[]>`：卡片页批量查询
   - `getItemsByTags(tagIds, platform?, db?)` → `TaggedItem[]`：**AND 语义**（group by item + having count(distinct tagId)=N，多选收窄），跨收藏夹（标签是知识库维度非文件夹维度），createdAt 降序。传 `platform` 时结果限定该平台（页面级标签网格）；省略 = 跨平台。`TaggedItem` 含 `originalUrl`（items.originalUrl——平台卡片 adapter 直接拿跳转 URL，无需重新派生）
@@ -17,7 +18,7 @@ AI 标签：转录完成后自动打标 + 标签 CRUD（UI 消费）。深模块
 
 ## 约定
 
-- **接缝唯一**：与转录管线的组合点只有 `lib/bilibili/transcribe-utils.ts` 的 `transcribeAndPersist`——`persistContent` 成功（'embedded' 或 'chunked'，标签只依赖转录文本不依赖向量）后 `void tagPlatformItem('bilibili', bvid)` 一行 fire-and-forget，不阻塞 UI indexing 阶段。删除功能 = 删本模块 + 删那一行 + 一次迁移回滚
+- **接缝枚举（全部 fire-and-forget 一行直调，均在 app.html/可读 storage 的 context）**：① 转录管线 `lib/bilibili/transcribe-utils.ts` 的 `transcribeAndPersist`——`persistContent` 成功后 `void tagPlatformItem('bilibili', bvid)`；② 收藏同步（docs/16 MEDIUM-2）——`ingestCollection` 的 `contentPersisted` 经 `Sync*Result.newItemIds` 透出后 `void tagNewItems(platform, ids)`：zhihu/youtube 在各自生产入口 wrapper（`syncFavorites`/`syncYoutubePlaylists`），x 在 `use-x-bookmarks.ts` 的 syncFn（lib/x 不得 import 本模块——offscreen 无 chrome.storage；浮层路径不打标，欠账见 `lib/x/CLAUDE.md`）。github/bookmarks 无内容持久化，无接缝。删除功能 = 删本模块 + 删各接缝行 + 一次迁移回滚
 - UI 消费者走 service 高层操作，零 drizzle/entity/getDb 导入（同 `bili-sync-service` 约定）。标签 UI 集中在共享模块 `entrypoints/app/components/tags/`（platform 参数化，见该目录 CLAUDE.md）
 - 存储：`tags`（name 全局唯一，单用户无 userId）+ `item_tags`（复合 PK，双 FK cascade），schema 在 `lib/database/entities/`，迁移 `v004-tags.ts`。新表不受 insert-only ADR 约束，但打标幂等（upsert + onConflictDoNothing）
-- 测试：`tagging.test.ts` 纯函数（config 解析/prompt 构建/normalizeTags）+ `generateTags` 能力分叉（`vi.hoisted` mock `ai` 的 `generateObject`，断言 no-schema/schema 参数与 Zod parse 兜底）；`tagging-service.test.ts` in-memory PGlite（同 `videos-sync.test.ts` 基建）+ 注入 `TaggingDeps`，覆盖幂等/同名复用/未配置静默/失败无残留/existingTags 与 content 传参/孤儿隐身/AND 筛选/platform 过滤（bilibili+github 双平台数据：getAllUsedTags 计数限定、getItemsByTags 结果限定、originalUrl 透传）/手动编辑往返/'item-tagged' 事件（成功发一次、skip/fail 不发）。测试文件需 `vi.mock('@/lib/storage')`（barrel 加载时触碰 chrome.runtime）
+- 测试：`tagging.test.ts` 纯函数（config 解析/prompt 构建/normalizeTags）+ `generateTags` 能力分叉（`vi.hoisted` mock `ai` 的 `generateObject`，断言 no-schema/schema 参数与 Zod parse 兜底）；`tagging-service.test.ts` in-memory PGlite（同 `videos-sync.test.ts` 基建）+ 注入 `TaggingDeps`，覆盖幂等/同名复用/未配置静默/失败无残留/existingTags 与 content 传参/孤儿隐身/AND 筛选/`tagNewItems` 批量（逐条调用/空批 no-op/单条失败不中断）/platform 过滤（bilibili+github 双平台数据：getAllUsedTags 计数限定、getItemsByTags 结果限定、originalUrl 透传）/手动编辑往返/'item-tagged' 事件（成功发一次、skip/fail 不发）。测试文件需 `vi.mock('@/lib/storage')`（barrel 加载时触碰 chrome.runtime）

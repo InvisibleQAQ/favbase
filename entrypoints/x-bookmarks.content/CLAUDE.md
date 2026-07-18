@@ -27,3 +27,4 @@ offscreen --OFFSCREEN_X_SYNC_PROGRESS--> bg(handleXSyncProgress) --X_SYNC_PUSH--
 - **i18n**：浮层文案全部 `x.fab.*`（zh/en 齐全，`progress`/`done` 有 `.one` 复数变体），无硬编码 CJK（`tests/i18n-no-hardcoded.test.ts` 守卫 `entrypoints/**/*.tsx`）。
 - **SPA 挂载纪律**：不 anchor x.com 内部选择器（固定定位不依赖页面 DOM），故无需 bilibili 那样的 remount 轮询；路由感知在 React 层（`useOnBookmarksPage`）。
 - **长同步与 SW 存活**：offscreen 每页发 `OFFSCREEN_X_SYNC_PROGRESS` 会持续唤醒 background SW，避免同步中途 SW 空闲挂起（同转录管线）。session map 为内存态，SW 若被杀则进度路由丢失（增量 stop-on-known-id 使 re-sync 很短，可接受）。
+- **本路径不自动打标（docs/16 MEDIUM-2 显式欠账）**：offscreen 读不到 LLM 配置，bg 转发又受 SW 空闲回收风险；经此路径入库的推文保持无标签（app.html `/collections/x` 同步按钮路径会打标，但只覆盖它自己新插入的 item）。决策记录见 `lib/x/CLAUDE.md`。

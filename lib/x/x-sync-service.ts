@@ -73,6 +73,15 @@ export interface SyncBookmarksResult {
   synced: number;
   /** Items newly inserted this run (content persisted for these only). */
   inserted: number;
+  /**
+   * platformItemIds whose content was persisted this run — auto-tagging input.
+   * The trigger lives in the app.html CALLER (use-x-bookmarks syncFn), NOT
+   * here: this service also runs in the offscreen document, where the tagging
+   * import chain (LLM config → chrome.storage) cannot load. The offscreen
+   * float-button path therefore does not auto-tag (recorded debt, docs/16
+   * MEDIUM-2 decision).
+   */
+  newItemIds: string[];
 }
 
 /** Row shape returned to the UI — zero drizzle knowledge required downstream. */
@@ -207,6 +216,7 @@ export async function syncBookmarksToDb(
     total: bookmarks.length,
     synced: bookmarks.length,
     inserted: result.inserted.length,
+    newItemIds: result.contentPersisted,
   };
 }
 

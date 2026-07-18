@@ -129,6 +129,24 @@ export async function tagPlatformItem(
   }
 }
 
+/**
+ * Batch entry for collection syncs (audit docs/16 MEDIUM-2): tag the items a
+ * sync run just persisted content for, one at a time. Sequential on purpose —
+ * a first sync can insert hundreds of items, and serial awaits are the pacing
+ * that keeps the LLM API from being hammered. Inherits tagPlatformItem's
+ * never-throws / idempotent / unconfigured-silent-skip semantics, so one bad
+ * item never aborts the rest. Fire-and-forget from callers (`void tagNewItems(…)`).
+ */
+export async function tagNewItems(
+  platform: string,
+  platformItemIds: string[],
+  deps?: Partial<TaggingDeps>,
+): Promise<void> {
+  for (const platformItemId of platformItemIds) {
+    await tagPlatformItem(platform, platformItemId, deps);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // UI reads
 // ---------------------------------------------------------------------------

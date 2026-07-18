@@ -150,6 +150,9 @@ describe('youtube-sync-service (in-memory PGlite)', () => {
 
     const result = await syncPlaylistsToDb(db, batches);
     expect(result).toMatchObject({ playlists: 2, entries: 3, inserted: 3 });
+    // Auto-tagging input: content-persisted new items only — the empty-
+    // description video is excluded even though its item row was inserted.
+    expect(result.newItemIds).toEqual(['vid-1', 'vid-3']);
 
     // sources: one row per playlist, title persisted
     const sourceA = await getSource('pl-a');
@@ -291,6 +294,8 @@ describe('youtube-sync-service (in-memory PGlite)', () => {
       makeBatch(makePlaylist('pl-a', 'List A RENAMED'), [mutated]),
     ]);
     expect(result.inserted).toBe(0); // nothing new → no content re-persist
+    // Nothing newly persisted → auto-tagging gets an empty batch on re-sync.
+    expect(result.newItemIds).toEqual([]);
 
     const item = await getItem('vid-10');
     expect(item.title).toBe('Video vid-10');

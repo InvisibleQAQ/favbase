@@ -38,6 +38,7 @@ import { sources } from '@/lib/database/entities/sources';
 import { items } from '@/lib/database/entities/items';
 import { itemSources } from '@/lib/database/entities/item-sources';
 import { ingestCollection } from '@/lib/ingest/ingest';
+import { tagNewItems } from '@/lib/tagging';
 import {
   resolveChannel,
   fetchPlaylists,
@@ -114,6 +115,8 @@ export interface SyncPlaylistsResult {
   entries: number;
   /** Items newly inserted this run (content persisted for these only). */
   inserted: number;
+  /** platformItemIds whose content was persisted this run — auto-tagging input. */
+  newItemIds: string[];
 }
 
 /** Row shape returned to the UI — zero drizzle knowledge required downstream. */
@@ -200,7 +203,13 @@ export async function syncYoutubePlaylists(
     batches.push({ playlist, entries: result.entries, videos: result.videos });
   }
 
-  return syncPlaylistsToDb(db, batches);
+  const synced = await syncPlaylistsToDb(db, batches);
+  // Auto-tag the content just persisted (audit docs/16 MEDIUM-2) —
+  // fire-and-forget, sequential inside, never throws. Lives HERE (not in
+  // syncPlaylistsToDb) because this wrapper only runs in the app.html context
+  // where LLM config is readable.
+  void tagNewItems(PLATFORM, synced.newItemIds);
+  return synced;
 }
 
 /** Set of already-stored video ids (platform='youtube') — details-fill skip set. */
@@ -224,7 +233,7 @@ export async function syncPlaylistsToDb(
   batches: PlaylistBatch[],
 ): Promise<SyncPlaylistsResult> {
   const entryCount = batches.reduce((n, b) => n + b.entries.length, 0);
-  if (batches.length === 0) return { playlists: 0, entries: 0, inserted: 0 };
+  if (batches.length === 0) return { playlists: 0, entries: 0, inserted: 0, newItemIds: [] };
 
   // Dedupe across playlists in batch order: the first-seen playlist supplies
   // addedAt + the display membership (playlistId/playlistTitle in platformMeta).
@@ -294,6 +303,7 @@ export async function syncPlaylistsToDb(
     playlists: batches.length,
     entries: entryCount,
     inserted: result.inserted.length,
+    newItemIds: result.contentPersisted,
   };
 }
 

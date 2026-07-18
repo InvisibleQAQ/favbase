@@ -110,6 +110,8 @@ describe('x-sync-service (in-memory PGlite)', () => {
 
     const result = await syncBookmarksToDb(db, bookmarks);
     expect(result).toMatchObject({ total: 3, synced: 3, inserted: 3 });
+    // Auto-tagging input: every tweet carries text, so all new items qualify.
+    expect(result.newItemIds).toEqual(['1', '2', '3']);
 
     // sources: single "bookmarks" row
     const source = await getBookmarksSource();
@@ -189,6 +191,8 @@ describe('x-sync-service (in-memory PGlite)', () => {
     // Already known → incremental would skip in production; direct DB path
     // still inserts nothing new.
     expect(result.inserted).toBe(0);
+    // Nothing newly persisted → auto-tagging gets an empty batch on re-sync.
+    expect(result.newItemIds).toEqual([]);
 
     const item = await getItem('10');
     expect(item.title).toBe('tweet 10 full text');

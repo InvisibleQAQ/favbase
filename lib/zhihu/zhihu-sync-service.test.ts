@@ -136,6 +136,9 @@ describe('zhihu-sync-service (in-memory PGlite)', () => {
 
     const result = await syncFavoritesToDb(db, collections, favorites);
     expect(result).toMatchObject({ total: 3, synced: 3, inserted: 3, collections: 2 });
+    // Auto-tagging input: content-persisted new items only — zvideo (no body)
+    // is excluded even though its item row was inserted.
+    expect(result.newItemIds).toEqual(['answer:1', 'article:3']);
 
     // sources: one row per collection, lastFetchedAt stamped
     const c1 = await getSource('c1');
@@ -201,7 +204,7 @@ describe('zhihu-sync-service (in-memory PGlite)', () => {
     expect(await getLastSyncedAt(db)).toBeNull();
 
     const result = await syncFavoritesToDb(db, [makeCollection('c1')], []);
-    expect(result).toMatchObject({ total: 0, synced: 0, inserted: 0, collections: 1 });
+    expect(result).toMatchObject({ total: 0, synced: 0, inserted: 0, collections: 1, newItemIds: [] });
 
     expect(await getLastSyncedAt(db)).not.toBeNull();
   });
@@ -234,6 +237,8 @@ describe('zhihu-sync-service (in-memory PGlite)', () => {
       [mutated],
     );
     expect(result.inserted).toBe(0);
+    // Nothing newly persisted → auto-tagging gets an empty batch on re-sync.
+    expect(result.newItemIds).toEqual([]);
 
     const item = await getItem('answer:10');
     expect(item.title).toBe('answer 10');
@@ -262,7 +267,9 @@ describe('zhihu-sync-service (in-memory PGlite)', () => {
   it('re-sync appends only new items without duplicating rows / links / content', async () => {
     const collections = [makeCollection('c1')];
     await syncFavoritesToDb(db, collections, [makeFavorite({ id: '20' })]);
-    await syncFavoritesToDb(db, collections, [makeFavorite({ id: '20' }), makeFavorite({ id: '21' })]);
+    const second = await syncFavoritesToDb(db, collections, [makeFavorite({ id: '20' }), makeFavorite({ id: '21' })]);
+    // Mixed known + new batch: only the genuinely new item feeds auto-tagging.
+    expect(second.newItemIds).toEqual(['answer:21']);
 
     const itemRows = await db.select().from(schema.items).where(eq(schema.items.platform, 'zhihu'));
     expect(itemRows).toHaveLength(2);

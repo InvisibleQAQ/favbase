@@ -97,7 +97,7 @@ WXT 入口点及运行时角色总览，详细结构见对应目录 `CLAUDE.md`�
 - `lib/permissions/CLAUDE.md` — 运行时 host 权限授权：自定义 API 域名的 CORS 解法（内置域名派生进静态 `host_permissions` + `optional_host_permissions` 运行时授权）
 - `lib/embedding/CLAUDE.md` — Embedding 领域层：pgvector 向量存储 + 语义检索 + 配置解析（接口层，无消费方）
 - `lib/events/CLAUDE.md` — 领域事件总线（DB 数据变更 → UI 实时刷新，app.html 单 context）
-- `lib/tagging/CLAUDE.md` — AI 标签（转录后自动打标 + 标签 CRUD）
+- `lib/tagging/CLAUDE.md` — AI 标签（转录/收藏同步后自动打标 + 标签 CRUD）
 - `lib/export/CLAUDE.md` — PGlite 全量导出（JSON/CSV）
 - `lib/hooks/CLAUDE.md` — 共享 Hooks（useSettings/useRetryCountdown）
 - `lib/storage/CLAUDE.md` — 存储命名空间统一管理

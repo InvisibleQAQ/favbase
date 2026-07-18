@@ -8,6 +8,7 @@ import {
 } from '@/lib/x/x-sync-service';
 import { getXAuth } from '@/lib/x/x-auth';
 import { classifyXSyncError, type XSyncError } from '@/lib/x/x-messages';
+import { tagNewItems } from '@/lib/tagging';
 
 import {
   useCollectionLibrary,
@@ -69,9 +70,14 @@ async function syncFn(onProgress: (progress: XSyncProgress) => void) {
   // syncBookmarks itself never touches storage — it also runs in the
   // offscreen document, which has no chrome.storage.
   const auth = await getXAuth();
-  await syncBookmarks(auth, (fetchedCount, page) => {
+  const result = await syncBookmarks(auth, (fetchedCount, page) => {
     onProgress({ fetchedCount, page });
   });
+  // Auto-tag the tweets just persisted (audit docs/16 MEDIUM-2). Same
+  // storage-context reasoning as auth: the tagging import chain needs
+  // chrome.storage, so the trigger lives in this app.html caller — the
+  // offscreen float-button path does not auto-tag (recorded debt).
+  void tagNewItems('x', result.newItemIds);
 }
 
 /** Thin adapter over the shared collection-library state machine. */

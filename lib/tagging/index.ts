@@ -10,6 +10,7 @@ export {
 export { generateTags, normalizeTags } from './tagger';
 export {
   tagPlatformItem,
+  tagNewItems,
   getAllUsedTags,
   getTagsForPlatformItems,
   getItemsByTags,

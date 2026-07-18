@@ -16,5 +16,5 @@
 - 排序固定 publishedAt 降序（= 内容 updated/created 时间，web v4 items 无收藏时间）；platformMeta 形状见 `lib/zhihu/CLAUDE.md`
 - 三种空态：未登录（打开知乎主按钮）/ 库空（立即同步主按钮）/ 同步失败（ErrorState+retry）；虚线框为共享 `StateBox`
 - 路由/导航：`main.tsx` 路由 `collections/zhihu` + `nav-config.tsx` Collections children 叶子（`nav.zhihuFavorites`）；active 判定走 `layouts/nav-active.ts` 最长前缀匹配
-- 标签：手动打标已接入（共享 `components/tags/`，platform='zhihu'）；AI 自动打标 out of scope。`simple-icons:zhihu`/`solar:bookmark-bold-duotone` 图标在 `components/iconify/icon-sets.ts` 离线注册
+- 标签：手动打标已接入（共享 `components/tags/`，platform='zhihu'）；AI 自动打标已接线（lib 层 `syncFavorites` 收尾直调 `tagNewItems`，见 `lib/zhihu/CLAUDE.md`；docs/16 MEDIUM-2）。`simple-icons:zhihu`/`solar:bookmark-bold-duotone` 图标在 `components/iconify/icon-sets.ts` 离线注册
 - i18n：平台特有文案 key 在 `zhihu.*`（zh/en 齐全，`zhihu.count` 带 `.one` 复数变体，`zhihu.noMatches` 保留平台名词）；通用文案（retry/syncNow/loadFailed）走共享 `common.*`；错误类映射在 view 边界；无硬编码 CJK

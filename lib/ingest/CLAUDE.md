@@ -4,7 +4,7 @@
 
 ## 模块结构
 
-- `ingest.ts` — `ingestCollection(db, input) → IngestResult`。输入 `IngestInput`：`platform` + 归一化行数组 `sources`（`{platformSourceId, title, platformMeta?}`——meta 缺省 `{}`）/ `authors`（`{platformAuthorId, name, avatarUrl}`）/ `items`（`{platformItemId, platformAuthorId, title, authorName, originalUrl, publishedAt, contentState('pending'|'no_content'|'chunked'), platformMeta}`）/ `links`（`{platformItemId, platformSourceId}`）+ 可选 `content: { textOf(platformItemId), chunk(plainText) }`。输出：`inserted`（本轮新插入的 `{platformItemId, itemId}`，content 只对这些持久化）、`droppedItemIds`（author 无法解析）、`droppedLinkItemIds`（link 两端解析失败，排除 author-drop 成因）、`linkCount`（去重后写入的 link 行数）
+- `ingest.ts` — `ingestCollection(db, input) → IngestResult`。输入 `IngestInput`：`platform` + 归一化行数组 `sources`（`{platformSourceId, title, platformMeta?}`——meta 缺省 `{}`）/ `authors`（`{platformAuthorId, name, avatarUrl}`）/ `items`（`{platformItemId, platformAuthorId, title, authorName, originalUrl, publishedAt, contentState('pending'|'no_content'|'chunked'), platformMeta}`）/ `links`（`{platformItemId, platformSourceId}`）+ 可选 `content: { textOf(platformItemId), chunk(plainText) }`。输出：`inserted`（本轮新插入的 `{platformItemId, itemId}`，content 只对这些持久化）、`contentPersisted`（本轮实际写入 content+chunks 的 platformItemId——新插入 ∩ 非空文本，即 content-persisted seam，调用方喂给自动打标；无 `content` 输入时恒空）、`droppedItemIds`（author 无法解析）、`droppedLinkItemIds`（link 两端解析失败，排除 author-drop 成因）、`linkCount`（去重后写入的 link 行数）
 
 ## 管线持有的不变量
 
@@ -20,4 +20,4 @@
 
 - 平台差异留在调用方：入库前的去重/归一化（如 zhihu turndown、youtube 首见列表归属）、结果统计形状（各平台 `Sync*Result`）、空输入早退（bookmarks 空树零写入、zhihu 空收藏夹零写入）、author 过滤（x/youtube 剔除空 id）
 - 消费方：5 个平台 sync-service 的 `sync*ToDb`；各自的 in-memory PGlite 守护测试即本管线的等价性验证
-- MEDIUM-2（content-persisted seam → `tagPlatformItem` 直调）的挂载点就是本管线的 content 步骤，待后续任务接线
+- MEDIUM-2 已接线（以数据形式，管线自身零 tagging/storage 依赖）：content 步骤把实际持久化的 id 收进 `contentPersisted`，各平台 sync-service 经 `Sync*Result.newItemIds` 透出，触发点在 app.html 侧调用方（zhihu/youtube 的生产入口 wrapper、x 的 `use-x-bookmarks` syncFn）`void tagNewItems(platform, ids)`（`lib/tagging`）。x 的 offscreen 浮层路径不打标（欠账显式记录，见 `lib/x/CLAUDE.md`）

@@ -13,6 +13,7 @@ import type { ResolvedTaggingConfig } from './config';
 import type { TaggingInput } from './prompt';
 import {
   tagPlatformItem,
+  tagNewItems,
   getAllUsedTags,
   getTagsForPlatformItems,
   getItemsByTags,
@@ -267,6 +268,55 @@ describe('tagging-service (in-memory PGlite)', () => {
         expect(listener).not.toHaveBeenCalled();
       } finally {
         off();
+        errSpy.mockRestore();
+      }
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // tagNewItems (batch entry for collection syncs — audit docs/16 MEDIUM-2)
+  // -------------------------------------------------------------------------
+
+  describe('tagNewItems', () => {
+    it('tags every item in the batch, one LLM call per item', async () => {
+      await seedItem('t1', 'x');
+      await seedItem('t2', 'x');
+      const generate = makeGenerate(['技术']);
+
+      await tagNewItems('x', ['t1', 't2'], deps({ generate }));
+
+      expect(generate).toHaveBeenCalledTimes(2);
+      const tagsById = await getTagsForPlatformItems('x', ['t1', 't2'], db);
+      expect(tagsById.t1?.map((t) => t.name)).toEqual(['技术']);
+      expect(tagsById.t2?.map((t) => t.name)).toEqual(['技术']);
+    });
+
+    it('empty batch is a no-op (no config read, no LLM call)', async () => {
+      const getConfig = vi.fn(async () => enabledConfig);
+      const generate = makeGenerate();
+
+      await tagNewItems('x', [], deps({ getConfig, generate }));
+
+      expect(getConfig).not.toHaveBeenCalled();
+      expect(generate).not.toHaveBeenCalled();
+    });
+
+    it('one failing item never aborts the rest (tagPlatformItem never-throws)', async () => {
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        await seedItem('t3', 'x');
+        await seedItem('t4', 'x');
+        const generate = vi.fn<GenerateFn>(async (_config, input) => {
+          if (input.title.includes('t3')) throw new Error('LLM boom');
+          return ['技术'];
+        });
+
+        await expect(tagNewItems('x', ['t3', 't4'], deps({ generate }))).resolves.toBeUndefined();
+
+        const tagsById = await getTagsForPlatformItems('x', ['t3', 't4'], db);
+        expect(tagsById.t3).toBeUndefined();
+        expect(tagsById.t4?.map((t) => t.name)).toEqual(['技术']);
+      } finally {
         errSpy.mockRestore();
       }
     });

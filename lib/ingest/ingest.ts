@@ -95,6 +95,13 @@ export interface IngestedItem {
 export interface IngestResult {
   /** Items newly inserted this run (content persisted for these only). */
   inserted: IngestedItem[];
+  /**
+   * platformItemIds whose content + chunks were actually written this run
+   * (newly inserted ∩ non-empty text) — the content-persisted seam callers
+   * feed to auto-tagging (audit docs/16 MEDIUM-2). Empty when `content` is
+   * absent from the input.
+   */
+  contentPersisted: string[];
   /** platformItemIds dropped because their author row could not be resolved. */
   droppedItemIds: string[];
   /** platformItemIds of links that failed to resolve (author drops excluded). */
@@ -247,6 +254,7 @@ export async function ingestCollection(db: FavbaseDb, input: IngestInput): Promi
   // 5. Content + chunks for NEW items only, OUTSIDE the tx (each
   //    replaceItemChunks opens its own transaction; nesting deadlocks the
   //    single-connection proxy). Embedding deferred (D3).
+  const contentPersisted: string[] = [];
   if (input.content) {
     for (const { platformItemId, itemId } of result.inserted) {
       const plainText = input.content.textOf(platformItemId).trim();
@@ -259,8 +267,9 @@ export async function ingestCollection(db: FavbaseDb, input: IngestInput): Promi
           set: { plainText, updatedAt: new Date() },
         });
       await replaceItemChunks(db, itemId, input.content.chunk(plainText));
+      contentPersisted.push(platformItemId);
     }
   }
 
-  return result;
+  return { ...result, contentPersisted };
 }

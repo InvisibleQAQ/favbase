@@ -35,6 +35,7 @@ import { sources } from '@/lib/database/entities/sources';
 import { items } from '@/lib/database/entities/items';
 import { itemSources } from '@/lib/database/entities/item-sources';
 import { ingestCollection } from '@/lib/ingest/ingest';
+import { tagNewItems } from '@/lib/tagging';
 import {
   fetchAllFavorites,
   type ZhihuCollection,
@@ -77,6 +78,8 @@ export interface SyncZhihuResult {
   inserted: number;
   /** Public collections found. */
   collections: number;
+  /** platformItemIds whose content was persisted this run — auto-tagging input. */
+  newItemIds: string[];
 }
 
 /** Row shape returned to the UI — zero drizzle knowledge required downstream. */
@@ -130,7 +133,13 @@ function platformItemIdOf(favorite: ZhihuRawFavorite): string {
 export async function syncFavorites(onProgress?: ZhihuProgressCallback): Promise<SyncZhihuResult> {
   const db = getDb();
   const { collections, favorites } = await fetchAllFavorites(onProgress);
-  return syncFavoritesToDb(db, collections, favorites);
+  const result = await syncFavoritesToDb(db, collections, favorites);
+  // Auto-tag the content just persisted (audit docs/16 MEDIUM-2) —
+  // fire-and-forget, sequential inside, never throws. Lives HERE (not in
+  // syncFavoritesToDb) because this wrapper only runs in the app.html context
+  // where LLM config is readable.
+  void tagNewItems(PLATFORM, result.newItemIds);
+  return result;
 }
 
 /**
@@ -158,7 +167,7 @@ export async function syncFavoritesToDb(
   }
 
   if (collections.length === 0) {
-    return { total: favorites.length, synced: byId.size, inserted: 0, collections: 0 };
+    return { total: favorites.length, synced: byId.size, inserted: 0, collections: 0, newItemIds: [] };
   }
 
   const result = await ingestCollection(db, {
@@ -210,6 +219,7 @@ export async function syncFavoritesToDb(
     synced: byId.size,
     inserted: result.inserted.length,
     collections: collections.length,
+    newItemIds: result.contentPersisted,
   };
 }
 
