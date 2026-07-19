@@ -34,6 +34,7 @@
 - **Insert-only（与全平台同 ADR）**：items/authors/item_sources 只 insert（`onConflictDoNothing`，first-write-wins）。取消收藏不删行；条目跨夹收藏 = 1 item + N link（对齐 bookmarks 文件夹模型）。唯一例外：`sources` 收藏夹行 upsert 刷新 `title`/`lastFetchedAt`
 - **content_state**：answer/article/pin（有正文）→ Markdown 落 `item_contents.plainText` + `charSplit(preferParagraph:true)` 切块 → `'chunked'`（**不 inline embed**，D3——向量化推迟到设置页「重建向量」）；zvideo/空正文 → `'no_content'`（**不用 `'pending'`**——那会喂给 auto-transcribe）
 - **items 行映射**：`platformItemId = '{type}:{id}'`（类型间 id 命名空间独立，防碰撞）、`title`（api 层保证非空，多级兜底）、`authorName`、`originalUrl`=构造的 web URL、`publishedAt = createdAt*1000`（web v4 items **无收藏时间**，用内容自身 updated/created 兜底——PRD 已决策）
-- **platformMeta 形状**（items，写入方即本目录）：`{ type, excerpt, authorName, avatarUrl, thumbnailUrl, collectionId, collectionTitle }`（camelCase；collection 二字段是**首见**归属仅供卡片展示，筛选走 item_sources）
+- **platformMeta 形状**（items，写入方即本目录）：`{ type, excerpt, authorName, avatarUrl, thumbnailUrl, collectionId, collectionTitle }`（camelCase；collection 二字段是**首见**归属仅供卡片展示，筛选走 item_sources）。防御式收窄由本目录导出的 `narrowZhihuMeta(meta, { authorName })` 单点持有，sync-service `mapRow` 与 section `tagged-zhihu-card` 共用
+- **`narrowZhihuMeta` 导出**（sync-service）：`narrowZhihuMeta(meta: unknown, fb: { authorName }): NarrowedZhihuMeta`（= `Omit<ZhihuFavoriteItem, envelope>`）。type 经 `ZHIHU_TYPES` 白名单回退 `answer`；authorName 缺失回退 `fb.authorName`（空串保留）。envelope（id/platformItemId/title/originalUrl/publishedAt）留各调用点
 - 运行位置：**仅 app.html 页面 context**（手动同步按钮 → RPC proxy 写 Offscreen PGlite）。无浮层按钮、无 offscreen 委托、无 background 消息
 - 未覆盖（Out of Scope，见 PRD）：私密收藏夹（`is_public` 过滤掉）、他人收藏夹、知乎页浮层按钮、类型双维筛选、inline embedding、增量 stop-on-known-id

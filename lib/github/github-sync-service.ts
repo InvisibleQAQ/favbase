@@ -235,6 +235,31 @@ export async function getLastSyncedAt(db: FavbaseDb = getDb()): Promise<Date | n
 // Internal
 // ---------------------------------------------------------------------------
 
+/**
+ * Defensive platformMeta → GithubRepoItem field narrowing, the SINGLE source of
+ * truth shared by the query mapRow (below) and the section tagged-repo-card
+ * adapter. Envelope fields (id/repoId/fullName/ownerLogin/htmlUrl) stay at each
+ * call site; GitHub has no envelope-fallback fields.
+ */
+export type NarrowedGithubMeta = Omit<
+  GithubRepoItem,
+  'id' | 'repoId' | 'fullName' | 'ownerLogin' | 'htmlUrl'
+>;
+
+export function narrowGithubMeta(meta: unknown): NarrowedGithubMeta {
+  const m = (meta ?? {}) as Record<string, unknown>;
+  return {
+    description: typeof m.description === 'string' ? m.description : null,
+    language: typeof m.language === 'string' ? m.language : null,
+    stargazersCount: typeof m.stargazersCount === 'number' ? m.stargazersCount : 0,
+    forksCount: typeof m.forksCount === 'number' ? m.forksCount : 0,
+    topics: Array.isArray(m.topics) ? (m.topics as string[]) : [],
+    pushedAt: typeof m.pushedAt === 'string' ? m.pushedAt : null,
+    starredAt: typeof m.starredAt === 'string' ? m.starredAt : null,
+    ownerAvatarUrl: typeof m.ownerAvatarUrl === 'string' ? m.ownerAvatarUrl : null,
+  };
+}
+
 function toRepoItem(row: {
   id: string;
   platformItemId: string;
@@ -243,20 +268,12 @@ function toRepoItem(row: {
   originalUrl: string;
   platformMeta: unknown;
 }): GithubRepoItem {
-  const meta = (row.platformMeta ?? {}) as Partial<GithubItemMeta>;
   return {
     id: row.id,
     repoId: row.platformItemId,
     fullName: row.title,
     ownerLogin: row.authorName,
     htmlUrl: row.originalUrl,
-    description: meta.description ?? null,
-    language: meta.language ?? null,
-    stargazersCount: typeof meta.stargazersCount === 'number' ? meta.stargazersCount : 0,
-    forksCount: typeof meta.forksCount === 'number' ? meta.forksCount : 0,
-    topics: Array.isArray(meta.topics) ? meta.topics : [],
-    pushedAt: meta.pushedAt ?? null,
-    starredAt: meta.starredAt ?? null,
-    ownerAvatarUrl: meta.ownerAvatarUrl ?? null,
+    ...narrowGithubMeta(row.platformMeta),
   };
 }

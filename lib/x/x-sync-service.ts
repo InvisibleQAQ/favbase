@@ -291,6 +291,50 @@ export async function getLastSyncedAt(db: FavbaseDb = getDb()): Promise<Date | n
 // Internal
 // ---------------------------------------------------------------------------
 
+/**
+ * Defensive platformMeta → XBookmarkItem field narrowing, the SINGLE source of
+ * truth shared by the query mapRow (below) and the section tagged-tweet-card
+ * adapter. Envelope fields (id/tweetId/title/originalUrl/publishedAt) stay at
+ * each call site; text falls back to the row's title, authorName to the row's
+ * own authorName.
+ */
+export type NarrowedXMeta = Omit<
+  XBookmarkItem,
+  'id' | 'tweetId' | 'title' | 'originalUrl' | 'publishedAt'
+>;
+
+/** Narrow the loose platformMeta.media into XMedia[] (drop malformed entries). */
+function narrowMedia(raw: unknown): XMedia[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter(
+      (m): m is XMedia =>
+        !!m &&
+        typeof m === 'object' &&
+        typeof (m as XMedia).type === 'string' &&
+        typeof (m as XMedia).url === 'string',
+    )
+    .map((m) => ({ type: m.type, url: m.url }));
+}
+
+export function narrowXMeta(
+  meta: unknown,
+  fb: { title: string; authorName: string },
+): NarrowedXMeta {
+  const m = (meta ?? {}) as Record<string, unknown>;
+  return {
+    text: typeof m.text === 'string' ? m.text : fb.title,
+    authorName: typeof m.authorName === 'string' ? m.authorName : fb.authorName,
+    authorHandle: typeof m.authorHandle === 'string' ? m.authorHandle : '',
+    avatarUrl: typeof m.avatarUrl === 'string' && m.avatarUrl ? m.avatarUrl : null,
+    media: narrowMedia(m.media),
+    likeCount: typeof m.likeCount === 'number' ? m.likeCount : 0,
+    retweetCount: typeof m.retweetCount === 'number' ? m.retweetCount : 0,
+    replyCount: typeof m.replyCount === 'number' ? m.replyCount : 0,
+    lang: typeof m.lang === 'string' ? m.lang : '',
+  };
+}
+
 function toBookmarkItem(row: {
   id: string;
   platformItemId: string;
@@ -300,21 +344,12 @@ function toBookmarkItem(row: {
   publishedAt: Date | null;
   platformMeta: unknown;
 }): XBookmarkItem {
-  const meta = (row.platformMeta ?? {}) as Partial<XItemMeta>;
   return {
     id: row.id,
     tweetId: row.platformItemId,
     title: row.title,
-    text: typeof meta.text === 'string' ? meta.text : row.title,
-    authorName: typeof meta.authorName === 'string' ? meta.authorName : row.authorName,
-    authorHandle: typeof meta.authorHandle === 'string' ? meta.authorHandle : '',
-    avatarUrl: typeof meta.avatarUrl === 'string' && meta.avatarUrl ? meta.avatarUrl : null,
     originalUrl: row.originalUrl,
-    media: Array.isArray(meta.media) ? meta.media : [],
-    likeCount: typeof meta.likeCount === 'number' ? meta.likeCount : 0,
-    retweetCount: typeof meta.retweetCount === 'number' ? meta.retweetCount : 0,
-    replyCount: typeof meta.replyCount === 'number' ? meta.replyCount : 0,
-    lang: typeof meta.lang === 'string' ? meta.lang : '',
     publishedAt: row.publishedAt,
+    ...narrowXMeta(row.platformMeta, { title: row.title, authorName: row.authorName }),
   };
 }

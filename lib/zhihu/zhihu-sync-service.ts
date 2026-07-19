@@ -302,6 +302,29 @@ export async function getLastSyncedAt(db: FavbaseDb = getDb()): Promise<Date | n
 
 const ZHIHU_TYPES: readonly ZhihuItemType[] = ['answer', 'article', 'pin', 'zvideo'];
 
+/**
+ * Defensive platformMeta → ZhihuFavoriteItem field narrowing, the SINGLE source
+ * of truth shared by the query mapRow (below) and the section tagged-zhihu-card
+ * adapter. Envelope fields (id/platformItemId/title/originalUrl/publishedAt)
+ * stay at each call site; authorName falls back to the row's own authorName.
+ */
+export type NarrowedZhihuMeta = Omit<
+  ZhihuFavoriteItem,
+  'id' | 'platformItemId' | 'title' | 'originalUrl' | 'publishedAt'
+>;
+
+export function narrowZhihuMeta(meta: unknown, fb: { authorName: string }): NarrowedZhihuMeta {
+  const m = (meta ?? {}) as Record<string, unknown>;
+  return {
+    type: ZHIHU_TYPES.includes(m.type as ZhihuItemType) ? (m.type as ZhihuItemType) : 'answer',
+    excerpt: typeof m.excerpt === 'string' ? m.excerpt : '',
+    authorName: typeof m.authorName === 'string' ? m.authorName : fb.authorName,
+    avatarUrl: typeof m.avatarUrl === 'string' && m.avatarUrl ? m.avatarUrl : null,
+    thumbnailUrl: typeof m.thumbnailUrl === 'string' && m.thumbnailUrl ? m.thumbnailUrl : null,
+    collectionTitle: typeof m.collectionTitle === 'string' ? m.collectionTitle : '',
+  };
+}
+
 function toFavoriteItem(row: {
   id: string;
   platformItemId: string;
@@ -311,18 +334,12 @@ function toFavoriteItem(row: {
   publishedAt: Date | null;
   platformMeta: unknown;
 }): ZhihuFavoriteItem {
-  const meta = (row.platformMeta ?? {}) as Partial<ZhihuItemMeta>;
   return {
     id: row.id,
     platformItemId: row.platformItemId,
-    type: ZHIHU_TYPES.includes(meta.type as ZhihuItemType) ? (meta.type as ZhihuItemType) : 'answer',
     title: row.title,
-    excerpt: typeof meta.excerpt === 'string' ? meta.excerpt : '',
-    authorName: typeof meta.authorName === 'string' ? meta.authorName : row.authorName,
-    avatarUrl: typeof meta.avatarUrl === 'string' && meta.avatarUrl ? meta.avatarUrl : null,
     originalUrl: row.originalUrl,
-    thumbnailUrl: typeof meta.thumbnailUrl === 'string' && meta.thumbnailUrl ? meta.thumbnailUrl : null,
-    collectionTitle: typeof meta.collectionTitle === 'string' ? meta.collectionTitle : '',
     publishedAt: row.publishedAt,
+    ...narrowZhihuMeta(row.platformMeta, { authorName: row.authorName }),
   };
 }

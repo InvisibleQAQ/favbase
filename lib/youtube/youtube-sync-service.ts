@@ -379,29 +379,46 @@ export async function getLastSyncedAt(db: FavbaseDb = getDb()): Promise<Date | n
 // Internal
 // ---------------------------------------------------------------------------
 
+/**
+ * Defensive platformMeta → YoutubeVideoItem field narrowing, the SINGLE source
+ * of truth shared by the query mapRow (below) and the section
+ * tagged-youtube-card adapter. Envelope fields (id/videoId/title/originalUrl/
+ * publishedAt) stay at each call site; channelTitle falls back to the row's own
+ * authorName. playlistId/playlistTitle live in platformMeta but are not view
+ * fields, so they are not narrowed here.
+ */
+export type NarrowedYoutubeMeta = Omit<
+  YoutubeVideoItem,
+  'id' | 'videoId' | 'title' | 'originalUrl' | 'publishedAt'
+>;
+
+export function narrowYoutubeMeta(
+  meta: unknown,
+  fb: { authorName: string },
+): NarrowedYoutubeMeta {
+  const m = (meta ?? {}) as Record<string, unknown>;
+  return {
+    channelId: typeof m.channelId === 'string' ? m.channelId : '',
+    channelTitle:
+      typeof m.channelTitle === 'string' && m.channelTitle ? m.channelTitle : fb.authorName,
+    thumbnailUrl: typeof m.thumbnailUrl === 'string' && m.thumbnailUrl ? m.thumbnailUrl : null,
+    durationSeconds: typeof m.durationSeconds === 'number' ? m.durationSeconds : 0,
+    viewCount: typeof m.viewCount === 'number' ? m.viewCount : 0,
+    likeCount: typeof m.likeCount === 'number' ? m.likeCount : 0,
+    description: typeof m.description === 'string' ? m.description : '',
+    addedAt: typeof m.addedAt === 'string' && m.addedAt ? m.addedAt : null,
+    videoPublishedAt:
+      typeof m.videoPublishedAt === 'string' && m.videoPublishedAt ? m.videoPublishedAt : null,
+  };
+}
+
 function toVideoItem(row: PagedItemRow): YoutubeVideoItem {
-  const meta = (row.platformMeta ?? {}) as Partial<YoutubeItemMeta>;
   return {
     id: row.id,
     videoId: row.platformItemId,
     title: row.title,
-    channelId: typeof meta.channelId === 'string' ? meta.channelId : '',
-    channelTitle:
-      typeof meta.channelTitle === 'string' && meta.channelTitle
-        ? meta.channelTitle
-        : row.authorName,
-    thumbnailUrl:
-      typeof meta.thumbnailUrl === 'string' && meta.thumbnailUrl ? meta.thumbnailUrl : null,
-    durationSeconds: typeof meta.durationSeconds === 'number' ? meta.durationSeconds : 0,
-    viewCount: typeof meta.viewCount === 'number' ? meta.viewCount : 0,
-    likeCount: typeof meta.likeCount === 'number' ? meta.likeCount : 0,
-    description: typeof meta.description === 'string' ? meta.description : '',
     originalUrl: row.originalUrl,
-    addedAt: typeof meta.addedAt === 'string' && meta.addedAt ? meta.addedAt : null,
-    videoPublishedAt:
-      typeof meta.videoPublishedAt === 'string' && meta.videoPublishedAt
-        ? meta.videoPublishedAt
-        : null,
     publishedAt: row.publishedAt,
+    ...narrowYoutubeMeta(row.platformMeta, { authorName: row.authorName }),
   };
 }

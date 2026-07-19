@@ -8,7 +8,7 @@
 - `use-zhihu-favorites.ts` — 数据 hook：共享 `useCollectionLibrary`（`app/hooks/`，见该目录 CLAUDE.md）的薄 adapter——状态机全在泛型层，本文件只注入模块级 `queryFn`（filter→collectionId 映射 `getFavorites`，publishedAt 降序服务层固定）、`facetsFn=getCollectionCounts`、`lastSyncedFn`、`syncFn`（cookie 直读无 auth 解析，进度三元组 fetchedCount/current/total）、`classifyZhihuSyncError`（在本文件定义——单触发点，无需下沉 lib），并把泛化字段映射回 favorites/collectionId/collections 命名。同步**手动按钮触发，绝不 auto-on-mount**——限流远程端点
 - `collection-chips.tsx` — 收藏夹 chip 行：共享 `ChipRowShell`（zhihu icon + `zhihu.collectionsTitle`）+ `FilterChip`（maxWidth 220）——「全部(N)」+ 各夹「标题 (count)」（服务层按数量降序）。**折叠**逻辑抄 author-chips：`COLLAPSED_COUNT=12` + 展开/收起 raw Chip + 选中夹落 fold 外时补渲染 `selectedHidden`
 - `zhihu-card.tsx` — 收藏卡片：作者头像（回退 zhihu icon）+ 显示名 + **类型 Chip 徽标**（`TYPE_LABEL_KEY: Record<ZhihuItemType, LocaleKeys>` 映射 `zhihu.type.*`，exhaustive）+ 标题（2 行 clamp）+ 摘要（3 行 clamp）+ 缩略图（96 高，若有）+ 底部行（收藏夹归属 bookmark icon + `formatDateTime(publishedAt)`）+ 标签行（`TagRow` 在 CardActionArea **之外**）。点击 `window.open(originalUrl)`
-- `tagged-zhihu-card.tsx` — `TaggedZhihuCard`：TaggedItemGrid `renderCard` adapter，`toZhihuFavoriteItem` 防御式收窄 platformMeta（type 白名单校验回退 answer；originalUrl 取 `item.originalUrl`）。`publishedAt` 置 null
+- `tagged-zhihu-card.tsx` — `TaggedZhihuCard`：TaggedItemGrid `renderCard` adapter，`toZhihuFavoriteItem` 收窄委托 sync-service 导出的 `narrowZhihuMeta`（SSOT，mapRow 与本 adapter 共用，含 type 白名单回退 answer），本文件只装 envelope（originalUrl 取 `item.originalUrl`，`publishedAt` 置 null）
 - `zhihu-grid-skeleton.tsx` — 共享 `CardGridSkeleton` 外壳 + rounded 200 卡片骨架
 
 ## 约定
