@@ -91,6 +91,8 @@ ingestCollection(db, {
 
 ### MEDIUM-4：字符软切 chunker 第 3 份拷贝（docs/15 LOW-6 触发条件已满足）
 
+> **已修复（2026-07-19，任务 07-19-refactor-extract-charsplit-chunker-dedupe-3rd-copy）**：提取 `lib/embedding/char-split.ts` 导出 `charSplit(text, { preferParagraph? }): ChunkInput[]`（与 `chunker.ts`/`ChunkInput` 同目录）。3 个 sync-service 调用点改闭包——zhihu/youtube 传 `preferParagraph:true`、x 传 `false`。`lib/{zhihu,youtube,x}/*-chunker.ts` 及各自 `.test.ts` 直接删除（无 re-export 空壳），三份单测合并到 `lib/embedding/char-split.test.ts`（9 例，覆盖 `preferParagraph` 双路径 + CJK 句断 + 硬切不丢内容 + 默认 false）。tsc 零错 + `pnpm test` 352 全绿。四份 CLAUDE.md 同步。
+
 **证据**：
 
 - `lib/zhihu/zhihu-chunker.ts:13-54` ↔ `lib/youtube/youtube-chunker.ts:14-54`：**除导出函数名与注释外逐字符相同**——`MAX_CHARS=1500`、`LOOKBACK=300`、`SENTENCE_END` 正则、`findCut`（段落空行 > 句末标点 > 硬切）、while 主循环 + 尾块。
@@ -141,7 +143,7 @@ docs/15 时是 4 处（main.tsx 路由、nav-config、wxt.config hostPermissions
 
 | 序 | 项 | 工作量 | 风险 |
 |---|---|---|---|
-| 1 | MEDIUM-4（charSplit 提取，3 单测兜底） | 极小 | 零 |
+| 1 | ~~MEDIUM-4（charSplit 提取，3 单测兜底）~~ ✅ 已修复 2026-07-19 | 极小 | 零 |
 | 2 | MEDIUM-5（narrowMeta 每平台单份） | 小 | 低（机械替换） |
 | 3 | HIGH-1（ingestCollection 管线，zhihu/youtube 先行） | 中大 | 中（5 守护测试等价验证兜底） |
 | 4 | MEDIUM-2（HIGH-1 收敛点直调 tagPlatformItem；offscreen 路径显式决策） | 小 | 低（含产品决策：哪些平台开自动打标） |

@@ -47,7 +47,7 @@ import {
   type PlaylistEntry,
   type YoutubePlaylistVideo,
 } from './youtube-api';
-import { chunkDescription } from './youtube-chunker';
+import { charSplit } from '@/lib/embedding';
 
 // Re-export what service consumers actually need: structured errors + the
 // types appearing in public signatures below. The channel probe
@@ -295,7 +295,7 @@ export async function syncPlaylistsToDb(
     ),
     content: {
       textOf: (videoId) => byId.get(videoId)?.video.description ?? '',
-      chunk: chunkDescription,
+      chunk: (text) => charSplit(text, { preferParagraph: true }),
     },
   });
 

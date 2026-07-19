@@ -31,6 +31,8 @@ export type { ChunkInput } from './types';
 
 export { chunkSubtitleRows, type ChunkerOptions } from './chunker';
 
+export { charSplit } from './char-split';
+
 export {
   indexItemChunks,
   rebuildPendingEmbeddings,

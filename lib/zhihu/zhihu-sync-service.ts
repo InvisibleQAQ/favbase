@@ -44,7 +44,7 @@ import {
   type ZhihuRawFavorite,
 } from './zhihu-api';
 import { htmlToMarkdown } from './zhihu-markdown';
-import { chunkZhihuMarkdown } from './zhihu-chunker';
+import { charSplit } from '@/lib/embedding';
 
 // Re-export what service consumers actually need: structured errors + the
 // types appearing in public signatures below.
@@ -211,7 +211,10 @@ export async function syncFavoritesToDb(
     })),
     // Empty markdown (zvideo) still counts as inserted; the pipeline skips
     // the content persist for it.
-    content: { textOf: (pid) => markdownById.get(pid) ?? '', chunk: chunkZhihuMarkdown },
+    content: {
+      textOf: (pid) => markdownById.get(pid) ?? '',
+      chunk: (text) => charSplit(text, { preferParagraph: true }),
+    },
   });
 
   return {

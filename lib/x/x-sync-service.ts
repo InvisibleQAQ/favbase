@@ -38,7 +38,12 @@ import {
   type XMedia,
   type BookmarksProgressCallback,
 } from './x-api';
-import { chunkTweetText } from './x-chunker';
+// Leaf import (NOT the '@/lib/embedding' barrel): the barrel value-re-exports
+// './config' → '@/lib/storage', whose module load eagerly touches
+// chrome.storage. This sync runs in offscreen documents (no chrome.storage), so
+// it must import charSplit from the leaf module. Same offscreen rule as the
+// './vector-store' / '@/lib/storage/keys' leaf imports above.
+import { charSplit } from '@/lib/embedding/char-split';
 
 // Re-export what service consumers actually need: structured errors + the types
 // appearing in public signatures below.
@@ -209,7 +214,10 @@ export async function syncBookmarksToDb(
       platformItemId: tweetId,
       platformSourceId: BOOKMARKS_SOURCE_ID,
     })),
-    content: { textOf: (tweetId) => byId.get(tweetId)?.text ?? '', chunk: chunkTweetText },
+    content: {
+      textOf: (tweetId) => byId.get(tweetId)?.text ?? '',
+      chunk: (text) => charSplit(text, { preferParagraph: false }),
+    },
   });
 
   return {
