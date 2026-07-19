@@ -293,6 +293,7 @@ const en: Record<LocaleKeys, string> = {
   'bookmarks.emptyDesc': 'Add web bookmarks in your browser, then return here — they will be collected automatically.',
   'bookmarks.noMatches': 'No matching bookmarks',
   'bookmarks.syncFailed': 'Sync failed: {{error}}',
+  'bookmarks.extracting': 'Extracting bookmark content {{done}}/{{total}}',
 
   'x.title': 'X Bookmarks',
   'x.count': '{{count}} bookmarks',

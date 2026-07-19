@@ -2,6 +2,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
+import Stack from '@mui/material/Stack';
+import CircularProgress from '@mui/material/CircularProgress';
 
 import { formatDateTime } from '@/lib/i18n';
 import { useTranslation } from '@/lib/i18n/use-translation';
@@ -25,6 +27,7 @@ import {
   useTagEditState,
 } from '../../components/tags';
 import { useBookmarks } from './use-bookmarks';
+import { useBookmarkExtraction } from './use-bookmark-extraction';
 import { FolderChips } from './folder-chips';
 import { BookmarkCard } from './bookmark-card';
 import { TaggedBookmarkCard } from './tagged-bookmark-card';
@@ -99,6 +102,7 @@ export function BookmarksView() {
   const { folderId } = useParams<{ folderId: string }>();
   const navigate = useNavigate();
   const bm = useBookmarks(folderId);
+  const extraction = useBookmarkExtraction();
 
   // Manual tagging — batch-load tags for the current page, single popover
   // instance, platform-scoped filter chips.
@@ -134,6 +138,16 @@ export function BookmarksView() {
         title={t('bookmarks.title')}
         caption={captionParts.length > 0 ? captionParts.join(' · ') : undefined}
       />
+
+      {/* Content-extraction progress — singleton worker, survives route changes */}
+      {extraction.running && (
+        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
+          <CircularProgress size={12} />
+          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+            {t('bookmarks.extracting', { done: extraction.done, total: extraction.total })}
+          </Typography>
+        </Stack>
+      )}
 
       {/* Sync failure banner (library still shows its persisted data) */}
       {bm.syncError && bm.libraryCount > 0 && (

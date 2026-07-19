@@ -121,12 +121,13 @@ describe('bookmarks-sync-service (in-memory PGlite)', () => {
       .where(eq(schema.authors.platform, 'bookmarks'));
     expect(authorRows.map((a) => a.platformAuthorId).sort()).toEqual(['github.com', 'web.dev']);
 
-    // items mapping + platformMeta + no_content state + publishedAt from dateAdded
+    // items mapping + platformMeta + pending state (awaiting content
+    // extraction — the bookmark-content-service seam) + publishedAt from dateAdded
     const item = await getItem('https://github.com/x');
     expect(item.title).toBe('GH');
     expect(item.authorName).toBe('github.com');
     expect(item.originalUrl).toBe('https://github.com/x');
-    expect(item.contentState).toBe('no_content');
+    expect(item.contentState).toBe('pending');
     expect(item.publishedAt?.getTime()).toBe(3000);
     expect(item.platformMeta).toEqual({ domain: 'github.com', dateAdded: 3000 });
 

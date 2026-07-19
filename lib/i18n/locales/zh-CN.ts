@@ -286,6 +286,7 @@ const zhCN = {
   'bookmarks.emptyDesc': '在浏览器中添加网页书签后，回到此页面即可自动收录。',
   'bookmarks.noMatches': '没有匹配的书签',
   'bookmarks.syncFailed': '同步失败: {{error}}',
+  'bookmarks.extracting': '正在提取书签正文 {{done}}/{{total}}',
 
   'x.title': 'X 书签',
   'x.count': '{{count}} 条书签',

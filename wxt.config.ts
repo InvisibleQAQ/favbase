@@ -53,6 +53,14 @@ const zhihuHostPermissions = ['https://www.zhihu.com/*', 'https://api.zhihu.com/
 // (public data needs no OAuth — see lib/youtube/youtube-api.ts).
 const youtubeHostPermissions = ['https://www.googleapis.com/*'];
 
+// Bookmark content extraction fetches arbitrary bookmarked sites from the
+// app.html context (defuddle → markdown pipeline, lib/bookmarks/). Static
+// <all_urls> is a deliberate ADR: install-time warning + longer CWS review
+// accepted (SingleFile precedent) in exchange for zero runtime-grant UX.
+// NOTE: host-permission fetches attach the user's cookies by default — the
+// extraction fetch MUST use credentials:'omit' (see bookmark-content.ts).
+const bookmarkContentHostPermissions = ['<all_urls>'];
+
 export default defineConfig({
   modules: ['@wxt-dev/module-react'],
   manifest: {
@@ -78,6 +86,7 @@ export default defineConfig({
       ...xHostPermissions,
       ...zhihuHostPermissions,
       ...youtubeHostPermissions,
+      ...bookmarkContentHostPermissions,
       ...providerHostPermissions,
     ],
     // Custom (user-entered) API domains are unknown at build time; grant them at

@@ -14,9 +14,17 @@
  * first-write-wins). Allowed exception: `sources` rows upsert (title +
  * folderPath + lastFetchedAt freshness). Removed bookmarks are never deleted; a
  * bookmark moved between folders keeps both links (same as bilibili).
+ *
+ * Content pipeline: new bookmarks land as contentState='pending' and are
+ * drained by the extraction worker (./bookmark-content-service.ts) through the
+ * queue/update methods at the bottom of this file — fetch page → defuddle →
+ * Markdown → item_contents + charSplit chunks → 'chunked', or 'no_content' on
+ * permanent failure. contentState UPDATEs do not violate the insert-only ADR
+ * (that constrains row add/delete; bilibili transcription drives the same
+ * pending→chunked advance).
  */
 
-import { eq, ilike, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, eq, ilike, or, sql, type SQL } from 'drizzle-orm';
 import { getDb } from '@/lib/database';
 import type { FavbaseDb } from '@/lib/database';
 import { escapeLike } from '@/lib/database/sql-utils';
@@ -24,7 +32,10 @@ import { getPlatformLastSyncedAt, pagedItemsQuery } from '@/lib/database/collect
 import { sources } from '@/lib/database/entities/sources';
 import { items } from '@/lib/database/entities/items';
 import { itemSources } from '@/lib/database/entities/item-sources';
-import { ingestCollection } from '@/lib/ingest/ingest';
+import { ingestCollection, persistItemContent } from '@/lib/ingest/ingest';
+// Leaf import (NOT the '@/lib/embedding' barrel): the barrel eagerly touches
+// chrome.storage at module load — same rule as lib/github/github-sync-service.
+import { charSplit } from '@/lib/embedding/char-split';
 import { readBookmarkTree, type BookmarkTree } from './bookmarks-api';
 
 export type { BookmarkTree, BookmarkFolder, BookmarkEntry } from './bookmarks-api';
@@ -139,7 +150,8 @@ export async function syncBookmarkTreeToDb(
       authorName: b.domain,
       originalUrl: b.url,
       publishedAt: b.dateAdded ? new Date(b.dateAdded) : null,
-      contentState: 'no_content' as const,
+      // Awaiting content extraction (bookmark-content-service drains this).
+      contentState: 'pending' as const,
       platformMeta: { domain: b.domain, dateAdded: b.dateAdded } satisfies BookmarkItemMeta,
     })),
     // One link per (bookmark, folder) pair — a URL in multiple folders → one
@@ -218,6 +230,80 @@ export async function getFolders(db: FavbaseDb = getDb()): Promise<BookmarkFolde
 /** Latest folder sync time; null = never synced. */
 export async function getLastSyncedAt(db: FavbaseDb = getDb()): Promise<Date | null> {
   return getPlatformLastSyncedAt(PLATFORM, db);
+}
+
+// ---------------------------------------------------------------------------
+// Public API — content extraction queue (bookmark-content-service.ts is the
+// sole production caller; the contentState UPDATEs here are the ADR-allowed
+// state-machine advance, see the file header)
+// ---------------------------------------------------------------------------
+
+/** One 'pending' item awaiting content extraction. */
+export interface PendingExtractionTarget {
+  /** items.id (uuid) — the extraction-state handle. */
+  itemId: string;
+  /** items.platformItemId (normalized URL) — the embed/tag addressing key. */
+  platformItemId: string;
+  /** items.originalUrl — what gets fetched. */
+  url: string;
+}
+
+/**
+ * Oldest-first slice of the extraction queue. Transient failures stay
+ * 'pending', so re-runs (and the next page-open) naturally resume here.
+ */
+export async function getPendingExtractionTargets(
+  limit: number,
+  db: FavbaseDb = getDb(),
+): Promise<PendingExtractionTarget[]> {
+  return db
+    .select({
+      itemId: items.id,
+      platformItemId: items.platformItemId,
+      url: items.originalUrl,
+    })
+    .from(items)
+    .where(and(eq(items.platform, PLATFORM), eq(items.contentState, 'pending')))
+    .orderBy(asc(items.createdAt), asc(items.id))
+    .limit(limit);
+}
+
+/** Extraction backlog size — the progress `total` for an extraction run. */
+export async function countPendingExtractions(db: FavbaseDb = getDb()): Promise<number> {
+  const rows = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(items)
+    .where(and(eq(items.platform, PLATFORM), eq(items.contentState, 'pending')));
+  return Number(rows[0]?.count ?? 0);
+}
+
+/** Permanent extraction failure (dead link / non-HTML / empty shell) — never retried. */
+export async function markItemNoContent(itemId: string, db: FavbaseDb = getDb()): Promise<void> {
+  await db
+    .update(items)
+    .set({ contentState: 'no_content', updatedAt: new Date() })
+    .where(eq(items.id, itemId));
+}
+
+/**
+ * Persist extracted Markdown (item_contents + charSplit chunks via the shared
+ * two-phase helper — runs OUTSIDE any transaction) and advance contentState to
+ * 'chunked'. Whitespace-only markdown (the caller's threshold guard should
+ * prevent it) degrades to 'no_content' — a 'chunked' state without chunks
+ * would lie.
+ */
+export async function saveBookmarkContent(
+  itemId: string,
+  markdown: string,
+  db: FavbaseDb = getDb(),
+): Promise<void> {
+  const written = await persistItemContent(db, itemId, markdown, (text) =>
+    charSplit(text, { preferParagraph: true }),
+  );
+  await db
+    .update(items)
+    .set({ contentState: written ? 'chunked' : 'no_content', updatedAt: new Date() })
+    .where(eq(items.id, itemId));
 }
 
 // ---------------------------------------------------------------------------

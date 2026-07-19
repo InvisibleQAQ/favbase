@@ -111,6 +111,34 @@ export interface IngestResult {
   linkCount: number;
 }
 
+/**
+ * Two-phase content write for ONE item: `item_contents` upsert + chunk
+ * rebuild, both OUTSIDE any caller transaction (`replaceItemChunks` opens its
+ * own — nesting on the single-connection proxy deadlocks). Empty /
+ * whitespace-only text is skipped. Returns whether content was actually
+ * written. Shared by the ingest content step below and the bookmarks
+ * extraction pipeline (`saveBookmarkContent` in
+ * lib/bookmarks/bookmarks-sync-service.ts).
+ */
+export async function persistItemContent(
+  db: FavbaseDb,
+  itemId: string,
+  text: string,
+  chunkText: (plainText: string) => ChunkInput[],
+): Promise<boolean> {
+  const plainText = text.trim();
+  if (!plainText) return false;
+  await db
+    .insert(itemContents)
+    .values({ itemId, plainText })
+    .onConflictDoUpdate({
+      target: itemContents.itemId,
+      set: { plainText, updatedAt: new Date() },
+    });
+  await replaceItemChunks(db, itemId, chunkText(plainText));
+  return true;
+}
+
 export async function ingestCollection(db: FavbaseDb, input: IngestInput): Promise<IngestResult> {
   const { platform } = input;
 
@@ -258,17 +286,13 @@ export async function ingestCollection(db: FavbaseDb, input: IngestInput): Promi
   const contentPersisted: string[] = [];
   if (input.content) {
     for (const { platformItemId, itemId } of result.inserted) {
-      const plainText = input.content.textOf(platformItemId).trim();
-      if (!plainText) continue;
-      await db
-        .insert(itemContents)
-        .values({ itemId, plainText })
-        .onConflictDoUpdate({
-          target: itemContents.itemId,
-          set: { plainText, updatedAt: new Date() },
-        });
-      await replaceItemChunks(db, itemId, input.content.chunk(plainText));
-      contentPersisted.push(platformItemId);
+      const written = await persistItemContent(
+        db,
+        itemId,
+        input.content.textOf(platformItemId),
+        input.content.chunk,
+      );
+      if (written) contentPersisted.push(platformItemId);
     }
   }
 
