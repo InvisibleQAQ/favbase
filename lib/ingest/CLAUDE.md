@@ -20,4 +20,4 @@
 
 - 平台差异留在调用方：入库前的去重/归一化（如 zhihu turndown、youtube 首见列表归属）、结果统计形状（各平台 `Sync*Result`）、空输入早退（bookmarks 空树零写入、zhihu 空收藏夹零写入）、author 过滤（x/youtube 剔除空 id）
 - 消费方：5 个平台 sync-service 的 `sync*ToDb`；各自的 in-memory PGlite 守护测试即本管线的等价性验证
-- MEDIUM-2 已接线（以数据形式，管线自身零 tagging/embedding/storage 依赖）：content 步骤把实际持久化的 id 收进 `contentPersisted`，各平台 sync-service 经 `Sync*Result.newItemIds` 透出，触发点在 app.html 侧调用方（zhihu/youtube 的生产入口 wrapper、x 的 `use-x-bookmarks` syncFn、github 的 `use-github-stars` syncFn）`void tagNewItems(platform, ids)`（`lib/tagging`）+ `void embedNewItems(platform, ids)`（`lib/embedding`，自动向量化新条目）。x 的 offscreen 浮层路径不打标也不 embed（欠账显式记录，见 `lib/x/CLAUDE.md`）
+- MEDIUM-2 已接线（以数据形式，管线自身零 tagging/embedding/storage 依赖）：content 步骤把实际持久化的 id 收进 `contentPersisted`，各平台 sync-service 经 `Sync*Result.newItemIds` 透出，触发点在 app.html 侧调用方（zhihu/youtube 的生产入口 wrapper、x 的 `use-x-bookmarks` syncFn、github 的 `use-github-stars` syncFn）`void tagNewItems(platform, ids)`（`lib/tagging`）+ `void embedNewItems(platform, ids)`（`lib/embedding`，自动向量化新条目）。x 已单一入口 app.html（07-20 删除 x.com 浮层按钮），旧「浮层 offscreen 路径不打标/不 embed」的欠账随之消失——恒打标恒 embed，见 `lib/x/CLAUDE.md`

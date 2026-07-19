@@ -13,7 +13,13 @@ export {
   migrateSettingsIfNeeded,
 } from './settings';
 
-export { sidebarPinnedStorage, localeStorage, type LocalePreference } from './ui-state';
+export {
+  sidebarPinnedStorage,
+  localeStorage,
+  type LocalePreference,
+  xLastSyncStorage,
+  type XLastSync,
+} from './ui-state';
 
 export async function runStorageMigrations(): Promise<void> {
   await migrateSettingsIfNeeded();

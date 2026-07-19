@@ -1,7 +1,6 @@
 import type { TranscribeRequest, TranscribeAbort } from '@/lib/transcription/types';
 import type { GetVideoCacheRequest, CacheSubtitleRequest } from '@/lib/cache/types';
-import type { OffscreenProgressMessage, OffscreenXSyncProgressMessage } from '@/lib/offscreen/types';
-import type { XSyncStartMessage } from '@/lib/x/x-messages';
+import type { OffscreenProgressMessage } from '@/lib/offscreen/types';
 
 /**
  * Open (or focus) the app.html extension page — content scripts have no
@@ -18,9 +17,8 @@ export type BgClientMessage =
   | TranscribeAbort
   | GetVideoCacheRequest
   | CacheSubtitleRequest
-  | OpenAppPageRequest
-  | XSyncStartMessage;
+  | OpenAppPageRequest;
 
-export type BgInternalMessage = OffscreenProgressMessage | OffscreenXSyncProgressMessage;
+export type BgInternalMessage = OffscreenProgressMessage;
 
 export type BgMessage = BgClientMessage | BgInternalMessage;

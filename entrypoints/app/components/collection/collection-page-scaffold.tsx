@@ -80,6 +80,11 @@ export interface CollectionPageScaffoldProps<T> {
   onSync: () => void;
   /** Re-run the failed paged query. */
   onRetryQuery: () => void;
+  /** Hard-disable the title-bar sync button while not syncing (X cooldown).
+   *  Optional — platforms without a cooldown omit it (unchanged behavior). */
+  syncDisabled?: boolean;
+  /** Pre-translated label shown on the sync button while `syncDisabled`. */
+  syncDisabledLabel?: string;
 
   // --- search ---------------------------------------------------------------
   searchInput: string;
@@ -134,6 +139,8 @@ export function CollectionPageScaffold<T>({
   onPageChange,
   onSync,
   onRetryQuery,
+  syncDisabled,
+  syncDisabledLabel,
   searchInput,
   onSearchInput,
   copy,
@@ -263,6 +270,8 @@ export function CollectionPageScaffold<T>({
         onSync={onSync}
         syncLabel={copy.syncLabel}
         syncingLabel={copy.syncingLabel}
+        syncDisabled={syncDisabled}
+        syncDisabledLabel={syncDisabledLabel}
       />
 
       {/* Sync progress — shape (determinate/indeterminate) owned by the platform's bar. */}

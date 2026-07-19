@@ -7,6 +7,7 @@ import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify } from '../../components/iconify';
 import { StateBox, SyncNowButton, SyncProgressBar, CollectionPageScaffold } from '../../components/collection';
 import { useXBookmarks, type XSyncError } from './use-x-bookmarks';
+import { formatCountdown } from './cooldown';
 import { AuthorChips } from './author-chips';
 import { XCard } from './x-card';
 import { TaggedTweetCard } from './tagged-tweet-card';
@@ -15,7 +16,8 @@ import { TweetGridSkeleton } from './tweet-grid-skeleton';
 /** Platform key for all tag operations in this (x-only) section. */
 const PLATFORM = 'x';
 // Deep-link to the bookmarks page: logged-out users get X's own login flow
-// first, logged-in users land right where the floating fetch button lives.
+// first; logged-in users land there so the extension captures their session,
+// after which app.html's Sync button can pull the bookmarks.
 const X_BOOKMARKS_URL = 'https://x.com/i/bookmarks';
 
 // ---------------------------------------------------------------------------
@@ -40,7 +42,8 @@ function syncErrorMessage(error: XSyncError): string {
 // ---------------------------------------------------------------------------
 
 /** Primary action of both empty states: open x.com/i/bookmarks (login-gated by
- *  X itself), where the floating fetch button does the import in place. */
+ *  X itself) so the extension captures the session; the user then returns here
+ *  and clicks Sync. */
 function OpenBookmarksButton() {
   const { t } = useTranslation();
   return (
@@ -58,7 +61,7 @@ function OpenBookmarksButton() {
 }
 
 /** No valid x.com session (surfaced when a sync throws XAuthError) — guide the
- *  user to log in on X and use the on-page fetch button. */
+ *  user to log in on X so the extension captures the session, then sync here. */
 function NotLoggedInState({ syncing, onSync }: { syncing: boolean; onSync: () => void }) {
   const { t } = useTranslation();
   return (
@@ -76,8 +79,8 @@ function NotLoggedInState({ syncing, onSync }: { syncing: boolean; onSync: () =>
   );
 }
 
-/** Never synced (or synced empty) — guide the user to the X bookmarks page
- *  (floating fetch button), with in-app sync as the secondary path. */
+/** Never synced (or synced empty) — guide the user to log in on X (session
+ *  capture) then sync here, with immediate in-app sync as the secondary path. */
 function EmptyLibraryState({ syncing, onSync }: { syncing: boolean; onSync: () => void }) {
   const { t } = useTranslation();
   return (
@@ -111,8 +114,20 @@ export function XView() {
   if (x.lastSyncedAt) {
     captionParts.push(t('x.lastSynced', { time: formatDateTime(x.lastSyncedAt.getTime()) }));
   }
+  // "N new this run" — persisted across reloads (omitted for legacy libraries
+  // synced before this feature existed).
+  if (x.lastInserted != null) {
+    captionParts.push(t('x.newThisSync', { count: x.lastInserted }));
+  }
 
   const syncErrorText = x.syncError ? syncErrorMessage(x.syncError) : '';
+
+  // X-only 5-minute cooldown after a successful sync — hard-disables the
+  // title-bar sync button with a live mm:ss countdown label.
+  const inCooldown = x.cooldownRemainingMs > 0;
+  const cooldownLabel = inCooldown
+    ? t('x.cooldown', { time: formatCountdown(x.cooldownRemainingMs) })
+    : undefined;
 
   return (
     <CollectionPageScaffold
@@ -132,6 +147,8 @@ export function XView() {
       onPageChange={x.goToPage}
       onSync={x.sync}
       onRetryQuery={x.retryQuery}
+      syncDisabled={inCooldown}
+      syncDisabledLabel={cooldownLabel}
       searchInput={x.searchInput}
       onSearchInput={x.setSearchInput}
       copy={{

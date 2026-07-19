@@ -14,11 +14,11 @@
  *
  * Tokens are session-scoped (chrome.storage.session — cleared on browser
  * close): the background webRequest listener writes them; `getXAuth()` is read
- * from storage-capable contexts only (app.html page, background SW). Offscreen
- * documents have NO chrome.storage — the SW resolves auth and passes it into
- * `syncBookmarks` via the OFFSCREEN_X_SYNC message. Requires the user to have
- * x.com open/browsed at least once this session before a sync can run
- * (surfaced as the "login" empty state).
+ * from storage-capable contexts only (app.html page, background SW). The
+ * app.html X collection page resolves auth here, then calls `syncBookmarks`
+ * directly (page context has the RPC proxy to the offscreen PGlite). Requires
+ * the user to have x.com open/browsed at least once this session before a sync
+ * can run (surfaced as the "login" empty state).
  */
 
 import { storage } from 'wxt/utils/storage';

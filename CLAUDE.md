@@ -22,7 +22,6 @@ WXT 入口点及运行时角色总览，详细结构见对应目录 `CLAUDE.md`�
 - `entrypoints/background.ts` — Background Service Worker（→ `lib/background/`）
 - `entrypoints/bilibili-inject.content.ts` — B站视频页 Main World 脚本（`world:'MAIN'` → `lib/bilibili/inject/`）
 - `entrypoints/bilibili-video.content/` — B站视频页 Content Script（Shadow DOM React UI，Isolated World）
-- `entrypoints/x-bookmarks.content/` — x.com 书签页右下角「获取书签」浮层按钮 Content Script（Shadow DOM React，委托 Offscreen 跑 `syncBookmarks`）
 - `entrypoints/app/` — Extension Page 主界面（`app.html`，MUI v7 Dashboard）
 - `entrypoints/popup/` — Popup 跳板：打开/聚焦 app.html 标签页
 
@@ -64,9 +63,6 @@ WXT 入口点及运行时角色总览，详细结构见对应目录 `CLAUDE.md`�
 - `entrypoints/bilibili-video.content/CLAUDE.md` — 右侧栏面板 UI 挂载 + Shadow DOM 约定
 - `entrypoints/bilibili-video.content/components/CLAUDE.md` — 面板子组件
 - `entrypoints/bilibili-video.content/hooks/CLAUDE.md` — 字幕检测/获取/转录 hooks
-
-### x.com 书签页 Content Script
-- `entrypoints/x-bookmarks.content/CLAUDE.md` — 右下角「获取书签」浮层按钮（CS 纯 UI → background → Offscreen 跑 `syncBookmarks`，镜像转录管线路由）
 
 ### 平台领域（lib）
 - `lib/ingest/CLAUDE.md` — 共享收藏收录管线（`ingestCollection` 五阶段 insert-only 事务骨架 + 两段式 content 写入，github/bookmarks/x/zhihu/youtube 五平台 sync-service 共用）

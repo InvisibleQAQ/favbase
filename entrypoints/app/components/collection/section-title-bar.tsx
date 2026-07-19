@@ -19,6 +19,12 @@ export interface SectionTitleBarProps {
   /** Pre-translated button labels — this component carries no i18n keys. */
   syncLabel?: string;
   syncingLabel?: string;
+  /** Hard-disable the sync button even when not syncing (e.g. X's 5-min
+   *  cooldown). Optional — platforms without a cooldown omit it (unchanged). */
+  syncDisabled?: boolean;
+  /** Pre-translated label shown while `syncDisabled` (e.g. a countdown). Falls
+   *  back to `syncLabel` when omitted. */
+  syncDisabledLabel?: string;
 }
 
 /** Title row shared by platform sections: title + caption + spacer + optional sync button. */
@@ -29,6 +35,8 @@ export function SectionTitleBar({
   onSync,
   syncLabel,
   syncingLabel,
+  syncDisabled = false,
+  syncDisabledLabel,
 }: SectionTitleBarProps) {
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 2, flexWrap: 'wrap' }}>
@@ -56,9 +64,9 @@ export function SectionTitleBar({
             )
           }
           onClick={onSync}
-          disabled={syncing}
+          disabled={syncing || syncDisabled}
         >
-          {syncing ? syncingLabel : syncLabel}
+          {syncing ? syncingLabel : syncDisabled ? (syncDisabledLabel ?? syncLabel) : syncLabel}
         </Button>
       )}
     </Box>

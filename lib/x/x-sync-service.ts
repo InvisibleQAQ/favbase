@@ -79,12 +79,11 @@ export interface SyncBookmarksResult {
   /** Items newly inserted this run (content persisted for these only). */
   inserted: number;
   /**
-   * platformItemIds whose content was persisted this run — auto-tagging input.
-   * The trigger lives in the app.html CALLER (use-x-bookmarks syncFn), NOT
-   * here: this service also runs in the offscreen document, where the tagging
-   * import chain (LLM config → chrome.storage) cannot load. The offscreen
-   * float-button path therefore does not auto-tag (recorded debt, docs/16
-   * MEDIUM-2 decision).
+   * platformItemIds whose content was persisted this run — auto-tagging +
+   * auto-embed input. The trigger lives in the app.html CALLER
+   * (use-x-bookmarks syncFn), NOT here: this service is import-safe for the
+   * offscreen document (leaf imports only), where the tagging/embedding barrel
+   * (LLM/embedding config → chrome.storage) cannot load.
    */
   newItemIds: string[];
 }
