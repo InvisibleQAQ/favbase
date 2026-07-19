@@ -1,6 +1,6 @@
 /**
  * Character-level soft splitter for text-native content types (tweets, zhihu
- * markdown, youtube descriptions). Produces `ChunkInput[]` (the single
+ * markdown, youtube descriptions, github READMEs). Produces `ChunkInput[]` (the single
  * chunker↔indexing contract) with no timestamps — text content maps to NULL
  * `start_sec`/`end_sec` columns.
  *

@@ -9,6 +9,17 @@
  * first-write-wins). Allowed exception: the `sources` row is upserted to
  * refresh lastFetchedAt. Unstarred repos are never deleted (knowledge base
  * keeps everything).
+ *
+ * README content pipeline (text-native, zhihu-isomorphic): `syncStars` diffs
+ * the fetched star list against platformItemIds already in the DB and fetches
+ * READMEs serially for NEW repos only (100ms pacing; per-repo failures —
+ * including non-404 — degrade to no_content with a console.warn, no retry /
+ * no backfill, same decision as tagging). README present → `item_contents` +
+ * `charSplit` chunks via the shared ingest content channel →
+ * `content_state='chunked'` (never 'pending' — that feeds auto-transcribe).
+ * Embedding is NOT run inline (D3) — the app.html caller
+ * (use-github-stars syncFn) fires `tagNewItems` + `embedNewItems` with
+ * `SyncStarsResult.newItemIds` after the sync returns.
  */
 
 import { and, desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm';
@@ -18,7 +29,18 @@ import { escapeLike } from '@/lib/database/sql-utils';
 import { getPlatformLastSyncedAt, pagedItemsQuery } from '@/lib/database/collection-queries';
 import { items } from '@/lib/database/entities/items';
 import { ingestCollection } from '@/lib/ingest/ingest';
-import { fetchAllStarred, type GithubStarredRepo, type StarsProgressCallback } from './github-api';
+// Leaf import (NOT the '@/lib/embedding' barrel): the barrel eagerly touches
+// chrome.storage at module load. charSplit is all this service needs — the
+// embedNewItems/tagNewItems seam lives in the app.html caller
+// (use-github-stars syncFn). Same rule as lib/x/x-sync-service.ts; keeps
+// lib/github's load graph storage-free and its pure tests mock-free.
+import { charSplit } from '@/lib/embedding/char-split';
+import {
+  fetchAllStarred,
+  fetchReadme,
+  type GithubStarredRepo,
+  type StarsProgressCallback,
+} from './github-api';
 
 // Re-export only what service consumers actually need: the structured errors
 // (hook classifies them) and the types appearing in public signatures below.
@@ -30,6 +52,14 @@ export type { GithubStarredRepo, StarsProgressCallback } from './github-api';
 const PLATFORM = 'github';
 const STARS_SOURCE_ID = 'stars';
 const STARS_SOURCE_TITLE = 'GitHub Stars';
+/** Pacing between serial README requests (mirrors PAGE_DELAY_MS in github-api). */
+const README_DELAY_MS = 100;
+/**
+ * Head-preserving cap on persisted README text — guards embedding cost against
+ * pathological READMEs. Enforced at the ingest boundary (`textOf`), exported
+ * for the guard test.
+ */
+export const MAX_README_CHARS = 100_000;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -52,7 +82,12 @@ export interface SyncStarsResult {
   synced: number;
   dropped: number;
   droppedRepoIds: string[];
+  /** platformItemIds whose README content was persisted this run — auto-tag/embed input. */
+  newItemIds: string[];
 }
+
+/** Progress callback for the serial README fetch phase (new repos only). */
+export type ReadmeProgressCallback = (done: number, total: number) => void;
 
 /** Row shape returned to the UI — zero drizzle knowledge required downstream. */
 export interface GithubRepoItem {
@@ -93,27 +128,87 @@ export interface LanguageCount {
 // ---------------------------------------------------------------------------
 
 /**
- * One-shot full sync: fetch ALL starred repos (paged, with progress), then
- * persist in a single transaction. Fetch/auth errors propagate to the caller
- * (UI shows error state) — nothing is written on failure.
+ * One-shot full sync: fetch ALL starred repos (paged, with progress), diff
+ * against the DB to find NEW repos, fetch their READMEs serially, then persist
+ * in a single transaction. Star-list fetch/auth errors propagate to the caller
+ * (UI shows error state) — nothing is written on failure; per-repo README
+ * failures degrade (see `fetchReadmesSerial`).
  */
 export async function syncStars(
   token: string,
   onProgress?: StarsProgressCallback,
+  onReadmeProgress?: ReadmeProgressCallback,
 ): Promise<SyncStarsResult> {
+  const db = getDb();
   const repos = await fetchAllStarred(token, onProgress);
-  return syncStarsToDb(getDb(), repos);
+  const newRepos = await getNewRepos(db, repos);
+  const readmeById = await fetchReadmesSerial(token, newRepos, onReadmeProgress);
+  return syncStarsToDb(db, repos, readmeById);
 }
 
 /**
- * Persist starred repos. Exported for tests — production code goes through
- * `syncStars`. The transaction skeleton (sources upsert → authors → items →
- * links) is delegated to the shared `ingestCollection` pipeline; this function
+ * Repos whose platformItemId is not yet in the DB — the README fetch diff:
+ * already-ingested repos never get a second README request (insert-only means
+ * their content could not be written anyway). Exported for the guard test;
+ * `syncStars` is the sole production caller.
+ */
+export async function getNewRepos(
+  db: FavbaseDb,
+  repos: GithubStarredRepo[],
+): Promise<GithubStarredRepo[]> {
+  const rows = await db
+    .select({ platformItemId: items.platformItemId })
+    .from(items)
+    .where(eq(items.platform, PLATFORM));
+  const existing = new Set(rows.map((r) => r.platformItemId));
+  return repos.filter((r) => !existing.has(String(r.id)));
+}
+
+/**
+ * Serial README fetch for the diffed new repos — 100ms pacing between
+ * requests. Tolerant degradation (user-confirmed): ANY per-repo failure
+ * (network / 5xx / rate limit, not just 404) logs a console.warn and treats
+ * the repo as README-less; the sync never aborts. No retry, no backfill —
+ * same "宁缺毋滥" decision as tagging.
+ */
+async function fetchReadmesSerial(
+  token: string,
+  repos: GithubStarredRepo[],
+  onProgress?: ReadmeProgressCallback,
+): Promise<Map<string, string>> {
+  const readmeById = new Map<string, string>();
+  if (repos.length === 0) return readmeById;
+
+  onProgress?.(0, repos.length);
+  for (let i = 0; i < repos.length; i++) {
+    if (i > 0) await new Promise((resolve) => setTimeout(resolve, README_DELAY_MS));
+    const repo = repos[i];
+    try {
+      const readme = await fetchReadme(token, repo.fullName);
+      if (readme?.trim()) readmeById.set(String(repo.id), readme);
+    } catch (err) {
+      console.warn(
+        '[github-sync] README fetch failed for %s (degrading to no_content):',
+        repo.fullName,
+        err,
+      );
+    }
+    onProgress?.(i + 1, repos.length);
+  }
+  return readmeById;
+}
+
+/**
+ * Persist starred repos (+ optional README markdown for new ones). Exported
+ * for tests — production code goes through `syncStars`. The transaction
+ * skeleton (sources upsert → authors → items → links → two-phase content
+ * write) is delegated to the shared `ingestCollection` pipeline; this function
  * only declares the normalized rows and reports dropped repos.
  */
 export async function syncStarsToDb(
   db: FavbaseDb,
   repos: GithubStarredRepo[],
+  readmeById?: Map<string, string>,
 ): Promise<SyncStarsResult> {
   const result = await ingestCollection(db, {
     platform: PLATFORM,
@@ -132,7 +227,12 @@ export async function syncStarsToDb(
       authorName: r.owner.login,
       originalUrl: r.htmlUrl,
       publishedAt: r.createdAt ? new Date(r.createdAt) : null,
-      contentState: 'no_content' as const,
+      // Text-native when a README exists (zhihu-isomorphic): README → chunked;
+      // absent / fetch-failed → no_content (NOT pending — that feeds
+      // auto-transcribe).
+      contentState: readmeById?.get(String(r.id))
+        ? ('chunked' as const)
+        : ('no_content' as const),
       platformMeta: {
         description: r.description,
         language: r.language,
@@ -148,6 +248,13 @@ export async function syncStarsToDb(
       platformItemId: String(r.id),
       platformSourceId: STARS_SOURCE_ID,
     })),
+    // README markdown for newly inserted repos (the pipeline skips
+    // pre-existing items and empty text). Head-preserving truncation lives
+    // HERE — the single enforcement point at the persistence boundary.
+    content: {
+      textOf: (pid) => (readmeById?.get(pid) ?? '').slice(0, MAX_README_CHARS),
+      chunk: (text) => charSplit(text, { preferParagraph: true }),
+    },
   });
 
   if (result.droppedItemIds.length > 0) {
@@ -171,6 +278,7 @@ export async function syncStarsToDb(
     synced: result.linkCount,
     dropped: droppedRepoIds.length,
     droppedRepoIds,
+    newItemIds: result.contentPersisted,
   };
 }
 

@@ -116,6 +116,27 @@ export function GithubStarsView() {
 
   const syncErrorText = gh.syncError ? syncErrorMessage(gh.syncError) : '';
 
+  // Two sync phases: paged star-list fetch (determinate once the first page's
+  // Link header lands), then serial README fetch for new repos.
+  let progressValue: number | null = null;
+  let progressCaption: string | undefined;
+  if (gh.syncProgress) {
+    if (gh.syncProgress.phase === 'stars') {
+      progressValue = (gh.syncProgress.page / gh.syncProgress.totalPages) * 100;
+      progressCaption = t('githubStars.syncProgress', {
+        fetched: gh.syncProgress.fetchedCount,
+        total: gh.syncProgress.estimatedTotal,
+      });
+    } else {
+      progressValue =
+        gh.syncProgress.total > 0 ? (gh.syncProgress.done / gh.syncProgress.total) * 100 : null;
+      progressCaption = t('githubStars.readmeProgress', {
+        done: gh.syncProgress.done,
+        total: gh.syncProgress.total,
+      });
+    }
+  }
+
   return (
     <CollectionPageScaffold
       platform={PLATFORM}
@@ -166,20 +187,7 @@ export function GithubStarsView() {
         />
       }
       emptyState={<EmptyLibraryState syncing={gh.syncing} onSync={gh.sync} />}
-      progressBar={
-        // Determinate once the first page (and its Link header) lands.
-        <SyncProgressBar
-          value={gh.syncProgress ? (gh.syncProgress.page / gh.syncProgress.totalPages) * 100 : null}
-          caption={
-            gh.syncProgress
-              ? t('githubStars.syncProgress', {
-                  fetched: gh.syncProgress.fetchedCount,
-                  total: gh.syncProgress.estimatedTotal,
-                })
-              : undefined
-          }
-        />
-      }
+      progressBar={<SyncProgressBar value={progressValue} caption={progressCaption} />}
     />
   );
 }

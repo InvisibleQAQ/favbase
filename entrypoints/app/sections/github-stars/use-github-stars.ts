@@ -11,19 +11,32 @@ import {
   type GithubRepoItem,
   type LanguageCount,
 } from '@/lib/github/github-sync-service';
+import { tagNewItems } from '@/lib/tagging';
+import { embedNewItems } from '@/lib/embedding';
 
 import {
   useCollectionLibrary,
   type CollectionQueryParams,
 } from '../../hooks/use-collection-library';
 
-export interface SyncProgress {
+/** Phase 1: paged star-list fetch (determinate once the Link header lands). */
+export interface StarsPhaseProgress {
+  phase: 'stars';
   page: number;
   totalPages: number;
   fetchedCount: number;
   /** totalPages × average page size — exact once the last page lands. */
   estimatedTotal: number;
 }
+
+/** Phase 2: serial README fetch for NEW repos only (diffed against the DB). */
+export interface ReadmePhaseProgress {
+  phase: 'readme';
+  done: number;
+  total: number;
+}
+
+export type SyncProgress = StarsPhaseProgress | ReadmePhaseProgress;
 
 /** Structured sync error — the view maps kinds to locale keys (i18n seam at UI). */
 export type GithubSyncError =
@@ -89,14 +102,26 @@ export function useGithubStars(): UseGithubStarsReturn {
   const syncFn = useCallback(
     async (onProgress: (progress: SyncProgress) => void) => {
       if (!token) return;
-      await syncStars(token, (page, totalPages, fetchedCount) => {
-        onProgress({
-          page,
-          totalPages,
-          fetchedCount,
-          estimatedTotal: Math.round((fetchedCount / page) * totalPages),
-        });
-      });
+      const result = await syncStars(
+        token,
+        (page, totalPages, fetchedCount) => {
+          onProgress({
+            phase: 'stars',
+            page,
+            totalPages,
+            fetchedCount,
+            estimatedTotal: Math.round((fetchedCount / page) * totalPages),
+          });
+        },
+        (done, total) => {
+          onProgress({ phase: 'readme', done, total });
+        },
+      );
+      // Auto-tag + auto-embed the READMEs just persisted. The triggers live in
+      // this app.html caller (not in lib/github) — the tagging/embedding import
+      // chains need chrome.storage, and lib/github stays storage-free.
+      void tagNewItems('github', result.newItemIds);
+      void embedNewItems('github', result.newItemIds);
     },
     [token],
   );

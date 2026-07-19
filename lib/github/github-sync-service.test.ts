@@ -8,11 +8,14 @@ import { and, eq } from 'drizzle-orm';
 import * as schema from '@/lib/database/schema';
 import { runMigrations } from '@/lib/database/migrations';
 import type { FavbaseDb } from '@/lib/database';
+
 import {
   syncStarsToDb,
+  getNewRepos,
   getStarredRepos,
   getLanguageCounts,
   getLastSyncedAt,
+  MAX_README_CHARS,
 } from './github-sync-service';
 import type { GithubStarredRepo } from './github-api';
 
@@ -57,6 +60,8 @@ describe('github-sync-service (in-memory PGlite)', () => {
 
   // FK-safe cleanup order — no state leaks across tests.
   afterEach(async () => {
+    await db.delete(schema.itemChunks);
+    await db.delete(schema.itemContents);
     await db.delete(schema.itemSources);
     await db.delete(schema.items);
     await db.delete(schema.authors);
@@ -111,6 +116,8 @@ describe('github-sync-service (in-memory PGlite)', () => {
 
     const result = await syncStarsToDb(db, repos);
     expect(result).toMatchObject({ total: 3, synced: 3, dropped: 0 });
+    // No readmeById → nothing content-persisted, auto-tag/embed get an empty batch.
+    expect(result.newItemIds).toEqual([]);
 
     // sources: single upserted "stars" row
     const source = await getStarsSource();
@@ -233,6 +240,109 @@ describe('github-sync-service (in-memory PGlite)', () => {
       .from(schema.itemSources)
       .where(eq(schema.itemSources.itemId, kept.id));
     expect(links).toHaveLength(1);
+  });
+
+  // -------------------------------------------------------------------------
+  // README content pipeline (zhihu-isomorphic content channel)
+  // -------------------------------------------------------------------------
+
+  it('repo with README → chunked + item_contents markdown + charSplit chunks; without → no_content', async () => {
+    const readme = '# repo-70\n\nA useful **tool**.';
+    const readmeById = new Map([['70', readme]]);
+
+    const result = await syncStarsToDb(
+      db,
+      [makeRepo({ id: 70 }), makeRepo({ id: 71 })],
+      readmeById,
+    );
+    // Only the repo whose content was actually persisted feeds auto-tag/embed.
+    expect(result.newItemIds).toEqual(['70']);
+
+    const withReadme = await getItem(70);
+    expect(withReadme.contentState).toBe('chunked');
+
+    const contents = await db
+      .select()
+      .from(schema.itemContents)
+      .where(eq(schema.itemContents.itemId, withReadme.id));
+    expect(contents).toHaveLength(1);
+    expect(contents[0].plainText).toBe(readme);
+
+    const chunks = await db
+      .select()
+      .from(schema.itemChunks)
+      .where(eq(schema.itemChunks.itemId, withReadme.id));
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0].chunkText).toBe(readme);
+    // Embedding NOT run inline (D3) — deferred to embedNewItems / 「重建向量」.
+    expect(chunks[0].embedding).toBeNull();
+    expect(chunks[0].startSec).toBeNull();
+    expect(chunks[0].endSec).toBeNull();
+
+    // README-less repo (404 / fetch failure degraded): no_content, zero rows.
+    const withoutReadme = await getItem(71);
+    expect(withoutReadme.contentState).toBe('no_content');
+    const noContents = await db
+      .select()
+      .from(schema.itemContents)
+      .where(eq(schema.itemContents.itemId, withoutReadme.id));
+    expect(noContents).toHaveLength(0);
+    const noChunks = await db
+      .select()
+      .from(schema.itemChunks)
+      .where(eq(schema.itemChunks.itemId, withoutReadme.id));
+    expect(noChunks).toHaveLength(0);
+  });
+
+  it('oversized README is head-truncated to MAX_README_CHARS at the persistence boundary', async () => {
+    const giant = 'a'.repeat(MAX_README_CHARS + 500);
+    const result = await syncStarsToDb(db, [makeRepo({ id: 80 })], new Map([['80', giant]]));
+    expect(result.newItemIds).toEqual(['80']);
+
+    const item = await getItem(80);
+    const contents = await db
+      .select()
+      .from(schema.itemContents)
+      .where(eq(schema.itemContents.itemId, item.id));
+    expect(contents[0].plainText).toHaveLength(MAX_README_CHARS);
+    expect(contents[0].plainText).toBe(giant.slice(0, MAX_README_CHARS));
+  });
+
+  it('re-sync never writes content for pre-existing repos (insert-only, empty newItemIds)', async () => {
+    await syncStarsToDb(db, [makeRepo({ id: 90 })]); // first sync: no README
+    const item = await getItem(90);
+    expect(item.contentState).toBe('no_content');
+
+    // A later sync offering a README for the known repo must NOT backfill.
+    const second = await syncStarsToDb(
+      db,
+      [makeRepo({ id: 90 })],
+      new Map([['90', '# late readme']]),
+    );
+    expect(second.newItemIds).toEqual([]);
+
+    const after = await getItem(90);
+    expect(after.contentState).toBe('no_content'); // insert-only, first-write-wins
+    const contents = await db
+      .select()
+      .from(schema.itemContents)
+      .where(eq(schema.itemContents.itemId, after.id));
+    expect(contents).toHaveLength(0);
+  });
+
+  it('getNewRepos diffs against ingested platformItemIds (no repeat README fetch)', async () => {
+    const known = [makeRepo({ id: 100 }), makeRepo({ id: 101 })];
+    await syncStarsToDb(db, known);
+
+    const resync = [...known, makeRepo({ id: 102 })];
+    const fresh = await getNewRepos(db, resync);
+    expect(fresh.map((r) => r.id)).toEqual([102]);
+
+    // Empty DB → everything is new.
+    await db.delete(schema.itemSources);
+    await db.delete(schema.items);
+    const all = await getNewRepos(db, resync);
+    expect(all.map((r) => r.id)).toEqual([100, 101, 102]);
   });
 
   // -------------------------------------------------------------------------

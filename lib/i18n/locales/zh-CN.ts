@@ -263,6 +263,7 @@ const zhCN = {
   'githubStars.sync': '同步',
   'githubStars.syncing': '同步中...',
   'githubStars.syncProgress': '已拉取 {{fetched}} / 约 {{total}} 个',
+  'githubStars.readmeProgress': '正在拉取 README（{{done}}/{{total}}）',
   'githubStars.syncFailed': '同步失败: {{error}}',
   'githubStars.searchPlaceholder': '搜索仓库名称或描述…',
   'githubStars.languagesTitle': '语言',

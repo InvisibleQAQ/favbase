@@ -17,6 +17,7 @@ const ENDPOINTS = {
   starred: (page: number) =>
     `${API_BASE}/user/starred?per_page=${PER_PAGE}&sort=created&direction=desc&page=${page}`,
   user: () => `${API_BASE}/user`,
+  readme: (fullName: string) => `${API_BASE}/repos/${fullName}/readme`,
 } as const;
 
 function buildHeaders(token: string): Record<string, string> {
@@ -202,6 +203,21 @@ export async function fetchAllStarred(
   }
 
   return all;
+}
+
+/**
+ * Fetch a repo's README as raw markdown (`Accept: application/vnd.github.raw+json`).
+ * 404 → null — "repo has no README" is a normal state, not an error. Other
+ * non-ok statuses throw the structured errors from `throwForStatus`; the
+ * caller decides whether to degrade.
+ */
+export async function fetchReadme(token: string, fullName: string): Promise<string | null> {
+  const res = await fetch(ENDPOINTS.readme(fullName), {
+    headers: { ...buildHeaders(token), Accept: 'application/vnd.github.raw+json' },
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throwForStatus(res);
+  return res.text();
 }
 
 /** Validate a PAT via GET /user. Throws GithubAuthError on 401. */

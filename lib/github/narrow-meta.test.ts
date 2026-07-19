@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { narrowGithubMeta } from './github-sync-service';
 
 const DEFAULTS = {

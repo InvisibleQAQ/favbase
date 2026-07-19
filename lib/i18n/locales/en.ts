@@ -269,6 +269,7 @@ const en: Record<LocaleKeys, string> = {
   'githubStars.sync': 'Sync',
   'githubStars.syncing': 'Syncing...',
   'githubStars.syncProgress': 'Fetched {{fetched}} of ~{{total}}',
+  'githubStars.readmeProgress': 'Fetching READMEs ({{done}}/{{total}})',
   'githubStars.syncFailed': 'Sync failed: {{error}}',
   'githubStars.searchPlaceholder': 'Search repository name or description…',
   'githubStars.languagesTitle': 'Languages',
