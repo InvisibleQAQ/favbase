@@ -36,7 +36,9 @@ export { charSplit } from './char-split';
 export {
   indexItemChunks,
   rebuildPendingEmbeddings,
+  embedNewItems,
   type IndexingDeps,
+  type EmbedNewItemsDeps,
   type IndexedContentState,
   type RebuildProgress,
   type RebuildOutcome,

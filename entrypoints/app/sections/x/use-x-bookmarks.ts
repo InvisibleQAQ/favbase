@@ -9,6 +9,7 @@ import {
 import { getXAuth } from '@/lib/x/x-auth';
 import { classifyXSyncError, type XSyncError } from '@/lib/x/x-messages';
 import { tagNewItems } from '@/lib/tagging';
+import { embedNewItems } from '@/lib/embedding';
 
 import {
   useCollectionLibrary,
@@ -73,11 +74,12 @@ async function syncFn(onProgress: (progress: XSyncProgress) => void) {
   const result = await syncBookmarks(auth, (fetchedCount, page) => {
     onProgress({ fetchedCount, page });
   });
-  // Auto-tag the tweets just persisted (audit docs/16 MEDIUM-2). Same
-  // storage-context reasoning as auth: the tagging import chain needs
-  // chrome.storage, so the trigger lives in this app.html caller — the
-  // offscreen float-button path does not auto-tag (recorded debt).
+  // Auto-tag + auto-embed the tweets just persisted. Same storage-context
+  // reasoning as auth: the tagging/embedding import chains need
+  // chrome.storage, so the triggers live in this app.html caller — the
+  // offscreen float-button path does neither (recorded debt).
   void tagNewItems('x', result.newItemIds);
+  void embedNewItems('x', result.newItemIds);
 }
 
 /** Thin adapter over the shared collection-library state machine. */

@@ -16,7 +16,8 @@
  * - `preExisting` diff: content is persisted for NEWLY inserted items only;
  * - two-phase content write: item_contents + chunks go OUTSIDE the tx
  *   (replaceItemChunks opens its own transaction — nesting on the
- *   single-connection proxy would deadlock). Embedding is deferred (D3).
+ *   single-connection proxy would deadlock). Embedding is deferred (D3) —
+ *   app.html callers fire `embedNewItems` after the sync returns.
  *
  * Offscreen-safe: zero '@/lib/storage' reach. `replaceItemChunks` is a leaf
  * import (the '@/lib/embedding' barrel touches chrome.storage at module load,

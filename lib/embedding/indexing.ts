@@ -1,6 +1,7 @@
-import { and, asc, eq, exists, sql } from 'drizzle-orm';
+import { and, asc, eq, exists, inArray, sql } from 'drizzle-orm';
 import type { FavbaseDb } from '@/lib/database';
-import { schema } from '@/lib/database';
+import { getDb, schema } from '@/lib/database';
+import { chunk } from '@/lib/database/sql-utils';
 import { createEmbeddingModel, embedTexts } from '@/lib/ai';
 import { getEmbeddingSettings, type ResolvedEmbeddingConfig } from './config';
 import { replaceItemChunks, upsertChunkEmbeddings } from './vector-store';
@@ -82,7 +83,7 @@ async function embedChunks(
   }
   await upsertChunkEmbeddings(
     db,
-    chunks.map((chunk, i) => ({ chunkId: chunk.id, vector: vectors[i] })),
+    chunks.map((c, i) => ({ chunkId: c.id, vector: vectors[i] })),
   );
   await setContentState(db, itemId, 'embedded');
 }
@@ -195,4 +196,80 @@ export async function rebuildPendingEmbeddings(
   }
 
   return { status: 'completed', completed, total };
+}
+
+// ---------------------------------------------------------------------------
+// embedNewItems
+// ---------------------------------------------------------------------------
+
+/** Injectable seams for tests — `IndexingDeps` plus the db accessor (mirrors TaggingDeps). */
+export interface EmbedNewItemsDeps extends IndexingDeps {
+  db: () => FavbaseDb;
+}
+
+/** Keeps `inArray` bind-params well under the PG 65535 limit (same as ingest). */
+const ID_QUERY_CHUNK_SIZE = 500;
+
+/**
+ * Batch entry for collection syncs (mirrors `tagNewItems`): embed the items a
+ * sync run just persisted chunks for. Addressed by (platform, platformItemId)
+ * so callers never touch DB uuids. Only items still at 'chunked' qualify, so
+ * re-runs are idempotent by construction.
+ *
+ * Sequential on purpose — a first sync can insert hundreds of items, and
+ * serial awaits are the pacing that keeps the embedding API from being
+ * hammered. Never throws: unconfigured is a silent no-op, a failing item logs
+ * and stays 'chunked' without aborting the rest (the settings-page rebuild
+ * remains the backlog safety net). Fire-and-forget from callers
+ * (`void embedNewItems(…)`).
+ */
+export async function embedNewItems(
+  platform: string,
+  platformItemIds: string[],
+  deps: Partial<EmbedNewItemsDeps> = {},
+): Promise<void> {
+  if (platformItemIds.length === 0) return;
+  const getConfig = deps.getConfig ?? defaultDeps.getConfig;
+  const embed = deps.embed ?? defaultDeps.embed;
+
+  try {
+    const config = await getConfig();
+    if (!config.enabled) return;
+    const db = (deps.db ?? getDb)();
+
+    const targets: { id: string }[] = [];
+    for (const batch of chunk(platformItemIds, ID_QUERY_CHUNK_SIZE)) {
+      const rows = await db
+        .select({ id: items.id })
+        .from(items)
+        .where(
+          and(
+            eq(items.platform, platform),
+            inArray(items.platformItemId, batch),
+            eq(items.contentState, 'chunked'),
+          ),
+        )
+        .orderBy(asc(items.createdAt), asc(items.id));
+      targets.push(...rows);
+    }
+
+    for (const { id: itemId } of targets) {
+      try {
+        const chunks = await db
+          .select({ id: itemChunks.id, chunkText: itemChunks.chunkText })
+          .from(itemChunks)
+          .where(eq(itemChunks.itemId, itemId))
+          .orderBy(asc(itemChunks.chunkIndex));
+        if (chunks.length === 0) continue;
+        await embedChunks(db, itemId, chunks, config, embed);
+      } catch (err) {
+        console.error(
+          `[embedding] Post-sync embed failed for item=${itemId}, staying at 'chunked':`,
+          err,
+        );
+      }
+    }
+  } catch (err) {
+    console.error('[embedding] embedNewItems aborted:', err);
+  }
 }

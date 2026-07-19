@@ -13,11 +13,11 @@
 - **分批**：所有 INSERT 走 `chunk(500)`（bind-param < PG 65535）
 - **id-map re-select 按 platform 全量**：覆盖本轮之前已存在的行——已知 item 新加入另一 source 仍会得到 link（youtube 全量重拉依赖此语义）
 - **preExisting 差集**：content 只对本轮新插入 item 写
-- **两段式 content 写入**：item_contents upsert + `replaceItemChunks` 在事务**外**逐条执行（`replaceItemChunks` 自开事务，单连接 proxy 嵌套死锁）；空/纯空白文本跳过；embedding 不 inline（D3，推迟到设置页「重建向量」）
+- **两段式 content 写入**：item_contents upsert + `replaceItemChunks` 在事务**外**逐条执行（`replaceItemChunks` 自开事务，单连接 proxy 嵌套死锁）；空/纯空白文本跳过；embedding 不 inline（D3——管线保持零 storage/AI 依赖；同步后由 app.html 侧调用方 `void embedNewItems` 自动补齐新条目，设置页「重建向量」为积压兜底）
 - **Offscreen 安全**：零 `@/lib/storage` 触达，`replaceItemChunks` 从 `@/lib/embedding/vector-store` leaf 导入（barrel 有 chrome.storage 模块加载副作用；x 同步跑在无 chrome.storage 的 offscreen）
 
 ## 约定
 
 - 平台差异留在调用方：入库前的去重/归一化（如 zhihu turndown、youtube 首见列表归属）、结果统计形状（各平台 `Sync*Result`）、空输入早退（bookmarks 空树零写入、zhihu 空收藏夹零写入）、author 过滤（x/youtube 剔除空 id）
 - 消费方：5 个平台 sync-service 的 `sync*ToDb`；各自的 in-memory PGlite 守护测试即本管线的等价性验证
-- MEDIUM-2 已接线（以数据形式，管线自身零 tagging/storage 依赖）：content 步骤把实际持久化的 id 收进 `contentPersisted`，各平台 sync-service 经 `Sync*Result.newItemIds` 透出，触发点在 app.html 侧调用方（zhihu/youtube 的生产入口 wrapper、x 的 `use-x-bookmarks` syncFn）`void tagNewItems(platform, ids)`（`lib/tagging`）。x 的 offscreen 浮层路径不打标（欠账显式记录，见 `lib/x/CLAUDE.md`）
+- MEDIUM-2 已接线（以数据形式，管线自身零 tagging/embedding/storage 依赖）：content 步骤把实际持久化的 id 收进 `contentPersisted`，各平台 sync-service 经 `Sync*Result.newItemIds` 透出，触发点在 app.html 侧调用方（zhihu/youtube 的生产入口 wrapper、x 的 `use-x-bookmarks` syncFn）`void tagNewItems(platform, ids)`（`lib/tagging`）+ `void embedNewItems(platform, ids)`（`lib/embedding`，自动向量化新条目）。x 的 offscreen 浮层路径不打标也不 embed（欠账显式记录，见 `lib/x/CLAUDE.md`）

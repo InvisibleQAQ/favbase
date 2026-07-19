@@ -17,9 +17,10 @@
  * lastFetchedAt freshness — collection renames flow through). Un-favorited
  * entries are never deleted.
  *
- * Embedding is NOT run inline during sync (D3) — vectorization is deferred to
- * the settings 「重建向量」batch. Full-text (ILIKE) search works right after
- * sync; semantic retrieval after a rebuild.
+ * Embedding is NOT run inside the ingest transaction (D3) — after the sync
+ * completes, `syncFavorites` fires `embedNewItems` (fire-and-forget) to
+ * vectorize the new items; the settings 「重建向量」batch remains the backlog
+ * safety net. Full-text (ILIKE) search works right after sync either way.
  *
  * Runs in the app.html page context only (manual sync button → RPC proxy →
  * Offscreen PGlite): the turndown conversion wants a DOM, and the zhihu fetch
@@ -44,7 +45,7 @@ import {
   type ZhihuRawFavorite,
 } from './zhihu-api';
 import { htmlToMarkdown } from './zhihu-markdown';
-import { charSplit } from '@/lib/embedding';
+import { charSplit, embedNewItems } from '@/lib/embedding';
 
 // Re-export what service consumers actually need: structured errors + the
 // types appearing in public signatures below.
@@ -134,11 +135,12 @@ export async function syncFavorites(onProgress?: ZhihuProgressCallback): Promise
   const db = getDb();
   const { collections, favorites } = await fetchAllFavorites(onProgress);
   const result = await syncFavoritesToDb(db, collections, favorites);
-  // Auto-tag the content just persisted (audit docs/16 MEDIUM-2) —
-  // fire-and-forget, sequential inside, never throws. Lives HERE (not in
-  // syncFavoritesToDb) because this wrapper only runs in the app.html context
-  // where LLM config is readable.
+  // Auto-tag + auto-embed the content just persisted — fire-and-forget,
+  // sequential inside, never throws. Lives HERE (not in syncFavoritesToDb)
+  // because this wrapper only runs in the app.html context where LLM /
+  // embedding config is readable.
   void tagNewItems(PLATFORM, result.newItemIds);
+  void embedNewItems(PLATFORM, result.newItemIds);
   return result;
 }
 

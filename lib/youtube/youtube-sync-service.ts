@@ -20,9 +20,11 @@
  * items / authors / item_sources are insert-only (`onConflictDoNothing`,
  * first-write-wins). Removing a video from a playlist never deletes rows.
  *
- * Embedding is NOT run inline during sync (D3). Descriptions are persisted +
- * chunked → `content_state='chunked'`; vectorization is deferred to the
- * settings 「重建向量」batch. ILIKE search works right after sync.
+ * Embedding is NOT run inside the ingest transaction (D3). Descriptions are
+ * persisted + chunked → `content_state='chunked'`; after the sync completes,
+ * `syncYoutubePlaylists` fires `embedNewItems` (fire-and-forget) to vectorize
+ * the new items — the settings 「重建向量」batch remains the backlog safety
+ * net. ILIKE search works right after sync either way.
  */
 
 import { desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm';
@@ -47,7 +49,7 @@ import {
   type PlaylistEntry,
   type YoutubePlaylistVideo,
 } from './youtube-api';
-import { charSplit } from '@/lib/embedding';
+import { charSplit, embedNewItems } from '@/lib/embedding';
 
 // Re-export what service consumers actually need: structured errors + the
 // types appearing in public signatures below. The channel probe
@@ -204,11 +206,12 @@ export async function syncYoutubePlaylists(
   }
 
   const synced = await syncPlaylistsToDb(db, batches);
-  // Auto-tag the content just persisted (audit docs/16 MEDIUM-2) —
-  // fire-and-forget, sequential inside, never throws. Lives HERE (not in
-  // syncPlaylistsToDb) because this wrapper only runs in the app.html context
-  // where LLM config is readable.
+  // Auto-tag + auto-embed the content just persisted — fire-and-forget,
+  // sequential inside, never throws. Lives HERE (not in syncPlaylistsToDb)
+  // because this wrapper only runs in the app.html context where LLM /
+  // embedding config is readable.
   void tagNewItems(PLATFORM, synced.newItemIds);
+  void embedNewItems(PLATFORM, synced.newItemIds);
   return synced;
 }
 
