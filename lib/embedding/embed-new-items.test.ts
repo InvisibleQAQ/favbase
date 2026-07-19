@@ -289,4 +289,78 @@ describe('embedNewItems', () => {
     expect(getConfig).not.toHaveBeenCalled();
     expect(embed).not.toHaveBeenCalled();
   });
+
+  it('reports onProgress starting at 0/total then incrementing to total (filtered count)', async () => {
+    await seedItem({
+      platformItemId: 'p-a',
+      contentState: 'chunked',
+      chunkTexts: ['a0'],
+      createdAt: T0,
+    });
+    await seedItem({
+      platformItemId: 'p-b',
+      contentState: 'chunked',
+      chunkTexts: ['b0'],
+      createdAt: T1,
+    });
+    // no_content is filtered out — total must be 2 (the chunked count), NOT the
+    // 3 input ids.
+    await seedItem({ platformItemId: 'p-c', contentState: 'no_content' });
+
+    const embed = vi.fn(async (_c: ResolvedEmbeddingConfig, texts: string[]) =>
+      fakeVectors(texts.length),
+    );
+    const onProgress = vi.fn();
+
+    await embedNewItems(
+      'test',
+      ['p-a', 'p-b', 'p-c'],
+      { db: () => db, getConfig: async () => fakeConfig(true), embed },
+      onProgress,
+    );
+
+    // Filtered total (2), 0-based start, monotonic increments to 2/2.
+    expect(onProgress.mock.calls.map((c) => c[0])).toEqual([
+      { done: 0, total: 2 },
+      { done: 1, total: 2 },
+      { done: 2, total: 2 },
+    ]);
+  });
+
+  it('advances onProgress for a failing item too (done reaches total)', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await seedItem({
+      platformItemId: 'p-fail',
+      contentState: 'chunked',
+      chunkTexts: ['fail-me'],
+      createdAt: T0,
+    });
+    await seedItem({
+      platformItemId: 'p-ok',
+      contentState: 'chunked',
+      chunkTexts: ['ok'],
+      createdAt: T1,
+    });
+
+    const embed = vi.fn(async (_c: ResolvedEmbeddingConfig, texts: string[]) => {
+      if (texts.includes('fail-me')) throw new Error('boom');
+      return fakeVectors(texts.length);
+    });
+    const onProgress = vi.fn();
+
+    await embedNewItems(
+      'test',
+      ['p-fail', 'p-ok'],
+      { db: () => db, getConfig: async () => fakeConfig(true), embed },
+      onProgress,
+    );
+
+    // Failing item still counts toward done — the bar reaches 2/2.
+    expect(onProgress.mock.calls.map((c) => c[0])).toEqual([
+      { done: 0, total: 2 },
+      { done: 1, total: 2 },
+      { done: 2, total: 2 },
+    ]);
+    errSpy.mockRestore();
+  });
 });

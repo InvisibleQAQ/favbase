@@ -18,6 +18,12 @@ import {
   useCollectionLibrary,
   type CollectionQueryParams,
 } from '../../hooks/use-collection-library';
+import { startJob, type BackgroundJob } from '../../hooks/background-jobs-store';
+
+/** Job namespace key (reused as `useCollectionLibrary` logTag). */
+const LOG_TAG = 'github-stars';
+/** DB platform discriminator for tag/embed (distinct from the UI job key). */
+const PLATFORM = 'github';
 
 /** Phase 1: paged star-list fetch (determinate once the Link header lands). */
 export interface StarsPhaseProgress {
@@ -76,6 +82,10 @@ export interface UseGithubStarsReturn {
   syncProgress: SyncProgress | null;
   syncError: GithubSyncError | null;
   sync: () => Promise<void>;
+
+  // Post-sync embed / tag jobs (progress captions).
+  embedJob: BackgroundJob | null;
+  tagJob: BackgroundJob | null;
 }
 
 function classifySyncError(err: unknown): GithubSyncError {
@@ -117,11 +127,17 @@ export function useGithubStars(): UseGithubStarsReturn {
           onProgress({ phase: 'readme', done, total });
         },
       );
-      // Auto-tag + auto-embed the READMEs just persisted. The triggers live in
-      // this app.html caller (not in lib/github) — the tagging/embedding import
-      // chains need chrome.storage, and lib/github stays storage-free.
-      void tagNewItems('github', result.newItemIds);
-      void embedNewItems('github', result.newItemIds);
+      // Auto-tag + auto-embed the READMEs just persisted, registered as
+      // background jobs (survive route switches, cross-mount dedupe, feed the
+      // global "don't close" reminder, done/total captions). The triggers live
+      // in this app.html caller (not in lib/github) — the tagging/embedding
+      // import chains need chrome.storage, and lib/github stays storage-free.
+      startJob(LOG_TAG, 'tag', (sp) =>
+        tagNewItems(PLATFORM, result.newItemIds, undefined, (p) => sp(p)),
+      );
+      startJob(LOG_TAG, 'embed', (sp) =>
+        embedNewItems(PLATFORM, result.newItemIds, undefined, (p) => sp(p)),
+      );
     },
     [token],
   );
@@ -132,7 +148,7 @@ export function useGithubStars(): UseGithubStarsReturn {
     lastSyncedFn: getLastSyncedAt,
     syncFn,
     classifyError: classifySyncError,
-    logTag: 'github-stars',
+    logTag: LOG_TAG,
   });
 
   const { sync: syncInner } = lib;
@@ -167,5 +183,7 @@ export function useGithubStars(): UseGithubStarsReturn {
     syncProgress: lib.syncProgress,
     syncError: lib.syncError,
     sync,
+    embedJob: lib.embedJob,
+    tagJob: lib.tagJob,
   };
 }

@@ -11,6 +11,7 @@ import {
   StateBox,
   SyncNowButton,
   SyncProgressBar,
+  BackgroundJobsBar,
   CollectionPageScaffold,
 } from '../../components/collection';
 import { useYoutubePlaylists, type YoutubeSyncError } from './use-youtube-playlists';
@@ -140,6 +141,13 @@ export function YoutubeView() {
 
   const syncErrorText = yt.syncError ? syncErrorMessage(yt.syncError) : '';
 
+  // Post-sync embed / tag progress captions (self-hiding bar under the title).
+  const jobCaptions: string[] = [];
+  const ep = yt.embedJob?.progress as { done: number; total: number } | null | undefined;
+  if (yt.embedJob?.running && ep && ep.total > 0) jobCaptions.push(t('backgroundJobs.embedding', ep));
+  const tp = yt.tagJob?.progress as { done: number; total: number } | null | undefined;
+  if (yt.tagJob?.running && tp && tp.total > 0) jobCaptions.push(t('backgroundJobs.tagging', tp));
+
   return (
     <CollectionPageScaffold
       platform={PLATFORM}
@@ -209,6 +217,7 @@ export function YoutubeView() {
           }
         />
       }
+      backgroundJobsBar={<BackgroundJobsBar captions={jobCaptions} />}
     />
   );
 }

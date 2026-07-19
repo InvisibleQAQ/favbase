@@ -5,7 +5,13 @@ import Link from '@mui/material/Link';
 import { t, formatDateTime } from '@/lib/i18n';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify } from '../../components/iconify';
-import { StateBox, SyncNowButton, SyncProgressBar, CollectionPageScaffold } from '../../components/collection';
+import {
+  StateBox,
+  SyncNowButton,
+  SyncProgressBar,
+  BackgroundJobsBar,
+  CollectionPageScaffold,
+} from '../../components/collection';
 import { useZhihuFavorites, type ZhihuSyncError } from './use-zhihu-favorites';
 import { CollectionChips } from './collection-chips';
 import { ZhihuCard } from './zhihu-card';
@@ -115,6 +121,14 @@ export function ZhihuView() {
 
   const syncErrorText = zhihu.syncError ? syncErrorMessage(zhihu.syncError) : '';
 
+  // Post-sync embed / tag progress captions (self-hiding bar under the title).
+  const jobCaptions: string[] = [];
+  const ep = zhihu.embedJob?.progress as { done: number; total: number } | null | undefined;
+  if (zhihu.embedJob?.running && ep && ep.total > 0)
+    jobCaptions.push(t('backgroundJobs.embedding', ep));
+  const tp = zhihu.tagJob?.progress as { done: number; total: number } | null | undefined;
+  if (zhihu.tagJob?.running && tp && tp.total > 0) jobCaptions.push(t('backgroundJobs.tagging', tp));
+
   return (
     <CollectionPageScaffold
       platform={PLATFORM}
@@ -179,6 +193,7 @@ export function ZhihuView() {
           }
         />
       }
+      backgroundJobsBar={<BackgroundJobsBar captions={jobCaptions} />}
     />
   );
 }

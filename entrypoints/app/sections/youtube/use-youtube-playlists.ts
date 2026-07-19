@@ -12,11 +12,19 @@ import {
   type PlaylistCount,
   type YoutubePlaylistsProgress,
 } from '@/lib/youtube/youtube-sync-service';
+import { tagNewItems } from '@/lib/tagging';
+import { embedNewItems } from '@/lib/embedding';
 
 import {
   useCollectionLibrary,
   type CollectionQueryParams,
 } from '../../hooks/use-collection-library';
+import { startJob, type BackgroundJob } from '../../hooks/background-jobs-store';
+
+/** Job namespace key (reused as `useCollectionLibrary` logTag). */
+const LOG_TAG = 'youtube-playlists';
+/** DB platform discriminator for tag/embed (distinct from the UI job key). */
+const PLATFORM = 'youtube';
 
 /**
  * Structured sync error — the view maps kinds to locale keys (i18n seam at the
@@ -70,6 +78,10 @@ export interface UseYoutubePlaylistsReturn {
   syncProgress: YoutubePlaylistsProgress | null;
   syncError: YoutubeSyncError | null;
   sync: () => Promise<void>;
+
+  // Post-sync embed / tag jobs (progress captions).
+  embedJob: BackgroundJob | null;
+  tagJob: BackgroundJob | null;
 }
 
 function queryFn({ filter, search, page, pageSize }: CollectionQueryParams) {
@@ -93,7 +105,18 @@ export function useYoutubePlaylists(): UseYoutubePlaylistsReturn {
   const syncFn = useCallback(
     async (onProgress: (progress: YoutubePlaylistsProgress) => void) => {
       if (!apiKey || !channel) return;
-      await syncYoutubePlaylists({ apiKey, channel }, onProgress);
+      const result = await syncYoutubePlaylists({ apiKey, channel }, onProgress);
+      // Auto-tag + auto-embed the descriptions just persisted, registered as
+      // background jobs (survive route switches, cross-mount dedupe, feed the
+      // global "don't close" reminder, done/total captions). Moved UP from the
+      // lib wrapper (ST3) so all four collection platforms share this single
+      // hook-layer seam.
+      startJob(LOG_TAG, 'tag', (sp) =>
+        tagNewItems(PLATFORM, result.newItemIds, undefined, (p) => sp(p)),
+      );
+      startJob(LOG_TAG, 'embed', (sp) =>
+        embedNewItems(PLATFORM, result.newItemIds, undefined, (p) => sp(p)),
+      );
     },
     [apiKey, channel],
   );
@@ -109,7 +132,7 @@ export function useYoutubePlaylists(): UseYoutubePlaylistsReturn {
     lastSyncedFn: getLastSyncedAt,
     syncFn,
     classifyError: classifyYoutubeSyncError,
-    logTag: 'youtube-playlists',
+    logTag: LOG_TAG,
   });
 
   const { sync: syncInner } = lib;
@@ -144,5 +167,7 @@ export function useYoutubePlaylists(): UseYoutubePlaylistsReturn {
     syncProgress: lib.syncProgress,
     syncError: lib.syncError,
     sync,
+    embedJob: lib.embedJob,
+    tagJob: lib.tagJob,
   };
 }

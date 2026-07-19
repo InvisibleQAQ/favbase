@@ -5,7 +5,13 @@ import Link from '@mui/material/Link';
 import { t, formatDateTime } from '@/lib/i18n';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify } from '../../components/iconify';
-import { StateBox, SyncNowButton, SyncProgressBar, CollectionPageScaffold } from '../../components/collection';
+import {
+  StateBox,
+  SyncNowButton,
+  SyncProgressBar,
+  BackgroundJobsBar,
+  CollectionPageScaffold,
+} from '../../components/collection';
 import { useXBookmarks, type XSyncError } from './use-x-bookmarks';
 import { formatCountdown } from './cooldown';
 import { AuthorChips } from './author-chips';
@@ -122,6 +128,13 @@ export function XView() {
 
   const syncErrorText = x.syncError ? syncErrorMessage(x.syncError) : '';
 
+  // Post-sync embed / tag progress captions (self-hiding bar under the title).
+  const jobCaptions: string[] = [];
+  const ep = x.embedJob?.progress as { done: number; total: number } | null | undefined;
+  if (x.embedJob?.running && ep && ep.total > 0) jobCaptions.push(t('backgroundJobs.embedding', ep));
+  const tp = x.tagJob?.progress as { done: number; total: number } | null | undefined;
+  if (x.tagJob?.running && tp && tp.total > 0) jobCaptions.push(t('backgroundJobs.tagging', tp));
+
   // X-only 5-minute cooldown after a successful sync — hard-disables the
   // title-bar sync button with a live mm:ss countdown label.
   const inCooldown = x.cooldownRemainingMs > 0;
@@ -190,6 +203,7 @@ export function XView() {
           }
         />
       }
+      backgroundJobsBar={<BackgroundJobsBar captions={jobCaptions} />}
     />
   );
 }

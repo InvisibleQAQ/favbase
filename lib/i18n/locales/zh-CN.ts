@@ -235,6 +235,10 @@ const zhCN = {
   // platform's sync/embed/tag job is running; count-plural.
   'backgroundJobs.reminder': '{{count}} 项后台任务进行中，请勿关闭本页',
   'backgroundJobs.reminder.one': '{{count}} 项后台任务进行中，请勿关闭本页',
+  // Per-section post-sync job progress captions ({{done}}/{{total}} — not count,
+  // so no plural variant).
+  'backgroundJobs.embedding': '正在向量化 {{done}}/{{total}}',
+  'backgroundJobs.tagging': '正在打标签 {{done}}/{{total}}',
 
   // Shared collection-page copy (identical across all platforms) — platform
   // prefixes keep only platform-specific nouns (see *.noMatches).

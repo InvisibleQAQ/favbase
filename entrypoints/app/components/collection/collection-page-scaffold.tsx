@@ -108,6 +108,10 @@ export interface CollectionPageScaffoldProps<T> {
   authFailedState?: ReactNode;
   /** Sync progress bar. Rendered only while syncing; omit for platforms without one. */
   progressBar?: ReactNode;
+  /** Post-sync background-job captions (embed / tag progress). Rendered
+   *  unconditionally right after the progress bar — the node self-hides when it
+   *  has no running jobs. Optional; platforms without post-sync jobs omit it. */
+  backgroundJobsBar?: ReactNode;
 }
 
 /**
@@ -151,6 +155,7 @@ export function CollectionPageScaffold<T>({
   emptyState,
   authFailedState,
   progressBar,
+  backgroundJobsBar,
 }: CollectionPageScaffoldProps<T>) {
   // Manual tagging — batch page tags + single popover + platform-scoped filter
   // chips, with the refresh invariant sealed inside the hook.
@@ -276,6 +281,9 @@ export function CollectionPageScaffold<T>({
 
       {/* Sync progress — shape (determinate/indeterminate) owned by the platform's bar. */}
       {syncing && progressBar}
+
+      {/* Post-sync embed / tag progress captions — self-hides when idle. */}
+      {backgroundJobsBar}
 
       {/* Sync failure banner (library still shows its persisted data). */}
       {hasSyncError && libraryCount > 0 && (

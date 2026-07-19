@@ -320,6 +320,36 @@ describe('tagging-service (in-memory PGlite)', () => {
         errSpy.mockRestore();
       }
     });
+
+    it('reports onProgress 0/total up front then increments to total (ids.length)', async () => {
+      await seedItem('tp1', 'x');
+      await seedItem('tp2', 'x');
+      const onProgress = vi.fn();
+
+      await tagNewItems('x', ['tp1', 'tp2'], deps(), onProgress);
+
+      // total = input count; 0-based start, monotonic to 2/2.
+      expect(onProgress.mock.calls.map((c) => c[0])).toEqual([
+        { done: 0, total: 2 },
+        { done: 1, total: 2 },
+        { done: 2, total: 2 },
+      ]);
+    });
+
+    it('advances onProgress for a skipped item too (total = ids.length)', async () => {
+      // tp3 exists → tagged; tp4 is missing → tagPlatformItem returns 'skipped'
+      // but progress still advances for it.
+      await seedItem('tp3', 'x');
+      const onProgress = vi.fn();
+
+      await tagNewItems('x', ['tp3', 'tp4-missing'], deps(), onProgress);
+
+      expect(onProgress.mock.calls.map((c) => c[0])).toEqual([
+        { done: 0, total: 2 },
+        { done: 1, total: 2 },
+        { done: 2, total: 2 },
+      ]);
+    });
   });
 
   // -------------------------------------------------------------------------

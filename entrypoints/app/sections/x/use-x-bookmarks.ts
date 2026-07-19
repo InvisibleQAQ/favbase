@@ -18,7 +18,13 @@ import {
   useCollectionLibrary,
   type CollectionQueryParams,
 } from '../../hooks/use-collection-library';
+import { startJob, type BackgroundJob } from '../../hooks/background-jobs-store';
 import { COOLDOWN_MS, remainingCooldown } from './cooldown';
+
+/** Job namespace key (reused as `useCollectionLibrary` logTag). */
+const LOG_TAG = 'x-bookmarks';
+/** DB platform discriminator for tag/embed (distinct from the UI job key). */
+const PLATFORM = 'x';
 
 // Re-exported so the view keeps importing XSyncError from the hook; the type +
 // classifier live in lib/x (shared classifier; single trigger surface now).
@@ -59,6 +65,10 @@ export interface UseXBookmarksReturn {
   syncProgress: XSyncProgress | null;
   syncError: XSyncError | null;
   sync: () => Promise<void>;
+
+  // Post-sync embed / tag jobs (progress captions).
+  embedJob: BackgroundJob | null;
+  tagJob: BackgroundJob | null;
 
   // X-specific: last-sync "N new this run" (persisted) + sync cooldown.
   lastInserted: number | null;
@@ -103,11 +113,15 @@ export function useXBookmarks(): UseXBookmarksReturn {
     const result = await syncBookmarks(auth, (fetchedCount, page) => {
       onProgress({ fetchedCount, page });
     });
-    // Auto-tag + auto-embed the tweets just persisted. Same storage-context
-    // reasoning as auth: the tagging/embedding import chains need chrome.storage,
-    // so the triggers live in this app.html caller.
-    void tagNewItems('x', result.newItemIds);
-    void embedNewItems('x', result.newItemIds);
+    // Auto-tag + auto-embed the tweets just persisted, registered as background
+    // jobs so they survive route switches, dedupe across mounts, feed the global
+    // "don't close" reminder, and surface done/total progress captions. Same
+    // storage-context reasoning as auth: the tagging/embedding import chains need
+    // chrome.storage, so the triggers live in this app.html caller.
+    startJob(LOG_TAG, 'tag', (sp) => tagNewItems(PLATFORM, result.newItemIds, undefined, (p) => sp(p)));
+    startJob(LOG_TAG, 'embed', (sp) =>
+      embedNewItems(PLATFORM, result.newItemIds, undefined, (p) => sp(p)),
+    );
 
     // Persist the "N new this run" summary + lock the cooldown immediately.
     const summary: XLastSync = { syncedAt: Date.now(), inserted: result.inserted };
@@ -122,7 +136,7 @@ export function useXBookmarks(): UseXBookmarksReturn {
     lastSyncedFn: getLastSyncedAt,
     syncFn,
     classifyError: classifyXSyncError,
-    logTag: 'x-bookmarks',
+    logTag: LOG_TAG,
   });
 
   // Cooldown source = the later of the DB last-synced time (survives reloads)
@@ -164,6 +178,8 @@ export function useXBookmarks(): UseXBookmarksReturn {
     syncProgress: lib.syncProgress,
     syncError: lib.syncError,
     sync: lib.sync,
+    embedJob: lib.embedJob,
+    tagJob: lib.tagJob,
     lastInserted,
     cooldownRemainingMs,
   };

@@ -11,6 +11,7 @@ import {
   StateBox,
   SyncNowButton,
   SyncProgressBar,
+  BackgroundJobsBar,
   CardGridSkeleton,
   CollectionPageScaffold,
 } from '../../components/collection';
@@ -116,6 +117,13 @@ export function GithubStarsView() {
 
   const syncErrorText = gh.syncError ? syncErrorMessage(gh.syncError) : '';
 
+  // Post-sync embed / tag progress captions (self-hiding bar under the title).
+  const jobCaptions: string[] = [];
+  const ep = gh.embedJob?.progress as { done: number; total: number } | null | undefined;
+  if (gh.embedJob?.running && ep && ep.total > 0) jobCaptions.push(t('backgroundJobs.embedding', ep));
+  const tp = gh.tagJob?.progress as { done: number; total: number } | null | undefined;
+  if (gh.tagJob?.running && tp && tp.total > 0) jobCaptions.push(t('backgroundJobs.tagging', tp));
+
   // Two sync phases: paged star-list fetch (determinate once the first page's
   // Link header lands), then serial README fetch for new repos.
   let progressValue: number | null = null;
@@ -188,6 +196,7 @@ export function GithubStarsView() {
       }
       emptyState={<EmptyLibraryState syncing={gh.syncing} onSync={gh.sync} />}
       progressBar={<SyncProgressBar value={progressValue} caption={progressCaption} />}
+      backgroundJobsBar={<BackgroundJobsBar captions={jobCaptions} />}
     />
   );
 }

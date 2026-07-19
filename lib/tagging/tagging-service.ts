@@ -136,14 +136,25 @@ export async function tagPlatformItem(
  * that keeps the LLM API from being hammered. Inherits tagPlatformItem's
  * never-throws / idempotent / unconfigured-silent-skip semantics, so one bad
  * item never aborts the rest. Fire-and-forget from callers (`void tagNewItems(…)`).
+ *
+ * `onProgress` (mirrors embedNewItems) fires once with `{ done: 0, total }`
+ * before the loop (total = `ids.length`, the input count — a 'skipped' item
+ * still advances `done`, unlike embed's filtered total) then again after each
+ * item settles. Monotonic, always reaches 100%. Pure notifier — never throws.
  */
 export async function tagNewItems(
   platform: string,
   platformItemIds: string[],
   deps?: Partial<TaggingDeps>,
+  onProgress?: (progress: { done: number; total: number }) => void,
 ): Promise<void> {
+  const total = platformItemIds.length;
+  let done = 0;
+  onProgress?.({ done, total });
   for (const platformItemId of platformItemIds) {
     await tagPlatformItem(platform, platformItemId, deps);
+    done += 1;
+    onProgress?.({ done, total });
   }
 }
 

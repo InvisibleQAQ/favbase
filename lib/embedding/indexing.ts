@@ -222,11 +222,19 @@ const ID_QUERY_CHUNK_SIZE = 500;
  * and stays 'chunked' without aborting the rest (the settings-page rebuild
  * remains the backlog safety net). Fire-and-forget from callers
  * (`void embedNewItems(…)`).
+ *
+ * `onProgress` (mirrors `rebuildPendingEmbeddings`) fires once with
+ * `{ done: 0, total }` after the embeddable targets are resolved (total = the
+ * FILTERED `content_state='chunked'` count, so no_content/embedded items are
+ * never in the denominator), then again after each item settles (success OR
+ * caught failure both advance `done`). Monotonic, always reaches 100%. It is a
+ * pure notifier — it must not throw (that would break the never-throws contract).
  */
 export async function embedNewItems(
   platform: string,
   platformItemIds: string[],
   deps: Partial<EmbedNewItemsDeps> = {},
+  onProgress?: (progress: { done: number; total: number }) => void,
 ): Promise<void> {
   if (platformItemIds.length === 0) return;
   const getConfig = deps.getConfig ?? defaultDeps.getConfig;
@@ -253,6 +261,10 @@ export async function embedNewItems(
       targets.push(...rows);
     }
 
+    const total = targets.length;
+    let done = 0;
+    onProgress?.({ done, total });
+
     for (const { id: itemId } of targets) {
       try {
         const chunks = await db
@@ -260,7 +272,13 @@ export async function embedNewItems(
           .from(itemChunks)
           .where(eq(itemChunks.itemId, itemId))
           .orderBy(asc(itemChunks.chunkIndex));
-        if (chunks.length === 0) continue;
+        if (chunks.length === 0) {
+          // A chunked item with no chunk rows is skipped, but it still counts
+          // toward progress so the bar reaches total.
+          done += 1;
+          onProgress?.({ done, total });
+          continue;
+        }
         await embedChunks(db, itemId, chunks, config, embed);
       } catch (err) {
         console.error(
@@ -268,6 +286,8 @@ export async function embedNewItems(
           err,
         );
       }
+      done += 1;
+      onProgress?.({ done, total });
     }
   } catch (err) {
     console.error('[embedding] embedNewItems aborted:', err);

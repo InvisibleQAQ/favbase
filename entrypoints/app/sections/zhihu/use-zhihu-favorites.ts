@@ -8,11 +8,19 @@ import {
   type ZhihuFavoriteItem,
   type ZhihuCollectionCount,
 } from '@/lib/zhihu/zhihu-sync-service';
+import { tagNewItems } from '@/lib/tagging';
+import { embedNewItems } from '@/lib/embedding';
 
 import {
   useCollectionLibrary,
   type CollectionQueryParams,
 } from '../../hooks/use-collection-library';
+import { startJob, type BackgroundJob } from '../../hooks/background-jobs-store';
+
+/** Job namespace key (reused as `useCollectionLibrary` logTag). */
+const LOG_TAG = 'zhihu-favorites';
+/** DB platform discriminator for tag/embed (distinct from the UI job key). */
+const PLATFORM = 'zhihu';
 
 /**
  * Structured sync error — the view maps kinds to locale keys (i18n seam at the
@@ -69,6 +77,10 @@ export interface UseZhihuFavoritesReturn {
   syncProgress: ZhihuSyncProgress | null;
   syncError: ZhihuSyncError | null;
   sync: () => Promise<void>;
+
+  // Post-sync embed / tag jobs (progress captions).
+  embedJob: BackgroundJob | null;
+  tagJob: BackgroundJob | null;
 }
 
 function queryFn({ filter, search, page, pageSize }: CollectionQueryParams) {
@@ -84,9 +96,18 @@ async function syncFn(onProgress: (progress: ZhihuSyncProgress) => void) {
   // Auth is the browser's own zhihu cookie jar (credentials:'include' +
   // host permission) — nothing to resolve here; a logged-out session
   // surfaces as ZhihuAuthError from the fetch layer.
-  await syncFavorites((fetchedCount, current, totalCollections) => {
+  const result = await syncFavorites((fetchedCount, current, totalCollections) => {
     onProgress({ fetchedCount, current, total: totalCollections });
   });
+  // Auto-tag + auto-embed the content just persisted, registered as background
+  // jobs (survive route switches, cross-mount dedupe, feed the global "don't
+  // close" reminder, done/total captions). Moved UP from the lib wrapper (ST3)
+  // so all four collection platforms share this single hook-layer seam; the
+  // store is a module singleton, so a module-level function can call startJob.
+  startJob(LOG_TAG, 'tag', (sp) => tagNewItems(PLATFORM, result.newItemIds, undefined, (p) => sp(p)));
+  startJob(LOG_TAG, 'embed', (sp) =>
+    embedNewItems(PLATFORM, result.newItemIds, undefined, (p) => sp(p)),
+  );
 }
 
 /** Thin adapter over the shared collection-library state machine. */
@@ -102,7 +123,7 @@ export function useZhihuFavorites(): UseZhihuFavoritesReturn {
     lastSyncedFn: getLastSyncedAt,
     syncFn,
     classifyError: classifyZhihuSyncError,
-    logTag: 'zhihu-favorites',
+    logTag: LOG_TAG,
   });
 
   return {
@@ -126,5 +147,7 @@ export function useZhihuFavorites(): UseZhihuFavoritesReturn {
     syncProgress: lib.syncProgress,
     syncError: lib.syncError,
     sync: lib.sync,
+    embedJob: lib.embedJob,
+    tagJob: lib.tagJob,
   };
 }

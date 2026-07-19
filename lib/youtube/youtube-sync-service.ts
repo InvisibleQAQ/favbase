@@ -20,11 +20,12 @@
  * items / authors / item_sources are insert-only (`onConflictDoNothing`,
  * first-write-wins). Removing a video from a playlist never deletes rows.
  *
- * Embedding is NOT run inside the ingest transaction (D3). Descriptions are
- * persisted + chunked → `content_state='chunked'`; after the sync completes,
- * `syncYoutubePlaylists` fires `embedNewItems` (fire-and-forget) to vectorize
- * the new items — the settings 「重建向量」batch remains the backlog safety
- * net. ILIKE search works right after sync either way.
+ * Auto-tag + auto-embed are NOT fired here (ST3): the trigger was moved UP into
+ * the app.html hook (`use-youtube-playlists.ts`) so all four collection
+ * platforms register embed/tag as `startJob` background jobs from a single seam
+ * (the hook layer) with done/total progress. Descriptions are persisted +
+ * chunked → `content_state='chunked'`; the settings 「重建向量」batch remains the
+ * backlog safety net for embedding. ILIKE search works right after sync either way.
  */
 
 import { desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm';
@@ -40,7 +41,6 @@ import { sources } from '@/lib/database/entities/sources';
 import { items } from '@/lib/database/entities/items';
 import { itemSources } from '@/lib/database/entities/item-sources';
 import { ingestCollection } from '@/lib/ingest/ingest';
-import { tagNewItems } from '@/lib/tagging';
 import {
   resolveChannel,
   fetchPlaylists,
@@ -49,7 +49,7 @@ import {
   type PlaylistEntry,
   type YoutubePlaylistVideo,
 } from './youtube-api';
-import { charSplit, embedNewItems } from '@/lib/embedding';
+import { charSplit } from '@/lib/embedding';
 
 // Re-export what service consumers actually need: structured errors + the
 // types appearing in public signatures below. The channel probe
@@ -205,14 +205,9 @@ export async function syncYoutubePlaylists(
     batches.push({ playlist, entries: result.entries, videos: result.videos });
   }
 
-  const synced = await syncPlaylistsToDb(db, batches);
-  // Auto-tag + auto-embed the content just persisted — fire-and-forget,
-  // sequential inside, never throws. Lives HERE (not in syncPlaylistsToDb)
-  // because this wrapper only runs in the app.html context where LLM /
-  // embedding config is readable.
-  void tagNewItems(PLATFORM, synced.newItemIds);
-  void embedNewItems(PLATFORM, synced.newItemIds);
-  return synced;
+  // Auto-tag / auto-embed are fired by the caller (use-youtube-playlists hook)
+  // via `startJob`, NOT here — see the module docstring (ST3 trigger move).
+  return syncPlaylistsToDb(db, batches);
 }
 
 /** Set of already-stored video ids (platform='youtube') — details-fill skip set. */

@@ -17,10 +17,12 @@
  * lastFetchedAt freshness — collection renames flow through). Un-favorited
  * entries are never deleted.
  *
- * Embedding is NOT run inside the ingest transaction (D3) — after the sync
- * completes, `syncFavorites` fires `embedNewItems` (fire-and-forget) to
- * vectorize the new items; the settings 「重建向量」batch remains the backlog
- * safety net. Full-text (ILIKE) search works right after sync either way.
+ * Auto-tag + auto-embed are NOT fired here (ST3): the trigger was moved UP into
+ * the app.html hook (`use-zhihu-favorites.ts`) so all four collection platforms
+ * register embed/tag as `startJob` background jobs from a single seam (the hook
+ * layer) with done/total progress. This wrapper only fetches + persists; the
+ * settings 「重建向量」batch remains the backlog safety net for embedding.
+ * Full-text (ILIKE) search works right after sync either way.
  *
  * Runs in the app.html page context only (manual sync button → RPC proxy →
  * Offscreen PGlite): the turndown conversion wants a DOM, and the zhihu fetch
@@ -36,7 +38,6 @@ import { sources } from '@/lib/database/entities/sources';
 import { items } from '@/lib/database/entities/items';
 import { itemSources } from '@/lib/database/entities/item-sources';
 import { ingestCollection } from '@/lib/ingest/ingest';
-import { tagNewItems } from '@/lib/tagging';
 import {
   fetchAllFavorites,
   type ZhihuCollection,
@@ -45,7 +46,7 @@ import {
   type ZhihuRawFavorite,
 } from './zhihu-api';
 import { htmlToMarkdown } from './zhihu-markdown';
-import { charSplit, embedNewItems } from '@/lib/embedding';
+import { charSplit } from '@/lib/embedding';
 
 // Re-export what service consumers actually need: structured errors + the
 // types appearing in public signatures below.
@@ -134,14 +135,9 @@ function platformItemIdOf(favorite: ZhihuRawFavorite): string {
 export async function syncFavorites(onProgress?: ZhihuProgressCallback): Promise<SyncZhihuResult> {
   const db = getDb();
   const { collections, favorites } = await fetchAllFavorites(onProgress);
-  const result = await syncFavoritesToDb(db, collections, favorites);
-  // Auto-tag + auto-embed the content just persisted — fire-and-forget,
-  // sequential inside, never throws. Lives HERE (not in syncFavoritesToDb)
-  // because this wrapper only runs in the app.html context where LLM /
-  // embedding config is readable.
-  void tagNewItems(PLATFORM, result.newItemIds);
-  void embedNewItems(PLATFORM, result.newItemIds);
-  return result;
+  // Auto-tag / auto-embed are fired by the caller (use-zhihu-favorites hook)
+  // via `startJob`, NOT here — see the module docstring (ST3 trigger move).
+  return syncFavoritesToDb(db, collections, favorites);
 }
 
 /**

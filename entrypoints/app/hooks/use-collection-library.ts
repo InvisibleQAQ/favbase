@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { initDbProxy } from '@/lib/database';
 
-import { startJob, useJob } from './background-jobs-store';
+import { startJob, useJob, type BackgroundJob } from './background-jobs-store';
 
 const DEFAULT_PAGE_SIZE = 24;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -72,6 +72,14 @@ export interface UseCollectionLibraryReturn<TItem, TFacet, TProgress, TError> {
   syncProgress: TProgress | null;
   syncError: TError | null;
   sync: () => Promise<void>;
+
+  // Post-sync background jobs (embed / tag) registered under the same logTag —
+  // exposed for progress captions only. Platform-neutral (no branch): the
+  // running-state feeds the global "don't close" reminder automatically, and
+  // completion is NOT wired into refreshMeta/queryVersion (embed adds no rows;
+  // tag refresh flows via the `item-tagged` domain event).
+  embedJob: BackgroundJob | null;
+  tagJob: BackgroundJob | null;
 }
 
 /**
@@ -115,6 +123,12 @@ export function useCollectionLibrary<TItem, TFacet, TProgress, TError>(
     () => (syncJob?.error != null ? classifyError(syncJob.error) : null),
     [syncJob?.error, classifyError],
   );
+
+  // Post-sync embed / tag jobs live under the same logTag namespace
+  // ({logTag}:embed / {logTag}:tag). Exposed for progress captions; their
+  // completion is intentionally NOT wired into meta/query refresh.
+  const embedJob = useJob(logTag, 'embed');
+  const tagJob = useJob(logTag, 'tag');
 
   // Staleness guard for user-triggered async (sync) — no context id drifts on
   // these pages (single global source per platform), only unmount to protect
@@ -251,5 +265,7 @@ export function useCollectionLibrary<TItem, TFacet, TProgress, TError>(
     syncProgress,
     syncError,
     sync,
+    embedJob,
+    tagJob,
   };
 }

@@ -241,6 +241,10 @@ const en: Record<LocaleKeys, string> = {
   // platform's sync/embed/tag job is running; count-plural.
   'backgroundJobs.reminder': "{{count}} background tasks running — don't close this page",
   'backgroundJobs.reminder.one': "{{count}} background task running — don't close this page",
+  // Per-section post-sync job progress captions ({{done}}/{{total}} — not count,
+  // so no plural variant).
+  'backgroundJobs.embedding': 'Embedding {{done}}/{{total}}',
+  'backgroundJobs.tagging': 'Tagging {{done}}/{{total}}',
 
   // Shared collection-page copy (identical across all platforms) — platform
   // prefixes keep only platform-specific nouns (see *.noMatches).
