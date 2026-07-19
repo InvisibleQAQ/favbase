@@ -13,6 +13,7 @@ import { Iconify } from '../../components/iconify';
 
 import { NavMobile, NavDesktop } from './nav';
 import { HeaderActions } from './header-actions';
+import { BackgroundJobsIndicator } from './background-jobs-indicator';
 import { layoutClasses } from '../core/classes';
 import { dashboardLayoutVars } from './css-vars';
 import { navData } from '../nav-config';
@@ -86,7 +87,12 @@ export function DashboardLayout({
             )}
           </Box>
         ),
-        rightArea: <HeaderActions />,
+        rightArea: (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.5, sm: 1 } }}>
+            <BackgroundJobsIndicator />
+            <HeaderActions />
+          </Box>
+        ),
       }}
     />
   );

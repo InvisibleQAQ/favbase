@@ -237,6 +237,11 @@ const en: Record<LocaleKeys, string> = {
   'header.languageAria': 'Switch interface language',
   'header.themeAria': 'Toggle dark mode',
 
+  // Global background-work reminder (dashboard header) — shown while any
+  // platform's sync/embed/tag job is running; count-plural.
+  'backgroundJobs.reminder': "{{count}} background tasks running — don't close this page",
+  'backgroundJobs.reminder.one': "{{count}} background task running — don't close this page",
+
   // Shared collection-page copy (identical across all platforms) — platform
   // prefixes keep only platform-specific nouns (see *.noMatches).
   'common.retry': 'Retry',

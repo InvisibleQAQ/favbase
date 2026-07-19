@@ -231,6 +231,11 @@ const zhCN = {
   'header.languageAria': '切换界面语言',
   'header.themeAria': '切换深色模式',
 
+  // Global background-work reminder (dashboard header) — shown while any
+  // platform's sync/embed/tag job is running; count-plural.
+  'backgroundJobs.reminder': '{{count}} 项后台任务进行中，请勿关闭本页',
+  'backgroundJobs.reminder.one': '{{count}} 项后台任务进行中，请勿关闭本页',
+
   // Shared collection-page copy (identical across all platforms) — platform
   // prefixes keep only platform-specific nouns (see *.noMatches).
   'common.retry': '重试',

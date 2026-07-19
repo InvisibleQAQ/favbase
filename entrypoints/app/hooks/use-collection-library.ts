@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { initDbProxy } from '@/lib/database';
+
+import { startJob, useJob } from './background-jobs-store';
 
 const DEFAULT_PAGE_SIZE = 24;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -103,10 +105,16 @@ export function useCollectionLibrary<TItem, TFacet, TProgress, TError>(
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [metaLoading, setMetaLoading] = useState(true);
 
-  // Sync
-  const [syncing, setSyncing] = useState(false);
-  const [syncProgress, setSyncProgress] = useState<TProgress | null>(null);
-  const [syncError, setSyncError] = useState<TError | null>(null);
+  // Sync state lives in the module-level backgroundJobs singleton (keyed by
+  // logTag) so it survives app.html route switches and dedupes across mounts;
+  // this hook only derives its view fields from that job.
+  const syncJob = useJob(logTag, 'sync');
+  const syncing = syncJob?.running ?? false;
+  const syncProgress = (syncJob?.progress ?? null) as TProgress | null;
+  const syncError = useMemo<TError | null>(
+    () => (syncJob?.error != null ? classifyError(syncJob.error) : null),
+    [syncJob?.error, classifyError],
+  );
 
   // Staleness guard for user-triggered async (sync) — no context id drifts on
   // these pages (single global source per platform), only unmount to protect
@@ -194,32 +202,33 @@ export function useCollectionLibrary<TItem, TFacet, TProgress, TError>(
     })();
   }, [refreshMeta, logTag]);
 
-  const sync = useCallback(async () => {
-    if (syncing) return;
-
-    setSyncing(true);
-    setSyncError(null);
-    setSyncProgress(null);
-    try {
-      await initDbProxy();
-      await syncFn((progress) => {
-        if (!mountedRef.current) return;
-        setSyncProgress(progress);
-      });
-      await refreshMeta();
-      if (!mountedRef.current) return;
-      setQueryVersion((v) => v + 1);
-    } catch (err) {
-      console.error(`[${logTag}] sync failed:`, err);
-      if (!mountedRef.current) return;
-      setSyncError(classifyError(err));
-    } finally {
-      if (mountedRef.current) {
-        setSyncing(false);
-        setSyncProgress(null);
-      }
+  // Refresh derived view data (meta + current page) when a sync this mount did
+  // NOT observe end completes — i.e. it finished while we were on another route.
+  // A fresh mount adopts the current generation without refetching, since its
+  // initial meta/query effects already load the latest committed rows.
+  const lastSyncGenRef = useRef<number | null>(null);
+  useEffect(() => {
+    const gen = syncJob?.generation ?? 0;
+    if (lastSyncGenRef.current === null) {
+      lastSyncGenRef.current = gen;
+      return;
     }
-  }, [syncing, refreshMeta, syncFn, classifyError, logTag]);
+    if (gen > lastSyncGenRef.current) {
+      lastSyncGenRef.current = gen;
+      refreshMeta().catch((err) => console.error(`[${logTag}] meta refresh failed:`, err));
+      setQueryVersion((v) => v + 1);
+    }
+  }, [syncJob?.generation, refreshMeta, logTag]);
+
+  // One-shot sync. Dedupe + progress + error all live in the singleton, so a
+  // remount re-joins an in-flight run instead of starting a duplicate; auth
+  // resolution stays inside the platform's syncFn closure.
+  const sync = useCallback(async () => {
+    startJob(logTag, 'sync', async (setProgress) => {
+      await initDbProxy();
+      await syncFn((progress) => setProgress(progress));
+    });
+  }, [logTag, syncFn]);
 
   return {
     items,
