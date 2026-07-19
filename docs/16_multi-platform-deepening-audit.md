@@ -73,6 +73,8 @@ ingestCollection(db, {
 
 ### MEDIUM-3：view 编排脚手架 ~150 行 ×4 残留复制（docs/15 HIGH-2 只做了一半）
 
+> **已修复（2026-07-19，任务 07-19-medium3-collection-page-scaffold）**：提取 `entrypoints/app/components/collection/collection-page-scaffold.tsx`（`CollectionPageScaffold<T>`），持有 tag 接线 + phase 阶梯 + 8-case 渲染 + 双 id 映射 + 主 grid popover/分页 + 页面骨架区；github/x/zhihu/youtube 四 view 退化为配置门 + 平台状态组件 + slot 装配（332/299/309/302 → 214/178/184/185 行）。重复的编排逻辑从 ×4 归一为 ×1。配置门早退 + 平台状态组件留在 view（平台专属）。tsc + 358 测试全绿；scaffold 零 t()/零平台字面量/零平台 lib import。
+
 **证据**：
 
 - view 行数实测：`github-stars-view.tsx` 302、`x-view.tsx` 299、`zhihu-view.tsx` 309、`youtube-view.tsx` 332。对比 docs/15 修复前（273/282/338）——**收敛之后 view 没有变薄**。风险最高的东西（分支顺序）确实进了 `resolveCollectionPhase` 并被 `collection-phase.test.ts` 锁死，但行数复制原样保留。
@@ -143,7 +145,7 @@ docs/15 时是 4 处（main.tsx 路由、nav-config、wxt.config hostPermissions
 | 2 | MEDIUM-5（narrowMeta 每平台单份） | 小 | 低（机械替换） |
 | 3 | HIGH-1（ingestCollection 管线，zhihu/youtube 先行） | 中大 | 中（5 守护测试等价验证兜底） |
 | 4 | MEDIUM-2（HIGH-1 收敛点直调 tagPlatformItem；offscreen 路径显式决策） | 小 | 低（含产品决策：哪些平台开自动打标） |
-| 5 | MEDIUM-3（CollectionPageScaffold，4 view 回归） | 中 | 中 |
+| 5 | ~~MEDIUM-3（CollectionPageScaffold，4 view 回归）~~ ✅ 已修复 2026-07-19 | 中 | 中 |
 | 6 | LOW-6 随 3 消失；LOW-7/8 等 dashboard 真实化需求一并做 registry | — | — |
 
 1-2 是纯机械任务可合并先做；3-4 是本审计的主菜——做完后新平台的 lib 层从「抄 165 行事务代码」变成「声明归一化行」，且自动打标不再逐平台欠账；5 做完后 view 层边际成本才真正落到 docs/15 预测的 ~150 行区间。

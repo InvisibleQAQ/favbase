@@ -1,6 +1,12 @@
 # app/components/collection
 
-平台 section 共享展示哑组件（app.html 内共享，同层先例 `components/tags/`、`components/iconify/`）。来源：`docs/14_multi-platform-cohesion-audit.md` HIGH-2——两个平台 view 之间 ~200 行结构等价脚手架复制且已分叉（暗色修复只落 github 一侧），抽哑组件收敛。**只抽哑组件，不做 `CollectionPageFrame` 大一统框架**（审计明确反对：两 view 内容分支顺序/chips 显隐/进度条种类不同，强行统一会造出接口和实现一样宽的浅模块）。各平台 view 保留自己的编排，只消费哑组件。
+平台 section 共享展示哑组件 + 页面级编排脚手架（app.html 内共享，同层先例 `components/tags/`、`components/iconify/`）。来源：`docs/14` HIGH-2（哑组件收敛）+ `docs/16` MEDIUM-3（`CollectionPageScaffold` 编排收敛）。
+
+**两级复用**：
+1. **哑组件**（state-box/section-title-bar/search-field/card-grid/chip-row/…）——纯展示，各 view 直接消费或经 scaffold 消费。
+2. **`CollectionPageScaffold`**（`collection-page-scaffold.tsx`）——「单列表 + facet chips + 手动同步」四平台（github/x/zhihu/youtube）的页面级编排。持有 tag 接线 + phase 阶梯 + 8-case 渲染 + 双 id 映射 + 主 grid popover/分页 + 页面骨架区；平台经 props/slots 注入卡片/chips/状态/进度条/文案。
+
+**docs/14 曾反对 `CollectionPageFrame` 大一统 frame**（理由：分支顺序有差异、消费方少 3）——`docs/16` 推翻此结论：分支顺序已被纯函数 `resolveCollectionPhase`（+ `collection-phase.test.ts`）消解，消费方涨到 4 且逐字同构。证据变了，结论跟着变。scaffold 接口偏宽（~26 props）但实现更深（隐藏 phase 顺序/双 id/tag 刷新不变量/双 popover 区分/5 个骨架区条件门），不是浅模块。**配置门早退（hasToken/hasConfig）与平台状态组件（Empty/AuthFailed/NotConnected）留在 view**——平台专属，经 slot 注入。
 
 ## 铁律（沿用 components/tags）
 
@@ -20,18 +26,23 @@
 - `no-matches-state.tsx` — `NoMatchesState { message }`：StateBox + disabled Typography 单行。`message` 平台特有名词由调用方传（`t('x.noMatches')` 等），维持零 `t()`
 - `sync-now-button.tsx` — `SyncNowButton { syncing, onSync, label, variant?='outlined' }`：空态/未登录态内的手动同步按钮（三态 restart 图标 / CircularProgress+disabled）。`contained` 用于同步即主路径的空态（zhihu/github），`outlined` 用于次要（x）
 - `sync-progress-bar.tsx` — `SyncProgressBar { value?, caption? }`：顶栏下方进度条。`value==null` → indeterminate（x/zhihu 游标分页），传 0–100 → determinate（github page/totalPages）；`caption` 平台文案由调用方翻译后传入
+- `collection-page-scaffold.tsx` — `CollectionPageScaffold<T>`（页面级编排，非哑组件）。props 三类：**数据**（items/getRowKey/getTagId/libraryCount/loading/metaLoading/syncing/queryError/hasSyncError/authFailed/page/totalPages/… + onSync/onRetryQuery/onPageChange/searchInput）、**文案** `copy: CollectionPageCopy`（预翻译，零 t() 契约）、**slots**（renderCard/renderTaggedCard/skeleton/chips/emptyState/authFailedState?/progressBar?）。内部：`useCollectionTags` + `resolveCollectionPhase`（由原始信号计算，view 不再手写 phase input）+ 8-case switch + 双 id 映射（`getRowKey` 行 key vs `getTagId` 打标 id）+ 主 grid `TagEditPopover` + `CardGridPagination` + 骨架区（`DashboardContent` → SectionTitleBar → `{syncing && progressBar}` → `{hasSyncError && libraryCount>0 && banner}` → SearchField → `{libraryCount>0 && chips}` → TagFilterChips → content）。为避免 barrel 循环引用，内部从各哑组件文件直接 import（非 `./index`）
 - `index.ts` — barrel，消费方单一 import 面
 
-**分支链不在本目录**：8 分支内容 phase 的顺序（tag-filtered→query-error→auth-failed→sync-error→skeleton→empty-library→no-matches→grid）由纯函数 `resolveCollectionPhase`（`app/hooks/collection-phase.ts`）持有并单测锁定，各 view `switch(phase)` 映射到本目录哑组件 + 平台卡片。本目录仍只出哑组件，不做 `CollectionPageFrame` 大一统 frame。
+**分支链**：8 分支 phase 顺序（tag-filtered→query-error→auth-failed→sync-error→skeleton→empty-library→no-matches→grid）由纯函数 `resolveCollectionPhase`（`app/hooks/collection-phase.ts`）持有并单测锁定；`CollectionPageScaffold` 消费它并映射到哑组件 + 平台 slot。**两套 popover**：主 grid popover 在 scaffold；`tag-filtered` phase 的 popover 封在 `TaggedItemGrid` 内部（scaffold 该 phase 不渲染主 popover）。**github 无 auth-failed**：省略 `authFailedState` slot，scaffold 在该 phase 回退渲染 `emptyState`（NoTokenState 已在 view 早退，phase 不可达）。
 
 ## 消费方（各平台 section adapter）
 
 - `sections/bilibili/`（B站）：bilibili-view（StateBox×3 / SectionTitleBar / SearchField 受控（服务端 keyword 搜当前夹）/ CardGrid+分页）、folder-chips（ChipRowShell+FilterChip，保留 loading 骨架/空态逻辑）、video-grid-skeleton（CardGridSkeleton + Card 媒体骨架）
-- `sections/github-stars/`：github-stars-view（StateBox×4 / SectionTitleBar / SearchField 受控 / CardGrid+分页 / CardGridSkeleton + rounded 平板）、language-chips（ChipRowShell+FilterChip，保留 All chip+色点逻辑）
-- `sections/bookmarks/`：bookmarks-view（StateBox×3 / SectionTitleBar **无 onSync 无按钮** / SearchField 受控 / CardGrid+分页）、folder-chips（ChipRowShell+FilterChip，All chip+文件夹名）、bookmark-grid-skeleton（CardGridSkeleton + rounded 96）
-- `sections/x/`：x-view（StateBox×4 / SectionTitleBar 手动 onSync / SearchField 受控 / CardGrid+分页 / SyncProgressBar 恒 indeterminate）、author-chips（CollapsibleChipRow 薄 adapter，注入作者类型/twitter icon/x.* i18n key/label）、tweet-grid-skeleton（CardGridSkeleton + rounded 200）
-- `sections/zhihu/`：zhihu-view、collection-chips（CollapsibleChipRow 薄 adapter，注入收藏夹类型/zhihu icon/zhihu.* i18n key/label）
-- `sections/youtube/`：youtube-view（StateBox×4 / SectionTitleBar 手动 onSync / SearchField 受控 / CardGrid+分页 / SyncProgressBar 恒 indeterminate）、playlist-chips（CollapsibleChipRow 薄 adapter，注入播放列表类型/youtube icon/youtube.* i18n key/label）、youtube-grid-skeleton（CardGridSkeleton + 16:9 媒体块卡片骨架）
-- `components/tags/`：tagged-item-grid（StateBox minHeight 240 空态 + CardGrid）、tag-filter-chips（ChipRowShell headerExtra 清除按钮 + FilterChip）
+**scaffold 消费方（4 平台，view 退化为配置门 + 平台状态组件 + slot 装配 ~180-214 行）**：
+- `sections/github-stars/`：github-stars-view（**消费 `CollectionPageScaffold`**；配置门 NoTokenState 早退；无 authFailedState → 回退 emptyState；progressBar determinate；RepoGridSkeleton = CardGridSkeleton + rounded 148）、language-chips（ChipRowShell+FilterChip，All chip+色点逻辑）
+- `sections/x/`：x-view（**消费 `CollectionPageScaffold`**；无配置门；authFailedState=NotLoggedInState；progressBar 恒 indeterminate）、author-chips（CollapsibleChipRow 薄 adapter）、tweet-grid-skeleton
+- `sections/zhihu/`：zhihu-view（**消费 `CollectionPageScaffold`**；无配置门；authFailedState=NotLoggedInState；progressBar indeterminate）、collection-chips（CollapsibleChipRow 薄 adapter）、zhihu-grid-skeleton
+- `sections/youtube/`：youtube-view（**消费 `CollectionPageScaffold`**；配置门 NotConnectedState 早退；authFailedState=AuthFailedState；progressBar indeterminate）、playlist-chips（CollapsibleChipRow 薄 adapter）、youtube-grid-skeleton
 
-平台 N 接入 = 编排自己的 view + 提供平台卡片，脚手架零复制。
+**哑组件直接消费方（不进 scaffold，形态不同）**：
+- `sections/bilibili/`：bilibili-view（服务端 keyword 搜/双 hook）、folder-chips、video-grid-skeleton
+- `sections/bookmarks/`：bookmarks-view（SectionTitleBar **无 onSync**，挂载自动同步）、folder-chips、bookmark-grid-skeleton
+- `components/tags/`：tagged-item-grid（StateBox minHeight 240 空态 + CardGrid）、tag-filter-chips
+
+平台 N 接入（单列表形态）= `CollectionPageScaffold` + 平台卡片/chips/状态组件/文案，编排零复制。

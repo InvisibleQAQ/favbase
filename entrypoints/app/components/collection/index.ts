@@ -17,3 +17,8 @@ export {
   CollapsibleChipRow,
   type CollapsibleChipRowProps,
 } from './collapsible-chip-row';
+export {
+  CollectionPageScaffold,
+  type CollectionPageScaffoldProps,
+  type CollectionPageCopy,
+} from './collection-page-scaffold';

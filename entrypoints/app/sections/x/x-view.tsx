@@ -1,33 +1,11 @@
-import type { ReactNode } from 'react';
-
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Link from '@mui/material/Link';
-import Typography from '@mui/material/Typography';
 
 import { t, formatDateTime } from '@/lib/i18n';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify } from '../../components/iconify';
-import {
-  useCollectionTags,
-  TagFilterChips,
-  TaggedItemGrid,
-  TagEditPopover,
-} from '../../components/tags';
-import { DashboardContent } from '../../layouts/dashboard';
-import {
-  StateBox,
-  SectionTitleBar,
-  SearchField,
-  CardGrid,
-  CardGridItem,
-  CardGridPagination,
-  ErrorState,
-  NoMatchesState,
-  SyncNowButton,
-  SyncProgressBar,
-} from '../../components/collection';
-import { resolveCollectionPhase } from '../../hooks/collection-phase';
+import { StateBox, SyncNowButton, SyncProgressBar, CollectionPageScaffold } from '../../components/collection';
 import { useXBookmarks, type XSyncError } from './use-x-bookmarks';
 import { AuthorChips } from './author-chips';
 import { XCard } from './x-card';
@@ -118,29 +96,13 @@ function EmptyLibraryState({ syncing, onSync }: { syncing: boolean; onSync: () =
 }
 
 // ---------------------------------------------------------------------------
-// Main view: title bar + sync + search + author chips + tweet grid
+// Main view: scaffold assembly (title bar + sync + search + author chips +
+// tweet grid all owned by CollectionPageScaffold).
 // ---------------------------------------------------------------------------
 
 export function XView() {
   const { t } = useTranslation();
   const x = useXBookmarks();
-
-  // Manual tagging — batch page tags + single popover + platform-scoped filter
-  // chips, with the refresh invariant sealed inside the hook.
-  const {
-    tagsById,
-    editing,
-    openTagEditor,
-    closeTagEditor,
-    usedTags,
-    selectedTagIds,
-    toggleTag,
-    clearTags,
-    handleTagsChanged,
-  } = useCollectionTags(
-    PLATFORM,
-    x.bookmarks.map((b) => b.tweetId),
-  );
 
   const captionParts: string[] = [];
   if (x.libraryCount > 0) {
@@ -152,106 +114,57 @@ export function XView() {
 
   const syncErrorText = x.syncError ? syncErrorMessage(x.syncError) : '';
 
-  const phase = resolveCollectionPhase({
-    tagFiltered: selectedTagIds.length > 0,
-    queryError: x.queryError != null,
-    authFailed: x.syncError?.kind === 'auth',
-    syncErrorEmpty: x.syncError != null && x.libraryCount === 0,
-    metaLoading: x.metaLoading,
-    syncingEmpty: x.syncing && x.libraryCount === 0,
-    libraryEmpty: x.libraryCount === 0,
-    loading: x.loading,
-    noMatches: x.bookmarks.length === 0,
-  });
-
-  let content: ReactNode;
-  switch (phase) {
-    case 'tag-filtered':
-      content = (
-        <TaggedItemGrid
-          platform={PLATFORM}
-          tagIds={selectedTagIds}
-          renderCard={(item, openEditor) => <TaggedTweetCard item={item} onEditTags={openEditor} />}
-          skeleton={<TweetGridSkeleton />}
-          onTagsChanged={handleTagsChanged}
-        />
-      );
-      break;
-    case 'query-error':
-      content = (
-        <ErrorState
-          title={t('common.loadFailed')}
-          message={x.queryError ?? ''}
-          retryLabel={t('common.retry')}
-          onRetry={x.retryQuery}
-        />
-      );
-      break;
-    case 'auth-failed':
-      content = <NotLoggedInState syncing={x.syncing} onSync={x.sync} />;
-      break;
-    case 'sync-error':
-      content = (
-        <ErrorState
-          title={t('common.loadFailed')}
-          message={syncErrorText}
-          retryLabel={t('common.retry')}
-          onRetry={x.sync}
-        />
-      );
-      break;
-    case 'skeleton':
-      content = <TweetGridSkeleton />;
-      break;
-    case 'empty-library':
-      content = <EmptyLibraryState syncing={x.syncing} onSync={x.sync} />;
-      break;
-    case 'no-matches':
-      content = <NoMatchesState message={t('x.noMatches')} />;
-      break;
-    case 'grid':
-      content = (
-        <>
-          <CardGrid>
-            {x.bookmarks.map((bookmark) => (
-              <CardGridItem key={bookmark.id}>
-                <XCard
-                  bookmark={bookmark}
-                  tags={tagsById[bookmark.tweetId] ?? []}
-                  onEditTags={(anchor) => openTagEditor(bookmark.tweetId, anchor)}
-                />
-              </CardGridItem>
-            ))}
-          </CardGrid>
-
-          <TagEditPopover
-            platform={PLATFORM}
-            anchorEl={editing?.anchorEl ?? null}
-            platformItemId={editing?.platformItemId ?? null}
-            tags={editing ? (tagsById[editing.platformItemId] ?? []) : []}
-            onClose={closeTagEditor}
-            onChanged={handleTagsChanged}
-          />
-
-          <CardGridPagination page={x.page} totalPages={x.totalPages} onChange={x.goToPage} />
-        </>
-      );
-      break;
-  }
-
   return (
-    <DashboardContent maxWidth="xl">
-      <SectionTitleBar
-        title={t('x.title')}
-        caption={captionParts.length > 0 ? captionParts.join(' · ') : undefined}
-        syncing={x.syncing}
-        onSync={x.sync}
-        syncLabel={t('x.sync')}
-        syncingLabel={t('x.syncing')}
-      />
-
-      {/* Sync progress — always indeterminate (cursor pagination has no total). */}
-      {x.syncing && (
+    <CollectionPageScaffold
+      platform={PLATFORM}
+      items={x.bookmarks}
+      getRowKey={(bookmark) => bookmark.id}
+      getTagId={(bookmark) => bookmark.tweetId}
+      libraryCount={x.libraryCount}
+      loading={x.loading}
+      metaLoading={x.metaLoading}
+      syncing={x.syncing}
+      queryError={x.queryError}
+      hasSyncError={x.syncError != null}
+      authFailed={x.syncError?.kind === 'auth'}
+      page={x.page}
+      totalPages={x.totalPages}
+      onPageChange={x.goToPage}
+      onSync={x.sync}
+      onRetryQuery={x.retryQuery}
+      searchInput={x.searchInput}
+      onSearchInput={x.setSearchInput}
+      copy={{
+        title: t('x.title'),
+        caption: captionParts.length > 0 ? captionParts.join(' · ') : undefined,
+        searchPlaceholder: t('x.searchPlaceholder'),
+        noMatches: t('x.noMatches'),
+        syncLabel: t('x.sync'),
+        syncingLabel: t('x.syncing'),
+        loadFailed: t('common.loadFailed'),
+        retry: t('common.retry'),
+        syncErrorText,
+        syncFailedBanner: t('x.syncFailed', { error: syncErrorText }),
+      }}
+      renderCard={(bookmark, tags, onEditTags) => (
+        <XCard bookmark={bookmark} tags={tags} onEditTags={onEditTags} />
+      )}
+      renderTaggedCard={(item, openEditor) => (
+        <TaggedTweetCard item={item} onEditTags={openEditor} />
+      )}
+      skeleton={<TweetGridSkeleton />}
+      chips={
+        <AuthorChips
+          authors={x.authors}
+          totalCount={x.libraryCount}
+          selected={x.author}
+          onSelect={x.setAuthor}
+        />
+      }
+      emptyState={<EmptyLibraryState syncing={x.syncing} onSync={x.sync} />}
+      authFailedState={<NotLoggedInState syncing={x.syncing} onSync={x.sync} />}
+      progressBar={
+        // Always indeterminate — cursor pagination has no total.
         <SyncProgressBar
           caption={
             x.syncProgress
@@ -259,41 +172,7 @@ export function XView() {
               : undefined
           }
         />
-      )}
-
-      {/* Sync failure banner (library still shows its persisted data) */}
-      {x.syncError && x.libraryCount > 0 && (
-        <Typography variant="body2" sx={{ color: 'error.main', mb: 2 }}>
-          {t('x.syncFailed', { error: syncErrorText })}
-        </Typography>
-      )}
-
-      {/* Search — debounced ILIKE over tweet text / author name (PGlite) */}
-      <SearchField
-        value={x.searchInput}
-        onChange={x.setSearchInput}
-        placeholder={t('x.searchPlaceholder')}
-      />
-
-      {/* Author chips — hidden until the library has content */}
-      {x.libraryCount > 0 && (
-        <AuthorChips
-          authors={x.authors}
-          totalCount={x.libraryCount}
-          selected={x.author}
-          onSelect={x.setAuthor}
-        />
-      )}
-
-      {/* Tag filter chips — x-scoped, multi-select AND; hidden when no used tags */}
-      <TagFilterChips
-        tags={usedTags}
-        selectedIds={selectedTagIds}
-        onToggle={toggleTag}
-        onClear={clearTags}
-      />
-
-      {content}
-    </DashboardContent>
+      }
+    />
   );
 }
