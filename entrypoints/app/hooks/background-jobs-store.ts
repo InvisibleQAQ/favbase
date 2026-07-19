@@ -12,7 +12,7 @@ import { useSyncExternalStore } from 'react';
 // guard dedupes across mounts (a remount cannot start a second identical job).
 // ---------------------------------------------------------------------------
 
-export type BackgroundJobKind = 'sync' | 'embed' | 'tag';
+export type BackgroundJobKind = 'sync' | 'embed' | 'tag' | 'transcribe';
 
 export interface BackgroundJob {
   /** Platform key — reuses the collection library's logTag (e.g. 'zhihu-favorites'). */

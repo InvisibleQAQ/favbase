@@ -122,6 +122,6 @@ describe('backgroundJobs store', () => {
   });
 });
 
-// Type-only guard: kind union is closed to the three known kinds.
-const _kinds: BackgroundJobKind[] = ['sync', 'embed', 'tag'];
+// Type-only guard: kind union is closed to the four known kinds.
+const _kinds: BackgroundJobKind[] = ['sync', 'embed', 'tag', 'transcribe'];
 void _kinds;

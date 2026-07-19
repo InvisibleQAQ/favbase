@@ -63,6 +63,16 @@ export class TranscriptionCoordinator {
   private countdownBvid: string | null = null;
   private cacheUnsubscribes: Array<() => void> = [];
 
+  /**
+   * Optional injection seam used by the app layer to reflect a running manual
+   * transcription as a global background job (running-state only). The
+   * coordinator itself stays store-agnostic (zero React / app-layer imports —
+   * layering preserved); the app-layer hook passes a callback that wraps the
+   * floating `transcribeAndPersist` promise into `startJob('bilibili',
+   * 'transcribe', …)`. A no-arg `new TranscriptionCoordinator()` still works.
+   */
+  constructor(private trackRun?: (bvid: string, run: Promise<unknown>) => void) {}
+
   // --- useSyncExternalStore contract ---
 
   subscribe = (listener: () => void): (() => void) => {
@@ -168,11 +178,19 @@ export class TranscriptionCoordinator {
 
     let indexResult: PersistContentResult = null;
 
-    transcribeAndPersist(bvid, title, {
+    const run = transcribeAndPersist(bvid, title, {
       // Local stage: shown while chunk+embed runs after the background 'done'.
       onIndexing: () => this.patchVideo(bvid, { progress: 100, stage: 'indexing' }),
       onIndexed: (result) => { indexResult = result; },
-    })
+    });
+
+    // Reflect the run as a global background job (running-state only). Reported
+    // before the coordinator's own chain so the job starts as soon as the run
+    // does; the promise floats to completion even after this coordinator is
+    // disposed (route switch), so the job clears when transcription finishes.
+    this.trackRun?.(bvid, run);
+
+    run
       .then((res) => {
         if (res.success) {
           this.patchVideo(bvid, {

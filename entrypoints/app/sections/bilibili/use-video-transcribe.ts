@@ -5,8 +5,19 @@ import {
 } from '@/lib/bilibili/transcription-coordinator';
 import type { BiliFavVideo } from '@/lib/bilibili/types';
 import type { VideoTranscribeState } from '@/lib/bilibili/transcription-coordinator';
+import { startJob } from '../../hooks/background-jobs-store';
 
 export type { VideoTranscribeState, ContentStatus } from '@/lib/bilibili/transcription-coordinator';
+
+// Reflect the SW-held manual transcription run into the global "don't close"
+// indicator as a running-state-only job (progress stays null/indeterminate —
+// per-video progress is still shown by the coordinator's section UI). The run
+// promise floats to completion even after this hook unmounts (route switch), so
+// the job clears when transcription actually finishes. Module-level so the
+// reference is stable across renders/mounts.
+const trackTranscribeRun = (_bvid: string, run: Promise<unknown>): void => {
+  startJob('bilibili', 'transcribe', () => run.then(() => undefined));
+};
 
 export interface UseVideoTranscribeReturn {
   getState: (bvid: string) => VideoTranscribeState;
@@ -20,7 +31,7 @@ export function useVideoTranscribe(
 ): UseVideoTranscribeReturn {
   const coordRef = useRef<TranscriptionCoordinator>(null);
   if (!coordRef.current) {
-    coordRef.current = new TranscriptionCoordinator();
+    coordRef.current = new TranscriptionCoordinator(trackTranscribeRun);
   }
 
   const snapshot = useSyncExternalStore(
