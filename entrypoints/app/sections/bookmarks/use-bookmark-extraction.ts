@@ -1,9 +1,9 @@
-import { useSyncExternalStore } from 'react';
-
 import { initDbProxy } from '@/lib/database';
 import { extractPendingBookmarks } from '@/lib/bookmarks/bookmark-content-service';
 import { tagNewItems } from '@/lib/tagging';
 import { embedNewItems } from '@/lib/embedding';
+
+import { startJob, useJob } from '../../hooks/background-jobs-store';
 
 export interface BookmarkExtractionState {
   running: boolean;
@@ -14,67 +14,48 @@ export interface BookmarkExtractionState {
 }
 
 // ---------------------------------------------------------------------------
-// Module-level singleton store (tiny push-model, mirrors the house
-// TranscriptionCoordinator pattern). Module scope — NOT hook state — so the
-// extraction run survives route changes inside app.html: navigating away
-// unmounts the bookmarks view but the worker keeps draining the queue, and
-// remounting re-subscribes to the same run instead of starting a second one.
+// Content extraction now runs through the shared backgroundJobs store as a
+// single `bookmarks:sync` job (the bespoke module-level singleton was folded
+// into that store). Two payoffs from consolidating: the run counts in the
+// global "don't close this page" reminder (useRunningJobCount), and startJob's
+// running guard dedupes across mounts (navigating away/back re-subscribes to
+// the SAME in-flight run instead of starting a second one — module scope
+// survives Hash-Router route switches inside app.html).
+//
+// Deliberately no AbortSignal: closing app.html kills the page anyway, and the
+// pending queue resumes on the next open. Each successfully chunked item is fed
+// to auto-tag + auto-embed per item (not at run end) so a mid-run page close
+// can't orphan chunked-but-never-embedded items — chunked items are never
+// re-picked. Those per-item embed/tag stay fire-and-forget (void) and are NOT
+// registered as separate jobs: their total is unknowable upfront and a run-end
+// batch would regress this orphan-safety.
 // ---------------------------------------------------------------------------
 
-let state: BookmarkExtractionState = { running: false, done: 0, total: 0 };
-const listeners = new Set<() => void>();
-
-function setState(patch: Partial<BookmarkExtractionState>): void {
-  state = { ...state, ...patch };
-  for (const listener of listeners) listener();
-}
-
-function subscribe(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-}
-
-function getSnapshot(): BookmarkExtractionState {
-  return state;
-}
-
 /**
- * Kick off the serial content-extraction worker (fire-and-forget, re-entrant
- * safe: a call while a run is active is a no-op). Deliberately no AbortSignal:
- * closing app.html kills the page anyway, and the pending queue resumes on the
- * next open. Each successfully chunked item is fed to auto-tag + auto-embed
- * per item (not at run end) so a mid-run page close can't orphan
- * chunked-but-never-embedded items — chunked items are never re-picked.
+ * Kick off the serial content-extraction worker as the `bookmarks:sync` job.
+ * Re-entrant safe via startJob's running guard (cross-mount dedupe).
  */
 export function startBookmarkExtraction(): void {
-  if (state.running) return;
-  setState({ running: true, done: 0, total: 0 });
-
-  void (async () => {
+  startJob('bookmarks', 'sync', async (setProgress) => {
     const db = await initDbProxy(); // idempotent — joins the in-flight init
     await extractPendingBookmarks({
       db,
-      onProgress: ({ done, total }) => setState({ done, total }),
+      onProgress: ({ done, total }) => setProgress({ done, total }),
       onItemExtracted: (id) => {
         // Same triggers + call convention as the other platforms' sync
         // wrap-up (use-github-stars syncFn): app.html context only — the
-        // tagging/embedding import chains need chrome.storage.
+        // tagging/embedding import chains need chrome.storage. Per-item (not
+        // run-end) to keep the orphan-safety noted above.
         void tagNewItems('bookmarks', [id]);
         void embedNewItems('bookmarks', [id]);
       },
     });
-  })()
-    .catch((err) => {
-      console.error('[bookmark-extraction] run failed:', err);
-    })
-    .finally(() => {
-      setState({ running: false });
-    });
+  });
 }
 
-/** Subscribe to the singleton extraction progress (drives the view caption). */
+/** Subscribe to the extraction progress (drives the view caption). */
 export function useBookmarkExtraction(): BookmarkExtractionState {
-  return useSyncExternalStore(subscribe, getSnapshot);
+  const job = useJob('bookmarks', 'sync');
+  const p = job?.progress as { done: number; total: number } | null | undefined;
+  return { running: job?.running ?? false, done: p?.done ?? 0, total: p?.total ?? 0 };
 }
