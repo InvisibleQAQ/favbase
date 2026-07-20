@@ -17,7 +17,7 @@ export interface BookmarkExtractionState {
 // Content extraction now runs through the shared backgroundJobs store as a
 // single `bookmarks:sync` job (the bespoke module-level singleton was folded
 // into that store). Two payoffs from consolidating: the run counts in the
-// global "don't close this page" reminder (useRunningJobCount), and startJob's
+// global "don't close this page" reminder (useRunningJobs), and startJob's
 // running guard dedupes across mounts (navigating away/back re-subscribes to
 // the SAME in-flight run instead of starting a second one — module scope
 // survives Hash-Router route switches inside app.html).

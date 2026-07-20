@@ -239,6 +239,11 @@ const zhCN = {
   // so no plural variant).
   'backgroundJobs.embedding': '正在向量化 {{done}}/{{total}}',
   'backgroundJobs.tagging': '正在打标签 {{done}}/{{total}}',
+  // Reminder tooltip: per-job kind labels (used when no {{done}}/{{total}} yet).
+  'backgroundJobs.kind.sync': '同步中',
+  'backgroundJobs.kind.embed': '向量化中',
+  'backgroundJobs.kind.tag': '打标签中',
+  'backgroundJobs.kind.transcribe': '转录中',
 
   // Shared collection-page copy (identical across all platforms) — platform
   // prefixes keep only platform-specific nouns (see *.noMatches).

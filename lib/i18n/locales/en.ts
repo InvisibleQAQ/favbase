@@ -245,6 +245,11 @@ const en: Record<LocaleKeys, string> = {
   // so no plural variant).
   'backgroundJobs.embedding': 'Embedding {{done}}/{{total}}',
   'backgroundJobs.tagging': 'Tagging {{done}}/{{total}}',
+  // Reminder tooltip: per-job kind labels (used when no {{done}}/{{total}} yet).
+  'backgroundJobs.kind.sync': 'Syncing',
+  'backgroundJobs.kind.embed': 'Embedding',
+  'backgroundJobs.kind.tag': 'Tagging',
+  'backgroundJobs.kind.transcribe': 'Transcribing',
 
   // Shared collection-page copy (identical across all platforms) — platform
   // prefixes keep only platform-specific nouns (see *.noMatches).

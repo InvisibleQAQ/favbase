@@ -36,8 +36,20 @@ export interface BackgroundJob {
 const jobs = new Map<string, BackgroundJob>();
 const listeners = new Set<() => void>();
 
+// Cached snapshot of the currently-running jobs. Recomputed only on mutation so
+// useSyncExternalStore gets a referentially-stable array between changes (a fresh
+// filter() per getSnapshot call would loop React). Single source for both the
+// running list and the count.
+let runningSnapshot: BackgroundJob[] = [];
+
 function keyOf(platform: string, kind: BackgroundJobKind): string {
   return `${platform}:${kind}`;
+}
+
+function refreshRunningSnapshot(): void {
+  const next: BackgroundJob[] = [];
+  for (const job of jobs.values()) if (job.running) next.push(job);
+  runningSnapshot = next;
 }
 
 function emit(): void {
@@ -47,6 +59,7 @@ function emit(): void {
 /** Replace one job with a new object (identity change drives useSyncExternalStore). */
 function setJob(key: string, job: BackgroundJob): void {
   jobs.set(key, job);
+  refreshRunningSnapshot();
   emit();
 }
 
@@ -62,11 +75,14 @@ export function getJob(platform: string, kind: BackgroundJobKind): BackgroundJob
   return jobs.get(keyOf(platform, kind)) ?? null;
 }
 
+/** Currently-running jobs (stable ref until a job changes). Backs the reminder. */
+export function getRunningJobs(): BackgroundJob[] {
+  return runningSnapshot;
+}
+
 /** Number of jobs currently running (drives the global "don't close" reminder). */
 export function getRunningJobCount(): number {
-  let count = 0;
-  for (const job of jobs.values()) if (job.running) count += 1;
-  return count;
+  return runningSnapshot.length;
 }
 
 /**
@@ -119,7 +135,7 @@ export function useJob(platform: string, kind: BackgroundJobKind): BackgroundJob
   return useSyncExternalStore(subscribe, () => getJob(platform, kind));
 }
 
-/** Subscribe to the running-job count (primitive → stable by value). */
-export function useRunningJobCount(): number {
-  return useSyncExternalStore(subscribe, getRunningJobCount);
+/** Subscribe to the list of running jobs (stable ref → drives the reminder detail). */
+export function useRunningJobs(): BackgroundJob[] {
+  return useSyncExternalStore(subscribe, getRunningJobs);
 }
