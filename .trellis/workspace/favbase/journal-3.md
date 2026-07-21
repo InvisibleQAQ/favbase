@@ -335,3 +335,36 @@ Replaced the bookmark extraction spinner with a theme-aware determinate/indeterm
 ### Next Steps
 
 - None - task complete
+
+
+## Session 130: Bookmark extraction pause and resume
+
+**Date**: 2026-07-22
+**Task**: Bookmark extraction pause and resume
+**Branch**: `main`
+
+### Summary
+
+Added cooperative pause, pausing, paused, and resume states for manual bookmark content extraction; preserved current-page progress metadata; verified compile and all 441 tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c67f2ac` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

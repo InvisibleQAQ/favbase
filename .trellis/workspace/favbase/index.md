@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-3.md`
-- **Total Sessions**: 129
-- **Last Active**: 2026-07-21
+- **Total Sessions**: 130
+- **Last Active**: 2026-07-22
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-3.md` | ~337 | Active |
+| `journal-3.md` | ~370 | Active |
 | `journal-2.md` | ~1993 | Archived |
 | `journal-1.md` | ~1976 | Archived |
 <!-- @@@/auto:active-documents -->
@@ -31,6 +31,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 130 | 2026-07-22 | Bookmark extraction pause and resume | `c67f2ac` | `main` |
 | 129 | 2026-07-21 | Redesign bookmark extraction progress | `0c153bf` | `main` |
 | 128 | 2026-07-21 | Fix bookmark HTML preload warnings | `be4ef26` | `main` |
 | 127 | 2026-07-21 | Fix Defuddle malformed schema.org JSON-LD | `91f9aa3` | `main` |
