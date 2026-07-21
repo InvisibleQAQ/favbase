@@ -1,9 +1,10 @@
 import { useParams, useNavigate } from 'react-router-dom';
+import { varAlpha } from 'minimal-shared/utils';
 
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
-import Stack from '@mui/material/Stack';
-import CircularProgress from '@mui/material/CircularProgress';
+import Box from '@mui/material/Box';
+import LinearProgress, { linearProgressClasses } from '@mui/material/LinearProgress';
 
 import { formatDateTime } from '@/lib/i18n';
 import { useTranslation } from '@/lib/i18n/use-translation';
@@ -131,6 +132,11 @@ export function BookmarksView() {
     captionParts.push(t('bookmarks.lastSynced', { time: formatDateTime(bm.lastSyncedAt.getTime()) }));
   }
 
+  const hasExtractionTotal = extraction.total > 0;
+  const extractionProgress = hasExtractionTotal
+    ? Math.min(100, Math.max(0, (extraction.done / extraction.total) * 100))
+    : 0;
+
   return (
     <DashboardContent maxWidth="xl">
       {/* Auto-synced on mount — no sync button (local + instant + insert-only). */}
@@ -141,12 +147,57 @@ export function BookmarksView() {
 
       {/* Content-extraction progress — singleton worker, survives route changes */}
       {extraction.running && (
-        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
-          <CircularProgress size={12} />
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            {t('bookmarks.extracting', { done: extraction.done, total: extraction.total })}
-          </Typography>
-        </Stack>
+        <Box
+          sx={(theme) => ({
+            mb: 2.5,
+            p: 2,
+            border: '1px solid',
+            borderRadius: 2,
+            borderColor: varAlpha(theme.vars.palette.primary.mainChannel, 0.2),
+            bgcolor: varAlpha(theme.vars.palette.primary.mainChannel, 0.06),
+          })}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, mb: 1.25 }}>
+            <Box
+              sx={(theme) => ({
+                display: 'grid',
+                width: 36,
+                height: 36,
+                flexShrink: 0,
+                placeItems: 'center',
+                borderRadius: 1.5,
+                color: theme.vars.palette.primary.main,
+                bgcolor: varAlpha(theme.vars.palette.primary.mainChannel, 0.12),
+              })}
+            >
+              <Iconify icon="solar:bookmark-bold-duotone" width={20} />
+            </Box>
+
+            <Typography variant="body2" sx={{ minWidth: 0, flex: 1, fontWeight: 'fontWeightMedium' }}>
+              {t('bookmarks.extracting', { done: extraction.done, total: extraction.total })}
+            </Typography>
+
+            {hasExtractionTotal && (
+              <Typography
+                variant="subtitle2"
+                sx={{ flexShrink: 0, color: 'primary.main', fontVariantNumeric: 'tabular-nums' }}
+              >
+                {Math.round(extractionProgress)}%
+              </Typography>
+            )}
+          </Box>
+
+          <LinearProgress
+            variant={hasExtractionTotal ? 'determinate' : 'indeterminate'}
+            value={hasExtractionTotal ? extractionProgress : undefined}
+            sx={(theme) => ({
+              height: 6,
+              borderRadius: 1,
+              bgcolor: varAlpha(theme.vars.palette.primary.mainChannel, 0.12),
+              [`& .${linearProgressClasses.bar}`]: { borderRadius: 1 },
+            })}
+          />
+        </Box>
       )}
 
       {/* Sync failure banner (library still shows its persisted data) */}
