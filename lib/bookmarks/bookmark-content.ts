@@ -215,6 +215,17 @@ export function meetsContentThreshold(markdown: string): boolean {
   return markdown.trim().length >= MIN_CONTENT_CHARS;
 }
 
+function removeMalformedSchemaOrgScripts(doc: Document): void {
+  doc.querySelectorAll('script[type="application/ld+json"]').forEach((script) => {
+    const normalized = (script.textContent ?? '')
+      .replace(/\/\*[\s\S]*?\*\/|^\s*\/\/.*$/gm, '')
+      .replace(/^\s*<!\[CDATA\[([\s\S]*?)\]\]>\s*$/, '$1')
+      .replace(/^\s*(\*\/|\/\*)\s*|\s*(\*\/|\/\*)\s*$/g, '')
+      .trim();
+    try { JSON.parse(normalized); } catch { script.remove(); }
+  });
+}
+
 /**
  * Cleaned main content as Markdown, or null when the page has no real content
  * (SPA shell, challenge page, near-empty body). `url` is mandatory — without
@@ -222,6 +233,7 @@ export function meetsContentThreshold(markdown: string): boolean {
  */
 export function extractMarkdown(html: string, url: string): { markdown: string } | null {
   const doc = new DOMParser().parseFromString(html, 'text/html');
+  removeMalformedSchemaOrgScripts(doc);
   // Sync parse() only — parseAsync's extractors may call third-party APIs.
   const result = new Defuddle(doc, { url, markdown: true }).parse();
   const markdown = (result.content ?? '').trim();

@@ -19,3 +19,4 @@
 - 运行位置：app.html 页面 context（提取管线也在此——有 DOMParser + host 权限 fetch 免 CORS），经 RPC proxy 写 Offscreen PGlite（与 bilibili/github 同步一致）
 - 权限：`bookmarks`（读树）+ `favicon`（本地图标）在静态 `permissions`；内容提取需静态 `host_permissions: ['<all_urls>']`（`wxt.config.ts` `bookmarkContentHostPermissions`，ADR：接受安装警告 + CWS 深审排队，SingleFile 先例；host 权限 fetch 默认携带用户 cookie，故提取 fetch 必须 `credentials:'omit'`）
 - defuddle 依赖：`defuddle/full`（~732KB，内嵌 Turndown 转换规则）与 zhihu 的独立 `turndown` 依赖并存（依赖内嵌非 copy-paste）；书签页本身是 lazy route，defuddle 落在该页 chunk
+- `extractMarkdown` 在调用 Defuddle 前移除无法解析的 `application/ld+json` 节点，避免第三方坏 schema.org 数据触发 Defuddle 控制台错误；合法 JSON-LD 保留。

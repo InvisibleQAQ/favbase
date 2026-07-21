@@ -325,6 +325,17 @@ describe('meetsContentThreshold', () => {
 });
 
 describe('extractMarkdown', () => {
+  it('removes malformed JSON-LD before Defuddle parses schema.org data', () => {
+    const originalError = console.error;
+    const errors: unknown[] = [];
+    console.error = (...args: unknown[]) => errors.push(args);
+    try {
+      const html = `<article><h1>Title</h1><p>${'content '.repeat(40)}</p><script type="application/ld+json">{"@type":"Article"}{"broken":true}</script><script type="application/ld+json">{"@type":"Article","headline":"Title"}</script></article>`;
+      expect(extractMarkdown(html, 'https://example.com/article')).not.toBeNull();
+      expect(errors).toEqual([]);
+    } finally { console.error = originalError; }
+  });
+
   it('extracts article content as markdown with absolute links', () => {
     const result = extractMarkdown(articleHtml(), 'https://example.com/post/1');
     expect(result).not.toBeNull();
