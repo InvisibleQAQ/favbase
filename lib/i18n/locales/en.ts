@@ -311,6 +311,11 @@ const en: Record<LocaleKeys, string> = {
   'bookmarks.extractContent': 'Extract content',
   'bookmarks.pendingExtraction': '{{count}} pages waiting for content extraction',
   'bookmarks.pendingCountFailed': 'Could not load the extraction queue',
+  'bookmarks.pauseExtraction': 'Pause',
+  'bookmarks.pausingExtraction': 'Pausing…',
+  'bookmarks.resumeExtraction': 'Resume',
+  'bookmarks.extractionPausing': 'Finishing the current page before pausing…',
+  'bookmarks.extractionPaused': 'Content extraction paused {{done}}/{{total}}',
 
   'x.title': 'X Bookmarks',
   'x.count': '{{count}} bookmarks',

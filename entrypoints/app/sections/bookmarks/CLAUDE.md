@@ -4,8 +4,8 @@
 
 ## 模块结构
 
-- `bookmarks-view.tsx` — 主视图：展示脚手架全部消费 `components/collection/` 哑组件（StateBox/SectionTitleBar/SearchField/CardGrid/*），本文件保留编排 + 平台文案。标题栏下方的正文提取控件常驻：idle 显示真实 pending 数量与手动按钮（0/加载失败时禁用），running 原位显示当前网页 favicon + 名称 + `done/total` + 百分比 + `LinearProgress`；名称回退逻辑与 favicon URL 统一放在 `bookmark-display.ts`。其余内容分支和标签接线保持原有 collection 约定。
-- `use-bookmark-extraction.ts` — 正文提取经共享 `backgroundJobs` store 跑成单个 `bookmarks:sync` job；只由 hook 暴露的 `start()` 手动触发，store guard 负责跨挂载去重。hook 在 idle 时查询 pending count（同步时间和 job generation 驱动刷新），并把 typed `{done,total,current,pendingCount,error}` 提供给 view。逐条 tag/embed、跨路由存活和 pending 续传语义不变。
+- `bookmarks-view.tsx` — 主视图：展示脚手架全部消费 `components/collection/` 哑组件（StateBox/SectionTitleBar/SearchField/CardGrid/*），本文件保留编排 + 平台文案。标题栏下方的正文提取控件常驻：idle 显示真实 pending 数量与手动按钮；running 显示当前网页 identity/进度与“暂停”；pausing 禁用按钮并明确当前条目完成后暂停；paused 保留最近进度并显示“继续”。名称回退逻辑与 favicon URL 统一放在 `bookmark-display.ts`。
+- `use-bookmark-extraction.ts` — 正文提取经共享 `backgroundJobs` store 跑成单个 `bookmarks:sync` job；只由 hook 暴露的 `start()/resume()` 手动触发，store guard 负责跨挂载去重。完整 `ExtractionProgress` 必须透传（不可解构丢 `current`）。模块级控制器在 `bookmark-extraction-control.ts`：`pause()` abort 只在条目边界生效；`done < total` 才进入 paused，最后一条完成不误判；状态跨 Hash Router 路由保留但不持久化到 app.html 重开。逐条 tag/embed 与 pending 续传语义不变。
 - `use-bookmarks.ts` — 数据 hook。挂载时 `sync()` 自动跑一次，负责本地书签树同步、分页查询与元信息刷新；同步成功后不再链式启动正文提取。搜索 300ms 防抖，folderId/search/page 驱动查询，undefined folderId = 「全部」。
 - `folder-chips.tsx` — 文件夹 chip 行：共享 `ChipRowShell`（folder icon + `bookmarks.foldersTitle`）+ `FilterChip`——「全部({{count}})」chip（选中态 = 无 folderId）+ 各文件夹（`maxWidth 200`，**无 per-chip 计数**，bilibili 风纯名称）。点击 = `onSelect(folderId|undefined)` 驱动 navigate
 - `bookmark-card.tsx` — 书签卡片（不复用 RepoCard）：favicon（Avatar rounded，MV3 本地 `_favicon` API `chrome.runtime.getURL('/_favicon/?pageUrl=…&size=32')`，无图回退 bookmark icon）+ title（2 行截断）+ 底部行（domain + `formatDateTime(dateAdded)`）+ 标签行（共享 `TagRow`，CardActionArea **之外**防误触 `window.open` 跳转；`tags?` undefined 时整区不渲染）。`BookmarkCardProps { bookmark, tags?, onEditTags? }`。点击 `window.open(url)`。`useTranslation()` 订阅保证 locale 切换 re-render 格式化输出

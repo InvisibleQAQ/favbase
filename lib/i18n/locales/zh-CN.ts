@@ -304,6 +304,11 @@ const zhCN = {
   'bookmarks.extractContent': '提取正文',
   'bookmarks.pendingExtraction': '{{count}} 个网页等待提取正文',
   'bookmarks.pendingCountFailed': '无法读取待提取队列',
+  'bookmarks.pauseExtraction': '暂停',
+  'bookmarks.pausingExtraction': '正在暂停…',
+  'bookmarks.resumeExtraction': '继续',
+  'bookmarks.extractionPausing': '当前网页处理完成后暂停…',
+  'bookmarks.extractionPaused': '正文提取已暂停 {{done}}/{{total}}',
 
   'x.title': 'X 书签',
   'x.count': '{{count}} 条书签',

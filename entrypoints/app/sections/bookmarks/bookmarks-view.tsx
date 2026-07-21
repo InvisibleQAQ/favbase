@@ -135,6 +135,7 @@ export function BookmarksView() {
   }
 
   const hasExtractionTotal = extraction.total > 0;
+  const extractionActive = extraction.phase !== 'idle';
   const extractionProgress = hasExtractionTotal
     ? Math.min(100, Math.max(0, (extraction.done / extraction.total) * 100))
     : 0;
@@ -159,11 +160,16 @@ export function BookmarksView() {
           })}
         >
           <Box
-            sx={{ display: 'flex', alignItems: 'center', gap: 1.25, mb: extraction.running ? 1.25 : 0 }}
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1.25,
+              mb: extractionActive ? 1.25 : 0,
+            }}
           >
             <Avatar
               src={
-                extraction.running && extraction.current
+                extractionActive && extraction.current
                   ? bookmarkFaviconUrl(extraction.current.url) || undefined
                   : undefined
               }
@@ -180,17 +186,24 @@ export function BookmarksView() {
             </Avatar>
 
             <Box sx={{ minWidth: 0, flex: 1 }}>
-              {extraction.running && extraction.current && (
+              {extractionActive && extraction.current && (
                 <Typography variant="subtitle2" title={extraction.current.title} noWrap>
                   {bookmarkDisplayName(extraction.current.title, extraction.current.url)}
                 </Typography>
               )}
               <Typography
                 variant="body2"
-                sx={{ color: extraction.running ? 'text.secondary' : 'text.primary' }}
+                sx={{ color: extractionActive ? 'text.secondary' : 'text.primary' }}
               >
-                {extraction.running
-                  ? t('bookmarks.extracting', { done: extraction.done, total: extraction.total })
+                {extraction.paused
+                  ? t('bookmarks.extractionPaused', {
+                      done: extraction.done,
+                      total: extraction.total,
+                    })
+                  : extraction.pausing
+                    ? t('bookmarks.extractionPausing')
+                    : extraction.running
+                      ? t('bookmarks.extracting', { done: extraction.done, total: extraction.total })
                   : extraction.pendingCountError
                     ? t('bookmarks.pendingCountFailed')
                     : extraction.pendingCount == null
@@ -199,15 +212,31 @@ export function BookmarksView() {
               </Typography>
             </Box>
 
-            {extraction.running && hasExtractionTotal ? (
+            {extractionActive && hasExtractionTotal && (
               <Typography
                 variant="subtitle2"
                 sx={{ flexShrink: 0, color: 'primary.main', fontVariantNumeric: 'tabular-nums' }}
               >
                 {Math.round(extractionProgress)}%
               </Typography>
+            )}
+
+            {extraction.paused ? (
+              <Button variant="contained" size="small" onClick={extraction.resume}>
+                {t('bookmarks.resumeExtraction')}
+              </Button>
+            ) : extraction.running ? (
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={extraction.pause}
+                disabled={extraction.pausing}
+              >
+                {extraction.pausing
+                  ? t('bookmarks.pausingExtraction')
+                  : t('bookmarks.pauseExtraction')}
+              </Button>
             ) : (
-              !extraction.running && (
                 <Button
                   variant="contained"
                   size="small"
@@ -216,11 +245,10 @@ export function BookmarksView() {
                 >
                   {t('bookmarks.extractContent')}
                 </Button>
-              )
             )}
           </Box>
 
-          {extraction.running && (
+          {extractionActive && (
             <LinearProgress
               variant={hasExtractionTotal ? 'determinate' : 'indeterminate'}
               value={hasExtractionTotal ? extractionProgress : undefined}
