@@ -4,6 +4,7 @@ import {
   decodeHtmlBytes,
   fetchBookmarkPage,
   extractMarkdown,
+  stripResourceHintLinks,
   meetsContentThreshold,
   MIN_CONTENT_CHARS,
   MAX_HTML_BYTES,
@@ -325,6 +326,23 @@ describe('meetsContentThreshold', () => {
 });
 
 describe('extractMarkdown', () => {
+  it('strips preload hints before parsing without removing normal stylesheets or content', () => {
+    const html = `<!doctype html><html><head>
+      <link href="font.woff2" as="font" rel="preload" crossorigin>
+      <LINK REL='modulepreload' HREF='bundle.js'>
+      <link rel="stylesheet" href="app.css">
+      <link data-rel="preload" rel="stylesheet" href="data-attribute.css">
+    </head><body><article>Keep this content.</article></body></html>`;
+
+    const sanitized = stripResourceHintLinks(html);
+
+    expect(sanitized).not.toContain('font.woff2');
+    expect(sanitized).not.toContain('bundle.js');
+    expect(sanitized).toContain('<link rel="stylesheet" href="app.css">');
+    expect(sanitized).toContain('href="data-attribute.css"');
+    expect(sanitized).toContain('<article>Keep this content.</article>');
+  });
+
   it('removes malformed JSON-LD before Defuddle parses schema.org data', () => {
     const originalError = console.error;
     const errors: unknown[] = [];

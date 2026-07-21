@@ -215,6 +215,23 @@ export function meetsContentThreshold(markdown: string): boolean {
   return markdown.trim().length >= MIN_CONTENT_CHARS;
 }
 
+const LINK_TAG_RE = /<link\b(?:"[^"]*"|'[^']*'|[^'">])*>/gi;
+const REL_ATTRIBUTE_RE = /\srel\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s'"=<>`]+))/i;
+
+/**
+ * Remove resource hints before DOMParser sees third-party HTML. Detached HTML
+ * documents may still activate preload/modulepreload links in Chromium; those
+ * hints are page-performance metadata and have no value to content extraction.
+ */
+export function stripResourceHintLinks(html: string): string {
+  return html.replace(LINK_TAG_RE, (tag) => {
+    const match = REL_ATTRIBUTE_RE.exec(tag);
+    const rel = match?.[1] ?? match?.[2] ?? match?.[3] ?? '';
+    const tokens = rel.toLowerCase().split(/\s+/);
+    return tokens.includes('preload') || tokens.includes('modulepreload') ? '' : tag;
+  });
+}
+
 function removeMalformedSchemaOrgScripts(doc: Document): void {
   doc.querySelectorAll('script[type="application/ld+json"]').forEach((script) => {
     const normalized = (script.textContent ?? '')
@@ -232,7 +249,7 @@ function removeMalformedSchemaOrgScripts(doc: Document): void {
  * it Defuddle cannot resolve relative links (a DOMParser doc has no base URL).
  */
 export function extractMarkdown(html: string, url: string): { markdown: string } | null {
-  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const doc = new DOMParser().parseFromString(stripResourceHintLinks(html), 'text/html');
   removeMalformedSchemaOrgScripts(doc);
   // Sync parse() only — parseAsync's extractors may call third-party APIs.
   const result = new Defuddle(doc, { url, markdown: true }).parse();
