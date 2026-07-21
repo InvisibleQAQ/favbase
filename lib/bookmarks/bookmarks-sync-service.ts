@@ -246,6 +246,8 @@ export interface PendingExtractionTarget {
   platformItemId: string;
   /** items.originalUrl — what gets fetched. */
   url: string;
+  /** Display name captured from the browser bookmark. */
+  title: string;
 }
 
 /**
@@ -261,6 +263,7 @@ export async function getPendingExtractionTargets(
       itemId: items.id,
       platformItemId: items.platformItemId,
       url: items.originalUrl,
+      title: items.title,
     })
     .from(items)
     .where(and(eq(items.platform, PLATFORM), eq(items.contentState, 'pending')))

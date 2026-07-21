@@ -125,6 +125,26 @@ describe('bookmark-content-service (in-memory PGlite)', () => {
   // Happy path
   // -------------------------------------------------------------------------
 
+  it('reports the current bookmark identity before fetching it', async () => {
+    const url = 'https://identity.example.com/post';
+    const entry = { ...bm(url), title: 'Readable bookmark title' };
+    await syncBookmarkTreeToDb(db, tree([entry]));
+
+    const progress: ExtractionProgress[] = [];
+    await extractPendingBookmarks({
+      db,
+      delayMs: 0,
+      fetchFn: fetchStub({ [url]: () => htmlResponse(articleHtml('Identity')) }),
+      onProgress: (value) => progress.push(value),
+    });
+
+    expect(progress).toContainEqual({
+      done: 0,
+      total: 1,
+      current: { url, title: 'Readable bookmark title' },
+    });
+  });
+
   it('pending → chunked: markdown persisted to item_contents + chunks written', async () => {
     const url = 'https://ok.example.com/post';
     await syncBookmarkTreeToDb(db, tree([bm(url)]));
@@ -146,7 +166,16 @@ describe('bookmark-content-service (in-memory PGlite)', () => {
     });
     expect(progress).toEqual([
       { done: 0, total: 1 },
-      { done: 1, total: 1 },
+      {
+        done: 0,
+        total: 1,
+        current: { url, title: url },
+      },
+      {
+        done: 1,
+        total: 1,
+        current: { url, title: url },
+      },
     ]);
 
     const item = await getItem(url);

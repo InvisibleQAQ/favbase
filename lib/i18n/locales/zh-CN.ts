@@ -301,6 +301,9 @@ const zhCN = {
   'bookmarks.noMatches': '没有匹配的书签',
   'bookmarks.syncFailed': '同步失败: {{error}}',
   'bookmarks.extracting': '正在提取书签正文 {{done}}/{{total}}',
+  'bookmarks.extractContent': '提取正文',
+  'bookmarks.pendingExtraction': '{{count}} 个网页等待提取正文',
+  'bookmarks.pendingCountFailed': '无法读取待提取队列',
 
   'x.title': 'X 书签',
   'x.count': '{{count}} 条书签',

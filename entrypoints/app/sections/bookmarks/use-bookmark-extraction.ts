@@ -1,5 +1,8 @@
+import { useEffect, useState } from 'react';
+
 import { initDbProxy } from '@/lib/database';
 import { extractPendingBookmarks } from '@/lib/bookmarks/bookmark-content-service';
+import { countPendingExtractions } from '@/lib/bookmarks/bookmarks-sync-service';
 import { tagNewItems } from '@/lib/tagging';
 import { embedNewItems } from '@/lib/embedding';
 
@@ -11,6 +14,10 @@ export interface BookmarkExtractionState {
   done: number;
   /** Pending backlog measured at run start. */
   total: number;
+  current: { url: string; title: string } | null;
+  pendingCount: number | null;
+  pendingCountError: string | null;
+  start: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -54,8 +61,43 @@ export function startBookmarkExtraction(): void {
 }
 
 /** Subscribe to the extraction progress (drives the view caption). */
-export function useBookmarkExtraction(): BookmarkExtractionState {
+export function useBookmarkExtraction(refreshKey?: unknown): BookmarkExtractionState {
   const job = useJob('bookmarks', 'sync');
-  const p = job?.progress as { done: number; total: number } | null | undefined;
-  return { running: job?.running ?? false, done: p?.done ?? 0, total: p?.total ?? 0 };
+  const [pendingCount, setPendingCount] = useState<number | null>(null);
+  const [pendingCountError, setPendingCountError] = useState<string | null>(null);
+  const p = job?.progress as
+    | { done: number; total: number; current?: { url: string; title: string } }
+    | null
+    | undefined;
+
+  useEffect(() => {
+    if (job?.running) return;
+    let cancelled = false;
+    setPendingCountError(null);
+    void initDbProxy()
+      .then((db) => countPendingExtractions(db))
+      .then((count) => {
+        if (!cancelled) setPendingCount(count);
+      })
+      .catch((err: unknown) => {
+        console.error('[bookmarks] pending extraction count failed:', err);
+        if (!cancelled) {
+          setPendingCount(null);
+          setPendingCountError(err instanceof Error ? err.message : String(err));
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [job?.generation, job?.running, refreshKey]);
+
+  return {
+    running: job?.running ?? false,
+    done: p?.done ?? 0,
+    total: p?.total ?? 0,
+    current: p?.current ?? null,
+    pendingCount,
+    pendingCountError,
+    start: startBookmarkExtraction,
+  };
 }

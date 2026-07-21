@@ -42,6 +42,8 @@ export interface ExtractionProgress {
   done: number;
   /** Pending backlog measured at run start. */
   total: number;
+  /** Target currently being processed; absent until the first target starts. */
+  current?: { url: string; title: string };
 }
 
 export interface ExtractPendingOptions {
@@ -116,6 +118,8 @@ export async function extractPendingBookmarks(
     for (const target of fresh) {
       if (opts.signal?.aborted) break;
       attempted.add(target.itemId);
+      const current = { url: target.url, title: target.title };
+      opts.onProgress?.({ done: result.processed, total, current });
 
       try {
         if (!classifyUrl(target.url)) {
@@ -156,7 +160,7 @@ export async function extractPendingBookmarks(
       }
 
       result.processed += 1;
-      opts.onProgress?.({ done: result.processed, total });
+      opts.onProgress?.({ done: result.processed, total, current });
     }
   }
 

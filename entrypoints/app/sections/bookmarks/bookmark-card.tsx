@@ -10,19 +10,7 @@ import { Iconify } from '../../components/iconify';
 import { TagRow } from '../../components/tags';
 import type { BookmarkItem } from '@/lib/bookmarks/bookmarks-sync-service';
 import type { TagRef } from '@/lib/tagging';
-
-/** MV3 local favicon endpoint (needs the `favicon` permission). Keeps favicon
- *  resolution on-device — no third-party favicon service is contacted. */
-function faviconUrl(pageUrl: string): string {
-  try {
-    const u = new URL(chrome.runtime.getURL('/_favicon/'));
-    u.searchParams.set('pageUrl', pageUrl);
-    u.searchParams.set('size', '32');
-    return u.toString();
-  } catch {
-    return '';
-  }
-}
+import { bookmarkFaviconUrl } from './bookmark-display';
 
 export interface BookmarkCardProps {
   bookmark: BookmarkItem;
@@ -59,7 +47,7 @@ export function BookmarkCard({ bookmark, tags, onEditTags }: BookmarkCardProps) 
           {/* Favicon + title */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
             <Avatar
-              src={faviconUrl(bookmark.url) || undefined}
+              src={bookmarkFaviconUrl(bookmark.url) || undefined}
               variant="rounded"
               sx={{ width: 32, height: 32, bgcolor: 'transparent' }}
             >

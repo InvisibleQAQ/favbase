@@ -4,6 +4,7 @@ import { varAlpha } from 'minimal-shared/utils';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import Box from '@mui/material/Box';
+import Avatar from '@mui/material/Avatar';
 import LinearProgress, { linearProgressClasses } from '@mui/material/LinearProgress';
 
 import { formatDateTime } from '@/lib/i18n';
@@ -33,6 +34,7 @@ import { FolderChips } from './folder-chips';
 import { BookmarkCard } from './bookmark-card';
 import { TaggedBookmarkCard } from './tagged-bookmark-card';
 import { BookmarkGridSkeleton } from './bookmark-grid-skeleton';
+import { bookmarkDisplayName, bookmarkFaviconUrl } from './bookmark-display';
 
 /** Platform key for all tag operations in this (bookmarks-only) section. */
 const PLATFORM = 'bookmarks';
@@ -103,7 +105,7 @@ export function BookmarksView() {
   const { folderId } = useParams<{ folderId: string }>();
   const navigate = useNavigate();
   const bm = useBookmarks(folderId);
-  const extraction = useBookmarkExtraction();
+  const extraction = useBookmarkExtraction(bm.lastSyncedAt?.getTime());
 
   // Manual tagging — batch-load tags for the current page, single popover
   // instance, platform-scoped filter chips.
@@ -145,9 +147,8 @@ export function BookmarksView() {
         caption={captionParts.length > 0 ? captionParts.join(' · ') : undefined}
       />
 
-      {/* Content-extraction progress — singleton worker, survives route changes */}
-      {extraction.running && (
-        <Box
+      {/* Manual content extraction — idle control becomes in-place progress. */}
+      <Box
           sx={(theme) => ({
             mb: 2.5,
             p: 2,
@@ -157,48 +158,81 @@ export function BookmarksView() {
             bgcolor: varAlpha(theme.vars.palette.primary.mainChannel, 0.06),
           })}
         >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, mb: 1.25 }}>
-            <Box
+          <Box
+            sx={{ display: 'flex', alignItems: 'center', gap: 1.25, mb: extraction.running ? 1.25 : 0 }}
+          >
+            <Avatar
+              src={
+                extraction.running && extraction.current
+                  ? bookmarkFaviconUrl(extraction.current.url) || undefined
+                  : undefined
+              }
+              variant="rounded"
               sx={(theme) => ({
-                display: 'grid',
                 width: 36,
                 height: 36,
                 flexShrink: 0,
-                placeItems: 'center',
-                borderRadius: 1.5,
                 color: theme.vars.palette.primary.main,
                 bgcolor: varAlpha(theme.vars.palette.primary.mainChannel, 0.12),
               })}
             >
               <Iconify icon="solar:bookmark-bold-duotone" width={20} />
+            </Avatar>
+
+            <Box sx={{ minWidth: 0, flex: 1 }}>
+              {extraction.running && extraction.current && (
+                <Typography variant="subtitle2" title={extraction.current.title} noWrap>
+                  {bookmarkDisplayName(extraction.current.title, extraction.current.url)}
+                </Typography>
+              )}
+              <Typography
+                variant="body2"
+                sx={{ color: extraction.running ? 'text.secondary' : 'text.primary' }}
+              >
+                {extraction.running
+                  ? t('bookmarks.extracting', { done: extraction.done, total: extraction.total })
+                  : extraction.pendingCountError
+                    ? t('bookmarks.pendingCountFailed')
+                    : extraction.pendingCount == null
+                      ? t('status.loading')
+                      : t('bookmarks.pendingExtraction', { count: extraction.pendingCount })}
+              </Typography>
             </Box>
 
-            <Typography variant="body2" sx={{ minWidth: 0, flex: 1, fontWeight: 'fontWeightMedium' }}>
-              {t('bookmarks.extracting', { done: extraction.done, total: extraction.total })}
-            </Typography>
-
-            {hasExtractionTotal && (
+            {extraction.running && hasExtractionTotal ? (
               <Typography
                 variant="subtitle2"
                 sx={{ flexShrink: 0, color: 'primary.main', fontVariantNumeric: 'tabular-nums' }}
               >
                 {Math.round(extractionProgress)}%
               </Typography>
+            ) : (
+              !extraction.running && (
+                <Button
+                  variant="contained"
+                  size="small"
+                  onClick={extraction.start}
+                  disabled={extraction.pendingCount == null || extraction.pendingCount === 0}
+                >
+                  {t('bookmarks.extractContent')}
+                </Button>
+              )
             )}
           </Box>
 
-          <LinearProgress
-            variant={hasExtractionTotal ? 'determinate' : 'indeterminate'}
-            value={hasExtractionTotal ? extractionProgress : undefined}
-            sx={(theme) => ({
-              height: 6,
-              borderRadius: 1,
-              bgcolor: varAlpha(theme.vars.palette.primary.mainChannel, 0.12),
-              [`& .${linearProgressClasses.bar}`]: { borderRadius: 1 },
-            })}
-          />
-        </Box>
-      )}
+          {extraction.running && (
+            <LinearProgress
+              variant={hasExtractionTotal ? 'determinate' : 'indeterminate'}
+              value={hasExtractionTotal ? extractionProgress : undefined}
+              sx={(theme) => ({
+                height: 6,
+                borderRadius: 1,
+                bgcolor: varAlpha(theme.vars.palette.primary.mainChannel, 0.12),
+                [`& .${linearProgressClasses.bar}`]: { borderRadius: 1 },
+              })}
+            />
+          )}
+      </Box>
 
       {/* Sync failure banner (library still shows its persisted data) */}
       {bm.syncError && bm.libraryCount > 0 && (

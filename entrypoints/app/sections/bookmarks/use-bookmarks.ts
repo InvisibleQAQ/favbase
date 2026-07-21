@@ -9,7 +9,6 @@ import {
   type BookmarkItem,
   type BookmarkFolderRef,
 } from '@/lib/bookmarks/bookmarks-sync-service';
-import { startBookmarkExtraction } from './use-bookmark-extraction';
 
 const PAGE_SIZE = 24;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -124,11 +123,6 @@ export function useBookmarks(folderId: string | undefined): UseBookmarksReturn {
     try {
       await initDbProxy();
       await syncBookmarks();
-      // Chain the content-extraction worker after new bookmarks land as
-      // 'pending' (mount auto-sync AND manual error-state retry both pass
-      // here). Fire-and-forget module singleton — survives route changes,
-      // its internal guard dedupes concurrent starts.
-      startBookmarkExtraction();
     } catch (err) {
       console.error('[bookmarks] sync failed:', err);
       if (mountedRef.current) {

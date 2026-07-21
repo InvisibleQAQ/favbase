@@ -308,6 +308,9 @@ const en: Record<LocaleKeys, string> = {
   'bookmarks.noMatches': 'No matching bookmarks',
   'bookmarks.syncFailed': 'Sync failed: {{error}}',
   'bookmarks.extracting': 'Extracting bookmark content {{done}}/{{total}}',
+  'bookmarks.extractContent': 'Extract content',
+  'bookmarks.pendingExtraction': '{{count}} pages waiting for content extraction',
+  'bookmarks.pendingCountFailed': 'Could not load the extraction queue',
 
   'x.title': 'X Bookmarks',
   'x.count': '{{count}} bookmarks',
