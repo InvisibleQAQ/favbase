@@ -368,3 +368,36 @@ Added cooperative pause, pausing, paused, and resume states for manual bookmark 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 131: Collapse secondary collection filters
+
+**Date**: 2026-07-22
+**Task**: Collapse secondary collection filters
+**Branch**: `main`
+
+### Summary
+
+Unified all platform category and tag filter rows on the shared collapsible chip contract: default eight items, expand/collapse, and selected-item visibility; added tests, i18n, docs, and future platform onboarding guidance.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6b5740e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
