@@ -401,3 +401,36 @@ Unified all platform category and tag filter rows on the shared collapsible chip
 ### Next Steps
 
 - None - task complete
+
+
+## Session 132: Fix bookmark extraction resource-hint leakage
+
+**Date**: 2026-07-22
+**Task**: Fix bookmark extraction resource-hint leakage
+**Branch**: `main`
+
+### Summary
+
+Moved arbitrary bookmark page fetches from app.html to the background service worker, retained inert DOM parsing, added boundary regression tests, and verified 447 tests plus MV3 production build.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8f5f308` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
