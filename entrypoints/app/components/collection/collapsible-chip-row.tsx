@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { ReactNode } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 
 import Chip from '@mui/material/Chip';
 
@@ -11,6 +11,8 @@ export interface CollapsibleChipRowProps<T> {
   icon: ReactNode;
   /** Pre-translated header title. */
   title: string;
+  /** Optional extra header content, e.g. a clear-filter button. */
+  headerExtra?: ReactNode;
   /** Filterable items, pre-sorted by the caller (e.g. count descending). */
   items: T[];
   /** Stable id for an item — also the value handed to onSelect. */
@@ -18,9 +20,9 @@ export interface CollapsibleChipRowProps<T> {
   /** Pre-translated chip label (caller formats name + count). */
   getLabel: (item: T) => string;
   /** Pre-translated "All (n)" chip label. */
-  allLabel: string;
-  /** null = "All" selected; otherwise the selected item's key. */
-  selected: string | null;
+  allLabel?: string;
+  /** null = "All" selected; otherwise one or more selected item keys. */
+  selected: string | string[] | null;
   onSelect: (key: string | null) => void;
   /** Pre-translated show-more label, given the hidden overflow count. */
   showMoreLabel: (overflow: number) => string;
@@ -30,6 +32,28 @@ export interface CollapsibleChipRowProps<T> {
   collapsedCount?: number;
   /** Ellipsis truncation width for item chips. */
   maxWidth?: number;
+  /** Optional leading icon for each item chip. */
+  getIcon?: (item: T) => ReactElement | undefined;
+}
+
+export function resolveCollapsedItems<T>(
+  items: T[],
+  getKey: (item: T) => string,
+  selected: string | string[] | null,
+  collapsedCount: number,
+  expanded: boolean,
+) {
+  const overflow = items.length - collapsedCount;
+  const visible = expanded || overflow <= 0 ? items : items.slice(0, collapsedCount);
+  const visibleKeys = new Set(visible.map(getKey));
+  const selectedKeys = new Set(
+    selected == null ? [] : Array.isArray(selected) ? selected : [selected],
+  );
+  const selectedHidden = items.filter(
+    (item) => selectedKeys.has(getKey(item)) && !visibleKeys.has(getKey(item)),
+  );
+
+  return { overflow, visible, selectedKeys, selectedHidden };
 }
 
 /** Filter chip row for an unbounded set (authors, collections, …): an "All"
@@ -40,6 +64,7 @@ export interface CollapsibleChipRowProps<T> {
 export function CollapsibleChipRow<T>({
   icon,
   title,
+  headerExtra,
   items,
   getKey,
   getLabel,
@@ -48,43 +73,49 @@ export function CollapsibleChipRow<T>({
   onSelect,
   showMoreLabel,
   showLessLabel,
-  collapsedCount = 12,
+  collapsedCount = 8,
   maxWidth = 220,
+  getIcon,
 }: CollapsibleChipRowProps<T>) {
   const [expanded, setExpanded] = useState(false);
 
-  const overflow = items.length - collapsedCount;
+  const { overflow, visible, selectedKeys, selectedHidden } = resolveCollapsedItems(
+    items,
+    getKey,
+    selected,
+    collapsedCount,
+    expanded,
+  );
   const collapsible = overflow > 0;
-  const visible = expanded || !collapsible ? items : items.slice(0, collapsedCount);
-
-  const selectedHidden =
-    selected != null && !visible.some((item) => getKey(item) === selected)
-      ? items.find((item) => getKey(item) === selected)
-      : undefined;
 
   return (
-    <ChipRowShell icon={icon} title={title}>
-      <FilterChip label={allLabel} selected={selected === null} onClick={() => onSelect(null)} />
+    <ChipRowShell icon={icon} title={title} headerExtra={headerExtra}>
+      {allLabel != null && (
+        <FilterChip label={allLabel} selected={selected === null} onClick={() => onSelect(null)} />
+      )}
       {visible.map((item) => {
         const key = getKey(item);
         return (
           <FilterChip
             key={key}
             label={getLabel(item)}
-            selected={key === selected}
+            selected={selectedKeys.has(key)}
             onClick={() => onSelect(key)}
             maxWidth={maxWidth}
+            icon={getIcon?.(item)}
           />
         );
       })}
-      {selectedHidden && (
+      {selectedHidden.map((item) => (
         <FilterChip
-          label={getLabel(selectedHidden)}
+          key={`selected-${getKey(item)}`}
+          label={getLabel(item)}
           selected
-          onClick={() => onSelect(getKey(selectedHidden))}
+          onClick={() => onSelect(getKey(item))}
           maxWidth={maxWidth}
+          icon={getIcon?.(item)}
         />
-      )}
+      ))}
       {collapsible && (
         <Chip
           clickable

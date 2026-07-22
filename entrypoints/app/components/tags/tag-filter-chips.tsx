@@ -3,7 +3,7 @@ import Button from '@mui/material/Button';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import type { UsedTag } from '@/lib/tagging';
 import { Iconify } from '../iconify';
-import { ChipRowShell, FilterChip } from '../collection';
+import { CollapsibleChipRow } from '../collection';
 
 interface TagFilterChipsProps {
   tags: UsedTag[];
@@ -22,9 +22,16 @@ export function TagFilterChips({ tags, selectedIds, onToggle, onClear }: TagFilt
   if (tags.length === 0) return null;
 
   return (
-    <ChipRowShell
+    <CollapsibleChipRow
       icon={<Iconify icon="mdi:tag" width={18} sx={{ color: 'primary.main' }} />}
       title={t('tags.sectionTitle')}
+      items={tags}
+      getKey={(tag) => tag.id}
+      getLabel={(tag) => `${tag.name} (${tag.count})`}
+      selected={selectedIds}
+      onSelect={(key) => key != null && onToggle(key)}
+      showMoreLabel={(n) => t('tags.showMore', { n })}
+      showLessLabel={t('tags.showLess')}
       headerExtra={
         selectedIds.length > 0 && (
           <Button size="small" variant="text" onClick={onClear} sx={{ minWidth: 0, px: 1, py: 0 }}>
@@ -32,16 +39,6 @@ export function TagFilterChips({ tags, selectedIds, onToggle, onClear }: TagFilt
           </Button>
         )
       }
-    >
-      {tags.map((tag) => (
-        <FilterChip
-          key={tag.id}
-          label={`${tag.name} (${tag.count})`}
-          selected={selectedIds.includes(tag.id)}
-          onClick={() => onToggle(tag.id)}
-          maxWidth={200}
-        />
-      ))}
-    </ChipRowShell>
+    />
   );
 }

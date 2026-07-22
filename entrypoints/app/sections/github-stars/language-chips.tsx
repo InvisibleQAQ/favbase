@@ -2,7 +2,7 @@ import Box from '@mui/material/Box';
 
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify } from '../../components/iconify';
-import { ChipRowShell, FilterChip } from '../../components/collection';
+import { CollapsibleChipRow } from '../../components/collection';
 import type { LanguageCount } from '@/lib/github/github-sync-service';
 import { languageColor } from './language-colors';
 
@@ -34,25 +34,18 @@ export function LanguageChips({ languages, totalCount, selected, onSelect }: Lan
   const { t } = useTranslation();
 
   return (
-    <ChipRowShell
+    <CollapsibleChipRow
       icon={<Iconify icon="mdi:github" width={20} sx={{ color: 'primary.main' }} />}
       title={t('githubStars.languagesTitle')}
-    >
-      <FilterChip
-        label={`${t('githubStars.allLanguages')} (${totalCount})`}
-        selected={selected === null}
-        onClick={() => onSelect(null)}
-      />
-      {languages.map(({ language, count }) => (
-        <FilterChip
-          key={language}
-          icon={<LanguageDot language={language} />}
-          label={`${language} (${count})`}
-          selected={language === selected}
-          onClick={() => onSelect(language)}
-          maxWidth={220}
-        />
-      ))}
-    </ChipRowShell>
+      allLabel={`${t('githubStars.allLanguages')} (${totalCount})`}
+      items={languages}
+      getKey={({ language }) => language}
+      getLabel={({ language, count }) => `${language} (${count})`}
+      getIcon={({ language }) => <LanguageDot language={language} />}
+      selected={selected}
+      onSelect={onSelect}
+      showMoreLabel={(n) => t('githubStars.showMoreLanguages', { n })}
+      showLessLabel={t('githubStars.showLessLanguages')}
+    />
   );
 }

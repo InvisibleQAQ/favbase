@@ -1,6 +1,6 @@
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify } from '../../components/iconify';
-import { ChipRowShell, FilterChip } from '../../components/collection';
+import { CollapsibleChipRow } from '../../components/collection';
 import type { BookmarkFolderRef } from '@/lib/bookmarks/bookmarks-sync-service';
 
 interface FolderChipsProps {
@@ -18,7 +18,7 @@ export function FolderChips({ folders, totalCount, selectedId, onSelect }: Folde
   const { t } = useTranslation();
 
   return (
-    <ChipRowShell
+    <CollapsibleChipRow
       icon={
         <Iconify
           icon="solar:folder-with-files-bold-duotone"
@@ -27,21 +27,14 @@ export function FolderChips({ folders, totalCount, selectedId, onSelect }: Folde
         />
       }
       title={t('bookmarks.foldersTitle')}
-    >
-      <FilterChip
-        label={t('bookmarks.allFolders', { count: totalCount })}
-        selected={!selectedId}
-        onClick={() => onSelect(undefined)}
-      />
-      {folders.map((folder) => (
-        <FilterChip
-          key={folder.folderId}
-          label={folder.title}
-          selected={folder.folderId === selectedId}
-          onClick={() => onSelect(folder.folderId)}
-          maxWidth={200}
-        />
-      ))}
-    </ChipRowShell>
+      allLabel={t('bookmarks.allFolders', { count: totalCount })}
+      items={folders}
+      getKey={(folder) => folder.folderId}
+      getLabel={(folder) => folder.title}
+      selected={selectedId ?? null}
+      onSelect={(key) => onSelect(key ?? undefined)}
+      showMoreLabel={(n) => t('bookmarks.showMoreFolders', { n })}
+      showLessLabel={t('bookmarks.showLessFolders')}
+    />
   );
 }

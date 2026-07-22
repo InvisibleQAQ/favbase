@@ -3,7 +3,7 @@ import Typography from '@mui/material/Typography';
 
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify } from '../../components/iconify';
-import { ChipRowShell, FilterChip } from '../../components/collection';
+import { ChipRowShell, CollapsibleChipRow } from '../../components/collection';
 import type { BiliFavFolder } from '@/lib/bilibili/types';
 
 interface FolderChipsProps {
@@ -15,37 +15,45 @@ interface FolderChipsProps {
 
 export function FolderChips({ folders, selectedId, loading, onSelect }: FolderChipsProps) {
   const { t } = useTranslation();
+  const icon = (
+    <Iconify
+      icon="solar:videocamera-record-bold-duotone"
+      width={20}
+      sx={{ color: 'primary.main' }}
+    />
+  );
 
-  return (
-    <ChipRowShell
-      icon={
-        <Iconify
-          icon="solar:videocamera-record-bold-duotone"
-          width={20}
-          sx={{ color: 'primary.main' }}
-        />
-      }
-      title={t('collections.sidebarTitle')}
-    >
-      {loading ? (
-        Array.from({ length: 4 }).map((_, i) => (
+  if (loading) {
+    return (
+      <ChipRowShell icon={icon} title={t('collections.sidebarTitle')}>
+        {Array.from({ length: 4 }).map((_, i) => (
           <Skeleton key={i} variant="rounded" width={96} height={32} />
-        ))
-      ) : folders.length === 0 ? (
+        ))}
+      </ChipRowShell>
+    );
+  }
+
+  if (folders.length === 0) {
+    return (
+      <ChipRowShell icon={icon} title={t('collections.sidebarTitle')}>
         <Typography variant="caption" sx={{ color: 'text.disabled' }}>
           {t('collections.noFolders')}
         </Typography>
-      ) : (
-        folders.map((folder) => (
-          <FilterChip
-            key={folder.id}
-            label={folder.title}
-            selected={folder.id === selectedId}
-            onClick={() => onSelect(folder.id)}
-            maxWidth={200}
-          />
-        ))
-      )}
-    </ChipRowShell>
+      </ChipRowShell>
+    );
+  }
+
+  return (
+    <CollapsibleChipRow
+      icon={icon}
+      title={t('collections.sidebarTitle')}
+      items={folders}
+      getKey={(folder) => String(folder.id)}
+      getLabel={(folder) => folder.title}
+      selected={selectedId == null ? null : String(selectedId)}
+      onSelect={(key) => key != null && onSelect(Number(key))}
+      showMoreLabel={(n) => t('collections.showMoreFolders', { n })}
+      showLessLabel={t('collections.showLessFolders')}
+    />
   );
 }
