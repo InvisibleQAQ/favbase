@@ -1,18 +1,21 @@
 import type { TranscribeResponse, TranscribeStatusPush } from '@/lib/transcription/types';
+import { embedPlatformItem } from '@/lib/embedding';
 import { tagPlatformItem } from '@/lib/tagging';
-import { persistContent, type PersistContentResult } from './bili-sync-service';
+import { persistContentChunks, type PersistContentResult } from './bili-sync-service';
+
+const PLATFORM = 'bilibili';
 
 export interface TranscribePersistHooks {
-  /** Fired after transcription succeeds, right before local chunk+embed indexing. */
+  /** Fired after transcription succeeds, before local persistence and post-processing. */
   onIndexing?: () => void;
-  /** Fired when indexing settles with the reached content state (null = persist failed). */
+  /** Fired when Embedding settles with the reached content state (null = persist failed). */
   onIndexed?: (result: PersistContentResult) => void;
 }
 
 /**
- * Transcribe via background pipeline, then persist + index locally (awaited so
- * the UI can show an "indexing" stage until chunk+embed completes). Indexing
- * failures never affect the transcription result.
+ * Transcribe via the background pipeline, persist content + chunks locally,
+ * then start Embedding and Tagging independently. Only Embedding is awaited
+ * for the UI indexing state; post-processing never changes transcription.
  */
 export async function transcribeAndPersist(
   bvid: string,
@@ -28,12 +31,16 @@ export async function transcribeAndPersist(
 
   if (response.success) {
     hooks?.onIndexing?.();
-    const result = await persistContent(bvid, response.data.rows, response.data.source);
+    const persisted = await persistContentChunks(bvid, response.data.rows, response.data.source);
+    if (!persisted) {
+      hooks?.onIndexed?.(null);
+      return response;
+    }
+
+    const embedding = embedPlatformItem(PLATFORM, bvid);
+    void tagPlatformItem(PLATFORM, bvid);
+    const result = await embedding;
     hooks?.onIndexed?.(result);
-    // AI tagging seam — the ONLY coupling point between lib/tagging and the
-    // transcription pipeline. Fire-and-forget (never throws, never blocks the
-    // indexing stage); remove this line to detach the tagging feature.
-    if (result) void tagPlatformItem('bilibili', bvid);
   }
 
   return response;

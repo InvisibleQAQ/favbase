@@ -29,6 +29,11 @@ export interface IndexingDeps {
   embed(config: ResolvedEmbeddingConfig, texts: string[]): Promise<number[][]>;
 }
 
+/** Shared dependencies for platform-addressed single-item and batch embedding. */
+export interface EmbeddingItemDeps extends IndexingDeps {
+  db: () => FavbaseDb;
+}
+
 const defaultDeps: IndexingDeps = {
   getConfig: getEmbeddingSettings,
   embed: (config, texts) => {
@@ -88,6 +93,37 @@ async function embedChunks(
   await setContentState(db, itemId, 'embedded');
 }
 
+async function replaceAndMarkItemChunks(
+  db: FavbaseDb,
+  itemId: string,
+  chunks: ChunkInput[],
+) {
+  const inserted = await replaceItemChunks(db, itemId, chunks);
+  await setContentState(db, itemId, 'chunked');
+  return inserted;
+}
+
+async function getEmbeddableChunks(
+  db: FavbaseDb,
+  itemId: string,
+): Promise<EmbeddableChunk[]> {
+  return db
+    .select({ id: itemChunks.id, chunkText: itemChunks.chunkText })
+    .from(itemChunks)
+    .where(eq(itemChunks.itemId, itemId))
+    .orderBy(asc(itemChunks.chunkIndex));
+}
+
+/** Persist a prepared content type's chunks and expose the durable `chunked` seam. */
+export async function persistItemChunks(
+  db: FavbaseDb,
+  itemId: string,
+  chunks: ChunkInput[],
+): Promise<'chunked'> {
+  await replaceAndMarkItemChunks(db, itemId, chunks);
+  return 'chunked';
+}
+
 /**
  * Rebuild the item's chunks and advance `content_state`:
  * chunks written → 'chunked'; embedding configured + succeeded → 'embedded'.
@@ -99,8 +135,7 @@ export async function indexItemChunks(
   chunks: ChunkInput[],
   deps: IndexingDeps = defaultDeps,
 ): Promise<IndexedContentState> {
-  const inserted = await replaceItemChunks(db, itemId, chunks);
-  await setContentState(db, itemId, 'chunked');
+  const inserted = await replaceAndMarkItemChunks(db, itemId, chunks);
   if (inserted.length === 0) return 'chunked';
 
   try {
@@ -113,6 +148,47 @@ export async function indexItemChunks(
   } catch (err) {
     console.error(
       `[embedding] Embed failed for item=${itemId}, staying at 'chunked':`,
+      err,
+    );
+    return 'chunked';
+  }
+}
+
+/**
+ * Best-effort single-item embedding addressed by platform identity. The item
+ * must already be at the durable `chunked` seam; callers never need its DB id.
+ */
+export async function embedPlatformItem(
+  platform: string,
+  platformItemId: string,
+  deps: Partial<EmbeddingItemDeps> = {},
+): Promise<IndexedContentState | null> {
+  const getConfig = deps.getConfig ?? defaultDeps.getConfig;
+  const embed = deps.embed ?? defaultDeps.embed;
+
+  try {
+    const db = (deps.db ?? getDb)();
+    const targets = await db
+      .select({ id: items.id, contentState: items.contentState })
+      .from(items)
+      .where(and(eq(items.platform, platform), eq(items.platformItemId, platformItemId)))
+      .limit(1);
+    if (targets.length === 0) return null;
+
+    const target = targets[0];
+    if (target.contentState === 'embedded') return 'embedded';
+    if (target.contentState !== 'chunked') return null;
+
+    const config = await getConfig();
+    if (!config.enabled) return 'chunked';
+
+    const chunks = await getEmbeddableChunks(db, target.id);
+    if (chunks.length === 0) return 'chunked';
+    await embedChunks(db, target.id, chunks, config, embed);
+    return 'embedded';
+  } catch (err) {
+    console.error(
+      `[embedding] Embed failed for ${platform}:${platformItemId}, staying at 'chunked':`,
       err,
     );
     return 'chunked';
@@ -178,11 +254,7 @@ export async function rebuildPendingEmbeddings(
   onProgress?.({ completed, total });
 
   for (const { id: itemId } of pending) {
-    const chunks = await db
-      .select({ id: itemChunks.id, chunkText: itemChunks.chunkText })
-      .from(itemChunks)
-      .where(eq(itemChunks.itemId, itemId))
-      .orderBy(asc(itemChunks.chunkIndex));
+    const chunks = await getEmbeddableChunks(db, itemId);
 
     // Race guard: chunks may have been replaced/cleared since the backlog
     // query (re-transcription) — an item without chunks must not become
@@ -202,10 +274,8 @@ export async function rebuildPendingEmbeddings(
 // embedNewItems
 // ---------------------------------------------------------------------------
 
-/** Injectable seams for tests — `IndexingDeps` plus the db accessor (mirrors TaggingDeps). */
-export interface EmbedNewItemsDeps extends IndexingDeps {
-  db: () => FavbaseDb;
-}
+/** Backward-compatible name for the batch entry's injectable dependencies. */
+export type EmbedNewItemsDeps = EmbeddingItemDeps;
 
 /** Keeps `inArray` bind-params well under the PG 65535 limit (same as ingest). */
 const ID_QUERY_CHUNK_SIZE = 500;
@@ -267,11 +337,7 @@ export async function embedNewItems(
 
     for (const { id: itemId } of targets) {
       try {
-        const chunks = await db
-          .select({ id: itemChunks.id, chunkText: itemChunks.chunkText })
-          .from(itemChunks)
-          .where(eq(itemChunks.itemId, itemId))
-          .orderBy(asc(itemChunks.chunkIndex));
+        const chunks = await getEmbeddableChunks(db, itemId);
         if (chunks.length === 0) {
           // A chunked item with no chunk rows is skipped, but it still counts
           // toward progress so the bar reaches total.

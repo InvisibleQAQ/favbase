@@ -34,10 +34,13 @@ export { chunkSubtitleRows, type ChunkerOptions } from './chunker';
 export { charSplit } from './char-split';
 
 export {
+  persistItemChunks,
   indexItemChunks,
+  embedPlatformItem,
   rebuildPendingEmbeddings,
   embedNewItems,
   type IndexingDeps,
+  type EmbeddingItemDeps,
   type EmbedNewItemsDeps,
   type IndexedContentState,
   type RebuildProgress,

@@ -3,7 +3,11 @@ import { getBiliAuth, fetchFavFolders, fetchFavVideos, BiliAuthError } from './b
 import { syncFavFoldersToDb } from './favorites-sync';
 import { syncFavVideosToDb } from './videos-sync';
 import { persistSubtitleContent } from './content-sync';
-import { chunkSubtitleRows, indexItemChunks } from '@/lib/embedding';
+import {
+  chunkSubtitleRows,
+  embedPlatformItem,
+  persistItemChunks,
+} from '@/lib/embedding';
 import { getDb } from '@/lib/database';
 import { sources } from '@/lib/database/entities/sources';
 import { items } from '@/lib/database/entities/items';
@@ -202,28 +206,38 @@ export async function markVideoError(bvid: string): Promise<void> {
 export type PersistContentResult = 'embedded' | 'chunked' | null;
 
 /**
- * Persist transcription results and build the RAG index: item_contents +
- * chunkSubtitleRows (subtitle chunker — the platform-level knowledge) +
- * indexItemChunks (content-agnostic chunk store + best-effort embedding).
- * Logs errors but never throws; returns the reached content state
- * ('embedded' | 'chunked') or null when persist failed / item missing.
+ * Persist transcription content and timestamped chunks, stopping at the
+ * durable seam shared by independent post-processors.
+ */
+export async function persistContentChunks(
+  bvid: string,
+  rows: SubtitleRow[],
+  source: SubtitleSource,
+): Promise<'chunked' | null> {
+  try {
+    const db = getDb();
+    const itemId = await persistSubtitleContent(db, bvid, rows, source);
+    if (!itemId) return null;
+
+    return await persistItemChunks(db, itemId, chunkSubtitleRows(rows));
+  } catch (err) {
+    console.error(`[bili-sync] Content persistence failed for bvid=${bvid}:`, err);
+    return null;
+  }
+}
+
+/**
+ * Backward-compatible combined operation. New orchestration should use
+ * `persistContentChunks` and start its post-processors from that data seam.
  */
 export async function persistContent(
   bvid: string,
   rows: SubtitleRow[],
   source: SubtitleSource,
 ): Promise<PersistContentResult> {
-  try {
-    const db = getDb();
-    const itemId = await persistSubtitleContent(db, bvid, rows, source);
-    if (!itemId) return null;
-
-    const chunks = chunkSubtitleRows(rows);
-    return await indexItemChunks(db, itemId, chunks);
-  } catch (err) {
-    console.error(`[bili-sync] Content indexing failed for bvid=${bvid}:`, err);
-    return null;
-  }
+  const persisted = await persistContentChunks(bvid, rows, source);
+  if (!persisted) return null;
+  return embedPlatformItem(PLATFORM, bvid);
 }
 
 /** Subset of the given bvids whose content_state is 'embedded' (indexed chip). */
