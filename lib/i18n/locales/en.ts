@@ -227,7 +227,7 @@ const en: Record<LocaleKeys, string> = {
   'nav.collections': 'Collections',
   'nav.bilibiliFavorites': 'Bilibili Favorites',
   'nav.githubStars': 'GitHub Stars',
-  'nav.bookmarks': 'Bookmarks',
+  'nav.bookmarks': 'Browser Bookmarks',
   'nav.xBookmarks': 'X Bookmarks',
   'nav.zhihuFavorites': 'Zhihu Favorites',
   'nav.youtubePlaylists': 'YouTube Playlists',
@@ -300,7 +300,7 @@ const en: Record<LocaleKeys, string> = {
   'githubStars.emptyDesc': 'Click Sync to fetch every repository you starred on GitHub.',
   'githubStars.noMatches': 'No matching repositories',
 
-  'bookmarks.title': 'Bookmarks',
+  'bookmarks.title': 'Browser Bookmarks',
   'bookmarks.count': '{{count}} bookmarks',
   'bookmarks.count.one': '{{count}} bookmark',
   'bookmarks.lastSynced': 'Last synced {{time}}',

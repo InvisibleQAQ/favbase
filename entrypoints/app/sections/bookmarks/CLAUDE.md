@@ -1,6 +1,6 @@
 # sections/bookmarks
 
-浏览器书签收藏页（`/collections/bookmarks` + `/collections/bookmarks/:folderId`）。视觉结构对齐 GitHub Stars 收藏页（`sections/github-stars/`）扁平堆叠：标题栏（标题+计数+lastSynced，**无同步按钮**）→ 手动正文提取控件 → 搜索框 → 文件夹 chips（「全部」+ 各文件夹）→ 标签筛选 chips → 卡片 grid（xs12/sm6/md4/lg3）+ Pagination。**数据一律从 PGlite 经 `lib/bookmarks/bookmarks-sync-service` 查询方法读取（UI 零 drizzle 导入）**；同步（`syncBookmarks`）**挂载时自动触发一次**（本地读取瞬时 + insert-only），正文提取不会随打开页面自动启动。
+浏览器书签收藏页（显示名固定为 `Browser Bookmarks` / `浏览器书签`，路由为 `/collections/bookmarks` + `/collections/bookmarks/:folderId`）。视觉结构对齐 GitHub Stars 收藏页（`sections/github-stars/`）扁平堆叠：标题栏（标题+计数+lastSynced，**无同步按钮**）→ 手动正文提取控件 → 搜索框 → 文件夹 chips（「全部」+ 各文件夹）→ 标签筛选 chips → 卡片 grid（xs12/sm6/md4/lg3）+ Pagination。**数据一律从 PGlite 经 `lib/bookmarks/bookmarks-sync-service` 查询方法读取（UI 零 drizzle 导入）**；同步（`syncBookmarks`）**挂载时自动触发一次**（本地读取瞬时 + insert-only），正文提取不会随打开页面自动启动。
 
 ## 模块结构
 

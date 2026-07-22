@@ -1,0 +1,15 @@
+# i18n
+
+用户可见文案集中在 `locales/`：`zh-CN.ts` 是 `LocaleKeys` 类型源，`en.ts` 以 `Record<LocaleKeys, string>` 保证键集合一致。React 组件通过 `useTranslation()` 订阅语言变化；非 React 调用经 `index.ts` 的 `t()`，禁止业务层直接拼接翻译文本。
+
+## 平台命名
+
+- 本地浏览器书签平台显示名固定为 `Browser Bookmarks` / `浏览器书签`；`nav.bookmarks` 与 `bookmarks.title` 必须一致，后台任务提示复用 `nav.bookmarks`。
+- X 平台显示名固定为 `X Bookmarks` / `X 书签`，不得与浏览器书签平台合并。
+- `bookmarks.*`、`x.*` 是稳定翻译键命名空间；显示名调整不改键、路由、数据库 platform 或任务 ID。
+- 普通名词 `bookmark` / `书签` 按语境翻译，不机械替换为平台显示名。
+
+## 验证
+
+- 修改 locale 后运行 `pnpm.cmd test -- lib/i18n/index.test.ts` 与 `pnpm.cmd compile`。
+- `index.test.ts` 通过公开 `t()` 覆盖双语平台名、插值、复数和数字格式化。

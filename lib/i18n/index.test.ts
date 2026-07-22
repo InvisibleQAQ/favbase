@@ -61,6 +61,18 @@ describe('t() plural resolution', () => {
   });
 });
 
+describe('platform labels', () => {
+  it('identifies browser bookmarks consistently in navigation and page title', () => {
+    setLocale('en');
+    expect(t('nav.bookmarks')).toBe('Browser Bookmarks');
+    expect(t('bookmarks.title')).toBe('Browser Bookmarks');
+
+    setLocale('zh-CN');
+    expect(t('nav.bookmarks')).toBe('浏览器书签');
+    expect(t('bookmarks.title')).toBe('浏览器书签');
+  });
+});
+
 describe('formatCompactNumber', () => {
   it('en: compact K/M', () => {
     setLocale('en');
