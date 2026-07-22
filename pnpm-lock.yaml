@@ -65,6 +65,9 @@ importers:
       fflate:
         specifier: ^0.8.3
         version: 0.8.3
+      linkedom:
+        specifier: 0.18.12
+        version: 0.18.12
       minimal-shared:
         specifier: ^1.1.6
         version: 1.1.6(react-dom@19.2.7(react@19.2.7))(react@19.2.7)

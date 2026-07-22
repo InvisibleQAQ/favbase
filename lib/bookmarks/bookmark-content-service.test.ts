@@ -9,9 +9,11 @@ import * as schema from '@/lib/database/schema';
 import { runMigrations } from '@/lib/database/migrations';
 import type { FavbaseDb } from '@/lib/database';
 
-// Sync-service transitively imports `browser` from 'wxt/browser'; the DB path
-// never calls it, so mock it away (same as bookmarks-sync-service.test.ts).
-vi.mock('wxt/browser', () => ({ browser: {} }));
+const { backgroundSendMessage } = vi.hoisted(() => ({ backgroundSendMessage: vi.fn() }));
+
+vi.mock('wxt/browser', () => ({
+  browser: { runtime: { sendMessage: backgroundSendMessage } },
+}));
 
 import {
   syncBookmarkTreeToDb,
@@ -19,8 +21,12 @@ import {
   type BookmarkFolder,
   type BookmarkTree,
 } from './bookmarks-sync-service';
-import { extractPendingBookmarks, type ExtractionProgress } from './bookmark-content-service';
-import type { FetchFn } from './bookmark-content';
+import {
+  extractPendingBookmarks,
+  type BookmarkPageFetcher,
+  type ExtractionProgress,
+} from './bookmark-content-service';
+import { fetchBookmarkPage, type FetchFn } from './bookmark-content';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -78,6 +84,11 @@ function fetchStub(routes: Record<string, () => Response>): FetchFn {
   };
 }
 
+function pageFetcher(routes: Record<string, () => Response>): BookmarkPageFetcher {
+  const fetchFn = fetchStub(routes);
+  return (url) => fetchBookmarkPage(url, fetchFn);
+}
+
 describe('bookmark-content-service (in-memory PGlite)', () => {
   let pg: PGlite;
   let db: FavbaseDb;
@@ -93,6 +104,7 @@ describe('bookmark-content-service (in-memory PGlite)', () => {
   });
 
   afterEach(async () => {
+    backgroundSendMessage.mockReset();
     // items delete cascades item_contents / item_chunks / item_sources FKs,
     // but item_sources is cleared first to keep parity with the sync suite.
     await db.delete(schema.itemSources);
@@ -134,7 +146,7 @@ describe('bookmark-content-service (in-memory PGlite)', () => {
     await extractPendingBookmarks({
       db,
       delayMs: 0,
-      fetchFn: fetchStub({ [url]: () => htmlResponse(articleHtml('Identity')) }),
+      fetchPage: pageFetcher({ [url]: () => htmlResponse(articleHtml('Identity')) }),
       onProgress: (value) => progress.push(value),
     });
 
@@ -154,7 +166,7 @@ describe('bookmark-content-service (in-memory PGlite)', () => {
     const result = await extractPendingBookmarks({
       db,
       delayMs: 0,
-      fetchFn: fetchStub({ [url]: () => htmlResponse(articleHtml('Alpha')) }),
+      fetchPage: pageFetcher({ [url]: () => htmlResponse(articleHtml('Alpha')) }),
       onProgress: (p) => progress.push(p),
     });
 
@@ -189,6 +201,25 @@ describe('bookmark-content-service (in-memory PGlite)', () => {
     expect(chunks[0].startSec).toBeNull(); // text content — no timestamps
   });
 
+  it('uses the background fetch seam when production does not inject fetchPage', async () => {
+    const url = 'https://background.example.com/post';
+    await syncBookmarkTreeToDb(db, tree([bm(url)]));
+    backgroundSendMessage.mockResolvedValueOnce({ kind: 'ok', html: articleHtml('Background') });
+    const ambientFetch = vi.spyOn(globalThis, 'fetch').mockRejectedValue(
+      new Error('app.html must not fetch third-party bookmark pages'),
+    );
+
+    try {
+      const result = await extractPendingBookmarks({ db, delayMs: 0 });
+
+      expect(result.chunkedItemIds).toEqual([url]);
+      expect(backgroundSendMessage).toHaveBeenCalledWith({ type: 'FETCH_BOOKMARK_PAGE', url });
+      expect(ambientFetch).not.toHaveBeenCalled();
+    } finally {
+      ambientFetch.mockRestore();
+    }
+  });
+
   // -------------------------------------------------------------------------
   // Permanent failures → no_content
   // -------------------------------------------------------------------------
@@ -202,7 +233,7 @@ describe('bookmark-content-service (in-memory PGlite)', () => {
     const result = await extractPendingBookmarks({
       db,
       delayMs: 0,
-      fetchFn: fetchStub({
+      fetchPage: pageFetcher({
         [dead]: () => htmlResponse('gone', 404),
         [pdf]: () => htmlResponse('%PDF-', 200, 'application/pdf'),
         [shell]: () => htmlResponse('<html><body><div id="root"></div></body></html>'),
@@ -223,10 +254,10 @@ describe('bookmark-content-service (in-memory PGlite)', () => {
     const local = 'http://localhost:9000/dev';
     await syncBookmarkTreeToDb(db, tree([bm(local)]));
 
-    const fetchFn = vi.fn<FetchFn>();
-    const result = await extractPendingBookmarks({ db, delayMs: 0, fetchFn });
+    const fetchPage = vi.fn<BookmarkPageFetcher>();
+    const result = await extractPendingBookmarks({ db, delayMs: 0, fetchPage });
 
-    expect(fetchFn).not.toHaveBeenCalled();
+    expect(fetchPage).not.toHaveBeenCalled();
     expect(result.noContent).toBe(1);
     expect((await getItem(local)).contentState).toBe('no_content');
   });
@@ -242,7 +273,7 @@ describe('bookmark-content-service (in-memory PGlite)', () => {
     const first = await extractPendingBookmarks({
       db,
       delayMs: 0,
-      fetchFn: fetchStub({ [url]: () => htmlResponse('oops', 500) }),
+      fetchPage: pageFetcher({ [url]: () => htmlResponse('oops', 500) }),
     });
     expect(first).toEqual({ processed: 1, chunkedItemIds: [], noContent: 0, transient: 1 });
     expect((await getItem(url)).contentState).toBe('pending');
@@ -250,7 +281,7 @@ describe('bookmark-content-service (in-memory PGlite)', () => {
     const second = await extractPendingBookmarks({
       db,
       delayMs: 0,
-      fetchFn: fetchStub({ [url]: () => htmlResponse(articleHtml('Beta')) }),
+      fetchPage: pageFetcher({ [url]: () => htmlResponse(articleHtml('Beta')) }),
     });
     expect(second.chunkedItemIds).toEqual([url]);
     expect((await getItem(url)).contentState).toBe('chunked');
@@ -286,7 +317,7 @@ describe('bookmark-content-service (in-memory PGlite)', () => {
       const result = await extractPendingBookmarks({
         db: flakyDb,
         delayMs: 0,
-        fetchFn: fetchStub({
+        fetchPage: pageFetcher({
           [bad]: () => {
             sabotage = true;
             return htmlResponse('gone', 404);
@@ -321,7 +352,7 @@ describe('bookmark-content-service (in-memory PGlite)', () => {
     const result = await extractPendingBookmarks({
       db,
       delayMs: 0,
-      fetchFn: fetchStub({
+      fetchPage: pageFetcher({
         [good]: () => htmlResponse(articleHtml('Delta')),
         [dead]: () => htmlResponse('gone', 404),
         [flaky]: () => htmlResponse('oops', 500),
@@ -344,7 +375,7 @@ describe('bookmark-content-service (in-memory PGlite)', () => {
       const result = await extractPendingBookmarks({
         db,
         delayMs: 0,
-        fetchFn: fetchStub({
+        fetchPage: pageFetcher({
           [a]: () => htmlResponse(articleHtml('Epsilon')),
           [b]: () => htmlResponse(articleHtml('Zeta')),
         }),
@@ -382,7 +413,7 @@ describe('bookmark-content-service (in-memory PGlite)', () => {
     await syncBookmarkTreeToDb(db, tree([bm(a), bm(b)]));
 
     const controller = new AbortController();
-    const routes = fetchStub({
+    const routes = pageFetcher({
       [a]: () => htmlResponse(articleHtml('A')),
       [b]: () => htmlResponse(articleHtml('B')),
     });
@@ -390,7 +421,7 @@ describe('bookmark-content-service (in-memory PGlite)', () => {
     const result = await extractPendingBookmarks({
       db,
       delayMs: 0,
-      fetchFn: routes,
+      fetchPage: routes,
       signal: controller.signal,
       onProgress: ({ done }) => {
         if (done >= 1) controller.abort();
@@ -404,9 +435,9 @@ describe('bookmark-content-service (in-memory PGlite)', () => {
   });
 
   it('empty queue is a no-op', async () => {
-    const fetchFn = vi.fn<FetchFn>();
-    const result = await extractPendingBookmarks({ db, delayMs: 0, fetchFn });
+    const fetchPage = vi.fn<BookmarkPageFetcher>();
+    const result = await extractPendingBookmarks({ db, delayMs: 0, fetchPage });
     expect(result).toEqual({ processed: 0, chunkedItemIds: [], noContent: 0, transient: 0 });
-    expect(fetchFn).not.toHaveBeenCalled();
+    expect(fetchPage).not.toHaveBeenCalled();
   });
 });

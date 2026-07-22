@@ -15,6 +15,7 @@ import {
   handleCacheSubtitle,
 } from '@/lib/background/cache-handlers';
 import { handleOpenAppPage } from '@/lib/background/app-handlers';
+import { handleFetchBookmarkPage } from '@/lib/background/bookmark-handlers';
 import { captureXTokens } from '@/lib/x/x-auth';
 
 function createBackgroundContext(): BackgroundContext {
@@ -125,6 +126,8 @@ export default defineBackground(() => {
           return handleCacheSubtitle(msg);
         case 'OPEN_APP_PAGE':
           return handleOpenAppPage(msg);
+        case 'FETCH_BOOKMARK_PAGE':
+          return handleFetchBookmarkPage(msg);
         default:
           return;
       }

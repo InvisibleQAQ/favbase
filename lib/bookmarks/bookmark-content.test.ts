@@ -4,7 +4,6 @@ import {
   decodeHtmlBytes,
   fetchBookmarkPage,
   extractMarkdown,
-  stripResourceHintLinks,
   meetsContentThreshold,
   MIN_CONTENT_CHARS,
   MAX_HTML_BYTES,
@@ -326,21 +325,35 @@ describe('meetsContentThreshold', () => {
 });
 
 describe('extractMarkdown', () => {
-  it('strips preload hints before parsing without removing normal stylesheets or content', () => {
-    const html = `<!doctype html><html><head>
-      <link href="font.woff2" as="font" rel="preload" crossorigin>
-      <LINK REL='modulepreload' HREF='bundle.js'>
-      <link rel="stylesheet" href="app.css">
-      <link data-rel="preload" rel="stylesheet" href="data-attribute.css">
-    </head><body><article>Keep this content.</article></body></html>`;
+  it('extracts preload-bearing third-party HTML without using the ambient DOM parser', () => {
+    const originalDomParser = globalThis.DOMParser;
+    Object.defineProperty(globalThis, 'DOMParser', {
+      configurable: true,
+      writable: true,
+      value: class ForbiddenAmbientDomParser {
+        parseFromString(): never {
+          throw new Error('ambient DOMParser must not parse third-party HTML');
+        }
+      },
+    });
 
-    const sanitized = stripResourceHintLinks(html);
+    try {
+      const html = `<!doctype html><html><head>
+        <link href="https://cdn.example.com/hero.webp" as="image" rel="preload">
+        <link href="https://cdn.example.com/font.woff2" as="font" rel="preload" crossorigin>
+        <link href="https://cdn.example.com/bundle.js" rel="modulepreload">
+      </head><body><article><h1>Inert extraction</h1><p>${'content '.repeat(40)}</p></article></body></html>`;
 
-    expect(sanitized).not.toContain('font.woff2');
-    expect(sanitized).not.toContain('bundle.js');
-    expect(sanitized).toContain('<link rel="stylesheet" href="app.css">');
-    expect(sanitized).toContain('href="data-attribute.css"');
-    expect(sanitized).toContain('<article>Keep this content.</article>');
+      const result = extractMarkdown(html, 'https://example.com/article');
+
+      expect(result?.markdown).toContain('content content');
+    } finally {
+      Object.defineProperty(globalThis, 'DOMParser', {
+        configurable: true,
+        writable: true,
+        value: originalDomParser,
+      });
+    }
   });
 
   it('removes malformed JSON-LD before Defuddle parses schema.org data', () => {

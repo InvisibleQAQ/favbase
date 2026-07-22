@@ -11,8 +11,9 @@
  *
  * Strictly serial with an inter-request delay — bookmark collections cluster
  * by domain, so global-serial IS per-host-serial (the politeness that
- * matters). Runs in the app.html context (DOMParser for Defuddle +
- * host-permission fetch); embedding / tagging / progress events are wired by
+ * matters). Orchestration + inert DOM extraction run in app.html; arbitrary
+ * network fetches run in the background SW so response resource hints cannot
+ * affect the page Document/CSP. Embedding / tagging / progress events are wired by
  * the caller against `chunkedItemIds` / `onProgress` — this module has zero
  * storage / AI / UI imports.
  */
@@ -28,9 +29,11 @@ import {
 import {
   classifyUrl,
   extractMarkdown,
-  fetchBookmarkPage,
-  type FetchFn,
 } from './bookmark-content';
+import { fetchBookmarkPageInBackground } from './bookmark-page-client';
+import type { FetchPageResult } from './bookmark-page-fetch';
+
+export type BookmarkPageFetcher = (url: string) => Promise<FetchPageResult>;
 
 /** Queue page size — one SELECT per batch, small enough to interleave with UI reads. */
 const BATCH_SIZE = 50;
@@ -48,8 +51,8 @@ export interface ExtractionProgress {
 
 export interface ExtractPendingOptions {
   db?: FavbaseDb;
-  /** Test injection — production uses the real fetch. */
-  fetchFn?: FetchFn;
+  /** Test seam returning structured results; production delegates to background. */
+  fetchPage?: BookmarkPageFetcher;
   onProgress?: (p: ExtractionProgress) => void;
   /**
    * Fired right after each item flips to 'chunked' (content persisted) with
@@ -129,7 +132,7 @@ export async function extractPendingBookmarks(
         } else {
           if (fetchedOnce && delayMs > 0) await sleep(delayMs);
           fetchedOnce = true;
-          const page = await fetchBookmarkPage(target.url, opts.fetchFn);
+          const page = await (opts.fetchPage ?? fetchBookmarkPageInBackground)(target.url);
 
           if (page.kind === 'transient') {
             result.transient += 1;

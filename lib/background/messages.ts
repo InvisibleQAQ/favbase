@@ -12,11 +12,17 @@ export interface OpenAppPageRequest {
   hash?: string;
 }
 
+export interface FetchBookmarkPageRequest {
+  type: 'FETCH_BOOKMARK_PAGE';
+  url: string;
+}
+
 export type BgClientMessage =
   | TranscribeRequest
   | TranscribeAbort
   | GetVideoCacheRequest
   | CacheSubtitleRequest
+  | FetchBookmarkPageRequest
   | OpenAppPageRequest;
 
 export type BgInternalMessage = OffscreenProgressMessage;

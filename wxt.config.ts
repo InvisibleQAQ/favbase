@@ -54,11 +54,13 @@ const zhihuHostPermissions = ['https://www.zhihu.com/*', 'https://api.zhihu.com/
 const youtubeHostPermissions = ['https://www.googleapis.com/*'];
 
 // Bookmark content extraction fetches arbitrary bookmarked sites from the
-// app.html context (defuddle → markdown pipeline, lib/bookmarks/). Static
+// background SW; app.html receives decoded HTML and parses it with an inert DOM.
+// Keeping fetch outside a Document prevents third-party HTTP Link resource hints
+// from being applied to app.html. Static
 // <all_urls> is a deliberate ADR: install-time warning + longer CWS review
 // accepted (SingleFile precedent) in exchange for zero runtime-grant UX.
 // NOTE: host-permission fetches attach the user's cookies by default — the
-// extraction fetch MUST use credentials:'omit' (see bookmark-content.ts).
+// extraction fetch MUST use credentials:'omit' (see bookmark-page-fetch.ts).
 const bookmarkContentHostPermissions = ['<all_urls>'];
 
 export default defineConfig({
