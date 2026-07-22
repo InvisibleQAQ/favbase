@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   classifyUrl,
   decodeHtmlBytes,
@@ -325,6 +325,31 @@ describe('meetsContentThreshold', () => {
 });
 
 describe('extractMarkdown', () => {
+  it('keeps inert computed-style lookups isolated from the host Window', () => {
+    const originalGetComputedStyle = globalThis.getComputedStyle;
+    const hostGetComputedStyle = vi.fn(function (this: unknown): CSSStyleDeclaration {
+      if (this !== globalThis) throw new TypeError('Illegal invocation');
+      return document.documentElement.style;
+    });
+    Object.defineProperty(globalThis, 'getComputedStyle', {
+      configurable: true,
+      writable: true,
+      value: hostGetComputedStyle,
+    });
+
+    try {
+      expect(extractMarkdown(articleHtml(), 'https://example.com/post/1')).not.toBeNull();
+      expect(hostGetComputedStyle).not.toHaveBeenCalled();
+      expect(globalThis.getComputedStyle).toBe(hostGetComputedStyle);
+    } finally {
+      Object.defineProperty(globalThis, 'getComputedStyle', {
+        configurable: true,
+        writable: true,
+        value: originalGetComputedStyle,
+      });
+    }
+  });
+
   it('extracts preload-bearing third-party HTML without using the ambient DOM parser', () => {
     const originalDomParser = globalThis.DOMParser;
     Object.defineProperty(globalThis, 'DOMParser', {

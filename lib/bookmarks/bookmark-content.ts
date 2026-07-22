@@ -11,9 +11,9 @@
  * - Defuddle full bundle (`markdown:true`) on an inert linkedom document,
  *   ALWAYS passing `url` so relative links resolve; sync `parse()` only —
  *   `parseAsync`'s site extractors may fetch third-party APIs;
- * - `parse()` never throws and falls back to the whole cleaned <body> on
- *   non-article pages — a char threshold decides "no content" (SPA shells,
- *   challenge pages, landing pages).
+ * - Defuddle falls back to the whole cleaned <body> on non-article pages — a
+ *   char threshold decides "no content" (SPA shells, challenge pages, landing
+ *   pages).
  */
 
 import Defuddle from 'defuddle/full';
@@ -37,8 +37,8 @@ export const MIN_CONTENT_CHARS = 200;
 // ---------------------------------------------------------------------------
 
 /**
- * Threshold guard — Defuddle's `parse()` never fails, so "extraction found
- * nothing" is the CALLER's judgement. Exported pure for unit tests.
+ * Threshold guard — "extraction found nothing" is the caller's judgement.
+ * Exported pure for unit tests.
  */
 export function meetsContentThreshold(markdown: string): boolean {
   return markdown.trim().length >= MIN_CONTENT_CHARS;
@@ -64,7 +64,11 @@ export function extractMarkdown(html: string, url: string): { markdown: string }
   // Third-party HTML must never enter the extension page's DOM implementation.
   // linkedom is inert: it has no browser resource loader, so preload/script/media
   // elements cannot affect app.html regardless of their spelling or nesting.
-  const { document: doc } = parseHTML(html);
+  const { document: doc } = parseHTML(html, {
+    // Never let linkedom's defaultView proxy fall through to the branded host
+    // Window method. An inert document has no layout or computed styles.
+    getComputedStyle: () => ({}),
+  });
   removeMalformedSchemaOrgScripts(doc);
   // Sync parse() only — parseAsync's extractors may call third-party APIs.
   const result = new Defuddle(doc, { url, markdown: true }).parse();
