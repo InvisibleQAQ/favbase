@@ -183,14 +183,14 @@ export function XView() {
         <TaggedTweetCard item={item} onEditTags={openEditor} />
       )}
       skeleton={<TweetGridSkeleton />}
-      chips={
+      primaryCategory={x.libraryCount > 0 ? (
         <AuthorChips
           authors={x.authors}
           totalCount={x.libraryCount}
           selected={x.author}
           onSelect={x.setAuthor}
         />
-      }
+      ) : null}
       emptyState={<EmptyLibraryState syncing={x.syncing} onSync={x.sync} />}
       authFailedState={<NotLoggedInState syncing={x.syncing} onSync={x.sync} />}
       progressBar={

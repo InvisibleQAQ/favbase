@@ -187,14 +187,14 @@ export function YoutubeView() {
         <TaggedYoutubeCard item={item} onEditTags={openEditor} />
       )}
       skeleton={<YoutubeGridSkeleton />}
-      chips={
+      primaryCategory={yt.libraryCount > 0 ? (
         <PlaylistChips
           playlists={yt.playlists}
           totalCount={yt.libraryCount}
           selected={yt.playlistId}
           onSelect={yt.setPlaylistId}
         />
-      }
+      ) : null}
       emptyState={<EmptyLibraryState syncing={yt.syncing} onSync={yt.sync} />}
       authFailedState={
         <AuthFailedState

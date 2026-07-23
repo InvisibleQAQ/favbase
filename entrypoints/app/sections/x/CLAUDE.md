@@ -14,6 +14,7 @@ X (Twitter) 书签收藏页（`/collections/x`，扁平单集合无详情路由�
 
 ## 约定
 
+- 页面顺序由共享 scaffold 固定为标题/系统状态 → 搜索 → 作者主分类 → 标签 → 列表；本目录只提供 adapter。
 - 排序固定 publishedAt 降序（MVP 无排序控件）；platformMeta 形状见 `lib/x/CLAUDE.md`
 - 三种空态：未登录（NotLoggedInState）/ 库空（EmptyLibraryState）——两者均为「打开 X 书签页」主按钮（deep-link `x.com/i/bookmarks`，引导登录让扩展捕获会话）+ 「立即同步」次按钮 / 同步失败（ErrorState+retry）；虚线框为共享 `StateBox`
 - 冷却（X 专属，其他平台无）：成功同步后 5 分钟硬禁用同步按钮 + mm:ss 倒计时 label，判定源 = DB `sources.lastFetchedAt`（跨刷新持久）+ 本会话 seed（即时锁）。逻辑封在 `use-x-bookmarks.ts` + `cooldown.ts`，经 scaffold `syncDisabled`/`syncDisabledLabel` 可选 props 下传到 `SectionTitleBar`——**不改共享 `useCollectionLibrary`**，其他平台不传 = 现状不变

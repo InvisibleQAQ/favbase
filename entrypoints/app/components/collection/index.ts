@@ -22,4 +22,5 @@ export {
   CollectionPageScaffold,
   type CollectionPageScaffoldProps,
   type CollectionPageCopy,
+  type CollectionSectionScope,
 } from './collection-page-scaffold';

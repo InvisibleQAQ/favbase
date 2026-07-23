@@ -13,6 +13,7 @@ GitHub Stars 收藏页（`/collections/github`），视觉结构对齐 B站收�
 
 ## 约定
 
+- 页面顺序由共享 scaffold 固定为标题/系统状态 → 搜索 → 语言主分类 → 标签 → 列表；本目录只提供 adapter。
 - 排序固定 starred_at 降序（MVP 无排序控件）；platformMeta 形状见 `lib/github/CLAUDE.md`
 - 三种空态：无 token（引导设置）/ 库空（引导同步）/ 同步失败（ErrorState+retry）；虚线框为共享 `StateBox`（`components/collection/`，`varAlpha(grey['500Channel'], 0.24)` 暗色安全边框，全平台统一）
 - 路由/导航：`main.tsx` 路由 `collections/github` + `nav-config.tsx` Collections children 叶子（`nav.githubStars`）；兄弟叶子 active 互斥判定见 `layouts/nav-active.ts`（最长前缀匹配）

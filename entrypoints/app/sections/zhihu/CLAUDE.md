@@ -13,6 +13,7 @@
 
 ## 约定
 
+- 页面顺序由共享 scaffold 固定为标题/系统状态 → 搜索 → 收藏夹主分类 → 标签 → 列表；本目录只提供 adapter。
 - 排序固定 publishedAt 降序（= 内容 updated/created 时间，web v4 items 无收藏时间）；platformMeta 形状见 `lib/zhihu/CLAUDE.md`
 - 三种空态：未登录（打开知乎主按钮）/ 库空（立即同步主按钮）/ 同步失败（ErrorState+retry）；虚线框为共享 `StateBox`
 - 路由/导航：`main.tsx` 路由 `collections/zhihu` + `nav-config.tsx` Collections children 叶子（`nav.zhihuFavorites`）；active 判定走 `layouts/nav-active.ts` 最长前缀匹配

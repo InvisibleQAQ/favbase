@@ -263,6 +263,7 @@ const zhCN = {
   'collections.syncFailed': '同步失败: {{error}}',
   'collections.selectFolder': '请选择一个收藏夹',
   'collections.sidebarTitle': 'BiliBili 收藏夹',
+  'collections.foldersTitle': '收藏夹',
   'collections.noFolders': '暂无收藏夹',
   'collections.showMoreFolders': '展开 (+{{n}})',
   'collections.showLessFolders': '收起',

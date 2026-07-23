@@ -1,54 +1,28 @@
 import { useEffect, useRef, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 
-import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import Skeleton from '@mui/material/Skeleton';
+import Typography from '@mui/material/Typography';
 
-import { useTranslation } from '@/lib/i18n/use-translation';
+import { createBiliAutoTranscribeAdapter } from '@/lib/bilibili/auto-transcribe-adapter';
 import type { BiliFavOrder } from '@/lib/bilibili/types';
+import { useTranslation } from '@/lib/i18n/use-translation';
+import { CollectionPageScaffold, StateBox } from '../../components/collection';
 import { Iconify } from '../../components/iconify';
-import { DashboardContent } from '../../layouts/dashboard';
-import {
-  StateBox,
-  SectionTitleBar,
-  SearchField,
-  CardGrid,
-  CardGridItem,
-  CardGridPagination,
-} from '../../components/collection';
-import {
-  useItemTags,
-  useUsedTags,
-  useTagFilter,
-  TagFilterChips,
-  TaggedItemGrid,
-  TagEditPopover,
-  useTagEditState,
-} from '../../components/tags';
+import { AutoTranscribeBar } from './auto-transcribe-bar';
+import { FolderChips } from './folder-chips';
+import { TaggedVideoCard } from './tagged-video-card';
+import { useAutoTranscribe } from './use-auto-transcribe';
 import { useBiliFavFolders } from './use-bili-fav-folders';
 import { useBiliFavVideos } from './use-bili-fav-videos';
 import { useVideoTranscribe } from './use-video-transcribe';
-import { useAutoTranscribe } from './use-auto-transcribe';
-import { createBiliAutoTranscribeAdapter } from '@/lib/bilibili/auto-transcribe-adapter';
-import { VideoCard, INVALID_ATTR } from './video-card';
-import { TaggedVideoCard } from './tagged-video-card';
+import { INVALID_ATTR, VideoCard } from './video-card';
 import { VideoGridSkeleton } from './video-grid-skeleton';
-import { FolderChips } from './folder-chips';
-import { AutoTranscribeBar } from './auto-transcribe-bar';
 
-/** Platform key for all tag operations in this (bilibili-only) section. */
 const PLATFORM = 'bilibili';
-
-/** Search debounce — mirrors the github-stars search field (300ms). */
 const SEARCH_DEBOUNCE_MS = 300;
-
 const biliAdapter = createBiliAutoTranscribeAdapter();
-
-// ---------------------------------------------------------------------------
-// Shared state views (not-logged-in / error / empty / skeleton)
-// ---------------------------------------------------------------------------
 
 function NotLoggedIn({ onRetry }: { onRetry: () => void }) {
   const { t } = useTranslation();
@@ -72,28 +46,6 @@ function NotLoggedIn({ onRetry }: { onRetry: () => void }) {
   );
 }
 
-function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
-  const { t } = useTranslation();
-  return (
-    <StateBox
-      icon={
-        <Iconify
-          icon="solar:danger-triangle-bold-duotone"
-          width={64}
-          sx={{ color: 'error.main', mb: 1 }}
-        />
-      }
-      title={t('common.loadFailed')}
-      description={message}
-      action={
-        <Button variant="outlined" onClick={onRetry} sx={{ mt: 1 }}>
-          {t('common.retry')}
-        </Button>
-      }
-    />
-  );
-}
-
 function EmptyFolderState() {
   const { t } = useTranslation();
   return (
@@ -108,21 +60,16 @@ function EmptyFolderState() {
   );
 }
 
-/** Search returned no videos in this folder (distinct from an empty folder). */
-function NoMatchesState() {
+function SelectFolderState() {
   const { t } = useTranslation();
   return (
-    <StateBox>
+    <StateBox minHeight={240}>
       <Typography variant="body1" sx={{ color: 'text.disabled' }}>
-        {t('collections.noMatches')}
+        {t('collections.selectFolder')}
       </Typography>
     </StateBox>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Sort control — server-side order (mtime/view/pubtime), all descending
-// ---------------------------------------------------------------------------
 
 const SORT_OPTIONS = [
   { value: 'mtime', labelKey: 'collections.sortFavTime', icon: 'solar:clock-circle-bold' },
@@ -130,19 +77,25 @@ const SORT_OPTIONS = [
   { value: 'pubtime', labelKey: 'collections.sortPubTime', icon: 'solar:calendar-bold' },
 ] as const;
 
-function SortControl({ order, onChange }: { order: BiliFavOrder; onChange: (o: BiliFavOrder) => void }) {
+function SortControl({
+  order,
+  onChange,
+}: {
+  order: BiliFavOrder;
+  onChange: (order: BiliFavOrder) => void;
+}) {
   const { t } = useTranslation();
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 2, flexWrap: 'wrap' }}>
-      {SORT_OPTIONS.map((opt) => {
-        const active = order === opt.value;
+      {SORT_OPTIONS.map((option) => {
+        const active = order === option.value;
         return (
           <Button
-            key={opt.value}
+            key={option.value}
             size="small"
             variant="text"
-            startIcon={<Iconify icon={opt.icon} width={18} />}
-            onClick={() => onChange(opt.value)}
+            startIcon={<Iconify icon={option.icon} width={18} />}
+            onClick={() => onChange(option.value)}
             sx={{
               minWidth: 0,
               px: 1,
@@ -156,7 +109,7 @@ function SortControl({ order, onChange }: { order: BiliFavOrder; onChange: (o: B
               },
             }}
           >
-            {t(opt.labelKey)}
+            {t(option.labelKey)}
           </Button>
         );
       })}
@@ -164,145 +117,242 @@ function SortControl({ order, onChange }: { order: BiliFavOrder; onChange: (o: B
   );
 }
 
-// ---------------------------------------------------------------------------
-// Video grid panel (only rendered when a valid folder is selected)
-// ---------------------------------------------------------------------------
-
-function VideoGridPanel({ mediaId, keyword, totalCount, syncing, onSync, lastSyncedAt, autoTranscribe, onTagsChanged }: {
+interface BilibiliCollectionPageProps {
   mediaId: number;
   keyword: string;
+  searchInput: string;
+  onSearchInput: (value: string) => void;
+  folders: ReturnType<typeof useBiliFavFolders>['folders'];
+  selectedId: number;
+  onSelectFolder: (folderId: number) => void;
   totalCount: number;
   syncing: boolean;
   onSync: () => void;
   lastSyncedAt: Date | null;
+  syncError: string | null;
   autoTranscribe: ReturnType<typeof useAutoTranscribe>;
-  onTagsChanged?: () => void;
-}) {
-  const { t } = useTranslation();
-  const { videos, folderTitle, page, totalPages, loading, loginState, error, order, setOrder, goToPage, retry } =
-    useBiliFavVideos(mediaId, keyword);
+}
 
+function BilibiliCollectionPage({
+  mediaId,
+  keyword,
+  searchInput,
+  onSearchInput,
+  folders,
+  selectedId,
+  onSelectFolder,
+  totalCount,
+  syncing,
+  onSync,
+  lastSyncedAt,
+  syncError,
+  autoTranscribe,
+}: BilibiliCollectionPageProps) {
+  const { t } = useTranslation();
+  const {
+    videos,
+    folderTitle,
+    page,
+    totalPages,
+    loading,
+    loginState,
+    error,
+    order,
+    setOrder,
+    goToPage,
+    retry,
+  } = useBiliFavVideos(mediaId, keyword);
   const { getState, startTranscribe, cancelTranscribe, activeBvid } =
     useVideoTranscribe(videos);
 
-  const { tagsById: tagsByBvid, refresh: refreshItemTags } = useItemTags(
-    PLATFORM,
-    videos.map((v) => v.bvid),
-  );
-  const { editing, open: openTagEditor, close: closeTagEditor } = useTagEditState();
-
-  const handleTagsChanged = () => {
-    refreshItemTags();
-    onTagsChanged?.();
-  };
-
   const captionParts: string[] = [];
+  if (!loading && folderTitle) captionParts.push(folderTitle);
   if (totalCount > 0) {
     captionParts.push(t('collections.videoCount', { count: totalCount }));
   }
   if (lastSyncedAt) {
-    captionParts.push(t('collections.lastSynced', { time: lastSyncedAt.toLocaleTimeString() }));
+    captionParts.push(
+      t('collections.lastSynced', { time: lastSyncedAt.toLocaleTimeString() }),
+    );
   }
 
   return (
-    <Box sx={{ minWidth: 0 }}>
-      <SectionTitleBar
-        title={loading ? <Skeleton width={200} /> : folderTitle}
-        caption={!loading && captionParts.length > 0 ? captionParts.join(' · ') : undefined}
-        syncing={syncing}
-        onSync={onSync}
-        syncLabel={t('collections.sync')}
-        syncingLabel={t('collections.syncing')}
-      />
-
-      {/* Auto-transcribe bar — full width below title */}
-      <Box sx={{ mb: 2.5 }}>
-        <AutoTranscribeBar
-          state={autoTranscribe.state}
-          running={autoTranscribe.running}
-          onStart={autoTranscribe.start}
-          onStop={autoTranscribe.stop}
-        />
-      </Box>
-
-      {/* Sort control — between transcribe bar and video grid */}
-      {loginState !== 'not_logged_in' && !error && (
-        <SortControl order={order} onChange={setOrder} />
-      )}
-
-      {/* Video content */}
-      {loading ? (
-        <VideoGridSkeleton />
-      ) : loginState === 'not_logged_in' ? (
-        <NotLoggedIn onRetry={retry} />
-      ) : error ? (
-        <ErrorState message={error} onRetry={retry} />
-      ) : videos.length === 0 ? (
-        keyword.trim() ? <NoMatchesState /> : <EmptyFolderState />
-      ) : (
-        <>
-          <CardGrid>
-            {videos.map((video) => {
-              const isInvalid = video.attr === INVALID_ATTR;
-              return (
-                <CardGridItem key={video.id}>
-                  <VideoCard
-                    video={video}
-                    transcribeState={getState(video.bvid)}
-                    onTranscribe={() => startTranscribe(video)}
-                    onCancel={cancelTranscribe}
-                    disabled={Boolean(activeBvid && activeBvid !== video.bvid)}
-                    tags={isInvalid ? undefined : (tagsByBvid[video.bvid] ?? [])}
-                    onEditTags={
-                      isInvalid ? undefined : (anchor) => openTagEditor(video.bvid, anchor)
-                    }
-                  />
-                </CardGridItem>
-              );
-            })}
-          </CardGrid>
-
-          <TagEditPopover
-            platform={PLATFORM}
-            anchorEl={editing?.anchorEl ?? null}
-            platformItemId={editing?.platformItemId ?? null}
-            tags={editing ? (tagsByBvid[editing.platformItemId] ?? []) : []}
-            onClose={closeTagEditor}
-            onChanged={handleTagsChanged}
+    <CollectionPageScaffold
+      platform={PLATFORM}
+      items={videos}
+      getRowKey={(video) => video.id}
+      getTagId={(video) => video.bvid}
+      libraryCount={totalCount}
+      loading={loading}
+      metaLoading={false}
+      syncing={syncing}
+      queryError={error}
+      hasSyncError={syncError != null}
+      authFailed={loginState === 'not_logged_in'}
+      page={page}
+      totalPages={totalPages}
+      onPageChange={goToPage}
+      onSync={onSync}
+      onRetryQuery={retry}
+      searchInput={searchInput}
+      onSearchInput={onSearchInput}
+      copy={{
+        title: t('collections.sidebarTitle'),
+        caption: captionParts.length > 0 ? captionParts.join(' · ') : undefined,
+        searchPlaceholder: t('collections.searchPlaceholder'),
+        noMatches: t('collections.noMatches'),
+        syncLabel: t('collections.sync'),
+        syncingLabel: t('collections.syncing'),
+        loadFailed: t('common.loadFailed'),
+        retry: t('common.retry'),
+        syncErrorText: syncError ?? '',
+        syncFailedBanner: t('collections.syncFailed', { error: syncError ?? '' }),
+      }}
+      renderCard={(video, tags, onEditTags) => {
+        const invalid = video.attr === INVALID_ATTR;
+        return (
+          <VideoCard
+            video={video}
+            transcribeState={getState(video.bvid)}
+            onTranscribe={() => startTranscribe(video)}
+            onCancel={cancelTranscribe}
+            disabled={Boolean(activeBvid && activeBvid !== video.bvid)}
+            tags={invalid ? undefined : tags}
+            onEditTags={invalid ? undefined : onEditTags}
           />
-
-          <CardGridPagination page={page} totalPages={totalPages} onChange={goToPage} />
-        </>
+        );
+      }}
+      renderTaggedCard={(item, openEditor) => (
+        <TaggedVideoCard item={item} onEditTags={openEditor} />
       )}
-    </Box>
+      skeleton={<VideoGridSkeleton />}
+      operation={
+        <Box sx={{ mb: 2.5 }}>
+          <AutoTranscribeBar
+            state={autoTranscribe.state}
+            running={autoTranscribe.running}
+            onStart={autoTranscribe.start}
+            onStop={autoTranscribe.stop}
+          />
+        </Box>
+      }
+      operationScope="primary-category"
+      primaryCategory={
+        <FolderChips
+          folders={folders}
+          selectedId={selectedId}
+          loading={false}
+          onSelect={onSelectFolder}
+        />
+      }
+      secondaryCategory={
+        loginState !== 'not_logged_in' && !error ? (
+          <SortControl order={order} onChange={setOrder} />
+        ) : null
+      }
+      secondaryCategoryScope="primary-category"
+      emptyState={<EmptyFolderState />}
+      authFailedState={<NotLoggedIn onRetry={retry} />}
+    />
   );
 }
 
-// ---------------------------------------------------------------------------
-// Main view: search box + folder chips + video grid (flat vertical stack)
-// ---------------------------------------------------------------------------
+interface BilibiliFallbackPageProps {
+  folders: ReturnType<typeof useBiliFavFolders>['folders'];
+  foldersLoading: boolean;
+  selectedId: number | undefined;
+  loginState: ReturnType<typeof useBiliFavFolders>['loginState'];
+  syncing: boolean;
+  error: string | null;
+  onSync: () => void;
+  searchInput: string;
+  onSearchInput: (value: string) => void;
+  onSelectFolder: (folderId: number) => void;
+}
+
+function BilibiliFallbackPage({
+  folders,
+  foldersLoading,
+  selectedId,
+  loginState,
+  syncing,
+  error,
+  onSync,
+  searchInput,
+  onSearchInput,
+  onSelectFolder,
+}: BilibiliFallbackPageProps) {
+  const { t } = useTranslation();
+  return (
+    <CollectionPageScaffold
+      platform={PLATFORM}
+      items={[]}
+      getRowKey={() => ''}
+      getTagId={() => ''}
+      libraryCount={0}
+      loading={false}
+      metaLoading={foldersLoading}
+      syncing={syncing}
+      queryError={null}
+      hasSyncError={error != null}
+      authFailed={loginState === 'not_logged_in'}
+      page={1}
+      totalPages={1}
+      onPageChange={() => undefined}
+      onSync={onSync}
+      onRetryQuery={onSync}
+      searchInput={searchInput}
+      onSearchInput={onSearchInput}
+      copy={{
+        title: t('collections.sidebarTitle'),
+        searchPlaceholder: t('collections.searchPlaceholder'),
+        noMatches: t('collections.noMatches'),
+        syncLabel: t('collections.sync'),
+        syncingLabel: t('collections.syncing'),
+        loadFailed: t('common.loadFailed'),
+        retry: t('common.retry'),
+        syncErrorText: error ?? '',
+        syncFailedBanner: t('collections.syncFailed', { error: error ?? '' }),
+      }}
+      renderCard={() => null}
+      renderTaggedCard={(item, openEditor) => (
+        <TaggedVideoCard item={item} onEditTags={openEditor} />
+      )}
+      skeleton={<VideoGridSkeleton />}
+      primaryCategory={
+        <FolderChips
+          folders={folders}
+          selectedId={selectedId}
+          loading={foldersLoading}
+          onSelect={onSelectFolder}
+        />
+      }
+      emptyState={<SelectFolderState />}
+      authFailedState={<NotLoggedIn onRetry={onSync} />}
+    />
+  );
+}
 
 export function BilibiliView() {
-  const { t } = useTranslation();
   const { mediaId } = useParams<{ mediaId: string }>();
   const navigate = useNavigate();
-
-  const { folders, loading: foldersLoading, syncing, loginState, lastSyncedAt, error, sync } =
-    useBiliFavFolders();
+  const {
+    folders,
+    loading: foldersLoading,
+    syncing,
+    loginState,
+    lastSyncedAt,
+    error,
+    sync,
+  } = useBiliFavFolders();
 
   const selectedId = mediaId ? Number(mediaId) : folders[0]?.id;
+  const selectedFolder = folders.find((folder) => folder.id === selectedId);
   const autoTranscribe = useAutoTranscribe(selectedId, biliAdapter);
-  const selectedFolder = folders.find((f) => f.id === selectedId);
-
-  const { usedTags, refresh: refreshUsedTags } = useUsedTags(PLATFORM);
-  const { selectedTagIds, toggleTag, clearTags } = useTagFilter(usedTags);
-
-  // Search — debounced server-side keyword search over the current folder's
-  // video titles. Input state lives here (the SearchField renders above the
-  // folder chips); the debounced keyword flows down into VideoGridPanel.
   const [searchInput, setSearchInput] = useState('');
   const [keyword, setKeyword] = useState('');
   const keywordRef = useRef('');
+
   useEffect(() => {
     const id = setTimeout(() => {
       const next = searchInput.trim();
@@ -320,85 +370,45 @@ export function BilibiliView() {
   }, [mediaId, foldersLoading, folders, navigate]);
 
   const handleSelectFolder = (folderId: number) => {
-    // Search is folder-scoped — clear input + debounced keyword synchronously so
-    // the remounting panel loads the new folder's full list, not the stale query.
     setSearchInput('');
     setKeyword('');
     keywordRef.current = '';
     navigate(`/collections/bilibili/${folderId}`);
   };
 
-  if (!foldersLoading && loginState === 'not_logged_in') {
+  if (!selectedId) {
     return (
-      <DashboardContent maxWidth="xl">
-        <NotLoggedIn onRetry={sync} />
-      </DashboardContent>
+      <BilibiliFallbackPage
+        folders={folders}
+        foldersLoading={foldersLoading}
+        selectedId={selectedId}
+        loginState={loginState}
+        syncing={syncing}
+        error={error}
+        onSync={sync}
+        searchInput={searchInput}
+        onSearchInput={setSearchInput}
+        onSelectFolder={handleSelectFolder}
+      />
     );
   }
 
   return (
-    <DashboardContent maxWidth="xl">
-      {error && (
-        <Typography variant="body2" sx={{ color: 'error.main', mb: 2 }}>
-          {t('collections.syncFailed', { error })}
-        </Typography>
-      )}
-
-      {/* Search box — debounced server-side keyword search (current folder) */}
-      <SearchField
-        value={searchInput}
-        onChange={setSearchInput}
-        placeholder={t('collections.searchPlaceholder')}
-      />
-
-      {/* Folder chips — horizontal filter */}
-      <FolderChips
-        folders={folders}
-        selectedId={selectedId}
-        loading={foldersLoading}
-        onSelect={handleSelectFolder}
-      />
-
-      {/* Tag filter chips — cross-folder, multi-select AND; hidden when no used tags */}
-      <TagFilterChips
-        tags={usedTags}
-        selectedIds={selectedTagIds}
-        onToggle={toggleTag}
-        onClear={clearTags}
-      />
-
-      {/* Content: tag-filtered cross-folder grid takes over while filters are active */}
-      {selectedTagIds.length > 0 ? (
-        <TaggedItemGrid
-          platform={PLATFORM}
-          tagIds={selectedTagIds}
-          renderCard={(item, openTagEditor) => (
-            <TaggedVideoCard item={item} onEditTags={openTagEditor} />
-          )}
-          skeleton={<VideoGridSkeleton />}
-          onTagsChanged={refreshUsedTags}
-        />
-      ) : selectedId ? (
-        <VideoGridPanel
-          key={selectedId}
-          mediaId={selectedId}
-          keyword={keyword}
-          totalCount={selectedFolder?.media_count ?? 0}
-          syncing={syncing}
-          onSync={sync}
-          lastSyncedAt={lastSyncedAt}
-          autoTranscribe={autoTranscribe}
-          onTagsChanged={refreshUsedTags}
-        />
-      ) : foldersLoading ? (
-        <VideoGridSkeleton />
-      ) : (
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 240 }}>
-          <Typography variant="body1" sx={{ color: 'text.disabled' }}>
-            {t('collections.selectFolder')}
-          </Typography>
-        </Box>
-      )}
-    </DashboardContent>
+    <BilibiliCollectionPage
+      key={selectedId}
+      mediaId={selectedId}
+      keyword={keyword}
+      searchInput={searchInput}
+      onSearchInput={setSearchInput}
+      folders={folders}
+      selectedId={selectedId}
+      onSelectFolder={handleSelectFolder}
+      totalCount={selectedFolder?.media_count ?? 0}
+      syncing={syncing}
+      onSync={sync}
+      lastSyncedAt={lastSyncedAt}
+      syncError={error}
+      autoTranscribe={autoTranscribe}
+    />
   );
 }

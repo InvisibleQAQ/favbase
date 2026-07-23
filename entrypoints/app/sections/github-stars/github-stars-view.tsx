@@ -186,14 +186,14 @@ export function GithubStarsView() {
         <TaggedRepoCard item={item} onEditTags={openEditor} />
       )}
       skeleton={<RepoGridSkeleton />}
-      chips={
+      primaryCategory={gh.libraryCount > 0 ? (
         <LanguageChips
           languages={gh.languages}
           totalCount={gh.libraryCount}
           selected={gh.language}
           onSelect={gh.setLanguage}
         />
-      }
+      ) : null}
       emptyState={<EmptyLibraryState syncing={gh.syncing} onSync={gh.sync} />}
       progressBar={<SyncProgressBar value={progressValue} caption={progressCaption} />}
       backgroundJobsBar={<BackgroundJobsBar captions={jobCaptions} />}

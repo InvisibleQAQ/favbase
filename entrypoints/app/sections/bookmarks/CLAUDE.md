@@ -1,10 +1,11 @@
 # sections/bookmarks
 
-浏览器书签收藏页（显示名固定为 `Browser Bookmarks` / `浏览器书签`，路由为 `/collections/bookmarks` + `/collections/bookmarks/:folderId`）。视觉结构对齐 GitHub Stars 收藏页（`sections/github-stars/`）扁平堆叠：标题栏（标题+计数+lastSynced，**无同步按钮**）→ 手动正文提取控件 → 搜索框 → 文件夹 chips（「全部」+ 各文件夹）→ 标签筛选 chips → 卡片 grid（xs12/sm6/md4/lg3）+ Pagination。**数据一律从 PGlite 经 `lib/bookmarks/bookmarks-sync-service` 查询方法读取（UI 零 drizzle 导入）**；同步（`syncBookmarks`）**挂载时自动触发一次**（本地读取瞬时 + insert-only），正文提取不会随打开页面自动启动。
+浏览器书签收藏页（显示名固定为 `Browser Bookmarks` / `浏览器书签`，路由为 `/collections/bookmarks` + `/collections/bookmarks/:folderId`）。消费共享 `CollectionPageScaffold`，固定顺序：标题/系统状态（无同步按钮）→ 搜索 → 手动正文提取 → 文件夹主分类 → 标签 → 卡片列表。同步挂载时自动触发一次；正文提取仍只能由用户显式启动。
 
 ## 模块结构
 
-- `bookmarks-view.tsx` — 主视图：展示脚手架全部消费 `components/collection/` 哑组件（StateBox/SectionTitleBar/SearchField/CardGrid/*），本文件保留编排 + 平台文案。标题栏下方的正文提取控件常驻：idle 显示真实 pending 数量与手动按钮；running 显示当前网页 identity/进度与“暂停”；pausing 禁用按钮并明确当前条目完成后暂停；paused 保留最近进度并显示“继续”。名称回退逻辑与 favicon URL 统一放在 `bookmark-display.ts`。
+- `bookmarks-view.tsx` — scaffold adapter：配置数据、文案、卡片、文件夹主分类和 page-scope operation；`showSyncButton=false` 仅隐藏标题动作，错误重试仍复用 `bm.sync`。
+- `bookmark-extraction-panel.tsx` — 正文提取 operation adapter：idle/running/pausing/paused UI 与 favicon/进度展示，高内聚在平台目录；只调用 hook 暴露的显式 start/pause/resume。
 - `use-bookmark-extraction.ts` — 正文提取经共享 `backgroundJobs` store 跑成单个 `bookmarks:sync` job；只由 hook 暴露的 `start()/resume()` 手动触发，store guard 负责跨挂载去重。完整 `ExtractionProgress` 必须透传（不可解构丢 `current`）。模块级控制器在 `bookmark-extraction-control.ts`：`pause()` abort 只在条目边界生效；`done < total` 才进入 paused，最后一条完成不误判；状态跨 Hash Router 路由保留但不持久化到 app.html 重开。逐条 tag/embed 与 pending 续传语义不变。
 - `use-bookmarks.ts` — 数据 hook。挂载时 `sync()` 自动跑一次，负责本地书签树同步、分页查询与元信息刷新；同步成功后不再链式启动正文提取。搜索 300ms 防抖，folderId/search/page 驱动查询，undefined folderId = 「全部」。
 - `folder-chips.tsx` — 文件夹 chip 行：共享 `ChipRowShell`（folder icon + `bookmarks.foldersTitle`）+ `FilterChip`——「全部({{count}})」chip（选中态 = 无 folderId）+ 各文件夹（`maxWidth 200`，**无 per-chip 计数**，bilibili 风纯名称）。点击 = `onSelect(folderId|undefined)` 驱动 navigate

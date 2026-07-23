@@ -13,6 +13,7 @@ YouTube 公开播放列表收藏页（`/collections/youtube`，扁平单集合�
 
 ## 约定
 
+- 页面顺序由共享 scaffold 固定为标题/系统状态 → 搜索 → 播放列表主分类 → 标签 → 列表；本目录只提供 adapter。
 - 排序固定 addedAt 降序（`platformMeta->>'addedAt'` ISO 字典序，服务层固定，MVP 无排序控件）；chips 筛选走 item_sources（跨列表视频在每个所属列表 chip 下都可见）；platformMeta 形状见 `lib/youtube/CLAUDE.md`
 - 四种空/异常态：未配置（NotConnectedState 整页短路，引导设置）/ 密钥无效（AuthFailedState，content phase）/ 库空（EmptyLibraryState 引导同步）/ 同步失败（ErrorState+retry）；虚线框为共享 `StateBox`
 - 路由/导航：`main.tsx` 路由 `collections/youtube`（**无 `:id` 详情路由**——扁平单集合）+ `nav-config.tsx` Collections children 叶子（`nav.youtubePlaylists`）；兄弟叶 active 互斥判定见 `layouts/nav-active.ts`（最长前缀匹配）

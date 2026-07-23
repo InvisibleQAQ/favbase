@@ -25,7 +25,7 @@ export function FolderChips({ folders, selectedId, loading, onSelect }: FolderCh
 
   if (loading) {
     return (
-      <ChipRowShell icon={icon} title={t('collections.sidebarTitle')}>
+      <ChipRowShell icon={icon} title={t('collections.foldersTitle')}>
         {Array.from({ length: 4 }).map((_, i) => (
           <Skeleton key={i} variant="rounded" width={96} height={32} />
         ))}
@@ -35,7 +35,7 @@ export function FolderChips({ folders, selectedId, loading, onSelect }: FolderCh
 
   if (folders.length === 0) {
     return (
-      <ChipRowShell icon={icon} title={t('collections.sidebarTitle')}>
+      <ChipRowShell icon={icon} title={t('collections.foldersTitle')}>
         <Typography variant="caption" sx={{ color: 'text.disabled' }}>
           {t('collections.noFolders')}
         </Typography>
@@ -46,7 +46,7 @@ export function FolderChips({ folders, selectedId, loading, onSelect }: FolderCh
   return (
     <CollapsibleChipRow
       icon={icon}
-      title={t('collections.sidebarTitle')}
+      title={t('collections.foldersTitle')}
       items={folders}
       getKey={(folder) => String(folder.id)}
       getLabel={(folder) => folder.title}

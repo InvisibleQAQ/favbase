@@ -269,6 +269,7 @@ const en: Record<LocaleKeys, string> = {
   'collections.syncFailed': 'Sync failed: {{error}}',
   'collections.selectFolder': 'Select a folder',
   'collections.sidebarTitle': 'Bilibili Favorites',
+  'collections.foldersTitle': 'Folders',
   'collections.noFolders': 'No folders',
   'collections.showMoreFolders': 'Show {{n}} more',
   'collections.showLessFolders': 'Show less',

@@ -11,8 +11,8 @@ export interface SyncProgressBarProps {
   caption?: ReactNode;
 }
 
-/** Sync progress bar below the title bar. Determinate when the platform knows a
- *  total (github page/totalPages), indeterminate for cursor pagination (x/zhihu). */
+/** Sync progress bar below the title bar. Determinate for bounded pagination,
+ *  indeterminate for cursor pagination. */
 export function SyncProgressBar({ value, caption }: SyncProgressBarProps) {
   return (
     <Box sx={{ mb: 2.5 }}>

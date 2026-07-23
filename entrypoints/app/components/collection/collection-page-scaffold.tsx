@@ -44,6 +44,13 @@ export interface CollectionPageCopy {
   syncFailedBanner: string;
 }
 
+/**
+ * Controls whether a platform-owned section belongs to the whole page or to
+ * the currently selected primary category. Primary-category sections disappear
+ * while the cross-category tag result owns the list.
+ */
+export type CollectionSectionScope = 'page' | 'primary-category';
+
 export interface CollectionPageScaffoldProps<T> {
   /** Platform discriminator — scopes every tag operation on this page. */
   platform: string;
@@ -78,9 +85,11 @@ export interface CollectionPageScaffoldProps<T> {
   // --- actions --------------------------------------------------------------
   /** Sync trigger — powers both the title-bar button and the sync-error retry. */
   onSync: () => void;
+  /** Hide the title action for auto-synced sources while retaining retry semantics. */
+  showSyncButton?: boolean;
   /** Re-run the failed paged query. */
   onRetryQuery: () => void;
-  /** Hard-disable the title-bar sync button while not syncing (X cooldown).
+  /** Hard-disable the title-bar sync button while not syncing (adapter cooldown).
    *  Optional — platforms without a cooldown omit it (unchanged behavior). */
   syncDisabled?: boolean;
   /** Pre-translated label shown on the sync button while `syncDisabled`. */
@@ -100,8 +109,16 @@ export interface CollectionPageScaffoldProps<T> {
   renderTaggedCard: (item: TaggedItem, openEditor: (anchor: HTMLElement) => void) => ReactNode;
   /** Loading placeholder (grid-shaped skeleton). Reused by skeleton + tag-filtered phases. */
   skeleton: ReactNode;
-  /** Facet chips (author / playlist / language …). Hidden until the library has content. */
-  chips: ReactNode;
+  /** Platform business operation (transcript / content extraction). */
+  operation?: ReactNode;
+  /** Page operations stay visible during tag takeover; category operations do not. */
+  operationScope?: CollectionSectionScope;
+  /** Primary category (folder / author / playlist / language …). */
+  primaryCategory: ReactNode;
+  /** Optional secondary category (for example, a server-side sort). */
+  secondaryCategory?: ReactNode;
+  /** Category-scoped secondary controls disappear during tag takeover. */
+  secondaryCategoryScope?: CollectionSectionScope;
   /** empty-library phase content (platform sync guide). */
   emptyState: ReactNode;
   /** auth-failed phase content. Omit for platforms without the concept (falls back to emptyState). */
@@ -115,8 +132,7 @@ export interface CollectionPageScaffoldProps<T> {
 }
 
 /**
- * The orchestration shared by every "single list + facet chips + manual sync"
- * collection page (github / x / zhihu / youtube). Owns the tag wiring
+ * The orchestration shared by every collection page. Owns the tag wiring
  * (`useCollectionTags`), the content-phase ladder (`resolveCollectionPhase` +
  * its 8-case render), the two-id mapping (grid key vs tag id), the main-grid
  * TagEditPopover + pagination, and the page skeleton region with its five
@@ -142,6 +158,7 @@ export function CollectionPageScaffold<T>({
   totalPages,
   onPageChange,
   onSync,
+  showSyncButton = true,
   onRetryQuery,
   syncDisabled,
   syncDisabledLabel,
@@ -151,7 +168,11 @@ export function CollectionPageScaffold<T>({
   renderCard,
   renderTaggedCard,
   skeleton,
-  chips,
+  operation,
+  operationScope = 'page',
+  primaryCategory,
+  secondaryCategory,
+  secondaryCategoryScope = 'page',
   emptyState,
   authFailedState,
   progressBar,
@@ -173,6 +194,9 @@ export function CollectionPageScaffold<T>({
     platform,
     items.map(getTagId),
   );
+
+  const sectionInScope = (scope: CollectionSectionScope) =>
+    scope === 'page' || selectedTagIds.length === 0;
 
   const phase = resolveCollectionPhase({
     tagFiltered: selectedTagIds.length > 0,
@@ -212,7 +236,7 @@ export function CollectionPageScaffold<T>({
       );
       break;
     case 'auth-failed':
-      // Platforms without an auth-failed concept (github) omit the slot and
+      // Adapters without an auth-failed concept omit the slot and
       // fall back to the sync guide — matching the pre-scaffold behavior.
       content = <>{authFailedState ?? emptyState}</>;
       break;
@@ -272,7 +296,7 @@ export function CollectionPageScaffold<T>({
         title={copy.title}
         caption={copy.caption}
         syncing={syncing}
-        onSync={onSync}
+        onSync={showSyncButton ? onSync : undefined}
         syncLabel={copy.syncLabel}
         syncingLabel={copy.syncingLabel}
         syncDisabled={syncDisabled}
@@ -298,8 +322,11 @@ export function CollectionPageScaffold<T>({
         placeholder={copy.searchPlaceholder}
       />
 
-      {/* Facet chips — hidden until the library has content. */}
-      {libraryCount > 0 && chips}
+      {/* Platform business action — page-level by default. */}
+      {operation && sectionInScope(operationScope) ? operation : null}
+
+      {/* Primary category visibility is owned by the adapter. */}
+      {primaryCategory}
 
       {/* Tag filter chips — platform-scoped, multi-select AND; hidden when no used tags. */}
       <TagFilterChips
@@ -308,6 +335,11 @@ export function CollectionPageScaffold<T>({
         onToggle={toggleTag}
         onClear={clearTags}
       />
+
+      {/* Optional category-local filter/sort, after tags by contract. */}
+      {secondaryCategory && sectionInScope(secondaryCategoryScope)
+        ? secondaryCategory
+        : null}
 
       {content}
     </DashboardContent>

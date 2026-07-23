@@ -14,13 +14,13 @@ export interface SectionTitleBarProps {
   caption?: ReactNode;
   syncing?: boolean;
   /** Omit the sync trio (onSync/syncLabel/syncingLabel) to render no sync button
-   *  — e.g. platforms that auto-sync on mount (bookmarks). */
+   *  — e.g. sources that auto-sync on mount. */
   onSync?: () => void;
   /** Pre-translated button labels — this component carries no i18n keys. */
   syncLabel?: string;
   syncingLabel?: string;
-  /** Hard-disable the sync button even when not syncing (e.g. X's 5-min
-   *  cooldown). Optional — platforms without a cooldown omit it (unchanged). */
+  /** Hard-disable the sync button even when not syncing (e.g. an adapter
+   *  cooldown). Optional — adapters without a cooldown omit it. */
   syncDisabled?: boolean;
   /** Pre-translated label shown while `syncDisabled` (e.g. a countdown). Falls
    *  back to `syncLabel` when omitted. */

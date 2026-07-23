@@ -168,14 +168,14 @@ export function ZhihuView() {
         <TaggedZhihuCard item={item} onEditTags={openEditor} />
       )}
       skeleton={<ZhihuGridSkeleton />}
-      chips={
+      primaryCategory={zhihu.libraryCount > 0 ? (
         <CollectionChips
           collections={zhihu.collections}
           totalCount={zhihu.libraryCount}
           selected={zhihu.collectionId}
           onSelect={zhihu.setCollectionId}
         />
-      }
+      ) : null}
       emptyState={<EmptyLibraryState syncing={zhihu.syncing} onSync={zhihu.sync} />}
       authFailedState={<NotLoggedInState syncing={zhihu.syncing} onSync={zhihu.sync} />}
       progressBar={
