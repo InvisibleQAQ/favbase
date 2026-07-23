@@ -1,6 +1,6 @@
 # Embedding 领域层
 
-pgvector 向量存储 + 语义检索 + 配置解析 + RAG 数据准备（chunker/indexing）。domain 层，依赖 `lib/ai`（provider/client infra）+ `lib/database`（Drizzle RPC proxy）。Bilibili 通过 `persistItemChunks` 暴露 durable-chunks 接缝，再由 `embedPlatformItem` 独立推进向量状态。
+pgvector 向量存储 + 语义检索 + 配置解析 + RAG 数据准备（chunker/indexing）。domain 层，依赖 `lib/ai`（provider/client infra）+ `lib/database`（Drizzle RPC proxy）。Bilibili 由 `lib/ingest.persistExistingItemContent` 落 durable chunks，再由 `embedPlatformItem` 独立推进向量状态。
 
 ## 分层
 
@@ -28,7 +28,7 @@ pgvector 向量存储 + 语义检索 + 配置解析 + RAG 数据准备（chunker
 
 ## 约定
 
-- 两层解耦：chunker 选择是平台/内容类型知识，平台 service 将 `ChunkInput[]` 交给 `persistItemChunks`；需要原子“落 chunk 后立即嵌入”的旧路径仍可用 `indexItemChunks`。Bilibili 在 app.html 编排层通过 `(platform, platformItemId)` 调 `embedPlatformItem`，不接触 DB uuid；文本类平台继续复用 `charSplit`
+- 两层解耦：chunker 选择是平台/内容类型知识；collection ingest 与 delayed content replacement 将 `ChunkInput[]` 交给 durable persistence seam。需要组合“落 chunk 后立即嵌入”的旧路径仍可用 `indexItemChunks`。Bilibili 在 app.html 编排层通过 `(platform, platformItemId)` 调 `embedPlatformItem`，不接触 DB uuid；文本类平台继续复用 `charSplit`
 - 失败策略：chunk 必做（本地零成本），embed 尽力而为（未启用/失败停 'chunked'，只 console 记录，不影响转录成功状态）；收藏同步平台（x/zhihu/youtube/github）同步收尾经 `embedNewItems` 自动 embed 新条目（never-throws，单条失败继续；**ST3 起四平台统一在 hook 层经 `startJob(logTag,'embed')` 注册并带 `onProgress` done/total 进度**）；积压由设置页「重建向量」手动补齐（`rebuildPendingEmbeddings`，失败即停 + 幂等续跑）
 - 维度惰性自适应（原"1536 锁"已移除）：列维度跟随当前模型——upsert 发现 batch 维度 ≠ 列维度时自动 re-dimension（旧向量清空 + 'embedded' 回退 'chunked'，换模型本就要全量重算，旧向量对新模型无意义）。任意 ≤2000 维 provider（gemini 768 / bge-m3 1024 / openai 1536 等）均可落库；>2000（如 text-embedding-3-large 3072 未裁剪）抛 `EmbeddingDimensionLimitError` 被 indexing catch 停 'chunked'——此时可在设置页配 `dimensions` 裁剪（config.ts `dimensions` + `lib/ai` `embeddingProviderOptions` 透传，openai v3 系 / gemini / 部分 openai-compatible 端点支持）。`testEmbeddingConnection` 带配置的 dimensions 探针，返回真实维度供 UI 对照 2000 上限展示成功/错误。Drizzle schema `{ dimensions: 1536 }` 是名义值（只喂 drizzle-kit，本项目不用），真相在 pg catalog
 - vector store 做成 `(db)=>` 纯函数：offscreen（`initDbMain`）/ proxy（`initDbProxy`）两端通用、可单测。DB 访问一律走 Drizzle query builder + 原生 `sql` 模板（`<=>` 检索用 `db.execute(sql\`...\`)`，读 `result.rows`）

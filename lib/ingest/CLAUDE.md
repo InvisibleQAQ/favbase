@@ -1,10 +1,10 @@
 # lib/ingest
 
-共享收藏收录管线（docs/16 HIGH-1）：5 个平台 sync-service（github/bookmarks/x/zhihu/youtube）曾各自拷贝的五阶段 insert-only 事务骨架（~165 行 ×5）收敛到唯一实现。平台只声明归一化行 + 自己的 content chunker；schema 知识与不变量由管线持有。bilibili 形态不同（转录管线驱动，非批量收录），不进本抽象（docs/15 已圈定）。
+共享收藏收录 Module（docs/16 HIGH-1）：6 个平台 Adapter（github/bookmarks/x/zhihu/youtube/bilibili）共用唯一的 collection metadata 持久化实现。平台只声明归一化行 + 自己的 content chunker；schema 知识与不变量由本 Module 持有。Bilibili 的延迟转录不塞进 collection 模式，而是复用同一 Module 的 existing-item content operation。
 
 ## 模块结构
 
-- `ingest.ts` — `ingestCollection(db, input) → IngestResult`。输入 `IngestInput`：`platform` + 归一化行数组 `sources`（`{platformSourceId, title, platformMeta?}`——meta 缺省 `{}`）/ `authors`（`{platformAuthorId, name, avatarUrl}`）/ `items`（`{platformItemId, platformAuthorId, title, authorName, originalUrl, publishedAt, contentState('pending'|'no_content'|'chunked'), platformMeta}`）/ `links`（`{platformItemId, platformSourceId}`）+ 可选 `content: { textOf(platformItemId), chunk(plainText) }`。输出：`inserted`（本轮新插入的 `{platformItemId, itemId}`，content 只对这些持久化）、`contentPersisted`（本轮实际写入 content+chunks 的 platformItemId——新插入 ∩ 非空文本，即 content-persisted seam，调用方喂给自动打标；无 `content` 输入时恒空）、`droppedItemIds`（author 无法解析）、`droppedLinkItemIds`（link 两端解析失败，排除 author-drop 成因）、`linkCount`（去重后写入的 link 行数）。**同文件导出 `persistItemContent(db, itemId, text, chunkText) → boolean`**：单 item 两段式 content 写入（`item_contents` upsert + `replaceItemChunks`，均在事务外；空/纯空白 trim 后跳过返回 false）——ingest content 步骤与 bookmarks 提取管线（`lib/bookmarks/bookmarks-sync-service.saveBookmarkContent`）的共用底座
+- `ingest.ts` — `ingestCollection(db, input) → IngestResult`。输入 `IngestInput`：`platform` + 归一化行数组 `sources`（`{platformSourceId, title, platformMeta?}`——meta 缺省 `{}`）/ `authors`（`{platformAuthorId, name, avatarUrl}`）/ `items`（`{platformItemId, platformAuthorId, title, authorName, originalUrl, publishedAt, contentState('pending'|'no_content'|'chunked'), platformMeta}`）/ `links`（`{platformItemId, platformSourceId}`）+ 可选 `content: { textOf(platformItemId), chunk(plainText) }`。输出：`inserted`（本轮新插入的 `{platformItemId, itemId}`，content 只对这些持久化）、`contentPersisted`（本轮实际写入 content+chunks 的 platformItemId——新插入 ∩ 非空文本，即 content-persisted seam）、`droppedItemIds`、`droppedLinkItemIds`、`linkCount`。同文件还导出两个明确 operation：`persistItemContent(db,itemId,text,chunkText) → boolean` 保留 Browser Bookmark 的 UUID 兼容调用；`persistExistingItemContent(db,platform,platformItemId,text,preparedChunks) → 'chunked'|null` 供延迟内容 Adapter 使用，内部拥有 item lookup、`item_contents` upsert、prepared chunk replacement 与最终 `content_state='chunked'`。正文 upsert 与回退到 `has_content` 在短事务内完成，chunk replacement 失败时错误向上抛且状态保持 `has_content`，禁止留下“新正文 + 旧向量”仍标 `embedded`；missing/blank/no-chunks 均零写入返回 null
 
 ## 管线持有的不变量
 
@@ -14,10 +14,11 @@
 - **id-map re-select 按 platform 全量**：覆盖本轮之前已存在的行——已知 item 新加入另一 source 仍会得到 link（youtube 全量重拉依赖此语义）
 - **preExisting 差集**：content 只对本轮新插入 item 写
 - **两段式 content 写入**：item_contents upsert + `replaceItemChunks` 在事务**外**逐条执行（`replaceItemChunks` 自开事务，单连接 proxy 嵌套死锁）；空/纯空白文本跳过；embedding 不 inline（D3——管线保持零 storage/AI 依赖；同步后由 app.html 侧调用方 `void embedNewItems` 自动补齐新条目，设置页「重建向量」为积压兜底）
+- **Existing-item replacement**：以 `(platform, platformItemId)` 寻址；prepared chunks 允许 Bilibili 保留 start/end 时间戳；重转录覆盖 plain text、事务重建 chunks，并把 `embedded` 等旧状态回退到 durable `chunked` seam。该 operation 不启动 Embedding/Tagging/Processing Queue
 - **Offscreen 安全**：零 `@/lib/storage` 触达，`replaceItemChunks` 从 `@/lib/embedding/vector-store` leaf 导入（barrel 有 chrome.storage 模块加载副作用；x 同步跑在无 chrome.storage 的 offscreen）
 
 ## 约定
 
 - 平台差异留在调用方：入库前的去重/归一化（如 zhihu turndown、youtube 首见列表归属）、结果统计形状（各平台 `Sync*Result`）、空输入早退（bookmarks 空树零写入、zhihu 空收藏夹零写入）、author 过滤（x/youtube 剔除空 id）
-- 消费方：5 个平台 sync-service 的 `sync*ToDb`；各自的 in-memory PGlite 守护测试即本管线的等价性验证
+- 消费方：6 个平台 Adapter 的 `sync*ToDb`；Bilibili folders/videos 也只传归一化 metadata，转录另走 existing-item operation；各自的 in-memory PGlite 守护测试验证等价性
 - MEDIUM-2 已接线（以数据形式，管线自身零 tagging/embedding/storage 依赖）：content 步骤把实际持久化的 id 收进 `contentPersisted`，各平台 sync-service 经 `Sync*Result.newItemIds` 透出，触发点在 app.html 侧调用方（zhihu/youtube 的生产入口 wrapper、x 的 `use-x-bookmarks` syncFn、github 的 `use-github-stars` syncFn）`void tagNewItems(platform, ids)`（`lib/tagging`）+ `void embedNewItems(platform, ids)`（`lib/embedding`，自动向量化新条目）。x 已单一入口 app.html（07-20 删除 x.com 浮层按钮），旧「浮层 offscreen 路径不打标/不 embed」的欠账随之消失——恒打标恒 embed，见 `lib/x/CLAUDE.md`

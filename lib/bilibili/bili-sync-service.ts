@@ -2,12 +2,8 @@ import { eq, and, inArray, sql, desc } from 'drizzle-orm';
 import { getBiliAuth, fetchFavFolders, fetchFavVideos, BiliAuthError } from './bilibili-api';
 import { syncFavFoldersToDb } from './favorites-sync';
 import { syncFavVideosToDb } from './videos-sync';
-import { persistSubtitleContent } from './content-sync';
-import {
-  chunkSubtitleRows,
-  embedPlatformItem,
-  persistItemChunks,
-} from '@/lib/embedding';
+import { chunkSubtitleRows, embedPlatformItem } from '@/lib/embedding';
+import { persistExistingItemContent } from '@/lib/ingest/ingest';
 import { getDb } from '@/lib/database';
 import { sources } from '@/lib/database/entities/sources';
 import { items } from '@/lib/database/entities/items';
@@ -59,11 +55,6 @@ async function resolveSource(mediaId: number): Promise<ResolvedSource | null> {
     return null;
   }
   return { id: rows[0].id, platformMeta: rows[0].platformMeta as Record<string, unknown> };
-}
-
-async function resolveSourceId(mediaId: number): Promise<string | null> {
-  const source = await resolveSource(mediaId);
-  return source?.id ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -216,10 +207,19 @@ export async function persistContentChunks(
 ): Promise<'chunked' | null> {
   try {
     const db = getDb();
-    const itemId = await persistSubtitleContent(db, bvid, rows, source);
-    if (!itemId) return null;
-
-    return await persistItemChunks(db, itemId, chunkSubtitleRows(rows));
+    const result = await persistExistingItemContent(
+      db,
+      PLATFORM,
+      bvid,
+      rows.map((row) => row.text).join('\n'),
+      chunkSubtitleRows(rows),
+    );
+    if (result) {
+      console.info(
+        `[bili-sync] Persisted ${rows.length} rows for bvid=${bvid} (source=${source})`,
+      );
+    }
+    return result;
   } catch (err) {
     console.error(`[bili-sync] Content persistence failed for bvid=${bvid}:`, err);
     return null;
@@ -262,8 +262,7 @@ export async function getEmbeddedBvids(pageBvids: string[]): Promise<string[]> {
 // ---------------------------------------------------------------------------
 
 async function syncVideosBackground(videos: BiliFavVideo[], mediaId: number): Promise<void> {
-  const sourceId = await resolveSourceId(mediaId);
-  if (!sourceId) return;
+  if (!(await resolveSource(mediaId))) return;
   const db = getDb();
-  await syncFavVideosToDb(db, videos, sourceId);
+  await syncFavVideosToDb(db, videos, String(mediaId));
 }

@@ -1,7 +1,8 @@
-import { sql } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { sources } from '@/lib/database/entities/sources';
 import type { Source } from '@/lib/database/entities/sources';
 import type { FavbaseDb } from '@/lib/database/db';
+import { ingestCollection } from '@/lib/ingest/ingest';
 import type { BiliFavFolder } from './types';
 
 const PLATFORM = 'bilibili';
@@ -12,37 +13,41 @@ export async function syncFavFoldersToDb(
 ): Promise<Source[]> {
   if (folders.length === 0) return [];
 
-  const now = new Date();
-
-  const values = folders.map((folder) => ({
+  const platformSourceIds = folders.map((folder) => String(folder.id));
+  await ingestCollection(db, {
     platform: PLATFORM,
-    platformSourceId: String(folder.id),
-    title: folder.title,
-    platformMeta: {
-      mlid: folder.id,
-      fid: folder.fid,
-      mid: folder.mid,
-      media_count: folder.media_count,
-      cover: folder.cover,
-      intro: folder.intro,
-      ctime: folder.ctime,
-      mtime: folder.mtime,
-      attr: folder.attr,
-    },
-    lastFetchedAt: now,
-  }));
-
-  return db
-    .insert(sources)
-    .values(values)
-    .onConflictDoUpdate({
-      target: [sources.platform, sources.platformSourceId],
-      set: {
-        title: sql`excluded.title`,
-        platformMeta: sql`excluded.platform_meta`,
-        lastFetchedAt: sql`excluded.last_fetched_at`,
-        updatedAt: sql`NOW()`,
+    sources: folders.map((folder) => ({
+      platformSourceId: String(folder.id),
+      title: folder.title,
+      platformMeta: {
+        mlid: folder.id,
+        fid: folder.fid,
+        mid: folder.mid,
+        media_count: folder.media_count,
+        cover: folder.cover,
+        intro: folder.intro,
+        ctime: folder.ctime,
+        mtime: folder.mtime,
+        attr: folder.attr,
       },
-    })
-    .returning();
+    })),
+    authors: [],
+    items: [],
+    links: [],
+  });
+
+  const persisted = await db
+    .select()
+    .from(sources)
+    .where(
+      and(
+        eq(sources.platform, PLATFORM),
+        inArray(sources.platformSourceId, platformSourceIds),
+      ),
+    );
+  const byPlatformId = new Map(persisted.map((source) => [source.platformSourceId, source]));
+  return platformSourceIds.flatMap((platformSourceId) => {
+    const source = byPlatformId.get(platformSourceId);
+    return source ? [source] : [];
+  });
 }

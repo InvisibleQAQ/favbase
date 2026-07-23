@@ -24,7 +24,7 @@
  * which offscreen documents don't have — same rule as x-sync-service).
  */
 
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import type { FavbaseDb } from '@/lib/database';
 import { chunk } from '@/lib/database/sql-utils';
 import { sources } from '@/lib/database/entities/sources';
@@ -137,6 +137,55 @@ export async function persistItemContent(
     });
   await replaceItemChunks(db, itemId, chunkText(plainText));
   return true;
+}
+
+/**
+ * Replace durable content for an item that already exists in the collection.
+ * The caller addresses the item by platform identity and supplies prepared
+ * chunks, so database UUID lookup and the `chunked` state transition stay
+ * inside the ingest module. Content and `has_content` commit before chunk
+ * replacement, so a replacement failure never leaves stale `embedded` state
+ * over new text. Missing items and blank text are explicit no-ops.
+ */
+export async function persistExistingItemContent(
+  db: FavbaseDb,
+  platform: string,
+  platformItemId: string,
+  text: string,
+  preparedChunks: ChunkInput[],
+): Promise<'chunked' | null> {
+  const plainText = text.trim();
+  if (!plainText || preparedChunks.length === 0) return null;
+
+  const target = await db
+    .select({ id: items.id })
+    .from(items)
+    .where(and(eq(items.platform, platform), eq(items.platformItemId, platformItemId)))
+    .limit(1);
+  if (target.length === 0) return null;
+
+  const itemId = target[0].id;
+  const updatedAt = new Date();
+  await db.transaction(async (tx) => {
+    await tx
+      .insert(itemContents)
+      .values({ itemId, plainText })
+      .onConflictDoUpdate({
+        target: itemContents.itemId,
+        set: { plainText, updatedAt },
+      });
+    await tx
+      .update(items)
+      .set({ contentState: 'has_content', updatedAt })
+      .where(eq(items.id, itemId));
+  });
+
+  await replaceItemChunks(db, itemId, preparedChunks);
+  await db
+    .update(items)
+    .set({ contentState: 'chunked', updatedAt: new Date() })
+    .where(eq(items.id, itemId));
+  return 'chunked';
 }
 
 export async function ingestCollection(db: FavbaseDb, input: IngestInput): Promise<IngestResult> {

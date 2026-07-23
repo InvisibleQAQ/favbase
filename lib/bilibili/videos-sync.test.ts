@@ -36,8 +36,10 @@ function makeVideo(overrides: Partial<BiliFavVideo> & { bvid: string }): BiliFav
 describe('syncFavVideosToDb insert-only invariant', () => {
   let pg: PGlite;
   let db: FavbaseDb;
-  let sourceA: string;
-  let sourceB: string;
+  const sourceA = 'folder-a';
+  const sourceB = 'folder-b';
+  let sourceAId: string;
+  let sourceBId: string;
 
   beforeAll(async () => {
     pg = await PGlite.create({ extensions: { vector, uuid_ossp, pg_trgm } });
@@ -51,8 +53,8 @@ describe('syncFavVideosToDb insert-only invariant', () => {
         { platform: 'bilibili', platformSourceId: 'folder-b', title: 'Folder B' },
       ])
       .returning();
-    sourceA = rows[0].id;
-    sourceB = rows[1].id;
+    sourceAId = rows[0].id;
+    sourceBId = rows[1].id;
   });
 
   afterAll(async () => {
@@ -128,7 +130,7 @@ describe('syncFavVideosToDb insert-only invariant', () => {
       .from(schema.itemSources)
       .where(eq(schema.itemSources.itemId, removed.id));
     expect(links).toHaveLength(1);
-    expect(links[0].sourceId).toBe(sourceA);
+    expect(links[0].sourceId).toBe(sourceAId);
   });
 
   it('cross-folder move keeps both folder links', async () => {
@@ -142,7 +144,7 @@ describe('syncFavVideosToDb insert-only invariant', () => {
       .from(schema.itemSources)
       .where(eq(schema.itemSources.itemId, item.id));
     const sourceIds = links.map((l) => l.sourceId).sort();
-    expect(sourceIds).toEqual([sourceA, sourceB].sort());
+    expect(sourceIds).toEqual([sourceAId, sourceBId].sort());
   });
 
   it('re-sync does not reset contentState advanced by the transcription pipeline', async () => {
