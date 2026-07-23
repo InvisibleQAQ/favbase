@@ -14,7 +14,7 @@ function toXBookmarkItem(item: TaggedItem): XBookmarkItem {
     tweetId: item.platformItemId,
     title: item.title,
     originalUrl: item.originalUrl,
-    publishedAt: null,
+    publishedAt: item.publishedAt,
     ...narrowXMeta(item.platformMeta, { title: item.title, authorName: item.authorName }),
   };
 }

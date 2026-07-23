@@ -12,7 +12,7 @@ AI 标签：转录/收藏同步完成后自动打标 + 标签 CRUD（UI 消费�
   - `tagNewItems(platform, platformItemIds, deps?, onProgress?)` → `void`：收藏同步的批量入口（docs/16 MEDIUM-2）——串行逐条 `await tagPlatformItem`（串行即限速：首同步可能数百条，不并发打爆 LLM API），继承 never-throws/幂等/未配置静默语义，单条失败不中断后续。批量无上限，中途关页剩余项永久无标签（与无回填决策一致）。**`onProgress?({done,total})`（ST3，第 4 参、镜像 `embedNewItems`；类型内联声明，lib 不 import app 层 store）**：`total = ids.length`（**输入数**，与 embed 的过滤 total 有意不对称——串行循环每条计一次，'skipped'/'failed' 项仍 `done++`），起始 `{done:0,total}` 一次 + 每条后一次，单调到 100%；纯通知不得抛。调用方 ST3 起在 hook 层经 `startJob(logTag,'tag', sp=>tagNewItems(platform, ids, undefined, sp))` 注册后台任务（非裸 `void`）
   - `getAllUsedTags(platform?, db?)` → `UsedTag[]`（含 count，降序）：inner join item_tags——**孤儿 tag（链接全删）自然隐身，无需清理任务**；tag 行本身保留。传 `platform` 时列表与计数限定该平台的 items（页面级筛选 chips，计数真实）；省略 = 全库（`tagPlatformItem` 内部喂 prompt 用全库——LLM 应跨平台复用标签名，不分叉重复）
   - `getTagsForPlatformItems(platform, ids, db?)` → `Record<platformItemId, TagRef[]>`：卡片页批量查询
-  - `getItemsByTags(tagIds, platform?, db?)` → `TaggedItem[]`：**AND 语义**（group by item + having count(distinct tagId)=N，多选收窄），跨收藏夹（标签是知识库维度非文件夹维度），createdAt 降序。传 `platform` 时结果限定该平台（页面级标签网格）；省略 = 跨平台。`TaggedItem` 含 `originalUrl`（items.originalUrl——平台卡片 adapter 直接拿跳转 URL，无需重新派生）
+  - `getItemsByTags(tagIds, platform?, db?)` → `TaggedItem[]`：**AND 语义**（group by item + having count(distinct tagId)=N，多选收窄），跨收藏夹（标签是知识库维度非文件夹维度），createdAt 降序。传 `platform` 时结果限定该平台（页面级标签网格）；省略 = 跨平台。`TaggedItem` 保留 `originalUrl` + `publishedAt`，平台卡片 adapter 不重新派生 URL/日期
   - `addTagToPlatformItem` / `removeTagFromPlatformItem` — 手动编辑：新名字自动建 tag（复用同名行），空白名/未知 item 返回 null；remove 只解链不删 tag 行
 - `index.ts` — barrel，单一 import 面
 

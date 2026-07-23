@@ -16,6 +16,6 @@
 ## 约定
 
 - **平台无关铁律**：本目录禁止出现平台字面量与平台 lib 导入（prd 验收项，grep 可查）。平台 N 接入打标 = 传 platform 参数 + 提供 renderCard adapter，零标签逻辑复制
-- **render-prop 而非 registry**：筛选按页面平台限定，每页网格只渲染本平台卡片；platform→card registry 是跨平台聚合网格的需求，那时再建（ADR，YAGNI）
+- **render-prop + 聚合 registry 分工**：平台页筛选仍用 `TaggedItemGrid.renderCard`；真实跨平台需求已在 `sections/collections/collection-item-card.tsx` 建穷尽 platform→TaggedCard registry，本共享目录仍保持零平台知识
 - **刷新双通道**：AI 自动打标走 `'item-tagged'` 事件（emit 在 tagging-service，零穿线）；手动编辑走显式 `onChanged → refresh` 链路（add/remove 不发事件）。消费 section 若 `useItemTags` 常驻不随筛选卸载（如 github-stars-view），TaggedItemGrid 的 `onTagsChanged` 必须同时 refreshItemTags——否则清除筛选后普通网格标签过期。**收藏页（github/x/zhihu）用 `useCollectionTags` 后此不变量已封在 hook 内**（`handleTagsChanged` 同刷两通道），无需各 view 自行记得；仅当直接手拼五件套（如未来非收藏页场景）时才需注意
 - i18n：复用 `tags.*` key（sectionTitle/editTooltip/addPlaceholder/clearFilter/noMatches，zh/en 齐全），组件内 `useTranslation()` 订阅

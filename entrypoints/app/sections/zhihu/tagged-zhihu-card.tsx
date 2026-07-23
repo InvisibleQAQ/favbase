@@ -14,7 +14,7 @@ function toZhihuFavoriteItem(item: TaggedItem): ZhihuFavoriteItem {
     platformItemId: item.platformItemId,
     title: item.title,
     originalUrl: item.originalUrl,
-    publishedAt: null,
+    publishedAt: item.publishedAt,
     ...narrowZhihuMeta(item.platformMeta, { authorName: item.authorName }),
   };
 }

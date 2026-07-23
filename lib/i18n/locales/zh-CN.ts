@@ -251,6 +251,18 @@ const zhCN = {
   'common.syncNow': '立即同步',
   'common.loadFailed': '加载失败',
 
+  'allCollections.title': '全部收藏',
+  'allCollections.count': '{{count}} 个条目',
+  'allCollections.count.one': '{{count}} 个条目',
+  'allCollections.searchPlaceholder': '搜索标题或作者…',
+  'allCollections.platformsTitle': '平台',
+  'allCollections.allPlatforms': '全部',
+  'allCollections.showMorePlatforms': '展开 (+{{n}})',
+  'allCollections.showLessPlatforms': '收起',
+  'allCollections.emptyTitle': '还没有收录任何条目',
+  'allCollections.emptyDesc': '前往各平台收藏页同步内容后，所有条目会汇总显示在这里。',
+  'allCollections.noMatches': '没有匹配的条目',
+
   'collections.notLoggedInTitle': '未检测到 B 站登录状态',
   'collections.notLoggedInDesc': '请先在浏览器中打开 bilibili.com 并登录你的账号，然后回到此页面点击重试。',
   'collections.emptyFolderTitle': '收藏夹为空',

@@ -30,6 +30,8 @@ export interface TaggedItem {
   authorName: string;
   /** items.originalUrl — lets platform card adapters link out without re-deriving URLs. */
   originalUrl: string;
+  /** items.publishedAt — preserved for platform cards that display the date. */
+  publishedAt: Date | null;
   platformMeta: Record<string, unknown>;
   tags: TagRef[];
 }
@@ -230,6 +232,7 @@ export async function getItemsByTags(
       title: items.title,
       authorName: items.authorName,
       originalUrl: items.originalUrl,
+      publishedAt: items.publishedAt,
       platformMeta: items.platformMeta,
     })
     .from(items)

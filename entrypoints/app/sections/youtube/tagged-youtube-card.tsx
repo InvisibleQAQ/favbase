@@ -14,7 +14,7 @@ function toYoutubeVideoItem(item: TaggedItem): YoutubeVideoItem {
     videoId: item.platformItemId,
     title: item.title,
     originalUrl: item.originalUrl,
-    publishedAt: null,
+    publishedAt: item.publishedAt,
     ...narrowYoutubeMeta(item.platformMeta, { authorName: item.authorName }),
   };
 }

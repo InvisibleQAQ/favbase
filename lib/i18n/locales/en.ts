@@ -257,6 +257,19 @@ const en: Record<LocaleKeys, string> = {
   'common.syncNow': 'Sync now',
   'common.loadFailed': 'Load failed',
 
+  'allCollections.title': 'All Collections',
+  'allCollections.count': '{{count}} items',
+  'allCollections.count.one': '{{count}} item',
+  'allCollections.searchPlaceholder': 'Search titles or authors…',
+  'allCollections.platformsTitle': 'Platform',
+  'allCollections.allPlatforms': 'All',
+  'allCollections.showMorePlatforms': 'Show {{n}} more',
+  'allCollections.showLessPlatforms': 'Show less',
+  'allCollections.emptyTitle': 'No collected items yet',
+  'allCollections.emptyDesc':
+    'Sync content from a platform collection page and every item will appear here.',
+  'allCollections.noMatches': 'No matching items',
+
   'collections.notLoggedInTitle': 'Bilibili login not detected',
   'collections.notLoggedInDesc': 'Open bilibili.com in your browser and sign in, then return here and retry.',
   'collections.emptyFolderTitle': 'Folder is empty',
