@@ -238,6 +238,8 @@ function NavChildLeaf({
             pr: 1,
             borderRadius: 0.75,
             minHeight: 36,
+            gap: 1,
+            alignItems: 'center',
             typography: 'body2',
             color: theme.vars.palette.text.secondary,
             ...(isActive && {
@@ -251,6 +253,21 @@ function NavChildLeaf({
           }),
         ]}
       >
+        {item.icon && (
+          <Box
+            component="span"
+            sx={{
+              width: 20,
+              height: 20,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            {item.icon}
+          </Box>
+        )}
         <Box
           component="span"
           sx={{ flexGrow: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
