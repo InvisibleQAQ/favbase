@@ -187,9 +187,9 @@ describe('runFavoriteVideosSync', () => {
 });
 
 describe('favoritePageDelayMs', () => {
-  it('maps jitter to the configured 2-3 second page delay', () => {
-    expect(favoritePageDelayMs(() => 0)).toBe(2_000);
-    expect(favoritePageDelayMs(() => 0.5)).toBe(2_500);
-    expect(favoritePageDelayMs(() => 1)).toBe(3_000);
+  it('maps jitter to the configured 7-10 second page delay', () => {
+    expect(favoritePageDelayMs(() => 0)).toBe(7_000);
+    expect(favoritePageDelayMs(() => 0.5)).toBe(8_500);
+    expect(favoritePageDelayMs(() => 1)).toBe(10_000);
   });
 });

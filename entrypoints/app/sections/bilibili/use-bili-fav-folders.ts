@@ -56,10 +56,17 @@ export function useBiliFavFolders(): UseFavFoldersReturn {
 
     (async () => {
       try {
-        await sync();
+        const folderList = await fetchAndSyncFolders();
+        if (cancelled) return;
+        setLoginState('logged_in');
+        setFolders(folderList);
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Failed to check login');
+          if (err instanceof BiliAuthError) {
+            setLoginState('not_logged_in');
+          } else {
+            setError(err instanceof Error ? err.message : 'Failed to check login');
+          }
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -67,7 +74,7 @@ export function useBiliFavFolders(): UseFavFoldersReturn {
     })();
 
     return () => { cancelled = true; };
-  }, [sync]);
+  }, []);
 
   return {
     folders,

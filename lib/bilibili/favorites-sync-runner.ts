@@ -1,7 +1,7 @@
 import type { BiliFavFolder, BiliFavVideo } from './types';
 
-const PAGE_DELAY_MIN_MS = 2_000;
-const PAGE_DELAY_JITTER_MS = 1_000;
+const PAGE_DELAY_MIN_MS = 7_000;
+const PAGE_DELAY_JITTER_MS = 3_000;
 
 export function favoritePageDelayMs(random: () => number = Math.random): number {
   return PAGE_DELAY_MIN_MS + random() * PAGE_DELAY_JITTER_MS;
