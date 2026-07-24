@@ -11,7 +11,7 @@ import {
   type BiliFavoritesSyncProgressCallback,
   type FavoriteVideosSyncResult,
 } from './favorites-sync-runner';
-import { syncFavVideosToDb } from './videos-sync';
+import { syncFavVideosToDb, type SyncResult } from './videos-sync';
 import { chunkSubtitleRows, embedPlatformItem } from '@/lib/embedding';
 import { persistExistingItemContent } from '@/lib/ingest/ingest';
 import { getDb } from '@/lib/database';
@@ -27,6 +27,14 @@ export type { BiliFavoritesSyncProgress } from './favorites-sync-runner';
 
 const PLATFORM = 'bilibili';
 const PAGE_SIZE = 20;
+
+function assertVideosPersisted(result: SyncResult, sourceId: string | number): void {
+  if (result.dropped > 0) {
+    throw new Error(
+      `Failed to persist ${result.dropped} Bilibili favorites for source ${sourceId}`,
+    );
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -117,10 +125,7 @@ export async function fetchAndSyncVideos(
   const result = await fetchFavoriteVideosPage(mediaId, page, order, keyword);
 
   if (result.videos.length > 0) {
-    syncVideosBackground(result.videos, mediaId).catch((err) => {
-      console.error('[bili-sync] Video DB sync failed:', err);
-      if (err?.cause) console.error('[bili-sync] Cause:', err.cause);
-    });
+    await persistFetchedVideos(result.videos, mediaId);
   }
 
   return result;
@@ -149,11 +154,7 @@ export async function syncAllFavoriteVideos(
       },
       async persist(folder, videos) {
         const result = await syncFavVideosToDb(db, videos, String(folder.id));
-        if (result.dropped > 0) {
-          throw new Error(
-            `Failed to persist ${result.dropped} Bilibili favorites for source ${folder.id}`,
-          );
-        }
+        assertVideosPersisted(result, folder.id);
       },
       markHistoryComplete(folder) {
         return markVideoHistoryComplete(db, String(folder.id));
@@ -320,8 +321,11 @@ export async function getEmbeddedBvids(pageBvids: string[]): Promise<string[]> {
 // Internal
 // ---------------------------------------------------------------------------
 
-async function syncVideosBackground(videos: BiliFavVideo[], mediaId: number): Promise<void> {
-  if (!(await resolveSource(mediaId))) return;
+async function persistFetchedVideos(videos: BiliFavVideo[], mediaId: number): Promise<void> {
+  if (!(await resolveSource(mediaId))) {
+    throw new Error(`Cannot persist Bilibili favorites: source ${mediaId} not found`);
+  }
   const db = getDb();
-  await syncFavVideosToDb(db, videos, String(mediaId));
+  const result = await syncFavVideosToDb(db, videos, String(mediaId));
+  assertVideosPersisted(result, mediaId);
 }

@@ -158,9 +158,7 @@ export function AutoTranscribeBar({ state, running, onStart, onStop }: AutoTrans
       );
     }
 
-    if (pendingCount === null) return null;
-
-    // All transcribed (pendingCount is null when source not yet synced — don't treat as "done")
+    // All transcribed
     if (pendingCount === 0 && !previewVideo) {
       return (
         <Box sx={{ ...PANEL_SX }}>
@@ -204,9 +202,11 @@ export function AutoTranscribeBar({ state, running, onStart, onStop }: AutoTrans
                 </Typography>
               </Typography>
             )}
-            <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.25 }}>
-              {t('autoTranscribe.pendingCount', { count: pendingCount })}
-            </Typography>
+            {pendingCount !== null && (
+              <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.25 }}>
+                {t('autoTranscribe.pendingCount', { count: pendingCount })}
+              </Typography>
+            )}
           </Box>
 
           <Button

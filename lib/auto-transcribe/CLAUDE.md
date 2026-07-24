@@ -7,7 +7,7 @@
 两层架构：通用状态机 + 平台适配器。状态机管理 phase 生命周期、countdown、progress 订阅、abort、useSyncExternalStore 契约。平台适配器提供 auth、数据获取、转录、错误标记等平台特定操作。
 
 - `types.ts` — 适配器接口 `AutoTranscribeAdapter`（8 方法：checkAuth/fetchPage/getPendingIds/getPreview/transcribe/markError/hasAsrKey/createStatusListener；`transcribe(videoId, title, onIndexing?)` 的 `onIndexing` 在转录成功后、本地 chunk+embed 索引期间触发）+ 通用类型：`AutoTranscribeVideo`（videoId/title/cover/author/duration/isInvalid）、`AutoTranscribePageResult`、`AutoTranscribePreview`、`AutoTranscribeState`（phase/stats/currentVideo/countdown/previewLoading 等 UI 状态，previewLoading 区分初始态与查询完毕态）、`AutoTranscribePhase`（7 态：idle/syncing/transcribing/waiting/paused/done/cancelled）
-- `pipeline.ts` — `AutoTranscribePipeline` class（构造函数注入 `AutoTranscribeAdapter`）：`subscribe()`/`getSnapshot()` 支持 `useSyncExternalStore`，`start(collectionId)`/`stop()` 控制接口，`queryPreview(collectionId)` idle 态预览查询。编排流：adapter.checkAuth → 分页 adapter.fetchPage → adapter.getPendingIds → 逐个 adapter.transcribe（传 onIndexing 回调，索引期间 `videoStage='indexing'`，UI 显示"正在建立索引…"；CC 5-10s / ASR 10-15s 随机间隔）→ rate limit 暂停 60s 重试 → 下一页。零平台依赖，通过 adapter 接口消费所有平台操作。新增平台只需实现 `AutoTranscribeAdapter` 接口
+- `pipeline.ts` — `AutoTranscribePipeline` class（构造函数注入 `AutoTranscribeAdapter`）：`subscribe()`/`getSnapshot()` 支持 `useSyncExternalStore`，`start(collectionId)`/`stop()` 控制接口，`queryPreview(collectionId)` idle 态预览查询。编排流：adapter.checkAuth → 串行 adapter.fetchPage → adapter.getPendingIds → 逐个 await adapter.transcribe（传 onIndexing 回调，索引期间 `videoStage='indexing'`，UI 显示"正在建立索引…"；CC 5-10s / ASR 10-15s 随机间隔）→ rate limit 暂停 60s 重试 → 当前页全部 settle 后才抓下一页。零平台依赖，通过 adapter 接口消费所有平台操作；分页顺序由 `pipeline.test.ts` 的 fake adapter 回归测试锁定。新增平台只需实现 `AutoTranscribeAdapter` 接口
 
 ## 约定
 
