@@ -1,12 +1,13 @@
 import type { Theme, SxProps, Breakpoint } from '@mui/material/styles';
 
-import { useState, useEffect } from 'react';
+import { useId, useState, useEffect } from 'react';
 import { varAlpha } from 'minimal-shared/utils';
 
 import Box from '@mui/material/Box';
 import ListItem from '@mui/material/ListItem';
 import Tooltip from '@mui/material/Tooltip';
 import Collapse from '@mui/material/Collapse';
+import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 import ListItemButton from '@mui/material/ListItemButton';
@@ -288,6 +289,7 @@ function CollectionsBranch({ item, pinned }: { item: NavItem; pinned: boolean })
   const { pathname } = useLocation();
   const isActive = pathname.startsWith(item.path);
   const [expanded, setExpanded] = useState(isActive);
+  const submenuId = useId();
 
   const children = item.children ?? [];
   // Longest-prefix match: sibling leaves ('/collections/bilibili',
@@ -311,20 +313,19 @@ function CollectionsBranch({ item, pinned }: { item: NavItem; pinned: boolean })
 
   return (
     <ListItem disableGutters disablePadding sx={{ flexDirection: 'column', alignItems: 'stretch' }}>
-      <ListItemButton
-        disableGutters
-        onClick={() => setExpanded((prev) => !prev)}
+      <Box
         sx={[
           (theme) => ({
-            pl: 2,
-            py: 1,
-            gap: 2,
-            pr: 1.5,
+            display: 'flex',
+            alignItems: 'center',
             borderRadius: 0.75,
             typography: 'body2',
             fontWeight: 'fontWeightMedium',
             color: theme.vars.palette.text.secondary,
             minHeight: 44,
+            '&:hover': {
+              bgcolor: theme.vars.palette.action.hover,
+            },
             ...(isActive && {
               fontWeight: 'fontWeightSemiBold',
               color: theme.vars.palette.primary.main,
@@ -336,16 +337,44 @@ function CollectionsBranch({ item, pinned }: { item: NavItem; pinned: boolean })
           }),
         ]}
       >
-        <Box component="span" sx={{ width: 24, height: 24, display: 'flex' }}>
-          {item.icon}
-        </Box>
-        <Box component="span" sx={{ flexGrow: 1 }}>
-          {t(item.title)}
-        </Box>
-        <ExpandChevron expanded={expanded} />
-      </ListItemButton>
+        <ListItemButton
+          disableGutters
+          component={RouterLink}
+          to={item.path}
+          sx={{
+            pl: 2,
+            py: 1,
+            gap: 2,
+            pr: 0.5,
+            flex: '1 1 auto',
+            minWidth: 0,
+            alignSelf: 'stretch',
+            color: 'inherit',
+            fontWeight: 'inherit',
+            borderRadius: 0.75,
+            '&:hover': { bgcolor: 'transparent' },
+          }}
+        >
+          <Box component="span" sx={{ width: 24, height: 24, display: 'flex' }}>
+            {item.icon}
+          </Box>
+          <Box component="span" sx={{ flexGrow: 1 }}>
+            {t(item.title)}
+          </Box>
+        </ListItemButton>
+        <IconButton
+          type="button"
+          aria-label={t(item.title)}
+          aria-controls={expanded ? submenuId : undefined}
+          aria-expanded={expanded}
+          onClick={() => setExpanded((prev) => !prev)}
+          sx={{ width: 44, height: 44, flexShrink: 0, color: 'inherit', borderRadius: 0.75 }}
+        >
+          <ExpandChevron expanded={expanded} />
+        </IconButton>
+      </Box>
 
-      <Collapse in={expanded} unmountOnExit sx={{ width: 1 }}>
+      <Collapse id={submenuId} in={expanded} unmountOnExit sx={{ width: 1 }}>
         <Box
           sx={{
             display: 'flex',
