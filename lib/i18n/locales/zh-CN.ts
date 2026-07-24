@@ -272,6 +272,7 @@ const zhCN = {
   'collections.lastSynced': '上次同步 {{time}}',
   'collections.syncing': '同步中...',
   'collections.sync': '同步',
+  'collections.bilibiliSyncProgress': '已拉取 {{fetched}} 条（收藏夹 {{current}}/{{total}}：{{title}}，第 {{page}}/{{totalPages}} 页）',
   'collections.syncFailed': '同步失败: {{error}}',
   'collections.selectFolder': '请选择一个收藏夹',
   'collections.sidebarTitle': 'BiliBili 收藏夹',

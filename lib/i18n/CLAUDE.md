@@ -5,6 +5,7 @@
 ## 平台命名
 
 - Bilibili 页面标题使用 `collections.sidebarTitle`，主分类标题使用 `collections.foldersTitle`；两者职责不可混用。
+- Bilibili 全量同步进度使用 `collections.bilibiliSyncProgress`，插值固定包含累计条目、收藏夹序号/总数/标题和页码/总页数；中英文键集合必须同步。
 - 本地浏览器书签平台显示名固定为 `Browser Bookmarks` / `浏览器书签`；`nav.bookmarks` 与 `bookmarks.title` 必须一致，后台任务提示复用 `nav.bookmarks`。
 - X 平台显示名固定为 `X Bookmarks` / `X 书签`，不得与浏览器书签平台合并。
 - `bookmarks.*`、`x.*` 是稳定翻译键命名空间；显示名调整不改键、路由、数据库 platform 或任务 ID。

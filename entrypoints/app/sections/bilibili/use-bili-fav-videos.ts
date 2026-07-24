@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { fetchAndSyncVideos, BiliAuthError } from '@/lib/bilibili/bili-sync-service';
+import { fetchFavoriteVideosPage, BiliAuthError } from '@/lib/bilibili/bili-sync-service';
 import type { BiliFavOrder, BiliFavVideo } from '@/lib/bilibili/types';
 
 type LoginState = 'unknown' | 'logged_in' | 'not_logged_in';
@@ -38,7 +38,12 @@ export function useBiliFavVideos(mediaId: number, keyword: string = ''): UseFavV
     setLoading(true);
     setError(null);
     try {
-      const result = await fetchAndSyncVideos(mediaId, targetPage, targetOrder, targetKeyword);
+      const result = await fetchFavoriteVideosPage(
+        mediaId,
+        targetPage,
+        targetOrder,
+        targetKeyword,
+      );
       if (fetchId !== fetchIdRef.current) return;
       setLoginState('logged_in');
       setVideos(result.videos);

@@ -279,6 +279,7 @@ const en: Record<LocaleKeys, string> = {
   'collections.lastSynced': 'Last synced {{time}}',
   'collections.syncing': 'Syncing...',
   'collections.sync': 'Sync',
+  'collections.bilibiliSyncProgress': 'Fetched {{fetched}} (folder {{current}}/{{total}}: {{title}}, page {{page}}/{{totalPages}})',
   'collections.syncFailed': 'Sync failed: {{error}}',
   'collections.selectFolder': 'Select a folder',
   'collections.sidebarTitle': 'Bilibili Favorites',

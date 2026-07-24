@@ -1,6 +1,16 @@
 import { eq, and, inArray, sql, desc } from 'drizzle-orm';
 import { getBiliAuth, fetchFavFolders, fetchFavVideos, BiliAuthError } from './bilibili-api';
-import { syncFavFoldersToDb } from './favorites-sync';
+import {
+  getFavoriteVideoSyncBaseline,
+  markVideoHistoryComplete,
+  syncFavFoldersToDb,
+} from './favorites-sync';
+import {
+  favoritePageDelayMs,
+  runFavoriteVideosSync,
+  type BiliFavoritesSyncProgressCallback,
+  type FavoriteVideosSyncResult,
+} from './favorites-sync-runner';
 import { syncFavVideosToDb } from './videos-sync';
 import { chunkSubtitleRows, embedPlatformItem } from '@/lib/embedding';
 import { persistExistingItemContent } from '@/lib/ingest/ingest';
@@ -13,6 +23,7 @@ import type { BiliFavFolder, BiliFavOrder, BiliFavVideo } from './types';
 import type { SubtitleRow, SubtitleSource } from '@/lib/subtitle/types';
 
 export { BiliAuthError };
+export type { BiliFavoritesSyncProgress } from './favorites-sync-runner';
 
 const PLATFORM = 'bilibili';
 const PAGE_SIZE = 20;
@@ -73,16 +84,13 @@ export async function fetchAndSyncFolders(): Promise<BiliFavFolder[]> {
 
   if (folders.length > 0) {
     const db = getDb();
-    syncFavFoldersToDb(db, folders).catch((err) => {
-      console.error('[bili-sync] Folder DB sync failed:', err);
-      if (err?.cause) console.error('[bili-sync] Cause:', err.cause);
-    });
+    await syncFavFoldersToDb(db, folders);
   }
 
   return folders;
 }
 
-export async function fetchAndSyncVideos(
+export async function fetchFavoriteVideosPage(
   mediaId: number,
   page: number,
   order: BiliFavOrder = 'mtime',
@@ -92,19 +100,70 @@ export async function fetchAndSyncVideos(
   const data = await fetchFavVideos(auth, mediaId, page, PAGE_SIZE, order, keyword);
   const videos = data.medias ?? [];
 
-  if (videos.length > 0) {
-    syncVideosBackground(videos, mediaId).catch((err) => {
-      console.error('[bili-sync] Video DB sync failed:', err);
-      if (err?.cause) console.error('[bili-sync] Cause:', err.cause);
-    });
-  }
-
   return {
     videos,
     folderTitle: data.info.title,
     totalPages: Math.max(1, Math.ceil(data.info.media_count / PAGE_SIZE)),
     mediaCount: data.info.media_count,
   };
+}
+
+export async function fetchAndSyncVideos(
+  mediaId: number,
+  page: number,
+  order: BiliFavOrder = 'mtime',
+  keyword: string = '',
+): Promise<SyncVideosResult> {
+  const result = await fetchFavoriteVideosPage(mediaId, page, order, keyword);
+
+  if (result.videos.length > 0) {
+    syncVideosBackground(result.videos, mediaId).catch((err) => {
+      console.error('[bili-sync] Video DB sync failed:', err);
+      if (err?.cause) console.error('[bili-sync] Cause:', err.cause);
+    });
+  }
+
+  return result;
+}
+
+export async function syncAllFavoriteVideos(
+  folders: BiliFavFolder[],
+  onProgress?: BiliFavoritesSyncProgressCallback,
+): Promise<FavoriteVideosSyncResult> {
+  const auth = await checkAuth();
+  const db = getDb();
+
+  return runFavoriteVideosSync(
+    folders,
+    {
+      async getBaseline(folder) {
+        return getFavoriteVideoSyncBaseline(db, String(folder.id));
+      },
+      async fetchPage(folder, page) {
+        const data = await fetchFavVideos(auth, folder.id, page, PAGE_SIZE, 'mtime', '');
+        return {
+          videos: data.medias ?? [],
+          totalPages: Math.max(1, Math.ceil(data.info.media_count / PAGE_SIZE)),
+          hasMore: data.has_more,
+        };
+      },
+      async persist(folder, videos) {
+        const result = await syncFavVideosToDb(db, videos, String(folder.id));
+        if (result.dropped > 0) {
+          throw new Error(
+            `Failed to persist ${result.dropped} Bilibili favorites for source ${folder.id}`,
+          );
+        }
+      },
+      markHistoryComplete(folder) {
+        return markVideoHistoryComplete(db, String(folder.id));
+      },
+      waitBetweenPages() {
+        return new Promise((resolve) => setTimeout(resolve, favoritePageDelayMs()));
+      },
+    },
+    onProgress,
+  );
 }
 
 export async function getPendingBvids(

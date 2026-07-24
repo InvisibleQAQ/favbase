@@ -8,7 +8,11 @@ import Typography from '@mui/material/Typography';
 import { createBiliAutoTranscribeAdapter } from '@/lib/bilibili/auto-transcribe-adapter';
 import type { BiliFavOrder } from '@/lib/bilibili/types';
 import { useTranslation } from '@/lib/i18n/use-translation';
-import { CollectionPageScaffold, StateBox } from '../../components/collection';
+import {
+  CollectionPageScaffold,
+  StateBox,
+  SyncProgressBar,
+} from '../../components/collection';
 import { Iconify } from '../../components/iconify';
 import { AutoTranscribeBar } from './auto-transcribe-bar';
 import { FolderChips } from './folder-chips';
@@ -127,6 +131,7 @@ interface BilibiliCollectionPageProps {
   onSelectFolder: (folderId: number) => void;
   totalCount: number;
   syncing: boolean;
+  syncProgress: ReturnType<typeof useBiliFavFolders>['syncProgress'];
   onSync: () => void;
   lastSyncedAt: Date | null;
   syncError: string | null;
@@ -143,6 +148,7 @@ function BilibiliCollectionPage({
   onSelectFolder,
   totalCount,
   syncing,
+  syncProgress,
   onSync,
   lastSyncedAt,
   syncError,
@@ -226,6 +232,22 @@ function BilibiliCollectionPage({
         <TaggedVideoCard item={item} onEditTags={openEditor} />
       )}
       skeleton={<VideoGridSkeleton />}
+      progressBar={
+        <SyncProgressBar
+          caption={
+            syncProgress
+              ? t('collections.bilibiliSyncProgress', {
+                  fetched: syncProgress.fetchedCount,
+                  current: syncProgress.folderIndex,
+                  total: syncProgress.folderCount,
+                  title: syncProgress.folderTitle,
+                  page: syncProgress.page,
+                  totalPages: syncProgress.totalPages,
+                })
+              : undefined
+          }
+        />
+      }
       operation={
         <Box sx={{ mb: 2.5 }}>
           <AutoTranscribeBar
@@ -340,6 +362,7 @@ export function BilibiliView() {
     folders,
     loading: foldersLoading,
     syncing,
+    syncProgress,
     loginState,
     lastSyncedAt,
     error,
@@ -405,6 +428,7 @@ export function BilibiliView() {
       onSelectFolder={handleSelectFolder}
       totalCount={selectedFolder?.media_count ?? 0}
       syncing={syncing}
+      syncProgress={syncProgress}
       onSync={sync}
       lastSyncedAt={lastSyncedAt}
       syncError={error}
