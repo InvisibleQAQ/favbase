@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
 import Skeleton from '@mui/material/Skeleton';
 
@@ -66,6 +67,9 @@ export function CollectionsView() {
     loading,
     queryError,
     retryQuery,
+    usedTags,
+    selectedTagId,
+    setSelectedTagId,
     platform,
     setPlatform,
     searchInput,
@@ -139,6 +143,33 @@ export function CollectionsView() {
         showMoreLabel={(overflow) => t('allCollections.showMorePlatforms', { n: overflow })}
         showLessLabel={t('allCollections.showLessPlatforms')}
       />
+
+      {usedTags.length > 0 && (
+        <CollapsibleChipRow
+          icon={<Iconify icon="mdi:tag" width={18} sx={{ color: 'primary.main' }} />}
+          title={t('tags.sectionTitle')}
+          items={usedTags}
+          getKey={(tag) => tag.id}
+          getLabel={(tag) => `${tag.name} (${tag.count})`}
+          allLabel={t('allCollections.allTags')}
+          selected={selectedTagId}
+          onSelect={setSelectedTagId}
+          showMoreLabel={(n) => t('tags.showMore', { n })}
+          showLessLabel={t('tags.showLess')}
+          headerExtra={
+            selectedTagId && (
+              <Button
+                size="small"
+                variant="text"
+                onClick={() => setSelectedTagId(null)}
+                sx={{ minWidth: 0, px: 1, py: 0 }}
+              >
+                {t('tags.clearFilter')}
+              </Button>
+            )
+          }
+        />
+      )}
 
       {showError ? (
         <ErrorState

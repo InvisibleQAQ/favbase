@@ -445,6 +445,12 @@ describe('tagging-service (in-memory PGlite)', () => {
         { name: '仓库', count: 1 },
         { name: '共享', count: 1 },
       ]);
+
+      const registered = await getAllUsedTags(['bilibili', 'github'], db);
+      expect(registered.map((t) => ({ name: t.name, count: t.count }))).toEqual([
+        { name: '共享', count: 2 },
+        { name: '仓库', count: 1 },
+      ]);
     });
 
     it('getItemsByTags returns only the given platform’s items', async () => {

@@ -15,3 +15,4 @@
 
 - 修改 locale 后运行 `pnpm.cmd test -- lib/i18n/index.test.ts` 与 `pnpm.cmd compile`。
 - `index.test.ts` 通过公开 `t()` 覆盖双语平台名、插值、复数和数字格式化。
+- Dashboard 与聚合标签筛选的所有可见文案使用 `dashboard.*` / `allCollections.*`；`overview-view.tsx` 不再享有硬编码守卫豁免。

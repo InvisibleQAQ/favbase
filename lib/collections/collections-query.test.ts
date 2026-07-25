@@ -188,4 +188,37 @@ describe('getCollectionItems (in-memory PGlite)', () => {
     });
     expect(result.rows[0].tags.map((tag) => tag.name)).toEqual(['alpha', 'beta']);
   });
+
+  it('filters by one tag before total, ordering, and pagination', async () => {
+    const newest = await seedItem({
+      platform: 'github',
+      platformItemId: 'newest-match',
+      platformMeta: { starredAt: '2026-03-01T00:00:00Z' },
+    });
+    await seedItem({
+      platform: 'github',
+      platformItemId: 'newest-unmatched',
+      platformMeta: { starredAt: '2026-04-01T00:00:00Z' },
+    });
+    const older = await seedItem({
+      platform: 'x',
+      platformItemId: 'older-match',
+      publishedAt: new Date('2026-02-01T00:00:00Z'),
+    });
+    const [tag] = await db
+      .insert(schema.tags)
+      .values({ name: 'focused' })
+      .returning({ id: schema.tags.id });
+    await db.insert(schema.itemTags).values([
+      { itemId: newest, tagId: tag.id },
+      { itemId: older, tagId: tag.id },
+    ]);
+
+    const first = await getCollectionItems({ tagId: tag.id, page: 1, pageSize: 1 }, db);
+    const second = await getCollectionItems({ tagId: tag.id, page: 2, pageSize: 1 }, db);
+
+    expect(first.total).toBe(2);
+    expect(first.rows.map((row) => row.platformItemId)).toEqual(['newest-match']);
+    expect(second.rows.map((row) => row.platformItemId)).toEqual(['older-match']);
+  });
 });

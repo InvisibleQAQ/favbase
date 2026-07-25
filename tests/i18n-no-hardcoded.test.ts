@@ -18,12 +18,6 @@ import path from 'node:path';
 const ENTRYPOINTS_DIR = path.resolve(__dirname, '../entrypoints');
 const CJK = /[一-鿿]/;
 
-// overview-view.tsx is intentionally out of scope: it is a placeholder/mock
-// page slated for a rewrite, so it is excluded from the i18n migration + guard.
-const EXCLUDED_FILES = new Set<string>([
-  path.resolve(ENTRYPOINTS_DIR, 'app/sections/overview/overview-view.tsx'),
-]);
-
 function walkTsx(dir: string): string[] {
   const out: string[] = [];
   for (const entry of readdirSync(dir)) {
@@ -50,7 +44,7 @@ function stripLineComment(line: string): string {
 
 describe('i18n guard: no hardcoded CJK in entrypoints tsx', () => {
   it('has no untranslated Chinese text', () => {
-    const files = walkTsx(ENTRYPOINTS_DIR).filter((f) => !EXCLUDED_FILES.has(path.resolve(f)));
+    const files = walkTsx(ENTRYPOINTS_DIR);
     const offenders: string[] = [];
 
     for (const file of files) {

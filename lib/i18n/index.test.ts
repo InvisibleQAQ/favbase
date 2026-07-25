@@ -59,6 +59,12 @@ describe('t() plural resolution', () => {
     // settings.fetchModelsSuccess has no .one/.other variants, just base with {{count}}
     expect(t('settings.fetchModelsSuccess', { count: 3 })).toBe('Found 3 available models');
   });
+
+  it('selects dashboard plurality from a numeric count while displaying a formatted value', () => {
+    setLocale('en');
+    expect(t('dashboard.itemCount', { count: 1, value: '1' })).toBe('1 item');
+    expect(t('dashboard.itemCount', { count: 1000, value: '1,000' })).toBe('1,000 items');
+  });
 });
 
 describe('platform labels', () => {

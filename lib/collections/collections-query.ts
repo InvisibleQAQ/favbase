@@ -23,6 +23,8 @@ export interface CollectionItemsQuery {
   platform?: CollectionPlatform | null;
   /** Trimmed title/author search; omitted/blank means no search. */
   search?: string;
+  /** One validated tag UUID; omitted/null means no tag filter. */
+  tagId?: string | null;
   /** 1-based page number. Values below 1 are normalized to 1. */
   page: number;
   /** Positive page size. Values below 1 are normalized to 1. */
@@ -68,10 +70,18 @@ function normalizedPageSize(value: number): number {
 function buildConditions({
   platform,
   search,
-}: Pick<CollectionItemsQuery, 'platform' | 'search'>): SQL[] {
+  tagId,
+}: Pick<CollectionItemsQuery, 'platform' | 'search' | 'tagId'>): SQL[] {
   const conditions: (SQL | undefined)[] = [inArray(items.platform, [...COLLECTION_PLATFORMS])];
 
   if (platform != null) conditions.push(eq(items.platform, platform));
+  if (tagId != null) {
+    conditions.push(sql`EXISTS (
+      SELECT 1 FROM ${itemTags}
+      WHERE ${itemTags.itemId} = ${items.id}
+        AND ${itemTags.tagId} = ${tagId}
+    )`);
+  }
 
   const normalizedSearch = search?.trim() ?? '';
   if (normalizedSearch) {
