@@ -121,7 +121,7 @@ describe('CollectionPageScaffold section contract', () => {
       root.render(
         <CollectionPageScaffold
           {...baseProps}
-          backgroundJobsBar={<div data-section="system-status" />}
+          pipeline={<div data-section="pipeline" />}
           operation={<div data-section="operation" />}
           secondaryCategory={<div data-section="secondary-category" />}
         />,
@@ -130,7 +130,7 @@ describe('CollectionPageScaffold section contract', () => {
 
     expect(directSectionOrder(container)).toEqual([
       'title',
-      'system-status',
+      'pipeline',
       'search',
       'operation',
       'primary-category',

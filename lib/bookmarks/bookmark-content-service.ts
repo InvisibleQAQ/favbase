@@ -20,6 +20,7 @@
 
 import { getDb } from '@/lib/database';
 import type { FavbaseDb } from '@/lib/database';
+import { emitDomainEvent } from '@/lib/events';
 import {
   countPendingExtractions,
   getPendingExtractionTargets,
@@ -124,11 +125,19 @@ export async function extractPendingBookmarks(
       const current = { url: target.url, title: target.title };
       opts.onProgress?.({ done: result.processed, total, current });
 
+      const settleNoContent = async () => {
+        await markItemNoContent(target.itemId, db);
+        result.noContent += 1;
+        emitDomainEvent('item-content-updated', {
+          platform: 'bookmarks',
+          platformItemId: target.platformItemId,
+        });
+      };
+
       try {
         if (!classifyUrl(target.url)) {
           // Localhost / private IP / dotless host — settled without a request.
-          await markItemNoContent(target.itemId, db);
-          result.noContent += 1;
+          await settleNoContent();
         } else {
           if (fetchedOnce && delayMs > 0) await sleep(delayMs);
           fetchedOnce = true;
@@ -137,16 +146,18 @@ export async function extractPendingBookmarks(
           if (page.kind === 'transient') {
             result.transient += 1;
           } else if (page.kind === 'permanent') {
-            await markItemNoContent(target.itemId, db);
-            result.noContent += 1;
+            await settleNoContent();
           } else {
             const extracted = extractMarkdown(page.html, target.url);
             if (extracted === null) {
-              await markItemNoContent(target.itemId, db);
-              result.noContent += 1;
+              await settleNoContent();
             } else {
               await saveBookmarkContent(target.itemId, extracted.markdown, db);
               result.chunkedItemIds.push(target.platformItemId);
+              emitDomainEvent('item-content-updated', {
+                platform: 'bookmarks',
+                platformItemId: target.platformItemId,
+              });
               try {
                 opts.onItemExtracted?.(target.platformItemId);
               } catch (err) {

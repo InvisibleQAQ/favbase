@@ -4,7 +4,7 @@
 
 **两级复用**：
 1. **哑组件**（state-box/section-title-bar/search-field/card-grid/chip-row/…）——纯展示，各 view 直接消费或经 scaffold 消费。
-2. **`CollectionPageScaffold`**（`collection-page-scaffold.tsx`）——六个平台共用的页面级编排。固定「标题/系统状态 → 搜索 → 业务操作（可选）→ 主分类 → 标签 → 次分类（可选）→ 列表」，并持有 tag 接线 + phase 阶梯 + 8-case 渲染 + 双 id 映射 + 主 grid popover/分页；平台只注入 adapter、文案和 slots。
+2. **`CollectionPageScaffold`**（`collection-page-scaffold.tsx`）——六个平台共用的页面级编排。固定「标题/紧凑 pipeline → 搜索 → 业务操作（可选）→ 主分类 → 标签 → 次分类（可选）→ 列表」，并持有 tag 接线 + phase 阶梯 + 8-case 渲染 + 双 id 映射 + 主 grid popover/分页；平台只注入 adapter、文案和 slots。
 
 **docs/14 曾反对 `CollectionPageFrame` 大一统 frame**（理由：分支顺序有差异、消费方少 3）——`docs/16` 推翻此结论：分支顺序已被纯函数 `resolveCollectionPhase`（+ `collection-phase.test.ts`）消解，消费方涨到 4 且逐字同构。证据变了，结论跟着变。scaffold 接口偏宽（~26 props）但实现更深（隐藏 phase 顺序/双 id/tag 刷新不变量/双 popover 区分/5 个骨架区条件门），不是浅模块。**配置门早退（hasToken/hasConfig）与平台状态组件（Empty/AuthFailed/NotConnected）留在 view**——平台专属，经 slot 注入。
 
@@ -25,9 +25,9 @@
 - `error-state.tsx` — `ErrorState { title, message, retryLabel, onRetry }`：danger-triangle 图标 + StateBox + outlined 重试按钮。query/sync 失败共用（github/x/zhihu）
 - `no-matches-state.tsx` — `NoMatchesState { message }`：StateBox + disabled Typography 单行。`message` 平台特有名词由调用方传（`t('x.noMatches')` 等），维持零 `t()`
 - `sync-now-button.tsx` — `SyncNowButton { syncing, onSync, label, variant?='outlined' }`：空态/未登录态内的手动同步按钮（三态 restart 图标 / CircularProgress+disabled）。`contained` 用于同步即主路径的空态（zhihu/github），`outlined` 用于次要（x）
-- `sync-progress-bar.tsx` — `SyncProgressBar { value?, caption? }`：顶栏下方进度条。`value==null` → indeterminate（x/zhihu 游标分页），传 0–100 → determinate（github page/totalPages）；`caption` 平台文案由调用方翻译后传入
-- `background-jobs-bar.tsx` — `BackgroundJobsBar { captions: string[] }`（ST3）：同步收尾后台任务（embed/tag）的进度 caption 条，每条一行 `CircularProgress size={12}` + `Typography variant="caption"`；`captions` 空数组渲染 null（自隐）。**零 t()**——文案由 view 从 `hook.embedJob/tagJob.progress` 派生并 `t('backgroundJobs.embedding'|'.tagging',{done,total})` 后传入。scaffold 经 `backgroundJobsBar?` slot 消费；4 collection view（x/github/zhihu/youtube）装配
-- `collection-page-scaffold.tsx` — `CollectionPageScaffold<T>`（页面级编排，非哑组件）。数据/phase/tag/grid 责任不变；分类入口统一为 `primaryCategory`，新增 `operation?` 与 `secondaryCategory?`。两个可选 slot 支持通用 scope：`page` 始终可见，`primary-category` 在跨分类标签结果接管列表时隐藏。`showSyncButton=false` 只隐藏标题动作，不改变 `onSync` 的错误重试语义。可选 slot 直接渲染节点，不创建空容器。
+- `pipeline-progress-strip.tsx` — `PipelineProgressStrip`：单行、可横向滚动的 micro-segment strip；`loading/error` 用 `--/--`，未知运行总量用 `N/--`，已知覆盖率用 determinate 轨道。只渲染预翻译 label 与判别状态，零平台知识、零 `t()`。
+- `sync-progress-bar.tsx` / `background-jobs-bar.tsx` — 旧 slot 的兼容展示模块；六个平台 Collection view 已迁移到 pipeline，不得用于新页面。
+- `collection-page-scaffold.tsx` — `CollectionPageScaffold<T>`（页面级编排，非哑组件）。`pipeline?` 位于标题后且常驻；旧 `progressBar/backgroundJobsBar` 仅作未迁移调用方 fallback。数据/phase/tag/grid 与 `page|primary-category` scope 语义不变。
 - `index.ts` — barrel，消费方单一 import 面
 
 **分支链**：8 分支 phase 顺序（tag-filtered→query-error→auth-failed→sync-error→skeleton→empty-library→no-matches→grid）由纯函数 `resolveCollectionPhase`（`app/hooks/collection-phase.ts`）持有并单测锁定；`CollectionPageScaffold` 消费它并映射到哑组件 + 平台 slot。**两套 popover**：主 grid popover 在 scaffold；`tag-filtered` phase 的 popover 封在 `TaggedItemGrid` 内部（scaffold 该 phase 不渲染主 popover）。**github 无 auth-failed**：省略 `authFailedState` slot，scaffold 在该 phase 回退渲染 `emptyState`（NoTokenState 已在 view 早退，phase 不可达）。

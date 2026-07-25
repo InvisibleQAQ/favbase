@@ -10,10 +10,11 @@ import { DashboardContent } from '../../layouts/dashboard';
 import {
   StateBox,
   SyncNowButton,
-  SyncProgressBar,
-  BackgroundJobsBar,
+  PipelineProgressStrip,
   CollectionPageScaffold,
 } from '../../components/collection';
+import { buildPipelineSegments } from '../../hooks/pipeline-segments';
+import { useProcessingCoverage } from '../../hooks/use-processing-coverage';
 import { useYoutubePlaylists, type YoutubeSyncError } from './use-youtube-playlists';
 import { PlaylistChips } from './playlist-chips';
 import { YoutubeCard } from './youtube-card';
@@ -119,6 +120,10 @@ export function YoutubeView() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const yt = useYoutubePlaylists();
+  const { coverage, status: coverageStatus } = useProcessingCoverage(
+    PLATFORM,
+    `${yt.syncing}:${yt.embedJob?.generation ?? 0}:${yt.tagJob?.generation ?? 0}`,
+  );
 
   // Not configured (API key / channel missing from settings): the whole page
   // short-circuits into the connect guide. A single synchronous gate — the
@@ -141,12 +146,40 @@ export function YoutubeView() {
 
   const syncErrorText = yt.syncError ? syncErrorMessage(yt.syncError) : '';
 
-  // Post-sync embed / tag progress captions (self-hiding bar under the title).
-  const jobCaptions: string[] = [];
-  const ep = yt.embedJob?.progress as { done: number; total: number } | null | undefined;
-  if (yt.embedJob?.running && ep && ep.total > 0) jobCaptions.push(t('backgroundJobs.embedding', ep));
-  const tp = yt.tagJob?.progress as { done: number; total: number } | null | undefined;
-  if (yt.tagJob?.running && tp && tp.total > 0) jobCaptions.push(t('backgroundJobs.tagging', tp));
+  const pipeline = (
+    <PipelineProgressStrip
+      segments={buildPipelineSegments({
+        coverage,
+        coverageStatus,
+        stages: [
+          {
+            id: 'fetch',
+            label: t('pipeline.fetch'),
+            coverage: 'acquisition',
+            runtime: {
+              running: yt.syncing,
+              progress: yt.syncing
+                ? { done: yt.syncProgress?.fetchedCount ?? 0, total: null }
+                : null,
+              error: yt.syncError,
+            },
+          },
+          {
+            id: 'embedding',
+            label: t('pipeline.embedding'),
+            coverage: 'embedding',
+            runtime: yt.embedJob,
+          },
+          {
+            id: 'tagging',
+            label: t('pipeline.tagging'),
+            coverage: 'tagging',
+            runtime: yt.tagJob,
+          },
+        ],
+      })}
+    />
+  );
 
   return (
     <CollectionPageScaffold
@@ -203,21 +236,11 @@ export function YoutubeView() {
           onGoToSettings={() => navigate('/settings')}
         />
       }
-      progressBar={
-        // Indeterminate bar with a running entry count and a playlist cursor.
-        <SyncProgressBar
-          caption={
-            yt.syncProgress
-              ? t('youtube.syncProgress', {
-                  fetched: yt.syncProgress.fetchedCount,
-                  current: yt.syncProgress.playlistIndex,
-                  total: yt.syncProgress.playlistCount,
-                })
-              : undefined
-          }
-        />
+      pipeline={
+        !yt.settingsLoading && yt.hasConfig && yt.syncError?.kind !== 'auth'
+          ? pipeline
+          : undefined
       }
-      backgroundJobsBar={<BackgroundJobsBar captions={jobCaptions} />}
     />
   );
 }

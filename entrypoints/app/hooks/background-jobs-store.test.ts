@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 
 import {
   startJob,
+  trackJobRun,
   getJob,
   getRunningJobCount,
   type BackgroundJobKind,
@@ -119,6 +120,47 @@ describe('backgroundJobs store', () => {
     gate.resolve();
     await flush();
     expect(getJob('p-ref', 'sync')).not.toBe(snapA); // settle swaps the ref
+  });
+
+  it('tracks overlapping fire-and-forget runs until the whole lane settles', async () => {
+    const first = deferred();
+    const second = deferred();
+
+    trackJobRun('p-overlap', 'embed', first.promise);
+    trackJobRun('p-overlap', 'embed', second.promise);
+    expect(getJob('p-overlap', 'embed')?.running).toBe(true);
+
+    first.resolve();
+    await flush();
+    expect(getJob('p-overlap', 'embed')?.running).toBe(true);
+
+    second.resolve();
+    await flush();
+    expect(getJob('p-overlap', 'embed')).toMatchObject({
+      running: false,
+      generation: 1,
+    });
+  });
+
+  it('retains the first tracked error until every overlapping run settles', async () => {
+    const first = deferred();
+    const second = deferred();
+    const error = new Error('embed failed');
+
+    trackJobRun('p-overlap-error', 'embed', first.promise);
+    trackJobRun('p-overlap-error', 'embed', second.promise);
+
+    first.reject(error);
+    await flush();
+    expect(getJob('p-overlap-error', 'embed')?.running).toBe(true);
+
+    second.resolve();
+    await flush();
+    expect(getJob('p-overlap-error', 'embed')).toMatchObject({
+      running: false,
+      error,
+      generation: 0,
+    });
   });
 });
 

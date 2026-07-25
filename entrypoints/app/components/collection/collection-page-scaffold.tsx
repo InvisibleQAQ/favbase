@@ -123,6 +123,8 @@ export interface CollectionPageScaffoldProps<T> {
   emptyState: ReactNode;
   /** auth-failed phase content. Omit for platforms without the concept (falls back to emptyState). */
   authFailedState?: ReactNode;
+  /** Compact, always-visible platform pipeline. Authentication gates stay outside the scaffold. */
+  pipeline?: ReactNode;
   /** Sync progress bar. Rendered only while syncing; omit for platforms without one. */
   progressBar?: ReactNode;
   /** Post-sync background-job captions (embed / tag progress). Rendered
@@ -175,6 +177,7 @@ export function CollectionPageScaffold<T>({
   secondaryCategoryScope = 'page',
   emptyState,
   authFailedState,
+  pipeline,
   progressBar,
   backgroundJobsBar,
 }: CollectionPageScaffoldProps<T>) {
@@ -303,11 +306,14 @@ export function CollectionPageScaffold<T>({
         syncDisabledLabel={syncDisabledLabel}
       />
 
-      {/* Sync progress — shape (determinate/indeterminate) owned by the platform's bar. */}
-      {syncing && progressBar}
-
-      {/* Post-sync embed / tag progress captions — self-hides when idle. */}
-      {backgroundJobsBar}
+      {/* New collection pages use one compact, idle-visible pipeline. The old
+          slots remain a compatibility fallback while adapters migrate. */}
+      {pipeline ?? (
+        <>
+          {syncing && progressBar}
+          {backgroundJobsBar}
+        </>
+      )}
 
       {/* Sync failure banner (library still shows its persisted data). */}
       {hasSyncError && libraryCount > 0 && (

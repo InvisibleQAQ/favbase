@@ -8,10 +8,11 @@ import { Iconify } from '../../components/iconify';
 import {
   StateBox,
   SyncNowButton,
-  SyncProgressBar,
-  BackgroundJobsBar,
+  PipelineProgressStrip,
   CollectionPageScaffold,
 } from '../../components/collection';
+import { buildPipelineSegments } from '../../hooks/pipeline-segments';
+import { useProcessingCoverage } from '../../hooks/use-processing-coverage';
 import { useZhihuFavorites, type ZhihuSyncError } from './use-zhihu-favorites';
 import { CollectionChips } from './collection-chips';
 import { ZhihuCard } from './zhihu-card';
@@ -110,6 +111,10 @@ function EmptyLibraryState({ syncing, onSync }: { syncing: boolean; onSync: () =
 export function ZhihuView() {
   const { t } = useTranslation();
   const zhihu = useZhihuFavorites();
+  const { coverage, status: coverageStatus } = useProcessingCoverage(
+    PLATFORM,
+    `${zhihu.syncing}:${zhihu.embedJob?.generation ?? 0}:${zhihu.tagJob?.generation ?? 0}`,
+  );
 
   const captionParts: string[] = [];
   if (zhihu.libraryCount > 0) {
@@ -121,13 +126,40 @@ export function ZhihuView() {
 
   const syncErrorText = zhihu.syncError ? syncErrorMessage(zhihu.syncError) : '';
 
-  // Post-sync embed / tag progress captions (self-hiding bar under the title).
-  const jobCaptions: string[] = [];
-  const ep = zhihu.embedJob?.progress as { done: number; total: number } | null | undefined;
-  if (zhihu.embedJob?.running && ep && ep.total > 0)
-    jobCaptions.push(t('backgroundJobs.embedding', ep));
-  const tp = zhihu.tagJob?.progress as { done: number; total: number } | null | undefined;
-  if (zhihu.tagJob?.running && tp && tp.total > 0) jobCaptions.push(t('backgroundJobs.tagging', tp));
+  const pipeline = (
+    <PipelineProgressStrip
+      segments={buildPipelineSegments({
+        coverage,
+        coverageStatus,
+        stages: [
+          {
+            id: 'fetch',
+            label: t('pipeline.fetch'),
+            coverage: 'acquisition',
+            runtime: {
+              running: zhihu.syncing,
+              progress: zhihu.syncing
+                ? { done: zhihu.syncProgress?.fetchedCount ?? 0, total: null }
+                : null,
+              error: zhihu.syncError,
+            },
+          },
+          {
+            id: 'embedding',
+            label: t('pipeline.embedding'),
+            coverage: 'embedding',
+            runtime: zhihu.embedJob,
+          },
+          {
+            id: 'tagging',
+            label: t('pipeline.tagging'),
+            coverage: 'tagging',
+            runtime: zhihu.tagJob,
+          },
+        ],
+      })}
+    />
+  );
 
   return (
     <CollectionPageScaffold
@@ -178,22 +210,7 @@ export function ZhihuView() {
       ) : null}
       emptyState={<EmptyLibraryState syncing={zhihu.syncing} onSync={zhihu.sync} />}
       authFailedState={<NotLoggedInState syncing={zhihu.syncing} onSync={zhihu.sync} />}
-      progressBar={
-        // Indeterminate (per-collection item totals are lazy), with a running
-        // fetched count + collection cursor.
-        <SyncProgressBar
-          caption={
-            zhihu.syncProgress
-              ? t('zhihu.syncProgress', {
-                  fetched: zhihu.syncProgress.fetchedCount,
-                  current: zhihu.syncProgress.current,
-                  total: zhihu.syncProgress.total,
-                })
-              : undefined
-          }
-        />
-      }
-      backgroundJobsBar={<BackgroundJobsBar captions={jobCaptions} />}
+      pipeline={zhihu.syncError?.kind === 'auth' ? undefined : pipeline}
     />
   );
 }

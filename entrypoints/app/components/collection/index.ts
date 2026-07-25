@@ -7,6 +7,12 @@ export { SyncNowButton, type SyncNowButtonProps } from './sync-now-button';
 export { SyncProgressBar, type SyncProgressBarProps } from './sync-progress-bar';
 export { BackgroundJobsBar, type BackgroundJobsBarProps } from './background-jobs-bar';
 export {
+  PipelineProgressStrip,
+  type PipelineProgressStripProps,
+  type PipelineProgressSegment,
+  type PipelineSegmentState,
+} from './pipeline-progress-strip';
+export {
   CardGrid,
   CardGridItem,
   CardGridPagination,

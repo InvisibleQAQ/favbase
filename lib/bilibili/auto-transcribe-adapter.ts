@@ -15,7 +15,13 @@ import { transcribeAndPersist, createStatusListener } from './transcribe-utils';
 import { normalizeCover } from './url-utils';
 import { getAsrSettings } from '@/lib/storage';
 
-export function createBiliAutoTranscribeAdapter(): AutoTranscribeAdapter {
+export interface BiliAutoTranscribeAdapterOptions {
+  trackProcessingRun?: (kind: 'embed' | 'tag', run: Promise<unknown>) => void;
+}
+
+export function createBiliAutoTranscribeAdapter(
+  options: BiliAutoTranscribeAdapterOptions = {},
+): AutoTranscribeAdapter {
   return {
     async checkAuth() { await checkAuth(); },
 
@@ -55,7 +61,11 @@ export function createBiliAutoTranscribeAdapter(): AutoTranscribeAdapter {
     },
 
     async transcribe(videoId: string, title: string, onIndexing?: () => void): Promise<TranscribeResponse> {
-      return transcribeAndPersist(videoId, title, { onIndexing });
+      return transcribeAndPersist(videoId, title, {
+        onIndexing,
+        onEmbeddingRun: (run) => options.trackProcessingRun?.('embed', run),
+        onTaggingRun: (run) => options.trackProcessingRun?.('tag', run),
+      });
     },
 
     markError: markVideoError,

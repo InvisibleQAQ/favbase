@@ -8,8 +8,9 @@ import { eq } from 'drizzle-orm';
 import * as schema from '@/lib/database/schema';
 import { runMigrations } from '@/lib/database/migrations';
 import type { FavbaseDb } from '@/lib/database';
+import { onDomainEvent } from '@/lib/events';
 import type { ResolvedEmbeddingConfig } from './config';
-import { embedNewItems } from './indexing';
+import { embedNewItems, embedPlatformItem } from './indexing';
 
 // config.ts (pulled in by indexing.ts) value-imports `settingsStorage`, whose
 // barrel eagerly touches `@wxt-dev/storage` (chrome.runtime) at load. All
@@ -259,6 +260,61 @@ describe('embedNewItems', () => {
     expect(await firstChunkEmbedding(itemA)).toBeNull();
     expect(await getContentState(itemB)).toBe('embedded');
     expect(await firstChunkEmbedding(itemB)).not.toBeNull();
+  });
+
+  it('emits item-embedded only after each durable embedding succeeds', async () => {
+    await seedItem({
+      platformItemId: 'event-fail',
+      contentState: 'chunked',
+      chunkTexts: ['fail-me'],
+      createdAt: T0,
+    });
+    await seedItem({
+      platformItemId: 'event-ok',
+      contentState: 'chunked',
+      chunkTexts: ['ok'],
+      createdAt: T1,
+    });
+    const seen: string[] = [];
+    const off = onDomainEvent('item-embedded', (event) => seen.push(event.platformItemId));
+
+    try {
+      await embedNewItems('test', ['event-fail', 'event-ok'], {
+        db: () => db,
+        getConfig: async () => fakeConfig(true),
+        embed: async (_config, texts) => {
+          if (texts.includes('fail-me')) throw new Error('boom');
+          return fakeVectors(texts.length);
+        },
+      });
+    } finally {
+      off();
+    }
+
+    expect(seen).toEqual(['event-ok']);
+  });
+
+  it('emits item-embedded for the single-item transcription path', async () => {
+    await seedItem({
+      platform: 'bilibili',
+      platformItemId: 'BV-EVENT',
+      contentState: 'chunked',
+      chunkTexts: ['video content'],
+    });
+    const seen: string[] = [];
+    const off = onDomainEvent('item-embedded', (event) => seen.push(event.platformItemId));
+
+    try {
+      await embedPlatformItem('bilibili', 'BV-EVENT', {
+        db: () => db,
+        getConfig: async () => fakeConfig(true),
+        embed: async (_config, texts) => fakeVectors(texts.length),
+      });
+    } finally {
+      off();
+    }
+
+    expect(seen).toEqual(['BV-EVENT']);
   });
 
   it('is a silent no-op when embedding is not configured', async () => {

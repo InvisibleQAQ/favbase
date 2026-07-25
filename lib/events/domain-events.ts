@@ -6,6 +6,8 @@
  */
 
 export interface DomainEventMap {
+  'item-content-updated': { platform: string; platformItemId: string };
+  'item-embedded': { platform: string; platformItemId: string };
   'item-tagged': { platform: string; platformItemId: string };
 }
 

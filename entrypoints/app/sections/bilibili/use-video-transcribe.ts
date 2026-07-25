@@ -5,7 +5,7 @@ import {
 } from '@/lib/bilibili/transcription-coordinator';
 import type { BiliFavVideo } from '@/lib/bilibili/types';
 import type { VideoTranscribeState } from '@/lib/bilibili/transcription-coordinator';
-import { startJob } from '../../hooks/background-jobs-store';
+import { startJob, trackJobRun } from '../../hooks/background-jobs-store';
 
 export type { VideoTranscribeState, ContentStatus } from '@/lib/bilibili/transcription-coordinator';
 
@@ -17,6 +17,10 @@ export type { VideoTranscribeState, ContentStatus } from '@/lib/bilibili/transcr
 // reference is stable across renders/mounts.
 const trackTranscribeRun = (_bvid: string, run: Promise<unknown>): void => {
   startJob('bilibili', 'transcribe', () => run.then(() => undefined));
+};
+
+const trackProcessingRun = (kind: 'embed' | 'tag', run: Promise<unknown>): void => {
+  trackJobRun('bilibili', kind, run);
 };
 
 export interface UseVideoTranscribeReturn {
@@ -31,7 +35,7 @@ export function useVideoTranscribe(
 ): UseVideoTranscribeReturn {
   const coordRef = useRef<TranscriptionCoordinator>(null);
   if (!coordRef.current) {
-    coordRef.current = new TranscriptionCoordinator(trackTranscribeRun);
+    coordRef.current = new TranscriptionCoordinator(trackTranscribeRun, trackProcessingRun);
   }
 
   const snapshot = useSyncExternalStore(

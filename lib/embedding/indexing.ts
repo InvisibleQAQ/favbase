@@ -2,6 +2,7 @@ import { and, asc, eq, exists, inArray, sql } from 'drizzle-orm';
 import type { FavbaseDb } from '@/lib/database';
 import { getDb, schema } from '@/lib/database';
 import { chunk } from '@/lib/database/sql-utils';
+import { emitDomainEvent } from '@/lib/events';
 import { createEmbeddingModel, embedTexts } from '@/lib/ai';
 import { getEmbeddingSettings, type ResolvedEmbeddingConfig } from './config';
 import { replaceItemChunks, upsertChunkEmbeddings } from './vector-store';
@@ -185,6 +186,7 @@ export async function embedPlatformItem(
     const chunks = await getEmbeddableChunks(db, target.id);
     if (chunks.length === 0) return 'chunked';
     await embedChunks(db, target.id, chunks, config, embed);
+    emitDomainEvent('item-embedded', { platform, platformItemId });
     return 'embedded';
   } catch (err) {
     console.error(
@@ -315,10 +317,10 @@ export async function embedNewItems(
     if (!config.enabled) return;
     const db = (deps.db ?? getDb)();
 
-    const targets: { id: string }[] = [];
+    const targets: Array<{ id: string; platformItemId: string }> = [];
     for (const batch of chunk(platformItemIds, ID_QUERY_CHUNK_SIZE)) {
       const rows = await db
-        .select({ id: items.id })
+        .select({ id: items.id, platformItemId: items.platformItemId })
         .from(items)
         .where(
           and(
@@ -335,7 +337,7 @@ export async function embedNewItems(
     let done = 0;
     onProgress?.({ done, total });
 
-    for (const { id: itemId } of targets) {
+    for (const { id: itemId, platformItemId } of targets) {
       try {
         const chunks = await getEmbeddableChunks(db, itemId);
         if (chunks.length === 0) {
@@ -346,6 +348,7 @@ export async function embedNewItems(
           continue;
         }
         await embedChunks(db, itemId, chunks, config, embed);
+        emitDomainEvent('item-embedded', { platform, platformItemId });
       } catch (err) {
         console.error(
           `[embedding] Post-sync embed failed for item=${itemId}, staying at 'chunked':`,

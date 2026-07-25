@@ -8,6 +8,7 @@ import { and, eq } from 'drizzle-orm';
 import * as schema from '@/lib/database/schema';
 import { runMigrations } from '@/lib/database/migrations';
 import type { FavbaseDb } from '@/lib/database';
+import { onDomainEvent } from '@/lib/events';
 
 const { backgroundSendMessage } = vi.hoisted(() => ({ backgroundSendMessage: vi.fn() }));
 
@@ -199,6 +200,29 @@ describe('bookmark-content-service (in-memory PGlite)', () => {
     expect(chunks.length).toBeGreaterThan(0);
     expect(chunks[0].chunkText).toContain('Alpha');
     expect(chunks[0].startSec).toBeNull(); // text content — no timestamps
+  });
+
+  it('emits item-content-updated after each durable settled state', async () => {
+    const ok = 'https://events.example.com/ok';
+    const dead = 'https://events.example.com/dead';
+    await syncBookmarkTreeToDb(db, tree([bm(ok), bm(dead)]));
+    const seen: string[] = [];
+    const off = onDomainEvent('item-content-updated', (event) => seen.push(event.platformItemId));
+
+    try {
+      await extractPendingBookmarks({
+        db,
+        delayMs: 0,
+        fetchPage: pageFetcher({
+          [ok]: () => htmlResponse(articleHtml('Event')),
+          [dead]: () => htmlResponse('gone', 404),
+        }),
+      });
+    } finally {
+      off();
+    }
+
+    expect(seen.sort()).toEqual([dead, ok].sort());
   });
 
   it('uses the background fetch seam when production does not inject fetchPage', async () => {

@@ -8,6 +8,7 @@ import { drizzle } from 'drizzle-orm/pglite';
 import * as schema from '@/lib/database/schema';
 import { runMigrations } from '@/lib/database/migrations';
 import type { FavbaseDb } from '@/lib/database';
+import { onDomainEvent } from '@/lib/events';
 import type { UserSettings } from '@/lib/storage';
 import type { TranscribeResponse } from '@/lib/transcription/types';
 
@@ -160,6 +161,46 @@ describe('transcribeAndPersist', () => {
     await expect(run).resolves.toEqual(response);
     expect(onIndexed).toHaveBeenCalledWith('embedded');
     expect(boundary.generateObject).toHaveBeenCalledTimes(1);
+  });
+
+  it('emits item-content-updated after transcription content is durably persisted', async () => {
+    await seedItem('BV-CONTENT-EVENT');
+    boundary.sendMessage.mockResolvedValueOnce(successResponse());
+    boundary.embedTexts.mockResolvedValueOnce([embeddingVector()]);
+    boundary.generateObject.mockResolvedValueOnce({ object: { tags: [] } });
+    const seen: string[] = [];
+    const off = onDomainEvent('item-content-updated', (event) => seen.push(event.platformItemId));
+
+    try {
+      await (await import('./transcribe-utils')).transcribeAndPersist(
+        'BV-CONTENT-EVENT',
+        'Content event',
+      );
+    } finally {
+      off();
+    }
+
+    expect(seen).toEqual(['BV-CONTENT-EVENT']);
+  });
+
+  it('exposes independent Embedding and Tagging promises without changing completion', async () => {
+    await seedItem('BV-PROCESSING-RUNS');
+    boundary.sendMessage.mockResolvedValueOnce(successResponse());
+    boundary.embedTexts.mockResolvedValueOnce([embeddingVector()]);
+    boundary.generateObject.mockResolvedValueOnce({ object: { tags: ['tracked'] } });
+    const onEmbeddingRun = vi.fn();
+    const onTaggingRun = vi.fn();
+
+    await (await import('./transcribe-utils')).transcribeAndPersist(
+      'BV-PROCESSING-RUNS',
+      'Tracked processing',
+      { onEmbeddingRun, onTaggingRun },
+    );
+
+    expect(onEmbeddingRun).toHaveBeenCalledTimes(1);
+    expect(onTaggingRun).toHaveBeenCalledTimes(1);
+    await expect(onEmbeddingRun.mock.calls[0][0]).resolves.toBe('embedded');
+    await expect(onTaggingRun.mock.calls[0][0]).resolves.toBe('tagged');
   });
 
   it('keeps tagging independent when embedding fails', async () => {

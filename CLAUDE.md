@@ -105,3 +105,4 @@ WXT 入口点及运行时角色总览，详细结构见对应目录 `CLAUDE.md`�
 - i18n 数字格式化: `formatCompactNumber(n)`（`lib/i18n/index.ts`）用 `Intl.NumberFormat(currentLocale, { notation: 'compact', maximumFractionDigits: 1 })`，zh → `1.2万/1.2亿`，en → `1.2K/1.2M`。消费者须通过 `useTranslation()` 订阅以在切换语言时 re-render（如 `video-card.tsx` 播放量）
 - i18n 日期格式化: `formatDateTime(ts)`（`lib/i18n/index.ts`）用 `Intl.DateTimeFormat(currentLocale, { dateStyle: 'short', timeStyle: 'short' })`。消费者同样须经 `useTranslation()` 订阅（如设置页 `save-actions.tsx` 已保存徽标）
 - i18n 硬编码守卫: `tests/i18n-no-hardcoded.test.ts`（vitest，非 ESLint——项目零 linter）。扫描全部 `entrypoints/**/*.tsx`，剥离行/块注释后若含 CJK（`[一-鿿]`）即 fail 并列出 file:line。行内 `// i18n-ignore` 可豁免单行。**仅拦 CJK**（英文展示文案靠 review）。`pnpm test`（`vitest run`）跑全部测试
+- Collection pipeline 的共享短标签统一放在 `pipeline.*`；视图翻译后传给零 `t()` 的共享 strip。

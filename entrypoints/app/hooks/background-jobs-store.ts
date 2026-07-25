@@ -35,6 +35,7 @@ export interface BackgroundJob {
 
 const jobs = new Map<string, BackgroundJob>();
 const listeners = new Set<() => void>();
+const trackedRunGroups = new Map<string, { active: number; error: unknown }>();
 
 // Cached snapshot of the currently-running jobs. Recomputed only on mutation so
 // useSyncExternalStore gets a referentially-stable array between changes (a fresh
@@ -128,6 +129,56 @@ export function startJob(
       if (!cur) return;
       setJob(key, { ...cur, running: false, progress: null, error: err });
     });
+}
+
+/**
+ * Observe overlapping fire-and-forget promises as one lane. Unlike startJob,
+ * this never dedupes work: it only keeps the job running until every tracked
+ * promise for the platform+kind settles.
+ */
+export function trackJobRun(
+  platform: string,
+  kind: Extract<BackgroundJobKind, 'embed' | 'tag'>,
+  run: Promise<unknown>,
+): void {
+  const key = keyOf(platform, kind);
+  let group = trackedRunGroups.get(key);
+  if (!group) {
+    group = { active: 0, error: null };
+    trackedRunGroups.set(key, group);
+    const existing = jobs.get(key);
+    setJob(key, {
+      platform,
+      kind,
+      running: true,
+      progress: null,
+      error: null,
+      generation: existing?.generation ?? 0,
+    });
+  }
+  group.active += 1;
+
+  const settle = (error: unknown): void => {
+    const currentGroup = trackedRunGroups.get(key);
+    if (!currentGroup) return;
+    if (error != null && currentGroup.error == null) currentGroup.error = error;
+    currentGroup.active -= 1;
+    if (currentGroup.active > 0) return;
+
+    trackedRunGroups.delete(key);
+    const currentJob = jobs.get(key);
+    if (!currentJob) return;
+    setJob(key, {
+      ...currentJob,
+      running: false,
+      progress: null,
+      error: currentGroup.error,
+      generation:
+        currentGroup.error == null ? currentJob.generation + 1 : currentJob.generation,
+    });
+  };
+
+  void run.then(() => settle(null), settle);
 }
 
 /** Subscribe to a single platform+kind job (null until first started). */

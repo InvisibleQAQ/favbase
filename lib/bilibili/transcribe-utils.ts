@@ -1,5 +1,6 @@
 import type { TranscribeResponse, TranscribeStatusPush } from '@/lib/transcription/types';
 import { embedPlatformItem } from '@/lib/embedding';
+import { emitDomainEvent } from '@/lib/events';
 import { tagPlatformItem } from '@/lib/tagging';
 import { persistContentChunks, type PersistContentResult } from './bili-sync-service';
 
@@ -10,6 +11,9 @@ export interface TranscribePersistHooks {
   onIndexing?: () => void;
   /** Fired when Embedding settles with the reached content state (null = persist failed). */
   onIndexed?: (result: PersistContentResult) => void;
+  /** Exposes the independent post-processing lifecycles without awaiting them. */
+  onEmbeddingRun?: (run: Promise<unknown>) => void;
+  onTaggingRun?: (run: Promise<unknown>) => void;
 }
 
 /**
@@ -37,8 +41,13 @@ export async function transcribeAndPersist(
       return response;
     }
 
+    emitDomainEvent('item-content-updated', { platform: PLATFORM, platformItemId: bvid });
+
     const embedding = embedPlatformItem(PLATFORM, bvid);
-    void tagPlatformItem(PLATFORM, bvid);
+    hooks?.onEmbeddingRun?.(embedding);
+    const tagging = tagPlatformItem(PLATFORM, bvid);
+    hooks?.onTaggingRun?.(tagging);
+    void tagging;
     const result = await embedding;
     hooks?.onIndexed?.(result);
   }

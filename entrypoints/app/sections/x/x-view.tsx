@@ -8,10 +8,11 @@ import { Iconify } from '../../components/iconify';
 import {
   StateBox,
   SyncNowButton,
-  SyncProgressBar,
-  BackgroundJobsBar,
+  PipelineProgressStrip,
   CollectionPageScaffold,
 } from '../../components/collection';
+import { buildPipelineSegments } from '../../hooks/pipeline-segments';
+import { useProcessingCoverage } from '../../hooks/use-processing-coverage';
 import { useXBookmarks, type XSyncError } from './use-x-bookmarks';
 import { formatCountdown } from './cooldown';
 import { AuthorChips } from './author-chips';
@@ -112,6 +113,10 @@ function EmptyLibraryState({ syncing, onSync }: { syncing: boolean; onSync: () =
 export function XView() {
   const { t } = useTranslation();
   const x = useXBookmarks();
+  const { coverage, status: coverageStatus } = useProcessingCoverage(
+    PLATFORM,
+    `${x.syncing}:${x.embedJob?.generation ?? 0}:${x.tagJob?.generation ?? 0}`,
+  );
 
   const captionParts: string[] = [];
   if (x.libraryCount > 0) {
@@ -128,12 +133,40 @@ export function XView() {
 
   const syncErrorText = x.syncError ? syncErrorMessage(x.syncError) : '';
 
-  // Post-sync embed / tag progress captions (self-hiding bar under the title).
-  const jobCaptions: string[] = [];
-  const ep = x.embedJob?.progress as { done: number; total: number } | null | undefined;
-  if (x.embedJob?.running && ep && ep.total > 0) jobCaptions.push(t('backgroundJobs.embedding', ep));
-  const tp = x.tagJob?.progress as { done: number; total: number } | null | undefined;
-  if (x.tagJob?.running && tp && tp.total > 0) jobCaptions.push(t('backgroundJobs.tagging', tp));
+  const pipeline = (
+    <PipelineProgressStrip
+      segments={buildPipelineSegments({
+        coverage,
+        coverageStatus,
+        stages: [
+          {
+            id: 'fetch',
+            label: t('pipeline.fetch'),
+            coverage: 'acquisition',
+            runtime: {
+              running: x.syncing,
+              progress: x.syncing
+                ? { done: x.syncProgress?.fetchedCount ?? 0, total: null }
+                : null,
+              error: x.syncError,
+            },
+          },
+          {
+            id: 'embedding',
+            label: t('pipeline.embedding'),
+            coverage: 'embedding',
+            runtime: x.embedJob,
+          },
+          {
+            id: 'tagging',
+            label: t('pipeline.tagging'),
+            coverage: 'tagging',
+            runtime: x.tagJob,
+          },
+        ],
+      })}
+    />
+  );
 
   // X-only 5-minute cooldown after a successful sync — hard-disables the
   // title-bar sync button with a live mm:ss countdown label.
@@ -193,17 +226,7 @@ export function XView() {
       ) : null}
       emptyState={<EmptyLibraryState syncing={x.syncing} onSync={x.sync} />}
       authFailedState={<NotLoggedInState syncing={x.syncing} onSync={x.sync} />}
-      progressBar={
-        // Always indeterminate — cursor pagination has no total.
-        <SyncProgressBar
-          caption={
-            x.syncProgress
-              ? t('x.syncProgress', { fetched: x.syncProgress.fetchedCount, page: x.syncProgress.page })
-              : undefined
-          }
-        />
-      }
-      backgroundJobsBar={<BackgroundJobsBar captions={jobCaptions} />}
+      pipeline={x.syncError?.kind === 'auth' ? undefined : pipeline}
     />
   );
 }

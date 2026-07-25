@@ -45,6 +45,11 @@ _Avoid_: Orphan tag, configured tag
 A Collection Item linked to at least one Used Tag, regardless of how many tags it has.
 _Avoid_: Tagged task, completed item
 
+**Processing Coverage**:
+A read-only, platform-scoped snapshot of how many locally persisted, eligible Collection Items have completed each content-processing stage.
+It does not claim that the local collection contains every current item from the external platform.
+_Avoid_: Remote sync completeness, job history, processing dashboard
+
 **Tag Drill-down**:
 Navigation from a Collection Analytics tag ranking to the aggregate collection filtered by that Used Tag.
 _Avoid_: Dashboard item browser
@@ -61,6 +66,8 @@ _Avoid_: Processing Dashboard, queue console
 - A **Collection Item** belongs to exactly one supported platform
 - A **Collection Item** has one **Creator** or bookmark **Domain**
 - A **Collection Item** belongs to one or more **Sources** when the platform exposes containers
+- A platform Collection page may present **Processing Coverage** for its locally persisted **Collection Items**
+- The **Dashboard** does not present **Processing Coverage** or operational task progress
 - **Library Composition** uses **Item Count** for platform share and **Membership Count** for Source rankings
 - A **Tag Drill-down** leaves the **Dashboard** and opens matching **Collection Items** in the aggregate collection
 
@@ -71,4 +78,5 @@ _Avoid_: Processing Dashboard, queue console
 
 ## Flagged ambiguities
 
-- "Progress" previously meant background task execution, but the requested **Dashboard** concerns collection data and explicitly excludes task progress.
+- "Progress" may mean live task execution or idle **Processing Coverage**; platform Collection pages may combine them in one compact control, but the **Dashboard** contains neither.
+- External platforms do not expose a durable remote-total snapshot, so **Processing Coverage** must not be described as remote sync completeness.

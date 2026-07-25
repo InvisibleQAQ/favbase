@@ -10,9 +10,12 @@ import type { BiliFavOrder } from '@/lib/bilibili/types';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import {
   CollectionPageScaffold,
+  PipelineProgressStrip,
   StateBox,
-  SyncProgressBar,
 } from '../../components/collection';
+import { buildPipelineSegments } from '../../hooks/pipeline-segments';
+import { useProcessingCoverage } from '../../hooks/use-processing-coverage';
+import { trackJobRun, useJob } from '../../hooks/background-jobs-store';
 import { Iconify } from '../../components/iconify';
 import { AutoTranscribeBar } from './auto-transcribe-bar';
 import { FolderChips } from './folder-chips';
@@ -26,7 +29,9 @@ import { VideoGridSkeleton } from './video-grid-skeleton';
 
 const PLATFORM = 'bilibili';
 const SEARCH_DEBOUNCE_MS = 300;
-const biliAdapter = createBiliAutoTranscribeAdapter();
+const biliAdapter = createBiliAutoTranscribeAdapter({
+  trackProcessingRun: (kind, run) => trackJobRun(PLATFORM, kind, run),
+});
 
 function NotLoggedIn({ onRetry }: { onRetry: () => void }) {
   const { t } = useTranslation();
@@ -170,6 +175,15 @@ function BilibiliCollectionPage({
   } = useBiliFavVideos(mediaId, keyword);
   const { getState, startTranscribe, cancelTranscribe, activeBvid } =
     useVideoTranscribe(videos);
+  const embedJob = useJob(PLATFORM, 'embed');
+  const tagJob = useJob(PLATFORM, 'tag');
+  const { coverage, status: coverageStatus } = useProcessingCoverage(
+    PLATFORM,
+    `${syncing}:${autoTranscribe.running}:${activeBvid ?? ''}:${embedJob?.generation ?? 0}:${tagJob?.generation ?? 0}`,
+  );
+  const activeTranscribeState = activeBvid ? getState(activeBvid) : null;
+  const manualTranscribing = activeBvid != null;
+  const autoTranscribing = autoTranscribe.running;
 
   const captionParts: string[] = [];
   if (!loading && folderTitle) captionParts.push(folderTitle);
@@ -181,6 +195,51 @@ function BilibiliCollectionPage({
       t('collections.lastSynced', { time: lastSyncedAt.toLocaleTimeString() }),
     );
   }
+
+  const pipeline = (
+    <PipelineProgressStrip
+      segments={buildPipelineSegments({
+        coverage,
+        coverageStatus,
+        stages: [
+          {
+            id: 'sync',
+            label: t('pipeline.sync'),
+            coverage: 'acquisition',
+            runtime: {
+              running: syncing,
+              progress: syncing
+                ? { done: syncProgress?.fetchedCount ?? 0, total: null }
+                : null,
+              error: syncError,
+            },
+          },
+          {
+            id: 'transcription',
+            label: t('pipeline.transcription'),
+            coverage: 'content',
+            runtime: {
+              running: autoTranscribing || manualTranscribing,
+              progress: coverageStatus === 'ready' ? coverage.content : null,
+              error: activeTranscribeState?.error,
+            },
+          },
+          {
+            id: 'embedding',
+            label: t('pipeline.embedding'),
+            coverage: 'embedding',
+            runtime: embedJob,
+          },
+          {
+            id: 'tagging',
+            label: t('pipeline.tagging'),
+            coverage: 'tagging',
+            runtime: tagJob,
+          },
+        ],
+      })}
+    />
+  );
 
   return (
     <CollectionPageScaffold
@@ -232,22 +291,7 @@ function BilibiliCollectionPage({
         <TaggedVideoCard item={item} onEditTags={openEditor} />
       )}
       skeleton={<VideoGridSkeleton />}
-      progressBar={
-        <SyncProgressBar
-          caption={
-            syncProgress
-              ? t('collections.bilibiliSyncProgress', {
-                  fetched: syncProgress.fetchedCount,
-                  current: syncProgress.folderIndex,
-                  total: syncProgress.folderCount,
-                  title: syncProgress.folderTitle,
-                  page: syncProgress.page,
-                  totalPages: syncProgress.totalPages,
-                })
-              : undefined
-          }
-        />
-      }
+      pipeline={loginState === 'logged_in' ? pipeline : undefined}
       operation={
         <Box sx={{ mb: 2.5 }}>
           <AutoTranscribeBar
@@ -305,6 +349,45 @@ function BilibiliFallbackPage({
   onSelectFolder,
 }: BilibiliFallbackPageProps) {
   const { t } = useTranslation();
+  const { coverage, status: coverageStatus } = useProcessingCoverage(PLATFORM, syncing);
+  const pipeline = (
+    <PipelineProgressStrip
+      segments={buildPipelineSegments({
+        coverage,
+        coverageStatus,
+        stages: [
+          {
+            id: 'sync',
+            label: t('pipeline.sync'),
+            coverage: 'acquisition',
+            runtime: {
+              running: syncing,
+              progress:
+                syncing && coverageStatus === 'ready'
+                  ? { done: coverage.acquisition.done, total: null }
+                  : null,
+              error,
+            },
+          },
+          {
+            id: 'transcription',
+            label: t('pipeline.transcription'),
+            coverage: 'content',
+          },
+          {
+            id: 'embedding',
+            label: t('pipeline.embedding'),
+            coverage: 'embedding',
+          },
+          {
+            id: 'tagging',
+            label: t('pipeline.tagging'),
+            coverage: 'tagging',
+          },
+        ],
+      })}
+    />
+  );
   return (
     <CollectionPageScaffold
       platform={PLATFORM}
@@ -351,6 +434,7 @@ function BilibiliFallbackPage({
       }
       emptyState={<SelectFolderState />}
       authFailedState={<NotLoggedIn onRetry={onSync} />}
+      pipeline={loginState === 'logged_in' ? pipeline : undefined}
     />
   );
 }

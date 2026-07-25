@@ -10,11 +10,12 @@ import { DashboardContent } from '../../layouts/dashboard';
 import {
   StateBox,
   SyncNowButton,
-  SyncProgressBar,
-  BackgroundJobsBar,
+  PipelineProgressStrip,
   CardGridSkeleton,
   CollectionPageScaffold,
 } from '../../components/collection';
+import { buildPipelineSegments } from '../../hooks/pipeline-segments';
+import { useProcessingCoverage } from '../../hooks/use-processing-coverage';
 import { useGithubStars, type GithubSyncError } from './use-github-stars';
 import { LanguageChips } from './language-chips';
 import { RepoCard } from './repo-card';
@@ -95,6 +96,10 @@ export function GithubStarsView() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const gh = useGithubStars();
+  const { coverage, status: coverageStatus } = useProcessingCoverage(
+    PLATFORM,
+    `${gh.syncing}:${gh.embedJob?.generation ?? 0}:${gh.tagJob?.generation ?? 0}`,
+  );
 
   // No token: the whole page short-circuits into the connect guide.
   if (!gh.settingsLoading && !gh.hasToken) {
@@ -117,33 +122,58 @@ export function GithubStarsView() {
 
   const syncErrorText = gh.syncError ? syncErrorMessage(gh.syncError) : '';
 
-  // Post-sync embed / tag progress captions (self-hiding bar under the title).
-  const jobCaptions: string[] = [];
-  const ep = gh.embedJob?.progress as { done: number; total: number } | null | undefined;
-  if (gh.embedJob?.running && ep && ep.total > 0) jobCaptions.push(t('backgroundJobs.embedding', ep));
-  const tp = gh.tagJob?.progress as { done: number; total: number } | null | undefined;
-  if (gh.tagJob?.running && tp && tp.total > 0) jobCaptions.push(t('backgroundJobs.tagging', tp));
-
-  // Two sync phases: paged star-list fetch (determinate once the first page's
-  // Link header lands), then serial README fetch for new repos.
-  let progressValue: number | null = null;
-  let progressCaption: string | undefined;
-  if (gh.syncProgress) {
-    if (gh.syncProgress.phase === 'stars') {
-      progressValue = (gh.syncProgress.page / gh.syncProgress.totalPages) * 100;
-      progressCaption = t('githubStars.syncProgress', {
-        fetched: gh.syncProgress.fetchedCount,
-        total: gh.syncProgress.estimatedTotal,
-      });
-    } else {
-      progressValue =
-        gh.syncProgress.total > 0 ? (gh.syncProgress.done / gh.syncProgress.total) * 100 : null;
-      progressCaption = t('githubStars.readmeProgress', {
-        done: gh.syncProgress.done,
-        total: gh.syncProgress.total,
-      });
-    }
-  }
+  const starsRunning = gh.syncing && gh.syncProgress?.phase !== 'readme';
+  const readmeRunning = gh.syncing && gh.syncProgress?.phase === 'readme';
+  const pipeline = (
+    <PipelineProgressStrip
+      segments={buildPipelineSegments({
+        coverage,
+        coverageStatus,
+        stages: [
+          {
+            id: 'stars',
+            label: t('pipeline.stars'),
+            coverage: 'acquisition',
+            runtime: {
+              running: starsRunning,
+              progress: starsRunning
+                ? {
+                    done: gh.syncProgress?.phase === 'stars' ? gh.syncProgress.fetchedCount : 0,
+                    total: null,
+                  }
+                : null,
+              error: gh.syncError,
+            },
+          },
+          {
+            id: 'readme',
+            label: t('pipeline.readme'),
+            coverage: 'content',
+            runtime: {
+              running: readmeRunning,
+              progress:
+                gh.syncProgress?.phase === 'readme'
+                  ? { done: gh.syncProgress.done, total: gh.syncProgress.total }
+                  : null,
+              error: gh.syncError,
+            },
+          },
+          {
+            id: 'embedding',
+            label: t('pipeline.embedding'),
+            coverage: 'embedding',
+            runtime: gh.embedJob,
+          },
+          {
+            id: 'tagging',
+            label: t('pipeline.tagging'),
+            coverage: 'tagging',
+            runtime: gh.tagJob,
+          },
+        ],
+      })}
+    />
+  );
 
   return (
     <CollectionPageScaffold
@@ -195,8 +225,11 @@ export function GithubStarsView() {
         />
       ) : null}
       emptyState={<EmptyLibraryState syncing={gh.syncing} onSync={gh.sync} />}
-      progressBar={<SyncProgressBar value={progressValue} caption={progressCaption} />}
-      backgroundJobsBar={<BackgroundJobsBar captions={jobCaptions} />}
+      pipeline={
+        !gh.settingsLoading && gh.hasToken && gh.syncError?.kind !== 'auth'
+          ? pipeline
+          : undefined
+      }
     />
   );
 }

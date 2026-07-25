@@ -9,6 +9,7 @@
 - 本地浏览器书签平台显示名固定为 `Browser Bookmarks` / `浏览器书签`；`nav.bookmarks` 与 `bookmarks.title` 必须一致，后台任务提示复用 `nav.bookmarks`。
 - X 平台显示名固定为 `X Bookmarks` / `X 书签`，不得与浏览器书签平台合并。
 - `bookmarks.*`、`x.*` 是稳定翻译键命名空间；显示名调整不改键、路由、数据库 platform 或任务 ID。
+- Collection 页面紧凑处理条的短标签统一使用 `pipeline.*`；共享 collection UI 只收预翻译 label，不调用 `t()`。
 - 普通名词 `bookmark` / `书签` 按语境翻译，不机械替换为平台显示名。
 
 ## 验证

@@ -69,9 +69,16 @@ export class TranscriptionCoordinator {
    * coordinator itself stays store-agnostic (zero React / app-layer imports —
    * layering preserved); the app-layer hook passes a callback that wraps the
    * floating `transcribeAndPersist` promise into `startJob('bilibili',
-   * 'transcribe', …)`. A no-arg `new TranscriptionCoordinator()` still works.
+   * 'transcribe', …), and observes its independent Embedding/Tagging promises
+   * through the second callback. A no-arg `new TranscriptionCoordinator()` still works.
    */
-  constructor(private trackRun?: (bvid: string, run: Promise<unknown>) => void) {}
+  constructor(
+    private trackRun?: (bvid: string, run: Promise<unknown>) => void,
+    private trackProcessingRun?: (
+      kind: 'embed' | 'tag',
+      run: Promise<unknown>,
+    ) => void,
+  ) {}
 
   // --- useSyncExternalStore contract ---
 
@@ -182,6 +189,8 @@ export class TranscriptionCoordinator {
       // Local stage: shown while chunk+embed runs after the background 'done'.
       onIndexing: () => this.patchVideo(bvid, { progress: 100, stage: 'indexing' }),
       onIndexed: (result) => { indexResult = result; },
+      onEmbeddingRun: (processingRun) => this.trackProcessingRun?.('embed', processingRun),
+      onTaggingRun: (processingRun) => this.trackProcessingRun?.('tag', processingRun),
     });
 
     // Reflect the run as a global background job (running-state only). Reported

@@ -245,6 +245,16 @@ const zhCN = {
   'backgroundJobs.kind.tag': '打标签中',
   'backgroundJobs.kind.transcribe': '转录中',
 
+  // Compact Collection pipeline segment labels.
+  'pipeline.sync': '同步',
+  'pipeline.fetch': '获取',
+  'pipeline.transcription': '转录',
+  'pipeline.extraction': '提取',
+  'pipeline.stars': 'Stars',
+  'pipeline.readme': 'README',
+  'pipeline.embedding': '向量',
+  'pipeline.tagging': '标签',
+
   // Shared collection-page copy (identical across all platforms) — platform
   // prefixes keep only platform-specific nouns (see *.noMatches).
   'common.retry': '重试',

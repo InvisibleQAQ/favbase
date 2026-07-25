@@ -251,6 +251,16 @@ const en: Record<LocaleKeys, string> = {
   'backgroundJobs.kind.tag': 'Tagging',
   'backgroundJobs.kind.transcribe': 'Transcribing',
 
+  // Compact Collection pipeline segment labels.
+  'pipeline.sync': 'Sync',
+  'pipeline.fetch': 'Fetch',
+  'pipeline.transcription': 'Transcribe',
+  'pipeline.extraction': 'Extract',
+  'pipeline.stars': 'Stars',
+  'pipeline.readme': 'README',
+  'pipeline.embedding': 'Embed',
+  'pipeline.tagging': 'Tags',
+
   // Shared collection-page copy (identical across all platforms) — platform
   // prefixes keep only platform-specific nouns (see *.noMatches).
   'common.retry': 'Retry',

@@ -4,8 +4,11 @@ import { formatDateTime } from '@/lib/i18n';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import {
   CollectionPageScaffold,
+  PipelineProgressStrip,
   StateBox,
 } from '../../components/collection';
+import { buildPipelineSegments } from '../../hooks/pipeline-segments';
+import { useProcessingCoverage } from '../../hooks/use-processing-coverage';
 import { Iconify } from '../../components/iconify';
 import { BookmarkCard } from './bookmark-card';
 import { BookmarkExtractionPanel } from './bookmark-extraction-panel';
@@ -41,6 +44,10 @@ export function BookmarksView() {
   const navigate = useNavigate();
   const bm = useBookmarks(folderId);
   const extraction = useBookmarkExtraction(bm.lastSyncedAt?.getTime());
+  const { coverage, status: coverageStatus } = useProcessingCoverage(
+    PLATFORM,
+    `${bm.syncing}:${extraction.running}`,
+  );
 
   const captionParts: string[] = [];
   if (bm.libraryCount > 0) {
@@ -53,6 +60,54 @@ export function BookmarksView() {
       }),
     );
   }
+
+  const pipeline = (
+    <PipelineProgressStrip
+      segments={buildPipelineSegments({
+        coverage,
+        coverageStatus,
+        stages: [
+          {
+            id: 'sync',
+            label: t('pipeline.sync'),
+            coverage: 'acquisition',
+            runtime: {
+              running: bm.syncing,
+              progress:
+                bm.syncing && coverageStatus === 'ready'
+                  ? { done: coverage.acquisition.done, total: null }
+                  : null,
+              error: bm.syncError,
+            },
+          },
+          {
+            id: 'extraction',
+            label: t('pipeline.extraction'),
+            coverage: 'content',
+            runtime: {
+              running: extraction.running,
+              progress: extraction.running
+                ? { done: extraction.done, total: extraction.total }
+                : null,
+              error: extraction.pendingCountError,
+            },
+          },
+          {
+            id: 'embedding',
+            label: t('pipeline.embedding'),
+            coverage: 'embedding',
+            runtime: extraction.embedJob,
+          },
+          {
+            id: 'tagging',
+            label: t('pipeline.tagging'),
+            coverage: 'tagging',
+            runtime: extraction.tagJob,
+          },
+        ],
+      })}
+    />
+  );
 
   return (
     <CollectionPageScaffold
@@ -110,6 +165,7 @@ export function BookmarksView() {
         ) : null
       }
       emptyState={<EmptyState />}
+      pipeline={pipeline}
     />
   );
 }

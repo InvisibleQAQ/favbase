@@ -6,7 +6,13 @@ import { countPendingExtractions } from '@/lib/bookmarks/bookmarks-sync-service'
 import { tagNewItems } from '@/lib/tagging';
 import { embedNewItems } from '@/lib/embedding';
 
-import { getJob, startJob, useJob } from '../../hooks/background-jobs-store';
+import {
+  getJob,
+  startJob,
+  trackJobRun,
+  useJob,
+  type BackgroundJob,
+} from '../../hooks/background-jobs-store';
 import {
   beginExtractionRun,
   deriveExtractionPhase,
@@ -30,6 +36,8 @@ export interface BookmarkExtractionState {
   current: { url: string; title: string } | null;
   pendingCount: number | null;
   pendingCountError: string | null;
+  embedJob: BackgroundJob | null;
+  tagJob: BackgroundJob | null;
   start: () => void;
   pause: () => void;
   resume: () => void;
@@ -49,9 +57,8 @@ export interface BookmarkExtractionState {
 // Each successfully chunked item is fed
 // to auto-tag + auto-embed per item (not at run end) so a mid-run page close
 // can't orphan chunked-but-never-embedded items — chunked items are never
-// re-picked. Those per-item embed/tag stay fire-and-forget (void) and are NOT
-// registered as separate jobs: their total is unknowable upfront and a run-end
-// batch would regress this orphan-safety.
+// re-picked. The work stays fire-and-forget for extraction, while trackJobRun
+// observes each independent lane without changing that orphan-safety.
 // ---------------------------------------------------------------------------
 
 /**
@@ -76,8 +83,8 @@ export function startBookmarkExtraction(): void {
           // wrap-up (use-github-stars syncFn): app.html context only — the
           // tagging/embedding import chains need chrome.storage. Per-item (not
           // run-end) to keep the orphan-safety noted above.
-          void tagNewItems('bookmarks', [id]);
-          void embedNewItems('bookmarks', [id]);
+          trackJobRun('bookmarks', 'tag', tagNewItems('bookmarks', [id]));
+          trackJobRun('bookmarks', 'embed', embedNewItems('bookmarks', [id]));
         },
       });
     } finally {
@@ -89,6 +96,8 @@ export function startBookmarkExtraction(): void {
 /** Subscribe to the extraction progress (drives the view caption). */
 export function useBookmarkExtraction(refreshKey?: unknown): BookmarkExtractionState {
   const job = useJob('bookmarks', 'sync');
+  const embedJob = useJob('bookmarks', 'embed');
+  const tagJob = useJob('bookmarks', 'tag');
   const control = useSyncExternalStore(
     subscribeExtractionControl,
     getExtractionControlSnapshot,
@@ -134,6 +143,8 @@ export function useBookmarkExtraction(refreshKey?: unknown): BookmarkExtractionS
     current: p?.current ?? null,
     pendingCount,
     pendingCountError,
+    embedJob,
+    tagJob,
     start: startBookmarkExtraction,
     pause: requestExtractionPause,
     resume: startBookmarkExtraction,

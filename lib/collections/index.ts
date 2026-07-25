@@ -16,3 +16,9 @@ export {
   type CollectionAnalyticsSnapshot,
   type CollectionAnalyticsTag,
 } from './collection-analytics';
+export {
+  EMPTY_PROCESSING_COVERAGE,
+  getProcessingCoverage,
+  type ProcessingCoverage,
+  type ProcessingCoverageCount,
+} from './processing-coverage';
