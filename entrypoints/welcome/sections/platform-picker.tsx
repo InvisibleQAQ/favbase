@@ -19,7 +19,7 @@ import { needsCredentials } from '../landing';
 import { FadeIn } from '../components/fade-in';
 import { MotionBox, MotionButtonBase } from '../components/motion-box';
 import { useOnboardingExit } from '../use-onboarding-exit';
-import { Eyebrow, Headline, WelcomeSection } from '../components/section-shell';
+import { ctaGlowShadow, Eyebrow, Headline, WelcomeSection } from '../components/section-shell';
 
 const HINT_KEYS: Record<CollectionPlatform, LocaleKeys> = {
   bilibili: 'welcome.picker.hint.bilibili',
@@ -71,11 +71,15 @@ function PlatformCard({
         alignItems: 'flex-start',
         justifyContent: 'flex-start',
         bgcolor: 'background.paper',
-        border: `2px solid ${
-          selected ? theme.vars.palette.primary.main : theme.vars.palette.divider
-        }`,
+        // Unselected cards separate from the page by surface + z1 shadow alone;
+        // the 2px slot stays reserved so selecting never shifts layout.
+        border: `2px solid ${selected ? theme.vars.palette.primary.main : 'transparent'}`,
         boxShadow: selected ? theme.vars.customShadows.card : theme.vars.customShadows.z1,
         transition: theme.transitions.create(['border-color', 'box-shadow']),
+        '&.Mui-focusVisible': {
+          outline: `2px solid ${theme.vars.palette.primary.main}`,
+          outlineOffset: 2,
+        },
       })}
     >
       <Box
@@ -107,7 +111,7 @@ function PlatformCard({
             display: 'inline-flex',
             alignItems: 'center',
             gap: 0.5,
-            color: 'text.disabled',
+            color: 'text.secondary',
           }}
         >
           <Iconify icon={state.icon} width={14} />
@@ -196,12 +200,7 @@ export function PlatformPicker() {
           disabled={leaving}
           onClick={() => exit(picked)}
           endIcon={<Iconify icon="eva:arrow-ios-forward-fill" width={18} />}
-          sx={(theme) => ({
-            px: 4,
-            py: 1.5,
-            fontSize: 16,
-            boxShadow: `0 10px 28px 0 ${varAlpha(theme.vars.palette.primary.mainChannel, 0.34)}`,
-          })}
+          sx={(theme) => ({ px: 4, py: 1.5, fontSize: 16, boxShadow: ctaGlowShadow(theme) })}
         >
           {picked.length ? t('welcome.picker.cta') : t('welcome.picker.ctaNone')}
         </Button>

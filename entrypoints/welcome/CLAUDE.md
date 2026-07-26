@@ -20,9 +20,9 @@
 
 ## 模块结构
 
-- `index.html` / `main.tsx` — 入口。`main.tsx` 复用 app 的 `ThemeProvider` + `global.css`（字体 + reset），再叠 `welcome.css`；外层 `MotionConfig reducedMotion="user"` 让全页 motion 组件统一尊重系统「减弱动效」
+- `index.html` / `main.tsx` — 入口。`main.tsx` 复用 app 的 `ThemeProvider` + `global.css`（字体 + reset），再叠 `welcome.css`；外层 `MotionConfig reducedMotion="user"` 让全页 motion 组件统一尊重系统「减弱动效」。**它只管声明式 `animate`**：`style` 绑定的 MotionValue（scroll-linked parallax / scale）不受其约束，须在组件里用 `useReducedMotion()` 手动 gate（现有：capability-marquee、how-it-works）
 - `welcome.css` — 只放 sx 表达不了的东西：`.fb-headline` 渐变裁字（`background-clip:text` 必须挂在画字的那个元素上）+ 两个 aurora 色值 CSS var（`[data-color-scheme='dark']` 覆盖，与 `public/theme-init.js` 的属性同源）+ `.fb-caret` 流式光标 keyframes + `scroll-behavior: smooth`（包在 `prefers-reduced-motion: no-preference` 里）
-- `welcome-view.tsx` — 段落装配 + 顶部滚动进度条。根 Box 用 `overflowX: 'clip'` 而非 `hidden`：`clip` 不建立滚动容器，sticky 叠卡才活得下来
+- `welcome-view.tsx` — 段落装配 + 顶部滚动进度条；并订阅 `useTranslation().locale` 同步 `document.documentElement.lang`（a11y。**只准在 welcome 入口做**——`lib/i18n` 共享给 Content Script，绝不能改宿主页的 lang）。根 Box 用 `overflowX: 'clip'` 而非 `hidden`：`clip` 不建立滚动容器，sticky 叠卡才活得下来
 - `landing.ts` / `landing.test.ts` — 落地路由纯函数（见上）
 - `use-onboarding-exit.ts` / `use-onboarding-exit.test.tsx` — 写记录 + 跳转，返回 `{ exit, leaving }`（`leaving` 禁用 CTA 防重复点）。写失败只 console.error 后照常跳转——记录写不上最多让引导多出现一次，不能把用户困在这页（此行为有测试守着）
 
@@ -34,17 +34,17 @@
 - `animated-text.tsx` — 逐字滚动点亮段落。按空白切词、每个词包 `inline-block`：拉丁词不会断在字母中间，中文没有空格自成一「词」、占满行宽后按字自然折行
 - `magnet.tsx` — 磁吸指针跟随（spring 回弹）。偏移量存 `useSpring` MotionValue 而非 React state：pointermove 每帧都来，用 state 会把被包裹的整棵子树（Hero orbit ≈20 个 motion 节点）每帧重渲一次。`useReducedMotion()` 为真时直接不订阅 pointermove——「跟着鼠标跑」没有可降级的静态版本
 - `orbit-core.tsx` — Hero 主视觉：六个平台 chip 绕本地数据库核心公转。纯 DOM/SVG 零图片，自动跟随明暗主题。旋转层与 chip 内层**同周期反向自转**（`SPIN_SECONDS`）保证图标始终正立；chip 位置全靠 `--fb-orbit-r`（写成显式断点块而非 sx 响应式对象——自定义属性不在 sx 已知 style key 里）；平台元数据直接吃 `collectionPlatformRegistry`，加平台自动进环
-- `section-shell.tsx` — `WelcomeSection`（统一纵向节奏 + Container）/ `Eyebrow`（小标签胶囊）/ `Headline`（`hero` 与 `section` 两档 clamp 字号 + `.fb-headline` 渐变）
+- `section-shell.tsx` — `WelcomeSection`（统一纵向节奏 + Container）/ `Eyebrow`（小标签胶囊）/ `Headline`（`hero` 与 `section` 两档 clamp 字号 + `.fb-headline` 渐变；**默认渲染 `h2`** 保文档大纲，传 `component` 改层级或降为 `span`；字距/行高按 locale 分档——zh `letterSpacing:0` + `lineHeight:1.12`，en 保持 `-0.03em`/`0.98`，避免满框的 CJK 字形被负字距挤压、在 overflow-hidden reveal 下被裁边）/ `ctaGlowShadow(theme)`（hero 与 picker 主 CTA 共享的主色光晕阴影，别再手写）
 
 ### sections/
 
 - `top-bar.tsx` — 固定顶栏：图标 + wordmark + tagline，右侧**直接复用 dashboard 的 `HeaderActions`**（主题开关 / 语言菜单 / 仓库链接，零复制）+ 跳过按钮。导出 `TOP_BAR_HEIGHT` 供 Hero 留白
-- `hero.tsx` — 100vh 首屏：aurora 双色斑（motion 慢漂）+ 文案 stagger + `OrbitCore` + 滚动提示。两个 CTA 是纯 `href="#welcome-picker"` / `"#welcome-flow"` 锚点（本页无 router，交给 CSS 平滑滚动）
-- `capability-marquee.tsx` — 双行反向 pill 跑马灯，**由页面滚动驱动**（`useScroll` + `useTransform`）而非 CSS 无限循环：读者停下它就停，不跟正文抢注意力。行内容三倍复制保证两端不露白，两侧 `maskImage` 渐隐
-- `how-it-works.tsx` — 三步 sticky 叠卡。`useScroll` 测整栈进度，每张卡 `1 - (total-1-index) * 0.04` 目标缩放做景深；卡内右侧 `StepGlyph`（rows / grid / bubble 三种抽象装饰）。sticky 在 `md+` 生效，窄屏退化为普通堆叠
+- `hero.tsx` — 100vh 首屏：aurora 双色斑（motion 慢漂）+ 文案 stagger + `OrbitCore` + 滚动提示。两个 CTA 是纯 `href="#welcome-picker"` / `"#welcome-flow"` 锚点（本页无 router，交给 CSS 平滑滚动）。标题是全页**唯一的 h1**：外层 `Box component="h1"`，两行各自 `FadeIn component="span"`（reveal mask）包 `Headline component="span"`——渐变留在每行，挂到 h1 上会横跨两行改变观感，且 background-clip:text 在 transformed 子元素上有渲染 glitch
+- `capability-marquee.tsx` — 双行反向 pill 跑马灯，**由页面滚动驱动**（`useScroll` + `useTransform`）而非 CSS 无限循环：读者停下它就停，不跟正文抢注意力。行内容三倍复制保证两端不露白，两侧 `maskImage` 渐隐。`useReducedMotion()` 为真时不绑 `style={{x}}`，pill 行静止
+- `how-it-works.tsx` — 三步 sticky 叠卡。`useScroll` 测整栈进度，每张卡 `1 - (total-1-index) * 0.04` 目标缩放做景深；卡内右侧 `StepGlyph`（rows / grid / bubble 三种抽象装饰）。sticky 在 `md+` 生效，窄屏退化为普通堆叠；reduce-motion 时不绑 `style={{scale}}`，卡片全尺寸堆叠
 - `chat-showcase.tsx` — **主功能演示**。`useInView(once)` 触发脚本化播放：提问 → tool call（转圈 → ✓ 命中 N 条）→ 打字机流式作答 → 来源卡片 stagger。phase 常量 + 定时器数组，`useReducedMotion` 时直接跳到终态（流式动画没有「慢一点」的降级）。面板 `minHeight` 按终态尺寸给足，避免播放中把页面顶下去
-- `bilibili-showcase.tsx` — B 站视频页 CS 面板演示：左侧播放器骨架 + 右侧面板 mock（字幕 / AI 总结双 tab，`layoutId` 让选中胶囊滑动）。入场 2.8s 后自动切到总结 tab 展示第二种能力，但 `pickedRef` 记录真人点击后不再自动切
-- `platform-picker.tsx` — 六平台多选卡（`collectionPlatformRegistry` 驱动）+ 就绪态标签（`readiness()`：需密钥 / 用登录态 / 开箱即用）+ 进入按钮。CTA 文案与 caption 随选择数变化（`welcome.picker.selected` 走复数 key）
+- `bilibili-showcase.tsx` — B 站视频页 CS 面板演示：左侧播放器骨架 + 右侧面板 mock（字幕 / AI 总结双 tab，`layoutId` 让选中胶囊滑动）。入场 2.8s 后自动切到总结 tab 展示第二种能力，但 `pickedRef` 记录真人点击后不再自动切。tab 行 `role="tablist"`、`TabButton` 带 `role="tab"`/`aria-selected` + `Mui-focusVisible` 焦点环；播放器进度条动画走 `scaleX`（`transformOrigin: left`）而非 `width`，不逐帧 relayout
+- `platform-picker.tsx` — 六平台多选卡（`collectionPlatformRegistry` 驱动）+ 就绪态标签（`readiness()`：需密钥 / 用登录态 / 开箱即用）+ 进入按钮。CTA 文案与 caption 随选择数变化（`welcome.picker.selected` 走复数 key）。卡片未选中态边框 `2px solid transparent`（选中亮 primary；宽度恒定防 layout shift），键盘焦点走 `Mui-focusVisible` 环；readiness 文字 `text.secondary` 保对比度
 
 ### hooks/
 

@@ -1,12 +1,22 @@
-import type { ReactNode } from 'react';
+import type { ElementType, ReactNode } from 'react';
 import type { BoxProps } from '@mui/material/Box';
+import type { Theme } from '@mui/material/styles';
 
 import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
 import Typography from '@mui/material/Typography';
 import { varAlpha } from 'minimal-shared/utils';
 
+import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify, type IconifyName } from '@/entrypoints/app/components/iconify';
+
+/**
+ * Primary-CTA glow. The hero and picker "main action" buttons share the exact
+ * same halo — defined once so the two can never drift apart visually.
+ */
+export function ctaGlowShadow(theme: Theme) {
+  return `0 10px 28px 0 ${varAlpha(theme.vars.palette.primary.mainChannel, 0.34)}`;
+}
 
 /** Vertical rhythm for every band on the page. */
 export function WelcomeSection({
@@ -65,25 +75,40 @@ export function Eyebrow({ children, icon }: { children: ReactNode; icon?: Iconif
  * Oversized display headline with the page's gradient fill (`.fb-headline`,
  * see welcome.css). `hero` is the first-screen size; `section` is every band
  * below it.
+ *
+ * Renders a real heading (`h2` by default) so the page keeps a document
+ * outline; pass `component` to change the level, or `span` when the semantic
+ * wrapper lives outside (the hero nests two lines inside a single h1).
+ *
+ * Metrics are locale-aware: the latin display treatment (negative tracking +
+ * sub-1 line-height) crowds CJK glyphs — which fill their em box — and risks
+ * clipping them under the hero's overflow-hidden reveals, so zh relaxes both.
  */
 export function Headline({
   children,
   size = 'section',
+  component = 'h2',
   sx,
 }: {
   children: ReactNode;
   size?: 'hero' | 'section';
+  component?: ElementType;
   sx?: BoxProps['sx'];
 }) {
+  const { locale } = useTranslation();
+  const isCjk = locale === 'zh-CN';
+
   return (
     <Box
+      component={component}
       className="fb-headline"
       sx={[
         (theme) => ({
+          m: 0,
           fontFamily: theme.typography.fontSecondaryFamily,
           fontWeight: 800,
-          lineHeight: 0.98,
-          letterSpacing: '-0.03em',
+          lineHeight: isCjk ? 1.12 : 0.98,
+          letterSpacing: isCjk ? 0 : '-0.03em',
           // Capped low enough that the longest localized line (English hero
           // copy is ~15 characters) still fits its column without wrapping
           // into a third line.

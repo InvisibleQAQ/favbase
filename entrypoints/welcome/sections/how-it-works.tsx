@@ -3,7 +3,7 @@ import type { LocaleKeys } from '@/lib/i18n';
 import type { IconifyName } from '@/entrypoints/app/components/iconify';
 
 import { useRef } from 'react';
-import { useScroll, useTransform } from 'motion/react';
+import { useReducedMotion, useScroll, useTransform } from 'motion/react';
 
 import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
@@ -178,6 +178,9 @@ function StickyStep({
   progress: MotionValue<number>;
 }) {
   const { t } = useTranslation();
+  // Style-bound MotionValues bypass MotionConfig's reducedMotion, so the
+  // depth-scale is gated by hand (cards simply stack at full size).
+  const reduceMotion = useReducedMotion();
 
   // Cards below the top of the stack shrink as later ones slide over them, so
   // the stack reads as depth rather than a flat cut.
@@ -196,7 +199,7 @@ function StickyStep({
       }}
     >
       <MotionBox
-        style={{ scale }}
+        style={reduceMotion ? undefined : { scale }}
         sx={(theme) => ({
           width: 1,
           maxWidth: 940,

@@ -51,8 +51,10 @@ function TabButton({
 }) {
   return (
     <ButtonBase
+      role="tab"
+      aria-selected={active}
       onClick={onClick}
-      sx={{
+      sx={(theme) => ({
         position: 'relative',
         flex: 1,
         gap: 0.75,
@@ -61,7 +63,11 @@ function TabButton({
         fontSize: 13,
         fontWeight: 600,
         color: active ? 'primary.main' : 'text.secondary',
-      }}
+        '&.Mui-focusVisible': {
+          outline: `2px solid ${theme.vars.palette.primary.main}`,
+          outlineOffset: 2,
+        },
+      })}
     >
       {/* Shared layoutId makes the pill slide between tabs instead of blinking. */}
       {active && (
@@ -152,7 +158,7 @@ function PanelMock() {
         </Typography>
       </Box>
 
-      <Box sx={{ display: 'flex', gap: 0.5 }}>
+      <Box role="tablist" sx={{ display: 'flex', gap: 0.5 }}>
         <TabButton
           active={tab === 'subtitle'}
           label={t('sidebar.subtitles')}
@@ -300,12 +306,20 @@ function PlayerMock() {
             overflow: 'hidden',
           }}
         >
+          {/* Full-width bar scaled down: the transform runs on the
+              compositor, unlike animating `width` which relayouts per frame. */}
           <MotionBox
-            initial={{ width: '12%' }}
-            whileInView={{ width: '46%' }}
+            initial={{ scaleX: 0.12 }}
+            whileInView={{ scaleX: 0.46 }}
             viewport={{ once: true }}
             transition={{ duration: 2.4, ease: 'easeInOut' }}
-            sx={{ height: 1, borderRadius: 999, bgcolor: 'primary.main' }}
+            sx={{
+              height: 1,
+              width: 1,
+              borderRadius: 999,
+              transformOrigin: 'left',
+              bgcolor: 'primary.main',
+            }}
           />
         </Box>
       </Box>

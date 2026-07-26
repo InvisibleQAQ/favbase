@@ -3,7 +3,6 @@ import Grid from '@mui/material/Grid';
 import Button from '@mui/material/Button';
 import Container from '@mui/material/Container';
 import Typography from '@mui/material/Typography';
-import { varAlpha } from 'minimal-shared/utils';
 
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify } from '@/entrypoints/app/components/iconify';
@@ -11,7 +10,7 @@ import { Iconify } from '@/entrypoints/app/components/iconify';
 import { FadeIn } from '../components/fade-in';
 import { MotionBox } from '../components/motion-box';
 import { OrbitCore } from '../components/orbit-core';
-import { Eyebrow, Headline } from '../components/section-shell';
+import { ctaGlowShadow, Eyebrow, Headline } from '../components/section-shell';
 import { TOP_BAR_HEIGHT } from './top-bar';
 
 /** Two slow-drifting colour blobs behind the fold. Decorative only. */
@@ -109,12 +108,30 @@ export function Hero() {
               <Eyebrow>{t('welcome.hero.eyebrow')}</Eyebrow>
             </FadeIn>
 
-            <Box sx={{ mt: 3 }}>
-              <FadeIn delay={0.1} y={38} sx={{ overflow: 'hidden' }}>
-                <Headline size="hero">{t('welcome.hero.titleLine1')}</Headline>
+            {/* One h1 for the whole title. Each line keeps its own reveal
+                mask and its own per-line `.fb-headline` clip — moving the
+                gradient up to the h1 would stretch it across both lines (and
+                background-clip:text glitches over transformed children). */}
+            <Box component="h1" sx={{ m: 0, mt: 3 }}>
+              <FadeIn
+                component="span"
+                delay={0.1}
+                y={38}
+                sx={{ display: 'block', overflow: 'hidden' }}
+              >
+                <Headline component="span" size="hero" sx={{ display: 'block' }}>
+                  {t('welcome.hero.titleLine1')}
+                </Headline>
               </FadeIn>
-              <FadeIn delay={0.2} y={38} sx={{ overflow: 'hidden' }}>
-                <Headline size="hero">{t('welcome.hero.titleLine2')}</Headline>
+              <FadeIn
+                component="span"
+                delay={0.2}
+                y={38}
+                sx={{ display: 'block', overflow: 'hidden' }}
+              >
+                <Headline component="span" size="hero" sx={{ display: 'block' }}>
+                  {t('welcome.hero.titleLine2')}
+                </Headline>
               </FadeIn>
             </Box>
 
@@ -142,10 +159,7 @@ export function Hero() {
                 variant="contained"
                 size="large"
                 endIcon={<Iconify icon="eva:arrow-ios-forward-fill" width={18} />}
-                sx={(theme) => ({
-                  px: 3,
-                  boxShadow: `0 8px 24px 0 ${varAlpha(theme.vars.palette.primary.mainChannel, 0.32)}`,
-                })}
+                sx={(theme) => ({ px: 3, boxShadow: ctaGlowShadow(theme) })}
               >
                 {t('welcome.hero.ctaPrimary')}
               </Button>

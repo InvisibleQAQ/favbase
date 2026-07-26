@@ -2,7 +2,7 @@ import type { LocaleKeys } from '@/lib/i18n';
 import type { IconifyName } from '@/entrypoints/app/components/iconify';
 
 import { useRef } from 'react';
-import { useScroll, useTransform } from 'motion/react';
+import { useReducedMotion, useScroll, useTransform } from 'motion/react';
 
 import Box from '@mui/material/Box';
 
@@ -83,6 +83,9 @@ function PillRow({ pills }: { pills: Pill[] }) {
  */
 export function CapabilityMarquee() {
   const ref = useRef<HTMLDivElement>(null);
+  // MotionConfig's reducedMotion only governs declarative `animate` props —
+  // style-bound MotionValues bypass it, so the parallax is gated by hand.
+  const reduceMotion = useReducedMotion();
   const { scrollYProgress } = useScroll({ target: ref, offset: ['start end', 'end start'] });
 
   const topX = useTransform(scrollYProgress, [0, 1], ['-4%', '-26%']);
@@ -103,10 +106,10 @@ export function CapabilityMarquee() {
           'linear-gradient(90deg, transparent 0%, #000 7%, #000 93%, transparent 100%)',
       }}
     >
-      <MotionBox style={{ x: topX }}>
+      <MotionBox style={reduceMotion ? undefined : { x: topX }}>
         <PillRow pills={ROW_TOP} />
       </MotionBox>
-      <MotionBox style={{ x: bottomX }}>
+      <MotionBox style={reduceMotion ? undefined : { x: bottomX }}>
         <PillRow pills={ROW_BOTTOM} />
       </MotionBox>
     </Box>
