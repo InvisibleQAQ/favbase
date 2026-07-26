@@ -5,8 +5,10 @@ import { useTranslation } from '@/lib/i18n/use-translation';
 import { StatusBar } from './StatusBar';
 import { SubtitleView } from './SubtitleView';
 import { SettingsView } from './SettingsView';
+import { SummaryView } from './SummaryView';
 import { TranscribeButton } from './TranscribeButton';
 import type { UseTranscribeReturn } from '../hooks/useTranscribe';
+import type { UseSummaryReturn } from '../hooks/useSummary';
 
 interface SidebarTab {
   id: string;
@@ -16,6 +18,7 @@ interface SidebarTab {
 
 const SIDEBAR_TABS: SidebarTab[] = [
   { id: 'cc', icon: 'CC', label: 'sidebar.subtitles' },
+  { id: 'summary', icon: '✦', label: 'sidebar.summary' },
   { id: 'settings', icon: '⚙', label: 'sidebar.settings' },
 ];
 
@@ -30,11 +33,14 @@ interface PanelProps {
   showTranscribe: boolean;
   transcribe: UseTranscribeReturn;
   hasApiKey: boolean;
+  summary: UseSummaryReturn;
+  llmConfigured: boolean;
 }
 
 export function Panel({
   loading, status, error, rows, title,
   source, cached, showTranscribe, transcribe, hasApiKey,
+  summary, llmConfigured,
 }: PanelProps) {
   const { t } = useTranslation();
   const [collapsed, setCollapsed] = useState(false);
@@ -93,6 +99,13 @@ export function Panel({
                 <SubtitleView rows={rows} source={source} cached={cached} />
               )}
             </>
+          )}
+          {activeTab === 'summary' && (
+            <SummaryView
+              summary={summary}
+              hasSubtitle={rows.length > 0}
+              hasLlmKey={llmConfigured}
+            />
           )}
           {activeTab === 'settings' && (
             <SettingsView />

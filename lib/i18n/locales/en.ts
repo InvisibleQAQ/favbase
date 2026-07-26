@@ -22,6 +22,7 @@ const en: Record<LocaleKeys, string> = {
   'source.asr': 'ASR Transcribed',
 
   'sidebar.subtitles': 'Subtitles',
+  'sidebar.summary': 'AI Summary',
   'sidebar.settings': 'Settings',
 
   'settings.llmProvider': 'LLM Provider',
@@ -153,6 +154,23 @@ const en: Record<LocaleKeys, string> = {
   'settings.youtube.channelNotFound': 'Channel not found — check the handle or channel ID',
   'settings.youtube.rateLimited':
     'YouTube API quota exhausted — try again later (quota resets at midnight Pacific Time)',
+
+  'summary.generate': 'Generate AI Summary',
+  'summary.regenerate': 'Regenerate',
+  'summary.retry': 'Retry',
+  'summary.cancel': 'Cancel',
+  'summary.generating': 'Generating summary...',
+  'summary.chapters': 'Chapters',
+  'summary.adBadge': 'Ad',
+  'summary.needSubtitle': 'Load the subtitles first, then generate a summary',
+  'summary.noApiKey': 'Configure an LLM API key in the settings page first',
+
+  'summaryError.SUMMARY_NOT_CONFIGURED': 'No LLM configured — set an API key and model in Settings',
+  'summaryError.SUMMARY_NO_SUBTITLE': 'No subtitles available — fetch or transcribe them first',
+  'summaryError.SUMMARY_EMPTY_OUTPUT': 'The model returned nothing usable — retry or switch models',
+  'summaryError.SUMMARY_ABORTED': 'Generation cancelled',
+  'summaryError.SUMMARY_DUPLICATE': 'A summary is already being generated for this video',
+  'summaryError.SUMMARY_REQUEST_FAILED': 'Generation failed: {{detail}}',
 
   'transcribe.button': 'Start Transcription',
   'transcribe.cancel': 'Cancel',

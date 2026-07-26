@@ -1,5 +1,10 @@
 import type { TranscribeRequest, TranscribeAbort } from '@/lib/transcription/types';
 import type { GetVideoCacheRequest, CacheSubtitleRequest } from '@/lib/cache/types';
+import type {
+  SummarizeRequest,
+  SummarizeAbort,
+  GetSummaryCacheRequest,
+} from '@/lib/summary/types';
 import type { OffscreenProgressMessage } from '@/lib/offscreen/types';
 
 /**
@@ -22,6 +27,9 @@ export type BgClientMessage =
   | TranscribeAbort
   | GetVideoCacheRequest
   | CacheSubtitleRequest
+  | SummarizeRequest
+  | SummarizeAbort
+  | GetSummaryCacheRequest
   | FetchBookmarkPageRequest
   | OpenAppPageRequest;
 

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { UserSettings } from '@/lib/storage';
 import { getProviderDef } from '@/lib/providers';
 import {
@@ -13,9 +13,19 @@ import { resolveTaggingConfig, type ResolvedTaggingConfig } from './config';
 // The storage barrel touches chrome.runtime at load time (wxt storage).
 vi.mock('@/lib/storage', () => ({
   settingsStorage: { getValue: vi.fn() },
-  getEnvApiKey: () => '',
-  getEnvModel: () => '',
 }));
+
+// `resolveTaggingConfig` delegates to the real `lib/storage/resolve`, which
+// falls back to `import.meta.env` — Vite loads the developer's .env into tests,
+// so the env tier is neutralized explicitly instead of by mocking the resolver
+// (mocking it would test nothing).
+beforeEach(() => {
+  vi.stubEnv('VITE_MODELSCOPE_API_KEY', '');
+  vi.stubEnv('VITE_MODELSCOPE_MODEL', '');
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 // Intercept only the LLM call; createLanguageModel/prompt building run real.
 const { generateObjectMock } = vi.hoisted(() => ({ generateObjectMock: vi.fn() }));

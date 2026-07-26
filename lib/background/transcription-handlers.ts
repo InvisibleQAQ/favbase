@@ -51,7 +51,7 @@ export async function handleTranscribe(
   try {
     return await handler(msg, tabId, ctx, controller.signal);
   } finally {
-    ctx.finishTranscription(tabId);
+    ctx.finishTranscription(tabId, controller);
   }
 }
 

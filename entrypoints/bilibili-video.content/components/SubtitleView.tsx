@@ -2,25 +2,13 @@ import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ReactN
 import type { SubtitleRow, SubtitleSource } from '@/lib/subtitle/types';
 import { t } from '@/lib/i18n';
 import { useTranslation } from '@/lib/i18n/use-translation';
+import { formatClock } from '@/lib/format';
+import { seekVideo } from '../player';
 
 interface SubtitleViewProps {
   rows: SubtitleRow[];
   source: SubtitleSource;
   cached: boolean;
-}
-
-function formatTime(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
-
-function seekVideo(seconds: number): void {
-  const video = document.querySelector('video');
-  if (video) {
-    video.currentTime = seconds;
-    video.play().catch(() => {});
-  }
 }
 
 function findActiveIndex(rows: SubtitleRow[], time: number): number {
@@ -185,9 +173,9 @@ export function SubtitleView({ rows, source, cached }: SubtitleViewProps) {
               className="favbase-timestamp"
               type="button"
               onClick={() => seekVideo(row.start)}
-              title={t('subtitle.jumpTo', { time: formatTime(row.start) })}
+              title={t('subtitle.jumpTo', { time: formatClock(row.start) })}
             >
-              {formatTime(row.start)}
+              {formatClock(row.start)}
             </button>
             <span className="favbase-subtitle-text">
               {lowerTerm ? highlightText(row.text, debouncedTerm) : row.text}

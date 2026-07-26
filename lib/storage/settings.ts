@@ -1,7 +1,7 @@
 import { storage } from 'wxt/utils/storage';
 import type { LLMProviderId, ASRProviderId, EmbeddingProviderId } from '../providers';
-import { getAsrProviderDef } from '../providers';
 import { STORAGE_KEYS } from './keys';
+import { resolveAsrConfig } from './resolve';
 
 export interface UserSettings {
   // LLM
@@ -88,25 +88,16 @@ export const settingsStorage = storage.defineItem<UserSettings>(
   { fallback: DEFAULT_SETTINGS },
 );
 
-export function getEnvApiKey(providerId: string): string {
-  const key = `VITE_${providerId.toUpperCase()}_API_KEY`;
-  return (import.meta.env[key] as string) ?? '';
-}
+// Pure resolvers live in `./resolve` (no wxt storage import) and are
+// re-exported here so `@/lib/storage` remains the single import surface.
+export {
+  getEnvApiKey,
+  getEnvModel,
+  resolveAsrConfig,
+  resolveLlmConfig,
+  type ResolvedLlmConfig,
+} from './resolve';
 
-export function getEnvModel(providerId: string): string {
-  const key = `VITE_${providerId.toUpperCase()}_MODEL`;
-  return (import.meta.env[key] as string) ?? '';
-}
-
-export function resolveAsrConfig(settings: UserSettings): { apiKey: string; model: string; baseUrl: string } {
-  const cfg = settings.asrConfigs?.[settings.asrProvider];
-  const def = getAsrProviderDef(settings.asrProvider);
-  return {
-    apiKey: cfg?.apiKey || getEnvApiKey(settings.asrProvider),
-    model: cfg?.model || getEnvModel(settings.asrProvider) || def.defaultModel,
-    baseUrl: def.baseUrl,
-  };
-}
 
 export async function getAsrSettings(): Promise<{ apiKey: string; model: string; baseUrl: string }> {
   const settings = await settingsStorage.getValue();

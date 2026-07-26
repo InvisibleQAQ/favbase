@@ -4,11 +4,12 @@ import { useVideoDetect } from './hooks/useVideoDetect';
 import { useSubtitle } from './hooks/useSubtitle';
 import { useSettings } from '@/lib/hooks/useSettings';
 import { useTranscribe } from './hooks/useTranscribe';
+import { useSummary } from './hooks/useSummary';
 
 export default function App() {
   const video = useVideoDetect();
   const subtitle = useSubtitle(video.bvid, video.cid);
-  const { currentAsrApiKey } = useSettings();
+  const { currentAsrApiKey, llmConfigured } = useSettings();
 
   const transcribe = useTranscribe(
     video.bvid,
@@ -16,6 +17,8 @@ export default function App() {
     video.title,
     !!currentAsrApiKey,
   );
+
+  const summary = useSummary(video.bvid, video.title);
 
   const showTranscribe =
     (subtitle.status === 'no_subtitle' || subtitle.status === 'error') &&
@@ -46,6 +49,8 @@ export default function App() {
       showTranscribe={showTranscribe}
       transcribe={transcribe}
       hasApiKey={!!currentAsrApiKey}
+      summary={summary}
+      llmConfigured={llmConfigured}
     />
   );
 }

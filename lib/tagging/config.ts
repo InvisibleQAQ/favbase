@@ -1,38 +1,19 @@
-import type { LLMProviderId } from '@/lib/providers';
-import { getProviderDef } from '@/lib/providers';
 import type { UserSettings } from '@/lib/storage';
-import { settingsStorage, getEnvApiKey, getEnvModel } from '@/lib/storage';
+import { settingsStorage } from '@/lib/storage';
+// Pure resolver module (no wxt storage side effects) — keeps this file's
+// callers testable without stubbing the storage barrel.
+import { resolveLlmConfig, type ResolvedLlmConfig } from '@/lib/storage/resolve';
 
-export interface ResolvedTaggingConfig {
-  providerId: LLMProviderId;
-  apiKey: string;
-  model: string;
-  customBaseUrl?: string;
-  customProtocol?: 'openai' | 'claude';
-  enabled: boolean;
-}
+/** Tagging uses the currently selected LLM as-is — no extra knobs. */
+export type ResolvedTaggingConfig = ResolvedLlmConfig;
 
 /**
- * Pure resolver: `UserSettings` → concrete LLM config for tagging. Mirrors
- * `deriveLlmDraft` field resolution (user-filled > env > provider def) and
- * `resolveEmbeddingConfig`'s derived `enabled` — there is no toggle; tagging
- * activates whenever an apiKey + model resolve, so an unconfigured install
- * silently skips tagging instead of erroring.
+ * Pure resolver: `UserSettings` → concrete LLM config for tagging.
+ * Thin alias over the shared `resolveLlmConfig` (same precedence and derived
+ * `enabled`); kept as a named export so tagging call sites read domain-first.
  */
 export function resolveTaggingConfig(settings: UserSettings): ResolvedTaggingConfig {
-  const providerId = settings.provider;
-  const def = getProviderDef(providerId);
-  const apiKey = settings.providerApiKeys[providerId] || getEnvApiKey(providerId);
-  const model = settings.providerModels[providerId] || getEnvModel(providerId) || def.defaultModel;
-
-  return {
-    providerId,
-    apiKey,
-    model,
-    customBaseUrl: settings.customBaseUrl,
-    customProtocol: settings.customProtocol,
-    enabled: !!apiKey && !!model,
-  };
+  return resolveLlmConfig(settings);
 }
 
 /** Async convenience for non-React consumers. Mirrors `getEmbeddingSettings()`. */

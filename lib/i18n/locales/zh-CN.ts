@@ -20,6 +20,7 @@ const zhCN = {
   'source.asr': 'ASR 转录',
 
   'sidebar.subtitles': '字幕',
+  'sidebar.summary': 'AI 总结',
   'sidebar.settings': '设置',
 
   'settings.llmProvider': 'LLM 服务商',
@@ -147,6 +148,23 @@ const zhCN = {
   'settings.youtube.invalidKey': 'API 密钥无效，请检查后重试',
   'settings.youtube.channelNotFound': '未找到对应频道，请检查频道 handle 或 ID',
   'settings.youtube.rateLimited': 'YouTube API 配额已用尽，请稍后重试（配额于太平洋时间午夜重置）',
+
+  'summary.generate': '生成 AI 总结',
+  'summary.regenerate': '重新生成',
+  'summary.retry': '重试',
+  'summary.cancel': '取消',
+  'summary.generating': '正在生成总结...',
+  'summary.chapters': '章节',
+  'summary.adBadge': '广告',
+  'summary.needSubtitle': '请先获取视频字幕，再生成总结',
+  'summary.noApiKey': '请先在设置页配置大模型 API Key',
+
+  'summaryError.SUMMARY_NOT_CONFIGURED': '未配置大模型，请在设置页填写 API Key 与模型',
+  'summaryError.SUMMARY_NO_SUBTITLE': '没有可用字幕，请先获取或转录字幕',
+  'summaryError.SUMMARY_EMPTY_OUTPUT': '模型没有返回有效内容，请重试或更换模型',
+  'summaryError.SUMMARY_ABORTED': '已取消生成',
+  'summaryError.SUMMARY_DUPLICATE': '该视频正在生成总结',
+  'summaryError.SUMMARY_REQUEST_FAILED': '生成失败：{{detail}}',
 
   'transcribe.button': '开始在线转录',
   'transcribe.cancel': '取消转录',

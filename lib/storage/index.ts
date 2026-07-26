@@ -7,6 +7,8 @@ export {
   DEFAULT_SETTINGS,
   settingsStorage,
   resolveAsrConfig,
+  resolveLlmConfig,
+  type ResolvedLlmConfig,
   getEnvApiKey,
   getEnvModel,
   getAsrSettings,
