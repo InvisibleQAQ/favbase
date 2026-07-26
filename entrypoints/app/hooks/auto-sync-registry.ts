@@ -104,10 +104,18 @@ export const AUTO_SYNC_PLATFORMS: AutoSyncPlatform[] = [
     itemPlatform: 'bookmarks',
     // Local browser data — always ready.
     probeReady: async () => true,
-    // Content extraction is a separate user-triggered pipeline; sync only writes
-    // metadata (contentState='pending'), so nothing to enqueue here.
+    // Content extraction is its own chained pipeline: each extracted item
+    // enqueues embed/tag itself, so newItemIds stays [] here.
     runSync: async (_setProgress, control) => {
       await syncBrowserBookmarks(control);
+      // Auto-continue the content stage. Dynamic import keeps the extraction
+      // worker (defuddle/linkedom) in the lazy bookmarks chunk instead of the
+      // eager app boot chunk; ESM modules are singletons, so this is the same
+      // instance the bookmarks section uses.
+      const { startBookmarkExtraction } = await import(
+        '../sections/bookmarks/use-bookmark-extraction'
+      );
+      startBookmarkExtraction();
       return [];
     },
   },
@@ -115,11 +123,22 @@ export const AUTO_SYNC_PLATFORMS: AutoSyncPlatform[] = [
     jobPlatform: 'bilibili',
     itemPlatform: 'bilibili',
     probeReady: async () => (await getBiliAuth()) !== null,
-    // Transcription is an async post-sync pipeline (items stay 'pending' until
-    // transcribed and enqueue themselves), so no batch enqueue here.
+    // Transcription is its own chained pipeline (items stay 'pending' until
+    // transcribed and enqueue themselves), so newItemIds stays [] here.
     runSync: async (setProgress, control) => {
       const folders = await fetchAndSyncFolders(control);
       await syncAllFavoriteVideos(folders, setProgress, control);
+      // Auto-continue the content stage for the default folder (the pipeline
+      // batches ONE folder per run; the page path targets the viewed folder).
+      // A still-active ASR quota guard makes this a silent skip — that is the
+      // "next-day daily auto-sync naturally re-evaluates" recovery path.
+      const first = folders[0];
+      if (first) {
+        const { startBiliAutoTranscribe } = await import(
+          '../sections/bilibili/auto-transcribe-runtime'
+        );
+        startBiliAutoTranscribe(String(first.id));
+      }
       return [];
     },
   },

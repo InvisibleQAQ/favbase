@@ -1,14 +1,12 @@
-import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
-import {
-  AutoTranscribePipeline,
-} from '@/lib/auto-transcribe/pipeline';
+import { useCallback, useEffect, useSyncExternalStore } from 'react';
 import type {
-  AutoTranscribeAdapter,
   AutoTranscribePhase,
   AutoTranscribeStats,
   AutoTranscribeCurrentVideo,
   AutoTranscribeState,
 } from '@/lib/auto-transcribe/types';
+
+import { biliAutoTranscribePipeline, startBiliAutoTranscribe } from './auto-transcribe-runtime';
 
 export type { AutoTranscribePhase, AutoTranscribeStats, AutoTranscribeCurrentVideo, AutoTranscribeState };
 
@@ -16,41 +14,30 @@ export interface UseAutoTranscribeReturn {
   state: AutoTranscribeState;
   running: boolean;
   start: () => void;
-  stop: () => void;
 }
 
-export function useAutoTranscribe(
-  collectionId: number | undefined,
-  adapter: AutoTranscribeAdapter,
-): UseAutoTranscribeReturn {
-  const pipelineRef = useRef<AutoTranscribePipeline>(null);
-  if (!pipelineRef.current) {
-    pipelineRef.current = new AutoTranscribePipeline(adapter);
-  }
-
+/**
+ * Thin view subscription over the module-level pipeline singleton
+ * (auto-transcribe-runtime.ts). Unmounting does NOT dispose/abort — the batch
+ * run belongs to the `bilibili:transcribe` background job and survives route
+ * switches. `start` is the auto-continuation target (post-fetch chaining);
+ * there is no stop control — pause/resume belongs to the library gate.
+ */
+export function useAutoTranscribe(collectionId: number | undefined): UseAutoTranscribeReturn {
   const state = useSyncExternalStore(
-    pipelineRef.current.subscribe,
-    pipelineRef.current.getSnapshot,
+    biliAutoTranscribePipeline.subscribe,
+    biliAutoTranscribePipeline.getSnapshot,
   );
 
   useEffect(() => {
     if (!collectionId) return;
-    pipelineRef.current!.queryPreview(String(collectionId));
+    void biliAutoTranscribePipeline.queryPreview(String(collectionId));
   }, [collectionId, state.phase]);
 
   const start = useCallback(() => {
     if (!collectionId) return;
-    pipelineRef.current!.start(String(collectionId));
+    startBiliAutoTranscribe(String(collectionId));
   }, [collectionId]);
-
-  const stop = useCallback(() => {
-    pipelineRef.current!.stop();
-  }, []);
-
-  useEffect(() => {
-    const p = pipelineRef.current!;
-    return () => { p.dispose(); };
-  }, []);
 
   return {
     state,
@@ -60,6 +47,5 @@ export function useAutoTranscribe(
       || state.phase === 'waiting'
       || state.phase === 'paused',
     start,
-    stop,
   };
 }

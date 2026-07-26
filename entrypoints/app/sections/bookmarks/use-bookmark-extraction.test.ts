@@ -55,6 +55,13 @@ describe('bookmark extraction job ownership', () => {
     await flush();
 
     expect(serviceMocks.extractPendingBookmarks).toHaveBeenCalledTimes(1);
+    // The shared cooperative checkpoint reaches the worker — this is what lets
+    // the library gate pause the run between items.
+    expect(serviceMocks.extractPendingBookmarks).toHaveBeenCalledWith(
+      expect.objectContaining({
+        control: expect.objectContaining({ checkpoint: expect.any(Function) }),
+      }),
+    );
 
     metadataSync.resolve();
     await flush();

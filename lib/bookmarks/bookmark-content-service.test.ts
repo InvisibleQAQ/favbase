@@ -458,6 +458,56 @@ describe('bookmark-content-service (in-memory PGlite)', () => {
     expect(states).toEqual(['chunked', 'pending']);
   });
 
+  it('parks between items at the cooperative checkpoint and resumes in place', async () => {
+    const a = 'https://a.example.com/1';
+    const b = 'https://b.example.com/2';
+    await syncBookmarkTreeToDb(db, tree([bm(a), bm(b)]));
+
+    let paused = false;
+    let notifyParked!: () => void;
+    const parked = new Promise<void>((resolve) => {
+      notifyParked = resolve;
+    });
+    let release!: () => void;
+
+    const control = {
+      checkpoint: async () => {
+        if (!paused) return;
+        notifyParked();
+        await new Promise<void>((resolve) => {
+          release = () => {
+            paused = false;
+            resolve();
+          };
+        });
+      },
+    };
+
+    const run = extractPendingBookmarks({
+      db,
+      delayMs: 0,
+      fetchPage: pageFetcher({
+        [a]: () => htmlResponse(articleHtml('Alpha')),
+        [b]: () => htmlResponse(articleHtml('Beta')),
+      }),
+      control,
+      onProgress: ({ done }) => {
+        if (done >= 1) paused = true; // pause request lands after item one
+      },
+    });
+
+    await parked; // the worker parked BEFORE claiming the second item
+
+    const states = [(await getItem(a)).contentState, (await getItem(b)).contentState].sort();
+    expect(states).toEqual(['chunked', 'pending']);
+
+    release();
+    const result = await run;
+    expect(result.processed).toBe(2);
+    expect((await getItem(a)).contentState).toBe('chunked');
+    expect((await getItem(b)).contentState).toBe('chunked');
+  });
+
   it('empty queue is a no-op', async () => {
     const fetchPage = vi.fn<BookmarkPageFetcher>();
     const result = await extractPendingBookmarks({ db, delayMs: 0, fetchPage });

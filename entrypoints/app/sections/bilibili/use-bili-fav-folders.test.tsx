@@ -11,10 +11,16 @@ const serviceMocks = vi.hoisted(() => ({
   syncAllFavoriteVideos: vi.fn(),
 }));
 
+const runtimeMocks = vi.hoisted(() => ({
+  startBiliAutoTranscribe: vi.fn(),
+}));
+
 vi.mock('@/lib/bilibili/bili-sync-service', () => ({
   ...serviceMocks,
   BiliAuthError: class BiliAuthError extends Error {},
 }));
+
+vi.mock('./auto-transcribe-runtime', () => runtimeMocks);
 
 import { useBiliFavFolders } from './use-bili-fav-folders';
 
@@ -50,6 +56,7 @@ describe('useBiliFavFolders sync boundary', () => {
       fetchedCount: 20,
       syncedCount: 20,
     });
+    runtimeMocks.startBiliAutoTranscribe.mockReset();
     current = null;
     container = document.createElement('div');
     document.body.append(container);
@@ -68,7 +75,21 @@ describe('useBiliFavFolders sync boundary', () => {
 
     expect(serviceMocks.fetchAndSyncFolders).toHaveBeenCalledTimes(1);
     expect(serviceMocks.syncAllFavoriteVideos).not.toHaveBeenCalled();
+    expect(runtimeMocks.startBiliAutoTranscribe).not.toHaveBeenCalled();
     expect(current?.folders).toEqual(FOLDERS);
+  });
+
+  it('chains a batch transcription for the default folder after a successful sync', async () => {
+    await act(async () => {
+      root.render(<Probe />);
+    });
+
+    await act(async () => {
+      await current?.sync();
+    });
+
+    expect(runtimeMocks.startBiliAutoTranscribe).toHaveBeenCalledTimes(1);
+    expect(runtimeMocks.startBiliAutoTranscribe).toHaveBeenCalledWith('10');
   });
 
   it('starts full video pagination only from the explicit sync action', async () => {

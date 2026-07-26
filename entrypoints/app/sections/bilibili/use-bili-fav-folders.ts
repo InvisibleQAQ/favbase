@@ -11,6 +11,7 @@ import {
   useJob,
   type BackgroundJob,
 } from '../../hooks/background-jobs-store';
+import { startBiliAutoTranscribe } from './auto-transcribe-runtime';
 
 const PLATFORM = 'bilibili';
 
@@ -28,7 +29,7 @@ interface UseFavFoldersReturn {
   sync: () => Promise<void>;
 }
 
-export function useBiliFavFolders(): UseFavFoldersReturn {
+export function useBiliFavFolders(routeFolderId?: number): UseFavFoldersReturn {
   const [folders, setFolders] = useState<BiliFavFolder[]>([]);
   const [loading, setLoading] = useState(true);
   const [loginState, setLoginState] = useState<LoginState>('unknown');
@@ -46,6 +47,14 @@ export function useBiliFavFolders(): UseFavFoldersReturn {
     : null;
   const effectiveLoginState = syncAuthFailed ? 'not_logged_in' : loginState;
   const error = syncError ?? loadError;
+
+  // Latest route selection for the post-sync transcription chain. The runner
+  // outlives unmounts, so it reads the ref (last known selection) and falls
+  // back to the default (first) folder.
+  const routeFolderRef = useRef<number | undefined>(routeFolderId);
+  useEffect(() => {
+    routeFolderRef.current = routeFolderId;
+  }, [routeFolderId]);
 
   const sync = useCallback(async () => {
     setLoadError(null);
@@ -69,6 +78,12 @@ export function useBiliFavFolders(): UseFavFoldersReturn {
         control,
       );
       if (mountedRef.current) setLastSyncedAt(new Date());
+      // Auto-continue the content stage: chain a batch transcription for the
+      // folder the user is viewing (default folder as fallback). Fire-and-
+      // forget — the `bilibili:transcribe` job is independent of this sync job
+      // and dedupes/gates itself.
+      const targetFolder = routeFolderRef.current ?? folderList[0]?.id;
+      if (targetFolder != null) startBiliAutoTranscribe(String(targetFolder));
     });
   }, []);
 

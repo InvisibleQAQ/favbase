@@ -1,7 +1,10 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useState } from 'react';
 
 import { initDbProxy } from '@/lib/database';
-import { extractPendingBookmarks } from '@/lib/bookmarks/bookmark-content-service';
+import {
+  extractPendingBookmarks,
+  type ExtractionProgress,
+} from '@/lib/bookmarks/bookmark-content-service';
 import { countPendingExtractions } from '@/lib/bookmarks/bookmarks-sync-service';
 
 import {
@@ -11,22 +14,12 @@ import {
   type BackgroundJob,
 } from '../../hooks/background-jobs-store';
 import { enqueueCollectionProcessingItem } from '../../hooks/collection-processing-jobs';
-import {
-  beginExtractionRun,
-  deriveExtractionPhase,
-  finishExtractionRun,
-  getExtractionControlSnapshot,
-  recordExtractionProgress,
-  requestExtractionPause,
-  subscribeExtractionControl,
-  type ExtractionPhase,
-} from './bookmark-extraction-control';
+
+export type ExtractionPhase = 'idle' | 'running' | 'pausing' | 'paused';
 
 export interface BookmarkExtractionState {
   running: boolean;
   phase: ExtractionPhase;
-  pausing: boolean;
-  paused: boolean;
   /** Items settled this run (all outcomes). */
   done: number;
   /** Pending backlog measured at run start. */
@@ -34,80 +27,73 @@ export interface BookmarkExtractionState {
   current: { url: string; title: string } | null;
   pendingCount: number | null;
   pendingCountError: string | null;
+  extractJob: BackgroundJob | null;
   embedJob: BackgroundJob | null;
   tagJob: BackgroundJob | null;
-  start: () => void;
-  pause: () => void;
-  resume: () => void;
 }
 
 // ---------------------------------------------------------------------------
-// Content extraction now runs through the shared backgroundJobs store as a
-// single `bookmarks:extract` job (the bespoke module-level singleton was folded
-// into that store). Two payoffs from consolidating: the run counts in the
-// global "don't close this page" reminder (useRunningJobs), and startJob's
-// running guard dedupes across mounts (navigating away/back re-subscribes to
-// the SAME in-flight run instead of starting a second one — module scope
-// survives Hash-Router route switches inside app.html).
+// Content extraction runs through the shared backgroundJobs store as a single
+// `bookmarks:extract` job: it counts in the global "don't close this page"
+// reminder, dedupes across mounts, and survives Hash-Router route switches.
 //
-// Pause uses a module-scoped AbortController. The worker checks it between
-// items, so the in-flight fetch/extract/write settles before the run yields.
-// Each successfully chunked item is fed
-// to auto-tag + auto-embed per item (not at run end) so a mid-run page close
-// can't orphan chunked-but-never-embedded items — chunked items are never
-// re-picked. The shared session inbox owns the independent, controllable
-// processing lanes; extraction only enqueues and never waits for them.
+// It auto-chains after every successful bookmark metadata sync (mount
+// auto-sync AND the manual fetch button) — there is no start button anymore.
+// Pause/resume belongs to the per-platform library gate: the runner forwards
+// startJob's cooperative checkpoint into `extractPendingBookmarks`, which
+// awaits it before claiming each item (the in-flight item settles first).
+// The bespoke AbortController pause store was deleted with the panel buttons.
+//
+// Each successfully chunked item is fed to auto-tag + auto-embed per item (not
+// at run end) so a mid-run page close can't orphan chunked-but-never-embedded
+// items — chunked items are never re-picked. The shared session inbox owns the
+// independent processing lanes; extraction only enqueues and never waits.
 // ---------------------------------------------------------------------------
 
 /**
  * Kick off the serial content-extraction worker as the `bookmarks:extract` job.
- * Re-entrant safe via startJob's running guard (cross-mount dedupe).
+ * Re-entrant safe via startJob's running guard (cross-mount dedupe). This is
+ * the auto-continuation target — bookmark sync chains it after success.
  */
 export function startBookmarkExtraction(): void {
   if (getJob('bookmarks', 'extract')?.running) return;
-  const signal = beginExtractionRun();
-  startJob('bookmarks', 'extract', async (setProgress) => {
-    try {
-      const db = await initDbProxy(); // idempotent — joins the in-flight init
-      await extractPendingBookmarks({
-        db,
-        signal,
-        onProgress: (progress) => {
-          recordExtractionProgress(progress);
-          setProgress(progress);
-        },
-        onItemExtracted: (id) => {
-          enqueueCollectionProcessingItem({
-            jobPlatform: 'bookmarks',
-            itemPlatform: 'bookmarks',
-            itemId: id,
-          });
-        },
-      });
-    } finally {
-      finishExtractionRun();
-    }
+  startJob('bookmarks', 'extract', async (setProgress, control) => {
+    const db = await initDbProxy(); // idempotent — joins the in-flight init
+    await extractPendingBookmarks({
+      db,
+      control,
+      onProgress: (progress) => setProgress(progress),
+      onItemExtracted: (id) => {
+        enqueueCollectionProcessingItem({
+          jobPlatform: 'bookmarks',
+          itemPlatform: 'bookmarks',
+          itemId: id,
+        });
+      },
+    });
   });
 }
 
-/** Subscribe to the extraction progress (drives the view caption). */
+/** Subscribe to the extraction progress (drives the bookmarks progress panel). */
 export function useBookmarkExtraction(refreshKey?: unknown): BookmarkExtractionState {
   const job = useJob('bookmarks', 'extract');
   const embedJob = useJob('bookmarks', 'embed');
   const tagJob = useJob('bookmarks', 'tag');
-  const control = useSyncExternalStore(
-    subscribeExtractionControl,
-    getExtractionControlSnapshot,
-  );
   const [pendingCount, setPendingCount] = useState<number | null>(null);
   const [pendingCountError, setPendingCountError] = useState<string | null>(null);
-  const jobProgress = job?.progress as
-    | { done: number; total: number; current?: { url: string; title: string } }
-    | null
-    | undefined;
-  const p = jobProgress ?? control.lastProgress;
+  // progress is cleared when a run settles; lastProgress keeps the final counts
+  // visible (the job store retains it across runs).
+  const p = (job?.progress ?? job?.lastProgress) as ExtractionProgress | null | undefined;
   const running = job?.running ?? false;
-  const phase = deriveExtractionPhase(running, control);
+  // Phase comes straight from the shared job (the library gate drives
+  // pausing/paused through the cooperative run control).
+  const phase: ExtractionPhase = !running
+    ? 'idle'
+    : job?.phase === 'pausing'
+      ? 'pausing'
+      : job?.phase === 'paused'
+        ? 'paused'
+        : 'running';
 
   useEffect(() => {
     if (job?.running) return;
@@ -133,17 +119,13 @@ export function useBookmarkExtraction(refreshKey?: unknown): BookmarkExtractionS
   return {
     running,
     phase,
-    pausing: phase === 'pausing',
-    paused: phase === 'paused',
     done: p?.done ?? 0,
     total: p?.total ?? 0,
     current: p?.current ?? null,
     pendingCount,
     pendingCountError,
+    extractJob: job,
     embedJob,
     tagJob,
-    start: startBookmarkExtraction,
-    pause: requestExtractionPause,
-    resume: startBookmarkExtraction,
   };
 }

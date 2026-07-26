@@ -272,9 +272,84 @@ describe('AutoTranscribePipeline page ordering', () => {
         previewLoading: false,
       });
 
-      pipeline.start('collection-1');
+      await pipeline.start('collection-1');
       expect(checkAuth).not.toHaveBeenCalled();
       expect(fetchPage).not.toHaveBeenCalled();
+    } finally {
+      pipeline.dispose();
+    }
+  });
+
+  it('blocks an automatic start on a fresh instance while the durable guard is active', async () => {
+    // Race fix: a fresh instance's in-memory quotaResetAt is null until an
+    // async preview lands. An automatic start (post-fetch chain / daily
+    // auto-sync) must await the persisted guard instead of trusting memory.
+    vi.spyOn(Date, 'now').mockReturnValue(1_000);
+    const checkAuth = vi.fn().mockResolvedValue(undefined);
+    const fetchPage = vi.fn();
+    const adapter = makeAdapter({
+      checkAuth,
+      fetchPage,
+      getQuotaPause: vi.fn().mockResolvedValue({ providerId: 'groq', resetAt: 5_000 }),
+    });
+    const pipeline = new AutoTranscribePipeline(adapter);
+
+    try {
+      await pipeline.start('collection-1'); // NO queryPreview before this
+      expect(checkAuth).not.toHaveBeenCalled();
+      expect(fetchPage).not.toHaveBeenCalled();
+      expect(pipeline.getSnapshot()).toMatchObject({
+        phase: 'quota_paused',
+        quotaResetAt: 5_000,
+      });
+    } finally {
+      pipeline.dispose();
+    }
+  });
+
+  it('blocks before claiming the next video when the cooperative checkpoint pauses', async () => {
+    vi.useFakeTimers();
+    const transcribe = vi.fn().mockResolvedValue(success());
+    const adapter = makeAdapter({
+      fetchPage: vi.fn().mockResolvedValue({
+        videos: [video('BV-1'), video('BV-2')],
+        totalPages: 1,
+        totalCount: 2,
+      }),
+      transcribe,
+    });
+    const pipeline = new AutoTranscribePipeline(adapter);
+
+    let paused = false;
+    const parked = deferred<void>();
+    let release: (() => void) | null = null;
+    const control = {
+      checkpoint: async () => {
+        if (!paused) return;
+        parked.resolve();
+        await new Promise<void>((resolve) => {
+          release = () => {
+            paused = false;
+            resolve();
+          };
+        });
+      },
+    };
+
+    try {
+      const run = pipeline.start('collection-1', control);
+      await vi.waitFor(() => expect(transcribe).toHaveBeenCalledOnce());
+      paused = true; // pause request lands while BV-1's post-item wait runs
+      await vi.advanceTimersByTimeAsync(20_000);
+      await parked.promise; // worker parked at the next-video checkpoint
+
+      expect(transcribe).toHaveBeenCalledOnce(); // BV-2 not claimed while paused
+
+      release!();
+      await vi.waitFor(() => expect(transcribe).toHaveBeenCalledTimes(2));
+      await vi.advanceTimersByTimeAsync(20_000);
+      await run;
+      expect(transcribe).toHaveBeenCalledTimes(2);
     } finally {
       pipeline.dispose();
     }

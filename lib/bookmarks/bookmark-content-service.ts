@@ -18,6 +18,7 @@
  * storage / AI / UI imports.
  */
 
+import type { CooperativeCheckpoint } from '@/lib/collections/cooperative-checkpoint';
 import { getDb } from '@/lib/database';
 import type { FavbaseDb } from '@/lib/database';
 import { emitDomainEvent } from '@/lib/events';
@@ -65,6 +66,12 @@ export interface ExtractPendingOptions {
   onItemExtracted?: (platformItemId: string) => void;
   /** Cooperative cancel — checked between items (the in-flight item finishes). */
   signal?: AbortSignal;
+  /**
+   * Cooperative pause (library gate): awaited before claiming each item, so a
+   * paused `bookmarks:extract` job blocks between items — the in-flight
+   * fetch/extract/write settles first — and resumes exactly where it stopped.
+   */
+  control?: CooperativeCheckpoint;
   /** Pause between network requests; default 1000ms. */
   delayMs?: number;
 }
@@ -120,6 +127,9 @@ export async function extractPendingBookmarks(
     if (fresh.length === 0) break;
 
     for (const target of fresh) {
+      if (opts.signal?.aborted) break;
+      // Pause boundary: a paused run parks here before claiming the next item.
+      await opts.control?.checkpoint();
       if (opts.signal?.aborted) break;
       attempted.add(target.itemId);
       const current = { url: target.url, title: target.title };

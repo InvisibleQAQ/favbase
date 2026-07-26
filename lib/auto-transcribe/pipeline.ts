@@ -1,9 +1,11 @@
 import type {
   AutoTranscribeAdapter,
   AutoTranscribePhase,
+  AutoTranscribeQuotaPause,
   AutoTranscribeState,
   AutoTranscribeStats,
 } from './types';
+import type { CooperativeCheckpoint } from '@/lib/collections/cooperative-checkpoint';
 import type { TranscribeErrorInfo } from '@/lib/transcription/types';
 
 // ---------------------------------------------------------------------------
@@ -59,6 +61,7 @@ export class AutoTranscribePipeline {
   private listeners = new Set<() => void>();
   private ac: AbortController | null = null;
   private running = false;
+  private startPending = false;
   private countdownTimer: ReturnType<typeof setInterval> | null = null;
   private statusCleanup: (() => void) | null = null;
   private previewGeneration = 0;
@@ -78,18 +81,61 @@ export class AutoTranscribePipeline {
 
   // --- Control ---
 
-  start(collectionId: string): void {
-    if (this.running) return;
-    if (this.state.quotaResetAt !== null && this.state.quotaResetAt > Date.now()) return;
-    if (this.state.quotaResetAt !== null) {
-      void this.adapter.setQuotaPause(null).catch((error) => {
-        console.error('[auto-transcribe] Failed to clear quota pause:', error);
-      });
+  /** True while a run is executing or a start is resolving its quota guard. */
+  isActive(): boolean {
+    return this.running || this.startPending;
+  }
+
+  /**
+   * Start one batch run. Resolves when the run finishes (never rejects — the
+   * pipeline reports failures through its phase). The optional cooperative
+   * checkpoint is awaited before any network work and before claiming each
+   * video, so a paused job blocks between items without cancelling the run.
+   */
+  async start(collectionId: string, control?: CooperativeCheckpoint): Promise<void> {
+    if (this.running || this.startPending) return;
+    this.startPending = true;
+    try {
+      // Read the DURABLE quota guard before deciding: a fresh instance's
+      // in-memory quotaResetAt stays null until an async preview lands, and
+      // automatic starts (post-fetch chaining, daily auto-sync) hit exactly
+      // that window. The in-memory mirror is only the fallback when the read
+      // fails.
+      let persisted: AutoTranscribeQuotaPause | null = null;
+      try {
+        persisted = await this.adapter.getQuotaPause();
+      } catch (error) {
+        console.error('[auto-transcribe] Failed to read quota pause:', error);
+      }
+      if (this.running) return;
+      const resetAt = persisted?.resetAt ?? this.state.quotaResetAt;
+      if (resetAt !== null && resetAt > Date.now()) {
+        // Guard still active — surface it (an idle fresh instance may not have
+        // loaded it yet) and skip silently. Recovery is the next automatic
+        // start after the reset (daily auto-sync re-evaluates every day).
+        this.patch({
+          phase: 'quota_paused',
+          quotaResetAt: resetAt,
+          waitSeconds: Math.max(0, Math.ceil((resetAt - Date.now()) / 1000)),
+          previewLoading: false,
+        });
+        this.startCountdown();
+        return;
+      }
+      if (persisted !== null || this.state.quotaResetAt !== null) {
+        try {
+          await this.adapter.setQuotaPause(null);
+        } catch (error) {
+          console.error('[auto-transcribe] Failed to clear quota pause:', error);
+        }
+      }
+      this.state = { ...INITIAL_STATE, phase: 'syncing', previewLoading: false };
+      this.emit();
+      this.installStatusListener();
+      await this.runPipeline(collectionId, control);
+    } finally {
+      this.startPending = false;
     }
-    this.state = { ...INITIAL_STATE, phase: 'syncing', previewLoading: false };
-    this.emit();
-    this.installStatusListener();
-    this.runPipeline(collectionId);
   }
 
   stop(): void {
@@ -248,7 +294,10 @@ export class AutoTranscribePipeline {
 
   // --- Core pipeline ---
 
-  private async runPipeline(collectionId: string): Promise<void> {
+  private async runPipeline(
+    collectionId: string,
+    control?: CooperativeCheckpoint,
+  ): Promise<void> {
     const ac = new AbortController();
     this.ac = ac;
     this.running = true;
@@ -257,6 +306,8 @@ export class AutoTranscribePipeline {
     const stats: AutoTranscribeStats = { existing: 0, cc: 0, asr: 0, skipped: 0, remaining: 0 };
 
     try {
+      // Library-gate seam: a born-paused run parks HERE, before any network.
+      await control?.checkpoint();
       await this.adapter.checkAuth();
 
       const hasAsrKey = await this.adapter.hasAsrKey();
@@ -269,6 +320,7 @@ export class AutoTranscribePipeline {
 
       for (let page = 1; page <= totalPages; page++) {
         signal.throwIfAborted();
+        await control?.checkpoint();
 
         // --- Sync phase ---
         this.patch({ phase: 'syncing', currentPage: page });
@@ -292,6 +344,8 @@ export class AutoTranscribePipeline {
 
         for (const videoId of pendingIds) {
           signal.throwIfAborted();
+          // Cooperative pause boundary: block before claiming the next video.
+          await control?.checkpoint();
 
           const video = validVideos.find((v) => v.videoId === videoId);
           const title = video?.title ?? videoId;

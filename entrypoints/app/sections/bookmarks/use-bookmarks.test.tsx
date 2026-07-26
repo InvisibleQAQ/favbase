@@ -13,11 +13,17 @@ const serviceMocks = vi.hoisted(() => ({
   getLastSyncedAt: vi.fn(),
 }));
 
+const extractionMocks = vi.hoisted(() => ({
+  startBookmarkExtraction: vi.fn(),
+}));
+
 vi.mock('@/lib/database', () => ({
   initDbProxy: vi.fn(async () => ({})),
 }));
 
 vi.mock('@/lib/bookmarks/bookmarks-sync-service', () => serviceMocks);
+
+vi.mock('./use-bookmark-extraction', () => extractionMocks);
 
 import { useBookmarks } from './use-bookmarks';
 
@@ -50,6 +56,7 @@ describe('useBookmarks sync ownership', () => {
     serviceMocks.getBookmarks.mockReset().mockResolvedValue({ rows: [], total: 0 });
     serviceMocks.getFolders.mockReset().mockResolvedValue([]);
     serviceMocks.getLastSyncedAt.mockReset().mockResolvedValue(null);
+    extractionMocks.startBookmarkExtraction.mockReset();
     container = document.createElement('div');
     document.body.append(container);
     root = createRoot(container);
@@ -74,5 +81,17 @@ describe('useBookmarks sync ownership', () => {
     });
 
     expect(serviceMocks.syncBookmarks).toHaveBeenCalledTimes(1);
+  });
+
+  it('chains content extraction after the metadata sync succeeds', async () => {
+    await act(async () => {
+      root.render(<Probe />);
+    });
+    expect(extractionMocks.startBookmarkExtraction).not.toHaveBeenCalled();
+
+    finishSync();
+    await act(async () => {});
+
+    expect(extractionMocks.startBookmarkExtraction).toHaveBeenCalledTimes(1);
   });
 });

@@ -14,6 +14,7 @@ import {
   useJob,
   type BackgroundJob,
 } from '../../hooks/background-jobs-store';
+import { startBookmarkExtraction } from './use-bookmark-extraction';
 
 const PAGE_SIZE = 24;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -127,6 +128,12 @@ export function useBookmarks(folderId: string | undefined): UseBookmarksReturn {
       setProgress({ done: 0, total: null });
       const result = await syncBookmarks(control);
       setProgress({ done: result.totalBookmarks, total: null });
+      // Chain the content-extraction worker after new bookmarks land as
+      // 'pending' (mount auto-sync AND the manual fetch button both pass
+      // here). Fire-and-forget module singleton — survives route changes, its
+      // startJob guard dedupes concurrent starts, and the library gate can
+      // pause it.
+      startBookmarkExtraction();
     });
   }, []);
 
