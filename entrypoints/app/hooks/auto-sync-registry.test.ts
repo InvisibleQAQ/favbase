@@ -78,7 +78,7 @@ describe('auto-sync registry content-stage chaining', () => {
     expect(mocks.startBookmarkExtraction).not.toHaveBeenCalled();
   });
 
-  it('bilibili: chains a batch transcription for the default folder, still returning []', async () => {
+  it('bilibili: chains a batch transcription across all folders, still returning []', async () => {
     mocks.fetchAndSyncFolders.mockResolvedValue([{ id: 42 }, { id: 43 }]);
 
     const ids = await entry('bilibili').runSync(noProgress, control);
@@ -89,7 +89,7 @@ describe('auto-sync registry content-stage chaining', () => {
       control,
     );
     expect(mocks.startBiliAutoTranscribe).toHaveBeenCalledTimes(1);
-    expect(mocks.startBiliAutoTranscribe).toHaveBeenCalledWith('42');
+    expect(mocks.startBiliAutoTranscribe).toHaveBeenCalledWith(['42', '43']);
     expect(ids).toEqual([]); // transcription enqueues embed/tag per item itself
   });
 

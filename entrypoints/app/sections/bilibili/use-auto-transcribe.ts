@@ -36,7 +36,7 @@ export function useAutoTranscribe(collectionId: number | undefined): UseAutoTran
 
   const start = useCallback(() => {
     if (!collectionId) return;
-    startBiliAutoTranscribe(String(collectionId));
+    startBiliAutoTranscribe([String(collectionId)]);
   }, [collectionId]);
 
   return {

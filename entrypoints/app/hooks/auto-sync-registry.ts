@@ -128,16 +128,16 @@ export const AUTO_SYNC_PLATFORMS: AutoSyncPlatform[] = [
     runSync: async (setProgress, control) => {
       const folders = await fetchAndSyncFolders(control);
       await syncAllFavoriteVideos(folders, setProgress, control);
-      // Auto-continue the content stage for the default folder (the pipeline
-      // batches ONE folder per run; the page path targets the viewed folder).
+      // Auto-continue the content stage across ALL folders (natural order =
+      // default folder first). The runtime filters out folders without pending
+      // videos via a local DB query before dispatching anything.
       // A still-active ASR quota guard makes this a silent skip — that is the
       // "next-day daily auto-sync naturally re-evaluates" recovery path.
-      const first = folders[0];
-      if (first) {
+      if (folders.length > 0) {
         const { startBiliAutoTranscribe } = await import(
           '../sections/bilibili/auto-transcribe-runtime'
         );
-        startBiliAutoTranscribe(String(first.id));
+        startBiliAutoTranscribe(folders.map((f) => String(f.id)));
       }
       return [];
     },

@@ -191,6 +191,33 @@ export async function getPendingBvids(
   return rows.map((r) => r.platformItemId);
 }
 
+/**
+ * Subset of the given folder mediaIds that still contain >=1 video with
+ * `contentState='pending'`, preserving the input order. Zero network — one
+ * grouped DB query over sources ⋈ item_sources ⋈ items. This is the dispatch
+ * filter for the auto-transcribe continuation: folders without pending work
+ * never reach the pipeline (which would otherwise re-crawl their pages).
+ */
+export async function listFoldersWithPending(mediaIds: readonly string[]): Promise<string[]> {
+  if (mediaIds.length === 0) return [];
+  const db = getDb();
+  const rows = await db
+    .selectDistinct({ platformSourceId: sources.platformSourceId })
+    .from(sources)
+    .innerJoin(itemSources, eq(itemSources.sourceId, sources.id))
+    .innerJoin(items, eq(items.id, itemSources.itemId))
+    .where(
+      and(
+        eq(sources.platform, PLATFORM),
+        inArray(sources.platformSourceId, [...mediaIds]),
+        eq(items.platform, PLATFORM),
+        eq(items.contentState, 'pending'),
+      ),
+    );
+  const withPending = new Set(rows.map((r) => r.platformSourceId));
+  return mediaIds.filter((id) => withPending.has(id));
+}
+
 export async function getPendingPreview(mediaId: number): Promise<PendingPreview> {
   const source = await resolveSource(mediaId);
   if (!source) return { video: null, pendingCount: null };

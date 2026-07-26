@@ -24,12 +24,12 @@ vi.mock('./auto-transcribe-runtime', () => runtimeMocks);
 
 import { useBiliFavFolders } from './use-bili-fav-folders';
 
-const FOLDERS: BiliFavFolder[] = [
-  {
-    id: 10,
-    fid: 10,
+function makeFolder(id: number, title: string): BiliFavFolder {
+  return {
+    id,
+    fid: id,
     mid: 1,
-    title: 'Default folder',
+    title,
     media_count: 20,
     cover: '',
     intro: '',
@@ -37,16 +37,19 @@ const FOLDERS: BiliFavFolder[] = [
     mtime: 0,
     attr: 0,
     fav_state: 0,
-  },
-];
+  };
+}
+
+const FOLDERS: BiliFavFolder[] = [makeFolder(10, 'Default folder')];
 
 describe('useBiliFavFolders sync boundary', () => {
   let container: HTMLDivElement;
   let root: Root;
   let current: ReturnType<typeof useBiliFavFolders> | null;
+  let routeFolderId: number | undefined;
 
   function Probe() {
-    current = useBiliFavFolders();
+    current = useBiliFavFolders(routeFolderId);
     return null;
   }
 
@@ -57,6 +60,7 @@ describe('useBiliFavFolders sync boundary', () => {
       syncedCount: 20,
     });
     runtimeMocks.startBiliAutoTranscribe.mockReset();
+    routeFolderId = undefined;
     current = null;
     container = document.createElement('div');
     document.body.append(container);
@@ -75,11 +79,38 @@ describe('useBiliFavFolders sync boundary', () => {
 
     expect(serviceMocks.fetchAndSyncFolders).toHaveBeenCalledTimes(1);
     expect(serviceMocks.syncAllFavoriteVideos).not.toHaveBeenCalled();
-    expect(runtimeMocks.startBiliAutoTranscribe).not.toHaveBeenCalled();
     expect(current?.folders).toEqual(FOLDERS);
   });
 
-  it('chains a batch transcription for the default folder after a successful sync', async () => {
+  it('auto-continues the pending backlog on mount (parity with bookmarks)', async () => {
+    await act(async () => {
+      root.render(<Probe />);
+    });
+
+    // The runtime filters folders without pending videos itself — the mount
+    // chain always fires with the full ordered folder list.
+    expect(runtimeMocks.startBiliAutoTranscribe).toHaveBeenCalledTimes(1);
+    expect(runtimeMocks.startBiliAutoTranscribe).toHaveBeenCalledWith(['10']);
+  });
+
+  it('does not auto-continue on mount when not logged in', async () => {
+    const { BiliAuthError } = await import('@/lib/bilibili/bili-sync-service');
+    serviceMocks.fetchAndSyncFolders.mockRejectedValue(new BiliAuthError('not logged in'));
+
+    await act(async () => {
+      root.render(<Probe />);
+    });
+
+    expect(runtimeMocks.startBiliAutoTranscribe).not.toHaveBeenCalled();
+    expect(current?.loginState).toBe('not_logged_in');
+  });
+
+  it('chains a batch transcription across all folders after a successful sync', async () => {
+    serviceMocks.fetchAndSyncFolders.mockResolvedValue([
+      makeFolder(10, 'Default folder'),
+      makeFolder(20, 'Second folder'),
+    ]);
+
     await act(async () => {
       root.render(<Probe />);
     });
@@ -88,8 +119,27 @@ describe('useBiliFavFolders sync boundary', () => {
       await current?.sync();
     });
 
-    expect(runtimeMocks.startBiliAutoTranscribe).toHaveBeenCalledTimes(1);
-    expect(runtimeMocks.startBiliAutoTranscribe).toHaveBeenCalledWith('10');
+    // Once from the mount continuation, once from the explicit sync chain.
+    expect(runtimeMocks.startBiliAutoTranscribe).toHaveBeenCalledTimes(2);
+    expect(runtimeMocks.startBiliAutoTranscribe).toHaveBeenLastCalledWith(['10', '20']);
+  });
+
+  it('puts the route-selected folder first in the transcription order', async () => {
+    routeFolderId = 20;
+    serviceMocks.fetchAndSyncFolders.mockResolvedValue([
+      makeFolder(10, 'Default folder'),
+      makeFolder(20, 'Second folder'),
+    ]);
+
+    await act(async () => {
+      root.render(<Probe />);
+    });
+
+    await act(async () => {
+      await current?.sync();
+    });
+
+    expect(runtimeMocks.startBiliAutoTranscribe).toHaveBeenLastCalledWith(['20', '10']);
   });
 
   it('starts full video pagination only from the explicit sync action', async () => {
