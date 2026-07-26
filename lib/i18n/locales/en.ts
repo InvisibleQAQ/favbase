@@ -325,7 +325,8 @@ const en: Record<LocaleKeys, string> = {
   'backgroundJobs.embedding': 'Embedding {{done}}/{{total}}',
   'backgroundJobs.tagging': 'Tagging {{done}}/{{total}}',
   // Reminder tooltip: per-job kind labels (used when no {{done}}/{{total}} yet).
-  'backgroundJobs.kind.sync': 'Sync',
+  // Matches pipeline.fetch on the per-page processing strip — same operation.
+  'backgroundJobs.kind.sync': 'Fetch',
   'backgroundJobs.kind.extract': 'Extraction',
   'backgroundJobs.kind.embed': 'Embedding',
   'backgroundJobs.kind.tag': 'Tagging',
@@ -334,7 +335,6 @@ const en: Record<LocaleKeys, string> = {
   'backgroundJobs.phase.paused': 'Paused: {{detail}}',
 
   // Compact Collection pipeline segment labels.
-  'pipeline.sync': 'Sync',
   'pipeline.fetch': 'Fetch',
   'pipeline.transcription': 'Transcribe',
   'pipeline.extraction': 'Extract',

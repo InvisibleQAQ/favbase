@@ -318,7 +318,8 @@ const zhCN = {
   'backgroundJobs.embedding': '向量化 {{done}}/{{total}}',
   'backgroundJobs.tagging': '打标签 {{done}}/{{total}}',
   // Reminder tooltip: per-job kind labels (used when no {{done}}/{{total}} yet).
-  'backgroundJobs.kind.sync': '同步',
+  // 与各收藏页处理条的 pipeline.fetch 保持同名：都是「从平台拉取收藏」这一件事。
+  'backgroundJobs.kind.sync': '获取',
   'backgroundJobs.kind.extract': '提取',
   'backgroundJobs.kind.embed': '向量化',
   'backgroundJobs.kind.tag': '打标签',
@@ -327,7 +328,6 @@ const zhCN = {
   'backgroundJobs.phase.paused': '已暂停 · {{detail}}',
 
   // Compact Collection pipeline segment labels.
-  'pipeline.sync': '同步',
   'pipeline.fetch': '获取',
   'pipeline.transcription': '转录',
   'pipeline.extraction': '提取',
