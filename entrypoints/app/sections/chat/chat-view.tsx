@@ -33,8 +33,8 @@ type Translate = (key: LocaleKeys, params?: Record<string, string | number>) => 
  * conversations (new / switch / delete); right column drives the multi-step agent
  * via `useChatAgent`, streams the answer token-by-token, renders a four-state tool
  * activity line, and shows clickable source cards under each answer. Conversations
- * persist to WXT storage (never PGlite). No markdown renderer dependency — assistant
- * text renders as pre-wrapped plain text (a markdown renderer is a P5 discussion).
+ * persist to WXT storage (never PGlite). Assistant answers render through
+ * `<ChatMarkdown>` (react-markdown, no rehype-raw); user messages stay plain text.
  */
 export function ChatView() {
   const { t } = useTranslation();
