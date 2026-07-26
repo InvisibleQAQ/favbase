@@ -82,7 +82,7 @@ export interface ExtractionRunResult {
   /**
    * platformItemIds (normalized URLs) flipped to 'chunked' this run — the
    * embed/tag seam, same addressing as the platforms' `Sync*Result.newItemIds`
-   * (`embedNewItems` / `tagNewItems` take platform + platformItemIds).
+   * (the shared lanes take platform + platformItemIds).
    */
   chunkedItemIds: string[];
   /** Items settled as permanent 'no_content' this run. */

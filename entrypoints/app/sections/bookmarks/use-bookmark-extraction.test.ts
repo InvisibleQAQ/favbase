@@ -19,7 +19,8 @@ vi.mock('@/lib/bookmarks/bookmarks-sync-service', () => ({
 }));
 
 vi.mock('@/lib/embedding', () => ({
-  embedNewItems: vi.fn(async () => undefined),
+  embedPlatformBacklog: vi.fn(async () => undefined),
+  embedPlatformItem: vi.fn(async () => null),
 }));
 
 vi.mock('@/lib/tagging', () => ({

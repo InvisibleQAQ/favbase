@@ -34,7 +34,7 @@ export interface StarsPhaseProgress {
   estimatedTotal: number;
 }
 
-/** Phase 2: serial README fetch for NEW repos only (diffed against the DB). */
+/** Phase 2: serial README fetch for new + ghost repos (diffed against the DB). */
 export interface ReadmePhaseProgress {
   phase: 'readme';
   done: number;

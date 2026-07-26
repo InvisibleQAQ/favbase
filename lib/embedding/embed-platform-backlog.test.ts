@@ -10,7 +10,7 @@ import { runMigrations } from '@/lib/database/migrations';
 import type { FavbaseDb } from '@/lib/database';
 import { onDomainEvent } from '@/lib/events';
 import type { ResolvedEmbeddingConfig } from './config';
-import { embedNewItems, embedPlatformItem } from './indexing';
+import { embedPlatformBacklog, embedPlatformItem } from './indexing';
 
 // config.ts (pulled in by indexing.ts) value-imports `settingsStorage`, whose
 // barrel eagerly touches `@wxt-dev/storage` (chrome.runtime) at load. All
@@ -51,7 +51,7 @@ function fakeVectors(count: number): number[][] {
   });
 }
 
-describe('embedNewItems', () => {
+describe('embedPlatformBacklog', () => {
   let pg: PGlite;
   let db: FavbaseDb;
 
@@ -131,7 +131,7 @@ describe('embedNewItems', () => {
   const T0 = new Date('2026-01-01T00:00:00Z');
   const T1 = new Date('2026-01-02T00:00:00Z');
 
-  it('embeds the listed chunked items in createdAt order', async () => {
+  it('embeds the whole platform backlog in createdAt order without an id list', async () => {
     const itemA = await seedItem({
       platformItemId: 'n-a',
       contentState: 'chunked',
@@ -149,7 +149,7 @@ describe('embedNewItems', () => {
       fakeVectors(texts.length),
     );
 
-    await embedNewItems('test', ['n-a', 'n-b'], {
+    await embedPlatformBacklog('test', {
       db: () => db,
       getConfig: async () => fakeConfig(true),
       embed,
@@ -163,18 +163,12 @@ describe('embedNewItems', () => {
     expect(embed.mock.calls.map((c) => c[1])).toEqual([['a0', 'a1'], ['b0']]);
   });
 
-  it('only touches the listed ids on the given platform', async () => {
-    const inList = await seedItem({
+  it('scopes to the given platform only', async () => {
+    const inScope = await seedItem({
       platformItemId: 'n-scope-in',
       contentState: 'chunked',
       chunkTexts: ['in'],
     });
-    const notListed = await seedItem({
-      platformItemId: 'n-scope-out',
-      contentState: 'chunked',
-      chunkTexts: ['out'],
-    });
-    // Same platformItemId on ANOTHER platform must not be picked up.
     const otherPlatform = await seedItem({
       platform: 'other',
       platformItemId: 'n-scope-in',
@@ -186,20 +180,19 @@ describe('embedNewItems', () => {
       fakeVectors(texts.length),
     );
 
-    await embedNewItems('test', ['n-scope-in'], {
+    await embedPlatformBacklog('test', {
       db: () => db,
       getConfig: async () => fakeConfig(true),
       embed,
     });
 
-    expect(await getContentState(inList)).toBe('embedded');
-    expect(await getContentState(notListed)).toBe('chunked');
+    expect(await getContentState(inScope)).toBe('embedded');
     expect(await getContentState(otherPlatform)).toBe('chunked');
     expect(embed).toHaveBeenCalledTimes(1);
     expect(embed).toHaveBeenCalledWith(expect.anything(), ['in']);
   });
 
-  it('skips items not at chunked and chunked items without chunk rows', async () => {
+  it('skips non-chunked items and chunked items without chunk rows', async () => {
     const embedded = await seedItem({
       platformItemId: 'n-skip-embedded',
       contentState: 'embedded',
@@ -209,26 +202,32 @@ describe('embedNewItems', () => {
       platformItemId: 'n-skip-no-content',
       contentState: 'no_content',
     });
-    const chunkedEmpty = await seedItem({
-      platformItemId: 'n-skip-chunked-empty',
+    // A ghost (chunked, zero chunk rows) is excluded by the EXISTS filter —
+    // it must neither be embedded nor counted into the total.
+    const ghost = await seedItem({
+      platformItemId: 'n-skip-ghost',
       contentState: 'chunked',
     });
 
     const embed = vi.fn();
-    await embedNewItems(
+    const onProgress = vi.fn();
+    await embedPlatformBacklog(
       'test',
-      ['n-skip-embedded', 'n-skip-no-content', 'n-skip-chunked-empty'],
       { db: () => db, getConfig: async () => fakeConfig(true), embed },
+      onProgress,
     );
 
     expect(embed).not.toHaveBeenCalled();
     expect(await getContentState(embedded)).toBe('embedded');
     expect(await getContentState(noContent)).toBe('no_content');
-    // Without chunk rows the item must NOT be advanced to 'embedded'.
-    expect(await getContentState(chunkedEmpty)).toBe('chunked');
+    expect(await getContentState(ghost)).toBe('chunked');
+    expect(onProgress.mock.calls.map((c) => c[0])).toEqual([
+      { done: 0, total: 0, failed: 0 },
+    ]);
   });
 
-  it('continues past a failing item and never throws', async () => {
+  it('continues past a failing item, then throws with the failure count', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const itemA = await seedItem({
       platformItemId: 'n-fail-a',
       contentState: 'chunked',
@@ -248,21 +247,23 @@ describe('embedNewItems', () => {
     });
 
     await expect(
-      embedNewItems('test', ['n-fail-a', 'n-fail-b'], {
+      embedPlatformBacklog('test', {
         db: () => db,
         getConfig: async () => fakeConfig(true),
         embed,
       }),
-    ).resolves.toBeUndefined();
+    ).rejects.toThrow('Embedding failed for 1/2 items');
 
-    // The failing item stays 'chunked' (rebuild backlog); the rest proceed.
+    // The failing item stays 'chunked' (still in the backlog); the rest proceed.
     expect(await getContentState(itemA)).toBe('chunked');
     expect(await firstChunkEmbedding(itemA)).toBeNull();
     expect(await getContentState(itemB)).toBe('embedded');
     expect(await firstChunkEmbedding(itemB)).not.toBeNull();
+    errSpy.mockRestore();
   });
 
   it('emits item-embedded only after each durable embedding succeeds', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     await seedItem({
       platformItemId: 'event-fail',
       contentState: 'chunked',
@@ -279,16 +280,17 @@ describe('embedNewItems', () => {
     const off = onDomainEvent('item-embedded', (event) => seen.push(event.platformItemId));
 
     try {
-      await embedNewItems('test', ['event-fail', 'event-ok'], {
+      await embedPlatformBacklog('test', {
         db: () => db,
         getConfig: async () => fakeConfig(true),
         embed: async (_config, texts) => {
           if (texts.includes('fail-me')) throw new Error('boom');
           return fakeVectors(texts.length);
         },
-      });
+      }).catch(() => undefined);
     } finally {
       off();
+      errSpy.mockRestore();
     }
 
     expect(seen).toEqual(['event-ok']);
@@ -317,7 +319,7 @@ describe('embedNewItems', () => {
     expect(seen).toEqual(['BV-EVENT']);
   });
 
-  it('is a silent no-op when embedding is not configured', async () => {
+  it('completes silently at 0/0 when embedding is not configured', async () => {
     const itemId = await seedItem({
       platformItemId: 'n-disabled',
       contentState: 'chunked',
@@ -325,65 +327,22 @@ describe('embedNewItems', () => {
     });
 
     const embed = vi.fn();
-    await embedNewItems('test', ['n-disabled'], {
-      db: () => db,
-      getConfig: async () => fakeConfig(false),
-      embed,
-    });
+    const onProgress = vi.fn();
+    await embedPlatformBacklog(
+      'test',
+      { db: () => db, getConfig: async () => fakeConfig(false), embed },
+      onProgress,
+    );
 
     expect(embed).not.toHaveBeenCalled();
     expect(await getContentState(itemId)).toBe('chunked');
     expect(await firstChunkEmbedding(itemId)).toBeNull();
-  });
-
-  it('is a no-op on an empty id list (config never read)', async () => {
-    const getConfig = vi.fn();
-    const embed = vi.fn();
-
-    await embedNewItems('test', [], { db: () => db, getConfig, embed });
-
-    expect(getConfig).not.toHaveBeenCalled();
-    expect(embed).not.toHaveBeenCalled();
-  });
-
-  it('reports onProgress starting at 0/total then incrementing to total (filtered count)', async () => {
-    await seedItem({
-      platformItemId: 'p-a',
-      contentState: 'chunked',
-      chunkTexts: ['a0'],
-      createdAt: T0,
-    });
-    await seedItem({
-      platformItemId: 'p-b',
-      contentState: 'chunked',
-      chunkTexts: ['b0'],
-      createdAt: T1,
-    });
-    // no_content is filtered out — total must be 2 (the chunked count), NOT the
-    // 3 input ids.
-    await seedItem({ platformItemId: 'p-c', contentState: 'no_content' });
-
-    const embed = vi.fn(async (_c: ResolvedEmbeddingConfig, texts: string[]) =>
-      fakeVectors(texts.length),
-    );
-    const onProgress = vi.fn();
-
-    await embedNewItems(
-      'test',
-      ['p-a', 'p-b', 'p-c'],
-      { db: () => db, getConfig: async () => fakeConfig(true), embed },
-      onProgress,
-    );
-
-    // Filtered total (2), 0-based start, monotonic increments to 2/2.
     expect(onProgress.mock.calls.map((c) => c[0])).toEqual([
-      { done: 0, total: 2 },
-      { done: 1, total: 2 },
-      { done: 2, total: 2 },
+      { done: 0, total: 0, failed: 0 },
     ]);
   });
 
-  it('advances onProgress for a failing item too (done reaches total)', async () => {
+  it('reports {done,total,failed} progress including failing items', async () => {
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     await seedItem({
       platformItemId: 'p-fail',
@@ -404,18 +363,16 @@ describe('embedNewItems', () => {
     });
     const onProgress = vi.fn();
 
-    await embedNewItems(
+    await embedPlatformBacklog(
       'test',
-      ['p-fail', 'p-ok'],
       { db: () => db, getConfig: async () => fakeConfig(true), embed },
       onProgress,
-    );
+    ).catch(() => undefined);
 
-    // Failing item still counts toward done — the bar reaches 2/2.
     expect(onProgress.mock.calls.map((c) => c[0])).toEqual([
-      { done: 0, total: 2 },
-      { done: 1, total: 2 },
-      { done: 2, total: 2 },
+      { done: 0, total: 2, failed: 0 },
+      { done: 1, total: 2, failed: 1 },
+      { done: 2, total: 2, failed: 1 },
     ]);
     errSpy.mockRestore();
   });
@@ -435,9 +392,8 @@ describe('embedNewItems', () => {
     });
     const checkpoint = vi.fn(async () => {});
 
-    await embedNewItems(
+    await embedPlatformBacklog(
       'test',
-      ['c-a', 'c-b'],
       {
         db: () => db,
         getConfig: async () => fakeConfig(true),

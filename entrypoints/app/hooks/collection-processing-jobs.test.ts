@@ -82,6 +82,27 @@ describe('collection processing jobs', () => {
     }
   });
 
+  it('dispatches the embed lane on zero new items (backlog drain) but skips the tag lane', async () => {
+    const calls: string[] = [];
+
+    startCollectionProcessingJobs(
+      { jobPlatform: 'p-empty-ids', itemPlatform: 'x', itemIds: [] },
+      {
+        embed: async (_platform, ids) => {
+          calls.push(`embed:${ids.length}`);
+        },
+        tag: async () => {
+          calls.push('tag');
+        },
+      },
+    );
+    await flush();
+
+    expect(calls).toEqual(['embed:0']);
+    expect(getJob('p-empty-ids', 'embed')?.phase).toBe('completed');
+    expect(getJob('p-empty-ids', 'tag')).toBeNull();
+  });
+
   it('runs independently controllable Embed and Tags lanes', async () => {
     const reachTagCheckpoint = deferred();
     let tagContinued = false;

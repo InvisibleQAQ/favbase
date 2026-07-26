@@ -1,7 +1,6 @@
-import { and, asc, eq, exists, inArray, sql } from 'drizzle-orm';
+import { and, asc, eq, exists, sql } from 'drizzle-orm';
 import type { FavbaseDb } from '@/lib/database';
 import { getDb, schema } from '@/lib/database';
-import { chunk } from '@/lib/database/sql-utils';
 import { emitDomainEvent } from '@/lib/events';
 import type { CooperativeCheckpoint } from '@/lib/collections';
 import { createEmbeddingModel, embedTexts } from '@/lib/ai';
@@ -274,94 +273,98 @@ export async function rebuildPendingEmbeddings(
 }
 
 // ---------------------------------------------------------------------------
-// embedNewItems
+// embedPlatformBacklog
 // ---------------------------------------------------------------------------
 
-/** Backward-compatible name for the batch entry's injectable dependencies. */
-export type EmbedNewItemsDeps = EmbeddingItemDeps;
-
-/** Keeps `inArray` bind-params well under the PG 65535 limit (same as ingest). */
-const ID_QUERY_CHUNK_SIZE = 500;
+/** Progress payload for the platform embed lane (extends the {done,total} shape). */
+export interface BacklogEmbedProgress {
+  done: number;
+  total: number;
+  /** Items whose embed threw this run (they stay 'chunked'; the run continues). */
+  failed: number;
+}
 
 /**
- * Batch entry for collection syncs (mirrors `tagNewItems`): embed the items a
- * sync run just persisted chunks for. Addressed by (platform, platformItemId)
- * so callers never touch DB uuids. Only items still at 'chunked' qualify, so
- * re-runs are idempotent by construction.
+ * Batch entry for the shared embed lane: embed EVERYTHING the platform still
+ * has at the durable 'chunked' seam (with chunk rows) — not just the ids a
+ * sync run happened to hand over. Items a sync just persisted are part of that
+ * backlog by definition, so callers stopped threading id lists through; a sync
+ * with zero new items still drains the backlog an earlier interrupted run left
+ * behind. Idempotent by construction ('embedded' items no longer qualify).
  *
- * Sequential on purpose — a first sync can insert hundreds of items, and
- * serial awaits are the pacing that keeps the embedding API from being
- * hammered. Never throws: unconfigured is a silent no-op, a failing item logs
- * and stays 'chunked' without aborting the rest (the settings-page rebuild
- * remains the backlog safety net). Fire-and-forget from callers
- * (`void embedNewItems(…)`).
+ * Sequential on purpose — serial awaits pace the embedding API. Per-item
+ * failures log, count into `progress.failed`, and never abort the rest; when
+ * any item failed, the run THROWS at the end so the job surfaces as failed
+ * with a real error instead of a silent console line (the settings-page
+ * rebuild remains the manual safety net). Unconfigured embedding completes
+ * silently at 0/0 — auto-dispatch must not spam failed jobs on keyless setups.
  *
- * `onProgress` (mirrors `rebuildPendingEmbeddings`) fires once with
- * `{ done: 0, total }` after the embeddable targets are resolved (total = the
- * FILTERED `content_state='chunked'` count, so no_content/embedded items are
- * never in the denominator), then again after each item settles (success OR
- * caught failure both advance `done`). Monotonic, always reaches 100%. It is a
- * pure notifier — it must not throw (that would break the never-throws contract).
+ * `onProgress` fires once with `{ done: 0, total, failed: 0 }` after the
+ * backlog query, then after each settled item. Monotonic, always reaches
+ * total. It is a pure notifier — it must not throw.
  */
-export async function embedNewItems(
+export async function embedPlatformBacklog(
   platform: string,
-  platformItemIds: string[],
-  deps: Partial<EmbedNewItemsDeps> = {},
-  onProgress?: (progress: { done: number; total: number }) => void,
+  deps: Partial<EmbeddingItemDeps> = {},
+  onProgress?: (progress: BacklogEmbedProgress) => void,
   control?: CooperativeCheckpoint,
 ): Promise<void> {
-  if (platformItemIds.length === 0) return;
   const getConfig = deps.getConfig ?? defaultDeps.getConfig;
   const embed = deps.embed ?? defaultDeps.embed;
 
-  try {
-    const config = await getConfig();
-    if (!config.enabled) return;
-    const db = (deps.db ?? getDb)();
+  const config = await getConfig();
+  if (!config.enabled) {
+    onProgress?.({ done: 0, total: 0, failed: 0 });
+    return;
+  }
+  const db = (deps.db ?? getDb)();
 
-    const targets: Array<{ id: string; platformItemId: string }> = [];
-    for (const batch of chunk(platformItemIds, ID_QUERY_CHUNK_SIZE)) {
-      const rows = await db
-        .select({ id: items.id, platformItemId: items.platformItemId })
-        .from(items)
-        .where(
-          and(
-            eq(items.platform, platform),
-            inArray(items.platformItemId, batch),
-            eq(items.contentState, 'chunked'),
-          ),
-        )
-        .orderBy(asc(items.createdAt), asc(items.id));
-      targets.push(...rows);
-    }
+  // Platform-scoped mirror of the rebuild backlog query: 'chunked' items that
+  // actually have chunk rows, in deterministic resume order.
+  const targets = await db
+    .select({ id: items.id, platformItemId: items.platformItemId })
+    .from(items)
+    .where(
+      and(
+        eq(items.platform, platform),
+        eq(items.contentState, 'chunked'),
+        exists(
+          db
+            .select({ one: sql`1` })
+            .from(itemChunks)
+            .where(eq(itemChunks.itemId, items.id)),
+        ),
+      ),
+    )
+    .orderBy(asc(items.createdAt), asc(items.id));
 
-    const total = targets.length;
-    let done = 0;
-    onProgress?.({ done, total });
+  const total = targets.length;
+  let done = 0;
+  let failed = 0;
+  onProgress?.({ done, total, failed });
 
-    for (const { id: itemId, platformItemId } of targets) {
-      await control?.checkpoint();
-      try {
-        const chunks = await getEmbeddableChunks(db, itemId);
-        if (chunks.length === 0) {
-          // A chunked item with no chunk rows is skipped, but it still counts
-          // toward progress so the bar reaches total.
-          done += 1;
-          onProgress?.({ done, total });
-          continue;
-        }
+  for (const { id: itemId, platformItemId } of targets) {
+    await control?.checkpoint();
+    try {
+      const chunks = await getEmbeddableChunks(db, itemId);
+      // Race guard: chunks may have been replaced/cleared since the backlog
+      // query — an item without chunks must not become 'embedded'.
+      if (chunks.length > 0) {
         await embedChunks(db, itemId, chunks, config, embed);
         emitDomainEvent('item-embedded', { platform, platformItemId });
-      } catch (err) {
-        console.error(
-          `[embedding] Post-sync embed failed for item=${itemId}, staying at 'chunked':`,
-          err,
-        );
       }
-      done += 1;
-      onProgress?.({ done, total });
+    } catch (err) {
+      failed += 1;
+      console.error(
+        `[embedding] Backlog embed failed for item=${itemId}, staying at 'chunked':`,
+        err,
+      );
     }
-  } catch (err) {
-    console.error('[embedding] embedNewItems aborted:', err);
+    done += 1;
+    onProgress?.({ done, total, failed });
+  }
+
+  if (failed > 0) {
+    throw new Error(`Embedding failed for ${failed}/${total} items`);
   }
 }

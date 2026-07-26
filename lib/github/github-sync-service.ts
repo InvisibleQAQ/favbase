@@ -12,13 +12,14 @@
  *
  * README content pipeline (text-native, zhihu-isomorphic): `syncStars` diffs
  * the fetched star list against platformItemIds already in the DB and fetches
- * READMEs serially for NEW repos only (100ms pacing; per-repo failures —
- * including non-404 — degrade to no_content with a console.warn, no retry /
- * no backfill, same decision as tagging). README present → `item_contents` +
- * `charSplit` chunks via the shared ingest content channel →
- * `content_state='chunked'` (never 'pending' — that feeds auto-transcribe).
+ * READMEs serially for NEW repos plus GHOST repos — rows claiming content with
+ * zero chunk rows, the bug-fix exception to "no backfill" (100ms pacing;
+ * per-repo failures — including non-404 — degrade to no_content with a
+ * console.warn, no retry). README present → `item_contents` + `charSplit`
+ * chunks via the shared ingest content channel → `content_state='chunked'`
+ * only AFTER chunk rows land (never 'pending' — that feeds auto-transcribe).
  * Embedding is NOT run inline (D3) — the app.html caller
- * (use-github-stars syncFn) fires `tagNewItems` + `embedNewItems` with
+ * (use-github-stars syncFn) dispatches the shared embed/tag lanes with
  * `SyncStarsResult.newItemIds` after the sync returns.
  */
 
@@ -28,10 +29,10 @@ import type { FavbaseDb } from '@/lib/database';
 import { escapeLike } from '@/lib/database/sql-utils';
 import { getPlatformLastSyncedAt, pagedItemsQuery } from '@/lib/database/collection-queries';
 import { items } from '@/lib/database/entities/items';
-import { ingestCollection } from '@/lib/ingest/ingest';
+import { ghostItemCondition, ingestCollection } from '@/lib/ingest/ingest';
 // Leaf import (NOT the '@/lib/embedding' barrel): the barrel eagerly touches
 // chrome.storage at module load. charSplit is all this service needs — the
-// embedNewItems/tagNewItems seam lives in the app.html caller
+// embed/tag dispatch seam lives in the app.html caller
 // (use-github-stars syncFn). Same rule as lib/x/x-sync-service.ts; keeps
 // lib/github's load graph storage-free and its pure tests mock-free.
 import { charSplit } from '@/lib/embedding/char-split';
@@ -143,18 +144,20 @@ export async function syncStars(
 ): Promise<SyncStarsResult> {
   const db = getDb();
   const repos = await fetchAllStarred(token, onProgress, control);
-  const newRepos = await getNewRepos(db, repos);
-  const readmeById = await fetchReadmesSerial(token, newRepos, onReadmeProgress, control);
+  const needingReadme = await getReposNeedingReadme(db, repos);
+  const readmeById = await fetchReadmesSerial(token, needingReadme, onReadmeProgress, control);
   return syncStarsToDb(db, repos, readmeById);
 }
 
 /**
- * Repos whose platformItemId is not yet in the DB — the README fetch diff:
- * already-ingested repos never get a second README request (insert-only means
- * their content could not be written anyway). Exported for the guard test;
- * `syncStars` is the sole production caller.
+ * The README fetch diff: repos not yet in the DB, PLUS ghost repos — rows that
+ * claim content ('chunked'/'has_content') but have zero chunk rows (an earlier
+ * run's content phase was interrupted). Refetching a ghost's README is the
+ * BUG-FIX exception to the "no backfill" ADR (see the task PRD decision) —
+ * healthy pre-existing repos still never get a second README request. Exported
+ * for the guard test; `syncStars` is the sole production caller.
  */
-export async function getNewRepos(
+export async function getReposNeedingReadme(
   db: FavbaseDb,
   repos: GithubStarredRepo[],
 ): Promise<GithubStarredRepo[]> {
@@ -163,7 +166,14 @@ export async function getNewRepos(
     .from(items)
     .where(eq(items.platform, PLATFORM));
   const existing = new Set(rows.map((r) => r.platformItemId));
-  return repos.filter((r) => !existing.has(String(r.id)));
+
+  const ghostRows = await db
+    .select({ platformItemId: items.platformItemId })
+    .from(items)
+    .where(and(eq(items.platform, PLATFORM), ghostItemCondition(db)));
+  const ghosts = new Set(ghostRows.map((r) => r.platformItemId));
+
+  return repos.filter((r) => !existing.has(String(r.id)) || ghosts.has(String(r.id)));
 }
 
 /**
