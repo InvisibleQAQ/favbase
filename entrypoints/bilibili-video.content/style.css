@@ -11,7 +11,9 @@
 
   /* -- Error -- */
   --fb-error-lighter: #FFE0DE;
+  --fb-error-light: #FF7A75;
   --fb-error-main: #E53935;
+  --fb-error-main-rgb: 229, 57, 53;
 
   /* -- Success -- */
   --fb-success-lighter: #D3FCD2;
@@ -19,6 +21,9 @@
 
   /* -- Warning -- */
   --fb-warning-lighter: #FFF5CC;
+  --fb-warning-light: #FFD666;
+  --fb-warning-main: #FFAB00;
+  --fb-warning-main-rgb: 255, 171, 0;
   --fb-warning-dark: #B76E00;
 
   /* -- Info -- */
@@ -40,9 +45,30 @@
   --fb-text-primary: var(--fb-grey-800);
   --fb-text-secondary: var(--fb-grey-600);
   --fb-text-disabled: var(--fb-grey-500);
+  /* Body copy (subtitle rows) — sits between primary and secondary. */
+  --fb-text-body: var(--fb-grey-700);
+  /* Faintest readable text: placeholders, timestamps, collapse chevron. */
+  --fb-text-faint: var(--fb-grey-400);
   --fb-bg-paper: #FFFFFF;
   --fb-bg-neutral: var(--fb-grey-200);
   --fb-divider: rgba(145, 158, 171, 0.2);
+
+  /* -- Inert surfaces: scrollbar thumb, progress track, spinner ring -- */
+  --fb-track: var(--fb-grey-300);
+  --fb-track-strong: var(--fb-grey-400);
+
+  /*
+   * -- Tinted pairs --
+   * `-fg` is the tinted foreground; `-soft-bg` the tinted backdrop it sits on.
+   * Light uses the solid `lighter` swatch, dark uses a 16% alpha wash (MUI's
+   * dark-scheme convention) — consumers reference the pair and never branch.
+   */
+  --fb-primary-fg: var(--fb-primary-main);
+  --fb-primary-soft-bg: var(--fb-primary-lighter);
+  --fb-error-fg: var(--fb-error-main);
+  --fb-error-soft-bg: var(--fb-error-lighter);
+  --fb-warning-fg: var(--fb-warning-dark);
+  --fb-warning-soft-bg: var(--fb-warning-lighter);
 
   /* -- Action opacity (MUI action spec) -- */
   --fb-action-hover: rgba(145, 158, 171, 0.08);
@@ -58,6 +84,9 @@
   --fb-radius-sm: 6px;
   --fb-radius-xs: 4px;
 
+  /* Lets the native <select> in SettingsView follow the resolved scheme. */
+  color-scheme: light dark;
+
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
   font-size: 14px !important;
   line-height: 1.5 !important;
@@ -65,6 +94,42 @@
   display: block !important;
   width: 100% !important;
   box-sizing: border-box !important;
+}
+
+/*
+ * Dark scheme follows the browser/OS preference, NOT app.html's theme toggle:
+ * that setting lives in localStorage under the extension origin and is
+ * unreachable from a bilibili.com content script. Values mirror the dark
+ * colorScheme in entrypoints/app/theme/core/palette.ts.
+ *
+ * Every difference is a token override here — component rules below must stay
+ * scheme-agnostic. Note primary/error/success/warning/grey are deliberately
+ * absent: palette.ts shares those across both schemes.
+ */
+@media (prefers-color-scheme: dark) {
+  :host {
+    --fb-text-primary: #FFFFFF;
+    --fb-text-secondary: var(--fb-grey-500);
+    --fb-text-disabled: var(--fb-grey-600);
+    --fb-text-body: var(--fb-grey-300);
+    --fb-text-faint: var(--fb-grey-600);
+    --fb-bg-paper: var(--fb-grey-800);
+    --fb-bg-neutral: #28323D;
+
+    --fb-track: var(--fb-grey-700);
+    --fb-track-strong: var(--fb-grey-600);
+
+    --fb-primary-fg: var(--fb-primary-light);
+    --fb-primary-soft-bg: rgba(var(--fb-primary-main-rgb), 0.16);
+    --fb-error-fg: var(--fb-error-light);
+    --fb-error-soft-bg: rgba(var(--fb-error-main-rgb), 0.16);
+    --fb-warning-fg: var(--fb-warning-light);
+    --fb-warning-soft-bg: rgba(var(--fb-warning-main-rgb), 0.16);
+
+    /* Dark shadows use the black channel instead of grey[500]. */
+    --fb-shadow-card: 0 0 2px 0 rgba(0, 0, 0, 0.2), 0 12px 24px -4px rgba(0, 0, 0, 0.12);
+    --fb-shadow-z1: 0 1px 2px 0 rgba(0, 0, 0, 0.16);
+  }
 }
 
 html, body {
@@ -95,7 +160,7 @@ html, body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  width: 46px;
+  width: 48px;
   flex-shrink: 0;
   padding: 10px 0;
   gap: 4px;
@@ -104,13 +169,11 @@ html, body {
 }
 
 .favbase-sidebar-icon {
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   border: none;
   background: transparent;
   cursor: pointer;
-  font-size: 11px;
-  font-weight: 700;
   color: var(--fb-text-disabled);
   display: flex;
   align-items: center;
@@ -120,13 +183,13 @@ html, body {
 }
 
 .favbase-sidebar-icon:hover {
-  background: var(--fb-primary-lighter);
-  color: var(--fb-primary-main);
+  background: var(--fb-primary-soft-bg);
+  color: var(--fb-primary-fg);
 }
 
 .favbase-sidebar-icon--active {
-  background: var(--fb-primary-lighter);
-  color: var(--fb-primary-main);
+  background: var(--fb-primary-soft-bg);
+  color: var(--fb-primary-fg);
   box-shadow: inset 0 0 0 1px rgba(var(--fb-primary-main-rgb), 0.12);
 }
 
@@ -173,7 +236,7 @@ html, body {
 .favbase-panel-logo {
   font-weight: 700;
   font-size: 14px;
-  color: var(--fb-primary-main);
+  color: var(--fb-primary-fg);
   white-space: nowrap;
   flex-shrink: 0;
   letter-spacing: -0.01em;
@@ -195,7 +258,7 @@ html, body {
   background: transparent;
   cursor: pointer;
   font-size: 12px;
-  color: var(--fb-grey-400);
+  color: var(--fb-text-faint);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -204,8 +267,8 @@ html, body {
 }
 
 .favbase-collapse-btn:hover {
-  background: var(--fb-primary-lighter);
-  color: var(--fb-primary-main);
+  background: var(--fb-primary-soft-bg);
+  color: var(--fb-primary-fg);
 }
 
 /* --- Body --- */
@@ -233,12 +296,12 @@ html, body {
 }
 
 .favbase-panel-body::-webkit-scrollbar-thumb {
-  background: var(--fb-grey-300);
+  background: var(--fb-track);
   border-radius: 2px;
 }
 
 .favbase-panel-body::-webkit-scrollbar-thumb:hover {
-  background: var(--fb-grey-400);
+  background: var(--fb-track-strong);
 }
 
 /* --- Status Bar --- */
@@ -258,7 +321,7 @@ html, body {
   display: inline-block;
   width: 12px;
   height: 12px;
-  border: 2px solid var(--fb-grey-300);
+  border: 2px solid var(--fb-track);
   border-top-color: var(--fb-primary-main);
   border-radius: 50%;
   margin-right: 8px;
@@ -271,8 +334,8 @@ html, body {
 }
 
 .favbase-status--error {
-  color: var(--fb-error-main);
-  background: var(--fb-error-lighter);
+  color: var(--fb-error-fg);
+  background: var(--fb-error-soft-bg);
   border-radius: var(--fb-radius-sm);
 }
 
@@ -324,7 +387,7 @@ html, body {
 }
 
 .favbase-search-input::placeholder {
-  color: var(--fb-grey-400);
+  color: var(--fb-text-faint);
 }
 
 .favbase-search-clear {
@@ -349,8 +412,8 @@ html, body {
 }
 
 .favbase-search-clear:hover {
-  color: var(--fb-primary-main);
-  background: var(--fb-primary-lighter);
+  color: var(--fb-primary-fg);
+  background: var(--fb-primary-soft-bg);
 }
 
 .favbase-source-badge {
@@ -364,7 +427,7 @@ html, body {
 /* --- Search Result Highlight --- */
 
 .favbase-highlight {
-  background: var(--fb-warning-lighter);
+  background: var(--fb-warning-soft-bg);
   color: inherit;
   border-radius: 2px;
   padding: 0 1px;
@@ -403,7 +466,7 @@ html, body {
 }
 
 .favbase-subtitle-row--active .favbase-timestamp {
-  color: var(--fb-primary-main);
+  color: var(--fb-primary-fg);
 }
 
 .favbase-subtitle-row--active .favbase-subtitle-text {
@@ -419,7 +482,7 @@ html, body {
   flex-shrink: 0;
   border: none;
   background: transparent;
-  color: var(--fb-grey-400);
+  color: var(--fb-text-faint);
   font-size: 12px;
   font-family: 'Menlo', 'Monaco', 'Consolas', monospace;
   cursor: pointer;
@@ -431,14 +494,14 @@ html, body {
 }
 
 .favbase-timestamp:hover {
-  color: var(--fb-primary-main);
+  color: var(--fb-primary-fg);
 }
 
 .favbase-subtitle-text {
   flex: 1;
   font-size: 13px;
   line-height: 1.5;
-  color: var(--fb-grey-700);
+  color: var(--fb-text-body);
   word-break: break-word;
 }
 
@@ -555,7 +618,7 @@ html, body {
 .favbase-transcribe-progress {
   width: 100%;
   height: 4px;
-  background: var(--fb-grey-300);
+  background: var(--fb-track);
   border-radius: 2px;
   overflow: hidden;
   margin-bottom: 6px;
@@ -583,7 +646,7 @@ html, body {
 
 .favbase-transcribe-percent {
   font-family: 'Menlo', 'Monaco', monospace;
-  color: var(--fb-primary-main);
+  color: var(--fb-primary-fg);
 }
 
 .favbase-transcribe-cancel {
@@ -599,14 +662,14 @@ html, body {
 }
 
 .favbase-transcribe-cancel:hover {
-  background: var(--fb-primary-lighter);
-  color: var(--fb-primary-main);
+  background: var(--fb-primary-soft-bg);
+  color: var(--fb-primary-fg);
 }
 
 .favbase-transcribe-error {
   font-size: 12px;
-  color: var(--fb-error-main);
-  background: var(--fb-error-lighter);
+  color: var(--fb-error-fg);
+  background: var(--fb-error-soft-bg);
   padding: 8px;
   border-radius: var(--fb-radius-sm);
   margin-bottom: 8px;
@@ -640,8 +703,8 @@ html, body {
 
 .favbase-summary-error {
   font-size: 12px;
-  color: var(--fb-error-main);
-  background: var(--fb-error-lighter);
+  color: var(--fb-error-fg);
+  background: var(--fb-error-soft-bg);
   padding: 8px;
   border-radius: var(--fb-radius-sm);
   margin-bottom: 8px;
@@ -659,7 +722,7 @@ html, body {
 .favbase-summary-spinner {
   width: 12px;
   height: 12px;
-  border: 2px solid var(--fb-grey-300);
+  border: 2px solid var(--fb-track);
   border-top-color: var(--fb-primary-main);
   border-radius: 50%;
   /* Same keyframes as the status-bar spinner — one definition, see above. */
@@ -693,8 +756,8 @@ html, body {
   flex-shrink: 0;
   padding: 4px 10px;
   font-size: 11px;
-  color: var(--fb-primary-main);
-  background: var(--fb-primary-lighter);
+  color: var(--fb-primary-fg);
+  background: var(--fb-primary-soft-bg);
   border: none;
   border-radius: var(--fb-radius-sm);
   cursor: pointer;
@@ -744,7 +807,7 @@ html, body {
   flex-shrink: 0;
   font-family: 'Menlo', 'Monaco', monospace;
   font-size: 11px;
-  color: var(--fb-primary-main);
+  color: var(--fb-primary-fg);
 }
 
 .favbase-summary-segment-title {
@@ -758,8 +821,8 @@ html, body {
   flex-shrink: 0;
   padding: 1px 5px;
   font-size: 10px;
-  color: var(--fb-warning-dark);
-  background: var(--fb-warning-lighter);
+  color: var(--fb-warning-fg);
+  background: var(--fb-warning-soft-bg);
   border-radius: var(--fb-radius-xs);
 }
 

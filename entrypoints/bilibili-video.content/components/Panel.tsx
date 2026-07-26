@@ -1,7 +1,13 @@
 import { useState } from 'react';
+import { Icon } from '@iconify/react';
 import type { SubtitleRow, SubtitleSource } from '@/lib/subtitle/types';
 import type { LocaleKeys } from '@/lib/i18n/locales/zh-CN';
 import { useTranslation } from '@/lib/i18n/use-translation';
+// Offline icon data is shared with app.html, but the `Iconify` wrapper next to
+// it is NOT: it is a styled(Icon) from MUI, and Emotion injects its <style>
+// into document.head — outside this Shadow DOM. Import the raw registry only.
+import { registerIcons } from '@/entrypoints/app/components/iconify/register-icons';
+import type { IconifyName } from '@/entrypoints/app/components/iconify/register-icons';
 import { StatusBar } from './StatusBar';
 import { SubtitleView } from './SubtitleView';
 import { SettingsView } from './SettingsView';
@@ -10,16 +16,20 @@ import { TranscribeButton } from './TranscribeButton';
 import type { UseTranscribeReturn } from '../hooks/useTranscribe';
 import type { UseSummaryReturn } from '../hooks/useSummary';
 
+registerIcons();
+
+const SIDEBAR_ICON_SIZE = 20;
+
 interface SidebarTab {
   id: string;
-  icon: string;
+  icon: IconifyName;
   label: LocaleKeys;
 }
 
 const SIDEBAR_TABS: SidebarTab[] = [
-  { id: 'cc', icon: 'CC', label: 'sidebar.subtitles' },
-  { id: 'summary', icon: '✦', label: 'sidebar.summary' },
-  { id: 'settings', icon: '⚙', label: 'sidebar.settings' },
+  { id: 'cc', icon: 'solar:subtitles-bold-duotone', label: 'sidebar.subtitles' },
+  { id: 'summary', icon: 'solar:magic-stick-3-bold-duotone', label: 'sidebar.summary' },
+  { id: 'settings', icon: 'solar:settings-bold-duotone', label: 'sidebar.settings' },
 ];
 
 interface PanelProps {
@@ -60,7 +70,7 @@ export function Panel({
             type="button"
             onClick={() => setActiveTab(tab.id)}
           >
-            {tab.icon}
+            <Icon ssr icon={tab.icon} width={SIDEBAR_ICON_SIZE} height={SIDEBAR_ICON_SIZE} />
           </button>
         ))}
       </div>
