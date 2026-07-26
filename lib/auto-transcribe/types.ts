@@ -1,4 +1,5 @@
 import type { TranscribeResponse } from '@/lib/transcription/types';
+import type { ASRProviderId } from '@/lib/providers';
 
 // ---------------------------------------------------------------------------
 // Generic video & page types
@@ -24,6 +25,11 @@ export interface AutoTranscribePreview {
   pendingCount: number | null;
 }
 
+export interface AutoTranscribeQuotaPause {
+  providerId: ASRProviderId;
+  resetAt: number;
+}
+
 // ---------------------------------------------------------------------------
 // State types (consumed by UI via useSyncExternalStore)
 // ---------------------------------------------------------------------------
@@ -34,6 +40,7 @@ export type AutoTranscribePhase =
   | 'transcribing'
   | 'waiting'
   | 'paused'
+  | 'quota_paused'
   | 'done'
   | 'cancelled';
 
@@ -64,6 +71,7 @@ export interface AutoTranscribeState {
   videoProgress: number;
   videoStage: string;
   waitSeconds: number;
+  quotaResetAt: number | null;
   stats: AutoTranscribeStats;
   previewVideo: AutoTranscribeCurrentVideo | null;
   pendingCount: number | null;
@@ -86,6 +94,8 @@ export interface AutoTranscribeAdapter {
   transcribe(videoId: string, title: string, onIndexing?: () => void): Promise<TranscribeResponse>;
   markError(videoId: string): Promise<void>;
   hasAsrKey(): Promise<boolean>;
+  getQuotaPause(): Promise<AutoTranscribeQuotaPause | null>;
+  setQuotaPause(pause: AutoTranscribeQuotaPause | null): Promise<void>;
   createStatusListener(
     matchVideoId: () => string,
     onStatus: (push: { progress: number; stage: string }) => void,

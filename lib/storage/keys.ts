@@ -2,6 +2,7 @@ export const STORAGE_KEYS = {
   settings: 'local:settings',
   sidebarPinned: 'local:sidebarPinned',
   locale: 'local:locale',
+  asrQuotaPause: 'local:asr-quota-pause',
   videoCacheLegacy: 'local:videoCache',
   // X (Twitter) auth headers captured live from x.com traffic (session-scoped,
   // cleared on browser close). Written by the background webRequest listener,

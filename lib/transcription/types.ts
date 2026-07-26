@@ -1,4 +1,5 @@
 import type { SubtitleRow, SubtitleSource } from '@/lib/subtitle/types';
+import type { ASRProviderId } from '@/lib/providers';
 
 export interface TranscribeRequest {
   type: 'TRANSCRIBE_AUDIO';
@@ -42,11 +43,17 @@ export interface TranscribeErrorInfo {
   message: string;
   params?: Record<string, string | number>;
   retryAfter?: number;
+  resetAt?: number;
+  rateLimitKind?: TranscribeRateLimitKind;
+  providerId?: ASRProviderId;
 }
+
+export type TranscribeRateLimitKind = 'audio_seconds_per_day';
 
 export type TranscribeErrorCode =
   | 'ASR_REQUEST_TIMEOUT'
   | 'ASR_RATE_LIMIT'
+  | 'ASR_QUOTA_EXCEEDED'
   | 'ASR_GROQ_UNREACHABLE'
   | 'ASR_GROQ_ACCESS_BLOCKED'
   | 'ASR_INVALID_KEY'

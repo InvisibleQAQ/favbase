@@ -2,6 +2,7 @@ import type { SubtitleRow } from '@/lib/subtitle/types';
 import {
   createErrorInfo,
   isTranscribeError,
+  type TranscribeRateLimitKind,
 } from './types';
 import {
   GROQ_TRANSCRIPTION_PROMPT,
@@ -103,8 +104,18 @@ export async function requestGroqTranscription(
 
     if (res.status === 429) {
       const retryAfter = parseRetryAfter(res);
-      const info = createErrorInfo('ASR_RATE_LIMIT', `Groq rate limited (retry after ${retryAfter}s)`);
+      const body = await res.json().catch(() => ({}));
+      const apiMsg = (body as { error?: { message?: unknown } })?.error?.message;
+      const detail = typeof apiMsg === 'string' ? apiMsg : 'rate limit exceeded';
+      const rateLimitKind = classifyRateLimit(detail);
+      const info = createErrorInfo(
+        rateLimitKind === 'audio_seconds_per_day' ? 'ASR_QUOTA_EXCEEDED' : 'ASR_RATE_LIMIT',
+        `Groq rate limited: ${detail}`,
+      );
       info.retryAfter = retryAfter;
+      info.resetAt = Date.now() + retryAfter * 1000;
+      info.providerId = 'groq';
+      if (rateLimitKind) info.rateLimitKind = rateLimitKind;
       throw info;
     }
 
@@ -160,6 +171,12 @@ function parseRetryAfter(res: Response): number {
     if (!Number.isNaN(seconds)) return seconds;
   }
   return 30;
+}
+
+function classifyRateLimit(message: string): TranscribeRateLimitKind | undefined {
+  return /audio seconds per day\s*\(ASD\)/i.test(message)
+    ? 'audio_seconds_per_day'
+    : undefined;
 }
 
 function parseQuota(res: Response): GroqQuota {

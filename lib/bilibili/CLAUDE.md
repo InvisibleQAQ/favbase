@@ -15,7 +15,7 @@ B站字幕获取 (Step 1 — 已完成，Bilitato 对齐)。双通道架构：Ma
 - `bilibili-transcription-handler.ts` — B站平台转录 handler：`handleBiliTranscribe(msg, tabId, ctx, signal)` 完整处理 B 站转录请求（prepare → 组装 PipelineDeps → runTranscriptionPipeline → 进度/错误通知）。通过 `prepareBiliTranscription` 获取平台碎片，通过 `transcription-utils.ts` 共享 notifyTab/createTranscribeAudio。注册到 `transcription-handlers.ts` 的 `platformHandlers` registry
 - `transcribe-utils.ts` — `transcribeAndPersist`：durable chunks 成功后发 `item-content-updated`，通过注入的 `startProcessing(bvid)` 获取独立 Embed/Tag ticket；仍只 await Embed，Tags 不阻塞。领域层不 import app queue/store。
 - `transcription-coordinator.ts` — 手动转录纯 JS 协调器。构造器可注入 transcription run 与 `startProcessing` seam；coordinator 不 import app store，无参构造仍兼容。缓存预载、stale generation、取消与 `indexing` UI 契约不变。
-- `auto-transcribe-adapter.ts` — B站自动转录 Adapter；注入 `startProcessing` 把每条 durable bvid 交给 app 层共享 inbox，认证、分页、pending、失效项和转录 Interface 不变。
+- `auto-transcribe-adapter.ts` — B站自动转录 Adapter；注入 `startProcessing` 把每条 durable bvid 交给 app 层共享 inbox。ASR quota guard 通过 storage seam 读写，读取时按当前 `settings.asrProvider` 过滤，切换 SiliconFlow 不受旧 Groq guard 影响
 - `bilibili-transcription-adapter.ts` — B站转录平台适配器：`prepareBiliTranscription(bvid, requestCid?)` 返回 `BiliTranscriptionContext`（`{ cid, fetchOfficialSubtitle, extractAudioUrl, postProcess }` 4 碎片）。内聚 bilibili-specific 转录准备逻辑（auth 获取、CID 解析、官方字幕 API 重试、DASH 音频 URL 提取、字幕后处理）。Background handler 通过此 adapter 获取平台碎片后组装 PipelineDeps，自身不直接 import bilibili-api/subtitle-processor
 - `subtitle-processor.ts` — processSubtitles() B 站特有四步管线：normalize -> filter（B 站交互关键词过滤：点赞/投币/一键三连等）-> filler removal -> deduplicate(Jaccard>0.85)。接受 B 站原始格式和 favbase 格式。每条字幕保持独立行，不合并。通过 PipelineDeps.postProcess 注入到平台无关的 pipeline，未来其他平台提供各自的 postProcess 实现
 
@@ -31,6 +31,7 @@ B站字幕获取 (Step 1 — 已完成，Bilitato 对齐)。双通道架构：Ma
 - 收藏夹视频同步：路由挂载只拉收藏夹列表，默认收藏夹的视频列表由普通浏览 hook 拉当前 UI 页；页面显式同步才遍历全部 remote folders，固定使用空关键词 `mtime` 顺序。`videos_sync_complete` 缺失表示历史可能只有旧版第一页缓存，必须全量回填；成功后才允许后续同步遇到当前 source 已有关联 BVID 即停止。网络分页期间不写库，单夹完整抓取后才批量持久化，故中途失败不会制造错误断点
 - **Insert-only 视频同步（架构决策）**: items/authors/item_sources 三表 re-sync 只 insert（`onConflictDoNothing`）、不 update、不 delete——首次入库为准。取消收藏不删行、下架不改行、元数据变更不更新、跨夹移动保留双关联、失效视频（attr=9）首次入库照存。**禁止**给这三表加 upsert 或 sync 内 delete/diff 逻辑。有意例外：`sources` upsert（media_count 新鲜度）、`items.contentState`（转录状态机推进）、`item_contents`/`item_chunks`（重转录覆盖/重建）。完整 ADR 见 `.trellis/spec/frontend/database-bridge.md`，守护测试 `videos-sync.test.ts`
 - RAG 数据准备（转录后）: app.html 两个转录入口经 `transcribeAndPersist` 单一 seam 完成“转录 → shared ingest existing-item replacement → enqueue app Embed/Tags lanes”。Bilibili Adapter 只选择 `chunkSubtitleRows`；shared ingest 落 plain text + timestamped chunks 到 `'chunked'`，Embedding 单独推进到 `'embedded'`，Tagging 只读 `item_contents`。B站视频页 content script 面板仍只存缓存不入库；重复转录覆盖 content、事务重建 chunks 并回退到 `'chunked'`
+- 自动转录因 ASR 日额度终止时，只停止继续 claim/transcribe；此前已 enqueue 的 Embed/Tags ticket 仍归 app 层独立 lane 所有，Adapter 不向 processing queue 传播 quota pause
 - 字幕获取流程（主路径）: interceptors.ts 拦截 fetch/XHR → sm.markCaptured() 解析+桥接 → postMessage SUBTITLE_DATA → useSubtitle 接收 → processSubtitles()
 - 字幕获取流程（降级路径）: extractBvid() → fetchCidByPageList() → fetchSubtitle(bvid, cid) → processSubtitles()（失败自动重试最多 2 次）
 - 字幕 CDN (`aisubtitle.hdslb.com`) 跨域但 CORS 允许，Content Script 可直接 fetch（带 `credentials: 'include'`）

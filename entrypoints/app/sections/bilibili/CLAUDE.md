@@ -13,8 +13,8 @@ app.html B站收藏夹页面 adapter，消费共享 `CollectionPageScaffold`。�
 - `use-bili-fav-videos.ts` — 收藏夹视频浏览 hook：调用 fetch-only `bili-sync-service.fetchFavoriteVideosPage(mediaId, page, order, keyword)` 获取当前 UI 页，不写库、不污染全量同步基线；goToPage、服务端排序/搜索与 `fetchIdRef` 过期响应保护保持不变
 - `use-video-transcribe.ts` — 手动转录薄 hook；`bilibili:transcribe` 仍独立，Embedding/Tagging 通过 `bilibili-processing-adapter.ts` 入共享双 lane，不观察已启动 Promise。
 - `bilibili-processing-adapter.ts` — app/lib 边界薄 Adapter：把单个 bvid enqueue 到共享处理 inbox，返回独立 Embed/Tag ticket；领域层因此不依赖 app job store。
-- `use-auto-transcribe.ts` — 自动转录薄 hook（~55 行）：接收 `collectionId` + `AutoTranscribeAdapter`，创建 `AutoTranscribePipeline`（构造函数注入 adapter）+ `useSyncExternalStore` 订阅状态 + start/stop 透传 + collectionId 变更时触发 preview 查询 + unmount 时 dispose。类型 re-export from `lib/auto-transcribe/types.ts`
-- `auto-transcribe-bar.tsx` — 自动转录进度 UI：全宽面板，独占 title bar 下方一行。idle 态：previewLoading 时 CircularProgress 占位；pendingCount===null（source 已建但 items 未同步）时显示无数量的通用面板 + 既有"开始"按钮；pendingCount===0 时 check 图标 + "所有视频已转录"；其余显示预览缩略图 + 待转录数 + "开始"按钮。运行时显示丰富进度面板（当前视频缩略图 100x60 + 标题/作者/时长/阶段文字（`stageLabel`：videoStage==='indexing' 时显示 `autoTranscribe.indexing`"正在建立索引…"，本地 chunk+embed 阶段）+ N/Total 进度计数器（N = existing + cc + asr + skipped，从 stats 推导）+ 已有/CC/ASR/跳过统计 Chip + 停止 IconButton + LinearProgress 进度条）。完成/停止后显示摘要统计 + 重新开始按钮。面板有 border + background 视觉区分。类型从 `lib/auto-transcribe/types.ts` 导入
+- `use-auto-transcribe.ts` — 自动转录薄 hook：创建/订阅 pipeline 并透传控制；`quota_paused` 是非运行态，避免页面 pipeline/runtime 把额度等待误报为后台工作
+- `auto-transcribe-bar.tsx` — 自动转录进度 UI。除 idle/running/done 外，`quota_paused` 使用独立 warning 面板：resetAt 存在时用 locale-aware 日期展示，重置前禁用重启；倒计时归零只开放显式按钮，不自动调用 start。不得渲染供应商 debug message
 
 ## 约定
 

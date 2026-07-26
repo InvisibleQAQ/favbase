@@ -1,5 +1,6 @@
 import { storage } from 'wxt/utils/storage';
 import { STORAGE_KEYS } from './keys';
+import type { AutoTranscribeQuotaPause } from '@/lib/auto-transcribe/types';
 
 export const sidebarPinnedStorage = storage.defineItem<boolean>(
   STORAGE_KEYS.sidebarPinned,
@@ -11,6 +12,11 @@ export type LocalePreference = 'auto' | 'zh-CN' | 'en';
 export const localeStorage = storage.defineItem<LocalePreference>(
   STORAGE_KEYS.locale,
   { fallback: 'auto' },
+);
+
+export const asrQuotaPauseStorage = storage.defineItem<AutoTranscribeQuotaPause | null>(
+  STORAGE_KEYS.asrQuotaPause,
+  { fallback: null },
 );
 
 /** Summary of the most recent successful X bookmarks sync. */

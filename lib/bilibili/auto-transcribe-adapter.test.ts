@@ -8,6 +8,12 @@ const transcribeMocks = vi.hoisted(() => ({
   createStatusListener: vi.fn(),
 }));
 
+const storageMocks = vi.hoisted(() => ({
+  getAsrSettings: vi.fn(async () => ({ apiKey: '' })),
+  settingsStorage: { getValue: vi.fn() },
+  asrQuotaPauseStorage: { getValue: vi.fn(), setValue: vi.fn() },
+}));
+
 vi.mock('./transcribe-utils', () => transcribeMocks);
 
 vi.mock('./bili-sync-service', () => ({
@@ -18,9 +24,7 @@ vi.mock('./bili-sync-service', () => ({
   markVideoError: vi.fn(),
 }));
 
-vi.mock('@/lib/storage', () => ({
-  getAsrSettings: vi.fn(async () => ({ apiKey: '' })),
-}));
+vi.mock('@/lib/storage', () => storageMocks);
 
 import { createBiliAutoTranscribeAdapter } from './auto-transcribe-adapter';
 
@@ -36,5 +40,22 @@ describe('Bilibili auto-transcribe adapter processing seam', () => {
       'Video',
       expect.objectContaining({ startProcessing }),
     );
+  });
+
+  it('loads a quota pause only for the active ASR provider', async () => {
+    storageMocks.asrQuotaPauseStorage.getValue.mockResolvedValue({
+      providerId: 'groq',
+      resetAt: 5_000,
+    });
+    storageMocks.settingsStorage.getValue.mockResolvedValue({ asrProvider: 'groq' });
+    const adapter = createBiliAutoTranscribeAdapter();
+
+    await expect(adapter.getQuotaPause()).resolves.toEqual({
+      providerId: 'groq',
+      resetAt: 5_000,
+    });
+
+    storageMocks.settingsStorage.getValue.mockResolvedValue({ asrProvider: 'siliconflow' });
+    await expect(adapter.getQuotaPause()).resolves.toBeNull();
   });
 });

@@ -17,7 +17,11 @@ import {
   type StartTranscribeProcessing,
 } from './transcribe-utils';
 import { normalizeCover } from './url-utils';
-import { getAsrSettings } from '@/lib/storage';
+import {
+  asrQuotaPauseStorage,
+  getAsrSettings,
+  settingsStorage,
+} from '@/lib/storage';
 
 export interface BiliAutoTranscribeAdapterOptions {
   startProcessing?: StartTranscribeProcessing;
@@ -76,6 +80,18 @@ export function createBiliAutoTranscribeAdapter(
     async hasAsrKey(): Promise<boolean> {
       const config = await getAsrSettings();
       return Boolean(config.apiKey);
+    },
+
+    async getQuotaPause() {
+      const [pause, settings] = await Promise.all([
+        asrQuotaPauseStorage.getValue(),
+        settingsStorage.getValue(),
+      ]);
+      return pause?.providerId === settings.asrProvider ? pause : null;
+    },
+
+    async setQuotaPause(pause) {
+      await asrQuotaPauseStorage.setValue(pause);
     },
 
     createStatusListener,

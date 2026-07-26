@@ -2,6 +2,8 @@
 
 用户可见文案集中在 `locales/`：`zh-CN.ts` 是 `LocaleKeys` 类型源，`en.ts` 以 `Record<LocaleKeys, string>` 保证键集合一致。React 组件通过 `useTranslation()` 订阅语言变化；非 React 调用经 `index.ts` 的 `t()`，禁止业务层直接拼接翻译文本。
 
+ASR quota 文案只消费结构化 `ASR_QUOTA_EXCEEDED/resetAt`：自动转录 UI 使用 `autoTranscribe.quotaPaused*`，设置页使用 `settings.asr.groq*`；Groq 原始 429 message 只作 debug，不进入可见文案。
+
 ## 平台命名
 
 - Bilibili 页面标题使用 `collections.sidebarTitle`，主分类标题使用 `collections.foldersTitle`；两者职责不可混用。
