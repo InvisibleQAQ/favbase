@@ -501,6 +501,13 @@ const en: Record<LocaleKeys, string> = {
   'export.emptyDb': 'Database is empty, nothing to export.',
   'export.dbNotReady': 'Database not ready, please try again.',
   'export.failed': 'Export failed, please try again.',
+  'export.backupHeading': 'Database backup',
+  'export.backupHint': 'Full tables and rows, for backup or migration.',
+  'export.obsidianHeading': 'Obsidian Vault',
+  'export.obsidianHint':
+    'One Markdown file per saved item, foldered by platform and collection. Unzip straight into your Obsidian vault.',
+  'export.obsidianBtn': 'Export for Obsidian',
+  'export.obsidianOriginalLink': 'Original',
 
   'settings.language': 'Language',
   'settings.languageAuto': 'Follow browser',

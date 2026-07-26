@@ -8,7 +8,16 @@ export function triggerDownload(blob: Blob, filename: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
-export function buildExportFilename(format: 'json' | 'csv'): string {
+export type ExportFileKind = 'json' | 'csv' | 'obsidian';
+
+const EXPORT_FILE_SPECS: Record<ExportFileKind, { stem: string; ext: string }> = {
+  json: { stem: 'favbase-export', ext: 'json' },
+  csv: { stem: 'favbase-export', ext: 'zip' },
+  obsidian: { stem: 'favbase-obsidian', ext: 'zip' },
+};
+
+export function buildExportFilename(kind: ExportFileKind): string {
   const date = new Date().toISOString().slice(0, 10);
-  return `favbase-export-${date}.${format === 'json' ? 'json' : 'zip'}`;
+  const { stem, ext } = EXPORT_FILE_SPECS[kind];
+  return `${stem}-${date}.${ext}`;
 }

@@ -491,6 +491,12 @@ const zhCN = {
   'export.emptyDb': '数据库为空，没有可导出的数据。',
   'export.dbNotReady': '数据库尚未就绪，请稍后重试。',
   'export.failed': '导出失败，请重试。',
+  'export.backupHeading': '数据库备份',
+  'export.backupHint': '完整表结构与数据，用于备份或迁移。',
+  'export.obsidianHeading': 'Obsidian Vault',
+  'export.obsidianHint': '每条收藏导出为一个 Markdown 文件，按平台与收藏夹分目录，解压后可直接放入 Obsidian 库。',
+  'export.obsidianBtn': '导出为 Obsidian',
+  'export.obsidianOriginalLink': '原文链接',
 
   'settings.language': '界面语言',
   'settings.languageAuto': '跟随浏览器',
