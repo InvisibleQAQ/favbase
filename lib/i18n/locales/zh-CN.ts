@@ -553,6 +553,103 @@ const zhCN = {
   'settings.languageAuto': '跟随浏览器',
   'settings.languageZhCN': '中文',
   'settings.languageEn': 'English',
+
+  // Welcome / first-run onboarding (welcome.html)
+  'welcome.brandTagline': '本地优先的收藏知识库',
+  'welcome.skip': '跳过引导',
+  'welcome.scrollHint': '往下看',
+
+  'welcome.hero.eyebrow': '浏览器扩展 · 数据不出本机',
+  'welcome.hero.titleLine1': '把收藏',
+  'welcome.hero.titleLine2': '变成知识库',
+  'welcome.hero.subtitle':
+    '六个平台的收藏自动收录、切块入库、向量索引。然后你只要提问——答案带着来源，原文一点即达。',
+  'welcome.hero.ctaPrimary': '开始使用',
+  'welcome.hero.ctaSecondary': '先看看能做什么',
+  'welcome.hero.coreLabel': '本地知识库',
+
+  'welcome.tags.semanticSearch': '语义检索',
+  'welcome.tags.hybridRetrieval': '混合检索 + RRF',
+  'welcome.tags.aiTags': 'AI 自动标签',
+  'welcome.tags.transcription': '字幕转录',
+  'welcome.tags.summary': 'AI 视频总结',
+  'welcome.tags.obsidian': 'Obsidian 导出',
+  'welcome.tags.localFirst': '本地优先',
+  'welcome.tags.noServer': '没有服务器',
+  'welcome.tags.pglite': '浏览器内数据库',
+  'welcome.tags.incremental': '增量同步',
+
+  'welcome.flow.eyebrow': '它怎么工作',
+  'welcome.flow.heading': '三步',
+  'welcome.flow.intro':
+    '收藏是最诚实的兴趣记录，也是最容易沉底的东西。favbase 把它捞起来，变成能问答的知识库。',
+  'welcome.flow.step1.title': '收录收藏',
+  'welcome.flow.step1.desc':
+    '连上平台后增量抓取收藏条目：标题、作者、链接、正文一起进来。只增不删——原站取消收藏，你的历史仍然在。',
+  'welcome.flow.step1.hint': '六个平台共用一条收录管线',
+  'welcome.flow.step2.title': '整合为知识库',
+  'welcome.flow.step2.desc':
+    '正文切块、向量化，连同 AI 标签一起写进浏览器内的 PGlite + pgvector。全程本地，不经过任何服务器。',
+  'welcome.flow.step2.hint': '嵌入与索引都在你的浏览器里',
+  'welcome.flow.step3.title': '开口提问',
+  'welcome.flow.step3.desc':
+    '知识库对话自己决定检索什么、检索几轮，边想边答，答案下面挂着可点开的来源卡片。',
+  'welcome.flow.step3.hint': '这就是主要功能',
+
+  'welcome.chat.eyebrow': '主要功能',
+  'welcome.chat.heading': '知识库对话',
+  'welcome.chat.desc':
+    '它不是一个关键词搜索框，而是一个会自己检索的 agent：向量负责「意思接近」，关键词负责「精确命中」，两路结果融合排序后再作答。',
+  'welcome.chat.feature1': '多步 tool-calling，一轮不够就再检一轮',
+  'welcome.chat.feature2': '语义 + 关键词混合检索，RRF 融合排序',
+  'welcome.chat.feature3': '每条来源都能点回原文',
+  'welcome.chat.demoQuestion': '我收藏过哪些讲 RAG 检索的内容？',
+  'welcome.chat.demoTool': '检索知识库',
+  'welcome.chat.demoToolResult': '命中 3 条',
+  'welcome.chat.demoAnswer':
+    '你的收藏里有三条直接相关。共同结论是：只靠向量检索会漏掉专有名词，只靠关键词又抓不到换了说法的同义表达，所以两路都要跑，最后用 RRF 融合排序。',
+  'welcome.chat.demoSources': '来源',
+  'welcome.chat.demoSource1': '一小时讲透 RAG 检索管线',
+  'welcome.chat.demoSource2': 'pgvector 实战：HNSW 索引调参',
+  'welcome.chat.demoSource3': '为什么你的向量检索召回率上不去',
+
+  'welcome.bilibili.eyebrow': 'B 站视频页',
+  'welcome.bilibili.heading': '看视频时，右边多一块',
+  'welcome.bilibili.desc':
+    '在 B 站视频页的右侧栏，favbase 直接挂一个面板：有官方字幕就抓下来，没有就走 ASR 转录。再点一下，整段内容压成带时间戳的章节总结，广告段也会被标出来。',
+  'welcome.bilibili.feature1': '字幕可搜索，点一行就跳到那一秒',
+  'welcome.bilibili.feature2': '没有字幕自动转录，结果本地缓存',
+  'welcome.bilibili.feature3': 'AI 总结按章节分段，并标注广告',
+  'welcome.bilibili.mockTitle': '把 RAG 检索讲清楚：从切块到召回',
+  'welcome.bilibili.line1': '所以第一个问题是：检索回来的东西，模型到底看不看得懂。',
+  'welcome.bilibili.line2': '我们先把整段文本切块，每块之间保留一点上下文重叠。',
+  'welcome.bilibili.line3': '接着做向量化，这一步决定了后面召回率的上限。',
+  'welcome.bilibili.summaryHeading': '全文总结',
+  'welcome.bilibili.chapter1': '开场：为什么要谈检索',
+  'welcome.bilibili.chapter2': '切块策略与上下文重叠',
+  'welcome.bilibili.chapter3': '召回率的天花板在哪',
+  'welcome.bilibili.adBadge': '广告',
+
+  'welcome.picker.eyebrow': '最后一步',
+  'welcome.picker.heading': '先收录哪些？',
+  'welcome.picker.desc':
+    '选一个或多个。这个选择只决定接下来带你去哪儿——所有平台在插件里始终可用，之后随时能加。',
+  'welcome.picker.readyNow': '开箱即用',
+  'welcome.picker.needsLogin': '用当前登录态',
+  'welcome.picker.needsKey': '需要配置密钥',
+  'welcome.picker.hint.bilibili': '沿用浏览器里的 B 站登录',
+  'welcome.picker.hint.github': '需要一个 Personal Access Token',
+  'welcome.picker.hint.bookmarks': '本地读取书签树，无需任何配置',
+  'welcome.picker.hint.x': '在 x.com 保持登录即可',
+  'welcome.picker.hint.zhihu': '沿用浏览器里的知乎登录',
+  'welcome.picker.hint.youtube': '需要 Data API 密钥与频道',
+  'welcome.picker.selected': '已选 {{count}} 个平台',
+  'welcome.picker.selected.one': '已选 {{count}} 个平台',
+  'welcome.picker.selectedNone': '还没选——也可以直接进去逛逛',
+  'welcome.picker.cta': '进入 favbase',
+  'welcome.picker.ctaNone': '直接进入 favbase',
+  'welcome.picker.footnote':
+    '所有收藏、正文与向量都存在这台浏览器里。没有账号，没有服务器。',
 } as const;
 
 export type LocaleKeys = keyof typeof zhCN;

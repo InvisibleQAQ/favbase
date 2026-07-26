@@ -24,6 +24,10 @@ export const STORAGE_KEYS = {
   webdavConfig: 'local:webdav-config',
   webdavSyncMeta: 'local:webdav-sync-meta',
   webdavSyncStatus: 'local:webdav-sync-status',
+  // First-run welcome flow outcome ({ completedAt, platforms }). Absent = the
+  // user has never finished/skipped welcome.html, which is what gates the
+  // install-time tab. See entrypoints/welcome/CLAUDE.md.
+  onboarding: 'local:onboarding',
 } as const;
 
 export const STORAGE_PREFIXES = {

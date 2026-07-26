@@ -22,6 +22,8 @@ export {
   asrQuotaPauseStorage,
   xLastSyncStorage,
   type XLastSync,
+  onboardingStorage,
+  type OnboardingState,
 } from './ui-state';
 
 export async function runStorageMigrations(): Promise<void> {

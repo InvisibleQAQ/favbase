@@ -5,7 +5,7 @@ MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRo
 ## 模块结构
 
 - `main.tsx` — 入口：fire-and-forget `initDbProxy()` 建立 DB RPC 连接 + Hash Router + lazy 页面加载 + LoadingFallback
-- `collection-platform-registry.ts` — app 侧平台 UI 元数据（label/path/icon），导航子叶与聚合页平台 chips 的唯一事实源；判别符顺序来自 `lib/collections`
+- `collection-platform-registry.ts` — app 侧平台 UI 元数据（label/path/icon），导航子叶与聚合页平台 chips 的唯一事实源；判别符顺序来自 `@/lib/collections/platforms`（**必须走这个纯模块，不走 `@/lib/collections` barrel**——barrel 经 `collections-query` 把 drizzle + `@/lib/database` 拖进静态图，welcome.html 复用本 registry 但根本不碰数据库）
 - `App.tsx` — 根组件：ThemeProvider + Outlet；顶层调用 `useDailyAutoSync()`（`hooks/use-daily-auto-sync.ts`）——每日首次打开 app.html（mount + tab 切回可见）自动同步所有「就绪」平台，闸门复用 `sources.lastFetchedAt`（per-platform，当天含手动拉过即跳过）
 - `global.css` — 全局样式：DM Sans Variable + Barlow 字体导入 + baseline reset + 主题切换 View Transition 的 `::view-transition-*(root)` 伪元素规则（供 `layouts/dashboard/header-actions.tsx` 的圆形揭示动画用）
 

@@ -7,6 +7,7 @@ Turn your social media Favorites into a searchable knowledge base just with a lo
 - **框架**: WXT 0.20.26 (Vite) + React 19 + TypeScript 5.9
 - **架构**: Chrome MV3 (Service Worker + Content Script + Shadow DOM UI + Extension Page)
 - **UI 框架**: MUI v7 (Extension Page) + 原生 CSS + `--fb-*` design tokens (Content Script Shadow DOM)；Chat 回答用 `react-markdown` + `remark-gfm` 渲染（无 rehype-raw，XSS 安全）
+- **动画**: `motion` 12（framer-motion 现名），**仅 welcome.html 用**（单独 code-split 进 welcome chunk）。app.html / Content Script 保持纯 MUI + CSS，不要因为装了这个包就往其他入口加动画依赖
 - **AI SDK**: Vercel AI SDK v6（`ai` + `@ai-sdk/openai` + `@ai-sdk/anthropic` + `@ai-sdk/google` + `@ai-sdk/openai-compatible`）
 - **存储**: WXT `storage.defineItem`（设置/缓存） + PGlite 0.5 + Drizzle ORM 0.45 + pgvector（知识库）
 - **包管理**: pnpm
@@ -23,6 +24,7 @@ WXT 入口点及运行时角色总览，详细结构见对应目录 `CLAUDE.md`�
 - `entrypoints/bilibili-inject.content.ts` — B站视频页 Main World 脚本（`world:'MAIN'` → `lib/bilibili/inject/`）
 - `entrypoints/bilibili-video.content/` — B站视频页 Content Script（Shadow DOM React UI，Isolated World）
 - `entrypoints/app/` — Extension Page 主界面（`app.html`，MUI v7 Dashboard）
+- `entrypoints/welcome/` — 首装引导页（`welcome.html`，滚动叙事 + 平台多选 → app.html；由 background `onInstalled` 弹出）
 - `entrypoints/popup/` — Popup 跳板：打开/聚焦 app.html 标签页
 
 ## 关键文档
@@ -59,6 +61,9 @@ WXT 入口点及运行时角色总览，详细结构见对应目录 `CLAUDE.md`�
 - `entrypoints/app/sections/zhihu/CLAUDE.md` — 知乎收藏页（收藏夹 chips + 4 类型卡片 grid + 手动同步按钮 + 未登录空态，cookie 直读无 Connections 卡）
 - `entrypoints/app/sections/youtube/CLAUDE.md` — YouTube 公开播放列表收藏页（播放列表 chips + 视频卡片 grid + 手动同步按钮 + 未配置空态，API key + 频道经 Connections 卡配置）
 - `entrypoints/app/sections/chat/CLAUDE.md` — Chat 一级页面（Agentic RAG 知识库助手，只读 PGlite）：多步 tool-calling agent + 流式回答 + hybrid 检索 + 可点来源卡片 + 工具四态 + 多会话持久化（WXT storage）+ markdown 渲染
+
+### 首装引导页（welcome.html）
+- `entrypoints/welcome/CLAUDE.md` — 安装触发与 onboarding 闸门、平台选择只做落地路由不做 gating、motion 动画原语（MotionBox/FadeIn/AnimatedText/Magnet/OrbitCore）与六个段落
 
 ### B站视频页 Content Script
 - `entrypoints/bilibili-video.content/CLAUDE.md` — 右侧栏面板 UI 挂载 + Shadow DOM 约定
