@@ -1,11 +1,6 @@
 import Box from '@mui/material/Box';
-import CircularProgress from '@mui/material/CircularProgress';
-import IconButton from '@mui/material/IconButton';
 import LinearProgress, { linearProgressClasses } from '@mui/material/LinearProgress';
-import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-
-import { Iconify } from '../iconify';
 
 export type PipelineSegmentState =
   | 'loading'
@@ -15,13 +10,6 @@ export type PipelineSegmentState =
   | 'paused'
   | 'completed'
   | 'failed';
-
-export interface PipelineSegmentControl {
-  kind: 'pause' | 'pausing' | 'resume';
-  label: string;
-  disabled: boolean;
-  onClick?: () => void;
-}
 
 export interface PipelineProgressSegment {
   id: string;
@@ -34,7 +22,6 @@ export interface PipelineProgressSegment {
   /** Explicit lifecycle percentage, used when count totals remain unknowable. */
   percent?: number | null;
   state: PipelineSegmentState;
-  control?: PipelineSegmentControl;
 }
 
 export interface PipelineProgressStripProps {
@@ -54,7 +41,11 @@ function visiblePercent(segment: PipelineProgressSegment): number | null {
   return Math.round(boundedPercent(segment.done, segment.total));
 }
 
-/** Compact, always-visible Collection pipeline. Labels are translated by views. */
+/**
+ * Compact, always-visible Collection pipeline. Labels are translated by views.
+ * Pure display — pause/resume lives in the per-platform library gate, not on
+ * segments. Outer spacing (mb) is owned by the scaffold's pipeline row.
+ */
 export function PipelineProgressStrip({ segments }: PipelineProgressStripProps) {
   if (segments.length === 0) return null;
 
@@ -66,7 +57,6 @@ export function PipelineProgressStrip({ segments }: PipelineProgressStripProps) 
         flexWrap: 'nowrap',
         gap: 1.25,
         minHeight: 28,
-        mb: 2,
         overflowX: 'auto',
         overflowY: 'hidden',
         pb: 0.25,
@@ -105,44 +95,19 @@ export function PipelineProgressStrip({ segments }: PipelineProgressStripProps) 
               >
                 {segment.label}
               </Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
-                <Typography
-                  variant="caption"
-                  sx={{
-                    color,
-                    fontWeight: active ? 700 : 500,
-                    fontVariantNumeric: 'tabular-nums',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {segment.done ?? '--'}/{segment.total ?? '--'}
-                  {percent == null ? null : ` ${percent}%`}
-                </Typography>
-                {segment.control ? (
-                  <Tooltip title={segment.control.label}>
-                    <Box component="span" sx={{ display: 'inline-flex', width: 24, height: 24 }}>
-                      <IconButton
-                        data-pipeline-control
-                        data-control-kind={segment.control.kind}
-                        aria-label={segment.control.label}
-                        disabled={segment.control.disabled}
-                        onClick={segment.control.onClick}
-                        size="small"
-                        sx={{ width: 24, height: 24, p: 0 }}
-                      >
-                        {segment.control.kind === 'pausing' ? (
-                          <CircularProgress size={14} thickness={5} aria-hidden />
-                        ) : (
-                          <Iconify
-                            icon={segment.control.kind === 'pause' ? 'solar:pause-bold' : 'solar:play-bold'}
-                            width={15}
-                          />
-                        )}
-                      </IconButton>
-                    </Box>
-                  </Tooltip>
-                ) : null}
-              </Box>
+              <Typography
+                variant="caption"
+                sx={{
+                  color,
+                  fontWeight: active ? 700 : 500,
+                  fontVariantNumeric: 'tabular-nums',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                }}
+              >
+                {segment.done ?? '--'}/{segment.total ?? '--'}
+                {percent == null ? null : ` ${percent}%`}
+              </Typography>
             </Box>
             <LinearProgress
               aria-label={segment.label}

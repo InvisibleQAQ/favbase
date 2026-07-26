@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import {
   backgroundJobRuntime,
@@ -17,44 +17,32 @@ function deferred() {
 }
 
 describe('pipeline segment adapters', () => {
-  it('binds one background job to the shared pause and resume contract', async () => {
-    const reachCheckpoint = deferred();
+  it('maps one background job to a display-only runtime snapshot', async () => {
     const finish = deferred();
-    startJob('p-runtime-adapter', 'sync', async (setProgress, control) => {
+    startJob('p-runtime-adapter', 'sync', async (setProgress) => {
       setProgress({ done: 2, total: null });
-      await reachCheckpoint.promise;
-      await control.checkpoint();
       await finish.promise;
     });
-    const labels = { pause: 'Pause', pausing: 'Pausing', resume: 'Resume' };
 
-    const runtime = backgroundJobRuntime(getJob('p-runtime-adapter', 'sync'), labels);
+    const runtime = backgroundJobRuntime(getJob('p-runtime-adapter', 'sync'));
 
-    expect(runtime).toMatchObject({
+    // Display-only: no pause/resume actions here — the per-platform library
+    // gate owns run control, backed by pauseJob/resumeJob in the store.
+    expect(runtime).toEqual({
       phase: 'running',
       running: true,
       progress: { done: 2, total: null },
-      controlLabels: labels,
+      lastProgress: null,
+      error: null,
     });
-    runtime?.pause?.();
-    expect(getJob('p-runtime-adapter', 'sync')?.phase).toBe('pausing');
-
-    reachCheckpoint.resolve();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(getJob('p-runtime-adapter', 'sync')?.phase).toBe('paused');
-
-    runtime?.resume?.();
-    expect(getJob('p-runtime-adapter', 'sync')?.phase).toBe('running');
+    expect(backgroundJobRuntime(null)).toBeNull();
 
     finish.resolve();
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
 
-  it('maps one pause/resume action from the active runtime phase', () => {
+  it('reflects an active pausing phase on a control-free segment', () => {
     const idle = { done: 8, total: 10 };
-    const pause = vi.fn();
-    const resume = vi.fn();
-    const labels = { pause: 'Pause', pausing: 'Pausing', resume: 'Resume' };
 
     expect(
       buildPipelineSegments({
@@ -74,9 +62,6 @@ describe('pipeline segment adapters', () => {
               phase: 'pausing',
               running: true,
               progress: { done: 3, total: 10 },
-              pause,
-              resume,
-              controlLabels: labels,
             },
           },
         ],
@@ -88,7 +73,6 @@ describe('pipeline segment adapters', () => {
         done: 3,
         total: 10,
         state: 'pausing',
-        control: { kind: 'pausing', label: 'Pausing', disabled: true },
       },
     ]);
   });

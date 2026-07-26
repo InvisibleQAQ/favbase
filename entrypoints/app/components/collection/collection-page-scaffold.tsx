@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 
+import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 
 import type { TagRef, TaggedItem } from '@/lib/tagging';
@@ -12,6 +13,9 @@ import {
   TaggedItemGrid,
   TagEditPopover,
 } from '../tags';
+// Smart module (own t() + gate subscription) — allowed as an import; this file
+// itself still never calls t().
+import { LibraryGateButton, useCollectionGate } from '../library-gate';
 import { SectionTitleBar } from './section-title-bar';
 import { SearchField } from './search-field';
 import { CardGrid, CardGridItem, CardGridPagination } from './card-grid';
@@ -181,6 +185,11 @@ export function CollectionPageScaffold<T>({
   progressBar,
   backgroundJobsBar,
 }: CollectionPageScaffoldProps<T>) {
+  // Per-platform library gate: while paused, the fetch button is disabled with
+  // an explanatory tooltip (pause wins over any adapter cooldown label).
+  const gate = useCollectionGate(platform);
+  const gatePaused = gate?.paused ?? false;
+
   // Manual tagging — batch page tags + single popover + platform-scoped filter
   // chips, with the refresh invariant sealed inside the hook.
   const {
@@ -302,13 +311,25 @@ export function CollectionPageScaffold<T>({
         onSync={showSyncButton ? onSync : undefined}
         syncLabel={copy.syncLabel}
         syncingLabel={copy.syncingLabel}
-        syncDisabled={syncDisabled}
-        syncDisabledLabel={syncDisabledLabel}
+        syncDisabled={gatePaused || syncDisabled}
+        syncDisabledLabel={gatePaused ? undefined : syncDisabledLabel}
+        syncDisabledTooltip={gatePaused ? gate?.fetchBlockedHint : undefined}
       />
 
-      {/* New collection pages use one compact, idle-visible pipeline. The old
-          slots remain a compatibility fallback while adapters migrate. */}
-      {pipeline ?? (
+      {/* New collection pages use one compact, idle-visible pipeline plus the
+          always-visible library-gate toggle. The strip gets `flex:1 minWidth:0`
+          (explicit — a flex item's min-width:auto would defeat its own
+          horizontal scrolling) and the button never shrinks or scrolls away.
+          The old slots remain a compatibility fallback while adapters migrate. */}
+      {pipeline != null ? (
+        <Box
+          data-section="pipeline"
+          sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}
+        >
+          <Box sx={{ flex: 1, minWidth: 0 }}>{pipeline}</Box>
+          <LibraryGateButton platform={platform} />
+        </Box>
+      ) : (
         <>
           {syncing && progressBar}
           {backgroundJobsBar}

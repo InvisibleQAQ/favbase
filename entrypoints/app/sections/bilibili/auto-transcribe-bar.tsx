@@ -1,10 +1,7 @@
 import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
 import LinearProgress from '@mui/material/LinearProgress';
 import Typography from '@mui/material/Typography';
 import Chip from '@mui/material/Chip';
-import IconButton from '@mui/material/IconButton';
-import Tooltip from '@mui/material/Tooltip';
 import CircularProgress from '@mui/material/CircularProgress';
 
 import { formatDateTime, t } from '@/lib/i18n';
@@ -129,15 +126,14 @@ const PANEL_SX = {
 export interface AutoTranscribeBarProps {
   state: AutoTranscribeState;
   running: boolean;
-  onStart: () => void;
-  onStop: () => void;
 }
 
 // ---------------------------------------------------------------------------
-// Component
+// Component (pure progress display — transcription starts automatically after
+// a fetch; pause/resume belongs to the per-platform library gate)
 // ---------------------------------------------------------------------------
 
-export function AutoTranscribeBar({ state, running, onStart, onStop }: AutoTranscribeBarProps) {
+export function AutoTranscribeBar({ state, running }: AutoTranscribeBarProps) {
   useTranslation();
   const { phase, stats, currentVideo, currentIndex, totalVideos, previewVideo, pendingCount, previewLoading } = state;
   const isDone = phase === 'done' || phase === 'cancelled';
@@ -164,15 +160,6 @@ export function AutoTranscribeBar({ state, running, onStart, onStop }: AutoTrans
               {quotaMessage}
             </Typography>
           </Box>
-          <Button
-            variant="outlined"
-            startIcon={<Iconify icon="solar:restart-bold" width={16} />}
-            onClick={onStart}
-            disabled={state.waitSeconds > 0}
-            sx={{ flexShrink: 0 }}
-          >
-            {t('autoTranscribe.restart')}
-          </Button>
         </Box>
       </Box>
     );
@@ -243,15 +230,6 @@ export function AutoTranscribeBar({ state, running, onStart, onStop }: AutoTrans
               </Typography>
             )}
           </Box>
-
-          <Button
-            variant="contained"
-            startIcon={<Iconify icon="solar:play-bold" width={18} />}
-            onClick={onStart}
-            sx={{ flexShrink: 0, px: 3 }}
-          >
-            {t('autoTranscribe.startBtn')}
-          </Button>
         </Box>
       </Box>
     );
@@ -274,15 +252,6 @@ export function AutoTranscribeBar({ state, running, onStart, onStop }: AutoTrans
             </Typography>
             {total > 0 && <StatsChips stats={stats} />}
           </Box>
-
-          <Button
-            variant="outlined"
-            startIcon={<Iconify icon="solar:restart-bold" width={16} />}
-            onClick={onStart}
-            sx={{ flexShrink: 0 }}
-          >
-            {t('autoTranscribe.restart')}
-          </Button>
         </Box>
       </Box>
     );
@@ -341,18 +310,6 @@ export function AutoTranscribeBar({ state, running, onStart, onStop }: AutoTrans
 
         {/* Stats chips */}
         <StatsChips stats={stats} />
-
-        {/* Stop button */}
-        <Tooltip title={t('autoTranscribe.stopTooltip')}>
-          <IconButton
-            size="small"
-            color="error"
-            onClick={onStop}
-            sx={{ flexShrink: 0 }}
-          >
-            <Iconify icon="solar:stop-bold" width={22} />
-          </IconButton>
-        </Tooltip>
       </Box>
 
       {/* Full-width progress bar */}

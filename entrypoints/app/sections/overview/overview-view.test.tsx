@@ -16,6 +16,13 @@ vi.mock('@/lib/storage', () => ({
     setValue: vi.fn(async () => undefined),
     watch: vi.fn(() => () => undefined),
   },
+  // Pulled in transitively via the components/collection barrel → scaffold →
+  // library-gate (module-level getValue + watch on load).
+  libraryGateStorage: {
+    getValue: vi.fn(async () => []),
+    setValue: vi.fn(async () => undefined),
+    watch: vi.fn(() => () => undefined),
+  },
 }));
 
 vi.mock('../../layouts/dashboard', () => ({

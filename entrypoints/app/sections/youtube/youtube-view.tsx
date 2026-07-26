@@ -16,7 +16,6 @@ import {
 import {
   backgroundJobRuntime,
   buildPipelineSegments,
-  pipelineControlLabels,
 } from '../../hooks/pipeline-segments';
 import { useProcessingCoverage } from '../../hooks/use-processing-coverage';
 import { useYoutubePlaylists, type YoutubeSyncError } from './use-youtube-playlists';
@@ -86,7 +85,7 @@ function AuthFailedState({
           <Button variant="contained" onClick={onGoToSettings}>
             {t('youtube.goToSettings')}
           </Button>
-          <SyncNowButton syncing={syncing} onSync={onSync} label={t('common.syncNow')} />
+          <SyncNowButton syncing={syncing} onSync={onSync} label={t('pipeline.fetchNow')} />
         </Box>
       }
     />
@@ -106,7 +105,7 @@ function EmptyLibraryState({ syncing, onSync }: { syncing: boolean; onSync: () =
           <SyncNowButton
             syncing={syncing}
             onSync={onSync}
-            label={t('common.syncNow')}
+            label={t('pipeline.fetchNow')}
             variant="contained"
           />
         </Box>
@@ -166,7 +165,6 @@ export function YoutubeView() {
             completedProgress: 'last-run',
             runtime: backgroundJobRuntime(
               yt.syncJob,
-              pipelineControlLabels(t, fetchLabel),
               (progress) => progress
                 ? { done: progress.fetchedCount, total: null }
                 : null,
@@ -176,19 +174,13 @@ export function YoutubeView() {
             id: 'embedding',
             label: embeddingLabel,
             coverage: 'embedding',
-            runtime: backgroundJobRuntime(
-              yt.embedJob,
-              pipelineControlLabels(t, embeddingLabel),
-            ),
+            runtime: backgroundJobRuntime(yt.embedJob),
           },
           {
             id: 'tagging',
             label: taggingLabel,
             coverage: 'tagging',
-            runtime: backgroundJobRuntime(
-              yt.tagJob,
-              pipelineControlLabels(t, taggingLabel),
-            ),
+            runtime: backgroundJobRuntime(yt.tagJob),
           },
         ],
       })}
@@ -220,8 +212,8 @@ export function YoutubeView() {
         caption: captionParts.length > 0 ? captionParts.join(' · ') : undefined,
         searchPlaceholder: t('youtube.searchPlaceholder'),
         noMatches: t('youtube.noMatches'),
-        syncLabel: t('youtube.sync'),
-        syncingLabel: t('youtube.syncing'),
+        syncLabel: t('pipeline.fetchNow'),
+        syncingLabel: t('pipeline.fetching'),
         loadFailed: t('common.loadFailed'),
         retry: t('common.retry'),
         syncErrorText,

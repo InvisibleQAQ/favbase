@@ -5,7 +5,6 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 
-import { createBiliAutoTranscribeAdapter } from '@/lib/bilibili/auto-transcribe-adapter';
 import type { BiliFavOrder } from '@/lib/bilibili/types';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import {
@@ -16,7 +15,6 @@ import {
 import {
   backgroundJobRuntime,
   buildPipelineSegments,
-  pipelineControlLabels,
 } from '../../hooks/pipeline-segments';
 import { useProcessingCoverage } from '../../hooks/use-processing-coverage';
 import { useJob } from '../../hooks/background-jobs-store';
@@ -28,15 +26,11 @@ import { useAutoTranscribe } from './use-auto-transcribe';
 import { useBiliFavFolders } from './use-bili-fav-folders';
 import { useBiliFavVideos } from './use-bili-fav-videos';
 import { useVideoTranscribe } from './use-video-transcribe';
-import { enqueueBiliCollectionProcessing } from './bilibili-processing-adapter';
 import { INVALID_ATTR, VideoCard } from './video-card';
 import { VideoGridSkeleton } from './video-grid-skeleton';
 
 const PLATFORM = 'bilibili';
 const SEARCH_DEBOUNCE_MS = 300;
-const biliAdapter = createBiliAutoTranscribeAdapter({
-  startProcessing: enqueueBiliCollectionProcessing,
-});
 
 function NotLoggedIn({ onRetry }: { onRetry: () => void }) {
   const { t } = useTranslation();
@@ -180,15 +174,13 @@ function BilibiliCollectionPage({
   } = useBiliFavVideos(mediaId, keyword);
   const { getState, startTranscribe, cancelTranscribe, activeBvid } =
     useVideoTranscribe(videos);
+  const transcribeJob = useJob(PLATFORM, 'transcribe');
   const embedJob = useJob(PLATFORM, 'embed');
   const tagJob = useJob(PLATFORM, 'tag');
   const { coverage, status: coverageStatus } = useProcessingCoverage(
     PLATFORM,
-    `${syncing}:${autoTranscribe.running}:${activeBvid ?? ''}:${embedJob?.generation ?? 0}:${tagJob?.generation ?? 0}`,
+    `${syncing}:${autoTranscribe.running}:${activeBvid ?? ''}:${transcribeJob?.generation ?? 0}:${embedJob?.generation ?? 0}:${tagJob?.generation ?? 0}`,
   );
-  const activeTranscribeState = activeBvid ? getState(activeBvid) : null;
-  const manualTranscribing = activeBvid != null;
-  const autoTranscribing = autoTranscribe.running;
 
   const captionParts: string[] = [];
   if (!loading && folderTitle) captionParts.push(folderTitle);
@@ -217,7 +209,6 @@ function BilibiliCollectionPage({
             completedProgress: 'last-run',
             runtime: backgroundJobRuntime(
               syncJob,
-              pipelineControlLabels(t, fetchLabel),
               (progress) => progress
                 ? { done: progress.fetchedCount, total: null }
                 : null,
@@ -227,29 +218,19 @@ function BilibiliCollectionPage({
             id: 'transcription',
             label: t('pipeline.transcription'),
             coverage: 'content',
-            runtime: {
-              running: autoTranscribing || manualTranscribing,
-              progress: coverageStatus === 'ready' ? coverage.content : null,
-              error: activeTranscribeState?.error,
-            },
+            runtime: backgroundJobRuntime(transcribeJob),
           },
           {
             id: 'embedding',
             label: embeddingLabel,
             coverage: 'embedding',
-            runtime: backgroundJobRuntime(
-              embedJob,
-              pipelineControlLabels(t, embeddingLabel),
-            ),
+            runtime: backgroundJobRuntime(embedJob),
           },
           {
             id: 'tagging',
             label: taggingLabel,
             coverage: 'tagging',
-            runtime: backgroundJobRuntime(
-              tagJob,
-              pipelineControlLabels(t, taggingLabel),
-            ),
+            runtime: backgroundJobRuntime(tagJob),
           },
         ],
       })}
@@ -281,8 +262,8 @@ function BilibiliCollectionPage({
         caption: captionParts.length > 0 ? captionParts.join(' · ') : undefined,
         searchPlaceholder: t('collections.searchPlaceholder'),
         noMatches: t('collections.noMatches'),
-        syncLabel: t('collections.sync'),
-        syncingLabel: t('collections.syncing'),
+        syncLabel: t('pipeline.fetchNow'),
+        syncingLabel: t('pipeline.fetching'),
         loadFailed: t('common.loadFailed'),
         retry: t('common.retry'),
         syncErrorText: syncError ?? '',
@@ -312,8 +293,6 @@ function BilibiliCollectionPage({
           <AutoTranscribeBar
             state={autoTranscribe.state}
             running={autoTranscribe.running}
-            onStart={autoTranscribe.start}
-            onStop={autoTranscribe.stop}
           />
         </Box>
       }
@@ -366,11 +345,12 @@ function BilibiliFallbackPage({
   onSelectFolder,
 }: BilibiliFallbackPageProps) {
   const { t } = useTranslation();
+  const transcribeJob = useJob(PLATFORM, 'transcribe');
   const embedJob = useJob(PLATFORM, 'embed');
   const tagJob = useJob(PLATFORM, 'tag');
   const { coverage, status: coverageStatus } = useProcessingCoverage(
     PLATFORM,
-    `${syncing}:${embedJob?.generation ?? 0}:${tagJob?.generation ?? 0}`,
+    `${syncing}:${transcribeJob?.generation ?? 0}:${embedJob?.generation ?? 0}:${tagJob?.generation ?? 0}`,
   );
   const fetchLabel = t('pipeline.fetch');
   const embeddingLabel = t('pipeline.embedding');
@@ -388,7 +368,6 @@ function BilibiliFallbackPage({
             completedProgress: 'last-run',
             runtime: backgroundJobRuntime(
               syncJob,
-              pipelineControlLabels(t, fetchLabel),
               (progress) => progress
                 ? { done: progress.fetchedCount, total: null }
                 : null,
@@ -398,24 +377,19 @@ function BilibiliFallbackPage({
             id: 'transcription',
             label: t('pipeline.transcription'),
             coverage: 'content',
+            runtime: backgroundJobRuntime(transcribeJob),
           },
           {
             id: 'embedding',
             label: embeddingLabel,
             coverage: 'embedding',
-            runtime: backgroundJobRuntime(
-              embedJob,
-              pipelineControlLabels(t, embeddingLabel),
-            ),
+            runtime: backgroundJobRuntime(embedJob),
           },
           {
             id: 'tagging',
             label: taggingLabel,
             coverage: 'tagging',
-            runtime: backgroundJobRuntime(
-              tagJob,
-              pipelineControlLabels(t, taggingLabel),
-            ),
+            runtime: backgroundJobRuntime(tagJob),
           },
         ],
       })}
@@ -445,8 +419,8 @@ function BilibiliFallbackPage({
         title: t('collections.sidebarTitle'),
         searchPlaceholder: t('collections.searchPlaceholder'),
         noMatches: t('collections.noMatches'),
-        syncLabel: t('collections.sync'),
-        syncingLabel: t('collections.syncing'),
+        syncLabel: t('pipeline.fetchNow'),
+        syncingLabel: t('pipeline.fetching'),
         loadFailed: t('common.loadFailed'),
         retry: t('common.retry'),
         syncErrorText: error ?? '',
@@ -484,11 +458,11 @@ export function BilibiliView() {
     lastSyncedAt,
     error,
     sync,
-  } = useBiliFavFolders();
+  } = useBiliFavFolders(mediaId ? Number(mediaId) : undefined);
 
   const selectedId = mediaId ? Number(mediaId) : folders[0]?.id;
   const selectedFolder = folders.find((folder) => folder.id === selectedId);
-  const autoTranscribe = useAutoTranscribe(selectedId, biliAdapter);
+  const autoTranscribe = useAutoTranscribe(selectedId);
   const [searchInput, setSearchInput] = useState('');
   const [keyword, setKeyword] = useState('');
   const keywordRef = useRef('');

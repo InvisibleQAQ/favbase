@@ -14,7 +14,6 @@ import {
 import {
   backgroundJobRuntime,
   buildPipelineSegments,
-  pipelineControlLabels,
 } from '../../hooks/pipeline-segments';
 import { useProcessingCoverage } from '../../hooks/use-processing-coverage';
 import { useZhihuFavorites, type ZhihuSyncError } from './use-zhihu-favorites';
@@ -78,7 +77,7 @@ function NotLoggedInState({ syncing, onSync }: { syncing: boolean; onSync: () =>
       action={
         <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
           <OpenZhihuButton />
-          <SyncNowButton syncing={syncing} onSync={onSync} label={t('common.syncNow')} />
+          <SyncNowButton syncing={syncing} onSync={onSync} label={t('pipeline.fetchNow')} />
         </Box>
       }
     />
@@ -98,7 +97,7 @@ function EmptyLibraryState({ syncing, onSync }: { syncing: boolean; onSync: () =
           <SyncNowButton
             syncing={syncing}
             onSync={onSync}
-            label={t('common.syncNow')}
+            label={t('pipeline.fetchNow')}
             variant="contained"
           />
         </Box>
@@ -146,7 +145,6 @@ export function ZhihuView() {
             completedProgress: 'last-run',
             runtime: backgroundJobRuntime(
               zhihu.syncJob,
-              pipelineControlLabels(t, fetchLabel),
               (progress) => progress
                 ? { done: progress.fetchedCount, total: null }
                 : null,
@@ -156,19 +154,13 @@ export function ZhihuView() {
             id: 'embedding',
             label: embeddingLabel,
             coverage: 'embedding',
-            runtime: backgroundJobRuntime(
-              zhihu.embedJob,
-              pipelineControlLabels(t, embeddingLabel),
-            ),
+            runtime: backgroundJobRuntime(zhihu.embedJob),
           },
           {
             id: 'tagging',
             label: taggingLabel,
             coverage: 'tagging',
-            runtime: backgroundJobRuntime(
-              zhihu.tagJob,
-              pipelineControlLabels(t, taggingLabel),
-            ),
+            runtime: backgroundJobRuntime(zhihu.tagJob),
           },
         ],
       })}
@@ -200,8 +192,8 @@ export function ZhihuView() {
         caption: captionParts.length > 0 ? captionParts.join(' · ') : undefined,
         searchPlaceholder: t('zhihu.searchPlaceholder'),
         noMatches: t('zhihu.noMatches'),
-        syncLabel: t('zhihu.sync'),
-        syncingLabel: t('zhihu.syncing'),
+        syncLabel: t('pipeline.fetchNow'),
+        syncingLabel: t('pipeline.fetching'),
         loadFailed: t('common.loadFailed'),
         retry: t('common.retry'),
         syncErrorText,

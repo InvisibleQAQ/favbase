@@ -6,6 +6,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const tagState = vi.hoisted(() => ({ selectedTagIds: [] as number[] }));
 
+interface FakeGate {
+  paused: boolean;
+  pause: () => void;
+  resume: () => void;
+  fetchBlockedHint: string;
+}
+const gateState = vi.hoisted(() => ({ gate: null as FakeGate | null }));
+const titleBarProps = vi.hoisted(() => ({ last: null as Record<string, unknown> | null }));
+
 vi.mock('../../layouts/dashboard', () => ({
   DashboardContent: ({ children }: { children: ReactNode }) => (
     <main data-testid="dashboard">{children}</main>
@@ -30,7 +39,17 @@ vi.mock('../tags', () => ({
 }));
 
 vi.mock('./section-title-bar', () => ({
-  SectionTitleBar: () => <div data-section="title" />,
+  SectionTitleBar: (props: Record<string, unknown>) => {
+    titleBarProps.last = props;
+    return <div data-section="title" />;
+  },
+}));
+
+// Smart library-gate module (own t() + storage-backed hook) — stubbed so the
+// scaffold contract test controls the paused state deterministically.
+vi.mock('../library-gate', () => ({
+  useCollectionGate: () => gateState.gate,
+  LibraryGateButton: () => <button data-testid="gate-button" />,
 }));
 
 vi.mock('./search-field', () => ({
@@ -106,6 +125,8 @@ describe('CollectionPageScaffold section contract', () => {
 
   beforeEach(() => {
     tagState.selectedTagIds = [];
+    gateState.gate = null;
+    titleBarProps.last = null;
     container = document.createElement('div');
     document.body.append(container);
     root = createRoot(container);
@@ -150,6 +171,72 @@ describe('CollectionPageScaffold section contract', () => {
       'tags',
       'content',
     ]);
+  });
+
+  it('wraps the pipeline slot in one row that also hosts the library-gate toggle', () => {
+    act(() => {
+      root.render(
+        <CollectionPageScaffold {...baseProps} pipeline={<div data-strip />} />,
+      );
+    });
+
+    // Still exactly ONE direct pipeline node in the section order…
+    const row = container.querySelector('[data-section="pipeline"]');
+    expect(row).not.toBeNull();
+    // …containing both the platform strip and the gate button.
+    expect(row?.querySelector('[data-strip]')).not.toBeNull();
+    expect(row?.querySelector('[data-testid="gate-button"]')).not.toBeNull();
+  });
+
+  it('disables fetch with the pause hint while the gate is paused (pause wins over cooldown)', () => {
+    gateState.gate = {
+      paused: true,
+      pause: vi.fn(),
+      resume: vi.fn(),
+      fetchBlockedHint: 'Paused hint',
+    };
+
+    act(() => {
+      root.render(
+        <CollectionPageScaffold
+          {...baseProps}
+          syncDisabled={false}
+          syncDisabledLabel="cooldown 4:59"
+        />,
+      );
+    });
+
+    expect(titleBarProps.last).toMatchObject({
+      syncDisabled: true,
+      // Pause keeps the fetch label; the cooldown countdown never shows.
+      syncDisabledLabel: undefined,
+      syncDisabledTooltip: 'Paused hint',
+    });
+  });
+
+  it('passes the adapter cooldown through untouched while the gate runs', () => {
+    gateState.gate = {
+      paused: false,
+      pause: vi.fn(),
+      resume: vi.fn(),
+      fetchBlockedHint: 'Paused hint',
+    };
+
+    act(() => {
+      root.render(
+        <CollectionPageScaffold
+          {...baseProps}
+          syncDisabled
+          syncDisabledLabel="cooldown 4:59"
+        />,
+      );
+    });
+
+    expect(titleBarProps.last).toMatchObject({
+      syncDisabled: true,
+      syncDisabledLabel: 'cooldown 4:59',
+      syncDisabledTooltip: undefined,
+    });
   });
 
   it('keeps page operations but hides primary-category scoped sections during tag takeover', () => {

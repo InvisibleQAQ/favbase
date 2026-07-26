@@ -10,7 +10,6 @@ export {
   PipelineProgressStrip,
   type PipelineProgressStripProps,
   type PipelineProgressSegment,
-  type PipelineSegmentControl,
   type PipelineSegmentState,
 } from './pipeline-progress-strip';
 export {

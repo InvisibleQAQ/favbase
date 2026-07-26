@@ -4,7 +4,6 @@ import { varAlpha } from 'minimal-shared/utils';
 
 import Avatar from '@mui/material/Avatar';
 import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
 import LinearProgress, { linearProgressClasses } from '@mui/material/LinearProgress';
 import Typography from '@mui/material/Typography';
 
@@ -16,7 +15,12 @@ export interface BookmarkExtractionPanelProps {
   extraction: ReturnType<typeof useBookmarkExtraction>;
 }
 
-/** Bookmarks-specific adapter for the shared scaffold's business-operation seam. */
+/**
+ * Bookmarks-specific adapter for the shared scaffold's business-operation seam.
+ * Pure progress display: extraction auto-chains after every bookmark fetch and
+ * pause/resume belongs to the per-platform library gate — the paused copy here
+ * only mirrors the shared job phase.
+ */
 export function BookmarkExtractionPanel({ extraction }: BookmarkExtractionPanelProps) {
   const { t } = useTranslation();
   const hasTotal = extraction.total > 0;
@@ -72,12 +76,12 @@ export function BookmarkExtractionPanel({ extraction }: BookmarkExtractionPanelP
             variant="body2"
             sx={{ color: active ? 'text.secondary' : 'text.primary' }}
           >
-            {extraction.paused
+            {extraction.phase === 'paused'
               ? t('bookmarks.extractionPaused', {
                   done: extraction.done,
                   total: extraction.total,
                 })
-              : extraction.pausing
+              : extraction.phase === 'pausing'
                 ? t('bookmarks.extractionPausing')
                 : extraction.running
                   ? t('bookmarks.extracting', {
@@ -101,32 +105,6 @@ export function BookmarkExtractionPanel({ extraction }: BookmarkExtractionPanelP
           >
             {Math.round(progress)}%
           </Typography>
-        )}
-
-        {extraction.paused ? (
-          <Button variant="contained" size="small" onClick={extraction.resume}>
-            {t('bookmarks.resumeExtraction')}
-          </Button>
-        ) : extraction.running ? (
-          <Button
-            variant="outlined"
-            size="small"
-            onClick={extraction.pause}
-            disabled={extraction.pausing}
-          >
-            {extraction.pausing
-              ? t('bookmarks.pausingExtraction')
-              : t('bookmarks.pauseExtraction')}
-          </Button>
-        ) : (
-          <Button
-            variant="contained"
-            size="small"
-            onClick={extraction.start}
-            disabled={extraction.pendingCount == null || extraction.pendingCount === 0}
-          >
-            {t('bookmarks.extractContent')}
-          </Button>
         )}
       </Box>
 

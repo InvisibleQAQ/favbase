@@ -2,7 +2,7 @@
 
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { PipelineProgressStrip } from './pipeline-progress-strip';
 
@@ -85,54 +85,23 @@ describe('PipelineProgressStrip', () => {
     ).toBe('running');
   });
 
-  it('renders one accessible toggle in place across running, pausing, and paused states', () => {
-    const pause = vi.fn();
-    const resume = vi.fn();
+  it('renders no per-segment controls — pause/resume lives in the library gate', () => {
     act(() => {
       root.render(
         <PipelineProgressStrip
           segments={[
-            {
-              id: 'running',
-              label: 'Fetch',
-              done: 4,
-              total: null,
-              state: 'running',
-              control: { kind: 'pause', label: 'Pause Fetch', disabled: false, onClick: pause },
-            },
-            {
-              id: 'pausing',
-              label: 'Embed',
-              done: 2,
-              total: 8,
-              state: 'pausing',
-              control: { kind: 'pausing', label: 'Pausing Embed', disabled: true },
-            },
-            {
-              id: 'paused',
-              label: 'Tags',
-              done: 3,
-              total: 8,
-              state: 'paused',
-              control: { kind: 'resume', label: 'Resume Tags', disabled: false, onClick: resume },
-            },
+            { id: 'running', label: 'Fetch', done: 4, total: null, state: 'running' },
+            { id: 'pausing', label: 'Embed', done: 2, total: 8, state: 'pausing' },
+            { id: 'paused', label: 'Tags', done: 3, total: 8, state: 'paused' },
           ]}
         />,
       );
     });
 
-    const buttons = container.querySelectorAll('[data-pipeline-control]');
-    expect(buttons).toHaveLength(3);
+    expect(container.querySelectorAll('button')).toHaveLength(0);
     expect(
-      container.querySelector('button[aria-label="Pausing Embed"]')?.hasAttribute('disabled'),
-    ).toBe(true);
-
-    act(() => {
-      (container.querySelector('button[aria-label="Pause Fetch"]') as HTMLButtonElement).click();
-      (container.querySelector('button[aria-label="Resume Tags"]') as HTMLButtonElement).click();
-    });
-    expect(pause).toHaveBeenCalledOnce();
-    expect(resume).toHaveBeenCalledOnce();
+      container.querySelector('[data-segment-id="pausing"]')?.getAttribute('data-segment-state'),
+    ).toBe('pausing');
   });
 
   it('keeps unavailable coverage explicit while loading', () => {

@@ -10,7 +10,6 @@ import {
 import {
   backgroundJobRuntime,
   buildPipelineSegments,
-  pipelineControlLabels,
 } from '../../hooks/pipeline-segments';
 import { useProcessingCoverage } from '../../hooks/use-processing-coverage';
 import { Iconify } from '../../components/iconify';
@@ -79,40 +78,25 @@ export function BookmarksView() {
             label: fetchLabel,
             coverage: 'acquisition',
             completedProgress: 'last-run',
-            runtime: backgroundJobRuntime(
-              bm.syncJob,
-              pipelineControlLabels(t, fetchLabel),
-            ),
+            runtime: backgroundJobRuntime(bm.syncJob),
           },
           {
             id: 'extraction',
             label: t('pipeline.extraction'),
             coverage: 'content',
-            runtime: {
-              running: extraction.running,
-              progress: extraction.running
-                ? { done: extraction.done, total: extraction.total }
-                : null,
-              error: extraction.pendingCountError,
-            },
+            runtime: backgroundJobRuntime(extraction.extractJob),
           },
           {
             id: 'embedding',
             label: embeddingLabel,
             coverage: 'embedding',
-            runtime: backgroundJobRuntime(
-              extraction.embedJob,
-              pipelineControlLabels(t, embeddingLabel),
-            ),
+            runtime: backgroundJobRuntime(extraction.embedJob),
           },
           {
             id: 'tagging',
             label: taggingLabel,
             coverage: 'tagging',
-            runtime: backgroundJobRuntime(
-              extraction.tagJob,
-              pipelineControlLabels(t, taggingLabel),
-            ),
+            runtime: backgroundJobRuntime(extraction.tagJob),
           },
         ],
       })}
@@ -136,7 +120,6 @@ export function BookmarksView() {
       totalPages={bm.totalPages}
       onPageChange={bm.goToPage}
       onSync={bm.sync}
-      showSyncButton={false}
       onRetryQuery={bm.retryQuery}
       searchInput={bm.searchInput}
       onSearchInput={bm.setSearchInput}
@@ -145,8 +128,8 @@ export function BookmarksView() {
         caption: captionParts.length > 0 ? captionParts.join(' · ') : undefined,
         searchPlaceholder: t('bookmarks.searchPlaceholder'),
         noMatches: t('bookmarks.noMatches'),
-        syncLabel: t('common.syncNow'),
-        syncingLabel: t('collections.syncing'),
+        syncLabel: t('pipeline.fetchNow'),
+        syncingLabel: t('pipeline.fetching'),
         loadFailed: t('common.loadFailed'),
         retry: t('common.retry'),
         syncErrorText: bm.syncError ?? '',

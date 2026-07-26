@@ -48,7 +48,7 @@ function idleState(overrides: Partial<AutoTranscribeState> = {}): AutoTranscribe
   };
 }
 
-describe('AutoTranscribeBar unsynced preview', () => {
+describe('AutoTranscribeBar (pure progress display)', () => {
   let container: HTMLDivElement;
   let root: Root;
 
@@ -63,59 +63,52 @@ describe('AutoTranscribeBar unsynced preview', () => {
     container.remove();
   });
 
-  it('exposes the existing start action without inventing a pending count', () => {
-    const onStart = vi.fn();
-
+  it('renders the idle preview with no buttons and no invented pending count', () => {
     act(() => {
-      root.render(
-        <AutoTranscribeBar
-          state={idleState()}
-          running={false}
-          onStart={onStart}
-          onStop={vi.fn()}
-        />,
-      );
+      root.render(<AutoTranscribeBar state={idleState()} running={false} />);
     });
 
-    const startButton = [...container.querySelectorAll('button')].find(
-      (button) => button.textContent?.includes('autoTranscribe.startBtn'),
-    );
-    expect(startButton).toBeDefined();
+    expect(container.textContent).toContain('autoTranscribe.title');
     expect(container.textContent).not.toContain('autoTranscribe.pendingCount');
-
-    act(() => startButton?.click());
-    expect(onStart).toHaveBeenCalledOnce();
+    // Transcription auto-continues after a fetch — the bar exposes no controls.
+    expect(container.querySelector('button')).toBeNull();
   });
 
-  it('blocks restart until the quota reset and still requires an explicit click', () => {
-    const onStart = vi.fn();
-    const render = (waitSeconds: number) => {
+  it('shows the auto-resume quota copy without a restart control', () => {
+    act(() => {
       root.render(
         <AutoTranscribeBar
           state={idleState({
             phase: 'quota_paused',
             quotaResetAt: 4_600_000,
-            waitSeconds,
+            waitSeconds: 60,
           })}
           running={false}
-          onStart={onStart}
-          onStop={vi.fn()}
         />,
       );
-    };
-
-    act(() => render(60));
+    });
 
     expect(container.textContent).toContain('autoTranscribe.quotaPausedUntil');
     expect(container.textContent).toContain('date:4600000');
-    const restartButton = container.querySelector('button');
-    expect(restartButton?.disabled).toBe(true);
+    expect(container.querySelector('button')).toBeNull();
+  });
 
-    act(() => render(0));
+  it('renders the running panel without a stop control', () => {
+    act(() => {
+      root.render(
+        <AutoTranscribeBar
+          state={idleState({
+            phase: 'transcribing',
+            totalVideos: 3,
+            currentIndex: 1,
+            currentVideo: { cover: '', title: 'BV-1', author: 'UP', duration: 60 },
+          })}
+          running
+        />,
+      );
+    });
 
-    expect(onStart).not.toHaveBeenCalled();
-    expect(restartButton?.disabled).toBe(false);
-    act(() => restartButton?.click());
-    expect(onStart).toHaveBeenCalledOnce();
+    expect(container.textContent).toContain('BV-1');
+    expect(container.querySelector('button')).toBeNull();
   });
 });

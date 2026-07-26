@@ -17,7 +17,6 @@ import {
 import {
   backgroundJobRuntime,
   buildPipelineSegments,
-  pipelineControlLabels,
   type PipelineRuntimeSnapshot,
 } from '../../hooks/pipeline-segments';
 import { useProcessingCoverage } from '../../hooks/use-processing-coverage';
@@ -80,7 +79,7 @@ function EmptyLibraryState({ syncing, onSync }: { syncing: boolean; onSync: () =
         <SyncNowButton
           syncing={syncing}
           onSync={onSync}
-          label={t('common.syncNow')}
+          label={t('pipeline.fetchNow')}
           variant="contained"
         />
       }
@@ -134,7 +133,6 @@ export function GithubStarsView() {
   const syncPhase = gh.syncJob?.progress?.phase ?? gh.syncJob?.lastProgress?.phase;
   const fetchRuntime = backgroundJobRuntime(
     gh.syncJob,
-    pipelineControlLabels(t, fetchLabel),
     (progress) => progress
       ? { done: progress.fetchedCount, total: null }
       : null,
@@ -143,7 +141,6 @@ export function GithubStarsView() {
     ? null
     : backgroundJobRuntime(
         gh.syncJob,
-        pipelineControlLabels(t, readmeLabel),
         (progress) => progress?.phase === 'readme'
           ? { done: progress.done, total: progress.total }
           : null,
@@ -179,19 +176,13 @@ export function GithubStarsView() {
             id: 'embedding',
             label: embeddingLabel,
             coverage: 'embedding',
-            runtime: backgroundJobRuntime(
-              gh.embedJob,
-              pipelineControlLabels(t, embeddingLabel),
-            ),
+            runtime: backgroundJobRuntime(gh.embedJob),
           },
           {
             id: 'tagging',
             label: taggingLabel,
             coverage: 'tagging',
-            runtime: backgroundJobRuntime(
-              gh.tagJob,
-              pipelineControlLabels(t, taggingLabel),
-            ),
+            runtime: backgroundJobRuntime(gh.tagJob),
           },
         ],
       })}
@@ -225,8 +216,8 @@ export function GithubStarsView() {
         caption: captionParts.length > 0 ? captionParts.join(' · ') : undefined,
         searchPlaceholder: t('githubStars.searchPlaceholder'),
         noMatches: t('githubStars.noMatches'),
-        syncLabel: t('githubStars.sync'),
-        syncingLabel: t('githubStars.syncing'),
+        syncLabel: t('pipeline.fetchNow'),
+        syncingLabel: t('pipeline.fetching'),
         loadFailed: t('common.loadFailed'),
         retry: t('common.retry'),
         syncErrorText,

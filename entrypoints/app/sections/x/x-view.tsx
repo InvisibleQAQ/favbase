@@ -14,7 +14,6 @@ import {
 import {
   backgroundJobRuntime,
   buildPipelineSegments,
-  pipelineControlLabels,
 } from '../../hooks/pipeline-segments';
 import { useProcessingCoverage } from '../../hooks/use-processing-coverage';
 import { useXBookmarks, type XSyncError } from './use-x-bookmarks';
@@ -83,7 +82,7 @@ function NotLoggedInState({ syncing, onSync }: { syncing: boolean; onSync: () =>
       action={
         <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
           <OpenBookmarksButton />
-          <SyncNowButton syncing={syncing} onSync={onSync} label={t('common.syncNow')} />
+          <SyncNowButton syncing={syncing} onSync={onSync} label={t('pipeline.fetchNow')} />
         </Box>
       }
     />
@@ -102,7 +101,7 @@ function EmptyLibraryState({ syncing, onSync }: { syncing: boolean; onSync: () =
       action={
         <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
           <OpenBookmarksButton />
-          <SyncNowButton syncing={syncing} onSync={onSync} label={t('common.syncNow')} />
+          <SyncNowButton syncing={syncing} onSync={onSync} label={t('pipeline.fetchNow')} />
         </Box>
       }
     />
@@ -153,7 +152,6 @@ export function XView() {
             completedProgress: 'last-run',
             runtime: backgroundJobRuntime(
               x.syncJob,
-              pipelineControlLabels(t, fetchLabel),
               (progress) => progress
                 ? { done: progress.fetchedCount, total: null }
                 : null,
@@ -163,19 +161,13 @@ export function XView() {
             id: 'embedding',
             label: embeddingLabel,
             coverage: 'embedding',
-            runtime: backgroundJobRuntime(
-              x.embedJob,
-              pipelineControlLabels(t, embeddingLabel),
-            ),
+            runtime: backgroundJobRuntime(x.embedJob),
           },
           {
             id: 'tagging',
             label: taggingLabel,
             coverage: 'tagging',
-            runtime: backgroundJobRuntime(
-              x.tagJob,
-              pipelineControlLabels(t, taggingLabel),
-            ),
+            runtime: backgroundJobRuntime(x.tagJob),
           },
         ],
       })}
@@ -216,8 +208,8 @@ export function XView() {
         caption: captionParts.length > 0 ? captionParts.join(' · ') : undefined,
         searchPlaceholder: t('x.searchPlaceholder'),
         noMatches: t('x.noMatches'),
-        syncLabel: t('x.sync'),
-        syncingLabel: t('x.syncing'),
+        syncLabel: t('pipeline.fetchNow'),
+        syncingLabel: t('pipeline.fetching'),
         loadFailed: t('common.loadFailed'),
         retry: t('common.retry'),
         syncErrorText,
