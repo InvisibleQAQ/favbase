@@ -7,21 +7,24 @@ import { varAlpha } from 'minimal-shared/utils';
 import { Iconify } from '../../components/iconify';
 import type { IconifyName } from '../../components/iconify';
 
-export type AiSection = 'llm' | 'asr' | 'embedding';
-
-export interface AiConfigNavItem {
-  value: AiSection;
+export interface SectionRailItem<T extends string = string> {
+  value: T;
   label: string;
   icon: IconifyName;
 }
 
-interface AiConfigNavProps {
-  value: AiSection;
-  onChange: (value: AiSection) => void;
-  items: AiConfigNavItem[];
+interface SectionRailProps<T extends string> {
+  value: T;
+  onChange: (value: T) => void;
+  items: SectionRailItem<T>[];
 }
 
-export function AiConfigNav({ value, onChange, items }: AiConfigNavProps) {
+/**
+ * Generic secondary-nav rail inside a settings tab: `md+` vertical rail,
+ * horizontal fullWidth on narrow screens. Shared by every tab (AI / 账号连接 /
+ * 通用 / 存储) so each gets the same left sidebar; feed it that tab's items.
+ */
+export function SectionRail<T extends string>({ value, onChange, items }: SectionRailProps<T>) {
   const theme = useTheme();
   const isCompact = useMediaQuery(theme.breakpoints.down('md'));
 
@@ -30,7 +33,7 @@ export function AiConfigNav({ value, onChange, items }: AiConfigNavProps) {
       orientation={isCompact ? 'horizontal' : 'vertical'}
       variant={isCompact ? 'fullWidth' : 'standard'}
       value={value}
-      onChange={(_, v) => onChange(v as AiSection)}
+      onChange={(_, v) => onChange(v as T)}
       sx={(t) => ({
         p: 0.5,
         borderRadius: 2,
