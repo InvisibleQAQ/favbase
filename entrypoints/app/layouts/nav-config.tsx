@@ -29,6 +29,11 @@ export const navData: NavItem[] = [
     })),
   },
   {
+    title: 'nav.chat',
+    path: '/chat',
+    icon: <Iconify icon="solar:chat-round-dots-bold" width={24} />,
+  },
+  {
     title: 'nav.settings',
     path: '/settings',
     icon: <Iconify icon="solar:settings-bold-duotone" width={24} />,

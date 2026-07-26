@@ -13,3 +13,4 @@
 - `x.tsx` → `sections/x/x-view.tsx`（X/Twitter 书签收藏页：作者 chips + 推文卡片 grid + 手动同步）
 - `zhihu.tsx` → `sections/zhihu/zhihu-view.tsx`（知乎收藏页：收藏夹 chips + 4 类型卡片 grid + 手动同步）
 - `youtube.tsx` → `sections/youtube/youtube-view.tsx`（YouTube 公开播放列表收藏页：播放列表 chips + 视频卡片 grid + 手动同步）
+- `chat.tsx` → `sections/chat/chat-view.tsx`（Chat 一级页：Agentic RAG 知识库助手，多会话 rail + 流式回答 + 来源卡片，只读 PGlite）

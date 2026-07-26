@@ -6,7 +6,7 @@ Turn your social media Favorites into a searchable knowledge base just with a lo
 
 - **框架**: WXT 0.20.26 (Vite) + React 19 + TypeScript 5.9
 - **架构**: Chrome MV3 (Service Worker + Content Script + Shadow DOM UI + Extension Page)
-- **UI 框架**: MUI v7 (Extension Page) + 原生 CSS + `--fb-*` design tokens (Content Script Shadow DOM)
+- **UI 框架**: MUI v7 (Extension Page) + 原生 CSS + `--fb-*` design tokens (Content Script Shadow DOM)；Chat 回答用 `react-markdown` + `remark-gfm` 渲染（无 rehype-raw，XSS 安全）
 - **AI SDK**: Vercel AI SDK v6（`ai` + `@ai-sdk/openai` + `@ai-sdk/anthropic` + `@ai-sdk/google` + `@ai-sdk/openai-compatible`）
 - **存储**: WXT `storage.defineItem`（设置/缓存） + PGlite 0.5 + Drizzle ORM 0.45 + pgvector（知识库）
 - **包管理**: pnpm
@@ -58,6 +58,7 @@ WXT 入口点及运行时角色总览，详细结构见对应目录 `CLAUDE.md`�
 - `entrypoints/app/sections/x/CLAUDE.md` — X（Twitter）书签收藏页（作者 chips + 推文卡片 grid + 手动同步按钮 + 未登录空态，凭据无 UI 半 D6）
 - `entrypoints/app/sections/zhihu/CLAUDE.md` — 知乎收藏页（收藏夹 chips + 4 类型卡片 grid + 手动同步按钮 + 未登录空态，cookie 直读无 Connections 卡）
 - `entrypoints/app/sections/youtube/CLAUDE.md` — YouTube 公开播放列表收藏页（播放列表 chips + 视频卡片 grid + 手动同步按钮 + 未配置空态，API key + 频道经 Connections 卡配置）
+- `entrypoints/app/sections/chat/CLAUDE.md` — Chat 一级页面（Agentic RAG 知识库助手，只读 PGlite）：多步 tool-calling agent + 流式回答 + hybrid 检索 + 可点来源卡片 + 工具四态 + 多会话持久化（WXT storage）+ markdown 渲染
 
 ### B站视频页 Content Script
 - `entrypoints/bilibili-video.content/CLAUDE.md` — 右侧栏面板 UI 挂载 + Shadow DOM 约定
@@ -90,6 +91,7 @@ WXT 入口点及运行时角色总览，详细结构见对应目录 `CLAUDE.md`�
 
 ### 基础设施
 - `lib/ai/CLAUDE.md` — Vercel AI SDK 集成（LLM + Embedding provider/client）+ Provider 定义（`lib/providers.ts`）
+- `lib/chat/CLAUDE.md` — Chat（Agentic RAG 助手）平台无关 lib：`config.ts`（`resolveChatModel` 复用主 LLM）+ `retrieval.ts`/`rrf.ts`（hybrid：语义 `semanticSearchChunks` + trigram 关键词 word_similarity + RRF）+ `tools.ts`（3 只读工具）+ `agent.ts`（`streamText`+`stepCountIs(8)`）+ `prompts.ts` + `history.ts`（WXT storage 多会话），全程只读 PGlite
 - `lib/permissions/CLAUDE.md` — 运行时 host 权限授权：自定义 API 域名的 CORS 解法（内置域名派生进静态 `host_permissions` + `optional_host_permissions` 运行时授权）
 - `lib/embedding/CLAUDE.md` — Embedding 领域层：pgvector 向量存储 + 语义检索 + chunker（字幕/文本）+ 配置解析（转录管线 + x/zhihu/youtube/github 同步收尾自动 embed + bookmarks 提取逐条自动 embed 已接线，语义搜索 UI 待接）
 - `lib/events/CLAUDE.md` — 领域事件总线（DB 数据变更 → UI 实时刷新，app.html 单 context）

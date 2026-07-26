@@ -13,6 +13,10 @@ export const STORAGE_KEYS = {
   // count across app.html reloads so the X collection caption can show it after
   // a refresh. Written by sections/x/use-x-bookmarks syncFn. See lib/x/CLAUDE.md.
   xLastSync: 'local:x-last-sync',
+  // Chat (Agentic RAG assistant) conversation history — a single array of all
+  // conversations (modelMessages + metadata). Read-only knowledge base; this is
+  // the ONLY chat persistence (never PGlite). See lib/chat/history.ts.
+  chatConversations: 'local:chat-conversations',
 } as const;
 
 export const STORAGE_PREFIXES = {

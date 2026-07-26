@@ -24,6 +24,7 @@ const BookmarksPage = lazy(() => import('./pages/bookmarks'));
 const XPage = lazy(() => import('./pages/x'));
 const ZhihuPage = lazy(() => import('./pages/zhihu'));
 const YoutubePage = lazy(() => import('./pages/youtube'));
+const ChatPage = lazy(() => import('./pages/chat'));
 const SettingsPage = lazy(() => import('./pages/settings'));
 
 function LoadingFallback() {
@@ -71,6 +72,7 @@ const router = createHashRouter([
           { path: 'collections/x', element: <XPage /> },
           { path: 'collections/zhihu', element: <ZhihuPage /> },
           { path: 'collections/youtube', element: <YoutubePage /> },
+          { path: 'chat', element: <ChatPage /> },
           { path: 'settings', element: <SettingsPage /> },
         ],
       },
