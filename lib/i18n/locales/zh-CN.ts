@@ -278,6 +278,7 @@ const zhCN = {
   'nav.xBookmarks': 'X 书签',
   'nav.zhihuFavorites': '知乎收藏',
   'nav.youtubePlaylists': 'YouTube 播放列表',
+  'nav.requestPlatform': '请求新平台',
   'nav.chat': '对话',
   'nav.settings': '设置',
 
@@ -638,6 +639,11 @@ const zhCN = {
   'welcome.picker.ctaNone': '直接进入 favbase',
   'welcome.picker.footnote':
     '所有收藏、正文与向量都存在这台浏览器里。没有账号，没有服务器。',
+
+  'welcome.request.heading': '没找到你的平台？',
+  'welcome.request.desc':
+    '六个平台只是起点。告诉我们下一个该收录谁——去仓库开一个 issue，说不定下个版本就有。',
+  'welcome.request.cta': '去 GitHub 提需求',
 } as const;
 
 export type LocaleKeys = keyof typeof zhCN;

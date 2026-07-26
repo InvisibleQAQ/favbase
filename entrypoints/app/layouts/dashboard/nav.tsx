@@ -183,6 +183,8 @@ function ExpandChevron({ expanded }: { expanded: boolean }) {
 // wired to the parent via a fishbone connector — a vertical spine segment plus
 // a horizontal rib per leaf. The last leaf's spine stops at the rib midpoint to
 // form an L-corner instead of a hanging tail. Primary highlight when active.
+// An `external` item (Platform Request) renders <a target="_blank"> instead,
+// dimmed and with a trailing outbound arrow: it is an action, not a page.
 // ---------------------------------------------------------------------------
 
 const FISHBONE_RIB = 14; // px reach from spine to leaf
@@ -229,8 +231,9 @@ function NavChildLeaf({
     >
       <ListItemButton
         disableGutters
-        component={RouterLink}
-        to={item.path}
+        {...(item.external
+          ? ({ component: 'a', href: item.path, target: '_blank', rel: 'noopener noreferrer' } as const)
+          : { component: RouterLink, to: item.path })}
         sx={[
           (theme) => ({
             ml: `${FISHBONE_RIB}px`,
@@ -242,7 +245,9 @@ function NavChildLeaf({
             gap: 1,
             alignItems: 'center',
             typography: 'body2',
-            color: theme.vars.palette.text.secondary,
+            color: item.external
+              ? theme.vars.palette.text.disabled
+              : theme.vars.palette.text.secondary,
             ...(isActive && {
               fontWeight: 'fontWeightSemiBold',
               color: theme.vars.palette.primary.main,
@@ -275,6 +280,13 @@ function NavChildLeaf({
         >
           {t(item.title)}
         </Box>
+        {item.external && (
+          <Iconify
+            icon="eva:diagonal-arrow-right-up-fill"
+            width={14}
+            sx={{ flexShrink: 0, color: 'text.disabled' }}
+          />
+        )}
       </ListItemButton>
     </ListItem>
   );

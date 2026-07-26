@@ -16,9 +16,21 @@ describe('collection platform registry', () => {
 
   it('drives the Collections navigation children without a second platform list', () => {
     const collectionsNav = navData.find((item) => item.path === '/collections');
+    const platformLeaves = collectionsNav?.children?.filter((child) => !child.external);
 
-    expect(collectionsNav?.children?.map(({ title, path }) => ({ title, path }))).toEqual(
+    expect(platformLeaves?.map(({ title, path }) => ({ title, path }))).toEqual(
       collectionPlatformRegistry.map(({ title, path }) => ({ title, path })),
     );
+  });
+
+  it('keeps Platform Request as the single trailing external action link', () => {
+    const collectionsNav = navData.find((item) => item.path === '/collections');
+    const externals = collectionsNav?.children?.filter((child) => child.external) ?? [];
+
+    expect(externals).toHaveLength(1);
+    expect(collectionsNav?.children?.at(-1)).toBe(externals[0]);
+    expect(externals[0]?.title).toBe('nav.requestPlatform');
+    // A full URL, not a route: active-route matching can never highlight it.
+    expect(externals[0]?.path).toMatch(/^https:\/\/github\.com\/.+\/issues\/new\?/);
   });
 });

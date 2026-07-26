@@ -11,6 +11,7 @@ import { TopBar } from './sections/top-bar';
 import { ChatShowcase } from './sections/chat-showcase';
 import { HowItWorks } from './sections/how-it-works';
 import { PlatformPicker } from './sections/platform-picker';
+import { PlatformRequest } from './sections/platform-request';
 import { CapabilityMarquee } from './sections/capability-marquee';
 import { BilibiliShowcase } from './sections/bilibili-showcase';
 import { useOnboardingExit } from './use-onboarding-exit';
@@ -60,6 +61,7 @@ export function WelcomeView() {
       <ChatShowcase />
       <BilibiliShowcase />
       <PlatformPicker />
+      <PlatformRequest />
     </Box>
   );
 }

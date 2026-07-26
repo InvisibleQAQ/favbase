@@ -14,12 +14,11 @@ import Switch from '@mui/material/Switch';
 import { styled, useColorScheme } from '@mui/material/styles';
 
 import { useTranslation } from '@/lib/i18n/use-translation';
+import { REPO_URL } from '@/lib/repo';
 
 import { Iconify } from '../../components/iconify';
 
 import type { IconifyName } from '../../components/iconify';
-
-const REPO_URL = 'https://github.com/InvisibleQAQ/favbase';
 
 // Flag-based switcher: one entry per concrete language (no `auto`). Selection is
 // keyed off the *resolved* locale, so `preference='auto'` still highlights and

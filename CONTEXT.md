@@ -66,6 +66,10 @@ _Avoid_: Processing Dashboard, queue console
 One persisted Chat assistant dialogue — an ordered sequence of user, assistant, and tool turns stored as a single local database record whose model-message sequence is the source of truth; display bubbles are rebuilt from it. It is not a Collection Item.
 _Avoid_: Collection Item, chat log, session cache
 
+**Platform Request**:
+An outbound guidance entry ("请求新平台 / Request a platform") that opens a prefilled new-issue form on the project repository so users can ask for an unsupported platform. It is an action link, not a platform: it never becomes a nav route, never joins the platform registry, and holds no Collection Items.
+_Avoid_: Seventh platform, platform page, feedback page
+
 ## Relationships
 
 - The **Dashboard** presents **Collection Analytics**
@@ -86,6 +90,7 @@ _Avoid_: Collection Item, chat log, session cache
 - **Library Composition** uses **Item Count** for platform share and **Membership Count** for Source rankings
 - A **Tag Drill-down** leaves the **Dashboard** and opens matching **Collection Items** in the aggregate collection
 - Chat reads **Collection Items** and their derived knowledge as read-only; the only records Chat writes are **Conversations**
+- A **Platform Request** entry may follow the platform list in navigation or onboarding, but is visually marked as an outbound action and never participates in platform aggregation, sync, or active-route highlighting
 
 ## Example dialogue
 

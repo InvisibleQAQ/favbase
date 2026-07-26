@@ -45,6 +45,7 @@
 - `chat-showcase.tsx` — **主功能演示**。`useInView(once)` 触发脚本化播放：提问 → tool call（转圈 → ✓ 命中 N 条）→ 打字机流式作答 → 来源卡片 stagger。phase 常量 + 定时器数组，`useReducedMotion` 时直接跳到终态（流式动画没有「慢一点」的降级）。面板 `minHeight` 按终态尺寸给足，避免播放中把页面顶下去
 - `bilibili-showcase.tsx` — B 站视频页 CS 面板演示：左侧播放器骨架 + 右侧面板 mock（字幕 / AI 总结双 tab，`layoutId` 让选中胶囊滑动）。入场 2.8s 后自动切到总结 tab 展示第二种能力，但 `pickedRef` 记录真人点击后不再自动切。tab 行 `role="tablist"`、`TabButton` 带 `role="tab"`/`aria-selected` + `Mui-focusVisible` 焦点环；播放器进度条动画走 `scaleX`（`transformOrigin: left`）而非 `width`，不逐帧 relayout
 - `platform-picker.tsx` — 六平台多选卡（`collectionPlatformRegistry` 驱动）+ 就绪态标签（`readiness()`：需密钥 / 用登录态 / 开箱即用）+ 进入按钮。CTA 文案与 caption 随选择数变化（`welcome.picker.selected` 走复数 key）。卡片未选中态边框 `2px solid transparent`（选中亮 primary；宽度恒定防 layout shift），键盘焦点走 `Mui-focusVisible` 环；readiness 文字 `text.secondary` 保对比度
+- `platform-request.tsx` — 页尾 Platform Request 引导（`welcome.request.*`）：Headline + 一句引导 + outlined 按钮外跳 `lib/repo.ts` 的预填 new-issue URL（`target="_blank"`）。刻意克制（outlined、无光晕）不抢上方 picker 主 CTA；它是动作外链不是平台，不进 registry（领域定义见根 `CONTEXT.md`）
 
 ### hooks/
 
