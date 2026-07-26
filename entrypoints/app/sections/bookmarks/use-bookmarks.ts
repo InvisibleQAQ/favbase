@@ -14,6 +14,7 @@ import {
   useJob,
   type BackgroundJob,
 } from '../../hooks/background-jobs-store';
+import { startCollectionProcessingJobs } from '../../hooks/collection-processing-jobs';
 import { startBookmarkExtraction } from './use-bookmark-extraction';
 
 const PAGE_SIZE = 24;
@@ -134,6 +135,15 @@ export function useBookmarks(folderId: string | undefined): UseBookmarksReturn {
       // startJob guard dedupes concurrent starts, and the library gate can
       // pause it.
       startBookmarkExtraction();
+      // Drain the embed backlog too: bookmarks left 'chunked' by an
+      // interrupted earlier run are not re-picked by extraction (it only sees
+      // 'pending'), so the batch embed lane is their retry path. Empty ids =
+      // backlog-only dispatch, no tag lane.
+      startCollectionProcessingJobs({
+        jobPlatform: 'bookmarks',
+        itemPlatform: 'bookmarks',
+        itemIds: [],
+      });
     });
   }, []);
 

@@ -1,6 +1,6 @@
 import type { CooperativeCheckpoint } from '@/lib/collections';
 import {
-  embedNewItems,
+  embedPlatformBacklog,
   embedPlatformItem,
   type IndexedContentState,
 } from '@/lib/embedding';
@@ -72,8 +72,12 @@ const itemDeps: CollectionProcessingItemDeps = {
 const streamLanes = new Map<string, ProcessingLaneState>();
 
 const defaultDeps: CollectionProcessingJobDeps = {
-  embed: (platform, itemIds, onProgress, control) =>
-    embedNewItems(platform, itemIds, undefined, onProgress, control),
+  // The embed lane's input is the platform's WHOLE 'chunked' backlog — the ids
+  // a sync just persisted are part of it by definition, and an earlier
+  // interrupted run's leftovers get drained on the next dispatch instead of
+  // waiting for the manual settings-page rebuild. itemIds are ignored here.
+  embed: (platform, _itemIds, onProgress, control) =>
+    embedPlatformBacklog(platform, undefined, onProgress, control),
   tag: (platform, itemIds, onProgress, control) =>
     tagNewItems(platform, itemIds, undefined, onProgress, control),
 };
@@ -82,12 +86,16 @@ export function startCollectionProcessingJobs(
   { jobPlatform, itemPlatform, itemIds }: StartCollectionProcessingJobsInput,
   deps: CollectionProcessingJobDeps = defaultDeps,
 ): void {
-  if (itemIds.length === 0) return;
   const ids = [...itemIds];
 
+  // Embed ALWAYS dispatches — zero new items still means the backlog query
+  // runs (it completes instantly at 0/0 when there is nothing to drain).
   startBatchLane(jobPlatform, 'embed', (setProgress, control) =>
     deps.embed(itemPlatform, ids, setProgress, control),
   );
+
+  // Tags are per-item work on exactly the fresh ids — nothing to do on empty.
+  if (ids.length === 0) return;
   startBatchLane(jobPlatform, 'tag', (setProgress, control) =>
     deps.tag(itemPlatform, ids, setProgress, control),
   );

@@ -213,6 +213,168 @@ describe('ingest module', () => {
     ).resolves.toEqual([{ state: 'pending' }]);
   });
 
+  // ---------------------------------------------------------------------------
+  // Ghost elimination: 'chunked' may only exist WITH chunk rows.
+  // ---------------------------------------------------------------------------
+
+  function collectionInput(
+    platform: string,
+    pids: string[],
+    textOf: (pid: string) => string,
+    chunk: (text: string) => { text: string }[] = (text) => [{ text }],
+  ) {
+    return {
+      platform,
+      sources: [{ platformSourceId: 'src', title: 'S' }],
+      authors: pids.map((pid) => ({
+        platformAuthorId: `a-${pid}`,
+        name: 'A',
+        avatarUrl: null,
+      })),
+      items: pids.map((pid) => ({
+        platformItemId: pid,
+        platformAuthorId: `a-${pid}`,
+        title: pid,
+        authorName: 'A',
+        originalUrl: `https://example.com/${pid}`,
+        publishedAt: null,
+        contentState: 'chunked' as const,
+        platformMeta: {},
+      })),
+      links: pids.map((pid) => ({ platformItemId: pid, platformSourceId: 'src' })),
+      content: { textOf, chunk },
+    };
+  }
+
+  async function stateOf(platform: string, pid: string) {
+    const rows = await db
+      .select({ id: schema.items.id, state: schema.items.contentState })
+      .from(schema.items)
+      .where(eq(schema.items.platformItemId, pid));
+    return rows.find(Boolean)!;
+  }
+
+  async function chunkCountOf(itemId: string) {
+    const rows = await db
+      .select()
+      .from(schema.itemChunks)
+      .where(eq(schema.itemChunks.itemId, itemId));
+    return rows.length;
+  }
+
+  it('an interrupted content phase never leaves chunked without chunk rows', async () => {
+    const input = collectionInput(
+      'ghost-order',
+      ['ok-1', 'boom-2'],
+      (pid) => `text of ${pid}`,
+      (text) => {
+        if (text.includes('boom-2')) throw new Error('chunker died mid-run');
+        return [{ text }];
+      },
+    );
+
+    await expect(ingestCollection(db, input)).rejects.toThrow('chunker died mid-run');
+
+    // The completed item is truthfully 'chunked'; the interrupted one stays at
+    // the 'has_content' interim — NEVER 'chunked' over zero chunk rows.
+    const ok = await stateOf('ghost-order', 'ok-1');
+    expect(ok.state).toBe('chunked');
+    expect(await chunkCountOf(ok.id)).toBe(1);
+
+    const interrupted = await stateOf('ghost-order', 'boom-2');
+    expect(interrupted.state).toBe('has_content');
+    expect(await chunkCountOf(interrupted.id)).toBe(0);
+  });
+
+  it('declared-chunked items with blank text settle at no_content, not a ghost', async () => {
+    await ingestCollection(db, collectionInput('ghost-blank', ['blank-1'], () => '   '));
+
+    const blank = await stateOf('ghost-blank', 'blank-1');
+    expect(blank.state).toBe('no_content');
+    expect(await chunkCountOf(blank.id)).toBe(0);
+  });
+
+  it('ghost sweep heals from textOf, then plainText, else settles no_content', async () => {
+    // Round 1: three ghosts by construction — interrupt after the first item.
+    let calls = 0;
+    await ingestCollection(
+      db,
+      collectionInput(
+        'ghost-heal',
+        ['from-text', 'from-plaintext', 'hopeless'],
+        (pid) => (pid === 'hopeless' ? '' : `original ${pid}`),
+        (text) => {
+          // Let 'from-plaintext' persist its item_contents then die chunking;
+          // 'from-text' dies before any content write (textOf consumed later).
+          calls += 1;
+          if (calls >= 2) throw new Error('interrupt');
+          return [{ text }];
+        },
+      ),
+    ).catch(() => undefined);
+
+    // Manufacture the classic pre-fix ghost shape: claim 'chunked', drop chunks.
+    await db
+      .update(schema.items)
+      .set({ contentState: 'chunked' })
+      .where(eq(schema.items.platform, 'ghost-heal'));
+    const preFrom = await stateOf('ghost-heal', 'from-text');
+    await db.delete(schema.itemChunks).where(eq(schema.itemChunks.itemId, preFrom.id));
+    await db.delete(schema.itemContents).where(eq(schema.itemContents.itemId, preFrom.id));
+
+    // Round 2: a fresh sync provides text for 'from-text' only. 'from-plaintext'
+    // heals from its persisted item_contents; 'hopeless' has no text anywhere.
+    const result = await ingestCollection(
+      db,
+      collectionInput('ghost-heal', [], (pid) =>
+        pid === 'from-text' ? 'refetched text' : '',
+      ),
+    );
+
+    expect([...result.contentPersisted].sort()).toEqual(['from-plaintext', 'from-text']);
+    expect([...result.healedItemIds].sort()).toEqual(['from-plaintext', 'from-text']);
+
+    const fromText = await stateOf('ghost-heal', 'from-text');
+    expect(fromText.state).toBe('chunked');
+    expect(await chunkCountOf(fromText.id)).toBe(1);
+
+    const fromPlain = await stateOf('ghost-heal', 'from-plaintext');
+    expect(fromPlain.state).toBe('chunked');
+    expect(await chunkCountOf(fromPlain.id)).toBe(1);
+
+    const hopeless = await stateOf('ghost-heal', 'hopeless');
+    expect(hopeless.state).toBe('no_content');
+    expect(await chunkCountOf(hopeless.id)).toBe(0);
+  });
+
+  it('the ghost sweep leaves healthy items and other platforms alone', async () => {
+    // Healthy: chunked WITH chunks on the swept platform.
+    await ingestCollection(
+      db,
+      collectionInput('ghost-scope', ['healthy'], () => 'healthy text'),
+    );
+    // Ghost on ANOTHER platform must not be swept by this platform's sync.
+    await ingestCollection(
+      db,
+      collectionInput('ghost-scope-other', ['foreign'], () => 'foreign text'),
+    );
+    const foreign = await stateOf('ghost-scope-other', 'foreign');
+    await db.delete(schema.itemChunks).where(eq(schema.itemChunks.itemId, foreign.id));
+
+    const result = await ingestCollection(
+      db,
+      collectionInput('ghost-scope', [], () => ''),
+    );
+
+    expect(result.contentPersisted).toEqual([]);
+    expect(result.healedItemIds).toEqual([]);
+    const healthy = await stateOf('ghost-scope', 'healthy');
+    expect(healthy.state).toBe('chunked');
+    // The foreign ghost is untouched (still lying) — its own platform's next
+    // sync heals it.
+    expect((await stateOf('ghost-scope-other', 'foreign')).state).toBe('chunked');
+  });
+
   it('upserts sources when collection ingest has no items', async () => {
     const baseInput = {
       platform: 'bilibili',

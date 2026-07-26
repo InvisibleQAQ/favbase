@@ -11,7 +11,7 @@ import type { FavbaseDb } from '@/lib/database';
 
 import {
   syncStarsToDb,
-  getNewRepos,
+  getReposNeedingReadme,
   getStarredRepos,
   getLanguageCounts,
   getLastSyncedAt,
@@ -274,7 +274,7 @@ describe('github-sync-service (in-memory PGlite)', () => {
       .where(eq(schema.itemChunks.itemId, withReadme.id));
     expect(chunks).toHaveLength(1);
     expect(chunks[0].chunkText).toBe(readme);
-    // Embedding NOT run inline (D3) — deferred to embedNewItems / 「重建向量」.
+    // Embedding NOT run inline (D3) — deferred to the embed lane / 「重建向量」.
     expect(chunks[0].embedding).toBeNull();
     expect(chunks[0].startSec).toBeNull();
     expect(chunks[0].endSec).toBeNull();
@@ -330,19 +330,106 @@ describe('github-sync-service (in-memory PGlite)', () => {
     expect(contents).toHaveLength(0);
   });
 
-  it('getNewRepos diffs against ingested platformItemIds (no repeat README fetch)', async () => {
+  it('getReposNeedingReadme diffs against ingested platformItemIds (no repeat README fetch)', async () => {
     const known = [makeRepo({ id: 100 }), makeRepo({ id: 101 })];
     await syncStarsToDb(db, known);
 
     const resync = [...known, makeRepo({ id: 102 })];
-    const fresh = await getNewRepos(db, resync);
+    const fresh = await getReposNeedingReadme(db, resync);
     expect(fresh.map((r) => r.id)).toEqual([102]);
 
     // Empty DB → everything is new.
     await db.delete(schema.itemSources);
     await db.delete(schema.items);
-    const all = await getNewRepos(db, resync);
+    const all = await getReposNeedingReadme(db, resync);
     expect(all.map((r) => r.id)).toEqual([100, 101, 102]);
+  });
+
+  it('getReposNeedingReadme includes ghost repos (content claimed, zero chunk rows)', async () => {
+    // Healthy chunked repo (has chunks) + ghost repo (claims chunked, no chunk
+    // rows — a pre-fix interrupted run) + honest no_content repo.
+    await syncStarsToDb(
+      db,
+      [makeRepo({ id: 110 }), makeRepo({ id: 111 }), makeRepo({ id: 112 })],
+      new Map([['110', '# healthy readme']]),
+    );
+    await db
+      .update(schema.items)
+      .set({ contentState: 'chunked' })
+      .where(and(eq(schema.items.platform, 'github'), eq(schema.items.platformItemId, '111')));
+    const ghost = await getItem(111);
+    await db.delete(schema.itemChunks).where(eq(schema.itemChunks.itemId, ghost.id));
+
+    const needing = await getReposNeedingReadme(db, [
+      makeRepo({ id: 110 }),
+      makeRepo({ id: 111 }),
+      makeRepo({ id: 112 }),
+      makeRepo({ id: 113 }),
+    ]);
+    // Ghost (111) + brand-new (113). Healthy chunked (110) and honest
+    // no_content (112) never get a second README request.
+    expect(needing.map((r) => r.id)).toEqual([111, 113]);
+  });
+
+  it('re-sync heals a ghost repo: README refetched, chunks written, state truthful again', async () => {
+    // First sync leaves a ghost: claims 'chunked' but its chunk rows are gone
+    // (simulates the pre-fix interrupted content phase).
+    await syncStarsToDb(db, [makeRepo({ id: 120 })], new Map([['120', '# original readme']]));
+    const item = await getItem(120);
+    await db.delete(schema.itemChunks).where(eq(schema.itemChunks.itemId, item.id));
+    await db.delete(schema.itemContents).where(eq(schema.itemContents.itemId, item.id));
+    expect((await getItem(120)).contentState).toBe('chunked'); // the lie
+
+    // Next sync hands the refetched README to the ingest heal sweep.
+    const result = await syncStarsToDb(
+      db,
+      [makeRepo({ id: 120 })],
+      new Map([['120', '# refetched readme']]),
+    );
+    // Healed id flows into newItemIds → the embed/tag lanes pick it up.
+    expect(result.newItemIds).toEqual(['120']);
+
+    const healed = await getItem(120);
+    expect(healed.contentState).toBe('chunked');
+    const chunks = await db
+      .select()
+      .from(schema.itemChunks)
+      .where(eq(schema.itemChunks.itemId, healed.id));
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0].chunkText).toBe('# refetched readme');
+  });
+
+  it('re-sync settles a ghost with no text source at no_content (honest state)', async () => {
+    await syncStarsToDb(db, [makeRepo({ id: 130 })], new Map([['130', '# will vanish']]));
+    const item = await getItem(130);
+    await db.delete(schema.itemChunks).where(eq(schema.itemChunks.itemId, item.id));
+    await db.delete(schema.itemContents).where(eq(schema.itemContents.itemId, item.id));
+
+    // Re-sync where the README fetch failed again (no readmeById entry) —
+    // no text this run, no persisted plainText → honest no_content.
+    const result = await syncStarsToDb(db, [makeRepo({ id: 130 })]);
+    expect(result.newItemIds).toEqual([]);
+    expect((await getItem(130)).contentState).toBe('no_content');
+  });
+
+  it('re-sync heals a ghost from persisted plainText without a fresh README', async () => {
+    // Ghost variant: item_contents survived but chunks are missing (the
+    // pre-fix crash window between the two writes).
+    await syncStarsToDb(db, [makeRepo({ id: 140 })], new Map([['140', '# persisted text']]));
+    const item = await getItem(140);
+    await db.delete(schema.itemChunks).where(eq(schema.itemChunks.itemId, item.id));
+
+    const result = await syncStarsToDb(db, [makeRepo({ id: 140 })]);
+    expect(result.newItemIds).toEqual(['140']);
+
+    const healed = await getItem(140);
+    expect(healed.contentState).toBe('chunked');
+    const chunks = await db
+      .select()
+      .from(schema.itemChunks)
+      .where(eq(schema.itemChunks.itemId, healed.id));
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0].chunkText).toBe('# persisted text');
   });
 
   // -------------------------------------------------------------------------

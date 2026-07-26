@@ -17,6 +17,10 @@ const extractionMocks = vi.hoisted(() => ({
   startBookmarkExtraction: vi.fn(),
 }));
 
+const processingMocks = vi.hoisted(() => ({
+  startCollectionProcessingJobs: vi.fn(),
+}));
+
 vi.mock('@/lib/database', () => ({
   initDbProxy: vi.fn(async () => ({})),
 }));
@@ -24,6 +28,9 @@ vi.mock('@/lib/database', () => ({
 vi.mock('@/lib/bookmarks/bookmarks-sync-service', () => serviceMocks);
 
 vi.mock('./use-bookmark-extraction', () => extractionMocks);
+
+// Real module pulls the embedding/tagging barrels (chrome.storage at load).
+vi.mock('../../hooks/collection-processing-jobs', () => processingMocks);
 
 import { useBookmarks } from './use-bookmarks';
 
@@ -57,6 +64,7 @@ describe('useBookmarks sync ownership', () => {
     serviceMocks.getFolders.mockReset().mockResolvedValue([]);
     serviceMocks.getLastSyncedAt.mockReset().mockResolvedValue(null);
     extractionMocks.startBookmarkExtraction.mockReset();
+    processingMocks.startCollectionProcessingJobs.mockReset();
     container = document.createElement('div');
     document.body.append(container);
     root = createRoot(container);
@@ -93,5 +101,21 @@ describe('useBookmarks sync ownership', () => {
     await act(async () => {});
 
     expect(extractionMocks.startBookmarkExtraction).toHaveBeenCalledTimes(1);
+  });
+
+  it('dispatches the backlog embed lane (empty ids) after the metadata sync succeeds', async () => {
+    await act(async () => {
+      root.render(<Probe />);
+    });
+    expect(processingMocks.startCollectionProcessingJobs).not.toHaveBeenCalled();
+
+    finishSync();
+    await act(async () => {});
+
+    expect(processingMocks.startCollectionProcessingJobs).toHaveBeenCalledWith({
+      jobPlatform: 'bookmarks',
+      itemPlatform: 'bookmarks',
+      itemIds: [],
+    });
   });
 });

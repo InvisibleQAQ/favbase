@@ -13,18 +13,32 @@
  * - batched INSERTs (`chunk(500)` keeps bind-params < PG 65535);
  * - id maps re-selected by platform (covers rows that existed before this
  *   run — a known item newly added to another source still gets its link);
- * - `preExisting` diff: content is persisted for NEWLY inserted items only;
+ * - `preExisting` diff: content is persisted for NEWLY inserted items — plus
+ *   the platform's GHOST items (see below), which self-heal on every sync;
  * - two-phase content write: item_contents + chunks go OUTSIDE the tx
  *   (replaceItemChunks opens its own transaction — nesting on the
  *   single-connection proxy would deadlock). Embedding is deferred (D3) —
- *   app.html callers fire `embedNewItems` after the sync returns.
+ *   app.html callers dispatch the shared embed lane after the sync returns.
+ *
+ * GHOSTS. An interrupted phase-5 run (page close, dev reload, mid-run error)
+ * used to leave items that CLAIMED 'chunked' with zero chunk rows — invisible
+ * to both the embed batch (skipped silently) and the settings rebuild (its
+ * EXISTS(chunks) filter). Two rules eliminate them:
+ *   1. 'chunked' is only ever written AFTER chunk rows are persisted. Items
+ *      declared 'chunked' by the platform are INSERTED as 'has_content' and
+ *      flipped per item in phase 5 (mirrors saveBookmarkContent's safe order).
+ *   2. When `content` is provided, phase 5 also sweeps the platform's ghosts
+ *      (state IN ('chunked','has_content') with no chunk rows): re-chunk from
+ *      `textOf` or the persisted `item_contents.plainText`; when neither text
+ *      source exists, settle honestly at 'no_content'. Healed ids join
+ *      `contentPersisted`, so they flow into the embed/tag lanes like new ones.
  *
  * Offscreen-safe: zero '@/lib/storage' reach. `replaceItemChunks` is a leaf
  * import (the '@/lib/embedding' barrel touches chrome.storage at module load,
  * which offscreen documents don't have — same rule as x-sync-service).
  */
 
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, exists, inArray, not, sql } from 'drizzle-orm';
 import type { FavbaseDb } from '@/lib/database';
 import { chunk } from '@/lib/database/sql-utils';
 import { sources } from '@/lib/database/entities/sources';
@@ -32,6 +46,7 @@ import { authors } from '@/lib/database/entities/authors';
 import { items, type NewItem } from '@/lib/database/entities/items';
 import { itemSources } from '@/lib/database/entities/item-sources';
 import { itemContents } from '@/lib/database/entities/item-contents';
+import { itemChunks } from '@/lib/database/entities/item-chunks';
 import { replaceItemChunks } from '@/lib/embedding/vector-store';
 import type { ChunkInput } from '@/lib/embedding/types';
 
@@ -98,11 +113,13 @@ export interface IngestResult {
   inserted: IngestedItem[];
   /**
    * platformItemIds whose content + chunks were actually written this run
-   * (newly inserted ∩ non-empty text) — the content-persisted seam callers
-   * feed to auto-tagging (audit docs/16 MEDIUM-2). Empty when `content` is
-   * absent from the input.
+   * ((newly inserted ∪ healed ghosts) ∩ non-empty text) — the content-persisted
+   * seam callers feed to auto-tagging (audit docs/16 MEDIUM-2). Empty when
+   * `content` is absent from the input.
    */
   contentPersisted: string[];
+  /** Subset of `contentPersisted`: pre-existing ghosts healed this run. */
+  healedItemIds: string[];
   /** platformItemIds dropped because their author row could not be resolved. */
   droppedItemIds: string[];
   /** platformItemIds of links that failed to resolve (author drops excluded). */
@@ -112,13 +129,34 @@ export interface IngestResult {
 }
 
 /**
+ * Ghost predicate: rows claiming content ('chunked'/'has_content') with zero
+ * chunk rows. Single source for the ingest heal sweep and platform-side diffs
+ * (github's README refetch). Callers AND it with their platform filter.
+ */
+export function ghostItemCondition(db: FavbaseDb) {
+  return and(
+    inArray(items.contentState, ['chunked', 'has_content']),
+    not(
+      exists(
+        db
+          .select({ one: sql`1` })
+          .from(itemChunks)
+          .where(eq(itemChunks.itemId, items.id)),
+      ),
+    ),
+  );
+}
+
+/**
  * Two-phase content write for ONE item: `item_contents` upsert + chunk
  * rebuild, both OUTSIDE any caller transaction (`replaceItemChunks` opens its
  * own — nesting on the single-connection proxy deadlocks). Empty /
- * whitespace-only text is skipped. Returns whether content was actually
- * written. Shared by the ingest content step below and the bookmarks
- * extraction pipeline (`saveBookmarkContent` in
- * lib/bookmarks/bookmarks-sync-service.ts).
+ * whitespace-only text is skipped. Returns whether CHUNK ROWS were actually
+ * written — `true` is the caller's license to claim 'chunked'; a chunker that
+ * yields zero chunks returns `false` so no state can ever say 'chunked' over
+ * an empty chunk set (the ghost-sweep convergence guarantee). Shared by the
+ * ingest content step below and the bookmarks extraction pipeline
+ * (`saveBookmarkContent` in lib/bookmarks/bookmarks-sync-service.ts).
  */
 export async function persistItemContent(
   db: FavbaseDb,
@@ -135,8 +173,8 @@ export async function persistItemContent(
       target: itemContents.itemId,
       set: { plainText, updatedAt: new Date() },
     });
-  await replaceItemChunks(db, itemId, chunkText(plainText));
-  return true;
+  const inserted = await replaceItemChunks(db, itemId, chunkText(plainText));
+  return inserted.length > 0;
 }
 
 /**
@@ -190,6 +228,13 @@ export async function persistExistingItemContent(
 
 export async function ingestCollection(db: FavbaseDb, input: IngestInput): Promise<IngestResult> {
   const { platform } = input;
+
+  // Deduped up front (first-seen wins) — phase 5 consults the DECLARED state
+  // to know which inserted items carry content.
+  const itemByPid = new Map<string, IngestItem>();
+  for (const item of input.items) {
+    if (!itemByPid.has(item.platformItemId)) itemByPid.set(item.platformItemId, item);
+  }
 
   const result = await db.transaction(async (tx) => {
     // 1. Sources upsert (ADR-allowed exception: title + platformMeta +
@@ -257,11 +302,6 @@ export async function ingestCollection(db: FavbaseDb, input: IngestInput): Promi
       .where(eq(items.platform, platform));
     const preExisting = new Set(existingRows.map((r) => r.platformItemId));
 
-    const itemByPid = new Map<string, IngestItem>();
-    for (const item of input.items) {
-      if (!itemByPid.has(item.platformItemId)) itemByPid.set(item.platformItemId, item);
-    }
-
     const droppedItemIds: string[] = [];
     const itemValues: NewItem[] = [];
     for (const item of itemByPid.values()) {
@@ -278,7 +318,10 @@ export async function ingestCollection(db: FavbaseDb, input: IngestInput): Promi
         authorName: item.authorName,
         originalUrl: item.originalUrl,
         publishedAt: item.publishedAt,
-        contentState: item.contentState,
+        // 'chunked' may only be claimed AFTER chunk rows land (phase 5, outside
+        // this tx). Content-bearing items enter as 'has_content'; an interrupted
+        // run leaves them there, where the next sync's ghost sweep picks them up.
+        contentState: item.contentState === 'chunked' ? 'has_content' : item.contentState,
         platformMeta: item.platformMeta,
       });
     }
@@ -329,21 +372,61 @@ export async function ingestCollection(db: FavbaseDb, input: IngestInput): Promi
     return { inserted, droppedItemIds, droppedLinkItemIds, linkCount: linkValues.length };
   });
 
-  // 5. Content + chunks for NEW items only, OUTSIDE the tx (each
-  //    replaceItemChunks opens its own transaction; nesting deadlocks the
-  //    single-connection proxy). Embedding deferred (D3).
+  // 5. Content + chunks OUTSIDE the tx (each replaceItemChunks opens its own
+  //    transaction; nesting deadlocks the single-connection proxy). Embedding
+  //    deferred (D3). Targets: newly inserted content-bearing items, then the
+  //    platform's ghost sweep (self-heal).
   const contentPersisted: string[] = [];
+  const healedItemIds: string[] = [];
   if (input.content) {
-    for (const { platformItemId, itemId } of result.inserted) {
-      const written = await persistItemContent(
-        db,
-        itemId,
-        input.content.textOf(platformItemId),
-        input.content.chunk,
-      );
+    const { textOf, chunk: chunkText } = input.content;
+
+    const settleContent = async (
+      itemId: string,
+      platformItemId: string,
+      text: string,
+    ): Promise<boolean> => {
+      const written = text.trim()
+        ? await persistItemContent(db, itemId, text, chunkText)
+        : false;
+      await db
+        .update(items)
+        .set({ contentState: written ? 'chunked' : 'no_content', updatedAt: new Date() })
+        .where(eq(items.id, itemId));
       if (written) contentPersisted.push(platformItemId);
+      return written;
+    };
+
+    // 5a. Newly inserted items the platform declared content for.
+    const insertedPids = new Set<string>();
+    for (const { platformItemId, itemId } of result.inserted) {
+      insertedPids.add(platformItemId);
+      if (itemByPid.get(platformItemId)?.contentState !== 'chunked') continue;
+      await settleContent(itemId, platformItemId, textOf(platformItemId));
+    }
+
+    // 5b. Ghost sweep: items claiming content ('chunked'/'has_content') with no
+    //     chunk rows. Text source order: this run's textOf → the persisted
+    //     item_contents.plainText → neither ⇒ honest 'no_content'.
+    const ghosts = await db
+      .select({ id: items.id, platformItemId: items.platformItemId })
+      .from(items)
+      .where(and(eq(items.platform, platform), ghostItemCondition(db)));
+    for (const ghost of ghosts) {
+      if (insertedPids.has(ghost.platformItemId)) continue;
+      let text = textOf(ghost.platformItemId);
+      if (!text.trim()) {
+        const rows = await db
+          .select({ plainText: itemContents.plainText })
+          .from(itemContents)
+          .where(eq(itemContents.itemId, ghost.id))
+          .limit(1);
+        text = rows[0]?.plainText ?? '';
+      }
+      const written = await settleContent(ghost.id, ghost.platformItemId, text);
+      if (written) healedItemIds.push(ghost.platformItemId);
     }
   }
 
-  return { ...result, contentPersisted };
+  return { ...result, contentPersisted, healedItemIds };
 }
