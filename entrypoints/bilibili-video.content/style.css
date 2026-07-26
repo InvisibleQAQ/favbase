@@ -19,6 +19,7 @@
 
   /* -- Warning -- */
   --fb-warning-lighter: #FFF5CC;
+  --fb-warning-dark: #B76E00;
 
   /* -- Info -- */
   --fb-info-main: #00B8D9;
@@ -623,9 +624,210 @@ html, body {
   padding: 8px;
 }
 
+/* --- AI summary tab --- */
+
+.favbase-summary {
+  padding: 10px;
+}
+
+.favbase-summary-hint {
+  padding: 12px 10px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--fb-text-secondary);
+  text-align: center;
+}
+
+.favbase-summary-error {
+  font-size: 12px;
+  color: var(--fb-error-main);
+  background: var(--fb-error-lighter);
+  padding: 8px;
+  border-radius: var(--fb-radius-sm);
+  margin-bottom: 8px;
+}
+
+.favbase-summary-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  font-size: 12px;
+  color: var(--fb-text-secondary);
+}
+
+.favbase-summary-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--fb-grey-300);
+  border-top-color: var(--fb-primary-main);
+  border-radius: 50%;
+  /* Same keyframes as the status-bar spinner — one definition, see above. */
+  animation: favbase-spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+.favbase-summary-status .favbase-transcribe-cancel {
+  margin-left: auto;
+}
+
+.favbase-summary-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--fb-divider);
+}
+
+.favbase-summary-meta {
+  font-size: 11px;
+  color: var(--fb-text-disabled);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.favbase-summary-regenerate {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 4px 10px;
+  font-size: 11px;
+  color: var(--fb-primary-main);
+  background: var(--fb-primary-lighter);
+  border: none;
+  border-radius: var(--fb-radius-sm);
+  cursor: pointer;
+  font-family: inherit;
+  transition: opacity 0.15s;
+}
+
+.favbase-summary-regenerate:hover {
+  opacity: 0.85;
+}
+
+/* --- Chapters --- */
+
+.favbase-summary-segments {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--fb-divider);
+}
+
+.favbase-summary-segments-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fb-text-secondary);
+  margin-bottom: 6px;
+}
+
+.favbase-summary-segment {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 6px;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: var(--fb-radius-sm);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+
+.favbase-summary-segment:hover {
+  background: var(--fb-action-hover);
+}
+
+.favbase-summary-segment-time {
+  flex-shrink: 0;
+  font-family: 'Menlo', 'Monaco', monospace;
+  font-size: 11px;
+  color: var(--fb-primary-main);
+}
+
+.favbase-summary-segment-title {
+  flex: 1;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--fb-text-primary);
+}
+
+.favbase-summary-segment-ad {
+  flex-shrink: 0;
+  padding: 1px 5px;
+  font-size: 10px;
+  color: var(--fb-warning-dark);
+  background: var(--fb-warning-lighter);
+  border-radius: var(--fb-radius-xs);
+}
+
+/* --- Markdown --- */
+
+.favbase-md {
+  font-size: 13px;
+  line-height: 1.75;
+  color: var(--fb-text-primary);
+  word-break: break-word;
+}
+
+.favbase-md-heading {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 10px 0 4px;
+  color: var(--fb-text-primary);
+}
+
+.favbase-md-paragraph {
+  margin: 0 0 8px;
+  white-space: pre-wrap;
+}
+
+.favbase-md-list {
+  margin: 0 0 8px;
+  padding-left: 18px;
+}
+
+.favbase-md-list li {
+  margin-bottom: 4px;
+}
+
+.favbase-md strong {
+  font-weight: 600;
+}
+
+.favbase-md code {
+  padding: 1px 4px;
+  font-family: 'Menlo', 'Monaco', monospace;
+  font-size: 12px;
+  background: var(--fb-bg-neutral);
+  border-radius: var(--fb-radius-xs);
+}
+
+.favbase-md-code {
+  margin: 0 0 8px;
+  padding: 8px;
+  overflow-x: auto;
+  background: var(--fb-bg-neutral);
+  border-radius: var(--fb-radius-sm);
+}
+
+.favbase-md-code code {
+  padding: 0;
+  background: transparent;
+}
+
 /* --- Reduced motion --- */
 
 @media (prefers-reduced-motion: reduce) {
+  .favbase-summary-spinner {
+    animation: none;
+  }
+  .favbase-summary-segment,
+  .favbase-summary-regenerate {
+    transition: none;
+  }
   .favbase-status--loading::before {
     animation: none;
   }

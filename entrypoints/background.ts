@@ -14,14 +14,19 @@ import {
   handleGetVideoCache,
   handleCacheSubtitle,
 } from '@/lib/background/cache-handlers';
+import {
+  handleSummarize,
+  handleSummarizeAbort,
+  handleGetSummaryCache,
+} from '@/lib/background/summary-handlers';
+import { createJobRegistry } from '@/lib/background/job-registry';
 import { handleOpenAppPage } from '@/lib/background/app-handlers';
 import { handleFetchBookmarkPage } from '@/lib/background/bookmark-handlers';
 import { captureXTokens } from '@/lib/x/x-auth';
 
 function createBackgroundContext(): BackgroundContext {
-  const abortControllers = new Map<number, AbortController>();
-  const tabVideoIds = new Map<number, string>();
-  const activeVideoIds = new Set<string>();
+  const transcription = createJobRegistry();
+  const summary = createJobRegistry();
   const sessionTabMap = new Map<string, number>();
 
   return {
@@ -30,39 +35,14 @@ function createBackgroundContext(): BackgroundContext {
     },
     ensureOffscreen,
 
-    startTranscription(tabId, videoId) {
-      const key = videoId.toLowerCase();
-      if (activeVideoIds.has(key)) return null;
+    startTranscription: transcription.start,
+    abortTranscription: transcription.abort,
+    finishTranscription: transcription.finish,
+    getVideoIdForTab: transcription.getVideoId,
 
-      const prevVideoId = tabVideoIds.get(tabId);
-      if (prevVideoId) activeVideoIds.delete(prevVideoId.toLowerCase());
-
-      activeVideoIds.add(key);
-      const controller = new AbortController();
-      abortControllers.set(tabId, controller);
-      tabVideoIds.set(tabId, videoId);
-      return controller;
-    },
-
-    abortTranscription(tabId) {
-      const ctrl = abortControllers.get(tabId);
-      if (ctrl) ctrl.abort();
-      const videoId = tabVideoIds.get(tabId);
-      if (videoId) activeVideoIds.delete(videoId.toLowerCase());
-      abortControllers.delete(tabId);
-      tabVideoIds.delete(tabId);
-    },
-
-    finishTranscription(tabId) {
-      const videoId = tabVideoIds.get(tabId);
-      if (videoId) activeVideoIds.delete(videoId.toLowerCase());
-      abortControllers.delete(tabId);
-      tabVideoIds.delete(tabId);
-    },
-
-    getVideoIdForTab(tabId) {
-      return tabVideoIds.get(tabId);
-    },
+    startSummary: summary.start,
+    abortSummary: summary.abort,
+    finishSummary: summary.finish,
 
     registerChunkSession(sessionId, tabId) {
       sessionTabMap.set(sessionId, tabId);
@@ -75,8 +55,7 @@ function createBackgroundContext(): BackgroundContext {
     resolveProgressTarget(sessionId) {
       const tabId = sessionTabMap.get(sessionId);
       if (tabId === undefined) return null;
-      const videoId = tabVideoIds.get(tabId);
-      return { tabId, videoId: videoId ?? '' };
+      return { tabId, videoId: transcription.getVideoId(tabId) ?? '' };
     },
   };
 }
@@ -124,6 +103,12 @@ export default defineBackground(() => {
           return handleGetVideoCache(msg);
         case 'CACHE_SUBTITLE':
           return handleCacheSubtitle(msg);
+        case 'SUMMARIZE_VIDEO':
+          return handleSummarize(msg, sender, ctx);
+        case 'SUMMARIZE_ABORT':
+          return handleSummarizeAbort(msg, sender, ctx);
+        case 'GET_SUMMARY_CACHE':
+          return handleGetSummaryCache(msg);
         case 'OPEN_APP_PAGE':
           return handleOpenAppPage(msg);
         case 'FETCH_BOOKMARK_PAGE':

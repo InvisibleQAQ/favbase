@@ -2,7 +2,14 @@ import { useCallback, useEffect, useState } from 'react';
 import type { LLMProviderId, ASRProviderId, EmbeddingProviderId } from '@/lib/providers';
 import { getProviderDef } from '@/lib/providers';
 import type { UserSettings } from '@/lib/storage';
-import { settingsStorage, DEFAULT_SETTINGS, resolveAsrConfig, getEnvApiKey, getEnvModel } from '@/lib/storage';
+import {
+  settingsStorage,
+  DEFAULT_SETTINGS,
+  resolveAsrConfig,
+  resolveLlmConfig,
+  getEnvApiKey,
+  getEnvModel,
+} from '@/lib/storage';
 import { resolveEmbeddingConfig } from '@/lib/embedding/config';
 
 // ---------------------------------------------------------------------------
@@ -122,6 +129,8 @@ export interface UseSettingsReturn {
 
   /** Resolved ASR key for non-settings consumers (content script panel). */
   currentAsrApiKey: string;
+  /** Whether an LLM apiKey+model resolve — gates the panel's summary tab. */
+  llmConfigured: boolean;
 
   saveLlm: (draft: LlmDraft) => Promise<void>;
   saveAsr: (draft: AsrDraft) => Promise<void>;
@@ -238,11 +247,13 @@ export function useSettings(): UseSettingsReturn {
   );
 
   const currentAsrApiKey = resolveAsrConfig(settings).apiKey;
+  const llmConfigured = resolveLlmConfig(settings).enabled;
 
   return {
     settings,
     loading,
     currentAsrApiKey,
+    llmConfigured,
     saveLlm,
     saveAsr,
     saveEmbedding,

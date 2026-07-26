@@ -61,7 +61,7 @@ WXT 入口点及运行时角色总览，详细结构见对应目录 `CLAUDE.md`�
 
 ### B站视频页 Content Script
 - `entrypoints/bilibili-video.content/CLAUDE.md` — 右侧栏面板 UI 挂载 + Shadow DOM 约定
-- `entrypoints/bilibili-video.content/components/CLAUDE.md` — 面板子组件
+- `entrypoints/bilibili-video.content/components/CLAUDE.md` — 面板子组件（字幕 / AI 总结 / 设置三 Tab + Markdown 渲染器）
 - `entrypoints/bilibili-video.content/hooks/CLAUDE.md` — 字幕检测/获取/转录 hooks
 
 ### 平台领域（lib）
@@ -76,6 +76,7 @@ WXT 入口点及运行时角色总览，详细结构见对应目录 `CLAUDE.md`�
 
 ### 转录 / 后台
 - `lib/subtitle/CLAUDE.md` — 通用字幕共享类型（平台无关）
+- `lib/summary/CLAUDE.md` — AI 视频总结领域（字幕 → 一次流式 LLM 调用 → Markdown 总结 + 章节分段/广告标记；合并输出协议 + 行号映射时间戳，结果落 `local:vs:` storage 不入 DB；LLM 调用只能在 Background SW）
 - `lib/transcription/CLAUDE.md` — 转录核心管线（cache → 官方字幕 → ASR）
 - `lib/offscreen/CLAUDE.md` — Offscreen Document + FFmpeg 分块 + PGlite 持有者
 - `lib/cache/CLAUDE.md` — 视频字幕缓存（平台感知）
@@ -97,6 +98,7 @@ WXT 入口点及运行时角色总览，详细结构见对应目录 `CLAUDE.md`�
 - `lib/export/CLAUDE.md` — PGlite 全量导出（JSON/CSV）
 - `lib/hooks/CLAUDE.md` — 共享 Hooks（useSettings/useRetryCountdown）
 - `lib/storage/CLAUDE.md` — 存储命名空间统一管理
+- `lib/format.ts` — 跨 context 纯格式化（`formatClock`：秒 → `m:ss`/`h:mm:ss`），app.html 时长角标 / CS 面板时间戳 / summary prompt 共用，无 CLAUDE.md（单文件）
 
 ## i18n
 

@@ -17,4 +17,6 @@ export const STORAGE_KEYS = {
 
 export const STORAGE_PREFIXES = {
   videoCache: 'vc:',
+  /** AI summary per video — `vs:{platform}:{videoId}`, see lib/summary. */
+  videoSummary: 'vs:',
 } as const;
