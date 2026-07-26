@@ -18,6 +18,12 @@ export const STORAGE_KEYS = {
   // conversations (modelMessages + metadata). Read-only knowledge base; this is
   // the ONLY chat persistence (never PGlite). See lib/chat/history.ts.
   chatConversations: 'local:chat-conversations',
+  // WebDAV sync (lib/sync). config: connection settings (password AES-GCM
+  // obfuscated). meta: LWW clock + version bookkeeping. status: UI-facing state
+  // watched by the settings card. See lib/sync/CLAUDE.md.
+  webdavConfig: 'local:webdav-config',
+  webdavSyncMeta: 'local:webdav-sync-meta',
+  webdavSyncStatus: 'local:webdav-sync-status',
 } as const;
 
 export const STORAGE_PREFIXES = {

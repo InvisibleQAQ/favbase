@@ -6,6 +6,7 @@ import type {
   GetSummaryCacheRequest,
 } from '@/lib/summary/types';
 import type { OffscreenProgressMessage } from '@/lib/offscreen/types';
+import type { WebdavSyncNowRequest, WebdavClearRemoteRequest } from '@/lib/sync';
 
 /**
  * Open (or focus) the app.html extension page — content scripts have no
@@ -31,7 +32,9 @@ export type BgClientMessage =
   | SummarizeAbort
   | GetSummaryCacheRequest
   | FetchBookmarkPageRequest
-  | OpenAppPageRequest;
+  | OpenAppPageRequest
+  | WebdavSyncNowRequest
+  | WebdavClearRemoteRequest;
 
 export type BgInternalMessage = OffscreenProgressMessage;
 

@@ -71,6 +71,9 @@ export default defineConfig({
     permissions: [
       'storage',
       'unlimitedStorage',
+      // alarms: MV3-safe periodic + debounced WebDAV sync triggers (SWs sleep,
+      // so setTimeout can't be used). See lib/sync/scheduler.ts.
+      'alarms',
       'offscreen',
       'declarativeNetRequest',
       'cookies',

@@ -22,6 +22,8 @@ import {
 import { createJobRegistry } from '@/lib/background/job-registry';
 import { handleOpenAppPage } from '@/lib/background/app-handlers';
 import { handleFetchBookmarkPage } from '@/lib/background/bookmark-handlers';
+import { handleWebdavSyncNow, handleWebdavClearRemote } from '@/lib/background/sync-handlers';
+import { initWebdavSyncScheduler } from '@/lib/sync';
 import { captureXTokens } from '@/lib/x/x-auth';
 
 function createBackgroundContext(): BackgroundContext {
@@ -64,6 +66,10 @@ export default defineBackground(() => {
   initPortBridge(DB_CHANNEL_NAME, ensureOffscreen);
 
   initCacheStorageListener();
+
+  // WebDAV sync scheduler: alarms + settings/locale watch + startup catch-up.
+  // Registers its listeners synchronously so the SW can be woken by them.
+  initWebdavSyncScheduler();
 
   // Capture X (Twitter) auth headers from the logged-in web client's own
   // requests (observational webRequest — returns nothing). x-api.ts replays
@@ -113,6 +119,10 @@ export default defineBackground(() => {
           return handleOpenAppPage(msg);
         case 'FETCH_BOOKMARK_PAGE':
           return handleFetchBookmarkPage(msg);
+        case 'WEBDAV_SYNC_NOW':
+          return handleWebdavSyncNow(msg);
+        case 'WEBDAV_CLEAR_REMOTE':
+          return handleWebdavClearRemote(msg);
         default:
           return;
       }

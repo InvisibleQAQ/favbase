@@ -20,12 +20,14 @@ import { EmbeddingConfigCard } from './embedding/embedding-config-card';
 import { GithubConnectionCard } from './github-connection-card';
 import { YoutubeConnectionCard } from './youtube-connection-card';
 import { ExportCard } from '../overview/export-card';
+import { WebdavSyncCard } from './webdav-sync-card';
 import { SettingsTabs, type SettingsTabItem } from './settings-tabs';
 import { SectionRail, type SectionRailItem } from './section-rail';
 
 type SettingsTab = 'ai' | 'connections' | 'general' | 'storage';
 type AiSection = 'llm' | 'asr' | 'embedding';
 type ConnSection = 'github' | 'youtube';
+type StorageSection = 'export' | 'webdav';
 
 /** Every tab shares the same two-column shape: left rail + right content. */
 function RailLayout({ rail, children }: { rail: ReactNode; children: ReactNode }) {
@@ -43,6 +45,7 @@ export function SettingsView() {
   const [tab, setTab] = useState<SettingsTab>('ai');
   const [aiSection, setAiSection] = useState<AiSection>('llm');
   const [connSection, setConnSection] = useState<ConnSection>('github');
+  const [storageSection, setStorageSection] = useState<StorageSection>('export');
 
   const tabs: SettingsTabItem[] = [
     { value: 'ai', label: t('settings.tabAi'), icon: 'solar:magic-stick-3-bold-duotone' },
@@ -66,8 +69,9 @@ export function SettingsView() {
     { value: 'language', label: t('settings.language'), icon: 'solar:global-bold-duotone' },
   ];
 
-  const storageNavItems: SectionRailItem<'export'>[] = [
+  const storageNavItems: SectionRailItem<StorageSection>[] = [
     { value: 'export', label: t('export.title'), icon: 'solar:database-bold-duotone' },
+    { value: 'webdav', label: t('settings.sync.title'), icon: 'solar:share-bold' },
   ];
 
   return (
@@ -129,9 +133,12 @@ export function SettingsView() {
 
       {tab === 'storage' && (
         <RailLayout
-          rail={<SectionRail value="export" onChange={() => {}} items={storageNavItems} />}
+          rail={
+            <SectionRail value={storageSection} onChange={setStorageSection} items={storageNavItems} />
+          }
         >
-          <ExportCard />
+          {storageSection === 'export' && <ExportCard />}
+          {storageSection === 'webdav' && <WebdavSyncCard />}
         </RailLayout>
       )}
     </DashboardContent>
