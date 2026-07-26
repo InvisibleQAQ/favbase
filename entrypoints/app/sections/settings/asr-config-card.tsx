@@ -8,6 +8,7 @@ import MenuItem from '@mui/material/MenuItem';
 import InputAdornment from '@mui/material/InputAdornment';
 import IconButton from '@mui/material/IconButton';
 import Alert from '@mui/material/Alert';
+import Link from '@mui/material/Link';
 
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify } from '../../components/iconify';
@@ -21,6 +22,7 @@ import { SaveActions } from './save-actions';
 // `model` is deliberately not connection-relevant: the /models probe validates
 // the credential, not a model name — editing the model never invalidates a test.
 const ASR_CONNECTION_KEYS = ['provider', 'apiKey'] as const satisfies readonly (keyof AsrDraft)[];
+const GROQ_LIMITS_URL = 'https://console.groq.com/settings/limits';
 
 interface AsrConfigCardProps {
   settings: UserSettings;
@@ -111,6 +113,21 @@ export function AsrConfigCard({ settings, saveAsr }: AsrConfigCardProps) {
               onChange={(e) => setField('model', e.target.value)}
             />
           </Grid>
+
+          {draft.provider === 'groq' && (
+            <Grid size={{ xs: 12 }}>
+              <Alert severity="info">
+                {t('settings.asr.groqFreeQuotaNote')}{' '}
+                <Link
+                  href={GROQ_LIMITS_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {t('settings.asr.groqLimitsLink')}
+                </Link>
+              </Alert>
+            </Grid>
+          )}
 
           <Grid size={{ xs: 12 }}>
             <SaveActions

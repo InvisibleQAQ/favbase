@@ -4,6 +4,7 @@ import type {
   AutoTranscribeState,
   AutoTranscribeStats,
 } from './types';
+import type { TranscribeErrorInfo } from '@/lib/transcription/types';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -21,6 +22,7 @@ const INITIAL_STATE: AutoTranscribeState = {
   videoProgress: 0,
   videoStage: '',
   waitSeconds: 0,
+  quotaResetAt: null,
   stats: { existing: 0, cc: 0, asr: 0, skipped: 0, remaining: 0 },
   previewVideo: null,
   pendingCount: null,
@@ -28,7 +30,7 @@ const INITIAL_STATE: AutoTranscribeState = {
 };
 
 const PAGE_SIZE = 20;
-const RATE_LIMIT_PAUSE_MS = 60_000;
+const DEFAULT_RATE_LIMIT_PAUSE_SECONDS = 60;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -78,6 +80,12 @@ export class AutoTranscribePipeline {
 
   start(collectionId: string): void {
     if (this.running) return;
+    if (this.state.quotaResetAt !== null && this.state.quotaResetAt > Date.now()) return;
+    if (this.state.quotaResetAt !== null) {
+      void this.adapter.setQuotaPause(null).catch((error) => {
+        console.error('[auto-transcribe] Failed to clear quota pause:', error);
+      });
+    }
     this.state = { ...INITIAL_STATE, phase: 'syncing', previewLoading: false };
     this.emit();
     this.installStatusListener();
@@ -106,6 +114,21 @@ export class AutoTranscribePipeline {
 
   private async queryPreviewAttempt(collectionId: string, gen: number, attempt: number): Promise<void> {
     try {
+      const quotaPause = await this.adapter.getQuotaPause();
+      if (gen !== this.previewGeneration) return;
+      if (quotaPause && quotaPause.resetAt > Date.now()) {
+        this.patch({
+          phase: 'quota_paused',
+          quotaResetAt: quotaPause.resetAt,
+          waitSeconds: Math.ceil((quotaPause.resetAt - Date.now()) / 1000),
+          previewLoading: false,
+        });
+        this.startCountdown();
+        return;
+      }
+      if (quotaPause) await this.adapter.setQuotaPause(null);
+      if (gen !== this.previewGeneration) return;
+
       const preview = await this.adapter.getPreview(collectionId);
       if (gen !== this.previewGeneration) return;
       if (preview.pendingCount === null && attempt < 3) {
@@ -146,7 +169,9 @@ export class AutoTranscribePipeline {
   private startCountdown(): void {
     this.clearCountdown();
     this.countdownTimer = setInterval(() => {
-      const next = this.state.waitSeconds - 1;
+      const next = this.state.phase === 'quota_paused' && this.state.quotaResetAt !== null
+        ? Math.ceil((this.state.quotaResetAt - Date.now()) / 1000)
+        : this.state.waitSeconds - 1;
       if (next <= 0) {
         this.clearCountdown();
         this.patch({ waitSeconds: 0 });
@@ -195,6 +220,30 @@ export class AutoTranscribePipeline {
       this.statusCleanup();
       this.statusCleanup = null;
     }
+  }
+
+  private async pauseForQuota(error: TranscribeErrorInfo): Promise<boolean> {
+    if (error.code !== 'ASR_QUOTA_EXCEEDED') return false;
+
+    const resetAt = error.resetAt ?? null;
+    if (resetAt !== null && error.providerId) {
+      try {
+        await this.adapter.setQuotaPause({ providerId: error.providerId, resetAt });
+      } catch (storageError) {
+        console.error('[auto-transcribe] Failed to persist quota pause:', storageError);
+      }
+    }
+
+    const waitSeconds = resetAt === null
+      ? error.retryAfter ?? 0
+      : Math.max(0, Math.ceil((resetAt - Date.now()) / 1000));
+    this.patch({
+      phase: 'quota_paused',
+      quotaResetAt: resetAt,
+      waitSeconds,
+    });
+    if (waitSeconds > 0) this.startCountdown();
+    return true;
   }
 
   // --- Core pipeline ---
@@ -275,8 +324,11 @@ export class AutoTranscribePipeline {
             } else {
               const errorCode = response.error.code;
 
+              if (await this.pauseForQuota(response.error)) return;
+
               if (errorCode === 'ASR_RATE_LIMIT') {
-                await this.waitWithCountdown(RATE_LIMIT_PAUSE_MS, 'paused', signal);
+                const retryDelayMs = (response.error.retryAfter ?? DEFAULT_RATE_LIMIT_PAUSE_SECONDS) * 1000;
+                await this.waitWithCountdown(retryDelayMs, 'paused', signal);
                 const retryRes = await this.adapter.transcribe(videoId, title, () =>
                   this.patch({ videoStage: 'indexing', videoProgress: 100 }),
                 );
@@ -284,6 +336,7 @@ export class AutoTranscribePipeline {
                   if (retryRes.data.source === 'official') stats.cc++;
                   else stats.asr++;
                 } else {
+                  if (await this.pauseForQuota(retryRes.error)) return;
                   stats.skipped++;
                 }
               } else if (errorCode === 'ASR_INVALID_KEY' && !hasAsrKey) {

@@ -54,7 +54,11 @@ export function useAutoTranscribe(
 
   return {
     state,
-    running: state.phase !== 'idle' && state.phase !== 'done' && state.phase !== 'cancelled',
+    running:
+      state.phase === 'syncing'
+      || state.phase === 'transcribing'
+      || state.phase === 'waiting'
+      || state.phase === 'paused',
     start,
     stop,
   };

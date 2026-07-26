@@ -33,6 +33,8 @@ const zhCN = {
 
   'settings.asrProvider': 'ASR 服务商',
   'settings.asrTestSuccess': '连接成功 — API Key 有效',
+  'settings.asr.groqFreeQuotaNote': 'Groq 免费套餐每天提供 8 小时音频转录额度（28,800 ASD），实际额度以账户为准。',
+  'settings.asr.groqLimitsLink': '查看 Groq Limits',
 
   'settings.mode': '调用模式',
   'settings.modeQuality': '质量优先',
@@ -170,6 +172,7 @@ const zhCN = {
 
   'error.ASR_REQUEST_TIMEOUT': '操作已取消',
   'error.ASR_RATE_LIMIT': '转录服务速率限制',
+  'error.ASR_QUOTA_EXCEEDED': '转录额度已用完',
   'error.ASR_GROQ_UNREACHABLE': '无法连接转录服务，请检查网络',
   'error.ASR_GROQ_ACCESS_BLOCKED': '转录服务访问被封禁',
   'error.ASR_INVALID_KEY': 'API Key 无效',
@@ -216,6 +219,8 @@ const zhCN = {
   'autoTranscribe.doneTitle': '转录完成',
   'autoTranscribe.restart': '重新开始',
   'autoTranscribe.stopTooltip': '停止自动转录',
+  'autoTranscribe.quotaPausedUntil': '自动转录已暂停，预计 {{reset}} 后可重试。重置后需要手动重新开始。',
+  'autoTranscribe.quotaPausedNoReset': '自动转录已暂停。额度恢复后需要手动重新开始。',
 
   'nav.dashboard': 'Dashboard',
   'nav.collections': '收藏夹',

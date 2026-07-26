@@ -7,7 +7,7 @@ import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 import CircularProgress from '@mui/material/CircularProgress';
 
-import { t } from '@/lib/i18n';
+import { formatDateTime, t } from '@/lib/i18n';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify } from '../../components/iconify';
 import { formatDuration } from '../../utils/format-duration';
@@ -142,6 +142,41 @@ export function AutoTranscribeBar({ state, running, onStart, onStop }: AutoTrans
   const { phase, stats, currentVideo, currentIndex, totalVideos, previewVideo, pendingCount, previewLoading } = state;
   const isDone = phase === 'done' || phase === 'cancelled';
   const showProgress = running || isDone;
+
+  if (phase === 'quota_paused') {
+    const quotaMessage = state.quotaResetAt === null
+      ? t('autoTranscribe.quotaPausedNoReset')
+      : t('autoTranscribe.quotaPausedUntil', { reset: formatDateTime(state.quotaResetAt) });
+
+    return (
+      <Box role="alert" sx={{ ...PANEL_SX, borderColor: 'warning.main' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+          <Iconify
+            icon="solar:danger-triangle-bold-duotone"
+            width={28}
+            sx={{ color: 'warning.main', flexShrink: 0 }}
+          />
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+              {t('error.ASR_QUOTA_EXCEEDED')}
+            </Typography>
+            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+              {quotaMessage}
+            </Typography>
+          </Box>
+          <Button
+            variant="outlined"
+            startIcon={<Iconify icon="solar:restart-bold" width={16} />}
+            onClick={onStart}
+            disabled={state.waitSeconds > 0}
+            sx={{ flexShrink: 0 }}
+          >
+            {t('autoTranscribe.restart')}
+          </Button>
+        </Box>
+      </Box>
+    );
+  }
 
   // ----- Idle: full-width preview panel -----
   if (!showProgress) {

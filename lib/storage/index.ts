@@ -17,6 +17,7 @@ export {
   sidebarPinnedStorage,
   localeStorage,
   type LocalePreference,
+  asrQuotaPauseStorage,
   xLastSyncStorage,
   type XLastSync,
 } from './ui-state';

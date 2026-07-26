@@ -35,6 +35,8 @@ const en: Record<LocaleKeys, string> = {
 
   'settings.asrProvider': 'ASR Provider',
   'settings.asrTestSuccess': 'Connection successful — API key is valid',
+  'settings.asr.groqFreeQuotaNote': 'The Groq Free Plan includes 8 hours of audio transcription per day (28,800 ASD). Your account limits may differ.',
+  'settings.asr.groqLimitsLink': 'View Groq Limits',
 
   'settings.mode': 'Call Mode',
   'settings.modeQuality': 'Quality',
@@ -176,6 +178,7 @@ const en: Record<LocaleKeys, string> = {
 
   'error.ASR_REQUEST_TIMEOUT': 'Operation cancelled',
   'error.ASR_RATE_LIMIT': 'ASR rate limited',
+  'error.ASR_QUOTA_EXCEEDED': 'Transcription quota exhausted',
   'error.ASR_GROQ_UNREACHABLE': 'Cannot reach ASR service, check your network',
   'error.ASR_GROQ_ACCESS_BLOCKED': 'ASR service access blocked',
   'error.ASR_INVALID_KEY': 'Invalid API Key',
@@ -222,6 +225,8 @@ const en: Record<LocaleKeys, string> = {
   'autoTranscribe.doneTitle': 'Transcription complete',
   'autoTranscribe.restart': 'Restart',
   'autoTranscribe.stopTooltip': 'Stop auto transcription',
+  'autoTranscribe.quotaPausedUntil': 'Auto transcription is paused. Try again after {{reset}}, then restart it manually.',
+  'autoTranscribe.quotaPausedNoReset': 'Auto transcription is paused. Restart it manually after the quota resets.',
 
   'nav.dashboard': 'Dashboard',
   'nav.collections': 'Collections',
