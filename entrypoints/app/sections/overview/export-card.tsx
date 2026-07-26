@@ -9,6 +9,8 @@ import Checkbox from '@mui/material/Checkbox';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import Box from '@mui/material/Box';
+import Divider from '@mui/material/Divider';
+import Typography from '@mui/material/Typography';
 import Alert from '@mui/material/Alert';
 
 import { useTranslation } from '@/lib/i18n/use-translation';
@@ -18,53 +20,88 @@ import { queryAllTables, isTableDataEmpty } from '../../../../lib/export/query';
 import { toExportJson } from '../../../../lib/export/serialize-json';
 import { toExportCsvZip } from '../../../../lib/export/serialize-csv';
 import { triggerDownload, buildExportFilename } from '../../../../lib/export/download';
+import { queryObsidianNotes } from '../../../../lib/export/obsidian/query';
+import { toObsidianZip } from '../../../../lib/export/obsidian/serialize';
 
-type ExportFormat = 'json' | 'csv';
+type BackupFormat = 'json' | 'csv';
+
+/** Both exports read the same database, so they are mutually exclusive by nature. */
+type Section = 'backup' | 'vault';
+
+function errorKey(err: unknown): 'export.dbNotReady' | 'export.failed' {
+  return err instanceof Error && err.message.includes('not initialized')
+    ? 'export.dbNotReady'
+    : 'export.failed';
+}
+
+function zipBlob(bytes: Uint8Array): Blob {
+  return new Blob([bytes as BlobPart], { type: 'application/zip' });
+}
 
 export function ExportCard() {
   const { t } = useTranslation();
-  const [format, setFormat] = useState<ExportFormat>('json');
+  const [format, setFormat] = useState<BackupFormat>('json');
   const [includeEmbedding, setIncludeEmbedding] = useState(false);
-  const [exporting, setExporting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<Section | null>(null);
+  const [error, setError] = useState<{ section: Section; message: string } | null>(null);
 
-  const handleExport = async () => {
+  /** Wraps the shared busy/error lifecycle so each handler only holds its own logic. */
+  const run = async (section: Section, task: () => Promise<string | null>) => {
     setError(null);
-    setExporting(true);
+    setBusy(section);
     try {
-      const db = getDb();
-      const data = await queryAllTables(db, includeEmbedding);
-
-      if (isTableDataEmpty(data)) {
-        setError(t('export.emptyDb'));
-        return;
-      }
-
-      if (format === 'json') {
-        const json = toExportJson(data);
-        const blob = new Blob([json], { type: 'application/json' });
-        triggerDownload(blob, buildExportFilename('json'));
-      } else {
-        const zip = toExportCsvZip(data);
-        const blob = new Blob([new Uint8Array(zip) as BlobPart], { type: 'application/zip' });
-        triggerDownload(blob, buildExportFilename('csv'));
-      }
+      const message = await task();
+      if (message) setError({ section, message });
     } catch (err) {
-      const msg =
-        err instanceof Error && err.message.includes('not initialized')
-          ? t('export.dbNotReady')
-          : t('export.failed');
-      setError(msg);
+      setError({ section, message: t(errorKey(err)) });
     } finally {
-      setExporting(false);
+      setBusy(null);
     }
   };
+
+  const handleBackup = () =>
+    run('backup', async () => {
+      const data = await queryAllTables(getDb(), includeEmbedding);
+      if (isTableDataEmpty(data)) return t('export.emptyDb');
+
+      if (format === 'json') {
+        const blob = new Blob([toExportJson(data)], { type: 'application/json' });
+        triggerDownload(blob, buildExportFilename('json'));
+      } else {
+        triggerDownload(zipBlob(toExportCsvZip(data)), buildExportFilename('csv'));
+      }
+      return null;
+    });
+
+  const handleVault = () =>
+    run('vault', async () => {
+      const notes = await queryObsidianNotes(getDb());
+      if (notes.length === 0) return t('export.emptyDb');
+
+      const zip = toObsidianZip(notes, {
+        originalLinkLabel: t('export.obsidianOriginalLink'),
+      });
+      triggerDownload(zipBlob(zip), buildExportFilename('obsidian'));
+      return null;
+    });
+
+  const alertFor = (section: Section) =>
+    error?.section === section ? (
+      <Alert severity="warning" onClose={() => setError(null)}>
+        {error.message}
+      </Alert>
+    ) : null;
 
   return (
     <Card>
       <CardHeader title={t('export.title')} subheader={t('export.subtitle')} />
       <CardContent>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Typography variant="subtitle2">{t('export.backupHeading')}</Typography>
+          <Typography variant="caption" color="text.secondary">
+            {t('export.backupHint')}
+          </Typography>
+
           <ToggleButtonGroup
             value={format}
             exclusive
@@ -86,21 +123,47 @@ export function ExportCard() {
             label={t('export.includeEmbedding')}
           />
 
-          {error && <Alert severity="warning" onClose={() => setError(null)}>{error}</Alert>}
+          {alertFor('backup')}
 
           <Button
             variant="contained"
-            onClick={handleExport}
-            disabled={exporting}
+            onClick={handleBackup}
+            disabled={busy !== null}
+            sx={{ alignSelf: 'flex-start' }}
             startIcon={
-              exporting ? (
+              busy === 'backup' ? (
                 <CircularProgress size={18} color="inherit" />
               ) : (
                 <Iconify icon="solar:database-bold-duotone" width={18} />
               )
             }
           >
-            {exporting ? t('export.exporting') : t('export.exportBtn')}
+            {busy === 'backup' ? t('export.exporting') : t('export.exportBtn')}
+          </Button>
+
+          <Divider />
+
+          <Typography variant="subtitle2">{t('export.obsidianHeading')}</Typography>
+          <Typography variant="caption" color="text.secondary">
+            {t('export.obsidianHint')}
+          </Typography>
+
+          {alertFor('vault')}
+
+          <Button
+            variant="outlined"
+            onClick={handleVault}
+            disabled={busy !== null}
+            sx={{ alignSelf: 'flex-start' }}
+            startIcon={
+              busy === 'vault' ? (
+                <CircularProgress size={18} color="inherit" />
+              ) : (
+                <Iconify icon="solar:folder-with-files-bold-duotone" width={18} />
+              )
+            }
+          >
+            {busy === 'vault' ? t('export.exporting') : t('export.obsidianBtn')}
           </Button>
         </Box>
       </CardContent>
