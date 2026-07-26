@@ -6,7 +6,7 @@ vi.mock('@/lib/storage', () => ({
   getEnvModel: () => '',
 }));
 
-import { getJob, pauseJob, resumeJob } from './background-jobs-store';
+import { getJob, pauseJob, resumeJob, setJobGate } from './background-jobs-store';
 import {
   enqueueCollectionProcessingItem,
   startCollectionProcessingJobs,
@@ -152,5 +152,93 @@ describe('collection processing jobs', () => {
     await flush();
 
     expect(calls).toEqual(['embed:a', 'tag:a', 'embed:b', 'tag:b']);
+  });
+
+  it('holds a gated batch born-paused and resumes it without losing the batch', async () => {
+    setJobGate((platform) => platform === 'p-gated-batch');
+    try {
+      const calls: string[] = [];
+      const deps = {
+        embed: async (
+          _platform: string,
+          ids: string[],
+          _onProgress: (p: { done: number; total: number }) => void,
+          control: { checkpoint: () => Promise<void> },
+        ) => {
+          await control.checkpoint();
+          calls.push(`embed:${ids.join(',')}`);
+        },
+        tag: async (
+          _platform: string,
+          ids: string[],
+          _onProgress: (p: { done: number; total: number }) => void,
+          control: { checkpoint: () => Promise<void> },
+        ) => {
+          await control.checkpoint();
+          calls.push(`tag:${ids.join(',')}`);
+        },
+      };
+
+      startCollectionProcessingJobs(
+        { jobPlatform: 'p-gated-batch', itemPlatform: 'x', itemIds: ['a', 'b'] },
+        deps,
+      );
+      await flush();
+      await flush();
+
+      // Born paused, NOT refused — a refused start would spin startBatchLane's
+      // "retry after settlement" path.
+      expect(getJob('p-gated-batch', 'embed')?.phase).toBe('paused');
+      expect(getJob('p-gated-batch', 'tag')?.phase).toBe('paused');
+      expect(calls).toEqual([]);
+
+      setJobGate(null);
+      resumeJob('p-gated-batch', 'embed');
+      resumeJob('p-gated-batch', 'tag');
+      await flush();
+
+      expect(calls.sort()).toEqual(['embed:a,b', 'tag:a,b']);
+      expect(getJob('p-gated-batch', 'embed')?.phase).toBe('completed');
+    } finally {
+      setJobGate(null);
+    }
+  });
+
+  it('holds a gated streaming lane and drains its inbox after resume', async () => {
+    setJobGate((platform) => platform === 'p-gated-stream');
+    try {
+      const embedded: string[] = [];
+      const deps = {
+        embed: async (_platform: string, itemId: string) => {
+          embedded.push(itemId);
+          return 'embedded' as const;
+        },
+        tag: async () => 'tagged' as const,
+      };
+
+      const first = enqueueCollectionProcessingItem(
+        { jobPlatform: 'p-gated-stream', itemPlatform: 'bookmarks', itemId: 'a' },
+        deps,
+      );
+      await flush();
+      // An item that arrives while the lane is gated must join the same inbox.
+      const second = enqueueCollectionProcessingItem(
+        { jobPlatform: 'p-gated-stream', itemPlatform: 'bookmarks', itemId: 'b' },
+        deps,
+      );
+      await flush();
+
+      expect(getJob('p-gated-stream', 'embed')?.phase).toBe('paused');
+      expect(embedded).toEqual([]);
+
+      setJobGate(null);
+      resumeJob('p-gated-stream', 'embed');
+      resumeJob('p-gated-stream', 'tag');
+      await Promise.all([first.embed, first.tag, second.embed, second.tag]);
+
+      expect(embedded).toEqual(['a', 'b']);
+    } finally {
+      setJobGate(null);
+    }
   });
 });

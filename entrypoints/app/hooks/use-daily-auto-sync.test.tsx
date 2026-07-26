@@ -14,6 +14,7 @@ import type { CooperativeCheckpoint } from '@/lib/collections';
 vi.mock('./auto-sync-registry', () => ({ AUTO_SYNC_PLATFORMS: [] }));
 vi.mock('./collection-processing-jobs', () => ({ startCollectionProcessingJobs: vi.fn() }));
 vi.mock('./background-jobs-store', () => ({ startJob: vi.fn() }));
+vi.mock('./library-gate', () => ({ isLibraryPaused: () => false }));
 vi.mock('@/lib/database', () => ({ initDbProxy: vi.fn(), getDb: vi.fn() }));
 vi.mock('@/lib/database/collection-queries', () => ({ getPlatformLastSyncedAt: vi.fn() }));
 
@@ -52,6 +53,7 @@ function makeDeps(overrides: Partial<DailyAutoSyncDeps> = {}): {
     initDb: vi.fn(async () => undefined),
     now: () => current,
     getLastSynced: vi.fn(async () => null),
+    isPaused: () => false,
     startJob,
     startProcessing: vi.fn(),
     ...overrides,
@@ -131,6 +133,24 @@ describe('useDailyAutoSync', () => {
       itemPlatform: 'github',
       itemIds: ['id1', 'id2'],
     });
+  });
+
+  it('skips a paused platform before probing it (no auth request, gate untouched)', async () => {
+    const probeReady = vi.fn(async () => true);
+    const { deps, started } = makeDeps({
+      isPaused: (jobPlatform) => jobPlatform === 'bilibili',
+    });
+    render(
+      [
+        platform({ jobPlatform: 'bilibili', itemPlatform: 'bilibili', probeReady }),
+        platform({ jobPlatform: 'github-stars', itemPlatform: 'github' }),
+      ],
+      deps,
+    );
+    await flush();
+
+    expect(probeReady).not.toHaveBeenCalled();
+    expect(started.map((j) => j.jobPlatform)).toEqual(['github-stars']);
   });
 
   it('does not dispatch when probeReady is false', async () => {

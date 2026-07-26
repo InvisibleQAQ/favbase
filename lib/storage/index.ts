@@ -24,6 +24,7 @@ export {
   type XLastSync,
   onboardingStorage,
   type OnboardingState,
+  libraryGateStorage,
 } from './ui-state';
 
 export async function runStorageMigrations(): Promise<void> {

@@ -57,6 +57,29 @@ export interface BackgroundJobRunHandle {
   settled: Promise<void>;
 }
 
+/**
+ * Reader for the per-platform library gate, INJECTED (never imported): this
+ * store is the generic layer — react + type-only imports — and importing the
+ * gate would drag storage + the platform discriminators into it.
+ * `entrypoints/app/hooks/library-gate.ts` self-registers on module load.
+ */
+let jobGate: ((platform: string) => boolean) | null = null;
+
+export function setJobGate(reader: ((platform: string) => boolean) | null): void {
+  jobGate = reader;
+}
+
+function isGatePaused(platform: string): boolean {
+  if (!jobGate) return false;
+  try {
+    return jobGate(platform);
+  } catch (err) {
+    // A broken gate must never take job dispatch down with it.
+    console.error('[background-jobs] gate read failed:', err);
+    return false;
+  }
+}
+
 // Cached snapshot of the currently-running jobs. Recomputed only on mutation so
 // useSyncExternalStore gets a referentially-stable array between changes (a fresh
 // filter() per getSnapshot call would loop React). Single source for both the
@@ -134,18 +157,23 @@ export function startJob(
   }
   const owner = Symbol(key);
   activeRunOwners.set(key, owner);
+  // A gated platform still creates the job and starts the runner — the run is
+  // merely born 'paused' and blocks at its first checkpoint. Refusing to start
+  // (started:false) would spin startBatchLane/wakeLane's "retry after the active
+  // run settles" path forever, because the settlement is already resolved.
+  const bornPaused = isGatePaused(platform);
   const control = createPipelineRunControl((phase) => {
     if (activeRunOwners.get(key) !== owner) return;
     const current = jobs.get(key);
     if (!current?.running) return;
     setJob(key, { ...current, phase });
-  });
+  }, bornPaused ? 'paused' : 'running');
   activeRunControls.set(key, control);
 
   setJob(key, {
     platform,
     kind,
-    phase: 'running',
+    phase: bornPaused ? 'paused' : 'running',
     running: true,
     progress: null,
     lastProgress: existing?.lastProgress ?? null,

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 
 import {
   startJob,
@@ -7,6 +7,7 @@ import {
   getRunningJobCount,
   pauseJob,
   resumeJob,
+  setJobGate,
   type BackgroundJobKind,
 } from './background-jobs-store';
 
@@ -229,6 +230,79 @@ describe('backgroundJobs store', () => {
       error,
       generation: 0,
     });
+  });
+});
+
+describe('backgroundJobs library gate', () => {
+  afterEach(() => {
+    setJobGate(null);
+  });
+
+  it('starts a gated run born-paused instead of refusing (no dropped work)', async () => {
+    setJobGate((platform) => platform === 'p-gated');
+    const finish = deferred();
+    const steps: string[] = [];
+
+    const handle = startJob('p-gated', 'sync', async (_setProgress, control) => {
+      await control.checkpoint();
+      steps.push('worked');
+      await finish.promise;
+    });
+    await flush();
+
+    // started:true is the contract — startBatchLane/wakeLane retry forever on false.
+    expect(handle.started).toBe(true);
+    expect(getJob('p-gated', 'sync')).toMatchObject({ phase: 'paused', running: true });
+    expect(steps).toEqual([]);
+
+    resumeJob('p-gated', 'sync');
+    await flush();
+    expect(getJob('p-gated', 'sync')?.phase).toBe('running');
+    expect(steps).toEqual(['worked']);
+
+    finish.resolve();
+    await flush();
+    expect(getJob('p-gated', 'sync')).toMatchObject({ phase: 'completed', generation: 1 });
+  });
+
+  it('leaves other platforms running while one is gated', async () => {
+    setJobGate((platform) => platform === 'p-gate-mine');
+    const gate = deferred();
+
+    startJob('p-gate-mine', 'embed', async (_setProgress, control) => {
+      await control.checkpoint();
+      await gate.promise;
+    });
+    startJob('p-gate-other', 'embed', async (_setProgress, control) => {
+      await control.checkpoint();
+    });
+    await flush();
+
+    expect(getJob('p-gate-mine', 'embed')?.phase).toBe('paused');
+    expect(getJob('p-gate-other', 'embed')?.phase).toBe('completed');
+
+    gate.resolve();
+    resumeJob('p-gate-mine', 'embed');
+    await flush();
+    expect(getJob('p-gate-mine', 'embed')?.phase).toBe('completed');
+  });
+
+  it('never lets a throwing gate take dispatch down', async () => {
+    setJobGate(() => {
+      throw new Error('gate exploded');
+    });
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      startJob('p-gate-throws', 'sync', async () => {});
+      await flush();
+      expect(getJob('p-gate-throws', 'sync')).toMatchObject({
+        phase: 'completed',
+        generation: 1,
+      });
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 });
 

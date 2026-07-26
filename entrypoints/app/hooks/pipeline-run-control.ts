@@ -9,10 +9,20 @@ export interface PipelineRunControl extends CooperativeCheckpoint {
   checkpoint: () => Promise<void>;
 }
 
+/**
+ * Cooperative pause state machine for ONE run.
+ *
+ * `initialPhase` exists for the library gate: a run dispatched while its
+ * platform is paused is born `'paused'` and blocks on its FIRST checkpoint.
+ * Born-paused (rather than refusing to start) is what keeps the queued work —
+ * batch ids / streaming inbox — alive in the runner closure, and it is why the
+ * checkpoint guard below tests `=== 'running'` instead of `!== 'pausing'`.
+ */
 export function createPipelineRunControl(
   onPhaseChange: (phase: PipelineRunPhase) => void,
+  initialPhase: PipelineRunPhase = 'running',
 ): PipelineRunControl {
-  let phase: PipelineRunPhase = 'running';
+  let phase: PipelineRunPhase = initialPhase;
   let continueRun: (() => void) | null = null;
 
   const setPhase = (nextPhase: PipelineRunPhase) => {
@@ -33,9 +43,12 @@ export function createPipelineRunControl(
       continueRun = null;
     },
     checkpoint: async () => {
-      if (phase !== 'pausing') return;
+      // 'running' is the ONLY phase that lets a worker through: a born-paused
+      // run has never been 'pausing', so a `!== 'pausing'` guard would wave it
+      // straight past its first checkpoint.
+      if (phase === 'running') return;
+      if (phase === 'pausing') setPhase('paused');
 
-      setPhase('paused');
       await new Promise<void>((resolve) => {
         continueRun = resolve;
       });

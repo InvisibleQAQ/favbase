@@ -57,3 +57,13 @@ export const onboardingStorage = storage.defineItem<OnboardingState | null>(
   STORAGE_KEYS.onboarding,
   { fallback: null },
 );
+
+// Knowledge-base build gate. Stores the platforms whose pipeline is PAUSED —
+// not a per-platform boolean map — so `[]` already means "everything runs" and
+// platform N+1 needs no default entry. Written/read only through the app.html
+// facade (entrypoints/app/hooks/library-gate.ts), which keeps a synchronous
+// mirror because the job dispatcher is not React.
+export const libraryGateStorage = storage.defineItem<CollectionPlatform[]>(
+  STORAGE_KEYS.libraryGate,
+  { fallback: [] },
+);

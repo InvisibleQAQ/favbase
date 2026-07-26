@@ -7,6 +7,7 @@ import { AUTO_SYNC_PLATFORMS, type AutoSyncPlatform } from './auto-sync-registry
 import { startJob } from './background-jobs-store';
 import { startCollectionProcessingJobs } from './collection-processing-jobs';
 import { shouldAutoSync } from './daily-sync-gate';
+import { isLibraryPaused } from './library-gate';
 
 /**
  * Minimum gap between two full-registry evaluations. Guards against a DB-query
@@ -19,6 +20,7 @@ export interface DailyAutoSyncDeps {
   initDb: () => Promise<unknown>;
   now: () => Date;
   getLastSynced: (platform: string) => Promise<Date | null>;
+  isPaused: (jobPlatform: string) => boolean;
   startJob: typeof startJob;
   startProcessing: typeof startCollectionProcessingJobs;
 }
@@ -27,6 +29,7 @@ const defaultDeps: DailyAutoSyncDeps = {
   initDb: initDbProxy,
   now: () => new Date(),
   getLastSynced: (platform) => getPlatformLastSyncedAt(platform, getDb()),
+  isPaused: isLibraryPaused,
   startJob,
   startProcessing: startCollectionProcessingJobs,
 };
@@ -37,6 +40,11 @@ async function evaluatePlatform(
 ): Promise<void> {
   const last = await deps.getLastSynced(platform.itemPlatform);
   if (!shouldAutoSync(last, deps.now())) return;
+  // Gate check BEFORE the probe: a paused platform sends no auth request and
+  // never refreshes sources.lastFetchedAt, so the day's sync still happens on
+  // the first evaluation after the user resumes. (startJob's born-paused path
+  // is the second line of defence; this one just avoids the noise job.)
+  if (deps.isPaused(platform.jobPlatform)) return;
   if (!(await platform.probeReady())) return;
 
   deps.startJob(platform.jobPlatform, 'sync', async (setProgress, control) => {
