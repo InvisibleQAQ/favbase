@@ -301,6 +301,7 @@ const zhCN = {
   'chat.noConversations': '还没有对话记录',
   'chat.untitledConversation': '未命名对话',
   'chat.deleteConversation': '删除对话',
+  'chat.openHistory': '打开会话历史',
 
   'header.githubAria': '在 GitHub 上查看仓库',
   'header.languageAria': '切换界面语言',

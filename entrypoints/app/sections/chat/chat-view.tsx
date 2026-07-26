@@ -9,8 +9,11 @@ import Grid from '@mui/material/Grid';
 import TextField from '@mui/material/TextField';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
+import Drawer from '@mui/material/Drawer';
 import Alert from '@mui/material/Alert';
 import CircularProgress from '@mui/material/CircularProgress';
+import useMediaQuery from '@mui/material/useMediaQuery';
+import { useTheme } from '@mui/material/styles';
 import { varAlpha } from 'minimal-shared/utils';
 
 import { DashboardContent } from '../../layouts/dashboard';
@@ -35,6 +38,10 @@ type Translate = (key: LocaleKeys, params?: Record<string, string | number>) => 
  * activity line, and shows clickable source cards under each answer. Conversations
  * persist to WXT storage (never PGlite). Assistant answers render through
  * `<ChatMarkdown>` (react-markdown, no rehype-raw); user messages stay plain text.
+ * Below the `md` breakpoint the rail hides and opens as a temporary left Drawer
+ * from the history button in the title row (auto-closed if the viewport widens
+ * past `md`). Composer: Enter sends, Ctrl/⌘+Enter
+ * and Shift+Enter insert a newline (Enter is ignored mid-IME composition).
  */
 export function ChatView() {
   const { t } = useTranslation();
@@ -57,7 +64,18 @@ export function ChatView() {
   } = useChatAgent();
 
   const [input, setInput] = useState('');
+  const [historyOpen, setHistoryOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const theme = useTheme();
+  const isMdUp = useMediaQuery(theme.breakpoints.up('md'));
+
+  // Close the history drawer when the viewport widens past `md`. Merely hiding
+  // an open Modal via CSS (`display: none`) would strand the body scroll lock
+  // and the focus trap with no visible way to dismiss them.
+  useEffect(() => {
+    if (isMdUp) setHistoryOpen(false);
+  }, [isMdUp]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
@@ -73,20 +91,60 @@ export function ChatView() {
 
   return (
     <DashboardContent maxWidth="lg">
-      <Typography variant="h4" sx={{ mb: { xs: 3, md: 4 } }}>
-        {t('chat.title')}
-      </Typography>
+      <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: { xs: 3, md: 4 } }}>
+        <Box
+          component="img"
+          src="/icon/128.png"
+          alt=""
+          sx={{ width: 32, height: 32, flexShrink: 0 }}
+        />
+        <Typography variant="h4" sx={{ flexGrow: 1 }}>
+          {t('chat.title')}
+        </Typography>
+        <IconButton
+          aria-label={t('chat.openHistory')}
+          onClick={() => setHistoryOpen(true)}
+          sx={{ display: { xs: 'inline-flex', md: 'none' } }}
+        >
+          <Iconify icon="solar:chat-round-dots-bold" width={22} />
+        </IconButton>
+      </Stack>
+
+      <Drawer
+        anchor="left"
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        sx={{ display: { md: 'none' } }}
+        slotProps={{ paper: { sx: { width: 300, p: 1.5 } } }}
+      >
+        <ConversationRail
+          conversations={conversations}
+          activeId={activeConversationId}
+          onNew={() => {
+            newConversation();
+            setHistoryOpen(false);
+          }}
+          onSelect={(id) => {
+            switchConversation(id);
+            setHistoryOpen(false);
+          }}
+          onDelete={deleteConversation}
+          t={t}
+        />
+      </Drawer>
 
       <Grid container spacing={3}>
-        <Grid size={{ xs: 12, md: 3 }}>
-          <ConversationRail
-            conversations={conversations}
-            activeId={activeConversationId}
-            onNew={newConversation}
-            onSelect={switchConversation}
-            onDelete={deleteConversation}
-            t={t}
-          />
+        <Grid size={{ md: 3 }} sx={{ display: { xs: 'none', md: 'block' } }}>
+          <Card sx={{ p: 1.5 }}>
+            <ConversationRail
+              conversations={conversations}
+              activeId={activeConversationId}
+              onNew={newConversation}
+              onSelect={switchConversation}
+              onDelete={deleteConversation}
+              t={t}
+            />
+          </Card>
         </Grid>
 
         <Grid size={{ xs: 12, md: 9 }}>
@@ -108,15 +166,23 @@ export function ChatView() {
                     }}
                   >
                     {showEmptyState ? (
-                      <Box
+                      <Stack
+                        spacing={1.5}
+                        alignItems="center"
                         sx={(theme) => ({
                           m: 'auto',
                           color: theme.vars.palette.text.secondary,
                           textAlign: 'center',
                         })}
                       >
+                        <Box
+                          component="img"
+                          src="/icon/128.png"
+                          alt=""
+                          sx={{ width: 56, height: 56 }}
+                        />
                         <Typography variant="body2">{t('chat.emptyHint')}</Typography>
-                      </Box>
+                      </Stack>
                     ) : (
                       messages.map((message) => <MessageBubble key={message.id} message={message} />)
                     )}
@@ -145,10 +211,22 @@ export function ChatView() {
                     placeholder={t('chat.composerPlaceholder')}
                     disabled={isStreaming}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                        e.preventDefault();
-                        handleSend();
+                      if (e.key !== 'Enter' || e.nativeEvent.isComposing) return;
+                      if (e.shiftKey) return;
+                      e.preventDefault();
+                      if (e.ctrlKey || e.metaKey) {
+                        // Textarea only inserts a newline on plain Enter, so Ctrl/⌘+Enter
+                        // has to splice one in at the caret manually.
+                        const el = e.target as HTMLTextAreaElement;
+                        const start = el.selectionStart ?? input.length;
+                        const end = el.selectionEnd ?? input.length;
+                        setInput(input.slice(0, start) + '\n' + input.slice(end));
+                        requestAnimationFrame(() => {
+                          el.selectionStart = el.selectionEnd = start + 1;
+                        });
+                        return;
                       }
+                      handleSend();
                     }}
                   />
 
@@ -200,7 +278,7 @@ function ConversationRail({
   t,
 }: ConversationRailProps) {
   return (
-    <Card sx={{ p: 1.5 }}>
+    <Box>
       <Button
         fullWidth
         variant="outlined"
@@ -238,7 +316,7 @@ function ConversationRail({
           ))}
         </Stack>
       )}
-    </Card>
+    </Box>
   );
 }
 
