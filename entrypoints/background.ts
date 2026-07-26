@@ -20,7 +20,7 @@ import {
   handleGetSummaryCache,
 } from '@/lib/background/summary-handlers';
 import { createJobRegistry } from '@/lib/background/job-registry';
-import { handleOpenAppPage } from '@/lib/background/app-handlers';
+import { handleOpenAppPage, openWelcomePage } from '@/lib/background/app-handlers';
 import { handleFetchBookmarkPage } from '@/lib/background/bookmark-handlers';
 import { handleWebdavSyncNow, handleWebdavClearRemote } from '@/lib/background/sync-handlers';
 import { initWebdavSyncScheduler } from '@/lib/sync';
@@ -129,13 +129,20 @@ export default defineBackground(() => {
     },
   );
 
-  chrome.runtime.onInstalled.addListener(() => {
+  chrome.runtime.onInstalled.addListener((details) => {
     ensureOffscreen().catch((err) =>
       console.error('[background] onInstalled: ensureOffscreen failed', err),
     );
     runStorageMigrations().catch((err) =>
       console.error('[background] onInstalled: storage migration failed', err),
     );
+    // First run only: introduce the product and let the user pick platforms.
+    // Self-gated on the onboarding record (see openWelcomePage).
+    if (details.reason === 'install') {
+      openWelcomePage().catch((err) =>
+        console.error('[background] onInstalled: open welcome failed', err),
+      );
+    }
   });
   chrome.runtime.onStartup.addListener(() => {
     ensureOffscreen().catch((err) =>

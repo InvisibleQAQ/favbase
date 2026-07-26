@@ -1,5 +1,9 @@
-import type { CollectionPlatform } from '@/lib/collections';
-import { COLLECTION_PLATFORMS } from '@/lib/collections';
+// Straight from the pure discriminator module, not the `@/lib/collections`
+// barrel: the barrel re-exports these through `collections-query`, which drags
+// drizzle + `@/lib/database` into every static import graph that touches this
+// registry (welcome.html has no database at all).
+import type { CollectionPlatform } from '@/lib/collections/platforms';
+import { COLLECTION_PLATFORMS } from '@/lib/collections/platforms';
 import type { LocaleKeys } from '@/lib/i18n/locales/zh-CN';
 
 import type { IconifyName } from './components/iconify/register-icons';

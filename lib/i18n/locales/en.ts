@@ -565,6 +565,105 @@ const en: Record<LocaleKeys, string> = {
   'settings.languageAuto': 'Follow browser',
   'settings.languageZhCN': '中文',
   'settings.languageEn': 'English',
+
+  // Welcome / first-run onboarding (welcome.html)
+  'welcome.brandTagline': 'A local-first knowledge base for your favorites',
+  'welcome.skip': 'Skip intro',
+  'welcome.scrollHint': 'Scroll',
+
+  'welcome.hero.eyebrow': 'Browser extension · nothing leaves this machine',
+  'welcome.hero.titleLine1': 'Your favorites,',
+  'welcome.hero.titleLine2': 'now answerable',
+  'welcome.hero.subtitle':
+    'Six platforms, collected automatically, chunked into a local database and vector-indexed. Then you just ask — every answer carries its sources, one click from the original.',
+  'welcome.hero.ctaPrimary': 'Get started',
+  'welcome.hero.ctaSecondary': 'See what it does',
+  'welcome.hero.coreLabel': 'Local knowledge base',
+
+  'welcome.tags.semanticSearch': 'Semantic search',
+  'welcome.tags.hybridRetrieval': 'Hybrid retrieval + RRF',
+  'welcome.tags.aiTags': 'AI auto-tagging',
+  'welcome.tags.transcription': 'Subtitle transcription',
+  'welcome.tags.summary': 'AI video summaries',
+  'welcome.tags.obsidian': 'Obsidian export',
+  'welcome.tags.localFirst': 'Local-first',
+  'welcome.tags.noServer': 'No server',
+  'welcome.tags.pglite': 'In-browser database',
+  'welcome.tags.incremental': 'Incremental sync',
+
+  'welcome.flow.eyebrow': 'How it works',
+  'welcome.flow.heading': 'Three steps',
+  'welcome.flow.intro':
+    'Your favorites are the most honest record of what you care about — and the easiest thing to lose track of. favbase digs them back up and turns them into something you can question.',
+  'welcome.flow.step1.title': 'Collect what you saved',
+  'welcome.flow.step1.desc':
+    'Connect a platform and favbase pulls your saved items incrementally: title, author, link and body text together. Insert-only — unstar something upstream and your history stays put.',
+  'welcome.flow.step1.hint': 'One ingest pipeline shared by all six platforms',
+  'welcome.flow.step2.title': 'Build the knowledge base',
+  'welcome.flow.step2.desc':
+    'Bodies get chunked, embedded and written — alongside AI tags — into PGlite + pgvector inside your browser. All local, no server in the path.',
+  'welcome.flow.step2.hint': 'Embedding and indexing both run in your browser',
+  'welcome.flow.step3.title': 'Ask it things',
+  'welcome.flow.step3.desc':
+    'The chat agent decides what to retrieve and how many rounds to run, streams its answer as it goes, and hangs clickable source cards underneath.',
+  'welcome.flow.step3.hint': 'This is the main event',
+
+  'welcome.chat.eyebrow': 'The main feature',
+  'welcome.chat.heading': 'Chat with your knowledge base',
+  'welcome.chat.desc':
+    'Not a keyword box — an agent that retrieves for itself. Vectors handle "close in meaning", keywords handle "exact hit", and the two result sets are fused before it answers.',
+  'welcome.chat.feature1': 'Multi-step tool calling — one round short, it runs another',
+  'welcome.chat.feature2': 'Semantic + keyword hybrid retrieval, fused with RRF',
+  'welcome.chat.feature3': 'Every source clicks straight back to the original',
+  'welcome.chat.demoQuestion': 'What have I saved about RAG retrieval?',
+  'welcome.chat.demoTool': 'search knowledge base',
+  'welcome.chat.demoToolResult': '3 hits',
+  'welcome.chat.demoAnswer':
+    'Three saved items are directly relevant. They agree on this: vectors alone miss proper nouns, keywords alone miss paraphrases — so run both arms and fuse the rankings with RRF.',
+  'welcome.chat.demoSources': 'Sources',
+  'welcome.chat.demoSource1': 'The RAG retrieval pipeline in one hour',
+  'welcome.chat.demoSource2': 'pgvector in practice: tuning HNSW',
+  'welcome.chat.demoSource3': 'Why your vector recall is stuck',
+
+  'welcome.bilibili.eyebrow': 'On bilibili video pages',
+  'welcome.bilibili.heading': 'An extra panel while you watch',
+  'welcome.bilibili.desc':
+    'favbase mounts a panel in the bilibili sidebar: it grabs official subtitles when they exist and falls back to ASR transcription when they do not. One more click compresses the whole thing into a timestamped chapter summary — sponsored segments marked.',
+  'welcome.bilibili.feature1': 'Searchable subtitles — click a line, jump to that second',
+  'welcome.bilibili.feature2': 'No subtitles? Auto-transcribed and cached locally',
+  'welcome.bilibili.feature3': 'AI summary split into chapters, ads flagged',
+  'welcome.bilibili.mockTitle': 'RAG retrieval explained: from chunking to recall',
+  'welcome.bilibili.line1':
+    'So the first question is whether the model can actually use what you retrieved.',
+  'welcome.bilibili.line2':
+    'We start by chunking the text, keeping a little context overlap between chunks.',
+  'welcome.bilibili.line3': 'Then we embed — and that step caps how good your recall can get.',
+  'welcome.bilibili.summaryHeading': 'Full summary',
+  'welcome.bilibili.chapter1': 'Intro: why retrieval matters',
+  'welcome.bilibili.chapter2': 'Chunking strategy and overlap',
+  'welcome.bilibili.chapter3': 'Where the recall ceiling sits',
+  'welcome.bilibili.adBadge': 'Sponsored',
+
+  'welcome.picker.eyebrow': 'Last step',
+  'welcome.picker.heading': 'What should we collect first?',
+  'welcome.picker.desc':
+    'Pick one or several. This only decides where we drop you next — every platform stays available inside the extension, and you can add more any time.',
+  'welcome.picker.readyNow': 'Works right away',
+  'welcome.picker.needsLogin': 'Uses your login',
+  'welcome.picker.needsKey': 'Needs a key',
+  'welcome.picker.hint.bilibili': 'Reuses your bilibili session in this browser',
+  'welcome.picker.hint.github': 'Needs a personal access token',
+  'welcome.picker.hint.bookmarks': 'Reads your bookmark tree locally, zero setup',
+  'welcome.picker.hint.x': 'Just stay logged in on x.com',
+  'welcome.picker.hint.zhihu': 'Reuses your Zhihu session in this browser',
+  'welcome.picker.hint.youtube': 'Needs a Data API key and a channel',
+  'welcome.picker.selected': '{{count}} platforms selected',
+  'welcome.picker.selected.one': '{{count}} platform selected',
+  'welcome.picker.selectedNone': 'Nothing picked — you can just go in',
+  'welcome.picker.cta': 'Enter favbase',
+  'welcome.picker.ctaNone': 'Enter favbase anyway',
+  'welcome.picker.footnote':
+    'Every saved item, body and vector lives in this browser. No account, no server.',
 };
 
 export default en;

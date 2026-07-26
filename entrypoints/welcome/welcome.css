@@ -1,0 +1,62 @@
+/* Welcome page (welcome.html) — only the few things `sx` cannot express.
+   Everything structural/chromatic comes from the shared MUI theme, so this page
+   stays light/dark aware without a second palette. Loaded after app/global.css
+   (fonts + baseline reset), which welcome/main.tsx imports first. */
+
+/* Headline gradient. Two stops of theme grey into the coral primary in light
+   mode; inverted (white → coral light) in dark so the text stays the brightest
+   thing on screen. Kept in CSS because -webkit-background-clip needs the
+   background on the very element that paints the glyphs. */
+:root {
+  --fb-welcome-headline: linear-gradient(112deg, #1c252e 0%, #454f5b 42%, #fc7e5b 100%);
+  --fb-welcome-aurora-a: rgba(252, 126, 91, 0.3);
+  --fb-welcome-aurora-b: rgba(142, 51, 255, 0.22);
+}
+
+[data-color-scheme='dark'] {
+  --fb-welcome-headline: linear-gradient(112deg, #ffffff 0%, #c4cdd5 38%, #fda48a 100%);
+  --fb-welcome-aurora-a: rgba(252, 126, 91, 0.34);
+  --fb-welcome-aurora-b: rgba(142, 51, 255, 0.3);
+}
+
+.fb-headline {
+  background-image: var(--fb-welcome-headline);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* Streaming-answer caret in the chat demo. `steps(1)` keeps it a hard blink
+   rather than a fade, which is what a real terminal/stream cursor looks like. */
+.fb-caret {
+  animation: fb-caret-blink 1.05s steps(1) infinite;
+}
+
+@keyframes fb-caret-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  99% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+/* In-page CTA anchors ("see what it does") scroll smoothly — but never for
+   users who asked the OS to calm animations down. */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fb-caret {
+    animation: none;
+  }
+}
