@@ -183,24 +183,27 @@ describe('transcribeAndPersist', () => {
     expect(seen).toEqual(['BV-CONTENT-EVENT']);
   });
 
-  it('exposes independent Embedding and Tagging promises without changing completion', async () => {
+  it('uses an injected processing ticket and waits only for Embedding', async () => {
     await seedItem('BV-PROCESSING-RUNS');
     boundary.sendMessage.mockResolvedValueOnce(successResponse());
-    boundary.embedTexts.mockResolvedValueOnce([embeddingVector()]);
-    boundary.generateObject.mockResolvedValueOnce({ object: { tags: ['tracked'] } });
-    const onEmbeddingRun = vi.fn();
-    const onTaggingRun = vi.fn();
+    const embedding = deferred<'embedded'>();
+    const tagging = new Promise<never>(() => undefined);
+    const startProcessing = vi.fn(() => ({ embed: embedding.promise, tag: tagging }));
+    const onIndexed = vi.fn();
 
-    await (await import('./transcribe-utils')).transcribeAndPersist(
+    const run = (await import('./transcribe-utils')).transcribeAndPersist(
       'BV-PROCESSING-RUNS',
       'Tracked processing',
-      { onEmbeddingRun, onTaggingRun },
+      { startProcessing, onIndexed },
     );
 
-    expect(onEmbeddingRun).toHaveBeenCalledTimes(1);
-    expect(onTaggingRun).toHaveBeenCalledTimes(1);
-    await expect(onEmbeddingRun.mock.calls[0][0]).resolves.toBe('embedded');
-    await expect(onTaggingRun.mock.calls[0][0]).resolves.toBe('tagged');
+    await vi.waitFor(() => expect(startProcessing).toHaveBeenCalledWith('BV-PROCESSING-RUNS'));
+    expect(onIndexed).not.toHaveBeenCalled();
+
+    embedding.resolve('embedded');
+
+    await expect(run).resolves.toEqual(successResponse());
+    expect(onIndexed).toHaveBeenCalledWith('embedded');
   });
 
   it('keeps tagging independent when embedding fails', async () => {

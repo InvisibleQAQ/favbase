@@ -50,6 +50,7 @@ import {
   type YoutubePlaylistVideo,
 } from './youtube-api';
 import { charSplit } from '@/lib/embedding';
+import type { CooperativeCheckpoint } from '@/lib/collections';
 
 // Re-export what service consumers actually need: structured errors + the
 // types appearing in public signatures below. The channel probe
@@ -175,11 +176,13 @@ export interface PlaylistCount {
 export async function syncYoutubePlaylists(
   config: YoutubeSyncConfig,
   onProgress?: PlaylistsProgressCallback,
+  control?: CooperativeCheckpoint,
 ): Promise<SyncPlaylistsResult> {
   const db = getDb();
 
+  await control?.checkpoint();
   const channel = await resolveChannel(config.apiKey, config.channel);
-  const playlists = await fetchPlaylists(config.apiKey, channel.channelId);
+  const playlists = await fetchPlaylists(config.apiKey, channel.channelId, control);
 
   const known = await getKnownVideoIds(db);
   const fetchedThisRun = new Set<string>();
@@ -187,6 +190,7 @@ export async function syncYoutubePlaylists(
   let entryTotal = 0;
 
   for (const [index, playlist] of playlists.entries()) {
+    await control?.checkpoint();
     const playlistIndex = index + 1;
     onProgress?.({ playlistIndex, playlistCount: playlists.length, fetchedCount: entryTotal });
 
@@ -198,6 +202,7 @@ export async function syncYoutubePlaylists(
           playlistCount: playlists.length,
           fetchedCount: entryTotal + entryCount,
         }),
+      control,
     });
 
     for (const v of result.videos) fetchedThisRun.add(v.videoId);

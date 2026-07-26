@@ -21,7 +21,7 @@ X (Twitter) 书签收录领域（第四个平台，镜像 `lib/github/` 分层�
 
 ## 单一触发点
 
-`syncBookmarks(auth, onProgress?)` 自身上下文无关（`getDb()` 在扩展页=RPC proxy；**零 storage 访问**——auth 是显式参数，由能读 `chrome.storage` 的 context 解析）。唯一驱动：**app.html `/collections/x` 手动按钮** — hook 在 app.html 页面 context 自己 `getXAuth()`（webRequest 捕获链，用户须本 session 访问过 x.com）后调 `syncBookmarks(auth)`（经 RPC proxy 写 Offscreen PGlite），返回后经 `startJob('x-bookmarks','tag'/'embed', …tagNewItems/embedNewItems('x', newItemIds, undefined, onProgress))` 注册后台任务（**ST3：四 collection 平台统一在 hook 层 startJob，非裸 `void`**——进度 done/total + 跨挂载去重 + 全局勿关页计数）。见 `entrypoints/app/sections/x/`。**x.com 浮层触发点已删（07-20）**——它需 CS→bg→offscreen→tab 整条专属管线（CS 读不到 PGlite/token），维护成本高且冗余；随之 docs/16 MEDIUM-2「浮层路径不打标/不 embed」欠账自然消失（不再有该路径）。auth 捕获链（background webRequest）完整保留。
+`syncBookmarks(auth, onProgress?, control?)` 自身上下文无关（`getDb()` 在扩展页=RPC proxy；零 storage 访问）。`fetchPageWithBackoff` 在每次请求/重试前执行 cooperative checkpoint，当前 fetch 不取消。唯一驱动仍是 app.html `/collections/x` 手动按钮；返回后 hook 将 `newItemIds` enqueue 到共享 `x-bookmarks:embed|tag` lanes。x.com 浮层触发点保持删除，auth 捕获链完整保留。
 
 ## 约定
 

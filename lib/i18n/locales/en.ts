@@ -238,18 +238,21 @@ const en: Record<LocaleKeys, string> = {
   'header.themeAria': 'Toggle dark mode',
 
   // Global background-work reminder (dashboard header) — shown while any
-  // platform's sync/embed/tag job is running; count-plural.
-  'backgroundJobs.reminder': "{{count}} background tasks running — don't close this page",
-  'backgroundJobs.reminder.one': "{{count}} background task running — don't close this page",
+  // platform's unfinished sync/extract/embed/tag/transcribe jobs; count-plural.
+  'backgroundJobs.reminder': "{{count}} background tasks unfinished; don't close this page",
+  'backgroundJobs.reminder.one': "{{count}} background task unfinished; don't close this page",
   // Per-section post-sync job progress captions ({{done}}/{{total}} — not count,
   // so no plural variant).
   'backgroundJobs.embedding': 'Embedding {{done}}/{{total}}',
   'backgroundJobs.tagging': 'Tagging {{done}}/{{total}}',
   // Reminder tooltip: per-job kind labels (used when no {{done}}/{{total}} yet).
-  'backgroundJobs.kind.sync': 'Syncing',
+  'backgroundJobs.kind.sync': 'Sync',
+  'backgroundJobs.kind.extract': 'Extraction',
   'backgroundJobs.kind.embed': 'Embedding',
   'backgroundJobs.kind.tag': 'Tagging',
-  'backgroundJobs.kind.transcribe': 'Transcribing',
+  'backgroundJobs.kind.transcribe': 'Transcription',
+  'backgroundJobs.phase.pausing': 'Pausing: {{detail}}',
+  'backgroundJobs.phase.paused': 'Paused: {{detail}}',
 
   // Compact Collection pipeline segment labels.
   'pipeline.sync': 'Sync',
@@ -260,6 +263,9 @@ const en: Record<LocaleKeys, string> = {
   'pipeline.readme': 'README',
   'pipeline.embedding': 'Embed',
   'pipeline.tagging': 'Tags',
+  'pipeline.control.pause': 'Pause {{stage}}',
+  'pipeline.control.pausing': 'Pausing {{stage}}',
+  'pipeline.control.resume': 'Resume {{stage}}',
 
   // Shared collection-page copy (identical across all platforms) — platform
   // prefixes keep only platform-specific nouns (see *.noMatches).

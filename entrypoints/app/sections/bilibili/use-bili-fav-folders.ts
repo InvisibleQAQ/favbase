@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   fetchAndSyncFolders,
   syncAllFavoriteVideos,
@@ -6,6 +6,13 @@ import {
 } from '@/lib/bilibili/bili-sync-service';
 import type { BiliFavoritesSyncProgress } from '@/lib/bilibili/bili-sync-service';
 import type { BiliFavFolder } from '@/lib/bilibili/types';
+import {
+  startJob,
+  useJob,
+  type BackgroundJob,
+} from '../../hooks/background-jobs-store';
+
+const PLATFORM = 'bilibili';
 
 type LoginState = 'unknown' | 'logged_in' | 'not_logged_in';
 
@@ -17,42 +24,57 @@ interface UseFavFoldersReturn {
   loginState: LoginState;
   lastSyncedAt: Date | null;
   error: string | null;
+  syncJob: BackgroundJob<BiliFavoritesSyncProgress> | null;
   sync: () => Promise<void>;
 }
 
 export function useBiliFavFolders(): UseFavFoldersReturn {
   const [folders, setFolders] = useState<BiliFavFolder[]>([]);
   const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
-  const [syncProgress, setSyncProgress] = useState<BiliFavoritesSyncProgress | null>(null);
   const [loginState, setLoginState] = useState<LoginState>('unknown');
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const mountedRef = useRef(true);
+  const syncJob = useJob<BiliFavoritesSyncProgress>(PLATFORM, 'sync');
+  const syncing = syncJob?.running ?? false;
+  const syncProgress = syncJob?.progress ?? null;
+  const syncAuthFailed = syncJob?.error instanceof BiliAuthError;
+  const syncError = syncJob?.error != null && !syncAuthFailed
+    ? syncJob.error instanceof Error
+      ? syncJob.error.message
+      : 'Sync failed'
+    : null;
+  const effectiveLoginState = syncAuthFailed ? 'not_logged_in' : loginState;
+  const error = syncError ?? loadError;
 
   const sync = useCallback(async () => {
-    setSyncing(true);
-    setSyncProgress(null);
-    setError(null);
-    try {
-      const folderList = await fetchAndSyncFolders();
-      setLoginState('logged_in');
-      setFolders(folderList);
-      await syncAllFavoriteVideos(folderList, setSyncProgress);
-      setLastSyncedAt(new Date());
-    } catch (err) {
-      if (err instanceof BiliAuthError) {
-        setLoginState('not_logged_in');
-      } else {
-        setError(err instanceof Error ? err.message : 'Sync failed');
+    setLoadError(null);
+    startJob(PLATFORM, 'sync', async (setProgress, control) => {
+      setProgress({
+        fetchedCount: 0,
+        folderIndex: 0,
+        folderCount: 0,
+        folderTitle: '',
+        page: 0,
+        totalPages: 0,
+      });
+      const folderList = await fetchAndSyncFolders(control);
+      if (mountedRef.current) {
+        setLoginState('logged_in');
+        setFolders(folderList);
       }
-    } finally {
-      setSyncProgress(null);
-      setSyncing(false);
-    }
+      await syncAllFavoriteVideos(
+        folderList,
+        (progress) => setProgress(progress),
+        control,
+      );
+      if (mountedRef.current) setLastSyncedAt(new Date());
+    });
   }, []);
 
   useEffect(() => {
     let cancelled = false;
+    mountedRef.current = true;
 
     (async () => {
       try {
@@ -65,7 +87,7 @@ export function useBiliFavFolders(): UseFavFoldersReturn {
           if (err instanceof BiliAuthError) {
             setLoginState('not_logged_in');
           } else {
-            setError(err instanceof Error ? err.message : 'Failed to check login');
+            setLoadError(err instanceof Error ? err.message : 'Failed to check login');
           }
         }
       } finally {
@@ -73,7 +95,10 @@ export function useBiliFavFolders(): UseFavFoldersReturn {
       }
     })();
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      mountedRef.current = false;
+    };
   }, []);
 
   return {
@@ -81,9 +106,10 @@ export function useBiliFavFolders(): UseFavFoldersReturn {
     loading,
     syncing,
     syncProgress,
-    loginState,
+    loginState: effectiveLoginState,
     lastSyncedAt,
     error,
+    syncJob,
     sync,
   };
 }

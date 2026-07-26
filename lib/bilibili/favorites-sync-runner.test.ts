@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { BiliFavFolder, BiliFavVideo } from './types';
 import {
@@ -42,6 +42,30 @@ function makeVideo(bvid: string): BiliFavVideo {
 }
 
 describe('runFavoriteVideosSync', () => {
+  it('checks for a cooperative pause before claiming a folder and its page', async () => {
+    const checkpoint = vi.fn(async () => undefined);
+    const deps: FavoriteVideosSyncDeps = {
+      getBaseline: async () => ({ existingBvids: new Set(), historyComplete: false }),
+      fetchPage: async () => ({
+        videos: [makeVideo('BV1')],
+        totalPages: 1,
+        hasMore: false,
+      }),
+      persist: async () => undefined,
+      markHistoryComplete: async () => undefined,
+      waitBetweenPages: async () => undefined,
+    };
+
+    await runFavoriteVideosSync(
+      [makeFolder()],
+      deps,
+      undefined,
+      { checkpoint },
+    );
+
+    expect(checkpoint).toHaveBeenCalledTimes(2);
+  });
+
   it('fetches every page on first sync before persisting the folder', async () => {
     const events: string[] = [];
     const pages = [

@@ -350,6 +350,16 @@ describe('tagging-service (in-memory PGlite)', () => {
         { done: 2, total: 2 },
       ]);
     });
+
+    it('checks cooperative control before claiming each item', async () => {
+      await seedItem('tc1', 'x');
+      await seedItem('tc2', 'x');
+      const checkpoint = vi.fn(async () => {});
+
+      await tagNewItems('x', ['tc1', 'tc2'], deps(), undefined, { checkpoint });
+
+      expect(checkpoint).toHaveBeenCalledTimes(2);
+    });
   });
 
   // -------------------------------------------------------------------------

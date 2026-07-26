@@ -6,15 +6,26 @@ import { persistContentChunks, type PersistContentResult } from './bili-sync-ser
 
 const PLATFORM = 'bilibili';
 
+export interface TranscribeProcessingTicket {
+  embed: Promise<PersistContentResult>;
+  tag: Promise<unknown>;
+}
+
+export type StartTranscribeProcessing = (bvid: string) => TranscribeProcessingTicket;
+
 export interface TranscribePersistHooks {
   /** Fired after transcription succeeds, before local persistence and post-processing. */
   onIndexing?: () => void;
   /** Fired when Embedding settles with the reached content state (null = persist failed). */
   onIndexed?: (result: PersistContentResult) => void;
-  /** Exposes the independent post-processing lifecycles without awaiting them. */
-  onEmbeddingRun?: (run: Promise<unknown>) => void;
-  onTaggingRun?: (run: Promise<unknown>) => void;
+  /** Starts independent post-processing lanes after content is durable. */
+  startProcessing?: StartTranscribeProcessing;
 }
+
+const startProcessingDirectly: StartTranscribeProcessing = (bvid) => ({
+  embed: embedPlatformItem(PLATFORM, bvid),
+  tag: tagPlatformItem(PLATFORM, bvid),
+});
 
 /**
  * Transcribe via the background pipeline, persist content + chunks locally,
@@ -43,12 +54,9 @@ export async function transcribeAndPersist(
 
     emitDomainEvent('item-content-updated', { platform: PLATFORM, platformItemId: bvid });
 
-    const embedding = embedPlatformItem(PLATFORM, bvid);
-    hooks?.onEmbeddingRun?.(embedding);
-    const tagging = tagPlatformItem(PLATFORM, bvid);
-    hooks?.onTaggingRun?.(tagging);
-    void tagging;
-    const result = await embedding;
+    const processing = (hooks?.startProcessing ?? startProcessingDirectly)(bvid);
+    void processing.tag;
+    const result = await processing.embed;
     hooks?.onIndexed?.(result);
   }
 

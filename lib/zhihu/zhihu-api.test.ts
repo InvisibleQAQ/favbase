@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import {
   buildCollectionItemsUrl,
+  fetchCollectionItems,
   mapCollection,
   mapCollectionItem,
   stripHtmlToText,
@@ -186,5 +187,39 @@ describe('mapCollectionItem', () => {
     expect(mapCollectionItem({}, COLLECTION)).toBeNull();
     expect(mapCollectionItem(null, COLLECTION)).toBeNull();
     expect(mapCollectionItem({ content: { type: 'answer' } }, COLLECTION)).toBeNull();
+  });
+});
+
+describe('fetchCollectionItems cooperative control', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('checks control before claiming each page', async () => {
+    vi.useFakeTimers();
+    global.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: [answerItem()],
+            paging: { is_end: false, totals: 40 },
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ data: [], paging: { is_end: true, totals: 40 } }), {
+          status: 200,
+        }),
+      );
+    const checkpoint = vi.fn(async () => {});
+
+    const run = fetchCollectionItems(COLLECTION, undefined, { checkpoint });
+    await vi.runAllTimersAsync();
+    await run;
+
+    expect(checkpoint).toHaveBeenCalledTimes(2);
   });
 });

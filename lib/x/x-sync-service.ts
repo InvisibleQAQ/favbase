@@ -44,6 +44,7 @@ import {
 // it must import charSplit from the leaf module. Same offscreen rule as the
 // './vector-store' / '@/lib/storage/keys' leaf imports above.
 import { charSplit } from '@/lib/embedding/char-split';
+import type { CooperativeCheckpoint } from '@/lib/collections';
 
 // Re-export what service consumers actually need: structured errors + the types
 // appearing in public signatures below.
@@ -141,6 +142,7 @@ export interface AuthorCount {
 export async function syncBookmarks(
   auth: XAuth | null,
   onProgress?: BookmarksProgressCallback,
+  control?: CooperativeCheckpoint,
 ): Promise<SyncBookmarksResult> {
   if (!auth) throw new XAuthError('Not logged in to x.com', 'no-token');
 
@@ -150,7 +152,7 @@ export async function syncBookmarks(
   const known = await getKnownTweetIds(db);
   const shouldStop = (id: string) => known.has(id);
 
-  const bookmarks = await fetchAllBookmarks(auth, onProgress, { shouldStop });
+  const bookmarks = await fetchAllBookmarks(auth, onProgress, { shouldStop, control });
   return syncBookmarksToDb(db, bookmarks);
 }
 

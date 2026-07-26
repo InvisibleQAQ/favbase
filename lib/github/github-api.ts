@@ -4,6 +4,8 @@
  * normalization, structured errors. No UI copy, no i18n (seam is at UI).
  */
 
+import type { CooperativeCheckpoint } from '@/lib/collections';
+
 // ---------------------------------------------------------------------------
 // Internal helpers (not exported)
 // ---------------------------------------------------------------------------
@@ -188,13 +190,16 @@ async function fetchStarredPage(
 export async function fetchAllStarred(
   token: string,
   onProgress?: StarsProgressCallback,
+  control?: CooperativeCheckpoint,
 ): Promise<GithubStarredRepo[]> {
+  await control?.checkpoint();
   const first = await fetchStarredPage(token, 1);
   const totalPages = parseLinkHeader(first.linkHeader) ?? 1;
   const all: GithubStarredRepo[] = [...first.repos];
   onProgress?.(1, totalPages, all.length);
 
   for (let page = 2; page <= totalPages; page++) {
+    await control?.checkpoint();
     await new Promise((resolve) => setTimeout(resolve, PAGE_DELAY_MS));
     const { repos } = await fetchStarredPage(token, page);
     all.push(...repos);

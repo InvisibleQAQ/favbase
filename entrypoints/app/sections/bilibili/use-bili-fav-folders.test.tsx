@@ -85,6 +85,48 @@ describe('useBiliFavFolders sync boundary', () => {
     expect(serviceMocks.syncAllFavoriteVideos).toHaveBeenCalledWith(
       FOLDERS,
       expect.any(Function),
+      expect.objectContaining({ checkpoint: expect.any(Function) }),
     );
+  });
+
+  it('rejoins an in-flight full sync after remount without starting another worker', async () => {
+    let finishSync!: () => void;
+    serviceMocks.syncAllFavoriteVideos.mockImplementation(
+      () => new Promise<void>((resolve) => {
+        finishSync = resolve;
+      }),
+    );
+
+    await act(async () => {
+      root.render(<Probe />);
+    });
+    act(() => {
+      void current?.sync();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(serviceMocks.syncAllFavoriteVideos).toHaveBeenCalledOnce();
+
+    act(() => root.unmount());
+    root = createRoot(container);
+    await act(async () => {
+      root.render(<Probe />);
+    });
+
+    expect(current?.syncing).toBe(true);
+    act(() => {
+      void current?.sync();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(serviceMocks.syncAllFavoriteVideos).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      finishSync();
+      await Promise.resolve();
+    });
   });
 });

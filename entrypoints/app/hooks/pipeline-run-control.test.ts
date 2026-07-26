@@ -1,0 +1,51 @@
+import { describe, expect, it } from 'vitest';
+
+import { createPipelineRunControl, type PipelineRunPhase } from './pipeline-run-control';
+
+describe('Pipeline Run control', () => {
+  it('pauses at the next safe checkpoint and resumes the same run', async () => {
+    const phases: PipelineRunPhase[] = [];
+    const control = createPipelineRunControl((phase) => phases.push(phase));
+
+    control.pause();
+    expect(control.getPhase()).toBe('pausing');
+
+    let continued = false;
+    const checkpoint = control.checkpoint().then(() => {
+      continued = true;
+    });
+    await Promise.resolve();
+
+    expect(control.getPhase()).toBe('paused');
+    expect(continued).toBe(false);
+
+    control.resume();
+    await checkpoint;
+
+    expect(control.getPhase()).toBe('running');
+    expect(continued).toBe(true);
+    expect(phases).toEqual(['pausing', 'paused', 'running']);
+  });
+
+  it('ignores duplicate and out-of-order control commands', async () => {
+    const phases: PipelineRunPhase[] = [];
+    const control = createPipelineRunControl((phase) => phases.push(phase));
+
+    control.pause();
+    control.pause();
+    control.resume();
+    expect(control.getPhase()).toBe('pausing');
+
+    const checkpoint = control.checkpoint();
+    await Promise.resolve();
+    control.pause();
+    expect(control.getPhase()).toBe('paused');
+
+    control.resume();
+    control.resume();
+    await checkpoint;
+
+    expect(control.getPhase()).toBe('running');
+    expect(phases).toEqual(['pausing', 'paused', 'running']);
+  });
+});

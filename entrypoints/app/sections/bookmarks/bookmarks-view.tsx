@@ -7,7 +7,11 @@ import {
   PipelineProgressStrip,
   StateBox,
 } from '../../components/collection';
-import { buildPipelineSegments } from '../../hooks/pipeline-segments';
+import {
+  backgroundJobRuntime,
+  buildPipelineSegments,
+  pipelineControlLabels,
+} from '../../hooks/pipeline-segments';
 import { useProcessingCoverage } from '../../hooks/use-processing-coverage';
 import { Iconify } from '../../components/iconify';
 import { BookmarkCard } from './bookmark-card';
@@ -60,6 +64,9 @@ export function BookmarksView() {
       }),
     );
   }
+  const fetchLabel = t('pipeline.fetch');
+  const embeddingLabel = t('pipeline.embedding');
+  const taggingLabel = t('pipeline.tagging');
 
   const pipeline = (
     <PipelineProgressStrip
@@ -68,17 +75,14 @@ export function BookmarksView() {
         coverageStatus,
         stages: [
           {
-            id: 'sync',
-            label: t('pipeline.sync'),
+            id: 'fetch',
+            label: fetchLabel,
             coverage: 'acquisition',
-            runtime: {
-              running: bm.syncing,
-              progress:
-                bm.syncing && coverageStatus === 'ready'
-                  ? { done: coverage.acquisition.done, total: null }
-                  : null,
-              error: bm.syncError,
-            },
+            completedProgress: 'last-run',
+            runtime: backgroundJobRuntime(
+              bm.syncJob,
+              pipelineControlLabels(t, fetchLabel),
+            ),
           },
           {
             id: 'extraction',
@@ -94,15 +98,21 @@ export function BookmarksView() {
           },
           {
             id: 'embedding',
-            label: t('pipeline.embedding'),
+            label: embeddingLabel,
             coverage: 'embedding',
-            runtime: extraction.embedJob,
+            runtime: backgroundJobRuntime(
+              extraction.embedJob,
+              pipelineControlLabels(t, embeddingLabel),
+            ),
           },
           {
             id: 'tagging',
-            label: t('pipeline.tagging'),
+            label: taggingLabel,
             coverage: 'tagging',
-            runtime: extraction.tagJob,
+            runtime: backgroundJobRuntime(
+              extraction.tagJob,
+              pipelineControlLabels(t, taggingLabel),
+            ),
           },
         ],
       })}

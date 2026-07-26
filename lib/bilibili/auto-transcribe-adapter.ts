@@ -11,12 +11,16 @@ import {
   getPendingPreview,
   markVideoError,
 } from './bili-sync-service';
-import { transcribeAndPersist, createStatusListener } from './transcribe-utils';
+import {
+  transcribeAndPersist,
+  createStatusListener,
+  type StartTranscribeProcessing,
+} from './transcribe-utils';
 import { normalizeCover } from './url-utils';
 import { getAsrSettings } from '@/lib/storage';
 
 export interface BiliAutoTranscribeAdapterOptions {
-  trackProcessingRun?: (kind: 'embed' | 'tag', run: Promise<unknown>) => void;
+  startProcessing?: StartTranscribeProcessing;
 }
 
 export function createBiliAutoTranscribeAdapter(
@@ -63,8 +67,7 @@ export function createBiliAutoTranscribeAdapter(
     async transcribe(videoId: string, title: string, onIndexing?: () => void): Promise<TranscribeResponse> {
       return transcribeAndPersist(videoId, title, {
         onIndexing,
-        onEmbeddingRun: (run) => options.trackProcessingRun?.('embed', run),
-        onTaggingRun: (run) => options.trackProcessingRun?.('tag', run),
+        startProcessing: options.startProcessing,
       });
     },
 

@@ -232,18 +232,21 @@ const zhCN = {
   'header.themeAria': '切换深色模式',
 
   // Global background-work reminder (dashboard header) — shown while any
-  // platform's sync/embed/tag job is running; count-plural.
-  'backgroundJobs.reminder': '{{count}} 项后台任务进行中，请勿关闭本页',
-  'backgroundJobs.reminder.one': '{{count}} 项后台任务进行中，请勿关闭本页',
+  // platform's unfinished sync/extract/embed/tag/transcribe jobs; count-plural.
+  'backgroundJobs.reminder': '{{count}} 项后台任务未完成，请勿关闭本页',
+  'backgroundJobs.reminder.one': '{{count}} 项后台任务未完成，请勿关闭本页',
   // Per-section post-sync job progress captions ({{done}}/{{total}} — not count,
   // so no plural variant).
-  'backgroundJobs.embedding': '正在向量化 {{done}}/{{total}}',
-  'backgroundJobs.tagging': '正在打标签 {{done}}/{{total}}',
+  'backgroundJobs.embedding': '向量化 {{done}}/{{total}}',
+  'backgroundJobs.tagging': '打标签 {{done}}/{{total}}',
   // Reminder tooltip: per-job kind labels (used when no {{done}}/{{total}} yet).
-  'backgroundJobs.kind.sync': '同步中',
-  'backgroundJobs.kind.embed': '向量化中',
-  'backgroundJobs.kind.tag': '打标签中',
-  'backgroundJobs.kind.transcribe': '转录中',
+  'backgroundJobs.kind.sync': '同步',
+  'backgroundJobs.kind.extract': '提取',
+  'backgroundJobs.kind.embed': '向量化',
+  'backgroundJobs.kind.tag': '打标签',
+  'backgroundJobs.kind.transcribe': '转录',
+  'backgroundJobs.phase.pausing': '正在暂停 · {{detail}}',
+  'backgroundJobs.phase.paused': '已暂停 · {{detail}}',
 
   // Compact Collection pipeline segment labels.
   'pipeline.sync': '同步',
@@ -254,6 +257,9 @@ const zhCN = {
   'pipeline.readme': 'README',
   'pipeline.embedding': '向量',
   'pipeline.tagging': '标签',
+  'pipeline.control.pause': '暂停{{stage}}',
+  'pipeline.control.pausing': '正在暂停{{stage}}',
+  'pipeline.control.resume': '继续{{stage}}',
 
   // Shared collection-page copy (identical across all platforms) — platform
   // prefixes keep only platform-specific nouns (see *.noMatches).

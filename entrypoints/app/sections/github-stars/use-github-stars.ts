@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 
 import { useSettings } from '@/lib/hooks/useSettings';
+import type { CooperativeCheckpoint } from '@/lib/collections';
 import {
   syncStars,
   getStarredRepos,
@@ -11,14 +12,12 @@ import {
   type GithubRepoItem,
   type LanguageCount,
 } from '@/lib/github/github-sync-service';
-import { tagNewItems } from '@/lib/tagging';
-import { embedNewItems } from '@/lib/embedding';
-
 import {
   useCollectionLibrary,
   type CollectionQueryParams,
 } from '../../hooks/use-collection-library';
-import { startJob, type BackgroundJob } from '../../hooks/background-jobs-store';
+import type { BackgroundJob } from '../../hooks/background-jobs-store';
+import { startCollectionProcessingJobs } from '../../hooks/collection-processing-jobs';
 
 /** Job namespace key (reused as `useCollectionLibrary` logTag). */
 const LOG_TAG = 'github-stars';
@@ -40,6 +39,7 @@ export interface ReadmePhaseProgress {
   phase: 'readme';
   done: number;
   total: number;
+  fetchedCount: number;
 }
 
 export type SyncProgress = StarsPhaseProgress | ReadmePhaseProgress;
@@ -81,6 +81,7 @@ export interface UseGithubStarsReturn {
   syncing: boolean;
   syncProgress: SyncProgress | null;
   syncError: GithubSyncError | null;
+  syncJob: BackgroundJob<SyncProgress> | null;
   sync: () => Promise<void>;
 
   // Post-sync embed / tag jobs (progress captions).
@@ -110,11 +111,23 @@ export function useGithubStars(): UseGithubStarsReturn {
   const hasToken = Boolean(token);
 
   const syncFn = useCallback(
-    async (onProgress: (progress: SyncProgress) => void) => {
+    async (
+      onProgress: (progress: SyncProgress) => void,
+      control: CooperativeCheckpoint,
+    ) => {
       if (!token) return;
+      let fetchedTotal = 0;
+      onProgress({
+        phase: 'stars',
+        page: 0,
+        totalPages: 0,
+        fetchedCount: 0,
+        estimatedTotal: 0,
+      });
       const result = await syncStars(
         token,
         (page, totalPages, fetchedCount) => {
+          fetchedTotal = fetchedCount;
           onProgress({
             phase: 'stars',
             page,
@@ -124,20 +137,20 @@ export function useGithubStars(): UseGithubStarsReturn {
           });
         },
         (done, total) => {
-          onProgress({ phase: 'readme', done, total });
+          onProgress({ phase: 'readme', done, total, fetchedCount: fetchedTotal });
         },
+        control,
       );
       // Auto-tag + auto-embed the READMEs just persisted, registered as
       // background jobs (survive route switches, cross-mount dedupe, feed the
       // global "don't close" reminder, done/total captions). The triggers live
       // in this app.html caller (not in lib/github) — the tagging/embedding
       // import chains need chrome.storage, and lib/github stays storage-free.
-      startJob(LOG_TAG, 'tag', (sp) =>
-        tagNewItems(PLATFORM, result.newItemIds, undefined, (p) => sp(p)),
-      );
-      startJob(LOG_TAG, 'embed', (sp) =>
-        embedNewItems(PLATFORM, result.newItemIds, undefined, (p) => sp(p)),
-      );
+      startCollectionProcessingJobs({
+        jobPlatform: LOG_TAG,
+        itemPlatform: PLATFORM,
+        itemIds: result.newItemIds,
+      });
     },
     [token],
   );
@@ -182,6 +195,7 @@ export function useGithubStars(): UseGithubStarsReturn {
     syncing: lib.syncing,
     syncProgress: lib.syncProgress,
     syncError: lib.syncError,
+    syncJob: lib.syncJob,
     sync,
     embedJob: lib.embedJob,
     tagJob: lib.tagJob,

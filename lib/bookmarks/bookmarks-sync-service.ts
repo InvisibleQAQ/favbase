@@ -37,6 +37,7 @@ import { ingestCollection, persistItemContent } from '@/lib/ingest/ingest';
 // chrome.storage at module load — same rule as lib/github/github-sync-service.
 import { charSplit } from '@/lib/embedding/char-split';
 import { readBookmarkTree, type BookmarkTree } from './bookmarks-api';
+import type { CooperativeCheckpoint } from '@/lib/collections';
 
 export type { BookmarkTree, BookmarkFolder, BookmarkEntry } from './bookmarks-api';
 
@@ -99,8 +100,11 @@ export interface BookmarksQuery {
 // ---------------------------------------------------------------------------
 
 /** Read the local bookmark tree and persist it. Auto-called on page visit. */
-export async function syncBookmarks(): Promise<SyncBookmarksResult> {
+export async function syncBookmarks(
+  control?: CooperativeCheckpoint,
+): Promise<SyncBookmarksResult> {
   const tree = await readBookmarkTree();
+  await control?.checkpoint();
   return syncBookmarkTreeToDb(getDb(), tree);
 }
 

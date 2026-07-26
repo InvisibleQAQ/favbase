@@ -50,6 +50,10 @@ A read-only, platform-scoped snapshot of how many locally persisted, eligible Co
 It does not claim that the local collection contains every current item from the external platform.
 _Avoid_: Remote sync completeness, job history, processing dashboard
 
+**Pipeline Run**:
+One bounded execution attempt for a Collection pipeline stage; its completion does not claim that local items fully cover the external platform.
+_Avoid_: Processing Coverage, remote sync completeness
+
 **Tag Drill-down**:
 Navigation from a Collection Analytics tag ranking to the aggregate collection filtered by that Used Tag.
 _Avoid_: Dashboard item browser
@@ -67,6 +71,13 @@ _Avoid_: Processing Dashboard, queue console
 - A **Collection Item** has one **Creator** or bookmark **Domain**
 - A **Collection Item** belongs to one or more **Sources** when the platform exposes containers
 - A platform Collection page may present **Processing Coverage** for its locally persisted **Collection Items**
+- A platform Collection page may present a **Pipeline Run** together with idle **Processing Coverage**
+- Each **Pipeline Run** belongs to one pipeline stage and is controlled independently; stage controls do not imply an atomic whole-pipeline operation
+- Fetch, Embed, and Tags **Pipeline Runs** share one control contract across all supported Collection platforms
+- A pause request lets the current **Pipeline Run** item settle, then stops before the stage claims its next item
+- A paused **Pipeline Run** remains controllable across Collection route changes in the current app-page runtime, but not after that runtime closes
+- A paused **Pipeline Run** remains unfinished and appears in the global do-not-close reminder until it resumes and settles
+- A completed Fetch **Pipeline Run** may report 100% run completion even when remote sync completeness is unknowable
 - The **Dashboard** does not present **Processing Coverage** or operational task progress
 - **Library Composition** uses **Item Count** for platform share and **Membership Count** for Source rankings
 - A **Tag Drill-down** leaves the **Dashboard** and opens matching **Collection Items** in the aggregate collection
@@ -75,8 +86,11 @@ _Avoid_: Processing Dashboard, queue console
 
 > **Dev:** "Should the **Dashboard** show the current Embedding job and a pause button?"
 > **Domain expert:** "No. The **Dashboard** summarizes stored **Collection Items**; task progress belongs elsewhere."
+>
+> **Dev:** "Does Fetch at 100% mean every remote favorite exists locally?"
+> **Domain expert:** "No. It means that **Pipeline Run** finished; remote completeness may still be unknowable."
 
 ## Flagged ambiguities
 
-- "Progress" may mean live task execution or idle **Processing Coverage**; platform Collection pages may combine them in one compact control, but the **Dashboard** contains neither.
+- "Progress" previously meant both a live **Pipeline Run** and idle **Processing Coverage**; these are now distinct, although a platform Collection page may combine them in one compact control.
 - External platforms do not expose a durable remote-total snapshot, so **Processing Coverage** must not be described as remote sync completeness.

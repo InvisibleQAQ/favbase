@@ -9,6 +9,11 @@ import {
   type BookmarkItem,
   type BookmarkFolderRef,
 } from '@/lib/bookmarks/bookmarks-sync-service';
+import {
+  startJob,
+  useJob,
+  type BackgroundJob,
+} from '../../hooks/background-jobs-store';
 
 const PAGE_SIZE = 24;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -37,6 +42,7 @@ export interface UseBookmarksReturn {
   // Auto-sync (runs once on mount; `sync` re-exposed for error-state retry)
   syncing: boolean;
   syncError: string | null;
+  syncJob: BackgroundJob | null;
   sync: () => void;
 }
 
@@ -64,9 +70,13 @@ export function useBookmarks(folderId: string | undefined): UseBookmarksReturn {
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [metaLoading, setMetaLoading] = useState(true);
 
-  // Sync
-  const [syncing, setSyncing] = useState(false);
-  const [syncError, setSyncError] = useState<string | null>(null);
+  const syncJob = useJob('bookmarks', 'sync');
+  const syncing = syncJob?.running ?? false;
+  const syncError = syncJob?.error == null
+    ? null
+    : syncJob.error instanceof Error
+      ? syncJob.error.message
+      : String(syncJob.error);
 
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -111,42 +121,29 @@ export function useBookmarks(folderId: string | undefined): UseBookmarksReturn {
     setLibraryCount(countResult.total);
   }, []);
 
-  // One-shot re-scan of the local bookmark tree. Stable identity (refreshMeta is
-  // stable) so the mount effect runs it exactly once; also wired to the
-  // error-state retry button.
-  const runningRef = useRef(false);
-  const sync = useCallback(async () => {
-    if (runningRef.current) return;
-    runningRef.current = true;
-    setSyncing(true);
-    setSyncError(null);
-    try {
+  const sync = useCallback(() => {
+    startJob('bookmarks', 'sync', async (setProgress, control) => {
       await initDbProxy();
-      await syncBookmarks();
-    } catch (err) {
-      console.error('[bookmarks] sync failed:', err);
-      if (mountedRef.current) {
-        setSyncError(err instanceof Error ? err.message : String(err));
-      }
-    } finally {
-      if (mountedRef.current) setSyncing(false);
-    }
-    try {
-      await refreshMeta();
-    } catch (err) {
-      console.error('[bookmarks] meta load failed:', err);
-    } finally {
-      runningRef.current = false;
-      if (mountedRef.current) {
-        setMetaLoading(false);
-        setQueryVersion((v) => v + 1);
-      }
-    }
-  }, [refreshMeta]);
+      setProgress({ done: 0, total: null });
+      const result = await syncBookmarks(control);
+      setProgress({ done: result.totalBookmarks, total: null });
+    });
+  }, []);
 
   useEffect(() => {
-    void sync();
+    sync();
   }, [sync]);
+
+  useEffect(() => {
+    if (syncJob?.running) return;
+    void refreshMeta()
+      .catch((err: unknown) => console.error('[bookmarks] meta load failed:', err))
+      .finally(() => {
+        if (!mountedRef.current) return;
+        setMetaLoading(false);
+        setQueryVersion((v) => v + 1);
+      });
+  }, [refreshMeta, syncJob?.running, syncJob?.generation]);
 
   // Paged query — refetch on folder/search/page change and after sync.
   useEffect(() => {
@@ -196,8 +193,7 @@ export function useBookmarks(folderId: string | undefined): UseBookmarksReturn {
     metaLoading,
     syncing,
     syncError,
-    sync: () => {
-      void sync();
-    },
+    syncJob,
+    sync,
   };
 }

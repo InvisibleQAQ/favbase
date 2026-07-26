@@ -5,6 +5,8 @@ import {
   trackJobRun,
   getJob,
   getRunningJobCount,
+  pauseJob,
+  resumeJob,
   type BackgroundJobKind,
 } from './background-jobs-store';
 
@@ -56,6 +58,19 @@ describe('backgroundJobs store', () => {
     expect(job?.generation).toBe(2);
   });
 
+  it('retains the last successful progress separately from active progress', async () => {
+    startJob('p-summary', 'sync', async (setProgress) => {
+      setProgress({ done: 7, total: null });
+    });
+    await flush();
+
+    expect(getJob('p-summary', 'sync')).toMatchObject({
+      phase: 'completed',
+      progress: null,
+      lastProgress: { done: 7, total: null },
+    });
+  });
+
   it('forwards progress from the runner while running', async () => {
     const gate = deferred();
     startJob('p-prog', 'embed', async (setProgress) => {
@@ -68,6 +83,26 @@ describe('backgroundJobs store', () => {
     await flush();
     // Progress resets to null once the job settles.
     expect(getJob('p-prog', 'embed')?.progress).toBeNull();
+  });
+
+  it('ignores stale progress callbacks from an older run', async () => {
+    let reportOldProgress!: (progress: unknown) => void;
+    startJob('p-owner-progress', 'sync', async (setProgress) => {
+      reportOldProgress = setProgress;
+    });
+    await flush();
+
+    const gate = deferred();
+    startJob('p-owner-progress', 'sync', async (setProgress) => {
+      setProgress({ run: 'new' });
+      await gate.promise;
+    });
+
+    reportOldProgress({ run: 'old' });
+    expect(getJob('p-owner-progress', 'sync')?.progress).toEqual({ run: 'new' });
+
+    gate.resolve();
+    await flush();
   });
 
   it('captures a thrown error and does NOT bump generation', async () => {
@@ -107,6 +142,39 @@ describe('backgroundJobs store', () => {
     a.resolve();
     b.resolve();
     await flush();
+    expect(getRunningJobCount()).toBe(before);
+  });
+
+  it('pauses at the runner checkpoint and resumes the same job', async () => {
+    const reachCheckpoint = deferred();
+    const finish = deferred();
+    const before = getRunningJobCount();
+    let continued = false;
+
+    startJob('p-control', 'embed', async (_setProgress, control) => {
+      await reachCheckpoint.promise;
+      await control.checkpoint();
+      continued = true;
+      await finish.promise;
+    });
+
+    pauseJob('p-control', 'embed');
+    expect(getJob('p-control', 'embed')?.phase).toBe('pausing');
+
+    reachCheckpoint.resolve();
+    await flush();
+    expect(getJob('p-control', 'embed')?.phase).toBe('paused');
+    expect(continued).toBe(false);
+    expect(getRunningJobCount()).toBe(before + 1);
+
+    resumeJob('p-control', 'embed');
+    await flush();
+    expect(getJob('p-control', 'embed')?.phase).toBe('running');
+    expect(continued).toBe(true);
+
+    finish.resolve();
+    await flush();
+    expect(getJob('p-control', 'embed')?.running).toBe(false);
     expect(getRunningJobCount()).toBe(before);
   });
 
@@ -164,6 +232,6 @@ describe('backgroundJobs store', () => {
   });
 });
 
-// Type-only guard: kind union is closed to the four known kinds.
-const _kinds: BackgroundJobKind[] = ['sync', 'embed', 'tag', 'transcribe'];
+// Type-only guard: kind union is closed to the five known kinds.
+const _kinds: BackgroundJobKind[] = ['sync', 'extract', 'embed', 'tag', 'transcribe'];
 void _kinds;

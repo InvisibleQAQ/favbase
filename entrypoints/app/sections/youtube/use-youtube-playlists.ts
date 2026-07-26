@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 
 import { useSettings } from '@/lib/hooks/useSettings';
+import type { CooperativeCheckpoint } from '@/lib/collections';
 import {
   syncYoutubePlaylists,
   getPlaylistVideos,
@@ -12,14 +13,12 @@ import {
   type PlaylistCount,
   type YoutubePlaylistsProgress,
 } from '@/lib/youtube/youtube-sync-service';
-import { tagNewItems } from '@/lib/tagging';
-import { embedNewItems } from '@/lib/embedding';
-
 import {
   useCollectionLibrary,
   type CollectionQueryParams,
 } from '../../hooks/use-collection-library';
-import { startJob, type BackgroundJob } from '../../hooks/background-jobs-store';
+import type { BackgroundJob } from '../../hooks/background-jobs-store';
+import { startCollectionProcessingJobs } from '../../hooks/collection-processing-jobs';
 
 /** Job namespace key (reused as `useCollectionLibrary` logTag). */
 const LOG_TAG = 'youtube-playlists';
@@ -77,6 +76,7 @@ export interface UseYoutubePlaylistsReturn {
   syncing: boolean;
   syncProgress: YoutubePlaylistsProgress | null;
   syncError: YoutubeSyncError | null;
+  syncJob: BackgroundJob<YoutubePlaylistsProgress> | null;
   sync: () => Promise<void>;
 
   // Post-sync embed / tag jobs (progress captions).
@@ -103,20 +103,23 @@ export function useYoutubePlaylists(): UseYoutubePlaylistsReturn {
   // Config resolution stays inside the adapter's syncFn closure (spec rule:
   // the generic layer reads zero storage / zero platform auth).
   const syncFn = useCallback(
-    async (onProgress: (progress: YoutubePlaylistsProgress) => void) => {
+    async (
+      onProgress: (progress: YoutubePlaylistsProgress) => void,
+      control: CooperativeCheckpoint,
+    ) => {
       if (!apiKey || !channel) return;
-      const result = await syncYoutubePlaylists({ apiKey, channel }, onProgress);
+      onProgress({ fetchedCount: 0, playlistIndex: 0, playlistCount: 0 });
+      const result = await syncYoutubePlaylists({ apiKey, channel }, onProgress, control);
       // Auto-tag + auto-embed the descriptions just persisted, registered as
       // background jobs (survive route switches, cross-mount dedupe, feed the
       // global "don't close" reminder, done/total captions). Moved UP from the
       // lib wrapper (ST3) so all four collection platforms share this single
       // hook-layer seam.
-      startJob(LOG_TAG, 'tag', (sp) =>
-        tagNewItems(PLATFORM, result.newItemIds, undefined, (p) => sp(p)),
-      );
-      startJob(LOG_TAG, 'embed', (sp) =>
-        embedNewItems(PLATFORM, result.newItemIds, undefined, (p) => sp(p)),
-      );
+      startCollectionProcessingJobs({
+        jobPlatform: LOG_TAG,
+        itemPlatform: PLATFORM,
+        itemIds: result.newItemIds,
+      });
     },
     [apiKey, channel],
   );
@@ -166,6 +169,7 @@ export function useYoutubePlaylists(): UseYoutubePlaylistsReturn {
     syncing: lib.syncing,
     syncProgress: lib.syncProgress,
     syncError: lib.syncError,
+    syncJob: lib.syncJob,
     sync,
     embedJob: lib.embedJob,
     tagJob: lib.tagJob,

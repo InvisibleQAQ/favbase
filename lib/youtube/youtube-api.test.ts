@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { parseIso8601Duration, parseChannelInput } from './youtube-api';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import { fetchPlaylistItems, parseIso8601Duration, parseChannelInput } from './youtube-api';
 
 describe('parseIso8601Duration', () => {
   it('parses full H/M/S durations', () => {
@@ -69,5 +69,38 @@ describe('parseChannelInput', () => {
 
   it('a UC prefix with the wrong length falls back to handle', () => {
     expect(parseChannelInput('UCshort')).toEqual({ kind: 'handle', value: 'UCshort' });
+  });
+});
+
+describe('fetchPlaylistItems cooperative control', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('checks control before claiming each playlist page', async () => {
+    vi.useFakeTimers();
+    global.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            items: [{ contentDetails: { videoId: 'v1' }, snippet: {} }],
+            nextPageToken: 'next',
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [] }), { status: 200 }));
+    const checkpoint = vi.fn(async () => {});
+
+    const run = fetchPlaylistItems('key', 'playlist', {
+      needsDetails: () => false,
+      control: { checkpoint },
+    });
+    await vi.runAllTimersAsync();
+    await run;
+
+    expect(checkpoint).toHaveBeenCalledTimes(2);
   });
 });

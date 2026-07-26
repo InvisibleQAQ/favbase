@@ -24,6 +24,7 @@
  */
 
 import type { XAuth } from './x-auth';
+import type { CooperativeCheckpoint } from '@/lib/collections';
 
 // Auth lives in x-auth.ts (session-storage-backed capture); re-export so the
 // sync service keeps a single `./x-api` import surface.
@@ -169,6 +170,7 @@ export type BookmarksProgressCallback = (fetchedCount: number, page: number) => 
 export interface FetchBookmarksOptions {
   /** Incremental stop: return true when a known (already-stored) id is hit. */
   shouldStop?: (tweetId: string) => boolean;
+  control?: CooperativeCheckpoint;
 }
 
 // ---------------------------------------------------------------------------
@@ -431,7 +433,7 @@ export async function fetchAllBookmarks(
   while (true) {
     page += 1;
     const url = buildBookmarksUrl({ count: PAGE_SIZE, cursor });
-    const { json, res } = await fetchPageWithBackoff(url, headers);
+    const { json, res } = await fetchPageWithBackoff(url, headers, opts.control);
 
     const instructions = extractInstructions(json);
     const tweets = parseTweets(instructions);
@@ -482,10 +484,12 @@ export async function fetchAllBookmarks(
 export async function fetchPageWithBackoff(
   url: string,
   headers: Record<string, string>,
+  control?: CooperativeCheckpoint,
 ): Promise<{ json: unknown; res: Response }> {
   let attempt = 0;
 
   while (true) {
+    await control?.checkpoint();
     // Mirror supermemory's fetch verbatim: NO `credentials` option. Do NOT use
     // `credentials:'omit'` — omit means "exclude credentials (cookies) from
     // this request", which makes Chromium drop the Cookie header entirely, so

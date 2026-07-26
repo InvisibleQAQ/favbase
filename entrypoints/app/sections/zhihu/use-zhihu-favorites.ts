@@ -8,14 +8,13 @@ import {
   type ZhihuFavoriteItem,
   type ZhihuCollectionCount,
 } from '@/lib/zhihu/zhihu-sync-service';
-import { tagNewItems } from '@/lib/tagging';
-import { embedNewItems } from '@/lib/embedding';
-
+import type { CooperativeCheckpoint } from '@/lib/collections';
 import {
   useCollectionLibrary,
   type CollectionQueryParams,
 } from '../../hooks/use-collection-library';
-import { startJob, type BackgroundJob } from '../../hooks/background-jobs-store';
+import type { BackgroundJob } from '../../hooks/background-jobs-store';
+import { startCollectionProcessingJobs } from '../../hooks/collection-processing-jobs';
 
 /** Job namespace key (reused as `useCollectionLibrary` logTag). */
 const LOG_TAG = 'zhihu-favorites';
@@ -76,6 +75,7 @@ export interface UseZhihuFavoritesReturn {
   syncing: boolean;
   syncProgress: ZhihuSyncProgress | null;
   syncError: ZhihuSyncError | null;
+  syncJob: BackgroundJob<ZhihuSyncProgress> | null;
   sync: () => Promise<void>;
 
   // Post-sync embed / tag jobs (progress captions).
@@ -92,22 +92,30 @@ function queryFn({ filter, search, page, pageSize }: CollectionQueryParams) {
   });
 }
 
-async function syncFn(onProgress: (progress: ZhihuSyncProgress) => void) {
+async function syncFn(
+  onProgress: (progress: ZhihuSyncProgress) => void,
+  control: CooperativeCheckpoint,
+) {
+  onProgress({ fetchedCount: 0, current: 0, total: 0 });
   // Auth is the browser's own zhihu cookie jar (credentials:'include' +
   // host permission) — nothing to resolve here; a logged-out session
   // surfaces as ZhihuAuthError from the fetch layer.
-  const result = await syncFavorites((fetchedCount, current, totalCollections) => {
-    onProgress({ fetchedCount, current, total: totalCollections });
-  });
+  const result = await syncFavorites(
+    (fetchedCount, current, totalCollections) => {
+      onProgress({ fetchedCount, current, total: totalCollections });
+    },
+    control,
+  );
   // Auto-tag + auto-embed the content just persisted, registered as background
   // jobs (survive route switches, cross-mount dedupe, feed the global "don't
   // close" reminder, done/total captions). Moved UP from the lib wrapper (ST3)
   // so all four collection platforms share this single hook-layer seam; the
   // store is a module singleton, so a module-level function can call startJob.
-  startJob(LOG_TAG, 'tag', (sp) => tagNewItems(PLATFORM, result.newItemIds, undefined, (p) => sp(p)));
-  startJob(LOG_TAG, 'embed', (sp) =>
-    embedNewItems(PLATFORM, result.newItemIds, undefined, (p) => sp(p)),
-  );
+  startCollectionProcessingJobs({
+    jobPlatform: LOG_TAG,
+    itemPlatform: PLATFORM,
+    itemIds: result.newItemIds,
+  });
 }
 
 /** Thin adapter over the shared collection-library state machine. */
@@ -146,6 +154,7 @@ export function useZhihuFavorites(): UseZhihuFavoritesReturn {
     syncing: lib.syncing,
     syncProgress: lib.syncProgress,
     syncError: lib.syncError,
+    syncJob: lib.syncJob,
     sync: lib.sync,
     embedJob: lib.embedJob,
     tagJob: lib.tagJob,

@@ -31,6 +31,8 @@
  * stripHtmlToText) are exported for unit tests.
  */
 
+import type { CooperativeCheckpoint } from '@/lib/collections';
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -497,13 +499,17 @@ export async function fetchSelfUrlToken(): Promise<string> {
  * List the user's PUBLIC collections. RSSHub reads this endpoint unpaginated;
  * defensively follow `paging.next` when the response says it isn't the end.
  */
-export async function fetchCollections(urlToken: string): Promise<ZhihuCollection[]> {
+export async function fetchCollections(
+  urlToken: string,
+  control?: CooperativeCheckpoint,
+): Promise<ZhihuCollection[]> {
   const out: ZhihuCollection[] = [];
   const seen = new Set<string>();
   let url: string | null = `${APP_API_BASE}/people/${encodeURIComponent(urlToken)}/collections`;
   let pages = 0;
 
   while (url && pages < MAX_COLLECTION_PAGES) {
+    await control?.checkpoint();
     pages += 1;
     const json = await fetchZhihuJson(url);
     const body = json as { data?: unknown; paging?: { is_end?: unknown; next?: unknown } };
@@ -538,12 +544,14 @@ export async function fetchCollections(urlToken: string): Promise<ZhihuCollectio
 export async function fetchCollectionItems(
   collection: ZhihuCollection,
   onPage?: (fetchedInCollection: number) => void,
+  control?: CooperativeCheckpoint,
 ): Promise<ZhihuRawFavorite[]> {
   const out: ZhihuRawFavorite[] = [];
   let offset = 0;
   let pages = 0;
 
   while (pages < MAX_ITEM_PAGES_PER_COLLECTION) {
+    await control?.checkpoint();
     pages += 1;
     const json = await fetchZhihuJson(buildCollectionItemsUrl(collection.id, offset), {
       'x-api-version': ITEMS_API_VERSION,
@@ -580,21 +588,26 @@ export async function fetchCollectionItems(
  */
 export async function fetchAllFavorites(
   onProgress?: ZhihuProgressCallback,
+  control?: CooperativeCheckpoint,
 ): Promise<ZhihuFetchAllResult> {
   const urlToken = await fetchSelfUrlToken();
+  await control?.checkpoint();
   await jitteredDelay();
 
-  const collections = await fetchCollections(urlToken);
+  const collections = await fetchCollections(urlToken, control);
   const favorites: ZhihuRawFavorite[] = [];
 
   for (let i = 0; i < collections.length; i++) {
+    await control?.checkpoint();
     const collection = collections[i];
     onProgress?.(favorites.length, i + 1, collections.length);
     await jitteredDelay();
 
     const base = favorites.length;
-    const items = await fetchCollectionItems(collection, (count) =>
-      onProgress?.(base + count, i + 1, collections.length),
+    const items = await fetchCollectionItems(
+      collection,
+      (count) => onProgress?.(base + count, i + 1, collections.length),
+      control,
     );
     favorites.push(...items);
   }

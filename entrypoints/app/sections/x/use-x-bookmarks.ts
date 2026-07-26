@@ -10,15 +10,15 @@ import {
 } from '@/lib/x/x-sync-service';
 import { getXAuth } from '@/lib/x/x-auth';
 import { classifyXSyncError, type XSyncError } from '@/lib/x/x-messages';
-import { tagNewItems } from '@/lib/tagging';
-import { embedNewItems } from '@/lib/embedding';
 import { xLastSyncStorage, type XLastSync } from '@/lib/storage';
+import type { CooperativeCheckpoint } from '@/lib/collections';
 
 import {
   useCollectionLibrary,
   type CollectionQueryParams,
 } from '../../hooks/use-collection-library';
-import { startJob, type BackgroundJob } from '../../hooks/background-jobs-store';
+import type { BackgroundJob } from '../../hooks/background-jobs-store';
+import { startCollectionProcessingJobs } from '../../hooks/collection-processing-jobs';
 import { COOLDOWN_MS, remainingCooldown } from './cooldown';
 
 /** Job namespace key (reused as `useCollectionLibrary` logTag). */
@@ -64,6 +64,7 @@ export interface UseXBookmarksReturn {
   syncing: boolean;
   syncProgress: XSyncProgress | null;
   syncError: XSyncError | null;
+  syncJob: BackgroundJob<XSyncProgress> | null;
   sync: () => Promise<void>;
 
   // Post-sync embed / tag jobs (progress captions).
@@ -105,23 +106,32 @@ export function useXBookmarks(): UseXBookmarksReturn {
   // button locks the exact instant the sync resolves (no wait for meta refresh).
   const [syncedAtSeed, setSyncedAtSeed] = useState<number | null>(null);
 
-  const syncFn = useCallback(async (onProgress: (progress: XSyncProgress) => void) => {
+  const syncFn = useCallback(async (
+    onProgress: (progress: XSyncProgress) => void,
+    control: CooperativeCheckpoint,
+  ) => {
+    onProgress({ fetchedCount: 0, page: 0 });
     // Auth is resolved HERE (app.html is a storage-capable trusted context);
     // syncBookmarks itself never touches storage — it also runs import-safe for
     // the offscreen document, which has no chrome.storage.
     const auth = await getXAuth();
-    const result = await syncBookmarks(auth, (fetchedCount, page) => {
-      onProgress({ fetchedCount, page });
-    });
+    const result = await syncBookmarks(
+      auth,
+      (fetchedCount, page) => {
+        onProgress({ fetchedCount, page });
+      },
+      control,
+    );
     // Auto-tag + auto-embed the tweets just persisted, registered as background
     // jobs so they survive route switches, dedupe across mounts, feed the global
     // "don't close" reminder, and surface done/total progress captions. Same
     // storage-context reasoning as auth: the tagging/embedding import chains need
     // chrome.storage, so the triggers live in this app.html caller.
-    startJob(LOG_TAG, 'tag', (sp) => tagNewItems(PLATFORM, result.newItemIds, undefined, (p) => sp(p)));
-    startJob(LOG_TAG, 'embed', (sp) =>
-      embedNewItems(PLATFORM, result.newItemIds, undefined, (p) => sp(p)),
-    );
+    startCollectionProcessingJobs({
+      jobPlatform: LOG_TAG,
+      itemPlatform: PLATFORM,
+      itemIds: result.newItemIds,
+    });
 
     // Persist the "N new this run" summary + lock the cooldown immediately.
     const summary: XLastSync = { syncedAt: Date.now(), inserted: result.inserted };
@@ -177,6 +187,7 @@ export function useXBookmarks(): UseXBookmarksReturn {
     syncing: lib.syncing,
     syncProgress: lib.syncProgress,
     syncError: lib.syncError,
+    syncJob: lib.syncJob,
     sync: lib.sync,
     embedJob: lib.embedJob,
     tagJob: lib.tagJob,

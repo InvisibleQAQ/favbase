@@ -13,9 +13,13 @@ import {
   PipelineProgressStrip,
   StateBox,
 } from '../../components/collection';
-import { buildPipelineSegments } from '../../hooks/pipeline-segments';
+import {
+  backgroundJobRuntime,
+  buildPipelineSegments,
+  pipelineControlLabels,
+} from '../../hooks/pipeline-segments';
 import { useProcessingCoverage } from '../../hooks/use-processing-coverage';
-import { trackJobRun, useJob } from '../../hooks/background-jobs-store';
+import { useJob } from '../../hooks/background-jobs-store';
 import { Iconify } from '../../components/iconify';
 import { AutoTranscribeBar } from './auto-transcribe-bar';
 import { FolderChips } from './folder-chips';
@@ -24,13 +28,14 @@ import { useAutoTranscribe } from './use-auto-transcribe';
 import { useBiliFavFolders } from './use-bili-fav-folders';
 import { useBiliFavVideos } from './use-bili-fav-videos';
 import { useVideoTranscribe } from './use-video-transcribe';
+import { enqueueBiliCollectionProcessing } from './bilibili-processing-adapter';
 import { INVALID_ATTR, VideoCard } from './video-card';
 import { VideoGridSkeleton } from './video-grid-skeleton';
 
 const PLATFORM = 'bilibili';
 const SEARCH_DEBOUNCE_MS = 300;
 const biliAdapter = createBiliAutoTranscribeAdapter({
-  trackProcessingRun: (kind, run) => trackJobRun(PLATFORM, kind, run),
+  startProcessing: enqueueBiliCollectionProcessing,
 });
 
 function NotLoggedIn({ onRetry }: { onRetry: () => void }) {
@@ -136,7 +141,7 @@ interface BilibiliCollectionPageProps {
   onSelectFolder: (folderId: number) => void;
   totalCount: number;
   syncing: boolean;
-  syncProgress: ReturnType<typeof useBiliFavFolders>['syncProgress'];
+  syncJob: ReturnType<typeof useBiliFavFolders>['syncJob'];
   onSync: () => void;
   lastSyncedAt: Date | null;
   syncError: string | null;
@@ -153,7 +158,7 @@ function BilibiliCollectionPage({
   onSelectFolder,
   totalCount,
   syncing,
-  syncProgress,
+  syncJob,
   onSync,
   lastSyncedAt,
   syncError,
@@ -195,6 +200,9 @@ function BilibiliCollectionPage({
       t('collections.lastSynced', { time: lastSyncedAt.toLocaleTimeString() }),
     );
   }
+  const fetchLabel = t('pipeline.fetch');
+  const embeddingLabel = t('pipeline.embedding');
+  const taggingLabel = t('pipeline.tagging');
 
   const pipeline = (
     <PipelineProgressStrip
@@ -203,16 +211,17 @@ function BilibiliCollectionPage({
         coverageStatus,
         stages: [
           {
-            id: 'sync',
-            label: t('pipeline.sync'),
+            id: 'fetch',
+            label: fetchLabel,
             coverage: 'acquisition',
-            runtime: {
-              running: syncing,
-              progress: syncing
-                ? { done: syncProgress?.fetchedCount ?? 0, total: null }
+            completedProgress: 'last-run',
+            runtime: backgroundJobRuntime(
+              syncJob,
+              pipelineControlLabels(t, fetchLabel),
+              (progress) => progress
+                ? { done: progress.fetchedCount, total: null }
                 : null,
-              error: syncError,
-            },
+            ),
           },
           {
             id: 'transcription',
@@ -226,15 +235,21 @@ function BilibiliCollectionPage({
           },
           {
             id: 'embedding',
-            label: t('pipeline.embedding'),
+            label: embeddingLabel,
             coverage: 'embedding',
-            runtime: embedJob,
+            runtime: backgroundJobRuntime(
+              embedJob,
+              pipelineControlLabels(t, embeddingLabel),
+            ),
           },
           {
             id: 'tagging',
-            label: t('pipeline.tagging'),
+            label: taggingLabel,
             coverage: 'tagging',
-            runtime: tagJob,
+            runtime: backgroundJobRuntime(
+              tagJob,
+              pipelineControlLabels(t, taggingLabel),
+            ),
           },
         ],
       })}
@@ -329,6 +344,7 @@ interface BilibiliFallbackPageProps {
   selectedId: number | undefined;
   loginState: ReturnType<typeof useBiliFavFolders>['loginState'];
   syncing: boolean;
+  syncJob: ReturnType<typeof useBiliFavFolders>['syncJob'];
   error: string | null;
   onSync: () => void;
   searchInput: string;
@@ -342,6 +358,7 @@ function BilibiliFallbackPage({
   selectedId,
   loginState,
   syncing,
+  syncJob,
   error,
   onSync,
   searchInput,
@@ -349,7 +366,15 @@ function BilibiliFallbackPage({
   onSelectFolder,
 }: BilibiliFallbackPageProps) {
   const { t } = useTranslation();
-  const { coverage, status: coverageStatus } = useProcessingCoverage(PLATFORM, syncing);
+  const embedJob = useJob(PLATFORM, 'embed');
+  const tagJob = useJob(PLATFORM, 'tag');
+  const { coverage, status: coverageStatus } = useProcessingCoverage(
+    PLATFORM,
+    `${syncing}:${embedJob?.generation ?? 0}:${tagJob?.generation ?? 0}`,
+  );
+  const fetchLabel = t('pipeline.fetch');
+  const embeddingLabel = t('pipeline.embedding');
+  const taggingLabel = t('pipeline.tagging');
   const pipeline = (
     <PipelineProgressStrip
       segments={buildPipelineSegments({
@@ -357,17 +382,17 @@ function BilibiliFallbackPage({
         coverageStatus,
         stages: [
           {
-            id: 'sync',
-            label: t('pipeline.sync'),
+            id: 'fetch',
+            label: fetchLabel,
             coverage: 'acquisition',
-            runtime: {
-              running: syncing,
-              progress:
-                syncing && coverageStatus === 'ready'
-                  ? { done: coverage.acquisition.done, total: null }
-                  : null,
-              error,
-            },
+            completedProgress: 'last-run',
+            runtime: backgroundJobRuntime(
+              syncJob,
+              pipelineControlLabels(t, fetchLabel),
+              (progress) => progress
+                ? { done: progress.fetchedCount, total: null }
+                : null,
+            ),
           },
           {
             id: 'transcription',
@@ -376,13 +401,21 @@ function BilibiliFallbackPage({
           },
           {
             id: 'embedding',
-            label: t('pipeline.embedding'),
+            label: embeddingLabel,
             coverage: 'embedding',
+            runtime: backgroundJobRuntime(
+              embedJob,
+              pipelineControlLabels(t, embeddingLabel),
+            ),
           },
           {
             id: 'tagging',
-            label: t('pipeline.tagging'),
+            label: taggingLabel,
             coverage: 'tagging',
+            runtime: backgroundJobRuntime(
+              tagJob,
+              pipelineControlLabels(t, taggingLabel),
+            ),
           },
         ],
       })}
@@ -446,7 +479,7 @@ export function BilibiliView() {
     folders,
     loading: foldersLoading,
     syncing,
-    syncProgress,
+    syncJob,
     loginState,
     lastSyncedAt,
     error,
@@ -491,6 +524,7 @@ export function BilibiliView() {
         selectedId={selectedId}
         loginState={loginState}
         syncing={syncing}
+        syncJob={syncJob}
         error={error}
         onSync={sync}
         searchInput={searchInput}
@@ -512,7 +546,7 @@ export function BilibiliView() {
       onSelectFolder={handleSelectFolder}
       totalCount={selectedFolder?.media_count ?? 0}
       syncing={syncing}
-      syncProgress={syncProgress}
+      syncJob={syncJob}
       onSync={sync}
       lastSyncedAt={lastSyncedAt}
       syncError={error}

@@ -1,4 +1,5 @@
 import type { BiliFavFolder, BiliFavVideo } from './types';
+import type { CooperativeCheckpoint } from '@/lib/collections';
 
 const PAGE_DELAY_MIN_MS = 7_000;
 const PAGE_DELAY_JITTER_MS = 3_000;
@@ -48,11 +49,13 @@ export async function runFavoriteVideosSync(
   folders: BiliFavFolder[],
   deps: FavoriteVideosSyncDeps,
   onProgress?: BiliFavoritesSyncProgressCallback,
+  control?: CooperativeCheckpoint,
 ): Promise<FavoriteVideosSyncResult> {
   let fetchedCount = 0;
   let syncedCount = 0;
 
   for (let folderIndex = 0; folderIndex < folders.length; folderIndex += 1) {
+    await control?.checkpoint();
     const folder = folders[folderIndex];
     const baseline = await deps.getBaseline(folder);
     const existingBvids = baseline.historyComplete
@@ -62,6 +65,7 @@ export async function runFavoriteVideosSync(
     let page = 1;
 
     while (true) {
+      await control?.checkpoint();
       if (page > 1) await deps.waitBetweenPages();
 
       const result = await deps.fetchPage(folder, page);

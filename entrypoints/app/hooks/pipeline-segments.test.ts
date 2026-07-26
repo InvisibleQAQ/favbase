@@ -1,12 +1,153 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
+  backgroundJobRuntime,
   buildPipelineSegment,
   buildPipelineSegments,
   readJobProgress,
 } from './pipeline-segments';
+import { getJob, startJob } from './background-jobs-store';
+
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
 
 describe('pipeline segment adapters', () => {
+  it('binds one background job to the shared pause and resume contract', async () => {
+    const reachCheckpoint = deferred();
+    const finish = deferred();
+    startJob('p-runtime-adapter', 'sync', async (setProgress, control) => {
+      setProgress({ done: 2, total: null });
+      await reachCheckpoint.promise;
+      await control.checkpoint();
+      await finish.promise;
+    });
+    const labels = { pause: 'Pause', pausing: 'Pausing', resume: 'Resume' };
+
+    const runtime = backgroundJobRuntime(getJob('p-runtime-adapter', 'sync'), labels);
+
+    expect(runtime).toMatchObject({
+      phase: 'running',
+      running: true,
+      progress: { done: 2, total: null },
+      controlLabels: labels,
+    });
+    runtime?.pause?.();
+    expect(getJob('p-runtime-adapter', 'sync')?.phase).toBe('pausing');
+
+    reachCheckpoint.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(getJob('p-runtime-adapter', 'sync')?.phase).toBe('paused');
+
+    runtime?.resume?.();
+    expect(getJob('p-runtime-adapter', 'sync')?.phase).toBe('running');
+
+    finish.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+  it('maps one pause/resume action from the active runtime phase', () => {
+    const idle = { done: 8, total: 10 };
+    const pause = vi.fn();
+    const resume = vi.fn();
+    const labels = { pause: 'Pause', pausing: 'Pausing', resume: 'Resume' };
+
+    expect(
+      buildPipelineSegments({
+        coverage: {
+          acquisition: idle,
+          content: idle,
+          embedding: idle,
+          tagging: idle,
+        },
+        coverageStatus: 'ready',
+        stages: [
+          {
+            id: 'embedding',
+            label: 'Embed',
+            coverage: 'embedding',
+            runtime: {
+              phase: 'pausing',
+              running: true,
+              progress: { done: 3, total: 10 },
+              pause,
+              resume,
+              controlLabels: labels,
+            },
+          },
+        ],
+      }),
+    ).toEqual([
+      {
+        id: 'embedding',
+        label: 'Embed',
+        done: 3,
+        total: 10,
+        state: 'pausing',
+        control: { kind: 'pausing', label: 'Pausing', disabled: true },
+      },
+    ]);
+  });
+
+  it('retains a completed Fetch run while terminal processing stages use DB coverage', () => {
+    const coverage = {
+      acquisition: { done: 40, total: null },
+      content: { done: 20, total: 40 },
+      embedding: { done: 18, total: 20 },
+      tagging: { done: 16, total: 20 },
+    };
+
+    expect(
+      buildPipelineSegments({
+        coverage,
+        coverageStatus: 'ready',
+        stages: [
+          {
+            id: 'sync',
+            label: 'Fetch',
+            coverage: 'acquisition',
+            completedProgress: 'last-run',
+            runtime: {
+              phase: 'completed',
+              running: false,
+              lastProgress: { done: 12, total: null },
+            },
+          },
+          {
+            id: 'embedding',
+            label: 'Embed',
+            coverage: 'embedding',
+            runtime: {
+              phase: 'completed',
+              running: false,
+              lastProgress: { done: 4, total: 4 },
+            },
+          },
+        ],
+      }),
+    ).toEqual([
+      {
+        id: 'sync',
+        label: 'Fetch',
+        done: 12,
+        total: null,
+        percent: 100,
+        state: 'completed',
+      },
+      {
+        id: 'embedding',
+        label: 'Embed',
+        done: 18,
+        total: 20,
+        state: 'completed',
+      },
+    ]);
+  });
+
   it('uses live progress while running and returns to DB coverage while idle', () => {
     const idle = { done: 8, total: 10 };
 
@@ -59,6 +200,16 @@ describe('pipeline segment adapters', () => {
     ).toEqual([
       { id: 'embedding', label: 'Embed', done: null, total: null, state: 'loading' },
       { id: 'tagging', label: 'Tags', done: null, total: null, state: 'loading' },
+    ]);
+
+    expect(
+      buildPipelineSegments({
+        coverage,
+        coverageStatus: 'error',
+        stages: [{ id: 'embedding', label: 'Embed', coverage: 'embedding' }],
+      }),
+    ).toEqual([
+      { id: 'embedding', label: 'Embed', done: null, total: null, state: 'failed' },
     ]);
 
     expect(

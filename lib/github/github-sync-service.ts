@@ -35,6 +35,7 @@ import { ingestCollection } from '@/lib/ingest/ingest';
 // (use-github-stars syncFn). Same rule as lib/x/x-sync-service.ts; keeps
 // lib/github's load graph storage-free and its pure tests mock-free.
 import { charSplit } from '@/lib/embedding/char-split';
+import type { CooperativeCheckpoint } from '@/lib/collections';
 import {
   fetchAllStarred,
   fetchReadme,
@@ -138,11 +139,12 @@ export async function syncStars(
   token: string,
   onProgress?: StarsProgressCallback,
   onReadmeProgress?: ReadmeProgressCallback,
+  control?: CooperativeCheckpoint,
 ): Promise<SyncStarsResult> {
   const db = getDb();
-  const repos = await fetchAllStarred(token, onProgress);
+  const repos = await fetchAllStarred(token, onProgress, control);
   const newRepos = await getNewRepos(db, repos);
-  const readmeById = await fetchReadmesSerial(token, newRepos, onReadmeProgress);
+  const readmeById = await fetchReadmesSerial(token, newRepos, onReadmeProgress, control);
   return syncStarsToDb(db, repos, readmeById);
 }
 
@@ -175,12 +177,14 @@ async function fetchReadmesSerial(
   token: string,
   repos: GithubStarredRepo[],
   onProgress?: ReadmeProgressCallback,
+  control?: CooperativeCheckpoint,
 ): Promise<Map<string, string>> {
   const readmeById = new Map<string, string>();
   if (repos.length === 0) return readmeById;
 
   onProgress?.(0, repos.length);
   for (let i = 0; i < repos.length; i++) {
+    await control?.checkpoint();
     if (i > 0) await new Promise((resolve) => setTimeout(resolve, README_DELAY_MS));
     const repo = repos[i];
     try {

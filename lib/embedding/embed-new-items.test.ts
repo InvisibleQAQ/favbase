@@ -419,4 +419,34 @@ describe('embedNewItems', () => {
     ]);
     errSpy.mockRestore();
   });
+
+  it('checks cooperative control before claiming each item', async () => {
+    await seedItem({
+      platformItemId: 'c-a',
+      contentState: 'chunked',
+      chunkTexts: ['a0'],
+      createdAt: T0,
+    });
+    await seedItem({
+      platformItemId: 'c-b',
+      contentState: 'chunked',
+      chunkTexts: ['b0'],
+      createdAt: T1,
+    });
+    const checkpoint = vi.fn(async () => {});
+
+    await embedNewItems(
+      'test',
+      ['c-a', 'c-b'],
+      {
+        db: () => db,
+        getConfig: async () => fakeConfig(true),
+        embed: async (_config, texts) => fakeVectors(texts.length),
+      },
+      undefined,
+      { checkpoint },
+    );
+
+    expect(checkpoint).toHaveBeenCalledTimes(2);
+  });
 });

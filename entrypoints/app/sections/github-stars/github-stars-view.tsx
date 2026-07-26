@@ -14,7 +14,12 @@ import {
   CardGridSkeleton,
   CollectionPageScaffold,
 } from '../../components/collection';
-import { buildPipelineSegments } from '../../hooks/pipeline-segments';
+import {
+  backgroundJobRuntime,
+  buildPipelineSegments,
+  pipelineControlLabels,
+  type PipelineRuntimeSnapshot,
+} from '../../hooks/pipeline-segments';
 import { useProcessingCoverage } from '../../hooks/use-processing-coverage';
 import { useGithubStars, type GithubSyncError } from './use-github-stars';
 import { LanguageChips } from './language-chips';
@@ -122,8 +127,35 @@ export function GithubStarsView() {
 
   const syncErrorText = gh.syncError ? syncErrorMessage(gh.syncError) : '';
 
-  const starsRunning = gh.syncing && gh.syncProgress?.phase !== 'readme';
-  const readmeRunning = gh.syncing && gh.syncProgress?.phase === 'readme';
+  const fetchLabel = t('pipeline.fetch');
+  const readmeLabel = t('pipeline.readme');
+  const embeddingLabel = t('pipeline.embedding');
+  const taggingLabel = t('pipeline.tagging');
+  const syncPhase = gh.syncJob?.progress?.phase ?? gh.syncJob?.lastProgress?.phase;
+  const fetchRuntime = backgroundJobRuntime(
+    gh.syncJob,
+    pipelineControlLabels(t, fetchLabel),
+    (progress) => progress
+      ? { done: progress.fetchedCount, total: null }
+      : null,
+  );
+  const readmeRuntime = syncPhase === 'stars' && gh.syncJob?.running
+    ? null
+    : backgroundJobRuntime(
+        gh.syncJob,
+        pipelineControlLabels(t, readmeLabel),
+        (progress) => progress?.phase === 'readme'
+          ? { done: progress.done, total: progress.total }
+          : null,
+      );
+  const settledFetchRuntime: PipelineRuntimeSnapshot | null =
+    syncPhase === 'readme' && gh.syncJob?.running && fetchRuntime
+      ? {
+          running: false,
+          phase: 'completed',
+          lastProgress: fetchRuntime.progress,
+        }
+      : fetchRuntime;
   const pipeline = (
     <PipelineProgressStrip
       segments={buildPipelineSegments({
@@ -131,44 +163,35 @@ export function GithubStarsView() {
         coverageStatus,
         stages: [
           {
-            id: 'stars',
-            label: t('pipeline.stars'),
+            id: 'fetch',
+            label: fetchLabel,
             coverage: 'acquisition',
-            runtime: {
-              running: starsRunning,
-              progress: starsRunning
-                ? {
-                    done: gh.syncProgress?.phase === 'stars' ? gh.syncProgress.fetchedCount : 0,
-                    total: null,
-                  }
-                : null,
-              error: gh.syncError,
-            },
+            completedProgress: 'last-run',
+            runtime: settledFetchRuntime,
           },
           {
             id: 'readme',
-            label: t('pipeline.readme'),
+            label: readmeLabel,
             coverage: 'content',
-            runtime: {
-              running: readmeRunning,
-              progress:
-                gh.syncProgress?.phase === 'readme'
-                  ? { done: gh.syncProgress.done, total: gh.syncProgress.total }
-                  : null,
-              error: gh.syncError,
-            },
+            runtime: readmeRuntime,
           },
           {
             id: 'embedding',
-            label: t('pipeline.embedding'),
+            label: embeddingLabel,
             coverage: 'embedding',
-            runtime: gh.embedJob,
+            runtime: backgroundJobRuntime(
+              gh.embedJob,
+              pipelineControlLabels(t, embeddingLabel),
+            ),
           },
           {
             id: 'tagging',
-            label: t('pipeline.tagging'),
+            label: taggingLabel,
             coverage: 'tagging',
-            runtime: gh.tagJob,
+            runtime: backgroundJobRuntime(
+              gh.tagJob,
+              pipelineControlLabels(t, taggingLabel),
+            ),
           },
         ],
       })}

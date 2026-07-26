@@ -4,6 +4,7 @@ import {
   extractBottomCursor,
   mapTweetToRow,
   buildBookmarksUrl,
+  fetchAllBookmarks,
   fetchPageWithBackoff,
   XRateLimitError,
   XAuthError,
@@ -291,6 +292,75 @@ describe('fetchPageWithBackoff — error surfacing', () => {
 
     global.fetch = vi.fn().mockResolvedValue(new Response('forbidden', { status: 403 }));
     await expect(fetchPageWithBackoff(URL_, HEADERS)).rejects.toBeInstanceOf(XAuthError);
+  });
+
+  it('checks control before each retry attempt', async () => {
+    vi.useFakeTimers();
+    try {
+      global.fetch = vi
+        .fn()
+        .mockResolvedValueOnce(new Response('temporary', { status: 500 }))
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              data: { bookmark_timeline_v2: { timeline: { instructions: [] } } },
+            }),
+            { status: 200 },
+          ),
+        );
+      const checkpoint = vi.fn(async () => {});
+
+      const run = fetchPageWithBackoff(URL_, HEADERS, { checkpoint });
+      await vi.runAllTimersAsync();
+      await run;
+
+      expect(checkpoint).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('fetchAllBookmarks cooperative control', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('checks control before claiming each page', async () => {
+    vi.useFakeTimers();
+    const firstPage = {
+      data: {
+        bookmark_timeline_v2: {
+          timeline: {
+            instructions: [
+              {
+                type: 'TimelineAddEntries',
+                entries: [itemEntry('1'), cursorEntry('Bottom', 'next')],
+              },
+            ],
+          },
+        },
+      },
+    };
+    const lastPage = {
+      data: { bookmark_timeline_v2: { timeline: { instructions: [] } } },
+    };
+    global.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(firstPage), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(lastPage), { status: 200 }));
+    const checkpoint = vi.fn(async () => {});
+
+    const run = fetchAllBookmarks(
+      { cookie: 'cookie', csrf: 'csrf', auth: 'Bearer test' },
+      undefined,
+      { control: { checkpoint } },
+    );
+    await vi.runAllTimersAsync();
+    await run;
+
+    expect(checkpoint).toHaveBeenCalledTimes(2);
   });
 });
 

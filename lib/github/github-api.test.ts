@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { parseLinkHeader } from './github-api';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import { fetchAllStarred, parseLinkHeader } from './github-api';
 
 // ---------------------------------------------------------------------------
 // parseLinkHeader — pure function over the GitHub Link response header.
@@ -43,5 +43,34 @@ describe('parseLinkHeader', () => {
       '<https://api.github.com/user/starred?page=5>; rel="last", ' +
       '<https://api.github.com/user/starred?page=2>; rel="next"';
     expect(parseLinkHeader(header)).toBe(5);
+  });
+});
+
+describe('fetchAllStarred cooperative control', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('checks control before claiming each page', async () => {
+    vi.useFakeTimers();
+    global.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify([]), {
+          status: 200,
+          headers: {
+            link: '<https://api.github.com/user/starred?page=2>; rel="last"',
+          },
+        }),
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }));
+    const checkpoint = vi.fn(async () => {});
+
+    const run = fetchAllStarred('token', undefined, { checkpoint });
+    await vi.runAllTimersAsync();
+    await run;
+
+    expect(checkpoint).toHaveBeenCalledTimes(2);
   });
 });

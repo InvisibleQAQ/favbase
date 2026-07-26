@@ -22,3 +22,4 @@ export {
   type ProcessingCoverage,
   type ProcessingCoverageCount,
 } from './processing-coverage';
+export type { CooperativeCheckpoint } from './cooperative-checkpoint';

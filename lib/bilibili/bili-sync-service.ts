@@ -21,6 +21,7 @@ import { itemSources } from '@/lib/database/entities/item-sources';
 import { normalizeCover } from './url-utils';
 import type { BiliFavFolder, BiliFavOrder, BiliFavVideo } from './types';
 import type { SubtitleRow, SubtitleSource } from '@/lib/subtitle/types';
+import type { CooperativeCheckpoint } from '@/lib/collections';
 
 export { BiliAuthError };
 export type { BiliFavoritesSyncProgress } from './favorites-sync-runner';
@@ -86,9 +87,12 @@ export async function checkAuth() {
   return auth;
 }
 
-export async function fetchAndSyncFolders(): Promise<BiliFavFolder[]> {
+export async function fetchAndSyncFolders(
+  control?: CooperativeCheckpoint,
+): Promise<BiliFavFolder[]> {
   const auth = await checkAuth();
   const folders = await fetchFavFolders(auth);
+  await control?.checkpoint();
 
   if (folders.length > 0) {
     const db = getDb();
@@ -134,6 +138,7 @@ export async function fetchAndSyncVideos(
 export async function syncAllFavoriteVideos(
   folders: BiliFavFolder[],
   onProgress?: BiliFavoritesSyncProgressCallback,
+  control?: CooperativeCheckpoint,
 ): Promise<FavoriteVideosSyncResult> {
   const auth = await checkAuth();
   const db = getDb();
@@ -164,6 +169,7 @@ export async function syncAllFavoriteVideos(
       },
     },
     onProgress,
+    control,
   );
 }
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { initDbProxy } from '@/lib/database';
+import type { CooperativeCheckpoint } from '@/lib/collections';
 
 import { startJob, useJob, type BackgroundJob } from './background-jobs-store';
 
@@ -36,7 +37,10 @@ export interface UseCollectionLibraryConfig<TItem, TFacet, TProgress, TError> {
   /** Last successful sync time. */
   lastSyncedFn: () => Promise<Date | null>;
   /** One-shot remote sync. Auth resolution stays inside the platform closure. */
-  syncFn: (onProgress: (progress: TProgress) => void) => Promise<void>;
+  syncFn: (
+    onProgress: (progress: TProgress) => void,
+    control: CooperativeCheckpoint,
+  ) => Promise<void>;
   /** Maps thrown sync errors to the platform's structured error union. */
   classifyError: (err: unknown) => TError;
   /** console.error prefix, e.g. 'x-bookmarks'. */
@@ -71,6 +75,7 @@ export interface UseCollectionLibraryReturn<TItem, TFacet, TProgress, TError> {
   syncing: boolean;
   syncProgress: TProgress | null;
   syncError: TError | null;
+  syncJob: BackgroundJob<TProgress> | null;
   sync: () => Promise<void>;
 
   // Post-sync background jobs (embed / tag) registered under the same logTag —
@@ -116,7 +121,7 @@ export function useCollectionLibrary<TItem, TFacet, TProgress, TError>(
   // Sync state lives in the module-level backgroundJobs singleton (keyed by
   // logTag) so it survives app.html route switches and dedupes across mounts;
   // this hook only derives its view fields from that job.
-  const syncJob = useJob(logTag, 'sync');
+  const syncJob = useJob<TProgress>(logTag, 'sync');
   const syncing = syncJob?.running ?? false;
   const syncProgress = (syncJob?.progress ?? null) as TProgress | null;
   const syncError = useMemo<TError | null>(
@@ -238,9 +243,9 @@ export function useCollectionLibrary<TItem, TFacet, TProgress, TError>(
   // remount re-joins an in-flight run instead of starting a duplicate; auth
   // resolution stays inside the platform's syncFn closure.
   const sync = useCallback(async () => {
-    startJob(logTag, 'sync', async (setProgress) => {
+    startJob(logTag, 'sync', async (setProgress, control) => {
       await initDbProxy();
-      await syncFn((progress) => setProgress(progress));
+      await syncFn((progress) => setProgress(progress), control);
     });
   }, [logTag, syncFn]);
 
@@ -264,6 +269,7 @@ export function useCollectionLibrary<TItem, TFacet, TProgress, TError>(
     syncing,
     syncProgress,
     syncError,
+    syncJob,
     sync,
     embedJob,
     tagJob,

@@ -3,6 +3,7 @@ import type { FavbaseDb } from '@/lib/database';
 import { getDb, schema } from '@/lib/database';
 import { chunk } from '@/lib/database/sql-utils';
 import { emitDomainEvent } from '@/lib/events';
+import type { CooperativeCheckpoint } from '@/lib/collections';
 import { createEmbeddingModel, embedTexts } from '@/lib/ai';
 import { getEmbeddingSettings, type ResolvedEmbeddingConfig } from './config';
 import { replaceItemChunks, upsertChunkEmbeddings } from './vector-store';
@@ -307,6 +308,7 @@ export async function embedNewItems(
   platformItemIds: string[],
   deps: Partial<EmbedNewItemsDeps> = {},
   onProgress?: (progress: { done: number; total: number }) => void,
+  control?: CooperativeCheckpoint,
 ): Promise<void> {
   if (platformItemIds.length === 0) return;
   const getConfig = deps.getConfig ?? defaultDeps.getConfig;
@@ -338,6 +340,7 @@ export async function embedNewItems(
     onProgress?.({ done, total });
 
     for (const { id: itemId, platformItemId } of targets) {
+      await control?.checkpoint();
       try {
         const chunks = await getEmbeddableChunks(db, itemId);
         if (chunks.length === 0) {

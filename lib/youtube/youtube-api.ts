@@ -20,6 +20,8 @@
  * missing-items-as-empty.
  */
 
+import type { CooperativeCheckpoint } from '@/lib/collections';
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -115,6 +117,7 @@ export interface FetchPlaylistItemsOptions {
   needsDetails?: (videoId: string) => boolean;
   /** Fired after each fetched page with the cumulative entry count. */
   onPage?: (page: number, entryCount: number) => void;
+  control?: CooperativeCheckpoint;
 }
 
 export interface PlaylistItemsResult {
@@ -367,11 +370,13 @@ export async function resolveChannel(apiKey: string, input: string): Promise<You
 export async function fetchPlaylists(
   apiKey: string,
   channelId: string,
+  control?: CooperativeCheckpoint,
 ): Promise<YoutubePlaylist[]> {
   const all: YoutubePlaylist[] = [];
   let pageToken: string | undefined;
 
   while (true) {
+    await control?.checkpoint();
     const params: Record<string, string> = {
       part: 'snippet,contentDetails',
       channelId,
@@ -445,6 +450,7 @@ export async function fetchPlaylistItems(
   let page = 0;
 
   while (true) {
+    await opts.control?.checkpoint();
     page += 1;
     const params: Record<string, string> = {
       part: 'snippet,contentDetails',

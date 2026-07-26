@@ -47,6 +47,7 @@ import {
 } from './zhihu-api';
 import { htmlToMarkdown } from './zhihu-markdown';
 import { charSplit } from '@/lib/embedding';
+import type { CooperativeCheckpoint } from '@/lib/collections';
 
 // Re-export what service consumers actually need: structured errors + the
 // types appearing in public signatures below.
@@ -132,9 +133,12 @@ function platformItemIdOf(favorite: ZhihuRawFavorite): string {
  * every item (serial, paced) → persist insert-only. Throws ZhihuAuthError when
  * not logged in to zhihu.com; rate-limit / fetch errors propagate.
  */
-export async function syncFavorites(onProgress?: ZhihuProgressCallback): Promise<SyncZhihuResult> {
+export async function syncFavorites(
+  onProgress?: ZhihuProgressCallback,
+  control?: CooperativeCheckpoint,
+): Promise<SyncZhihuResult> {
   const db = getDb();
-  const { collections, favorites } = await fetchAllFavorites(onProgress);
+  const { collections, favorites } = await fetchAllFavorites(onProgress, control);
   // Auto-tag / auto-embed are fired by the caller (use-zhihu-favorites hook)
   // via `startJob`, NOT here — see the module docstring (ST3 trigger move).
   return syncFavoritesToDb(db, collections, favorites);

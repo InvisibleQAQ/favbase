@@ -3,16 +3,14 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import { initDbProxy } from '@/lib/database';
 import { extractPendingBookmarks } from '@/lib/bookmarks/bookmark-content-service';
 import { countPendingExtractions } from '@/lib/bookmarks/bookmarks-sync-service';
-import { tagNewItems } from '@/lib/tagging';
-import { embedNewItems } from '@/lib/embedding';
 
 import {
   getJob,
   startJob,
-  trackJobRun,
   useJob,
   type BackgroundJob,
 } from '../../hooks/background-jobs-store';
+import { enqueueCollectionProcessingItem } from '../../hooks/collection-processing-jobs';
 import {
   beginExtractionRun,
   deriveExtractionPhase,
@@ -45,7 +43,7 @@ export interface BookmarkExtractionState {
 
 // ---------------------------------------------------------------------------
 // Content extraction now runs through the shared backgroundJobs store as a
-// single `bookmarks:sync` job (the bespoke module-level singleton was folded
+// single `bookmarks:extract` job (the bespoke module-level singleton was folded
 // into that store). Two payoffs from consolidating: the run counts in the
 // global "don't close this page" reminder (useRunningJobs), and startJob's
 // running guard dedupes across mounts (navigating away/back re-subscribes to
@@ -57,18 +55,18 @@ export interface BookmarkExtractionState {
 // Each successfully chunked item is fed
 // to auto-tag + auto-embed per item (not at run end) so a mid-run page close
 // can't orphan chunked-but-never-embedded items — chunked items are never
-// re-picked. The work stays fire-and-forget for extraction, while trackJobRun
-// observes each independent lane without changing that orphan-safety.
+// re-picked. The shared session inbox owns the independent, controllable
+// processing lanes; extraction only enqueues and never waits for them.
 // ---------------------------------------------------------------------------
 
 /**
- * Kick off the serial content-extraction worker as the `bookmarks:sync` job.
+ * Kick off the serial content-extraction worker as the `bookmarks:extract` job.
  * Re-entrant safe via startJob's running guard (cross-mount dedupe).
  */
 export function startBookmarkExtraction(): void {
-  if (getJob('bookmarks', 'sync')?.running) return;
+  if (getJob('bookmarks', 'extract')?.running) return;
   const signal = beginExtractionRun();
-  startJob('bookmarks', 'sync', async (setProgress) => {
+  startJob('bookmarks', 'extract', async (setProgress) => {
     try {
       const db = await initDbProxy(); // idempotent — joins the in-flight init
       await extractPendingBookmarks({
@@ -79,12 +77,11 @@ export function startBookmarkExtraction(): void {
           setProgress(progress);
         },
         onItemExtracted: (id) => {
-          // Same triggers + call convention as the other platforms' sync
-          // wrap-up (use-github-stars syncFn): app.html context only — the
-          // tagging/embedding import chains need chrome.storage. Per-item (not
-          // run-end) to keep the orphan-safety noted above.
-          trackJobRun('bookmarks', 'tag', tagNewItems('bookmarks', [id]));
-          trackJobRun('bookmarks', 'embed', embedNewItems('bookmarks', [id]));
+          enqueueCollectionProcessingItem({
+            jobPlatform: 'bookmarks',
+            itemPlatform: 'bookmarks',
+            itemId: id,
+          });
         },
       });
     } finally {
@@ -95,7 +92,7 @@ export function startBookmarkExtraction(): void {
 
 /** Subscribe to the extraction progress (drives the view caption). */
 export function useBookmarkExtraction(refreshKey?: unknown): BookmarkExtractionState {
-  const job = useJob('bookmarks', 'sync');
+  const job = useJob('bookmarks', 'extract');
   const embedJob = useJob('bookmarks', 'embed');
   const tagJob = useJob('bookmarks', 'tag');
   const control = useSyncExternalStore(

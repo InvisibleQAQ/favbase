@@ -1,6 +1,7 @@
 import { and, eq, inArray, sql, desc } from 'drizzle-orm';
 import { getDb, type FavbaseDb } from '@/lib/database';
 import { emitDomainEvent } from '@/lib/events';
+import type { CooperativeCheckpoint } from '@/lib/collections';
 import { items } from '@/lib/database/entities/items';
 import { itemContents } from '@/lib/database/entities/item-contents';
 import { tags } from '@/lib/database/entities/tags';
@@ -149,11 +150,13 @@ export async function tagNewItems(
   platformItemIds: string[],
   deps?: Partial<TaggingDeps>,
   onProgress?: (progress: { done: number; total: number }) => void,
+  control?: CooperativeCheckpoint,
 ): Promise<void> {
   const total = platformItemIds.length;
   let done = 0;
   onProgress?.({ done, total });
   for (const platformItemId of platformItemIds) {
+    await control?.checkpoint();
     await tagPlatformItem(platform, platformItemId, deps);
     done += 1;
     onProgress?.({ done, total });
