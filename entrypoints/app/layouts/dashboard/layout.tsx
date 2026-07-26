@@ -13,6 +13,7 @@ import { Iconify } from '../../components/iconify';
 
 import { NavMobile, NavDesktop } from './nav';
 import { HeaderActions } from './header-actions';
+import { useJobsBadge } from '../../hooks/use-jobs-badge';
 import { BackgroundJobsIndicator } from './background-jobs-indicator';
 import { layoutClasses } from '../core/classes';
 import { dashboardLayoutVars } from './css-vars';
@@ -39,6 +40,9 @@ export function DashboardLayout({
   const isDesktop = useMediaQuery(theme.breakpoints.up(layoutQuery));
   const [mobileOpen, setMobileOpen] = useState(false);
   const [pinned, setPinned] = useState(true);
+
+  // Toolbar badge = running-job count; always mounted like the indicator chip.
+  useJobsBadge();
 
   useEffect(() => {
     let cancelled = false;

@@ -23,6 +23,7 @@ import { createJobRegistry } from '@/lib/background/job-registry';
 import { handleOpenAppPage, openWelcomePage } from '@/lib/background/app-handlers';
 import { handleFetchBookmarkPage } from '@/lib/background/bookmark-handlers';
 import { handleWebdavSyncNow, handleWebdavClearRemote } from '@/lib/background/sync-handlers';
+import { initJobsBadgeJanitor } from '@/lib/background/jobs-badge';
 import { initWebdavSyncScheduler } from '@/lib/sync';
 import { captureXTokens } from '@/lib/x/x-auth';
 
@@ -70,6 +71,10 @@ export default defineBackground(() => {
   // WebDAV sync scheduler: alarms + settings/locale watch + startup catch-up.
   // Registers its listeners synchronously so the SW can be woken by them.
   initWebdavSyncScheduler();
+
+  // Jobs-badge janitor: app.html writes the badge, the SW wipes it once the
+  // last app tab is gone (badge text would otherwise outlive the jobs).
+  initJobsBadgeJanitor();
 
   // Capture X (Twitter) auth headers from the logged-in web client's own
   // requests (observational webRequest — returns nothing). x-api.ts replays
