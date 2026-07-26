@@ -309,6 +309,7 @@ const en: Record<LocaleKeys, string> = {
   'chat.untitledConversation': 'Untitled conversation',
   'chat.deleteConversation': 'Delete conversation',
   'chat.openHistory': 'Open conversation history',
+  'chat.historyLoadFailed': 'Failed to load conversation history. Refresh the page to retry.',
 
   'header.githubAria': 'View repository on GitHub',
   'header.languageAria': 'Switch interface language',

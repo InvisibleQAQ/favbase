@@ -302,6 +302,7 @@ const zhCN = {
   'chat.untitledConversation': '未命名对话',
   'chat.deleteConversation': '删除对话',
   'chat.openHistory': '打开会话历史',
+  'chat.historyLoadFailed': '会话历史加载失败，请刷新页面重试。',
 
   'header.githubAria': '在 GitHub 上查看仓库',
   'header.languageAria': '切换界面语言',

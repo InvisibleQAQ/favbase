@@ -62,6 +62,10 @@ _Avoid_: Dashboard item browser
 The default app page that presents Collection Analytics without operational task progress or controls.
 _Avoid_: Processing Dashboard, queue console
 
+**Conversation**:
+One persisted Chat assistant dialogue — an ordered sequence of user, assistant, and tool turns stored as a single local database record whose model-message sequence is the source of truth; display bubbles are rebuilt from it. It is not a Collection Item.
+_Avoid_: Collection Item, chat log, session cache
+
 ## Relationships
 
 - The **Dashboard** presents **Collection Analytics**
@@ -81,6 +85,7 @@ _Avoid_: Processing Dashboard, queue console
 - The **Dashboard** does not present **Processing Coverage** or operational task progress
 - **Library Composition** uses **Item Count** for platform share and **Membership Count** for Source rankings
 - A **Tag Drill-down** leaves the **Dashboard** and opens matching **Collection Items** in the aggregate collection
+- Chat reads **Collection Items** and their derived knowledge as read-only; the only records Chat writes are **Conversations**
 
 ## Example dialogue
 

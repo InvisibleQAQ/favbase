@@ -1,31 +1,13 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { PGlite } from '@electric-sql/pglite';
+import { vector } from '@electric-sql/pglite-pgvector';
+import { uuid_ossp } from '@electric-sql/pglite/contrib/uuid_ossp';
+import { pg_trgm } from '@electric-sql/pglite/contrib/pg_trgm';
+import { drizzle } from 'drizzle-orm/pglite';
 import type { ModelMessage } from 'ai';
-
-// In-memory stub of WXT's storage.defineItem — the real implementation needs a
-// browser extension context (chrome.storage), which vitest lacks. Mirrors the
-// pattern in lib/storage/x-last-sync.test.ts.
-vi.mock('wxt/utils/storage', () => {
-  const store = new Map<string, unknown>();
-  return {
-    storage: {
-      defineItem<T>(key: string, opts?: { fallback?: T }) {
-        return {
-          async getValue(): Promise<T> {
-            return (store.has(key) ? store.get(key) : opts?.fallback) as T;
-          },
-          async setValue(value: T): Promise<void> {
-            store.set(key, value);
-          },
-          async removeValue(): Promise<void> {
-            store.delete(key);
-          },
-        };
-      },
-    },
-    __store: store,
-  };
-});
-
+import * as schema from '@/lib/database/schema';
+import { runMigrations } from '@/lib/database/migrations';
+import type { FavbaseDb } from '@/lib/database';
 import {
   MAX_MESSAGES,
   createConversation,
@@ -38,21 +20,36 @@ import {
   type ChatConversation,
 } from './history';
 
+// CRUD runs against a real in-memory PGlite (same rig as retrieval.test.ts):
+// PGlite.create + extensions + runMigrations, Drizzle on top. All history
+// functions take the db as an explicit first argument, so no proxy/storage
+// mocking is needed.
+
 function userMsg(text: string): ModelMessage {
   return { role: 'user', content: text };
 }
 
-async function reset(): Promise<void> {
-  const mod = (await import('wxt/utils/storage')) as unknown as { __store: Map<string, unknown> };
-  mod.__store.clear();
-}
+describe('chat history CRUD (PGlite)', () => {
+  let pg: PGlite;
+  let db: FavbaseDb;
 
-describe('chat history CRUD', () => {
-  beforeEach(reset);
+  beforeAll(async () => {
+    pg = await PGlite.create({ extensions: { vector, uuid_ossp, pg_trgm } });
+    await runMigrations(pg);
+    db = drizzle({ client: pg, schema }) as unknown as FavbaseDb;
+  });
+
+  afterAll(async () => {
+    await pg.close();
+  });
+
+  beforeEach(async () => {
+    await pg.exec('DELETE FROM chat_conversations');
+  });
 
   it('starts empty', async () => {
-    expect(await listConversations()).toEqual([]);
-    expect(await loadConversation('missing')).toBeNull();
+    expect(await listConversations(db)).toEqual([]);
+    expect(await loadConversation(db, crypto.randomUUID())).toBeNull();
   });
 
   it('createConversation makes a unique unsaved conversation', () => {
@@ -64,43 +61,63 @@ describe('chat history CRUD', () => {
     // Not persisted until saveConversation is called.
   });
 
-  it('saves and loads a conversation', async () => {
+  it('saves and loads a conversation (timestamptz ↔ ms epoch round-trip)', async () => {
     const conv = createConversation();
     conv.modelMessages = [userMsg('hello')];
     conv.title = deriveTitle(conv.modelMessages);
-    await saveConversation(conv);
+    await saveConversation(db, conv);
 
-    const loaded = await loadConversation(conv.id);
+    const loaded = await loadConversation(db, conv.id);
     expect(loaded?.title).toBe('hello');
     expect(loaded?.modelMessages).toEqual([userMsg('hello')]);
+    expect(loaded?.createdAt).toBe(conv.createdAt);
+    expect(typeof loaded?.updatedAt).toBe('number');
+  });
+
+  it('persists the FULL message history — save never trims', async () => {
+    const conv = createConversation();
+    const total = MAX_MESSAGES + 10;
+    for (let i = 0; i < total; i += 1) conv.modelMessages.push(userMsg(`m${i}`));
+    await saveConversation(db, conv);
+
+    const loaded = await loadConversation(db, conv.id);
+    expect(loaded?.modelMessages).toHaveLength(total);
+    expect(loaded?.modelMessages[0]).toEqual(userMsg('m0'));
+    expect(loaded?.modelMessages[total - 1]).toEqual(userMsg(`m${total - 1}`));
   });
 
   it('upserts (updates in place) rather than duplicating', async () => {
     const conv = createConversation();
     conv.modelMessages = [userMsg('first')];
-    await saveConversation(conv);
-    await saveConversation({ ...conv, modelMessages: [userMsg('first'), userMsg('second')] });
+    await saveConversation(db, conv);
+    await saveConversation(db, {
+      ...conv,
+      title: 'updated',
+      modelMessages: [userMsg('first'), userMsg('second')],
+    });
 
-    const all = await listConversations();
+    const all = await listConversations(db);
     expect(all).toHaveLength(1);
+    expect(all[0].title).toBe('updated');
     expect(all[0].modelMessages).toHaveLength(2);
   });
 
   it('lists conversations most-recently-updated first', async () => {
     const older: ChatConversation = { ...createConversation(), title: 'old', updatedAt: 100 };
     const newer: ChatConversation = { ...createConversation(), title: 'new', updatedAt: 200 };
-    await saveConversation(older);
-    await saveConversation(newer);
+    await saveConversation(db, older);
+    await saveConversation(db, newer);
 
-    const all = await listConversations();
+    const all = await listConversations(db);
     expect(all.map((c) => c.title)).toEqual(['new', 'old']);
   });
 
   it('deletes a conversation', async () => {
     const conv = createConversation();
-    await saveConversation(conv);
-    await deleteConversation(conv.id);
-    expect(await loadConversation(conv.id)).toBeNull();
+    await saveConversation(db, conv);
+    await deleteConversation(db, conv.id);
+    expect(await loadConversation(db, conv.id)).toBeNull();
+    expect(await listConversations(db)).toEqual([]);
   });
 });
 

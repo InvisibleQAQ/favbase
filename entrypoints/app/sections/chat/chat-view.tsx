@@ -36,8 +36,10 @@ type Translate = (key: LocaleKeys, params?: Record<string, string | number>) => 
  * conversations (new / switch / delete); right column drives the multi-step agent
  * via `useChatAgent`, streams the answer token-by-token, renders a four-state tool
  * activity line, and shows clickable source cards under each answer. Conversations
- * persist to WXT storage (never PGlite). Assistant answers render through
- * `<ChatMarkdown>` (react-markdown, no rehype-raw); user messages stay plain text.
+ * persist to PGlite (`chat_conversations`); a failed history load renders an error
+ * caption in the rail instead of silently showing an empty list. Assistant answers
+ * render through `<ChatMarkdown>` (react-markdown, no rehype-raw); user messages
+ * stay plain text.
  * Below the `md` breakpoint the rail hides and opens as a temporary left Drawer
  * from the history button in the title row (auto-closed if the viewport widens
  * past `md`). Composer: Enter sends, Ctrl/⌘+Enter
@@ -57,6 +59,7 @@ export function ChatView() {
     send,
     stop,
     conversations,
+    historyError,
     activeConversationId,
     newConversation,
     switchConversation,
@@ -120,6 +123,7 @@ export function ChatView() {
         <ConversationRail
           conversations={conversations}
           activeId={activeConversationId}
+          loadError={historyError}
           onNew={() => {
             newConversation();
             setHistoryOpen(false);
@@ -139,6 +143,7 @@ export function ChatView() {
             <ConversationRail
               conversations={conversations}
               activeId={activeConversationId}
+              loadError={historyError}
               onNew={newConversation}
               onSelect={switchConversation}
               onDelete={deleteConversation}
@@ -263,6 +268,8 @@ export function ChatView() {
 interface ConversationRailProps {
   conversations: ConversationSummary[];
   activeId: string | null;
+  /** History failed to load from PGlite — show an error instead of an empty list. */
+  loadError: boolean;
   onNew: () => void;
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
@@ -272,6 +279,7 @@ interface ConversationRailProps {
 function ConversationRail({
   conversations,
   activeId,
+  loadError,
   onNew,
   onSelect,
   onDelete,
@@ -290,7 +298,19 @@ function ConversationRail({
         {t('chat.newConversation')}
       </Button>
 
-      {conversations.length === 0 ? (
+      {loadError ? (
+        <Typography
+          variant="caption"
+          sx={(theme) => ({
+            display: 'block',
+            px: 1,
+            py: 0.5,
+            color: theme.vars.palette.error.main,
+          })}
+        >
+          {t('chat.historyLoadFailed')}
+        </Typography>
+      ) : conversations.length === 0 ? (
         <Typography
           variant="caption"
           sx={(theme) => ({

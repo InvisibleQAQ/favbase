@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ModelMessage } from 'ai';
 
-import { initDbProxy } from '@/lib/database';
+import { initDbProxy, type FavbaseDb } from '@/lib/database';
 import { useSettings } from '@/lib/hooks/useSettings';
 import { isChatModelConfigured, resolveChatModel } from '@/lib/chat/config';
 import { createChatStream } from '@/lib/chat/agent';
@@ -13,6 +13,7 @@ import {
   loadConversation,
   modelMessageText,
   saveConversation,
+  trimMessages,
   type ChatConversation,
 } from '@/lib/chat/history';
 
@@ -82,6 +83,8 @@ export interface UseChatAgentReturn {
   stop: () => void;
   /** Session list (most-recently-updated first). */
   conversations: ConversationSummary[];
+  /** True when loading the conversation list from PGlite failed on mount. */
+  historyError: boolean;
   /** Currently open conversation id, or null for a fresh unsaved one. */
   activeConversationId: string | null;
   /** Start a fresh conversation (stops any active stream). */
@@ -234,12 +237,17 @@ function toSummary(conv: ChatConversation): ConversationSummary {
 
 /**
  * Drives the multi-step chat agent from app.html. Owns the model-format
- * conversation (`modelMessagesRef`, fed to `createChatStream`) and a separate
- * display list. Consumes `result.fullStream`: `text-delta` grows the assistant
- * draft; `tool-input-start`/`tool-call`/`tool-result`/`tool-error` drive the
- * four-state tool activity; searchKnowledgeBase results accumulate into the
- * turn's source cards. After each turn the model messages persist to WXT storage
- * (never PGlite) so conversations survive a refresh and appear in the session list.
+ * conversation (`modelMessagesRef`, fed to `createChatStream` through
+ * `trimMessages` — the model sees the sliding window, storage keeps the full
+ * history) and a separate display list. Consumes `result.fullStream`:
+ * `text-delta` grows the assistant draft; `tool-input-start`/`tool-call`/
+ * `tool-result`/`tool-error` drive the four-state tool activity;
+ * searchKnowledgeBase results accumulate into the turn's source cards. After
+ * each turn the FULL model messages persist to PGlite (`chat_conversations` —
+ * the only table chat writes; retrieval tools stay read-only) so conversations
+ * survive a refresh and appear in the session list. A failed save logs to the
+ * console without disturbing the already-rendered answer; a failed mount load
+ * surfaces as `historyError` for the rail.
  */
 export function useChatAgent(): UseChatAgentReturn {
   const { settings, loading } = useSettings();
@@ -258,6 +266,7 @@ export function useChatAgent(): UseChatAgentReturn {
   const [isStreaming, setIsStreaming] = useState(false);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState(false);
 
   const modelMessagesRef = useRef<ModelMessage[]>([]);
   const abortRef = useRef<AbortController | null>(null);
@@ -268,33 +277,50 @@ export function useChatAgent(): UseChatAgentReturn {
 
   const configured = isChatModelConfigured(settings);
 
-  // Restore the most recent conversation on first mount (storage only, no PGlite).
+  // Restore the most recent conversation from PGlite on first mount. A failure
+  // surfaces as `historyError` (rail error state) — never silently an empty list.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const list = await listConversations();
-      if (cancelled) return;
-      setConversations(list.map(toSummary));
-      // Only auto-open if the user hasn't already started a session.
-      if (activeIdRef.current !== null || modelMessagesRef.current.length > 0) return;
-      const latest = list[0];
-      if (!latest) return;
-      modelMessagesRef.current = latest.modelMessages;
-      createdAtRef.current = latest.createdAt;
-      activeIdRef.current = latest.id;
-      setActiveConversationId(latest.id);
-      setMessages(rebuildDisplayMessages(latest.modelMessages));
+      try {
+        const db = await initDbProxy();
+        const list = await listConversations(db);
+        if (cancelled) return;
+        setHistoryError(false);
+        setConversations(list.map(toSummary));
+        // Only auto-open if the user hasn't already started a session.
+        if (activeIdRef.current !== null || modelMessagesRef.current.length > 0) return;
+        const latest = list[0];
+        if (!latest) return;
+        modelMessagesRef.current = latest.modelMessages;
+        createdAtRef.current = latest.createdAt;
+        activeIdRef.current = latest.id;
+        setActiveConversationId(latest.id);
+        setMessages(rebuildDisplayMessages(latest.modelMessages));
+      } catch (err) {
+        if (cancelled) return;
+        console.error('[chat] failed to load conversation history:', err);
+        setHistoryError(true);
+      }
     })();
     return () => {
       cancelled = true;
     };
   }, []);
 
-  const refreshConversations = useCallback(async () => {
-    const list = await listConversations();
+  // Single list-refresh path. A successful refresh also clears `historyError` —
+  // once a list load has succeeded (after save/delete), keeping the mount-time
+  // error up would hide real conversations behind a stale "load failed" caption.
+  const refreshConversations = useCallback(async (db: FavbaseDb) => {
+    const list = await listConversations(db);
     setConversations(list.map(toSummary));
+    setHistoryError(false);
+    return list;
   }, []);
 
+  // Persist the active conversation IN FULL (trim only applies when feeding the
+  // model). A save failure must not disturb the already-rendered answer (D4):
+  // log and move on.
   const persistActive = useCallback(async () => {
     const id = activeIdRef.current;
     if (!id || modelMessagesRef.current.length === 0) return;
@@ -305,8 +331,13 @@ export function useChatAgent(): UseChatAgentReturn {
       createdAt: createdAtRef.current || Date.now(),
       updatedAt: Date.now(),
     };
-    await saveConversation(conv);
-    await refreshConversations();
+    try {
+      const db = await initDbProxy();
+      await saveConversation(db, conv);
+      await refreshConversations(db);
+    } catch (err) {
+      console.error('[chat] failed to persist conversation:', err);
+    }
   }, [refreshConversations]);
 
   const stop = useCallback(() => {
@@ -337,19 +368,25 @@ export function useChatAgent(): UseChatAgentReturn {
       if (id === activeIdRef.current) return;
       stop();
       void (async () => {
-        const conv = await loadConversation(id);
-        if (!conv) return;
-        modelMessagesRef.current = conv.modelMessages;
-        createdAtRef.current = conv.createdAt;
-        activeIdRef.current = conv.id;
-        turnSourcesRef.current = [];
-        draftRef.current = '';
-        setActiveConversationId(conv.id);
-        setMessages(rebuildDisplayMessages(conv.modelMessages));
-        setStreamingText('');
-        setToolActivity(null);
-        setStatus('idle');
-        setErrorKind(null);
+        try {
+          const db = await initDbProxy();
+          const conv = await loadConversation(db, id);
+          if (!conv) return;
+          modelMessagesRef.current = conv.modelMessages;
+          createdAtRef.current = conv.createdAt;
+          activeIdRef.current = conv.id;
+          turnSourcesRef.current = [];
+          draftRef.current = '';
+          setActiveConversationId(conv.id);
+          setMessages(rebuildDisplayMessages(conv.modelMessages));
+          setStreamingText('');
+          setToolActivity(null);
+          setStatus('idle');
+          setErrorKind(null);
+        } catch (err) {
+          // Keep the current session on a failed switch — no partial state swap.
+          console.error('[chat] failed to load conversation:', err);
+        }
       })();
     },
     [stop],
@@ -358,20 +395,24 @@ export function useChatAgent(): UseChatAgentReturn {
   const deleteConversation = useCallback(
     (id: string) => {
       void (async () => {
-        await deleteStoredConversation(id);
-        const list = await listConversations();
-        setConversations(list.map(toSummary));
-        if (activeIdRef.current === id) {
-          const next = list[0];
-          if (next) {
-            switchConversation(next.id);
-          } else {
-            newConversation();
+        try {
+          const db = await initDbProxy();
+          await deleteStoredConversation(db, id);
+          const list = await refreshConversations(db);
+          if (activeIdRef.current === id) {
+            const next = list[0];
+            if (next) {
+              switchConversation(next.id);
+            } else {
+              newConversation();
+            }
           }
+        } catch (err) {
+          console.error('[chat] failed to delete conversation:', err);
         }
       })();
     },
-    [switchConversation, newConversation],
+    [refreshConversations, switchConversation, newConversation],
   );
 
   const send = useCallback(
@@ -413,7 +454,9 @@ export function useChatAgent(): UseChatAgentReturn {
           const db = await initDbProxy();
           const result = createChatStream({
             model: resolved.model,
-            messages: modelMessagesRef.current,
+            // The model gets the sliding window (last 40, realigned to a user
+            // turn); the ref keeps — and persistence stores — the full history.
+            messages: trimMessages(modelMessagesRef.current),
             db,
             now: new Date(),
             abortSignal: controller.signal,
@@ -528,6 +571,7 @@ export function useChatAgent(): UseChatAgentReturn {
     send,
     stop,
     conversations,
+    historyError,
     activeConversationId,
     newConversation,
     switchConversation,

@@ -10,6 +10,7 @@
 - `v003-chunk-timestamps.ts` — v3 chunk 时间戳：`ALTER TABLE item_chunks ADD COLUMN IF NOT EXISTS start_sec REAL / end_sec REAL`（nullable）。字幕 chunk 保住时间跨度供未来"跳转视频时间点"，时间戳只存列不混入 chunk_text（污染向量）。旧行/图文内容为 NULL。`IF NOT EXISTS` 保证幂等
 
 - `v004-tags.ts` — v4 AI 标签：`CREATE TABLE IF NOT EXISTS tags`（name 唯一）+ `item_tags`（复合 PK + 双 FK cascade + tag_id 索引）。平台无关 M:N，未来文章/仓库 item 直接复用。`IF NOT EXISTS` 保证幂等
+- `v005-chat-conversations.ts` — v5 Chat 会话历史：`CREATE TABLE IF NOT EXISTS chat_conversations`（整会话 jsonb 行：title + model_messages 全量 + created_at/updated_at）。复用 v001 的 `update_updated_at_column()` 触发器函数；触发器用 `DROP TRIGGER IF EXISTS` + `CREATE TRIGGER` 保证幂等（PG 无 `CREATE TRIGGER IF NOT EXISTS`）
 
 ## 约定
 

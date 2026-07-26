@@ -1,12 +1,20 @@
 import type { ModelMessage } from 'ai';
-import { storage } from 'wxt/utils/storage';
-import { STORAGE_KEYS } from '@/lib/storage';
+import { desc, eq, sql } from 'drizzle-orm';
+import type { FavbaseDb } from '@/lib/database';
+import { schema } from '@/lib/database';
+import type { ChatConversationRow } from '@/lib/database/entities/chat-conversations';
+
+const { chatConversations } = schema;
 
 /**
  * A persisted chat session. `modelMessages` is the source of truth (model
  * format, including tool-call/tool-result turns) — the display bubbles AND the
- * per-answer source cards are rebuilt from it on load. Chat persists ONLY to WXT
- * `local:` storage; it never writes PGlite (read-only knowledge base).
+ * per-answer source cards are rebuilt from it on load. Persistence lives in
+ * PGlite (`chat_conversations`, one jsonb row per conversation), stored in
+ * FULL — the sliding window is applied when feeding the model, not on save.
+ *
+ * Write discipline: this module writes ONLY `chat_conversations`. The chat
+ * retrieval tools stay strictly read-only over the knowledge-base tables.
  */
 export interface ChatConversation {
   id: string;
@@ -18,20 +26,15 @@ export interface ChatConversation {
 }
 
 /**
- * Sliding-window cap: max messages retained per conversation. Older messages are
- * trimmed on save so a long session can't grow storage without bound. The trim
- * realigns the window to start at a user turn so a persisted tool-result is never
- * orphaned from its tool-call (some providers reject that).
+ * Sliding-window cap: max messages FED TO THE MODEL per turn (context-window
+ * budget, not a storage limit — saves persist the full history). The trim
+ * realigns the window to start at a user turn so the model never sees a
+ * tool-result orphaned from its tool-call (some providers reject that).
  */
 export const MAX_MESSAGES = 40;
 
 /** Max characters kept for a derived conversation title. */
 const MAX_TITLE_LEN = 40;
-
-const conversationsStorage = storage.defineItem<ChatConversation[]>(
-  STORAGE_KEYS.chatConversations,
-  { fallback: [] },
-);
 
 /** Flatten a model message's content into plain text (string or text parts). */
 export function modelMessageText(message: ModelMessage): string {
@@ -68,29 +71,62 @@ export function trimMessages(messages: ModelMessage[], max = MAX_MESSAGES): Mode
   return start < sliced.length ? sliced.slice(start) : sliced;
 }
 
-/** All conversations, most-recently-updated first. */
-export async function listConversations(): Promise<ChatConversation[]> {
-  const all = await conversationsStorage.getValue();
-  return [...all].sort((a, b) => b.updatedAt - a.updatedAt);
-}
-
-/** One conversation by id, or null if it does not exist. */
-export async function loadConversation(id: string): Promise<ChatConversation | null> {
-  const all = await conversationsStorage.getValue();
-  return all.find((c) => c.id === id) ?? null;
-}
-
-/** Upsert a conversation (trimmed to the sliding window) into storage. */
-export async function saveConversation(conv: ChatConversation): Promise<void> {
-  const all = await conversationsStorage.getValue();
-  const trimmed: ChatConversation = {
-    ...conv,
-    modelMessages: trimMessages(conv.modelMessages),
+/** DB row (Date timestamps) → domain conversation (ms epoch numbers). */
+function rowToConversation(row: ChatConversationRow): ChatConversation {
+  return {
+    id: row.id,
+    title: row.title,
+    modelMessages: row.modelMessages,
+    createdAt: row.createdAt.getTime(),
+    updatedAt: row.updatedAt.getTime(),
   };
-  const idx = all.findIndex((c) => c.id === conv.id);
-  const next =
-    idx >= 0 ? all.map((c) => (c.id === conv.id ? trimmed : c)) : [...all, trimmed];
-  await conversationsStorage.setValue(next);
+}
+
+/** All conversations, most-recently-updated first. */
+export async function listConversations(db: FavbaseDb): Promise<ChatConversation[]> {
+  const rows = await db
+    .select()
+    .from(chatConversations)
+    .orderBy(desc(chatConversations.updatedAt));
+  return rows.map(rowToConversation);
+}
+
+/** One conversation by id (uuid), or null if it does not exist. */
+export async function loadConversation(
+  db: FavbaseDb,
+  id: string,
+): Promise<ChatConversation | null> {
+  const rows = await db
+    .select()
+    .from(chatConversations)
+    .where(eq(chatConversations.id, id))
+    .limit(1);
+  return rows[0] ? rowToConversation(rows[0]) : null;
+}
+
+/**
+ * Upsert a conversation with its FULL message history (no trim — the sliding
+ * window belongs to the model-feeding path). On the update path the v001
+ * `updated_at` trigger refreshes the timestamp to NOW().
+ */
+export async function saveConversation(db: FavbaseDb, conv: ChatConversation): Promise<void> {
+  await db
+    .insert(chatConversations)
+    .values({
+      id: conv.id,
+      title: conv.title,
+      modelMessages: conv.modelMessages,
+      createdAt: new Date(conv.createdAt),
+      updatedAt: new Date(conv.updatedAt),
+    })
+    .onConflictDoUpdate({
+      target: chatConversations.id,
+      set: {
+        title: sql`excluded.title`,
+        modelMessages: sql`excluded.model_messages`,
+        updatedAt: sql`excluded.updated_at`,
+      },
+    });
 }
 
 /** A fresh, empty conversation (not yet persisted). Uses `crypto.randomUUID`. */
@@ -100,7 +136,6 @@ export function createConversation(): ChatConversation {
 }
 
 /** Remove a conversation by id. */
-export async function deleteConversation(id: string): Promise<void> {
-  const all = await conversationsStorage.getValue();
-  await conversationsStorage.setValue(all.filter((c) => c.id !== id));
+export async function deleteConversation(db: FavbaseDb, id: string): Promise<void> {
+  await db.delete(chatConversations).where(eq(chatConversations.id, id));
 }

@@ -3,6 +3,7 @@ import { up as v001Init } from './v001-init';
 import { up as v002VectorIndex } from './v002-vector-index';
 import { up as v003ChunkTimestamps } from './v003-chunk-timestamps';
 import { up as v004Tags } from './v004-tags';
+import { up as v005ChatConversations } from './v005-chat-conversations';
 
 interface Migration {
   version: number;
@@ -15,6 +16,7 @@ const migrations: Migration[] = [
   { version: 2, name: 'v2_vector_index', up: v002VectorIndex },
   { version: 3, name: 'v3_chunk_timestamps', up: v003ChunkTimestamps },
   { version: 4, name: 'v4_tags', up: v004Tags },
+  { version: 5, name: 'v5_chat_conversations', up: v005ChatConversations },
 ];
 
 const MIGRATIONS_DDL = `

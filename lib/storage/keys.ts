@@ -14,10 +14,6 @@ export const STORAGE_KEYS = {
   // count across app.html reloads so the X collection caption can show it after
   // a refresh. Written by sections/x/use-x-bookmarks syncFn. See lib/x/CLAUDE.md.
   xLastSync: 'local:x-last-sync',
-  // Chat (Agentic RAG assistant) conversation history — a single array of all
-  // conversations (modelMessages + metadata). Read-only knowledge base; this is
-  // the ONLY chat persistence (never PGlite). See lib/chat/history.ts.
-  chatConversations: 'local:chat-conversations',
   // WebDAV sync (lib/sync). config: connection settings (password AES-GCM
   // obfuscated). meta: LWW clock + version bookkeeping. status: UI-facing state
   // watched by the settings card. See lib/sync/CLAUDE.md.
