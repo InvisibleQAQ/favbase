@@ -1,0 +1,8 @@
+{"file":".trellis/spec/frontend/index.md","reason":"Frontend layer quality checklist."}
+{"file":".trellis/spec/frontend/processing-queue.md","reason":"Verify streaming, lane isolation, job progress, pause/resume, and page-runtime contracts."}
+{"file":".trellis/spec/frontend/hook-guidelines.md","reason":"Verify hook lifecycle and subscription cleanup."}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"Verify component ownership and actionable warning behavior."}
+{"file":".trellis/spec/frontend/state-management.md","reason":"Verify lifecycle state remains in the shared job/runtime modules."}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Apply repository quality rules during review."}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"Check public unions, adapter contracts, and route-query handling."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Review cross-layer data flow and failure ownership."}

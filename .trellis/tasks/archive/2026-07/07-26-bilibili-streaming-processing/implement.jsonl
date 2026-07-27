@@ -1,0 +1,7 @@
+{"file":".trellis/spec/frontend/index.md","reason":"Frontend layer entry point and required quality checklist."}
+{"file":".trellis/spec/frontend/processing-queue.md","reason":"Page-runtime job ownership, streaming inbox, pause/resume, and Bilibili processing contracts."}
+{"file":".trellis/spec/frontend/hook-guidelines.md","reason":"Hook and runtime integration conventions for manual and daily fetch paths."}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"UI component conventions for the recoverable ASR warning and settings deep link."}
+{"file":".trellis/spec/frontend/state-management.md","reason":"Job/store ownership and subscription conventions across route lifetimes."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"The change spans sync persistence, app runtime jobs, storage observation, and UI."}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Reuse existing background jobs, processing lanes, and settings storage seams without duplicating lifecycle state."}
