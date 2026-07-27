@@ -23,6 +23,74 @@ function deferred<T = void>() {
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe('collection processing jobs', () => {
+  it('traces Embed batch dispatch, active-run collision, and retry', async () => {
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const releaseFirst = deferred();
+
+    try {
+      startCollectionProcessingJobs(
+        { jobPlatform: 'p-trace-batch', itemPlatform: 'x', itemIds: ['a'] },
+        { embed: () => releaseFirst.promise, tag: async () => {} },
+      );
+      startCollectionProcessingJobs(
+        { jobPlatform: 'p-trace-batch', itemPlatform: 'x', itemIds: ['b'] },
+        { embed: async () => {}, tag: async () => {} },
+      );
+      await flush();
+
+      expect(infoSpy.mock.calls.map((call) => call[1])).toEqual(
+        expect.arrayContaining([
+          'scheduler:batch-dispatch',
+          'scheduler:batch-collision',
+          'job:started',
+        ]),
+      );
+
+      releaseFirst.resolve();
+      await flush();
+      await flush();
+
+      expect(infoSpy.mock.calls.map((call) => call[1])).toContain(
+        'scheduler:batch-retry',
+      );
+      expect(infoSpy.mock.calls.map((call) => call[1])).toContain('job:completed');
+    } finally {
+      infoSpy.mockRestore();
+    }
+  });
+
+  it('traces Embed job progress and failure from the owning scheduler', async () => {
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      startCollectionProcessingJobs(
+        { jobPlatform: 'p-trace-failure', itemPlatform: 'x', itemIds: [] },
+        {
+          embed: async (_platform, _ids, onProgress) => {
+            onProgress({ done: 1, total: 2 });
+            throw new Error('provider stopped');
+          },
+          tag: async () => {},
+        },
+      );
+      await flush();
+
+      expect(infoSpy.mock.calls.map((call) => call[1])).toContain('job:progress');
+      expect(infoSpy.mock.calls.find((call) => call[1] === 'job:progress')?.[2]).toEqual(
+        expect.objectContaining({
+          jobPlatform: 'p-trace-failure',
+          done: 1,
+          total: 2,
+        }),
+      );
+      expect(errorSpy.mock.calls.map((call) => call[1])).toContain('job:failed');
+    } finally {
+      infoSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+  });
+
   it('drains items enqueued while the session lane is already running', async () => {
     const releaseFirstEmbed = deferred();
     const embedded: string[] = [];

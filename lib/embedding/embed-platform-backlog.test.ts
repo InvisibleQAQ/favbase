@@ -131,6 +131,55 @@ describe('embedPlatformBacklog', () => {
   const T0 = new Date('2026-01-01T00:00:00Z');
   const T1 = new Date('2026-01-02T00:00:00Z');
 
+  it('traces Provider and persistence boundaries without logging content or vectors', async () => {
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    await seedItem({
+      platformItemId: 'n-trace',
+      contentState: 'chunked',
+      chunkTexts: ['private-chunk-body'],
+    });
+
+    try {
+      await embedPlatformBacklog('test', {
+        db: () => db,
+        getConfig: async () => fakeConfig(true),
+        embed: async (_config, texts) => fakeVectors(texts.length),
+      });
+
+      const traceCalls = infoSpy.mock.calls.filter(
+        (call) => call[0] === '[embedding:trace]',
+      );
+      expect(traceCalls.map((call) => call[1])).toEqual(
+        expect.arrayContaining([
+          'backlog:started',
+          'query:completed',
+          'item:started',
+          'provider:started',
+          'provider:completed',
+          'persistence:started',
+          'persistence:completed',
+          'item:completed',
+          'backlog:completed',
+        ]),
+      );
+      expect(
+        traceCalls.find((call) => call[1] === 'provider:started')?.[2],
+      ).toEqual(
+        expect.objectContaining({
+          platform: 'test',
+          chunkCount: 1,
+          charCount: 'private-chunk-body'.length,
+          providerId: 'openai',
+          model: 'm',
+        }),
+      );
+      expect(JSON.stringify(traceCalls)).not.toContain('private-chunk-body');
+      expect(JSON.stringify(traceCalls)).not.toContain('0.1');
+    } finally {
+      infoSpy.mockRestore();
+    }
+  });
+
   it('embeds the whole platform backlog in createdAt order without an id list', async () => {
     const itemA = await seedItem({
       platformItemId: 'n-a',
@@ -317,6 +366,43 @@ describe('embedPlatformBacklog', () => {
     }
 
     expect(seen).toEqual(['BV-EVENT']);
+  });
+
+  it('correlates the platform-addressed single-item trace', async () => {
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    await seedItem({
+      platform: 'bilibili',
+      platformItemId: 'BV-TRACE',
+      contentState: 'chunked',
+      chunkTexts: ['trace me'],
+    });
+
+    try {
+      await embedPlatformItem('bilibili', 'BV-TRACE', {
+        db: () => db,
+        getConfig: async () => fakeConfig(true),
+        embed: async (_config, texts) => fakeVectors(texts.length),
+      });
+
+      const traceCalls = infoSpy.mock.calls.filter(
+        (call) => call[0] === '[embedding:trace]',
+      );
+      expect(traceCalls.map((call) => call[1])).toEqual(
+        expect.arrayContaining([
+          'single-item:started',
+          'provider:started',
+          'persistence:completed',
+          'single-item:completed',
+        ]),
+      );
+      const correlated = traceCalls.filter(
+        (call) => (call[2] as { platformItemId?: string }).platformItemId === 'BV-TRACE',
+      );
+      expect(new Set(correlated.map((call) => (call[2] as { traceId: string }).traceId)).size)
+        .toBe(1);
+    } finally {
+      infoSpy.mockRestore();
+    }
   });
 
   it('completes silently at 0/0 when embedding is not configured', async () => {
