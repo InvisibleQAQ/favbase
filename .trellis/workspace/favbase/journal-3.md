@@ -1478,3 +1478,37 @@ Removed the app-wide embedding promise FIFO, restored provider-owned batch concu
 ### Next Steps
 
 - None - task complete
+
+
+## Session 162: Repair bookmark chunk persistence and embedding completion
+
+**Date**: 2026-07-28
+**Task**: Repair bookmark chunk persistence and embedding completion
+**Branch**: `main`
+
+### Summary
+
+Added embedding pipeline diagnostics, identified zero-chunk false completion, repaired Bookmark stored-content ghosts without refetching, gated downstream enqueue on durable chunks, and propagated single-item embedding failures truthfully. Full tests, compile, and production build pass.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3331a50` | (see git log) |
+| `5e80543` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
