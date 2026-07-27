@@ -1440,3 +1440,41 @@ Bilibili Favorites逐页持久化并流式驱动Transcript；缺ASR和quota可�
 ### Next Steps
 
 - None - task complete
+
+
+## Session 161: Fix stalled collection embedding pipeline
+
+**Date**: 2026-07-28
+**Task**: Fix stalled collection embedding pipeline
+**Branch**: `main`
+
+### Summary
+
+Removed the app-wide embedding promise FIFO, restored provider-owned batch concurrency, fixed resume-before-checkpoint lost wakeups, and released Bilibili transcription after durable content while observing late indexing results. Full compile, 860 tests, and production build passed.
+
+### Main Changes
+
+- Removed the module-level Embedding promise FIFO so independent platform lanes no longer head-of-line block each other.
+- Restored provider-owned `embedMany` batch concurrency while retaining the 60-second request deadline.
+- Fixed resume commands received during `pausing` so the next checkpoint cannot park forever.
+- Released Bilibili Transcript after durable content and handled late Embedding settlement in coordinator state.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7272119` | (see git log) |
+
+### Testing
+
+- [OK] `pnpm.cmd compile`
+- [OK] `pnpm.cmd test` - 110 files, 860 tests
+- [OK] `pnpm.cmd build`
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

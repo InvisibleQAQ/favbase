@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-3.md`
-- **Total Sessions**: 160
-- **Last Active**: 2026-07-27
+- **Total Sessions**: 161
+- **Last Active**: 2026-07-28
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-3.md` | ~1442 | Active |
+| `journal-3.md` | ~1475 | Active |
 | `journal-2.md` | ~1993 | Archived |
 | `journal-1.md` | ~1976 | Archived |
 <!-- @@@/auto:active-documents -->
@@ -31,6 +31,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 161 | 2026-07-28 | Fix stalled collection embedding pipeline | `7272119` | `main` |
 | 160 | 2026-07-27 | Bilibili streaming processing | `1906a02`, `75e018d`, `81fa054` | `main` |
 | 159 | 2026-07-26 | fix(embedding): ghost chunked elimination + backlog embed lane | `ec588b5` | `main` |
 | 158 | 2026-07-26 | Platform Request 外链入口（nav 叶子 + welcome 尾节） | `99526f5` | `main` |
