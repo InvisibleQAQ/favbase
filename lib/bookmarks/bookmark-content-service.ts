@@ -1,7 +1,8 @@
 /**
  * Serial extraction worker for the bookmarks content pipeline: drains the
- * 'pending' queue (./bookmarks-sync-service.ts), fetches + extracts each page
- * (./bookmark-content.ts), and settles contentState per the failure taxonomy:
+ * extraction/recovery queue (./bookmarks-sync-service.ts), reuses durable
+ * item_contents text or fetches and extracts a new page
+ * (./bookmark-content.ts), then settles contentState per the failure taxonomy:
  *
  * - unfetchable URL / 4xx / non-HTML / oversized / below-threshold extraction
  *   → 'no_content' (permanent, never retried);
@@ -45,7 +46,7 @@ const DEFAULT_DELAY_MS = 1000;
 export interface ExtractionProgress {
   /** Items settled this run (all outcomes). */
   done: number;
-  /** Pending backlog measured at run start. */
+  /** Extraction/recovery backlog measured at run start. */
   total: number;
   /** Target currently being processed; absent until the first target starts. */
   current?: { url: string; title: string };
@@ -92,9 +93,9 @@ export interface ExtractionRunResult {
 }
 
 /**
- * Drain the extraction queue. Resumable by construction: successes and
- * permanent failures leave 'pending', so a fresh run (next page-open) picks up
- * exactly what's left — including items that failed transiently this run.
+ * Drain the extraction/recovery queue. Resumable by construction: settled
+ * rows leave the work predicate, while a fresh run picks up pending transient
+ * failures and stored-content rows that still have no chunks.
  */
 export async function extractPendingBookmarks(
   opts: ExtractPendingOptions = {},
@@ -135,17 +136,41 @@ export async function extractPendingBookmarks(
       const current = { url: target.url, title: target.title };
       opts.onProgress?.({ done: result.processed, total, current });
 
-      const settleNoContent = async () => {
-        await markItemNoContent(target.itemId, db);
-        result.noContent += 1;
+      const emitContentUpdated = () => {
         emitDomainEvent('item-content-updated', {
           platform: 'bookmarks',
           platformItemId: target.platformItemId,
         });
       };
 
+      const settleNoContent = async () => {
+        await markItemNoContent(target.itemId, db);
+        result.noContent += 1;
+        emitContentUpdated();
+      };
+
+      const settleContent = async (markdown: string) => {
+        const written = await saveBookmarkContent(target.itemId, markdown, db);
+        if (!written) {
+          result.noContent += 1;
+          emitContentUpdated();
+          return;
+        }
+
+        result.chunkedItemIds.push(target.platformItemId);
+        emitContentUpdated();
+        try {
+          opts.onItemExtracted?.(target.platformItemId);
+        } catch (err) {
+          // Listener failure must not reclassify an already-chunked item.
+          console.warn('[bookmark-content] onItemExtracted listener failed:', err);
+        }
+      };
+
       try {
-        if (!classifyUrl(target.url)) {
+        if (target.storedContent?.trim()) {
+          await settleContent(target.storedContent);
+        } else if (!classifyUrl(target.url)) {
           // Localhost / private IP / dotless host — settled without a request.
           await settleNoContent();
         } else {
@@ -162,18 +187,7 @@ export async function extractPendingBookmarks(
             if (extracted === null) {
               await settleNoContent();
             } else {
-              await saveBookmarkContent(target.itemId, extracted.markdown, db);
-              result.chunkedItemIds.push(target.platformItemId);
-              emitDomainEvent('item-content-updated', {
-                platform: 'bookmarks',
-                platformItemId: target.platformItemId,
-              });
-              try {
-                opts.onItemExtracted?.(target.platformItemId);
-              } catch (err) {
-                // Listener failure must not reclassify an already-chunked item.
-                console.warn('[bookmark-content] onItemExtracted listener failed:', err);
-              }
+              await settleContent(extracted.markdown);
             }
           }
         }

@@ -202,6 +202,84 @@ describe('bookmark-content-service (in-memory PGlite)', () => {
     expect(chunks[0].startSec).toBeNull(); // text content — no timestamps
   });
 
+  it('repairs persisted bookmark content without chunks without refetching', async () => {
+    const ghosts = [
+      { url: 'https://ghost.example.com/chunked', state: 'chunked' },
+      { url: 'https://ghost.example.com/has-content', state: 'has_content' },
+      { url: 'https://ghost.example.com/no-content', state: 'no_content' },
+    ] as const;
+    await syncBookmarkTreeToDb(db, tree(ghosts.map(({ url }) => bm(url))));
+
+    for (const { url, state } of ghosts) {
+      const item = await getItem(url);
+      await db.insert(schema.itemContents).values({
+        itemId: item.id,
+        plainText: `Persisted article body for ${url}`,
+      });
+      await db
+        .update(schema.items)
+        .set({ contentState: state })
+        .where(eq(schema.items.id, item.id));
+    }
+
+    const fetchPage = vi.fn<BookmarkPageFetcher>();
+    const extracted: string[] = [];
+    const first = await extractPendingBookmarks({
+      db,
+      delayMs: 0,
+      fetchPage,
+      onItemExtracted: (id) => extracted.push(id),
+    });
+
+    expect(fetchPage).not.toHaveBeenCalled();
+    expect(first.processed).toBe(ghosts.length);
+    expect(first.chunkedItemIds.sort()).toEqual(ghosts.map(({ url }) => url).sort());
+    expect(extracted.sort()).toEqual(ghosts.map(({ url }) => url).sort());
+    for (const { url } of ghosts) {
+      const item = await getItem(url);
+      expect(item.contentState).toBe('chunked');
+      expect(await getChunks(item.id)).not.toHaveLength(0);
+    }
+
+    const second = await extractPendingBookmarks({ db, delayMs: 0, fetchPage });
+    expect(second).toEqual({ processed: 0, chunkedItemIds: [], noContent: 0, transient: 0 });
+  });
+
+  it('does not publish chunked work when chunk insertion persists zero rows', async () => {
+    const url = 'https://zero-chunks.example.com/post';
+    await syncBookmarkTreeToDb(db, tree([bm(url)]));
+    await pg.exec(`
+      CREATE FUNCTION test_skip_bookmark_chunks() RETURNS trigger
+      LANGUAGE plpgsql AS $$ BEGIN RETURN NULL; END $$;
+      CREATE TRIGGER test_skip_bookmark_chunks
+      BEFORE INSERT ON item_chunks
+      FOR EACH ROW EXECUTE FUNCTION test_skip_bookmark_chunks();
+    `);
+
+    const extracted: string[] = [];
+    const result = await (async () => {
+      try {
+        return await extractPendingBookmarks({
+          db,
+          delayMs: 0,
+          fetchPage: pageFetcher({ [url]: () => htmlResponse(articleHtml('Skipped')) }),
+          onItemExtracted: (id) => extracted.push(id),
+        });
+      } finally {
+        await pg.exec(`
+          DROP TRIGGER test_skip_bookmark_chunks ON item_chunks;
+          DROP FUNCTION test_skip_bookmark_chunks();
+        `);
+      }
+    })();
+
+    const item = await getItem(url);
+    expect(result).toEqual({ processed: 1, chunkedItemIds: [], noContent: 1, transient: 0 });
+    expect(extracted).toEqual([]);
+    expect(item.contentState).toBe('no_content');
+    expect(await getChunks(item.id)).toEqual([]);
+  });
+
   it('emits item-content-updated after each durable settled state', async () => {
     const ok = 'https://events.example.com/ok';
     const dead = 'https://events.example.com/dead';

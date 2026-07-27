@@ -368,6 +368,94 @@ describe('embedPlatformBacklog', () => {
     expect(seen).toEqual(['BV-EVENT']);
   });
 
+  it('returns null instead of reporting success for a chunked item without chunks', async () => {
+    await seedItem({
+      platform: 'bookmarks',
+      platformItemId: 'https://ghost.example.com/',
+      contentState: 'chunked',
+    });
+    const embed = vi.fn();
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+
+    try {
+      await expect(
+        embedPlatformItem('bookmarks', 'https://ghost.example.com/', {
+          db: () => db,
+          getConfig: async () => fakeConfig(true),
+          embed,
+        }),
+      ).resolves.toBeNull();
+      expect(embed).not.toHaveBeenCalled();
+      expect(infoSpy.mock.calls).toContainEqual([
+        '[embedding:trace]',
+        'single-item:skipped',
+        expect.objectContaining({ phase: 'no-chunks', chunkCount: 0 }),
+      ]);
+    } finally {
+      infoSpy.mockRestore();
+    }
+  });
+
+  it('checks for missing chunks before treating disabled embedding as a successful skip', async () => {
+    await seedItem({
+      platform: 'bookmarks',
+      platformItemId: 'https://disabled-ghost.example.com/',
+      contentState: 'chunked',
+    });
+
+    await expect(
+      embedPlatformItem('bookmarks', 'https://disabled-ghost.example.com/', {
+        db: () => db,
+        getConfig: async () => fakeConfig(false),
+        embed: vi.fn(),
+      }),
+    ).resolves.toBeNull();
+  });
+
+  it('rejects single-item embedding failures instead of reporting chunked success', async () => {
+    const itemId = await seedItem({
+      platform: 'bookmarks',
+      platformItemId: 'https://provider-failure.example.com/',
+      contentState: 'chunked',
+      chunkTexts: ['provider failure content'],
+    });
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      await expect(
+        embedPlatformItem('bookmarks', 'https://provider-failure.example.com/', {
+          db: () => db,
+          getConfig: async () => fakeConfig(true),
+          embed: async () => {
+            throw new Error('provider unavailable');
+          },
+        }),
+      ).rejects.toThrow('provider unavailable');
+    } finally {
+      errSpy.mockRestore();
+    }
+
+    expect(await getContentState(itemId)).toBe('chunked');
+  });
+
+  it('rejects single-item database failures instead of reporting chunked success', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      await expect(
+        embedPlatformItem('bookmarks', 'https://database-failure.example.com/', {
+          db: () => {
+            throw new Error('database unavailable');
+          },
+          getConfig: async () => fakeConfig(true),
+          embed: vi.fn(),
+        }),
+      ).rejects.toThrow('database unavailable');
+    } finally {
+      errSpy.mockRestore();
+    }
+  });
+
   it('correlates the platform-addressed single-item trace', async () => {
     const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
     await seedItem({

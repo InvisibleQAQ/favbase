@@ -19,18 +19,22 @@
  * drained by the extraction worker (./bookmark-content-service.ts) through the
  * queue/update methods at the bottom of this file — fetch page → defuddle →
  * Markdown → item_contents + charSplit chunks → 'chunked', or 'no_content' on
- * permanent failure. contentState UPDATEs do not violate the insert-only ADR
+ * permanent failure. Existing content without chunks is rebuilt from
+ * item_contents without another fetch. contentState UPDATEs do not violate
+ * the insert-only ADR
  * (that constrains row add/delete; bilibili transcription drives the same
  * pending→chunked advance).
  */
 
-import { and, asc, eq, ilike, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, eq, exists, ilike, inArray, not, or, sql, type SQL } from 'drizzle-orm';
 import { getDb } from '@/lib/database';
 import type { FavbaseDb } from '@/lib/database';
 import { escapeLike } from '@/lib/database/sql-utils';
 import { getPlatformLastSyncedAt, pagedItemsQuery } from '@/lib/database/collection-queries';
 import { sources } from '@/lib/database/entities/sources';
 import { items } from '@/lib/database/entities/items';
+import { itemChunks } from '@/lib/database/entities/item-chunks';
+import { itemContents } from '@/lib/database/entities/item-contents';
 import { itemSources } from '@/lib/database/entities/item-sources';
 import { ingestCollection, persistItemContent } from '@/lib/ingest/ingest';
 // Leaf import (NOT the '@/lib/embedding' barrel): the barrel eagerly touches
@@ -242,7 +246,7 @@ export async function getLastSyncedAt(db: FavbaseDb = getDb()): Promise<Date | n
 // state-machine advance, see the file header)
 // ---------------------------------------------------------------------------
 
-/** One 'pending' item awaiting content extraction. */
+/** One item awaiting extraction or durable-content chunk recovery. */
 export interface PendingExtractionTarget {
   /** items.id (uuid) — the extraction-state handle. */
   itemId: string;
@@ -252,11 +256,45 @@ export interface PendingExtractionTarget {
   url: string;
   /** Display name captured from the browser bookmark. */
   title: string;
+  /** Existing durable text used to repair missing chunks without refetching. */
+  storedContent?: string | null;
+}
+
+function extractionWorkCondition(db: FavbaseDb): SQL {
+  const hasStoredContent = exists(
+    db
+      .select({ one: sql`1` })
+      .from(itemContents)
+      .where(
+        and(
+          eq(itemContents.itemId, items.id),
+          sql`NULLIF(BTRIM(${itemContents.plainText}), '') IS NOT NULL`,
+        ),
+      ),
+  );
+  const hasNoChunks = not(
+    exists(
+      db
+        .select({ one: sql`1` })
+        .from(itemChunks)
+        .where(eq(itemChunks.itemId, items.id)),
+    ),
+  );
+
+  return or(
+    eq(items.contentState, 'pending'),
+    and(
+      inArray(items.contentState, ['chunked', 'has_content', 'no_content']),
+      hasStoredContent,
+      hasNoChunks,
+    ),
+  )!;
 }
 
 /**
- * Oldest-first slice of the extraction queue. Transient failures stay
- * 'pending', so re-runs (and the next page-open) naturally resume here.
+ * Oldest-first slice of the extraction/recovery queue. Transient failures stay
+ * 'pending'; rows with stored content and missing chunks are repaired without
+ * fetching the page again.
  */
 export async function getPendingExtractionTargets(
   limit: number,
@@ -268,19 +306,21 @@ export async function getPendingExtractionTargets(
       platformItemId: items.platformItemId,
       url: items.originalUrl,
       title: items.title,
+      storedContent: itemContents.plainText,
     })
     .from(items)
-    .where(and(eq(items.platform, PLATFORM), eq(items.contentState, 'pending')))
+    .leftJoin(itemContents, eq(itemContents.itemId, items.id))
+    .where(and(eq(items.platform, PLATFORM), extractionWorkCondition(db)))
     .orderBy(asc(items.createdAt), asc(items.id))
     .limit(limit);
 }
 
-/** Extraction backlog size — the progress `total` for an extraction run. */
+/** Extraction/recovery backlog size — the progress `total` for a run. */
 export async function countPendingExtractions(db: FavbaseDb = getDb()): Promise<number> {
   const rows = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(items)
-    .where(and(eq(items.platform, PLATFORM), eq(items.contentState, 'pending')));
+    .where(and(eq(items.platform, PLATFORM), extractionWorkCondition(db)));
   return Number(rows[0]?.count ?? 0);
 }
 
@@ -297,13 +337,14 @@ export async function markItemNoContent(itemId: string, db: FavbaseDb = getDb())
  * two-phase helper — runs OUTSIDE any transaction) and advance contentState to
  * 'chunked'. Whitespace-only markdown (the caller's threshold guard should
  * prevent it) degrades to 'no_content' — a 'chunked' state without chunks
- * would lie.
+ * would lie. Returns whether chunk rows were durably inserted; only `true`
+ * licenses downstream Embed/Tag enqueue.
  */
 export async function saveBookmarkContent(
   itemId: string,
   markdown: string,
   db: FavbaseDb = getDb(),
-): Promise<void> {
+): Promise<boolean> {
   const written = await persistItemContent(db, itemId, markdown, (text) =>
     charSplit(text, { preferParagraph: true }),
   );
@@ -311,6 +352,7 @@ export async function saveBookmarkContent(
     .update(items)
     .set({ contentState: written ? 'chunked' : 'no_content', updatedAt: new Date() })
     .where(eq(items.id, itemId));
+  return written;
 }
 
 // ---------------------------------------------------------------------------

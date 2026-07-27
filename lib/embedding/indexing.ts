@@ -21,10 +21,10 @@ const { items, itemChunks } = schema;
  * content types — it consumes `ChunkInput[]` produced by whatever chunker the
  * platform service chose (subtitle rows today, article text tomorrow).
  *
- * Policy: chunking is free and always persisted ('chunked'); embedding is
- * best-effort — disabled config, un-indexable dimension (HNSW cap), or network
- * failure logs and leaves the item at 'chunked' without throwing. Dimension
- * changes across model switches are handled inside `upsertChunkEmbeddings`
+ * Policy: chunking is free and always persisted ('chunked'); the combined
+ * `indexItemChunks` compatibility path keeps embedding best-effort. The
+ * platform-addressed job path rejects failures so its scheduler stays
+ * truthful. Dimension changes across model switches are handled inside `upsertChunkEmbeddings`
  * (lazy column re-dimensioning), not here.
  */
 
@@ -238,8 +238,9 @@ export async function indexItemChunks(
 }
 
 /**
- * Best-effort single-item embedding addressed by platform identity. The item
- * must already be at the durable `chunked` seam; callers never need its DB id.
+ * Single-item embedding addressed by platform identity. The item must already
+ * be at the durable `chunked` seam; missing chunks return null, while DB or
+ * Provider failures reject so job owners cannot report false completion.
  */
 export async function embedPlatformItem(
   platform: string,
@@ -311,6 +312,34 @@ export async function embedPlatformItem(
       return null;
     }
 
+    phase = 'chunk-query';
+    embeddingTrace('query:started', {
+      ...diagnostic,
+      stage: 'query',
+      phase,
+      elapsedMs: Date.now() - startedAt,
+    });
+    const chunks = await getEmbeddableChunks(db, target.id);
+    const contentDetails: EmbeddingTraceDetails = {
+      ...diagnostic,
+      chunkCount: chunks.length,
+      charCount: chunks.reduce((sum, chunk) => sum + chunk.chunkText.length, 0),
+    };
+    embeddingTrace('query:completed', {
+      ...contentDetails,
+      stage: 'query',
+      phase,
+      elapsedMs: Date.now() - startedAt,
+    });
+    if (chunks.length === 0) {
+      embeddingTrace('single-item:skipped', {
+        ...contentDetails,
+        phase: 'no-chunks',
+        elapsedMs: Date.now() - startedAt,
+      });
+      return null;
+    }
+
     phase = 'config';
     embeddingTrace('config:started', {
       ...diagnostic,
@@ -335,33 +364,6 @@ export async function embedPlatformItem(
       return 'chunked';
     }
 
-    phase = 'chunk-query';
-    embeddingTrace('query:started', {
-      ...diagnostic,
-      stage: 'query',
-      phase,
-      elapsedMs: Date.now() - startedAt,
-    });
-    const chunks = await getEmbeddableChunks(db, target.id);
-    const contentDetails: EmbeddingTraceDetails = {
-      ...diagnostic,
-      chunkCount: chunks.length,
-      charCount: chunks.reduce((sum, chunk) => sum + chunk.chunkText.length, 0),
-    };
-    embeddingTrace('query:completed', {
-      ...contentDetails,
-      stage: 'query',
-      phase,
-      elapsedMs: Date.now() - startedAt,
-    });
-    if (chunks.length === 0) {
-      embeddingTrace('single-item:completed', {
-        ...contentDetails,
-        phase: 'no-chunks',
-        elapsedMs: Date.now() - startedAt,
-      });
-      return 'chunked';
-    }
     phase = 'embedding';
     await embedChunks(db, target.id, chunks, config, embed, diagnostic);
     emitDomainEvent('item-embedded', { platform, platformItemId });
@@ -383,7 +385,7 @@ export async function embedPlatformItem(
     } else {
       embeddingTraceError('single-item:failed', err, failureDetails);
     }
-    return 'chunked';
+    throw err;
   }
 }
 
