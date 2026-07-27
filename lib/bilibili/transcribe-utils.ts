@@ -29,8 +29,8 @@ const startProcessingDirectly: StartTranscribeProcessing = (bvid) => ({
 
 /**
  * Transcribe via the background pipeline, persist content + chunks locally,
- * then start Embedding and Tagging independently. Only Embedding is awaited
- * for the UI indexing state; post-processing never changes transcription.
+ * then start Embedding and Tagging independently. Durable content releases the
+ * producer immediately; post-processing never blocks the next transcription.
  */
 export async function transcribeAndPersist(
   bvid: string,
@@ -56,8 +56,10 @@ export async function transcribeAndPersist(
 
     const processing = (hooks?.startProcessing ?? startProcessingDirectly)(bvid);
     void processing.tag;
-    const result = await processing.embed;
-    hooks?.onIndexed?.(result);
+    void processing.embed.then(
+      (result) => hooks?.onIndexed?.(result),
+      () => hooks?.onIndexed?.('chunked'),
+    );
   }
 
   return response;

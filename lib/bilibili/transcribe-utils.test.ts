@@ -134,7 +134,7 @@ describe('transcribeAndPersist', () => {
     };
   }
 
-  it('starts tagging while embedding is pending and completes without waiting for tagging', async () => {
+  it('returns after persistence while Embedding and Tagging continue independently', async () => {
     await seedItem('BV-CONCURRENT');
     const response = successResponse();
     const embedding = deferred<number[][]>();
@@ -156,10 +156,12 @@ describe('transcribeAndPersist', () => {
     expect(onIndexing).toHaveBeenCalledTimes(1);
     expect(onIndexed).not.toHaveBeenCalled();
 
+    await expect(run).resolves.toEqual(response);
+    expect(onIndexed).not.toHaveBeenCalled();
+
     embedding.resolve([embeddingVector()]);
 
-    await expect(run).resolves.toEqual(response);
-    expect(onIndexed).toHaveBeenCalledWith('embedded');
+    await vi.waitFor(() => expect(onIndexed).toHaveBeenCalledWith('embedded'));
     expect(boundary.generateObject).toHaveBeenCalledTimes(1);
   });
 
@@ -183,7 +185,7 @@ describe('transcribeAndPersist', () => {
     expect(seen).toEqual(['BV-CONTENT-EVENT']);
   });
 
-  it('uses an injected processing ticket and waits only for Embedding', async () => {
+  it('returns after durable content without waiting for the injected Embedding ticket', async () => {
     await seedItem('BV-PROCESSING-RUNS');
     boundary.sendMessage.mockResolvedValueOnce(successResponse());
     const embedding = deferred<'embedded'>();
@@ -200,10 +202,12 @@ describe('transcribeAndPersist', () => {
     await vi.waitFor(() => expect(startProcessing).toHaveBeenCalledWith('BV-PROCESSING-RUNS'));
     expect(onIndexed).not.toHaveBeenCalled();
 
+    await expect(run).resolves.toEqual(successResponse());
+    expect(onIndexed).not.toHaveBeenCalled();
+
     embedding.resolve('embedded');
 
-    await expect(run).resolves.toEqual(successResponse());
-    expect(onIndexed).toHaveBeenCalledWith('embedded');
+    await vi.waitFor(() => expect(onIndexed).toHaveBeenCalledWith('embedded'));
   });
 
   it('keeps tagging independent when embedding fails', async () => {

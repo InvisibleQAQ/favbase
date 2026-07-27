@@ -28,7 +28,7 @@ pgvector 向量存储 + 语义检索 + 配置解析 + RAG 数据准备（chunker
 
 ## 约定
 
-- Provider 并发：所有 indexing / backlog / rebuild 经 `embedChunks` 的模块级 FIFO，全 app.html 最多一个远程 embedding 请求 in-flight；成功与失败都必须释放下一请求。请求 deadline 归 `lib/ai/embedding.ts`。
+- Provider 并发：同一平台的 Collection Embed lane 逐 item 串行；不同平台不得在 `lib/embedding` 再套全局 FIFO，否则一个未结算请求会阻塞全部平台。`indexItemChunks` / backlog / rebuild 直接调用 provider；单请求 deadline 归 `lib/ai/embedding.ts`。
 
 - 两层解耦：chunker 选择是平台/内容类型知识；collection ingest 与 delayed content replacement 将 `ChunkInput[]` 交给 durable persistence seam。需要组合“落 chunk 后立即嵌入”的旧路径仍可用 `indexItemChunks`。Bilibili 在 app.html 编排层通过 `(platform, platformItemId)` 调 `embedPlatformItem`，不接触 DB uuid；文本类平台继续复用 `charSplit`
 - 失败策略：chunk 必做（本地零成本），embed 尽力而为（未启用/失败停 'chunked'，转录路径 `embedPlatformItem` 仍只 console 记录不影响转录成功状态）；六平台 app 层的共享串行 Embed lane 输入 = 平台 `'chunked'` 积压（`embedPlatformBacklog`：单条失败继续 + `{done,total,failed}` + cooperative pause + 收尾 failed>0 抛错 → job 显示 failed），同步收尾恒派发故积压自动重试；设置页「重建向量」（`rebuildPendingEmbeddings`，全平台、失败即停 + 幂等续跑）为手动兜底

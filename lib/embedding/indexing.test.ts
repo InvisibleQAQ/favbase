@@ -165,43 +165,33 @@ describe('indexItemChunks', () => {
     expect(rows).toHaveLength(2);
   });
 
-  it('serializes provider calls shared by concurrent indexing runs', async () => {
+  it('does not let one unresolved embedding call block an independent indexing run', async () => {
     const firstItemId = await seedItem('i-provider-queue-a');
     const secondItemId = await seedItem('i-provider-queue-b');
     const firstResult = deferred<number[][]>();
     const secondResult = deferred<number[][]>();
     const calls: string[][] = [];
-    let active = 0;
-    let maxActive = 0;
     const embed = vi.fn(async (_config: ResolvedEmbeddingConfig, texts: string[]) => {
       calls.push(texts);
-      active += 1;
-      maxActive = Math.max(maxActive, active);
-      try {
-        return await (calls.length === 1 ? firstResult.promise : secondResult.promise);
-      } finally {
-        active -= 1;
-      }
+      return texts[0] === 'first item' ? firstResult.promise : secondResult.promise;
     });
     const deps: IndexingDeps = { getConfig: async () => fakeConfig(true), embed };
 
     const first = indexItemChunks(db, firstItemId, [{ text: 'first item' }], deps);
+    await vi.waitFor(() => expect(calls).toEqual([['first item']]));
+
     const second = indexItemChunks(db, secondItemId, [{ text: 'second item' }], deps);
-    await vi.waitFor(() => expect(calls).toHaveLength(1));
-
-    expect(calls).toEqual([['first item']]);
-    expect(maxActive).toBe(1);
-
-    firstResult.resolve(fakeVectors(1));
     await vi.waitFor(() => expect(calls).toHaveLength(2));
     expect(calls).toEqual([['first item'], ['second item']]);
-    expect(maxActive).toBe(1);
 
     secondResult.resolve(fakeVectors(1));
-    await expect(Promise.all([first, second])).resolves.toEqual(['embedded', 'embedded']);
+    await expect(second).resolves.toBe('embedded');
+
+    firstResult.resolve(fakeVectors(1));
+    await expect(first).resolves.toBe('embedded');
   });
 
-  it('releases the shared provider queue after a failed indexing request', async () => {
+  it('isolates a failed embedding call from an independent indexing run', async () => {
     const failedItemId = await seedItem('i-provider-queue-fail');
     const nextItemId = await seedItem('i-provider-queue-after-fail');
     const releaseFailure = deferred<number[][]>();
@@ -217,12 +207,12 @@ describe('indexItemChunks', () => {
 
     const failed = indexItemChunks(db, failedItemId, [{ text: 'will fail' }], deps);
     const next = indexItemChunks(db, nextItemId, [{ text: 'runs next' }], deps);
-    await vi.waitFor(() => expect(calls).toEqual([['will fail']]));
+    await vi.waitFor(() => expect(calls).toEqual([['will fail'], ['runs next']]));
+    await expect(next).resolves.toBe('embedded');
 
     releaseFailure.reject(new Error('provider timeout'));
 
     await expect(failed).resolves.toBe('chunked');
-    await expect(next).resolves.toBe('embedded');
     expect(calls).toEqual([['will fail'], ['runs next']]);
   });
 

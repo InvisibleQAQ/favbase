@@ -37,7 +37,7 @@ export function createPipelineRunControl(
       setPhase('pausing');
     },
     resume: () => {
-      if (phase !== 'paused') return;
+      if (phase === 'running') return;
       setPhase('running');
       continueRun?.();
       continueRun = null;

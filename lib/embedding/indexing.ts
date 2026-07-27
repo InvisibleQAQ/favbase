@@ -66,17 +66,6 @@ interface EmbeddableChunk {
   chunkText: string;
 }
 
-let embeddingRequestTail: Promise<void> = Promise.resolve();
-
-function enqueueEmbeddingRequest<TResult>(run: () => Promise<TResult>): Promise<TResult> {
-  const result = embeddingRequestTail.then(run, run);
-  embeddingRequestTail = result.then(
-    () => undefined,
-    () => undefined,
-  );
-  return result;
-}
-
 /**
  * Shared embed core for fresh indexing and backlog rebuild: embed the ordered
  * chunk texts, attach vectors by chunk id (the lazy dimension switch lives
@@ -92,9 +81,7 @@ async function embedChunks(
   config: ResolvedEmbeddingConfig,
   embed: IndexingDeps['embed'],
 ): Promise<void> {
-  const vectors = await enqueueEmbeddingRequest(() =>
-    embed(config, chunks.map((c) => c.chunkText)),
-  );
+  const vectors = await embed(config, chunks.map((c) => c.chunkText));
   if (vectors.length !== chunks.length) {
     throw new Error(
       `Embedding count mismatch: expected ${chunks.length}, got ${vectors.length}`,

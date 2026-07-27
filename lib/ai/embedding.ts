@@ -161,7 +161,6 @@ export async function embedTexts(
     model,
     values: texts,
     providerOptions,
-    maxParallelCalls: 1,
     abortSignal: AbortSignal.timeout(EMBEDDING_REQUEST_TIMEOUT_MS),
   });
   return embeddings;

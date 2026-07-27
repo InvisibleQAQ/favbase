@@ -136,12 +136,11 @@ describe('embedText / embedTexts providerOptions passthrough', () => {
       model: fakeModel,
       values: ['a', 'b'],
       providerOptions: { zhipu: { dimensions: 512 } },
-      maxParallelCalls: 1,
       abortSignal: expect.any(AbortSignal),
     });
   });
 
-  it('bounds embedMany concurrency and aborts a provider call after the deadline', async () => {
+  it('preserves provider concurrency while aborting a call after the deadline', async () => {
     const controller = new AbortController();
     const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(controller.signal);
     vi.mocked(embedMany).mockImplementationOnce(
@@ -158,7 +157,7 @@ describe('embedText / embedTexts providerOptions passthrough', () => {
       await Promise.resolve();
       const request = vi.mocked(embedMany).mock.calls[0][0];
 
-      expect(request.maxParallelCalls).toBe(1);
+      expect(request).not.toHaveProperty('maxParallelCalls');
       expect(request.abortSignal).toBeInstanceOf(AbortSignal);
       expect(timeout).toHaveBeenCalledWith(60_000);
 
@@ -175,7 +174,6 @@ describe('embedText / embedTexts providerOptions passthrough', () => {
       model: fakeModel,
       values: ['a'],
       providerOptions: undefined,
-      maxParallelCalls: 1,
       abortSignal: expect.any(AbortSignal),
     });
   });

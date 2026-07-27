@@ -27,26 +27,19 @@ describe('Pipeline Run control', () => {
     expect(phases).toEqual(['pausing', 'paused', 'running']);
   });
 
-  it('ignores duplicate and out-of-order control commands', async () => {
+  it('cancels a pending pause when resumed before the next checkpoint', async () => {
     const phases: PipelineRunPhase[] = [];
     const control = createPipelineRunControl((phase) => phases.push(phase));
 
     control.pause();
     control.pause();
     control.resume();
-    expect(control.getPhase()).toBe('pausing');
-
-    const checkpoint = control.checkpoint();
-    await Promise.resolve();
-    control.pause();
-    expect(control.getPhase()).toBe('paused');
-
     control.resume();
-    control.resume();
-    await checkpoint;
-
     expect(control.getPhase()).toBe('running');
-    expect(phases).toEqual(['pausing', 'paused', 'running']);
+
+    await control.checkpoint();
+    expect(control.getPhase()).toBe('running');
+    expect(phases).toEqual(['pausing', 'running']);
   });
 
   it('blocks a born-paused run at its FIRST checkpoint (library gate)', async () => {

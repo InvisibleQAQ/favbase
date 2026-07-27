@@ -189,7 +189,10 @@ export class TranscriptionCoordinator {
     const run = transcribeAndPersist(bvid, title, {
       // Local stage: shown while chunk+embed runs after the background 'done'.
       onIndexing: () => this.patchVideo(bvid, { progress: 100, stage: 'indexing' }),
-      onIndexed: (result) => { indexResult = result; },
+      onIndexed: (result) => {
+        indexResult = result;
+        if (result !== null) this.patchVideo(bvid, { indexed: result === 'embedded' });
+      },
       startProcessing: this.startProcessing,
     });
 

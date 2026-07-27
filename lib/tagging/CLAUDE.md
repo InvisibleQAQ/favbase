@@ -18,7 +18,7 @@ AI 标签：转录/收藏同步完成后自动打标 + 标签 CRUD（UI 消费�
 
 ## 约定
 
-- **接缝枚举（均在 app.html/可读 storage 的 context）**：x/github/zhihu/youtube 的 `newItemIds` 批量 enqueue；bookmarks 每条提取成功后 enqueue；Bilibili 每条 durable transcription enqueue 并只让上游 await Embed ticket。六平台都经 `collection-processing-jobs.ts` 的独立串行 Tags lane 执行；lib/tagging 不反向依赖平台或 app store。
+- **接缝枚举（均在 app.html/可读 storage 的 context）**：x/github/zhihu/youtube 的 `newItemIds` 批量 enqueue；bookmarks 每条提取成功后 enqueue；Bilibili 每条 durable transcription enqueue，Embed/Tag ticket 都只异步观察，不阻塞下一条 Transcript。六平台都经 `collection-processing-jobs.ts` 的独立串行 Tags lane 执行；lib/tagging 不反向依赖平台或 app store。
 - UI 消费者走 service 高层操作，零 drizzle/entity/getDb 导入（同 `bili-sync-service` 约定）。标签 UI 集中在共享模块 `entrypoints/app/components/tags/`（platform 参数化，见该目录 CLAUDE.md）
 - 存储：`tags`（name 全局唯一，单用户无 userId）+ `item_tags`（复合 PK，双 FK cascade），schema 在 `lib/database/entities/`，迁移 `v004-tags.ts`。新表不受 insert-only ADR 约束，但打标幂等（upsert + onConflictDoNothing）
 - 测试：`tagging.test.ts` 纯函数（config 解析/prompt 构建/normalizeTags）+ `generateTags` 能力分叉（`vi.hoisted` mock `ai` 的 `generateObject`，断言 no-schema/schema 参数与 Zod parse 兜底）；`tagging-service.test.ts` in-memory PGlite（同 `videos-sync.test.ts` 基建）+ 注入 `TaggingDeps`，覆盖幂等/同名复用/未配置静默/失败无残留/existingTags 与 content 传参/孤儿隐身/AND 筛选/`tagNewItems` 批量（逐条调用/空批 no-op/单条失败不中断/**onProgress 0/total→total 且 total=ids.length + 'skipped' 项亦进度**）/platform 过滤（单平台与平台数组计数限定、getItemsByTags 结果限定、originalUrl 透传）/手动编辑往返/'item-tagged' 事件（成功发一次、skip/fail 不发）。测试文件需 `vi.mock('@/lib/storage')`（barrel 加载时触碰 chrome.runtime）

@@ -56,6 +56,37 @@ describe('collection processing jobs', () => {
     expect(tagged).toEqual(['a', 'b']);
   });
 
+  it('keeps draining when resume arrives before the in-flight item reaches its checkpoint', async () => {
+    const releaseFirstEmbed = deferred();
+    const embedded: string[] = [];
+    const deps = {
+      embed: async (_platform: string, itemId: string) => {
+        embedded.push(itemId);
+        if (itemId === 'a') await releaseFirstEmbed.promise;
+        return 'embedded' as const;
+      },
+      tag: async () => 'tagged' as const,
+    };
+
+    enqueueCollectionProcessingItem(
+      { jobPlatform: 'p-resume-during-item', itemPlatform: 'x', itemId: 'a' },
+      deps,
+    );
+    enqueueCollectionProcessingItem(
+      { jobPlatform: 'p-resume-during-item', itemPlatform: 'x', itemId: 'b' },
+      deps,
+    );
+    await vi.waitFor(() => expect(embedded).toEqual(['a']));
+
+    pauseJob('p-resume-during-item', 'embed');
+    expect(getJob('p-resume-during-item', 'embed')?.phase).toBe('pausing');
+    resumeJob('p-resume-during-item', 'embed');
+    releaseFirstEmbed.resolve();
+
+    await vi.waitFor(() => expect(embedded).toEqual(['a', 'b']));
+    expect(getJob('p-resume-during-item', 'embed')?.phase).toBe('completed');
+  });
+
   it('observes rejected tickets when a streaming caller intentionally ignores them', async () => {
     const unhandled: unknown[] = [];
     const onUnhandled = (reason: unknown) => unhandled.push(reason);
