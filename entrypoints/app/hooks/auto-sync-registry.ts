@@ -1,4 +1,4 @@
-import { fetchAndSyncFolders, syncAllFavoriteVideos } from '@/lib/bilibili/bili-sync-service';
+import { fetchAndSyncFolders } from '@/lib/bilibili/bili-sync-service';
 import { getBiliAuth } from '@/lib/bilibili/bilibili-api';
 import { syncBookmarks as syncBrowserBookmarks } from '@/lib/bookmarks/bookmarks-sync-service';
 import type { CooperativeCheckpoint } from '@/lib/collections';
@@ -127,18 +127,10 @@ export const AUTO_SYNC_PLATFORMS: AutoSyncPlatform[] = [
     // transcribed and enqueue themselves), so newItemIds stays [] here.
     runSync: async (setProgress, control) => {
       const folders = await fetchAndSyncFolders(control);
-      await syncAllFavoriteVideos(folders, setProgress, control);
-      // Auto-continue the content stage across ALL folders (natural order =
-      // default folder first). The runtime filters out folders without pending
-      // videos via a local DB query before dispatching anything.
-      // A still-active ASR quota guard makes this a silent skip — that is the
-      // "next-day daily auto-sync naturally re-evaluates" recovery path.
-      if (folders.length > 0) {
-        const { startBiliAutoTranscribe } = await import(
-          '../sections/bilibili/auto-transcribe-runtime'
-        );
-        startBiliAutoTranscribe(folders.map((f) => String(f.id)));
-      }
+      const { runBiliStreamingSync } = await import(
+        '../sections/bilibili/auto-transcribe-runtime'
+      );
+      await runBiliStreamingSync(folders, setProgress, control);
       return [];
     },
   },

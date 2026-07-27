@@ -1,26 +1,22 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { AutoTranscribeState } from '@/lib/auto-transcribe/types';
+import type { BiliFavFolder, BiliFavVideo } from '@/lib/bilibili/types';
 
-// The runtime builds a module-level pipeline singleton; stub the pipeline and
-// its bilibili collaborators so the tests drive dispatch/filter/quota-break
-// behavior only. The background-jobs store stays REAL — dispatching through it
-// is part of the contract under test (born-paused etc. are its own tests).
 const mocks = vi.hoisted(() => ({
-  isActive: vi.fn<() => boolean>(() => false),
-  start: vi.fn<(collectionId: string, control?: unknown) => Promise<void>>(
-    async () => undefined,
-  ),
-  getSnapshot: vi.fn<() => Partial<AutoTranscribeState>>(),
+  append: vi.fn(),
+  close: vi.fn(),
+  run: vi.fn(),
+  finishSession: null as (() => void) | null,
+  sessionClosed: false,
+  createSession: vi.fn(),
+  getSnapshot: vi.fn(() => ({ totalVideos: 0, currentIndex: 0 })),
   subscribe: vi.fn(() => () => undefined),
-  initDbProxy: vi.fn(async () => ({})),
-  listFoldersWithPending: vi.fn<(ids: readonly string[]) => Promise<string[]>>(),
+  syncAllFavoriteVideos: vi.fn(),
 }));
 
 vi.mock('@/lib/auto-transcribe/pipeline', () => ({
   AutoTranscribePipeline: class {
-    isActive = mocks.isActive;
-    start = mocks.start;
+    createSession = mocks.createSession;
     getSnapshot = mocks.getSnapshot;
     subscribe = mocks.subscribe;
   },
@@ -28,113 +24,194 @@ vi.mock('@/lib/auto-transcribe/pipeline', () => ({
 vi.mock('@/lib/bilibili/auto-transcribe-adapter', () => ({
   createBiliAutoTranscribeAdapter: vi.fn(() => ({})),
 }));
+vi.mock('@/lib/bilibili/bili-sync-service', () => ({
+  syncAllFavoriteVideos: mocks.syncAllFavoriteVideos,
+}));
 vi.mock('./bilibili-processing-adapter', () => ({
   enqueueBiliCollectionProcessing: vi.fn(),
 }));
-vi.mock('@/lib/database', () => ({ initDbProxy: mocks.initDbProxy }));
-vi.mock('@/lib/bilibili/bili-sync-service', () => ({
-  listFoldersWithPending: mocks.listFoldersWithPending,
-}));
 
-import { startBiliAutoTranscribe } from './auto-transcribe-runtime';
-import { getJob } from '../../hooks/background-jobs-store';
+import { runBiliStreamingSync } from './auto-transcribe-runtime';
+import { startJob } from '../../hooks/background-jobs-store';
 
-function snapshot(phase: AutoTranscribeState['phase']): Partial<AutoTranscribeState> {
-  return { phase, totalVideos: 0, currentIndex: 0 };
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((done, fail) => {
+    resolve = done;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
 }
 
-/** Let the internal async dispatch (init → filter → job runner) settle. */
-async function flush(): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  await new Promise((resolve) => setTimeout(resolve, 0));
+function folder(id: number): BiliFavFolder {
+  return {
+    id,
+    fid: id,
+    mid: 1,
+    title: `folder-${id}`,
+    media_count: 1,
+    cover: '',
+    intro: '',
+    ctime: 0,
+    mtime: 0,
+    attr: 0,
+    fav_state: 0,
+  };
 }
 
-describe('startBiliAutoTranscribe', () => {
+function video(bvid: string): BiliFavVideo {
+  return {
+    id: 1,
+    type: 2,
+    title: bvid,
+    cover: '',
+    intro: '',
+    duration: 60,
+    bvid,
+    upper: { mid: 1, name: 'UP', face: '' },
+    cnt_info: { play: 0, collect: 0, danmaku: 0 },
+    fav_time: 0,
+    attr: 0,
+  };
+}
+
+describe('runBiliStreamingSync', () => {
   beforeEach(() => {
-    mocks.isActive.mockReset().mockReturnValue(false);
-    mocks.start.mockReset().mockResolvedValue(undefined);
-    mocks.getSnapshot.mockReset().mockReturnValue(snapshot('done'));
-    mocks.subscribe.mockReset().mockReturnValue(() => undefined);
-    mocks.initDbProxy.mockReset().mockResolvedValue({});
-    mocks.listFoldersWithPending.mockReset().mockImplementation(async (ids) => [...ids]);
-  });
-
-  afterEach(async () => {
-    // Never leave a run in flight across tests (shared module-level job store).
-    await flush();
-  });
-
-  // NOTE: the "no job" assertions run before any test that creates the
-  // bilibili:transcribe job — the job store is a module singleton.
-  it('dispatches no job when no folder has pending videos', async () => {
-    mocks.listFoldersWithPending.mockResolvedValue([]);
-
-    startBiliAutoTranscribe(['1', '2']);
-    await flush();
-
-    expect(mocks.listFoldersWithPending).toHaveBeenCalledWith(['1', '2']);
-    expect(mocks.start).not.toHaveBeenCalled();
-    expect(getJob('bilibili', 'transcribe')).toBeNull();
-  });
-
-  it('logs and dispatches nothing when the pending lookup fails', async () => {
-    mocks.listFoldersWithPending.mockRejectedValue(new Error('db down'));
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-
-    startBiliAutoTranscribe(['1']);
-    await flush();
-
-    expect(mocks.start).not.toHaveBeenCalled();
-    expect(getJob('bilibili', 'transcribe')).toBeNull();
-    expect(errorSpy).toHaveBeenCalled();
-    errorSpy.mockRestore();
-  });
-
-  it('is a no-op while the pipeline is already active', async () => {
-    mocks.isActive.mockReturnValue(true);
-
-    startBiliAutoTranscribe(['1']);
-    await flush();
-
-    expect(mocks.listFoldersWithPending).not.toHaveBeenCalled();
-    expect(mocks.start).not.toHaveBeenCalled();
-  });
-
-  it('filters folders and runs the survivors serially, in order, with the checkpoint', async () => {
-    mocks.listFoldersWithPending.mockResolvedValue(['2', '3']);
-    const order: string[] = [];
-    mocks.start.mockImplementation(async (collectionId) => {
-      order.push(collectionId);
+    mocks.append.mockReset();
+    mocks.sessionClosed = false;
+    mocks.close.mockReset().mockImplementation(() => {
+      mocks.sessionClosed = true;
+      mocks.finishSession?.();
     });
-
-    startBiliAutoTranscribe(['1', '2', '3']);
-    await flush();
-
-    expect(order).toEqual(['2', '3']);
-    for (const call of mocks.start.mock.calls) {
-      expect(call[1]).toEqual(expect.objectContaining({ checkpoint: expect.any(Function) }));
-    }
-    expect(getJob('bilibili', 'transcribe')?.phase).toBe('completed');
+    mocks.run.mockReset().mockImplementation(
+      () => mocks.sessionClosed
+        ? Promise.resolve()
+        : new Promise<void>((resolve) => {
+            mocks.finishSession = resolve;
+          }),
+    );
+    mocks.finishSession = null;
+    mocks.createSession.mockReset().mockReturnValue({
+      append: mocks.append,
+      close: mocks.close,
+      run: mocks.run,
+    });
+    mocks.getSnapshot.mockReset().mockReturnValue({ totalVideos: 0, currentIndex: 0 });
+    mocks.subscribe.mockReset().mockReturnValue(() => undefined);
+    mocks.syncAllFavoriteVideos.mockReset();
   });
 
-  it('stops the remaining folders when a run ends quota_paused', async () => {
-    mocks.listFoldersWithPending.mockResolvedValue(['1', '2', '3']);
-    mocks.getSnapshot.mockReturnValue(snapshot('quota_paused'));
+  it('starts one transcript run from the first persisted page while Fetch continues', async () => {
+    const fetchDone = deferred<{ fetchedCount: number; syncedCount: number }>();
+    let publish!: (videos: readonly BiliFavVideo[]) => void;
+    mocks.syncAllFavoriteVideos.mockImplementation(
+      async (_folders, _onProgress, _control, onItemsPersisted) => {
+        publish = onItemsPersisted;
+        return fetchDone.promise;
+      },
+    );
 
-    startBiliAutoTranscribe(['1', '2', '3']);
-    await flush();
+    let settled = false;
+    const fetch = runBiliStreamingSync([folder(1)]).then((result) => {
+      settled = true;
+      return result;
+    });
+    await vi.waitFor(() => expect(mocks.syncAllFavoriteVideos).toHaveBeenCalledOnce());
 
-    expect(mocks.start).toHaveBeenCalledTimes(1);
-    expect(mocks.start).toHaveBeenCalledWith('1', expect.anything());
+    publish([video('BV-1')]);
+    await vi.waitFor(() => expect(mocks.run).toHaveBeenCalledOnce());
+    expect(settled).toBe(false);
+
+    publish([video('BV-2')]);
+    expect(mocks.createSession).toHaveBeenCalledOnce();
+    expect(mocks.append).toHaveBeenCalledTimes(2);
+
+    fetchDone.resolve({ fetchedCount: 2, syncedCount: 2 });
+    await expect(fetch).resolves.toEqual({ fetchedCount: 2, syncedCount: 2 });
+    expect(mocks.close).toHaveBeenCalledOnce();
   });
 
-  it('stops the remaining folders when a run ends cancelled', async () => {
-    mocks.listFoldersWithPending.mockResolvedValue(['1', '2']);
-    mocks.getSnapshot.mockReturnValue(snapshot('cancelled'));
+  it('closes the producer on Fetch failure so already-published items drain', async () => {
+    const fetchError = new Error('page 2 failed');
+    mocks.syncAllFavoriteVideos.mockImplementation(
+      async (_folders, _onProgress, _control, onItemsPersisted) => {
+        onItemsPersisted([video('BV-SAVED')]);
+        throw fetchError;
+      },
+    );
 
-    startBiliAutoTranscribe(['1', '2']);
-    await flush();
+    await expect(runBiliStreamingSync([folder(1)])).rejects.toBe(fetchError);
+    await vi.waitFor(() => expect(mocks.run).toHaveBeenCalledOnce());
 
-    expect(mocks.start).toHaveBeenCalledTimes(1);
+    expect(mocks.append).toHaveBeenCalledOnce();
+    expect(mocks.close).toHaveBeenCalledOnce();
+  });
+
+  it('retains the stream while a manual transcription owns the job key', async () => {
+    const manual = deferred<void>();
+    const manualJob = startJob('bilibili', 'transcribe', () => manual.promise);
+    mocks.syncAllFavoriteVideos.mockImplementation(
+      async (_folders, _onProgress, _control, onItemsPersisted) => {
+        onItemsPersisted([video('BV-AFTER-MANUAL')]);
+        return { fetchedCount: 1, syncedCount: 1 };
+      },
+    );
+
+    await runBiliStreamingSync([folder(1)]);
+    await Promise.resolve();
+    expect(mocks.run).not.toHaveBeenCalled();
+
+    manual.resolve();
+    await manualJob.settled;
+    await vi.waitFor(() => expect(mocks.run).toHaveBeenCalledOnce());
+    expect(mocks.append).toHaveBeenCalledOnce();
+  });
+
+  it('serializes a later Fetch producer behind the active Transcript session', async () => {
+    const firstDrain = deferred<void>();
+    const firstSession = {
+      append: vi.fn(),
+      close: vi.fn(),
+      run: vi.fn(() => firstDrain.promise),
+    };
+    const secondSession = {
+      append: vi.fn(),
+      close: vi.fn(),
+      run: vi.fn(async () => undefined),
+    };
+    mocks.createSession
+      .mockReset()
+      .mockReturnValueOnce(firstSession)
+      .mockReturnValueOnce(secondSession);
+    mocks.syncAllFavoriteVideos
+      .mockImplementationOnce(
+        async (_folders, _onProgress, _control, onItemsPersisted) => {
+          onItemsPersisted([video('BV-FIRST-FETCH')]);
+          return { fetchedCount: 1, syncedCount: 1 };
+        },
+      )
+      .mockImplementationOnce(
+        async (_folders, _onProgress, _control, onItemsPersisted) => {
+          onItemsPersisted([video('BV-SECOND-FETCH')]);
+          return { fetchedCount: 1, syncedCount: 1 };
+        },
+      );
+
+    await runBiliStreamingSync([folder(1)]);
+    await vi.waitFor(() => expect(firstSession.run).toHaveBeenCalledOnce());
+
+    await runBiliStreamingSync([folder(2)]);
+    expect(mocks.createSession).toHaveBeenCalledOnce();
+    expect(secondSession.run).not.toHaveBeenCalled();
+
+    firstDrain.resolve();
+    await vi.waitFor(() => expect(secondSession.run).toHaveBeenCalledOnce());
+
+    expect(mocks.createSession).toHaveBeenCalledTimes(2);
+    expect(firstSession.append).toHaveBeenCalledOnce();
+    expect(secondSession.append).toHaveBeenCalledOnce();
+    expect(firstSession.close).toHaveBeenCalledOnce();
+    expect(secondSession.close).toHaveBeenCalledOnce();
   });
 });

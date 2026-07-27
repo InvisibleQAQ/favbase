@@ -462,7 +462,7 @@ export function BilibiliView() {
 
   const selectedId = mediaId ? Number(mediaId) : folders[0]?.id;
   const selectedFolder = folders.find((folder) => folder.id === selectedId);
-  const autoTranscribe = useAutoTranscribe(selectedId);
+  const autoTranscribe = useAutoTranscribe();
   const [searchInput, setSearchInput] = useState('');
   const [keyword, setKeyword] = useState('');
   const keywordRef = useRef('');

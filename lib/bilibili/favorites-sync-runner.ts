@@ -31,7 +31,10 @@ export interface BiliFavoritesSyncProgress {
 export interface FavoriteVideosSyncDeps {
   getBaseline(folder: BiliFavFolder): Promise<FavoriteVideosSyncBaseline>;
   fetchPage(folder: BiliFavFolder, page: number): Promise<FavoriteVideosPage>;
-  persist(folder: BiliFavFolder, videos: BiliFavVideo[]): Promise<void>;
+  persist(
+    folder: BiliFavFolder,
+    videos: BiliFavVideo[],
+  ): Promise<readonly string[] | void>;
   markHistoryComplete(folder: BiliFavFolder): Promise<void>;
   waitBetweenPages(): Promise<void>;
 }
@@ -45,11 +48,16 @@ export type BiliFavoritesSyncProgressCallback = (
   progress: BiliFavoritesSyncProgress,
 ) => void;
 
+export type BiliFavoritesItemsPersistedCallback = (
+  videos: readonly BiliFavVideo[],
+) => void;
+
 export async function runFavoriteVideosSync(
   folders: BiliFavFolder[],
   deps: FavoriteVideosSyncDeps,
   onProgress?: BiliFavoritesSyncProgressCallback,
   control?: CooperativeCheckpoint,
+  onItemsPersisted?: BiliFavoritesItemsPersistedCallback,
 ): Promise<FavoriteVideosSyncResult> {
   let fetchedCount = 0;
   let syncedCount = 0;
@@ -61,7 +69,6 @@ export async function runFavoriteVideosSync(
     const existingBvids = baseline.historyComplete
       ? new Set([...baseline.existingBvids].map((bvid) => bvid.toLowerCase()))
       : null;
-    const pending: BiliFavVideo[] = [];
     let page = 1;
 
     while (true) {
@@ -75,7 +82,26 @@ export async function runFavoriteVideosSync(
             (video) => Boolean(video.bvid) && existingBvids.has(video.bvid.toLowerCase()),
           )
         : -1;
-      pending.push(...(existingIndex >= 0 ? result.videos.slice(0, existingIndex) : result.videos));
+      const accepted = existingIndex >= 0
+        ? result.videos.slice(0, existingIndex)
+        : result.videos;
+      if (accepted.length > 0) {
+        const newItemIds = await deps.persist(folder, accepted);
+        if (newItemIds && newItemIds.length > 0) {
+          const newIdSet = new Set(newItemIds.map((id) => id.toLowerCase()));
+          try {
+            const notification = onItemsPersisted?.(
+              accepted.filter((video) => newIdSet.has(video.bvid.toLowerCase())),
+            );
+            void Promise.resolve(notification).catch((error) => {
+              console.error('[bili-sync] persisted-item subscriber failed:', error);
+            });
+          } catch (error) {
+            console.error('[bili-sync] persisted-item subscriber failed:', error);
+          }
+        }
+        syncedCount += accepted.length;
+      }
       onProgress?.({
         fetchedCount,
         folderIndex: folderIndex + 1,
@@ -94,9 +120,7 @@ export async function runFavoriteVideosSync(
       page += 1;
     }
 
-    if (pending.length > 0) await deps.persist(folder, pending);
     await deps.markHistoryComplete(folder);
-    syncedCount += pending.length;
   }
 
   return { fetchedCount, syncedCount };

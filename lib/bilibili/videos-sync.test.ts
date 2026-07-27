@@ -135,8 +135,11 @@ describe('syncFavVideosToDb insert-only invariant', () => {
 
   it('cross-folder move keeps both folder links', async () => {
     const v = makeVideo({ bvid: 'BV3MOVE', upper: { mid: 300, name: 'Carol', face: '' } });
-    await syncFavVideosToDb(db, [v], sourceA);
-    await syncFavVideosToDb(db, [v], sourceB);
+    const first = await syncFavVideosToDb(db, [v], sourceA);
+    const second = await syncFavVideosToDb(db, [v], sourceB);
+
+    expect(first.newItemIds).toEqual(['BV3MOVE']);
+    expect(second.newItemIds).toEqual([]);
 
     const item = await getItem('BV3MOVE');
     const links = await db

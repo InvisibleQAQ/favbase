@@ -2,6 +2,7 @@
 
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AutoTranscribeState } from '@/lib/auto-transcribe/types';
@@ -29,8 +30,6 @@ import { AutoTranscribeBar } from './auto-transcribe-bar';
 function idleState(overrides: Partial<AutoTranscribeState> = {}): AutoTranscribeState {
   return {
     phase: 'idle',
-    currentPage: 0,
-    totalPages: 0,
     currentVideoTitle: '',
     currentVideoId: '',
     currentVideo: null,
@@ -41,9 +40,6 @@ function idleState(overrides: Partial<AutoTranscribeState> = {}): AutoTranscribe
     waitSeconds: 0,
     quotaResetAt: null,
     stats: { existing: 0, cc: 0, asr: 0, skipped: 0, remaining: 0 },
-    previewVideo: null,
-    pendingCount: null,
-    previewLoading: false,
     ...overrides,
   };
 }
@@ -110,5 +106,24 @@ describe('AutoTranscribeBar (pure progress display)', () => {
 
     expect(container.textContent).toContain('BV-1');
     expect(container.querySelector('button')).toBeNull();
+  });
+
+  it('links missing ASR configuration directly to the ASR settings section', () => {
+    act(() => {
+      root.render(
+        <MemoryRouter>
+          <AutoTranscribeBar
+            state={idleState({ phase: 'configuration_required' })}
+            running
+          />
+        </MemoryRouter>,
+      );
+    });
+
+    expect(container.querySelector('[role="alert"]')).not.toBeNull();
+    expect(container.textContent).toContain('autoTranscribe.configurationRequiredTitle');
+    expect(container.textContent).toContain('autoTranscribe.configurationRequired');
+    expect(container.textContent).not.toContain('error.ASR_INVALID_KEY');
+    expect(container.querySelector('a')?.getAttribute('href')).toBe('/settings?section=asr');
   });
 });

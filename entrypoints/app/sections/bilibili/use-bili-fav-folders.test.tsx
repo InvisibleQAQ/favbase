@@ -8,11 +8,10 @@ import type { BiliFavFolder } from '@/lib/bilibili/types';
 
 const serviceMocks = vi.hoisted(() => ({
   fetchAndSyncFolders: vi.fn(),
-  syncAllFavoriteVideos: vi.fn(),
 }));
 
 const runtimeMocks = vi.hoisted(() => ({
-  startBiliAutoTranscribe: vi.fn(),
+  runBiliStreamingSync: vi.fn(),
 }));
 
 vi.mock('@/lib/bilibili/bili-sync-service', () => ({
@@ -55,11 +54,10 @@ describe('useBiliFavFolders sync boundary', () => {
 
   beforeEach(() => {
     serviceMocks.fetchAndSyncFolders.mockReset().mockResolvedValue(FOLDERS);
-    serviceMocks.syncAllFavoriteVideos.mockReset().mockResolvedValue({
+    runtimeMocks.runBiliStreamingSync.mockReset().mockResolvedValue({
       fetchedCount: 20,
       syncedCount: 20,
     });
-    runtimeMocks.startBiliAutoTranscribe.mockReset();
     routeFolderId = undefined;
     current = null;
     container = document.createElement('div');
@@ -78,19 +76,16 @@ describe('useBiliFavFolders sync boundary', () => {
     });
 
     expect(serviceMocks.fetchAndSyncFolders).toHaveBeenCalledTimes(1);
-    expect(serviceMocks.syncAllFavoriteVideos).not.toHaveBeenCalled();
+    expect(runtimeMocks.runBiliStreamingSync).not.toHaveBeenCalled();
     expect(current?.folders).toEqual(FOLDERS);
   });
 
-  it('auto-continues the pending backlog on mount (parity with bookmarks)', async () => {
+  it('does not scan or continue historical pending items on mount', async () => {
     await act(async () => {
       root.render(<Probe />);
     });
 
-    // The runtime filters folders without pending videos itself — the mount
-    // chain always fires with the full ordered folder list.
-    expect(runtimeMocks.startBiliAutoTranscribe).toHaveBeenCalledTimes(1);
-    expect(runtimeMocks.startBiliAutoTranscribe).toHaveBeenCalledWith(['10']);
+    expect(runtimeMocks.runBiliStreamingSync).not.toHaveBeenCalled();
   });
 
   it('does not auto-continue on mount when not logged in', async () => {
@@ -101,11 +96,11 @@ describe('useBiliFavFolders sync boundary', () => {
       root.render(<Probe />);
     });
 
-    expect(runtimeMocks.startBiliAutoTranscribe).not.toHaveBeenCalled();
+    expect(runtimeMocks.runBiliStreamingSync).not.toHaveBeenCalled();
     expect(current?.loginState).toBe('not_logged_in');
   });
 
-  it('chains a batch transcription across all folders after a successful sync', async () => {
+  it('runs Fetch and streaming transcription through one runtime', async () => {
     serviceMocks.fetchAndSyncFolders.mockResolvedValue([
       makeFolder(10, 'Default folder'),
       makeFolder(20, 'Second folder'),
@@ -119,9 +114,12 @@ describe('useBiliFavFolders sync boundary', () => {
       await current?.sync();
     });
 
-    // Once from the mount continuation, once from the explicit sync chain.
-    expect(runtimeMocks.startBiliAutoTranscribe).toHaveBeenCalledTimes(2);
-    expect(runtimeMocks.startBiliAutoTranscribe).toHaveBeenLastCalledWith(['10', '20']);
+    expect(runtimeMocks.runBiliStreamingSync).toHaveBeenCalledOnce();
+    expect(runtimeMocks.runBiliStreamingSync).toHaveBeenCalledWith(
+      [makeFolder(10, 'Default folder'), makeFolder(20, 'Second folder')],
+      expect.any(Function),
+      expect.objectContaining({ checkpoint: expect.any(Function) }),
+    );
   });
 
   it('puts the route-selected folder first in the transcription order', async () => {
@@ -139,7 +137,11 @@ describe('useBiliFavFolders sync boundary', () => {
       await current?.sync();
     });
 
-    expect(runtimeMocks.startBiliAutoTranscribe).toHaveBeenLastCalledWith(['20', '10']);
+    expect(runtimeMocks.runBiliStreamingSync).toHaveBeenCalledWith(
+      [makeFolder(20, 'Second folder'), makeFolder(10, 'Default folder')],
+      expect.any(Function),
+      expect.objectContaining({ checkpoint: expect.any(Function) }),
+    );
   });
 
   it('starts full video pagination only from the explicit sync action', async () => {
@@ -152,8 +154,8 @@ describe('useBiliFavFolders sync boundary', () => {
     });
 
     expect(serviceMocks.fetchAndSyncFolders).toHaveBeenCalledTimes(2);
-    expect(serviceMocks.syncAllFavoriteVideos).toHaveBeenCalledOnce();
-    expect(serviceMocks.syncAllFavoriteVideos).toHaveBeenCalledWith(
+    expect(runtimeMocks.runBiliStreamingSync).toHaveBeenCalledOnce();
+    expect(runtimeMocks.runBiliStreamingSync).toHaveBeenCalledWith(
       FOLDERS,
       expect.any(Function),
       expect.objectContaining({ checkpoint: expect.any(Function) }),
@@ -162,7 +164,7 @@ describe('useBiliFavFolders sync boundary', () => {
 
   it('rejoins an in-flight full sync after remount without starting another worker', async () => {
     let finishSync!: () => void;
-    serviceMocks.syncAllFavoriteVideos.mockImplementation(
+    runtimeMocks.runBiliStreamingSync.mockImplementation(
       () => new Promise<void>((resolve) => {
         finishSync = resolve;
       }),
@@ -178,7 +180,7 @@ describe('useBiliFavFolders sync boundary', () => {
       await Promise.resolve();
     });
 
-    expect(serviceMocks.syncAllFavoriteVideos).toHaveBeenCalledOnce();
+    expect(runtimeMocks.runBiliStreamingSync).toHaveBeenCalledOnce();
 
     act(() => root.unmount());
     root = createRoot(container);
@@ -193,7 +195,7 @@ describe('useBiliFavFolders sync boundary', () => {
     await act(async () => {
       await Promise.resolve();
     });
-    expect(serviceMocks.syncAllFavoriteVideos).toHaveBeenCalledOnce();
+    expect(runtimeMocks.runBiliStreamingSync).toHaveBeenCalledOnce();
 
     await act(async () => {
       finishSync();

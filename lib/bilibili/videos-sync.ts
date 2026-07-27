@@ -9,6 +9,7 @@ export interface SyncResult {
   synced: number;
   dropped: number;
   droppedBvids: string[];
+  newItemIds: string[];
 }
 
 export async function syncFavVideosToDb(
@@ -17,7 +18,9 @@ export async function syncFavVideosToDb(
   platformSourceId: string,
 ): Promise<SyncResult> {
   const valid = videos.filter((v) => v.bvid);
-  if (valid.length === 0) return { total: 0, synced: 0, dropped: 0, droppedBvids: [] };
+  if (valid.length === 0) {
+    return { total: 0, synced: 0, dropped: 0, droppedBvids: [], newItemIds: [] };
+  }
 
   try {
     const result = await ingestCollection(db, {
@@ -63,6 +66,7 @@ export async function syncFavVideosToDb(
       synced: result.linkCount,
       dropped: droppedBvids.length,
       droppedBvids,
+      newItemIds: result.inserted.map((item) => item.platformItemId),
     };
   } catch (err) {
     console.error('[videos-sync] Batch sync failed:', err);
@@ -71,6 +75,7 @@ export async function syncFavVideosToDb(
       synced: 0,
       dropped: valid.length,
       droppedBvids: valid.map((v) => v.bvid),
+      newItemIds: [],
     };
   }
 }

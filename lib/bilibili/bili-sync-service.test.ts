@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { BiliFavVideo } from './types';
-import type { SyncResult } from './videos-sync';
+import type { BiliFavFolder, BiliFavVideo } from './types';
 
 const boundary = vi.hoisted(() => ({
   getBiliAuth: vi.fn(),
   fetchFavFolders: vi.fn(),
   fetchFavVideos: vi.fn(),
+  getFavoriteVideoSyncBaseline: vi.fn(),
+  markVideoHistoryComplete: vi.fn(),
+  syncFavFoldersToDb: vi.fn(),
   syncFavVideosToDb: vi.fn(),
   getDb: vi.fn(),
 }));
@@ -19,9 +21,9 @@ vi.mock('./bilibili-api', () => ({
 }));
 
 vi.mock('./favorites-sync', () => ({
-  getFavoriteVideoSyncBaseline: vi.fn(),
-  markVideoHistoryComplete: vi.fn(),
-  syncFavFoldersToDb: vi.fn(),
+  getFavoriteVideoSyncBaseline: boundary.getFavoriteVideoSyncBaseline,
+  markVideoHistoryComplete: boundary.markVideoHistoryComplete,
+  syncFavFoldersToDb: boundary.syncFavFoldersToDb,
 }));
 
 vi.mock('./videos-sync', () => ({
@@ -41,7 +43,7 @@ vi.mock('@/lib/ingest/ingest', () => ({
   persistExistingItemContent: vi.fn(),
 }));
 
-import { fetchAndSyncVideos } from './bili-sync-service';
+import { fetchAndSyncFolders, syncAllFavoriteVideos } from './bili-sync-service';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -51,84 +53,122 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-const VIDEO: BiliFavVideo = {
-  id: 1,
-  type: 2,
-  title: 'Page one video',
-  cover: '',
-  intro: '',
-  duration: 60,
-  bvid: 'BV-PAGE-1',
-  upper: { mid: 1, name: 'UP', face: '' },
-  cnt_info: { play: 0, collect: 0, danmaku: 0 },
-  fav_time: 0,
-  attr: 0,
-};
-
-function sourceDb(rows: Array<{ id: string; platformMeta: Record<string, unknown> }>) {
+function makeFolder(): BiliFavFolder {
   return {
-    select: vi.fn(() => ({
-      from: vi.fn(() => ({
-        where: vi.fn(() => ({
-          limit: vi.fn().mockResolvedValue(rows),
-        })),
-      })),
-    })),
+    id: 42,
+    fid: 42,
+    mid: 1,
+    title: 'Folder',
+    media_count: 2,
+    cover: '',
+    intro: '',
+    ctime: 0,
+    mtime: 0,
+    attr: 0,
+    fav_state: 0,
   };
 }
 
-describe('fetchAndSyncVideos', () => {
+function makeVideo(bvid: string): BiliFavVideo {
+  return {
+    id: 1,
+    type: 2,
+    title: bvid,
+    cover: '',
+    intro: '',
+    duration: 60,
+    bvid,
+    upper: { mid: 1, name: 'UP', face: '' },
+    cnt_info: { play: 0, collect: 0, danmaku: 0 },
+    fav_time: 0,
+    attr: 0,
+  };
+}
+
+describe('fetchAndSyncFolders', () => {
+  it('checks a born-paused gate before authentication or network work', async () => {
+    vi.clearAllMocks();
+    const release = deferred<void>();
+    const checkpoint = vi.fn(() => release.promise);
+    boundary.getBiliAuth.mockResolvedValue({ sessdata: 'session', mid: '1' });
+    boundary.fetchFavFolders.mockResolvedValue([]);
+
+    const operation = fetchAndSyncFolders({ checkpoint });
+    await vi.waitFor(() => expect(checkpoint).toHaveBeenCalledOnce());
+
+    expect(boundary.getBiliAuth).not.toHaveBeenCalled();
+    expect(boundary.fetchFavFolders).not.toHaveBeenCalled();
+
+    release.resolve();
+    await expect(operation).resolves.toEqual([]);
+    expect(boundary.getBiliAuth).toHaveBeenCalledOnce();
+    expect(boundary.fetchFavFolders).toHaveBeenCalledOnce();
+  });
+});
+
+describe('syncAllFavoriteVideos', () => {
+  const db = { marker: 'db' };
+  const videos = [makeVideo('BV-EXISTING'), makeVideo('BV-INSERTED')];
+
   beforeEach(() => {
     vi.clearAllMocks();
     boundary.getBiliAuth.mockResolvedValue({ sessdata: 'session', mid: '1' });
+    boundary.getDb.mockReturnValue(db);
+    boundary.getFavoriteVideoSyncBaseline.mockResolvedValue({
+      existingBvids: new Set(),
+      historyComplete: false,
+    });
     boundary.fetchFavVideos.mockResolvedValue({
       has_more: false,
-      medias: [VIDEO],
-      info: { id: 42, title: 'Folder', media_count: 1 },
+      medias: videos,
+      info: { id: 42, title: 'Folder', media_count: videos.length },
     });
-    boundary.getDb.mockReturnValue(sourceDb([{ id: 'source-id', platformMeta: {} }]));
+    boundary.markVideoHistoryComplete.mockResolvedValue(undefined);
   });
 
-  it('does not resolve before the fetched page is persisted', async () => {
-    const persistence = deferred<SyncResult>();
-    boundary.syncFavVideosToDb.mockReturnValueOnce(persistence.promise);
+  it('publishes only the item ids reported as newly inserted by persistence', async () => {
+    boundary.syncFavVideosToDb.mockResolvedValue({
+      total: 2,
+      synced: 2,
+      dropped: 0,
+      droppedBvids: [],
+      newItemIds: ['BV-INSERTED'],
+    });
+    const onItemsPersisted = vi.fn();
 
-    const operation = fetchAndSyncVideos(42, 1);
-    let settled = false;
-    void operation.then(
-      () => { settled = true; },
-      () => { settled = true; },
+    await syncAllFavoriteVideos(
+      [makeFolder()],
+      undefined,
+      undefined,
+      onItemsPersisted,
     );
 
-    await vi.waitFor(() => expect(boundary.syncFavVideosToDb).toHaveBeenCalledOnce());
-    await Promise.resolve();
-    const settledBeforePersistence = settled;
-
-    persistence.resolve({ total: 1, synced: 1, dropped: 0, droppedBvids: [] });
-    await operation;
-
-    expect(settledBeforePersistence).toBe(false);
+    expect(boundary.syncFavVideosToDb).toHaveBeenCalledWith(db, videos, '42');
+    expect(onItemsPersisted).toHaveBeenCalledOnce();
+    expect(onItemsPersisted.mock.calls[0][0]).toEqual([videos[1]]);
+    expect(boundary.markVideoHistoryComplete).toHaveBeenCalledOnce();
   });
 
-  it('rejects when persistence drops a fetched video', async () => {
-    boundary.syncFavVideosToDb.mockResolvedValueOnce({
-      total: 1,
-      synced: 0,
+  it('fails Fetch and does not publish or mark history complete when persistence drops an item', async () => {
+    boundary.syncFavVideosToDb.mockResolvedValue({
+      total: 2,
+      synced: 1,
       dropped: 1,
-      droppedBvids: [VIDEO.bvid],
+      droppedBvids: ['BV-INSERTED'],
+      newItemIds: ['BV-EXISTING'],
     });
+    const onItemsPersisted = vi.fn();
 
-    await expect(fetchAndSyncVideos(42, 1)).rejects.toThrow(
-      'Failed to persist 1 Bilibili favorites for source 42',
-    );
-  });
+    await expect(
+      syncAllFavoriteVideos(
+        [makeFolder()],
+        undefined,
+        undefined,
+        onItemsPersisted,
+      ),
+    ).rejects.toThrow('Failed to persist 1 Bilibili favorites for source 42');
 
-  it('rejects when the fetched page has no source to persist into', async () => {
-    boundary.getDb.mockReturnValueOnce(sourceDb([]));
-
-    await expect(fetchAndSyncVideos(42, 1)).rejects.toThrow(
-      'Cannot persist Bilibili favorites: source 42 not found',
-    );
-    expect(boundary.syncFavVideosToDb).not.toHaveBeenCalled();
+    expect(onItemsPersisted).not.toHaveBeenCalled();
+    expect(boundary.markVideoHistoryComplete).not.toHaveBeenCalled();
   });
 });

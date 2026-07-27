@@ -66,7 +66,7 @@ describe('runFavoriteVideosSync', () => {
     expect(checkpoint).toHaveBeenCalledTimes(2);
   });
 
-  it('fetches every page on first sync before persisting the folder', async () => {
+  it('persists and publishes each page before fetching the next page', async () => {
     const events: string[] = [];
     const pages = [
       { videos: [makeVideo('BV1'), makeVideo('BV2')], totalPages: 3, hasMore: true },
@@ -84,6 +84,7 @@ describe('runFavoriteVideosSync', () => {
       },
       persist: async (_folder, videos) => {
         events.push(`persist:${videos.map((video) => video.bvid).join(',')}`);
+        return videos.map((video) => video.bvid);
       },
       markHistoryComplete: async () => {
         events.push('mark-complete');
@@ -93,15 +94,26 @@ describe('runFavoriteVideosSync', () => {
       },
     };
 
-    const result = await runFavoriteVideosSync([makeFolder()], deps);
+    const result = await runFavoriteVideosSync(
+      [makeFolder()],
+      deps,
+      undefined,
+      undefined,
+      (videos) => events.push(`publish:${videos.map((video) => video.bvid).join(',')}`),
+    );
 
     expect(events).toEqual([
       'fetch:1',
+      'persist:BV1,BV2',
+      'publish:BV1,BV2',
       'wait',
       'fetch:2',
+      'persist:BV3,BV4',
+      'publish:BV3,BV4',
       'wait',
       'fetch:3',
-      'persist:BV1,BV2,BV3,BV4,BV5',
+      'persist:BV5',
+      'publish:BV5',
       'mark-complete',
     ]);
     expect(result).toEqual({ fetchedCount: 5, syncedCount: 5 });
@@ -137,8 +149,9 @@ describe('runFavoriteVideosSync', () => {
     expect(result).toEqual({ fetchedCount: 3, syncedCount: 1 });
   });
 
-  it('does not persist or mark a folder when a later page fails', async () => {
-    let persisted = false;
+  it('keeps earlier pages durable but does not mark the Source when a later page fails', async () => {
+    const persisted: string[] = [];
+    const published: string[] = [];
     let markedComplete = false;
     const deps: FavoriteVideosSyncDeps = {
       getBaseline: async () => ({ existingBvids: new Set(), historyComplete: false }),
@@ -150,8 +163,10 @@ describe('runFavoriteVideosSync', () => {
           hasMore: true,
         };
       },
-      persist: async () => {
-        persisted = true;
+      persist: async (_folder, videos) => {
+        const ids = videos.map((video) => video.bvid);
+        persisted.push(...ids);
+        return ids;
       },
       markHistoryComplete: async () => {
         markedComplete = true;
@@ -159,9 +174,94 @@ describe('runFavoriteVideosSync', () => {
       waitBetweenPages: async () => undefined,
     };
 
-    await expect(runFavoriteVideosSync([makeFolder()], deps)).rejects.toThrow('page 2 failed');
-    expect(persisted).toBe(false);
+    await expect(
+      runFavoriteVideosSync(
+        [makeFolder()],
+        deps,
+        undefined,
+        undefined,
+        (videos) => published.push(...videos.map((video) => video.bvid)),
+      ),
+    ).rejects.toThrow('page 2 failed');
+    expect(persisted).toEqual(['BV1', 'BV2']);
+    expect(published).toEqual(['BV1', 'BV2']);
     expect(markedComplete).toBe(false);
+  });
+
+  it('contains a persisted-item subscriber failure instead of failing Fetch', async () => {
+    let markedComplete = false;
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const deps: FavoriteVideosSyncDeps = {
+      getBaseline: async () => ({ existingBvids: new Set(), historyComplete: false }),
+      fetchPage: async () => ({
+        videos: [makeVideo('BV1')],
+        totalPages: 1,
+        hasMore: false,
+      }),
+      persist: async () => ['BV1'],
+      markHistoryComplete: async () => {
+        markedComplete = true;
+      },
+      waitBetweenPages: async () => undefined,
+    };
+
+    try {
+      await expect(
+        runFavoriteVideosSync(
+          [makeFolder()],
+          deps,
+          undefined,
+          undefined,
+          () => {
+            throw new Error('subscriber failed');
+          },
+        ),
+      ).resolves.toEqual({ fetchedCount: 1, syncedCount: 1 });
+      expect(markedComplete).toBe(true);
+      expect(errorSpy).toHaveBeenCalledOnce();
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it('observes an async persisted-item subscriber rejection without failing Fetch', async () => {
+    let markedComplete = false;
+    const subscriberError = new Error('async subscriber failed');
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const deps: FavoriteVideosSyncDeps = {
+      getBaseline: async () => ({ existingBvids: new Set(), historyComplete: false }),
+      fetchPage: async () => ({
+        videos: [makeVideo('BV1')],
+        totalPages: 1,
+        hasMore: false,
+      }),
+      persist: async () => ['BV1'],
+      markHistoryComplete: async () => {
+        markedComplete = true;
+      },
+      waitBetweenPages: async () => undefined,
+    };
+
+    try {
+      await expect(
+        runFavoriteVideosSync(
+          [makeFolder()],
+          deps,
+          undefined,
+          undefined,
+          async () => { throw subscriberError; },
+        ),
+      ).resolves.toEqual({ fetchedCount: 1, syncedCount: 1 });
+      await vi.waitFor(() => {
+        expect(errorSpy).toHaveBeenCalledWith(
+          '[bili-sync] persisted-item subscriber failed:',
+          subscriberError,
+        );
+      });
+      expect(markedComplete).toBe(true);
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 
   it('syncs every folder and reports cumulative folder-page progress', async () => {

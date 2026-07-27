@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import Typography from '@mui/material/Typography';
 import Grid from '@mui/material/Grid';
 import Card from '@mui/material/Card';
@@ -42,8 +43,11 @@ function RailLayout({ rail, children }: { rail: ReactNode; children: ReactNode }
 export function SettingsView() {
   const s = useSettings();
   const { t, preference, setLocale } = useTranslation();
+  const [searchParams] = useSearchParams();
   const [tab, setTab] = useState<SettingsTab>('ai');
-  const [aiSection, setAiSection] = useState<AiSection>('llm');
+  const [aiSection, setAiSection] = useState<AiSection>(() =>
+    searchParams.get('section') === 'asr' ? 'asr' : 'llm',
+  );
   const [connSection, setConnSection] = useState<ConnSection>('github');
   const [storageSection, setStorageSection] = useState<StorageSection>('export');
 

@@ -1,82 +1,133 @@
-import { AutoTranscribePipeline } from '@/lib/auto-transcribe/pipeline';
-import { listFoldersWithPending } from '@/lib/bilibili/bili-sync-service';
+import {
+  AutoTranscribePipeline,
+  type AutoTranscribeSession,
+} from '@/lib/auto-transcribe/pipeline';
+import type { AutoTranscribeVideo } from '@/lib/auto-transcribe/types';
 import { createBiliAutoTranscribeAdapter } from '@/lib/bilibili/auto-transcribe-adapter';
-import { initDbProxy } from '@/lib/database';
+import {
+  syncAllFavoriteVideos,
+  type BiliFavoritesSyncProgress,
+} from '@/lib/bilibili/bili-sync-service';
+import type {
+  FavoriteVideosSyncResult,
+} from '@/lib/bilibili/favorites-sync-runner';
+import type { BiliFavFolder, BiliFavVideo } from '@/lib/bilibili/types';
+import { normalizeCover } from '@/lib/bilibili/url-utils';
+import type { CooperativeCheckpoint } from '@/lib/collections';
 
 import { startJob } from '../../hooks/background-jobs-store';
 import { enqueueBiliCollectionProcessing } from './bilibili-processing-adapter';
 
 const PLATFORM = 'bilibili';
 
-/**
- * Module-level pipeline singleton (NOT a hook ref): the batch run must survive
- * route switches — unmounting the bilibili section no longer aborts it — and it
- * must be reachable with no view mounted (daily auto-sync chains transcription
- * from whatever route is active). The view hook only subscribes.
- */
 export const biliAutoTranscribePipeline = new AutoTranscribePipeline(
   createBiliAutoTranscribeAdapter({ startProcessing: enqueueBiliCollectionProcessing }),
 );
 
-/**
- * Dispatch one auto-transcribe batch covering every given favorite folder
- * (ordered — callers put the viewed folder first) through the shared job store
- * as `bilibili:transcribe`. This is what puts the batch into the global "don't
- * close this page" reminder and under the per-platform library gate
- * (born-paused + pause/resume via the cooperative checkpoint the runner
- * forwards into the pipeline's video loop).
- *
- * Before dispatching, folders are filtered by a local DB query
- * (`listFoldersWithPending`): folders without pending videos never start the
- * pipeline (which would re-crawl their pages), and an all-caught-up call
- * dispatches NO job at all — this makes the mount continuation free in steady
- * state (a few DB reads, zero network). A failed lookup only logs: this is
- * opportunistic automation, the next trigger retries.
- *
- * Kind decision: the manual single-video path (use-video-transcribe) shares the
- * `bilibili:transcribe` key but is observation-only (it wraps an ALREADY
- * STARTED promise, so startJob's dedupe never blocks the transcription itself).
- * When that observation currently owns the key, the batch — opportunistic
- * automation — waits for it to settle and then re-dispatches (re-filtering).
- * The pipeline's own isActive guard keeps the retry from ever stacking a
- * second batch.
- */
-export function startBiliAutoTranscribe(folderIds: readonly string[]): void {
-  if (biliAutoTranscribePipeline.isActive()) return;
-  void dispatchAutoTranscribe(folderIds);
+let transcriptTail: Promise<void> = Promise.resolve();
+
+function toAutoTranscribeVideo(video: BiliFavVideo): AutoTranscribeVideo {
+  return {
+    videoId: video.bvid,
+    title: video.title,
+    cover: normalizeCover(video.cover),
+    author: video.upper.name,
+    duration: video.duration,
+  };
 }
 
-async function dispatchAutoTranscribe(folderIds: readonly string[]): Promise<void> {
-  let targets: string[];
-  try {
-    await initDbProxy(); // idempotent — joins the in-flight init
-    targets = await listFoldersWithPending(folderIds);
-  } catch (err) {
-    console.error('[auto-transcribe] pending-folder lookup failed:', err);
-    return;
-  }
-  if (targets.length === 0) return;
-
-  const handle = startJob(PLATFORM, 'transcribe', async (setProgress, control) => {
-    const unsubscribe = biliAutoTranscribePipeline.subscribe(() => {
-      const s = biliAutoTranscribePipeline.getSnapshot();
-      // Per-folder progress: {done,total} resets when the run moves to the
-      // next folder (accepted — the pipeline reports one folder at a time).
-      if (s.totalVideos > 0) setProgress({ done: s.currentIndex, total: s.totalVideos });
-    });
-    try {
-      for (const folderId of targets) {
-        await biliAutoTranscribePipeline.start(folderId, control);
-        const phase = biliAutoTranscribePipeline.getSnapshot().phase;
-        // A still-active ASR quota guard or a cancel applies to every
-        // remaining folder too — stop instead of hitting the same wall N times.
-        if (phase === 'quota_paused' || phase === 'cancelled') return;
+async function dispatchTranscriptSession(session: AutoTranscribeSession): Promise<void> {
+  while (true) {
+    const handle = startJob(PLATFORM, 'transcribe', async (setProgress, control) => {
+      const publishProgress = (): void => {
+        const state = biliAutoTranscribePipeline.getSnapshot();
+        if (state.totalVideos > 0) {
+          setProgress({ done: state.currentIndex, total: state.totalVideos });
+        }
+      };
+      const unsubscribe = biliAutoTranscribePipeline.subscribe(publishProgress);
+      publishProgress();
+      try {
+        await session.run(control);
+      } finally {
+        unsubscribe();
       }
-    } finally {
-      unsubscribe();
+    });
+
+    if (handle.started) {
+      await handle.settled;
+      return;
     }
-  });
-  if (!handle.started) {
-    void handle.settled.then(() => startBiliAutoTranscribe(folderIds));
+    await handle.settled;
+  }
+}
+
+interface TranscriptProducer {
+  append(videos: readonly BiliFavVideo[]): void;
+  close(): void;
+}
+
+function createTranscriptProducer(): TranscriptProducer {
+  let queued: AutoTranscribeVideo[] = [];
+  let session: AutoTranscribeSession | null = null;
+  let closed = false;
+  let scheduled = false;
+
+  const schedule = (): void => {
+    if (scheduled) return;
+    scheduled = true;
+    const previous = transcriptTail;
+    const run = previous
+      .catch(() => undefined)
+      .then(async () => {
+        session = biliAutoTranscribePipeline.createSession();
+        session.append(queued);
+        queued = [];
+        if (closed) session.close();
+        await dispatchTranscriptSession(session);
+      });
+    transcriptTail = run.catch((error) => {
+      console.error('[auto-transcribe] session dispatch failed:', error);
+    });
+  };
+
+  return {
+    append(videos) {
+      if (closed) return;
+      const accepted = videos
+        .filter((video) => video.attr !== 9 && Boolean(video.bvid))
+        .map(toAutoTranscribeVideo);
+      if (accepted.length === 0) return;
+      if (session) session.append(accepted);
+      else queued.push(...accepted);
+      schedule();
+    },
+    close() {
+      if (closed) return;
+      closed = true;
+      session?.close();
+    },
+  };
+}
+
+/**
+ * Run one Bilibili Fetch producer. Every durably inserted page batch is
+ * published into the same Transcript inbox; Fetch never awaits Transcript.
+ */
+export async function runBiliStreamingSync(
+  folders: BiliFavFolder[],
+  onProgress?: (progress: BiliFavoritesSyncProgress) => void,
+  control?: CooperativeCheckpoint,
+): Promise<FavoriteVideosSyncResult> {
+  const producer = createTranscriptProducer();
+  try {
+    return await syncAllFavoriteVideos(
+      folders,
+      onProgress,
+      control,
+      (videos) => producer.append(videos),
+    );
+  } finally {
+    producer.close();
   }
 }

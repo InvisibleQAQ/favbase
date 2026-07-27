@@ -269,6 +269,9 @@ const zhCN = {
   'autoTranscribe.doneTitle': '转录完成',
   'autoTranscribe.quotaPausedUntil': '自动转录已暂停，预计 {{reset}} 重置，额度重置后将自动继续。',
   'autoTranscribe.quotaPausedNoReset': '自动转录已暂停，额度重置后将自动继续。',
+  'autoTranscribe.configurationRequiredTitle': '需要配置 ASR',
+  'autoTranscribe.configurationRequired': '当前视频没有可用的官方字幕。配置 ASR 后将自动继续转录。',
+  'autoTranscribe.configureAsr': '配置 ASR',
 
   'nav.dashboard': 'Dashboard',
   'nav.collections': '收藏夹',

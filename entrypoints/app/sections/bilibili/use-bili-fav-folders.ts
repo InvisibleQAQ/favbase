@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   fetchAndSyncFolders,
-  syncAllFavoriteVideos,
   BiliAuthError,
 } from '@/lib/bilibili/bili-sync-service';
 import type { BiliFavoritesSyncProgress } from '@/lib/bilibili/bili-sync-service';
@@ -11,23 +10,21 @@ import {
   useJob,
   type BackgroundJob,
 } from '../../hooks/background-jobs-store';
-import { startBiliAutoTranscribe } from './auto-transcribe-runtime';
+import { runBiliStreamingSync } from './auto-transcribe-runtime';
 
 const PLATFORM = 'bilibili';
 
 type LoginState = 'unknown' | 'logged_in' | 'not_logged_in';
 
 /**
- * All folder ids as strings, with the route-selected folder moved to the
- * front — the auto-transcribe continuation drains folders in this order, so
- * the folder the user is looking at transcribes first.
+ * Move the route-selected Source to the front of the Fetch producer. The
+ * Transcript inbox inherits this order from persisted page notifications.
  */
-function orderFolderIds(folders: BiliFavFolder[], routeFolderId?: number): string[] {
-  const ids = folders.map((f) => String(f.id));
-  if (routeFolderId == null) return ids;
-  const route = String(routeFolderId);
-  if (!ids.includes(route)) return ids;
-  return [route, ...ids.filter((id) => id !== route)];
+function orderFolders(folders: BiliFavFolder[], routeFolderId?: number): BiliFavFolder[] {
+  if (routeFolderId == null) return folders;
+  const selected = folders.find((folder) => folder.id === routeFolderId);
+  if (!selected) return folders;
+  return [selected, ...folders.filter((folder) => folder.id !== routeFolderId)];
 }
 
 interface UseFavFoldersReturn {
@@ -85,17 +82,12 @@ export function useBiliFavFolders(routeFolderId?: number): UseFavFoldersReturn {
         setLoginState('logged_in');
         setFolders(folderList);
       }
-      await syncAllFavoriteVideos(
-        folderList,
+      await runBiliStreamingSync(
+        orderFolders(folderList, routeFolderRef.current),
         (progress) => setProgress(progress),
         control,
       );
       if (mountedRef.current) setLastSyncedAt(new Date());
-      // Auto-continue the content stage: chain a batch transcription across
-      // ALL folders, the one the user is viewing first. Fire-and-forget — the
-      // `bilibili:transcribe` job is independent of this sync job, filters out
-      // folders without pending videos, and dedupes/gates itself.
-      startBiliAutoTranscribe(orderFolderIds(folderList, routeFolderRef.current));
     });
   }, []);
 
@@ -106,12 +98,6 @@ export function useBiliFavFolders(routeFolderId?: number): UseFavFoldersReturn {
     (async () => {
       try {
         const folderList = await fetchAndSyncFolders();
-        // Mount continuation (parity with bookmarks): auto-continue any stored
-        // pending backlog even when the daily gate already blocked a re-sync.
-        // Free in steady state — the runtime dispatches NO job and touches NO
-        // network when a local DB query finds no pending videos. Deliberately
-        // outside the `cancelled` guard: the job outlives this mount anyway.
-        startBiliAutoTranscribe(orderFolderIds(folderList, routeFolderRef.current));
         if (cancelled) return;
         setLoginState('logged_in');
         setFolders(folderList);

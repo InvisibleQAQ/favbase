@@ -11,18 +11,6 @@ export interface AutoTranscribeVideo {
   cover: string;
   author: string;
   duration: number;
-  isInvalid: boolean;
-}
-
-export interface AutoTranscribePageResult {
-  videos: AutoTranscribeVideo[];
-  totalPages: number;
-  totalCount: number;
-}
-
-export interface AutoTranscribePreview {
-  video: AutoTranscribeCurrentVideo | null;
-  pendingCount: number | null;
 }
 
 export interface AutoTranscribeQuotaPause {
@@ -36,10 +24,10 @@ export interface AutoTranscribeQuotaPause {
 
 export type AutoTranscribePhase =
   | 'idle'
-  | 'syncing'
   | 'transcribing'
   | 'waiting'
   | 'paused'
+  | 'configuration_required'
   | 'quota_paused'
   | 'done'
   | 'cancelled';
@@ -61,8 +49,6 @@ export interface AutoTranscribeCurrentVideo {
 
 export interface AutoTranscribeState {
   phase: AutoTranscribePhase;
-  currentPage: number;
-  totalPages: number;
   currentVideoTitle: string;
   currentVideoId: string;
   currentVideo: AutoTranscribeCurrentVideo | null;
@@ -73,9 +59,6 @@ export interface AutoTranscribeState {
   waitSeconds: number;
   quotaResetAt: number | null;
   stats: AutoTranscribeStats;
-  previewVideo: AutoTranscribeCurrentVideo | null;
-  pendingCount: number | null;
-  previewLoading: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -83,10 +66,6 @@ export interface AutoTranscribeState {
 // ---------------------------------------------------------------------------
 
 export interface AutoTranscribeAdapter {
-  checkAuth(): Promise<void>;
-  fetchPage(collectionId: string, page: number): Promise<AutoTranscribePageResult>;
-  getPendingIds(videoIds: string[]): Promise<string[]>;
-  getPreview(collectionId: string): Promise<AutoTranscribePreview>;
   /**
    * Transcribe + persist + index. `onIndexing` fires after transcription
    * succeeds, while local chunk+embed indexing runs (UI "indexing" stage).
@@ -94,6 +73,7 @@ export interface AutoTranscribeAdapter {
   transcribe(videoId: string, title: string, onIndexing?: () => void): Promise<TranscribeResponse>;
   markError(videoId: string): Promise<void>;
   hasAsrKey(): Promise<boolean>;
+  waitForAsrKey(): Promise<void>;
   getQuotaPause(): Promise<AutoTranscribeQuotaPause | null>;
   setQuotaPause(pause: AutoTranscribeQuotaPause | null): Promise<void>;
   createStatusListener(

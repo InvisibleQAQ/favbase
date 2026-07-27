@@ -8,15 +8,13 @@ import type { CooperativeCheckpoint } from '@/lib/collections';
 // dispatch semantics live in use-daily-auto-sync.test.tsx.
 const mocks = vi.hoisted(() => ({
   fetchAndSyncFolders: vi.fn(),
-  syncAllFavoriteVideos: vi.fn(),
   syncBrowserBookmarks: vi.fn(),
   startBookmarkExtraction: vi.fn(),
-  startBiliAutoTranscribe: vi.fn(),
+  runBiliStreamingSync: vi.fn(),
 }));
 
 vi.mock('@/lib/bilibili/bili-sync-service', () => ({
   fetchAndSyncFolders: mocks.fetchAndSyncFolders,
-  syncAllFavoriteVideos: mocks.syncAllFavoriteVideos,
 }));
 vi.mock('@/lib/bilibili/bilibili-api', () => ({ getBiliAuth: vi.fn() }));
 vi.mock('@/lib/bookmarks/bookmarks-sync-service', () => ({
@@ -38,7 +36,7 @@ vi.mock('../sections/bookmarks/use-bookmark-extraction', () => ({
   startBookmarkExtraction: mocks.startBookmarkExtraction,
 }));
 vi.mock('../sections/bilibili/auto-transcribe-runtime', () => ({
-  startBiliAutoTranscribe: mocks.startBiliAutoTranscribe,
+  runBiliStreamingSync: mocks.runBiliStreamingSync,
 }));
 
 import { AUTO_SYNC_PLATFORMS } from './auto-sync-registry';
@@ -55,10 +53,9 @@ function entry(jobPlatform: string) {
 describe('auto-sync registry content-stage chaining', () => {
   beforeEach(() => {
     mocks.fetchAndSyncFolders.mockReset();
-    mocks.syncAllFavoriteVideos.mockReset().mockResolvedValue({ fetchedCount: 0 });
+    mocks.runBiliStreamingSync.mockReset().mockResolvedValue({ fetchedCount: 0 });
     mocks.syncBrowserBookmarks.mockReset().mockResolvedValue({ totalBookmarks: 3 });
     mocks.startBookmarkExtraction.mockReset();
-    mocks.startBiliAutoTranscribe.mockReset();
   });
 
   it('bookmarks: chains content extraction after a successful sync, still returning []', async () => {
@@ -78,18 +75,16 @@ describe('auto-sync registry content-stage chaining', () => {
     expect(mocks.startBookmarkExtraction).not.toHaveBeenCalled();
   });
 
-  it('bilibili: chains a batch transcription across all folders, still returning []', async () => {
+  it('bilibili: runs the natural folder order through the streaming runtime', async () => {
     mocks.fetchAndSyncFolders.mockResolvedValue([{ id: 42 }, { id: 43 }]);
 
     const ids = await entry('bilibili').runSync(noProgress, control);
 
-    expect(mocks.syncAllFavoriteVideos).toHaveBeenCalledWith(
+    expect(mocks.runBiliStreamingSync).toHaveBeenCalledWith(
       [{ id: 42 }, { id: 43 }],
       noProgress,
       control,
     );
-    expect(mocks.startBiliAutoTranscribe).toHaveBeenCalledTimes(1);
-    expect(mocks.startBiliAutoTranscribe).toHaveBeenCalledWith(['42', '43']);
     expect(ids).toEqual([]); // transcription enqueues embed/tag per item itself
   });
 
@@ -98,6 +93,6 @@ describe('auto-sync registry content-stage chaining', () => {
 
     await entry('bilibili').runSync(noProgress, control);
 
-    expect(mocks.startBiliAutoTranscribe).not.toHaveBeenCalled();
+    expect(mocks.runBiliStreamingSync).toHaveBeenCalledWith([], noProgress, control);
   });
 });

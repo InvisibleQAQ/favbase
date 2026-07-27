@@ -4,6 +4,8 @@
 
 ASR quota 文案只消费结构化 `ASR_QUOTA_EXCEEDED/resetAt`：自动转录 UI 使用 `autoTranscribe.quotaPaused*`，设置页使用 `settings.asr.groq*`；Groq 原始 429 message 只作 debug，不进入可见文案。
 
+缺 ASR 配置的自动转录等待使用 `autoTranscribe.configurationRequiredTitle/configurationRequired/configureAsr`，不得复用“API Key 无效”错误标题；只在视频确实无可用官方字幕且 resolver 无 key 时显示，按钮深链 AI / ASR 设置。不得把“未配置 ASR”做成 Fetch 前置门。
+
 ## 平台命名
 
 - Bilibili 页面标题使用 `collections.sidebarTitle`，主分类标题使用 `collections.foldersTitle`；两者职责不可混用。

@@ -1,8 +1,10 @@
 import Box from '@mui/material/Box';
+import type { ReactNode } from 'react';
 import LinearProgress from '@mui/material/LinearProgress';
 import Typography from '@mui/material/Typography';
 import Chip from '@mui/material/Chip';
-import CircularProgress from '@mui/material/CircularProgress';
+import Button from '@mui/material/Button';
+import { Link as RouterLink } from 'react-router-dom';
 
 import { formatDateTime, t } from '@/lib/i18n';
 import { useTranslation } from '@/lib/i18n/use-translation';
@@ -17,8 +19,6 @@ import type { AutoTranscribeState } from '@/lib/auto-transcribe/types';
 function stageLabel(state: AutoTranscribeState): string {
   const { phase, videoStage, videoProgress, waitSeconds } = state;
   switch (phase) {
-    case 'syncing':
-      return t('autoTranscribe.syncing', { current: state.currentPage, total: state.totalPages });
     case 'transcribing':
       if (videoStage === 'indexing') return t('autoTranscribe.indexing');
       if (videoStage === 'start') return t('autoTranscribe.preparing');
@@ -128,6 +128,37 @@ export interface AutoTranscribeBarProps {
   running: boolean;
 }
 
+function WarningPanel({
+  title,
+  message,
+  action,
+}: {
+  title: string;
+  message: string;
+  action?: ReactNode;
+}) {
+  return (
+    <Box role="alert" sx={{ ...PANEL_SX, borderColor: 'warning.main' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+        <Iconify
+          icon="solar:danger-triangle-bold-duotone"
+          width={28}
+          sx={{ color: 'warning.main', flexShrink: 0 }}
+        />
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+            {title}
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            {message}
+          </Typography>
+        </Box>
+        {action}
+      </Box>
+    </Box>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Component (pure progress display — transcription starts automatically after
 // a fetch; pause/resume belongs to the per-platform library gate)
@@ -135,9 +166,29 @@ export interface AutoTranscribeBarProps {
 
 export function AutoTranscribeBar({ state, running }: AutoTranscribeBarProps) {
   useTranslation();
-  const { phase, stats, currentVideo, currentIndex, totalVideos, previewVideo, pendingCount, previewLoading } = state;
+  const { phase, stats, currentVideo, currentIndex, totalVideos } = state;
   const isDone = phase === 'done' || phase === 'cancelled';
   const showProgress = running || isDone;
+
+  if (phase === 'configuration_required') {
+    return (
+      <WarningPanel
+        title={t('autoTranscribe.configurationRequiredTitle')}
+        message={t('autoTranscribe.configurationRequired')}
+        action={
+          <Button
+            component={RouterLink}
+            to="/settings?section=asr"
+            variant="outlined"
+            color="warning"
+            startIcon={<Iconify icon="solar:settings-bold-duotone" width={18} />}
+          >
+            {t('autoTranscribe.configureAsr')}
+          </Button>
+        }
+      />
+    );
+  }
 
   if (phase === 'quota_paused') {
     const quotaMessage = state.quotaResetAt === null
@@ -145,91 +196,26 @@ export function AutoTranscribeBar({ state, running }: AutoTranscribeBarProps) {
       : t('autoTranscribe.quotaPausedUntil', { reset: formatDateTime(state.quotaResetAt) });
 
     return (
-      <Box role="alert" sx={{ ...PANEL_SX, borderColor: 'warning.main' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-          <Iconify
-            icon="solar:danger-triangle-bold-duotone"
-            width={28}
-            sx={{ color: 'warning.main', flexShrink: 0 }}
-          />
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-              {t('error.ASR_QUOTA_EXCEEDED')}
-            </Typography>
-            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-              {quotaMessage}
-            </Typography>
-          </Box>
-        </Box>
-      </Box>
+      <WarningPanel
+        title={t('error.ASR_QUOTA_EXCEEDED')}
+        message={quotaMessage}
+      />
     );
   }
 
-  // ----- Idle: full-width preview panel -----
+  // ----- Idle: no historical pending lookup -----
   if (!showProgress) {
-    if (previewLoading) {
-      return (
-        <Box sx={{ ...PANEL_SX }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <CircularProgress size={24} sx={{ flexShrink: 0 }} />
-            <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-              {t('autoTranscribe.title')}
-            </Typography>
-          </Box>
-        </Box>
-      );
-    }
-
-    // All transcribed
-    if (pendingCount === 0 && !previewVideo) {
-      return (
-        <Box sx={{ ...PANEL_SX }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <Iconify
-              icon="solar:check-circle-bold"
-              width={28}
-              sx={{ color: 'success.main', flexShrink: 0 }}
-            />
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                {t('autoTranscribe.title')}
-              </Typography>
-              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                {t('autoTranscribe.allDone')}
-              </Typography>
-            </Box>
-          </Box>
-        </Box>
-      );
-    }
-
     return (
       <Box sx={{ ...PANEL_SX }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, minWidth: 0 }}>
-          <Thumbnail cover={previewVideo?.cover} />
-          <Box sx={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
-            <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.4 }}>
-              {t('autoTranscribe.title')}
-            </Typography>
-            {previewVideo && (
-              <Typography
-                variant="body2"
-                noWrap
-                sx={{ color: 'text.primary', lineHeight: 1.5 }}
-                title={previewVideo.title}
-              >
-                {previewVideo.title}
-                <Typography component="span" variant="body2" sx={{ color: 'text.secondary', ml: 0.5 }}>
-                  · {previewVideo.author}
-                </Typography>
-              </Typography>
-            )}
-            {pendingCount !== null && (
-              <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.25 }}>
-                {t('autoTranscribe.pendingCount', { count: pendingCount })}
-              </Typography>
-            )}
-          </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Iconify
+            icon="solar:subtitles-bold-duotone"
+            width={28}
+            sx={{ color: 'text.secondary', flexShrink: 0 }}
+          />
+          <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+            {t('autoTranscribe.title')}
+          </Typography>
         </Box>
       </Box>
     );
@@ -314,7 +300,7 @@ export function AutoTranscribeBar({ state, running }: AutoTranscribeBarProps) {
 
       {/* Full-width progress bar */}
       <LinearProgress
-        variant={phase === 'syncing' ? 'indeterminate' : 'determinate'}
+        variant="determinate"
         value={overallProgress(state)}
         sx={{ borderRadius: 1, height: 5 }}
       />

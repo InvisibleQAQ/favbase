@@ -276,6 +276,9 @@ const en: Record<LocaleKeys, string> = {
   'autoTranscribe.doneTitle': 'Transcription complete',
   'autoTranscribe.quotaPausedUntil': 'Auto transcription is paused. It will resume automatically after the quota resets around {{reset}}.',
   'autoTranscribe.quotaPausedNoReset': 'Auto transcription is paused and will resume automatically after the quota resets.',
+  'autoTranscribe.configurationRequiredTitle': 'ASR configuration required',
+  'autoTranscribe.configurationRequired': 'This video has no usable official subtitles. Configure ASR to resume transcription automatically.',
+  'autoTranscribe.configureAsr': 'Configure ASR',
 
   'nav.dashboard': 'Dashboard',
   'nav.collections': 'Collections',

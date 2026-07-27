@@ -4,6 +4,7 @@ import type {
   AutoTranscribeQuotaPause,
   AutoTranscribeState,
   AutoTranscribeStats,
+  AutoTranscribeVideo,
 } from './types';
 import type { CooperativeCheckpoint } from '@/lib/collections/cooperative-checkpoint';
 import type { TranscribeErrorInfo } from '@/lib/transcription/types';
@@ -14,8 +15,6 @@ import type { TranscribeErrorInfo } from '@/lib/transcription/types';
 
 const INITIAL_STATE: AutoTranscribeState = {
   phase: 'idle',
-  currentPage: 0,
-  totalPages: 0,
   currentVideoTitle: '',
   currentVideoId: '',
   currentVideo: null,
@@ -26,13 +25,15 @@ const INITIAL_STATE: AutoTranscribeState = {
   waitSeconds: 0,
   quotaResetAt: null,
   stats: { existing: 0, cc: 0, asr: 0, skipped: 0, remaining: 0 },
-  previewVideo: null,
-  pendingCount: null,
-  previewLoading: true,
 };
 
-const PAGE_SIZE = 20;
 const DEFAULT_RATE_LIMIT_PAUSE_SECONDS = 60;
+
+export interface AutoTranscribeSession {
+  append(videos: readonly AutoTranscribeVideo[]): void;
+  close(): void;
+  run(control?: CooperativeCheckpoint): Promise<void>;
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -61,10 +62,10 @@ export class AutoTranscribePipeline {
   private listeners = new Set<() => void>();
   private ac: AbortController | null = null;
   private running = false;
-  private startPending = false;
   private countdownTimer: ReturnType<typeof setInterval> | null = null;
   private statusCleanup: (() => void) | null = null;
-  private previewGeneration = 0;
+  private sessionActive = false;
+  private closeActiveSession: (() => void) | null = null;
 
   constructor(adapter: AutoTranscribeAdapter) {
     this.adapter = adapter;
@@ -81,61 +82,206 @@ export class AutoTranscribePipeline {
 
   // --- Control ---
 
-  /** True while a run is executing or a start is resolving its quota guard. */
+  /** True while a producer session exists, including before its runner starts. */
   isActive(): boolean {
-    return this.running || this.startPending;
+    return this.running || this.sessionActive;
   }
 
-  /**
-   * Start one batch run. Resolves when the run finishes (never rejects — the
-   * pipeline reports failures through its phase). The optional cooperative
-   * checkpoint is awaited before any network work and before claiming each
-   * video, so a paused job blocks between items without cancelling the run.
-   */
-  async start(collectionId: string, control?: CooperativeCheckpoint): Promise<void> {
-    if (this.running || this.startPending) return;
-    this.startPending = true;
-    try {
-      // Read the DURABLE quota guard before deciding: a fresh instance's
-      // in-memory quotaResetAt stays null until an async preview lands, and
-      // automatic starts (post-fetch chaining, daily auto-sync) hit exactly
-      // that window. The in-memory mirror is only the fallback when the read
-      // fails.
-      let persisted: AutoTranscribeQuotaPause | null = null;
-      try {
-        persisted = await this.adapter.getQuotaPause();
-      } catch (error) {
-        console.error('[auto-transcribe] Failed to read quota pause:', error);
-      }
-      if (this.running) return;
-      const resetAt = persisted?.resetAt ?? this.state.quotaResetAt;
-      if (resetAt !== null && resetAt > Date.now()) {
-        // Guard still active — surface it (an idle fresh instance may not have
-        // loaded it yet) and skip silently. Recovery is the next automatic
-        // start after the reset (daily auto-sync re-evaluates every day).
-        this.patch({
-          phase: 'quota_paused',
-          quotaResetAt: resetAt,
-          waitSeconds: Math.max(0, Math.ceil((resetAt - Date.now()) / 1000)),
-          previewLoading: false,
+  createSession(): AutoTranscribeSession {
+    if (this.isActive()) throw new Error('Auto-transcribe session already active');
+
+    const queue: AutoTranscribeVideo[] = [];
+    const seen = new Set<string>();
+    let closed = false;
+    let started = false;
+    let wake: (() => void) | null = null;
+    this.sessionActive = true;
+    this.state = { ...INITIAL_STATE };
+    this.emit();
+
+    const close = (): void => {
+      if (closed) return;
+      closed = true;
+      wake?.();
+      wake = null;
+    };
+    this.closeActiveSession = close;
+
+    const waitForItem = async (): Promise<boolean> => {
+      while (queue.length === 0 && !closed) {
+        await new Promise<void>((resolve) => {
+          wake = resolve;
         });
-        this.startCountdown();
-        return;
+        wake = null;
       }
-      if (persisted !== null || this.state.quotaResetAt !== null) {
+      return queue.length > 0;
+    };
+
+    return {
+      append: (videos) => {
+        if (closed) throw new Error('Cannot append to a closed auto-transcribe session');
+        const accepted = videos.filter((video) => {
+          const id = video.videoId.toLowerCase();
+          if (!id || seen.has(id)) return false;
+          seen.add(id);
+          return true;
+        });
+        if (accepted.length === 0) return;
+        queue.push(...accepted);
+        const stats = {
+          ...this.state.stats,
+          remaining: this.state.stats.remaining + accepted.length,
+        };
+        this.patch({ totalVideos: this.state.totalVideos + accepted.length, stats });
+        wake?.();
+        wake = null;
+      },
+      close,
+      run: async (control) => {
+        if (started) throw new Error('Auto-transcribe session already started');
+        started = true;
+        const ac = new AbortController();
+        this.ac = ac;
+        this.running = true;
+        this.installStatusListener();
+
         try {
-          await this.adapter.setQuotaPause(null);
+          // A born-paused Library Gate must stop the runner before quota
+          // storage or any inbox item is touched.
+          await control?.checkpoint();
+          let persisted: AutoTranscribeQuotaPause | null = null;
+          try {
+            persisted = await this.adapter.getQuotaPause();
+          } catch (error) {
+            console.error('[auto-transcribe] Failed to read quota pause:', error);
+          }
+          const resetAt = persisted?.resetAt ?? null;
+          if (resetAt !== null && resetAt > Date.now()) {
+            await this.waitForQuotaReset(resetAt, ac.signal);
+          }
+          if (persisted !== null) {
+            await this.clearQuotaPause();
+          }
+          this.patch({ phase: 'transcribing' });
+
+          while (true) {
+            if (!(await waitForItem())) break;
+            ac.signal.throwIfAborted();
+            await control?.checkpoint();
+            ac.signal.throwIfAborted();
+            const item = queue.shift();
+            if (!item) continue;
+            this.patch({
+              phase: 'transcribing',
+              currentVideoTitle: item.title,
+              currentVideoId: item.videoId,
+              currentVideo: {
+                cover: item.cover,
+                title: item.title,
+                author: item.author,
+                duration: item.duration,
+              },
+              videoProgress: 0,
+              videoStage: 'start',
+            });
+
+            try {
+              let response: Awaited<ReturnType<AutoTranscribeAdapter['transcribe']>>;
+              let rateLimitRetried = false;
+              while (true) {
+                response = await this.adapter.transcribe(
+                  item.videoId,
+                  item.title,
+                  () => this.patch({ videoStage: 'indexing', videoProgress: 100 }),
+                );
+                if (
+                  !response.success
+                  && response.error.code === 'ASR_INVALID_KEY'
+                  && !(await this.adapter.hasAsrKey())
+                ) {
+                  this.patch({ phase: 'configuration_required' });
+                  await this.adapter.waitForAsrKey();
+                  await control?.checkpoint();
+                  this.patch({ phase: 'transcribing', videoProgress: 0, videoStage: 'start' });
+                  continue;
+                }
+                if (
+                  !response.success
+                  && response.error.code === 'ASR_RATE_LIMIT'
+                  && !rateLimitRetried
+                ) {
+                  rateLimitRetried = true;
+                  const retryDelayMs = (
+                    response.error.retryAfter ?? DEFAULT_RATE_LIMIT_PAUSE_SECONDS
+                  ) * 1000;
+                  await this.waitWithCountdown(retryDelayMs, 'paused', ac.signal);
+                  this.patch({ phase: 'transcribing', videoProgress: 0, videoStage: 'start' });
+                  continue;
+                }
+                if (!response.success && response.error.code === 'ASR_QUOTA_EXCEEDED') {
+                  const resumable = await this.waitForQuota(response.error, ac.signal);
+                  if (!resumable) return;
+                  await control?.checkpoint();
+                  this.patch({ phase: 'transcribing', videoProgress: 0, videoStage: 'start' });
+                  continue;
+                }
+                break;
+              }
+              if (response.success) {
+                const stats = { ...this.state.stats };
+                if (response.data.source === 'official') stats.cc += 1;
+                else stats.asr += 1;
+                stats.remaining = Math.max(0, stats.remaining - 1);
+                this.patchStats(stats);
+
+                const delayMs = response.data.source === 'official'
+                  ? randomDelay(5, 10)
+                  : randomDelay(10, 15);
+                await this.waitWithCountdown(delayMs, 'waiting', ac.signal);
+              } else {
+                await this.adapter.markError(item.videoId);
+                this.patchStats({
+                  skipped: this.state.stats.skipped + 1,
+                  remaining: Math.max(0, this.state.stats.remaining - 1),
+                });
+              }
+            } catch (error) {
+              if ((error as Error)?.name === 'AbortError' || ac.signal.aborted) throw error;
+              console.error(`[auto-transcribe] Item ${item.videoId} failed:`, error);
+              try {
+                await this.adapter.markError(item.videoId);
+              } catch (markError) {
+                console.error(`[auto-transcribe] Failed to mark ${item.videoId}:`, markError);
+              }
+              this.patchStats({
+                skipped: this.state.stats.skipped + 1,
+                remaining: Math.max(0, this.state.stats.remaining - 1),
+              });
+            }
+          }
+
+          this.patch({
+            phase: 'done',
+            currentVideoTitle: '',
+            currentVideoId: '',
+            currentVideo: null,
+            videoProgress: 0,
+            videoStage: '',
+          });
         } catch (error) {
-          console.error('[auto-transcribe] Failed to clear quota pause:', error);
+          if ((error as Error)?.name !== 'AbortError' && !ac.signal.aborted) {
+            console.error('[auto-transcribe] Pipeline error:', error);
+          }
+          this.patch({ phase: 'cancelled' });
+        } finally {
+          this.running = false;
+          this.sessionActive = false;
+          this.closeActiveSession = null;
+          this.ac = null;
+          this.uninstallStatusListener();
         }
-      }
-      this.state = { ...INITIAL_STATE, phase: 'syncing', previewLoading: false };
-      this.emit();
-      this.installStatusListener();
-      await this.runPipeline(collectionId, control);
-    } finally {
-      this.startPending = false;
-    }
+      },
+    };
   }
 
   stop(): void {
@@ -143,50 +289,11 @@ export class AutoTranscribePipeline {
   }
 
   dispose(): void {
+    this.closeActiveSession?.();
     this.stop();
     this.clearCountdown();
     this.uninstallStatusListener();
     this.listeners.clear();
-  }
-
-  // --- Preview query (called by hook when idle + collectionId available) ---
-
-  async queryPreview(collectionId: string): Promise<void> {
-    if (this.running) return;
-    const gen = ++this.previewGeneration;
-    this.patch({ previewLoading: true });
-    await this.queryPreviewAttempt(collectionId, gen, 0);
-  }
-
-  private async queryPreviewAttempt(collectionId: string, gen: number, attempt: number): Promise<void> {
-    try {
-      const quotaPause = await this.adapter.getQuotaPause();
-      if (gen !== this.previewGeneration) return;
-      if (quotaPause && quotaPause.resetAt > Date.now()) {
-        this.patch({
-          phase: 'quota_paused',
-          quotaResetAt: quotaPause.resetAt,
-          waitSeconds: Math.ceil((quotaPause.resetAt - Date.now()) / 1000),
-          previewLoading: false,
-        });
-        this.startCountdown();
-        return;
-      }
-      if (quotaPause) await this.adapter.setQuotaPause(null);
-      if (gen !== this.previewGeneration) return;
-
-      const preview = await this.adapter.getPreview(collectionId);
-      if (gen !== this.previewGeneration) return;
-      if (preview.pendingCount === null && attempt < 3) {
-        await new Promise((r) => setTimeout(r, 2000));
-        if (gen !== this.previewGeneration) return;
-        return this.queryPreviewAttempt(collectionId, gen, attempt + 1);
-      }
-      this.patch({ previewVideo: preview.video, pendingCount: preview.pendingCount, previewLoading: false });
-    } catch {
-      if (gen !== this.previewGeneration) return;
-      this.patch({ previewLoading: false });
-    }
   }
 
   // --- Private: state management ---
@@ -248,6 +355,23 @@ export class AutoTranscribePipeline {
     }
   }
 
+  private async waitForQuotaReset(resetAt: number, signal: AbortSignal): Promise<void> {
+    const remainingMs = Math.max(0, resetAt - Date.now());
+    this.patch({ quotaResetAt: resetAt });
+    if (remainingMs > 0) {
+      await this.waitWithCountdown(remainingMs, 'quota_paused', signal);
+    }
+    this.patch({ quotaResetAt: null, waitSeconds: 0 });
+  }
+
+  private async clearQuotaPause(): Promise<void> {
+    try {
+      await this.adapter.setQuotaPause(null);
+    } catch (error) {
+      console.error('[auto-transcribe] Failed to clear quota pause:', error);
+    }
+  }
+
   // --- Private: TRANSCRIBE_STATUS listener ---
 
   private installStatusListener(): void {
@@ -268,9 +392,10 @@ export class AutoTranscribePipeline {
     }
   }
 
-  private async pauseForQuota(error: TranscribeErrorInfo): Promise<boolean> {
-    if (error.code !== 'ASR_QUOTA_EXCEEDED') return false;
-
+  private async waitForQuota(
+    error: TranscribeErrorInfo,
+    signal: AbortSignal,
+  ): Promise<boolean> {
     const resetAt = error.resetAt ?? null;
     if (resetAt !== null && error.providerId) {
       try {
@@ -288,156 +413,17 @@ export class AutoTranscribePipeline {
       quotaResetAt: resetAt,
       waitSeconds,
     });
-    if (waitSeconds > 0) this.startCountdown();
-    return true;
-  }
-
-  // --- Core pipeline ---
-
-  private async runPipeline(
-    collectionId: string,
-    control?: CooperativeCheckpoint,
-  ): Promise<void> {
-    const ac = new AbortController();
-    this.ac = ac;
-    this.running = true;
-    const { signal } = ac;
-
-    const stats: AutoTranscribeStats = { existing: 0, cc: 0, asr: 0, skipped: 0, remaining: 0 };
-
-    try {
-      // Library-gate seam: a born-paused run parks HERE, before any network.
-      await control?.checkpoint();
-      await this.adapter.checkAuth();
-
-      const hasAsrKey = await this.adapter.hasAsrKey();
-
-      const firstResult = await this.adapter.fetchPage(collectionId, 1);
-      signal.throwIfAborted();
-      const totalPages = firstResult.totalPages;
-
-      this.patch({ totalPages, totalVideos: firstResult.totalCount, currentPage: 0 });
-
-      for (let page = 1; page <= totalPages; page++) {
-        signal.throwIfAborted();
-        await control?.checkpoint();
-
-        // --- Sync phase ---
-        this.patch({ phase: 'syncing', currentPage: page });
-
-        const pageResult = page === 1 ? firstResult : await this.adapter.fetchPage(collectionId, page);
-        signal.throwIfAborted();
-        const videos = pageResult.videos;
-
-        const validVideos = videos.filter((v) => !v.isInvalid);
-        const validIds = validVideos.map((v) => v.videoId);
-
-        const pendingIds = await this.adapter.getPendingIds(validIds);
-
-        stats.skipped += videos.length - validVideos.length;
-        stats.existing += validIds.length - pendingIds.length;
-        stats.remaining = pendingIds.length + (totalPages - page) * PAGE_SIZE;
-        this.patchStats({ ...stats });
-
-        // --- Transcribe phase ---
-        this.patch({ phase: 'transcribing' });
-
-        for (const videoId of pendingIds) {
-          signal.throwIfAborted();
-          // Cooperative pause boundary: block before claiming the next video.
-          await control?.checkpoint();
-
-          const video = validVideos.find((v) => v.videoId === videoId);
-          const title = video?.title ?? videoId;
-
-          this.patch({
-            currentVideoTitle: title,
-            currentVideoId: videoId,
-            currentVideo: video
-              ? { cover: video.cover, title: video.title, author: video.author, duration: video.duration }
-              : null,
-            videoProgress: 0,
-            videoStage: 'start',
-          });
-
-          try {
-            const response = await this.adapter.transcribe(videoId, title, () =>
-              this.patch({ videoStage: 'indexing', videoProgress: 100 }),
-            );
-
-            if (response.success) {
-              if (response.data.source === 'official') stats.cc++;
-              else stats.asr++;
-              stats.remaining = Math.max(0, stats.remaining - 1);
-              this.patchStats({ ...stats });
-
-              const delayMs = response.data.source === 'official'
-                ? randomDelay(5, 10)
-                : randomDelay(10, 15);
-              await this.waitWithCountdown(delayMs, 'waiting', signal);
-            } else {
-              const errorCode = response.error.code;
-
-              if (await this.pauseForQuota(response.error)) return;
-
-              if (errorCode === 'ASR_RATE_LIMIT') {
-                const retryDelayMs = (response.error.retryAfter ?? DEFAULT_RATE_LIMIT_PAUSE_SECONDS) * 1000;
-                await this.waitWithCountdown(retryDelayMs, 'paused', signal);
-                const retryRes = await this.adapter.transcribe(videoId, title, () =>
-                  this.patch({ videoStage: 'indexing', videoProgress: 100 }),
-                );
-                if (retryRes.success) {
-                  if (retryRes.data.source === 'official') stats.cc++;
-                  else stats.asr++;
-                } else {
-                  if (await this.pauseForQuota(retryRes.error)) return;
-                  stats.skipped++;
-                }
-              } else if (errorCode === 'ASR_INVALID_KEY' && !hasAsrKey) {
-                stats.skipped++;
-              } else {
-                stats.skipped++;
-                await this.adapter.markError(videoId);
-              }
-
-              stats.remaining = Math.max(0, stats.remaining - 1);
-              this.patchStats({ ...stats });
-
-              await this.waitWithCountdown(3000, 'waiting', signal);
-            }
-          } catch {
-            stats.skipped++;
-            stats.remaining = Math.max(0, stats.remaining - 1);
-            this.patchStats({ ...stats });
-          }
-        }
-
-        if (page < totalPages) {
-          await this.waitWithCountdown(randomDelay(5, 10), 'waiting', signal);
-        }
-      }
-
-      stats.remaining = 0;
-      this.patchStats({ ...stats });
-      this.patch({
-        phase: 'done',
-        currentVideoTitle: '',
-        currentVideoId: '',
-        currentVideo: null,
-        videoProgress: 0,
-        videoStage: '',
-      });
-    } catch (err) {
-      if ((err as Error)?.name === 'AbortError' || signal.aborted) {
-        this.patch({ phase: 'cancelled' });
-      } else {
-        console.error('[auto-transcribe] Pipeline error:', err);
-        this.patch({ phase: 'cancelled' });
-      }
-    } finally {
-      this.running = false;
-      this.ac = null;
-      this.uninstallStatusListener();
+    if (resetAt !== null) {
+      await this.waitForQuotaReset(resetAt, signal);
+      await this.clearQuotaPause();
+      return true;
     }
+    if (waitSeconds > 0) {
+      await this.waitWithCountdown(waitSeconds * 1000, 'quota_paused', signal);
+      this.patch({ quotaResetAt: null, waitSeconds: 0 });
+      return true;
+    }
+    return false;
   }
+
 }
