@@ -116,6 +116,7 @@ describe('embedText / embedTexts providerOptions passthrough', () => {
       model: fakeModel,
       value: 'hello',
       providerOptions: { openai: { dimensions: 1024 } },
+      abortSignal: expect.any(AbortSignal),
     });
   });
 
@@ -125,6 +126,7 @@ describe('embedText / embedTexts providerOptions passthrough', () => {
       model: fakeModel,
       value: 'hello',
       providerOptions: undefined,
+      abortSignal: expect.any(AbortSignal),
     });
   });
 
@@ -134,7 +136,37 @@ describe('embedText / embedTexts providerOptions passthrough', () => {
       model: fakeModel,
       values: ['a', 'b'],
       providerOptions: { zhipu: { dimensions: 512 } },
+      maxParallelCalls: 1,
+      abortSignal: expect.any(AbortSignal),
     });
+  });
+
+  it('bounds embedMany concurrency and aborts a provider call after the deadline', async () => {
+    const controller = new AbortController();
+    const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(controller.signal);
+    vi.mocked(embedMany).mockImplementationOnce(
+      ({ abortSignal }: { abortSignal?: AbortSignal }) =>
+        new Promise((_, reject) => {
+          abortSignal?.addEventListener('abort', () => reject(abortSignal.reason), {
+            once: true,
+          });
+        }),
+    );
+
+    try {
+      const result = embedTexts(fakeModel, ['stuck'], { providerId: 'openai' });
+      await Promise.resolve();
+      const request = vi.mocked(embedMany).mock.calls[0][0];
+
+      expect(request.maxParallelCalls).toBe(1);
+      expect(request.abortSignal).toBeInstanceOf(AbortSignal);
+      expect(timeout).toHaveBeenCalledWith(60_000);
+
+      controller.abort(new DOMException('The operation timed out', 'TimeoutError'));
+      await expect(result).rejects.toMatchObject({ name: 'TimeoutError' });
+    } finally {
+      timeout.mockRestore();
+    }
   });
 
   it('embedTexts with options but no dimensions sends no providerOptions', async () => {
@@ -143,6 +175,8 @@ describe('embedText / embedTexts providerOptions passthrough', () => {
       model: fakeModel,
       values: ['a'],
       providerOptions: undefined,
+      maxParallelCalls: 1,
+      abortSignal: expect.any(AbortSignal),
     });
   });
 

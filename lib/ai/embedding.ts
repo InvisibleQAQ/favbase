@@ -5,6 +5,8 @@ import { embed, embedMany, type EmbeddingModel } from 'ai';
 import type { EmbeddingProviderId, SdkType } from '@/lib/providers';
 import { getEmbeddingProviderDef } from '@/lib/providers';
 
+const EMBEDDING_REQUEST_TIMEOUT_MS = 60_000;
+
 // NOTE: There is no canonical embedding dimension anymore. The
 // `item_chunks.embedding` column follows the active model — the vector store
 // (`lib/embedding/vector-store.ts`) lazily re-dimensions the column when a new
@@ -136,7 +138,12 @@ export async function embedText(
   const providerOptions = options
     ? embeddingProviderOptions(options.providerId, options.dimensions)
     : undefined;
-  const { embedding } = await embed({ model, value: text, providerOptions });
+  const { embedding } = await embed({
+    model,
+    value: text,
+    providerOptions,
+    abortSignal: AbortSignal.timeout(EMBEDDING_REQUEST_TIMEOUT_MS),
+  });
   return embedding;
 }
 
@@ -150,7 +157,13 @@ export async function embedTexts(
   const providerOptions = options
     ? embeddingProviderOptions(options.providerId, options.dimensions)
     : undefined;
-  const { embeddings } = await embedMany({ model, values: texts, providerOptions });
+  const { embeddings } = await embedMany({
+    model,
+    values: texts,
+    providerOptions,
+    maxParallelCalls: 1,
+    abortSignal: AbortSignal.timeout(EMBEDDING_REQUEST_TIMEOUT_MS),
+  });
   return embeddings;
 }
 

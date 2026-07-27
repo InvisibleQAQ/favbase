@@ -28,6 +28,8 @@ pgvector 向量存储 + 语义检索 + 配置解析 + RAG 数据准备（chunker
 
 ## 约定
 
+- Provider 并发：所有 indexing / backlog / rebuild 经 `embedChunks` 的模块级 FIFO，全 app.html 最多一个远程 embedding 请求 in-flight；成功与失败都必须释放下一请求。请求 deadline 归 `lib/ai/embedding.ts`。
+
 - 两层解耦：chunker 选择是平台/内容类型知识；collection ingest 与 delayed content replacement 将 `ChunkInput[]` 交给 durable persistence seam。需要组合“落 chunk 后立即嵌入”的旧路径仍可用 `indexItemChunks`。Bilibili 在 app.html 编排层通过 `(platform, platformItemId)` 调 `embedPlatformItem`，不接触 DB uuid；文本类平台继续复用 `charSplit`
 - 失败策略：chunk 必做（本地零成本），embed 尽力而为（未启用/失败停 'chunked'，转录路径 `embedPlatformItem` 仍只 console 记录不影响转录成功状态）；六平台 app 层的共享串行 Embed lane 输入 = 平台 `'chunked'` 积压（`embedPlatformBacklog`：单条失败继续 + `{done,total,failed}` + cooperative pause + 收尾 failed>0 抛错 → job 显示 failed），同步收尾恒派发故积压自动重试；设置页「重建向量」（`rebuildPendingEmbeddings`，全平台、失败即停 + 幂等续跑）为手动兜底
 - 维度惰性自适应（原"1536 锁"已移除）：列维度跟随当前模型——upsert 发现 batch 维度 ≠ 列维度时自动 re-dimension（旧向量清空 + 'embedded' 回退 'chunked'，换模型本就要全量重算，旧向量对新模型无意义）。任意 ≤2000 维 provider（gemini 768 / bge-m3 1024 / openai 1536 等）均可落库；>2000（如 text-embedding-3-large 3072 未裁剪）抛 `EmbeddingDimensionLimitError` 被 indexing catch 停 'chunked'——此时可在设置页配 `dimensions` 裁剪（config.ts `dimensions` + `lib/ai` `embeddingProviderOptions` 透传，openai v3 系 / gemini / 部分 openai-compatible 端点支持）。`testEmbeddingConnection` 带配置的 dimensions 探针，返回真实维度供 UI 对照 2000 上限展示成功/错误。Drizzle schema `{ dimensions: 1536 }` 是名义值（只喂 drizzle-kit，本项目不用），真相在 pg catalog
