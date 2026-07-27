@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-3.md`
-- **Total Sessions**: 132
-- **Last Active**: 2026-07-22
+- **Total Sessions**: 160
+- **Last Active**: 2026-07-27
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-3.md` | ~436 | Active |
+| `journal-3.md` | ~1442 | Active |
 | `journal-2.md` | ~1993 | Archived |
 | `journal-1.md` | ~1976 | Archived |
 <!-- @@@/auto:active-documents -->
@@ -31,6 +31,34 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 160 | 2026-07-27 | Bilibili streaming processing | `1906a02`, `75e018d`, `81fa054` | `main` |
+| 159 | 2026-07-26 | fix(embedding): ghost chunked elimination + backlog embed lane | `ec588b5` | `main` |
+| 158 | 2026-07-26 | Platform Request 外链入口（nav 叶子 + welcome 尾节） | `99526f5` | `main` |
+| 157 | 2026-07-26 | Chat 会话历史迁入 PGlite 持久化 | `74e01c6` | `main` |
+| 156 | 2026-07-26 | 工具栏任务 badge（app 写 / SW 清道夫擦） | `4eef3a6` | `main` |
+| 155 | 2026-07-26 | chat 页面 UI 优化：响应式会话列表 + logo + 回车发送 | `e5f5234` | `main` |
+| 154 | 2026-07-26 | bilibili 转录全夹自动接续（对齐 bookmarks 提取） | `2466feb` | `main` |
+| 153 | 2026-07-27 | 统一六平台获取按钮 + 知识库构建闸门（born-paused） | `5686571`, `4eee9c5`, `8afa71d`, `530909a` | `main` |
+| 152 | 2026-07-26 | 统一后台任务提醒的 sync 文案为「获取」 | `adad77a` | `main` |
+| 151 | 2026-07-26 | 首装引导页 welcome.html（滚动叙事 + 平台多选 → app.html） | `421568a` | `feat/welcome-onboarding` |
+| 150 | 2026-07-26 | WebDAV 配置同步第一期提交并合进 main | `0dec527` | `feat/welcome-onboarding` |
+| 149 | 2026-07-26 | settings 页给账号连接/通用/存储各加左侧二级 rail | `60ae343` | `main` |
+| 148 | 2026-07-26 | Pause ASR on Groq quota exhaustion | `67ae02d` | `main` |
+| 147 | 2026-07-26 | Chat Agentic RAG 知识库助手（app.html，只读 PGlite） | `969e04b`, `a76c39e` | `main` |
+| 146 | 2026-07-26 | Obsidian Markdown vault export | `082dc00`, `9bbd707`, `20a9905` | `main` |
+| 145 | 2026-07-26 | bilibili AI summary panel (worktree, rebased onto main) | `48de223` | `main` |
+| 144 | 2026-07-26 | Daily first-open auto-sync for all platforms | `ad65ce7` | `main` |
+| 143 | 2026-07-26 | Collection pipeline progress controls | `881eca9` | `main` |
+| 142 | 2026-07-25 | Compact collection pipeline progress | `5f6b396` | `main` |
+| 141 | 2026-07-25 | Collection analytics dashboard | `cae62a7` | `main` |
+| 140 | 2026-07-24 | Bilibili route sync throttle | `3fa8cd4` | `main` |
+| 139 | 2026-07-24 | Bilibili favorites full and incremental sync | `4a57d15` | `main` |
+| 138 | 2026-07-24 | Fix sidebar Collections navigation | `1e6cdfb` | `main` |
+| 137 | 2026-07-23 | Converge Bilibili ingestion | `d8fb9b3` | `main` |
+| 136 | 2026-07-23 | Unify Collections page structure | `379abb9` | `main` |
+| 135 | 2026-07-23 | Add collection submenu icons | `817dd30` | `main` |
+| 134 | 2026-07-22 | Bilibili embedding and tagging concurrency | `39720bd` | `main` |
+| 133 | 2026-07-22 | Fix Defuddle Illegal invocation | `8bbf85b` | `main` |
 | 132 | 2026-07-22 | Fix bookmark extraction resource-hint leakage | `8f5f308` | `main` |
 | 131 | 2026-07-22 | Collapse secondary collection filters | `6b5740e` | `main` |
 | 130 | 2026-07-22 | Bookmark extraction pause and resume | `c67f2ac` | `main` |
