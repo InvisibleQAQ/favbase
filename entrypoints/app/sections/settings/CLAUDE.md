@@ -25,3 +25,5 @@ app.html 设置页面组件（顶部分段 Tab + 四个 panel：AI 配置/账号
   - `use-embedding-stats.ts` — `useEmbeddingStats() → { stats, refresh }`：挂载加载统计（`initDbProxy()` 幂等 join main.tsx 的 in-flight init + `getEmbeddingStats`，mount cancelled guard），失败 console.error 返回 null；`refresh` 供重建后刷新
   - `use-embedding-rebuild.ts` — `useEmbeddingRebuild({ settings, ensure }) → { isRebuilding, progress, outcome, error, rebuild }`：**rebuild 恒走已保存配置**（`resolveEmbeddingConfig(settings)`，与 indexing 同源），不看未保存 draft：先本地判 `!saved.enabled` → outcome not-configured（不为无法 embed 的 provider 弹授权），再 `ensure(saved.baseUrl)` CORS 授权（deny → `t(permissionErrorKey(reason))`），最后 `initDbProxy()` + `rebuildPendingEmbeddings`（app.html context 直跑循环，失败即停可续跑）
   - `embedding-stats-panel.tsx` — `EmbeddingStatsPanel` 纯展示（全 props 驱动）：向量索引统计两格 + 重建按钮（运行中禁用 + CircularProgress）+ `LinearProgress` + 进度文案 + 结果 Alert 三态（completed/not-configured/error）
+
+Embedding 统计运行时契约：`use-embedding-stats.ts` 订阅 durable `item-content-updated` / `item-embedded` 事件，以 100ms 窗口合并 DB 刷新；不得用临时 job progress 冒充 Indexed Vectors / Total Chunks。

@@ -2,6 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { initDbProxy } from '@/lib/database';
 import { getEmbeddingStats, type EmbeddingStats } from '@/lib/embedding';
+import { onDomainEvent } from '@/lib/events';
+
+const EVENT_REFRESH_DEBOUNCE_MS = 100;
 
 export interface UseEmbeddingStatsReturn {
   stats: EmbeddingStats | null;
@@ -14,6 +17,7 @@ export interface UseEmbeddingStatsReturn {
  */
 export function useEmbeddingStats(): UseEmbeddingStatsReturn {
   const [stats, setStats] = useState<EmbeddingStats | null>(null);
+  const [eventRevision, setEventRevision] = useState(0);
 
   // `initDbProxy()` is idempotent (joins main.tsx's in-flight init), so this
   // waits for DB readiness instead of racing `getDb()` on first paint.
@@ -35,7 +39,26 @@ export function useEmbeddingStats(): UseEmbeddingStatsReturn {
     return () => {
       cancelled = true;
     };
-  }, [fetchStats]);
+  }, [eventRevision, fetchStats]);
+
+  useEffect(() => {
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleRefresh = () => {
+      if (refreshTimer != null) return;
+      refreshTimer = setTimeout(() => {
+        refreshTimer = null;
+        setEventRevision((value) => value + 1);
+      }, EVENT_REFRESH_DEBOUNCE_MS);
+    };
+    const unsubscribers = [
+      onDomainEvent('item-content-updated', scheduleRefresh),
+      onDomainEvent('item-embedded', scheduleRefresh),
+    ];
+    return () => {
+      if (refreshTimer != null) clearTimeout(refreshTimer);
+      unsubscribers.forEach((unsubscribe) => unsubscribe());
+    };
+  }, []);
 
   const refresh = useCallback(async () => {
     const s = await fetchStats();

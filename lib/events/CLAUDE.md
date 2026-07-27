@@ -12,8 +12,8 @@
 | 事件 | payload | 发射点 | 消费者 |
 |------|---------|--------|--------|
 | `item-tagged` | `{ platform, platformItemId }` | `lib/tagging/tagging-service.ts` `tagPlatformItem` 成功落库后 | `useItemTags`/`useUsedTags`/`TaggedItemGrid`（`entrypoints/app/components/tags/`，均按 `e.platform` 过滤） |
-| `item-content-updated` | `{ platform, platformItemId }` | Bilibili durable chunks / Bookmarks settled content state | `useProcessingCoverage` |
-| `item-embedded` | `{ platform, platformItemId }` | 单条/批量 Embedding 成功推进到 embedded 后 | `useProcessingCoverage` |
+| `item-content-updated` | `{ platform, platformItemId }` | Bilibili durable chunks / Bookmarks settled content state | `useProcessingCoverage`, settings `useEmbeddingStats` |
+| `item-embedded` | `{ platform, platformItemId }` | 单条/批量 Embedding 成功推进到 embedded 后 | `useProcessingCoverage`, settings `useEmbeddingStats` |
 
 ## 约定
 
