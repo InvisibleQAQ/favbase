@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-3.md`
-- **Total Sessions**: 163
-- **Last Active**: 2026-07-28
+- **Total Sessions**: 164
+- **Last Active**: 2026-07-29
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-3.md` | ~1547 | Active |
+| `journal-3.md` | ~1596 | Active |
 | `journal-2.md` | ~1993 | Archived |
 | `journal-1.md` | ~1976 | Archived |
 <!-- @@@/auto:active-documents -->
@@ -31,6 +31,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 164 | 2026-07-29 | README redesign and Chinese visual localization | `594ec03` | `main` |
 | 163 | 2026-07-28 | Fix shared PGlite chunk persistence | `6ea9be3` | `main` |
 | 162 | 2026-07-28 | Repair bookmark chunk persistence and embedding completion | `3331a50`, `5e80543` | `main` |
 | 161 | 2026-07-28 | Fix stalled collection embedding pipeline | `7272119` | `main` |

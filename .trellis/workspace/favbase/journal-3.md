@@ -1561,3 +1561,36 @@ Fixed cross-proxy PGlite transaction ownership so chunk writes survive commit, e
 ### Next Steps
 
 - None - task complete
+
+
+## Session 164: README redesign and Chinese visual localization
+
+**Date**: 2026-07-29
+**Task**: README redesign and Chinese visual localization
+**Branch**: `main`
+
+### Summary
+
+Redesigned the bilingual repository README, added English and Simplified Chinese hero/workflow SVG assets, preserved the Favbase mascot, and verified XML safety, responsive rendering, type-check, and the full test suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `594ec03` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
