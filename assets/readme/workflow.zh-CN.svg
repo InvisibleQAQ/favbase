@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" role="img" aria-labelledby="title desc">
+  <title id="title">favbase 如何把收藏内容变成可核对的答案</title>
+  <desc id="desc">三步产品概念流程：汇集六个平台的收藏，在本地进行分块、标签和向量整理，再通过搜索或对话获得可返回原始来源的答案。</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0 0L10 5L0 10Z" fill="#2F7CF6"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="360" rx="20" fill="#F7FAFC"/>
+  <g font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif">
+    <text x="48" y="45" fill="#637381" font-size="18" font-weight="700">产品概念流程</text>
+
+    <g transform="translate(48 76)">
+      <text x="0" y="0" fill="#2F7CF6" font-size="18" font-weight="800">01</text>
+      <text x="0" y="37" fill="#141A21" font-size="30" font-weight="750">汇集收藏</text>
+      <text x="0" y="68" fill="#637381" font-size="20">汇集六个平台的收藏。</text>
+      <g transform="translate(0 96)">
+        <rect width="280" height="102" rx="12" fill="#FFFFFF" stroke="#DFE3E8"/>
+        <g font-size="18" font-weight="700">
+          <circle cx="27" cy="28" r="9" fill="#FB7299"/><text x="43" y="33" fill="#454F5B">Bilibili</text>
+          <circle cx="125" cy="28" r="9" fill="#24292F"/><text x="141" y="33" fill="#454F5B">GitHub</text>
+          <circle cx="27" cy="74" r="9" fill="#2F7CF6"/><text x="43" y="79" fill="#454F5B">浏览器书签</text>
+          <circle cx="152" cy="74" r="9" fill="#141A21"/><text x="168" y="79" fill="#454F5B">X · 知乎 · YouTube</text>
+        </g>
+      </g>
+    </g>
+
+    <path d="M345 190H410" fill="none" stroke="#2F7CF6" stroke-width="3" marker-end="url(#arrow)"/>
+
+    <g transform="translate(438 76)">
+      <text x="0" y="0" fill="#2F7CF6" font-size="18" font-weight="800">02</text>
+      <text x="0" y="37" fill="#141A21" font-size="30" font-weight="750">本地整理</text>
+      <text x="0" y="68" fill="#637381" font-size="20">建立可检索的知识库。</text>
+      <g transform="translate(0 96)">
+        <rect width="288" height="102" rx="12" fill="#FFFFFF" stroke="#DFE3E8"/>
+        <ellipse cx="45" cy="29" rx="25" ry="10" fill="#E8F1FF" stroke="#2F7CF6"/>
+        <path d="M20 29V64C20 70 31 75 45 75S70 70 70 64V29" fill="#E8F1FF" stroke="#2F7CF6"/>
+        <path d="M20 46C20 52 31 57 45 57S70 52 70 46" fill="none" stroke="#2F7CF6"/>
+        <text x="96" y="27" fill="#141A21" font-size="18" font-weight="700">浏览器本地 PGlite</text>
+        <g font-size="18" font-weight="700">
+          <rect x="96" y="42" width="60" height="26" rx="6" fill="#E8F1FF"/><text x="108" y="61" fill="#1E63C8">分块</text>
+          <rect x="164" y="42" width="48" height="26" rx="6" fill="#FFF2B8"/><text x="170" y="61" fill="#704800">标签</text>
+          <rect x="220" y="42" width="58" height="26" rx="6" fill="#FFE7DF"/><text x="231" y="61" fill="#A63A1B">向量</text>
+        </g>
+      </g>
+    </g>
+
+    <path d="M763 190H828" fill="none" stroke="#2F7CF6" stroke-width="3" marker-end="url(#arrow)"/>
+
+    <g transform="translate(856 76)">
+      <text x="0" y="0" fill="#2F7CF6" font-size="18" font-weight="800">03</text>
+      <text x="0" y="37" fill="#141A21" font-size="30" font-weight="750">搜索与提问</text>
+      <text x="0" y="68" fill="#637381" font-size="20">得到可核对的答案。</text>
+      <g transform="translate(0 96)">
+        <rect width="296" height="102" rx="12" fill="#FFFFFF" stroke="#DFE3E8"/>
+        <circle cx="35" cy="31" r="13" fill="none" stroke="#2F7CF6" stroke-width="3"/>
+        <path d="M44 41L54 51" stroke="#2F7CF6" stroke-width="3" stroke-linecap="round"/>
+        <path d="M78 27H262M78 47H220" stroke="#C4CDD5" stroke-width="7" stroke-linecap="round"/>
+        <path d="M22 77H32L38 70L45 79L53 72H62" fill="none" stroke="#F6C33B" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        <text x="78" y="82" fill="#454F5B" font-size="18" font-weight="700">引用答案 → 原始来源</text>
+      </g>
+    </g>
+
+    <text x="600" y="329" text-anchor="middle" fill="#637381" font-size="18">每条检索结果都属于一个收藏项并保留原始 URL，资料库始终可核对。</text>
+  </g>
+</svg>
