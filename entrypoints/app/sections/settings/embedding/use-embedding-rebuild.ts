@@ -61,8 +61,8 @@ export function useEmbeddingRebuild({
         setOutcome({ status: 'not-configured' });
         return;
       }
-      // Same CORS gate as the test-connection button: embeds are fetches from
-      // this page, so the (custom) API origin must be granted first.
+      // Same host-access gate as the test-connection button: verify or restore
+      // the configured API origin before fetching from this page.
       const perm = await ensure(saved.baseUrl);
       if (!perm.ok) {
         setError(t(permissionErrorKey(perm.reason)));

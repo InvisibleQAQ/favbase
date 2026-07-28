@@ -79,7 +79,7 @@ export function WebdavSyncCard() {
       setLocalError(t('settings.sync.err.httpsOnly'));
       return;
     }
-    // Grant the host permission (in this user gesture) before the SW fetches.
+    // Verify or restore required host access before the SW fetches.
     const res = await ensure(url);
     if (!res.ok) {
       setLocalError(t(permissionErrorKey(res.reason)));

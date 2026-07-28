@@ -21,13 +21,13 @@ interface PendingGrant {
 }
 
 /**
- * Bridges the two host-permission primitives with an explanation Dialog.
+ * Bridges host-access preflight/recovery with an explanation Dialog.
  *
- * `ensure` classifies the Base URL first (no prompt). When a custom https
- * origin needs a runtime grant, it opens a friendly Dialog explaining what is
- * being authorized (Bilitato-style copy) and defers the native Chrome prompt to
- * the Dialog's grant button — a fresh user gesture, so `browser.permissions.request`
- * still has transient user activation.
+ * `ensure` classifies the Base URL first (no prompt). When required access to an
+ * https origin was declined or revoked, it opens a friendly Dialog explaining
+ * what is being restored and defers the native Chrome prompt to the Dialog's
+ * grant button — a fresh user gesture, so `browser.permissions.request` still
+ * has transient user activation.
  */
 export function useHostPermission() {
   const { t } = useTranslation();

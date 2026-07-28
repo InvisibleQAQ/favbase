@@ -5,8 +5,9 @@ import type { WebdavConfig } from './types';
  * Thin wrapper over the `webdav` npm package (handles PROPFIND/GET/PUT/MKCOL/
  * DELETE + Basic Auth XML for us). We only add: JSON round-tripping, 404→null,
  * and tolerant recursive directory creation. Cross-origin fetches to the user's
- * server require a runtime host permission granted once in the UI (see
- * lib/permissions) — after that the SW can fetch without a user gesture.
+ * server require effective access from the manifest's required host permission
+ * (see lib/permissions); the UI can restore rejected/revoked HTTPS access before
+ * the SW fetches without a user gesture.
  */
 export class WebdavClient {
   private client: WebDAVClient;

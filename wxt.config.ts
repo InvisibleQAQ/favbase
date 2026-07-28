@@ -15,8 +15,8 @@ function toHostPattern(baseUrl: string): string | null {
 }
 
 // Built-in provider domains, derived from lib/providers.ts (single source of
-// truth) so adding a provider auto-covers its host. Custom domains go through
-// optional_host_permissions + runtime authorization instead.
+// truth) so adding a provider keeps its host contract explicit. Bookmark
+// extraction's required <all_urls> permission currently subsumes these hosts.
 const providerHostPermissions = [
   ...new Set(
     [...LLM_PROVIDERS, ...EMBEDDING_PROVIDERS, ...ASR_PROVIDERS]
@@ -94,9 +94,8 @@ export default defineConfig({
       ...bookmarkContentHostPermissions,
       ...providerHostPermissions,
     ],
-    // Custom (user-entered) API domains are unknown at build time; grant them at
-    // runtime via lib/permissions/host-access.ts (must run in a user gesture).
-    optional_host_permissions: ['https://*/*'],
+    // <all_urls> also covers user-entered API and WebDAV origins. The runtime
+    // helper only checks or restores required host access after rejection/revocation.
     declarative_net_request: {
       rule_resources: [
         { id: 'bilibili_headers', enabled: true, path: 'rules.json' },

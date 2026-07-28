@@ -25,7 +25,7 @@ WebDAV 双向同步领域。**第一期只同步配置**（`UserSettings` + loca
 - **首配时钟从真实编辑时间 seed**（`seedConfigClockIfUnset` 读 `settings.configSavedAt` 最大值，不用 `now`）。让第二台设备首配时倾向 pull 第一台的配置而非覆盖它。
 - **两级闸门**：`isConfigSyncable`（enabled + 凭据）门自动触发（scheduler）；`hasWebdavCredentials`（仅凭据）门手动同步（`doSync`）——`enabled` 只关自动，手动「立即同步」凭据齐全即可。
 - **凭据轻混淆**：`crypto.ts` AES-GCM（固定 key + 随机 IV）只混淆本地存储的 password，**非真加密**（config.json 传上 WebDAV 仍含明文 API Key，E2E 留后期）。解密失败回退当明文。
-- **仅 https**：UI 预检 http → `settings.sync.err.httpsOnly`；`optional_host_permissions` 只有 https，`checkHostPermission` 对 http 判 `unsupported-scheme`。
+- **仅 https**：UI 预检 http → `settings.sync.err.httpsOnly`；静态 `<all_urls>` 正常覆盖 WebDAV origin，`checkHostPermission` 在 HTTPS access 被拒绝/收回时进入恢复流程。
 
 ## 模块
 
@@ -46,7 +46,7 @@ WebDAV 双向同步领域。**第一期只同步配置**（`UserSettings` + loca
 - `entrypoints/background.ts` — `initWebdavSyncScheduler()` + dispatcher `WEBDAV_SYNC_NOW`/`WEBDAV_CLEAR_REMOTE` case。
 - `lib/background/{messages.ts,sync-handlers.ts}` — 两条消息注册 + handler。
 - `lib/storage/keys.ts` — `webdavConfig`/`webdavSyncMeta`/`webdavSyncStatus` key。
-- `wxt.config.ts` — `alarms` 权限（https 任意域名走既有 `optional_host_permissions`）。
+- `wxt.config.ts` — `alarms` + 静态 `<all_urls>` host 权限（覆盖任意 HTTPS WebDAV origin）。
 - `entrypoints/app/sections/settings/webdav-sync-card.tsx` — 设置页存储 tab 的 WebDAV 卡（rail 区段 `webdav`）。
 
 ## 测试

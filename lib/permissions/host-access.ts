@@ -1,10 +1,9 @@
 /**
- * Runtime host permission helper for user-configured API domains.
+ * Host-access preflight and recovery for user-configured API domains.
  *
- * MV3 extension pages can only make cross-origin fetches to hosts covered by
- * `host_permissions` (built-in providers, declared statically) or an optional
- * host permission granted at runtime (custom domains). Any other origin is
- * blocked by CORS. This module bridges that gap for custom Base URLs.
+ * The required `<all_urls>` manifest permission normally covers every HTTP(S)
+ * origin. Users can still decline or revoke required site access, so callers
+ * check the effective grant before fetching and can request missing HTTPS access.
  *
  * `requestHostPermission` MUST run inside a user gesture (a button click) so
  * `browser.permissions.request` has transient user activation.
@@ -35,9 +34,9 @@ export function hostMatchPattern(baseUrl: string): string | null {
 }
 
 /**
- * Classify whether a Base URL's origin is already granted, needs a runtime
- * grant (unknown https origin), or can't be granted. Does NOT prompt — callers
- * show an explanation UI on `needs-grant` before calling `requestHostPermission`.
+ * Classify whether a Base URL's origin is already granted, needs required HTTPS
+ * access restored, or can't be restored here. Does NOT prompt — callers show an
+ * explanation UI on `needs-grant` before calling `requestHostPermission`.
  */
 export async function checkHostPermission(baseUrl: string): Promise<HostPermissionState> {
   const pattern = hostMatchPattern(baseUrl);
@@ -47,7 +46,7 @@ export async function checkHostPermission(baseUrl: string): Promise<HostPermissi
   return { status: 'needs-grant', pattern, origin: new URL(baseUrl).origin };
 }
 
-/** Request a previously-classified origin pattern. MUST run in a user gesture. */
+/** Restore a previously-classified required HTTPS origin. MUST run in a user gesture. */
 export function requestHostPermission(pattern: string): Promise<boolean> {
   return browser.permissions.request({ origins: [pattern] });
 }
