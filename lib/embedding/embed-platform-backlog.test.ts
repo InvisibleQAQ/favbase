@@ -368,14 +368,14 @@ describe('embedPlatformBacklog', () => {
     expect(seen).toEqual(['BV-EVENT']);
   });
 
-  it('returns null instead of reporting success for a chunked item without chunks', async () => {
+  it('rejects a chunked item without chunks instead of reporting job completion', async () => {
     await seedItem({
       platform: 'bookmarks',
       platformItemId: 'https://ghost.example.com/',
       contentState: 'chunked',
     });
     const embed = vi.fn();
-    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     try {
       await expect(
@@ -384,32 +384,53 @@ describe('embedPlatformBacklog', () => {
           getConfig: async () => fakeConfig(true),
           embed,
         }),
-      ).resolves.toBeNull();
+      ).rejects.toThrow('has no durable chunks');
       expect(embed).not.toHaveBeenCalled();
-      expect(infoSpy.mock.calls).toContainEqual([
-        '[embedding:trace]',
-        'single-item:skipped',
-        expect.objectContaining({ phase: 'no-chunks', chunkCount: 0 }),
-      ]);
     } finally {
-      infoSpy.mockRestore();
+      errSpy.mockRestore();
     }
   });
 
-  it('checks for missing chunks before treating disabled embedding as a successful skip', async () => {
+  it('checks for missing chunks before treating disabled embedding as a normal skip', async () => {
     await seedItem({
       platform: 'bookmarks',
       platformItemId: 'https://disabled-ghost.example.com/',
       contentState: 'chunked',
     });
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    await expect(
-      embedPlatformItem('bookmarks', 'https://disabled-ghost.example.com/', {
-        db: () => db,
-        getConfig: async () => fakeConfig(false),
-        embed: vi.fn(),
-      }),
-    ).resolves.toBeNull();
+    try {
+      await expect(
+        embedPlatformItem('bookmarks', 'https://disabled-ghost.example.com/', {
+          db: () => db,
+          getConfig: async () => fakeConfig(false),
+          embed: vi.fn(),
+        }),
+      ).rejects.toThrow('has no durable chunks');
+    } finally {
+      errSpy.mockRestore();
+    }
+  });
+
+  it('rejects an embedded item whose durable chunks are missing', async () => {
+    await seedItem({
+      platform: 'bookmarks',
+      platformItemId: 'https://embedded-ghost.example.com/',
+      contentState: 'embedded',
+    });
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      await expect(
+        embedPlatformItem('bookmarks', 'https://embedded-ghost.example.com/', {
+          db: () => db,
+          getConfig: async () => fakeConfig(true),
+          embed: vi.fn(),
+        }),
+      ).rejects.toThrow('has no durable chunks');
+    } finally {
+      errSpy.mockRestore();
+    }
   });
 
   it('rejects single-item embedding failures instead of reporting chunked success', async () => {
@@ -451,6 +472,79 @@ describe('embedPlatformBacklog', () => {
           embed: vi.fn(),
         }),
       ).rejects.toThrow('database unavailable');
+    } finally {
+      errSpy.mockRestore();
+    }
+  });
+
+  it('propagates single-item embedding persistence failures', async () => {
+    const itemId = await seedItem({
+      platform: 'bookmarks',
+      platformItemId: 'https://persistence-failure.example.com/',
+      contentState: 'chunked',
+      chunkTexts: ['persistence failure content'],
+    });
+    await pg.exec(`
+      CREATE FUNCTION test_fail_embedding_persistence() RETURNS trigger
+      LANGUAGE plpgsql AS $$ BEGIN
+        RAISE EXCEPTION 'forced embedding persistence failure';
+      END $$;
+      CREATE TRIGGER test_fail_embedding_persistence
+      BEFORE UPDATE OF embedding ON item_chunks
+      FOR EACH ROW EXECUTE FUNCTION test_fail_embedding_persistence();
+    `);
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      let persistenceError: unknown;
+      try {
+        await embedPlatformItem('bookmarks', 'https://persistence-failure.example.com/', {
+          db: () => db,
+          getConfig: async () => fakeConfig(true),
+          embed: async (_config, texts) => fakeVectors(texts.length),
+        });
+      } catch (error) {
+        persistenceError = error;
+      }
+      expect(persistenceError).toBeInstanceOf(Error);
+      expect((persistenceError as Error).message).toContain('Failed query');
+      expect((persistenceError as Error & { cause?: Error }).cause?.message)
+        .toContain('forced embedding persistence failure');
+    } finally {
+      errSpy.mockRestore();
+      await pg.exec(`
+        DROP TRIGGER test_fail_embedding_persistence ON item_chunks;
+        DROP FUNCTION test_fail_embedding_persistence();
+      `);
+    }
+
+    expect(await getContentState(itemId)).toBe('chunked');
+    expect(await firstChunkEmbedding(itemId)).toBeNull();
+  });
+
+  it('fails the backlog when chunks disappear after candidate selection', async () => {
+    const itemId = await seedItem({
+      platformItemId: 'lost-before-embed',
+      contentState: 'chunked',
+      chunkTexts: ['present during candidate query'],
+    });
+    const embed = vi.fn();
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      await expect(
+        embedPlatformBacklog(
+          'test',
+          { db: () => db, getConfig: async () => fakeConfig(true), embed },
+          undefined,
+          {
+            checkpoint: async () => {
+              await db.delete(schema.itemChunks).where(eq(schema.itemChunks.itemId, itemId));
+            },
+          },
+        ),
+      ).rejects.toThrow('Embedding failed for 1/1 items');
+      expect(embed).not.toHaveBeenCalled();
     } finally {
       errSpy.mockRestore();
     }

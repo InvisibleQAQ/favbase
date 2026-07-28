@@ -15,11 +15,21 @@ export interface QueryResult<R = unknown> {
   affectedRows?: number;
 }
 
-export type RpcOp = 'health' | 'query' | 'exec' | 'close';
+export type RpcOp =
+  | 'health'
+  | 'query'
+  | 'exec'
+  | 'transaction-begin'
+  | 'transaction-commit'
+  | 'transaction-rollback'
+  | 'close';
 
 export interface RpcRequest {
   id: number;
   op: RpcOp;
+  transactionId?: string;
+  /** Caller timeout expressed in the shared extension-page clock domain. */
+  deadlineAt?: number;
   payload?: unknown;
 }
 

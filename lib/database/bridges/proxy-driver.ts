@@ -75,13 +75,18 @@ export class PGliteSharedProxy implements PGliteLike {
     sql: string,
     params?: unknown[],
     options?: QueryOptions,
+    transactionId?: string,
   ): Promise<QueryResult<R>> {
     const payload: QueryPayload = {
       sql,
       params,
       rowMode: options?.rowMode ?? 'array',
     };
-    const res = await this.call<{ rows: unknown[]; fields?: { name: string; dataTypeID: number }[]; affectedRows?: number }>('query', payload);
+    const res = await this.call<{ rows: unknown[]; fields?: { name: string; dataTypeID: number }[]; affectedRows?: number }>(
+      'query',
+      payload,
+      transactionId,
+    );
     return deserializeQueryResult<R>(res ?? { rows: [] });
   }
 
@@ -93,14 +98,15 @@ export class PGliteSharedProxy implements PGliteLike {
   async transaction<T>(fn: (tx: PGliteLike) => Promise<T>): Promise<T> {
     await this.acquireTxLock();
     try {
-      await this.rawQuery('BEGIN');
+      const transactionId = globalThis.crypto.randomUUID();
       try {
-        const out = await fn(this.createTxClient());
-        await this.rawQuery('COMMIT');
+        await this.call('transaction-begin', undefined, transactionId);
+        const out = await fn(this.createTxClient(transactionId));
+        await this.call('transaction-commit', undefined, transactionId);
         return out;
       } catch (err) {
         try {
-          await this.rawQuery('ROLLBACK');
+          await this.call('transaction-rollback', undefined, transactionId);
         } catch { /* swallow rollback error */ }
         throw err;
       }
@@ -109,12 +115,15 @@ export class PGliteSharedProxy implements PGliteLike {
     }
   }
 
-  private createTxClient(): PGliteLike {
+  private createTxClient(transactionId: string): PGliteLike {
     return {
       query: <R>(sql: string, params?: unknown[], options?: QueryOptions) =>
-        this.rawQuery<R>(sql, params, options),
-      exec: async (sql: string) => { await this.call('exec', { sql }); },
-      transaction: async <T>(fn: (tx: PGliteLike) => Promise<T>) => fn(this.createTxClient()),
+        this.rawQuery<R>(sql, params, options, transactionId),
+      exec: async (sql: string) => {
+        await this.call('exec', { sql }, transactionId);
+      },
+      transaction: async <T>(fn: (tx: PGliteLike) => Promise<T>) =>
+        fn(this.createTxClient(transactionId)),
       waitReady: Promise.resolve(),
       close: () => Promise.resolve(),
     };
@@ -134,7 +143,7 @@ export class PGliteSharedProxy implements PGliteLike {
     await this.call('health');
   }
 
-  private call<T>(op: RpcOp, payload?: unknown): Promise<T> {
+  private call<T>(op: RpcOp, payload?: unknown, transactionId?: string): Promise<T> {
     const id = this.nextId();
     return new Promise<T>((resolve, reject) => {
       const waiter: PendingRequest = {
@@ -146,7 +155,13 @@ export class PGliteSharedProxy implements PGliteLike {
         reject(new Error(`RPC timeout (${op}, ${RPC_TIMEOUT_MS}ms)`));
       }, RPC_TIMEOUT_MS);
       this.pending.set(id, waiter);
-      this.transport.post({ id, op, payload: serializeForRpc(payload) });
+      this.transport.post({
+        id,
+        op,
+        transactionId,
+        deadlineAt: Date.now() + RPC_TIMEOUT_MS,
+        payload: serializeForRpc(payload),
+      });
     });
   }
 

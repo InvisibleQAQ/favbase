@@ -21,11 +21,11 @@ const { items, itemChunks } = schema;
  * content types — it consumes `ChunkInput[]` produced by whatever chunker the
  * platform service chose (subtitle rows today, article text tomorrow).
  *
- * Policy: chunking is free and always persisted ('chunked'); the combined
- * `indexItemChunks` compatibility path keeps embedding best-effort. The
- * platform-addressed job path rejects failures so its scheduler stays
- * truthful. Dimension changes across model switches are handled inside `upsertChunkEmbeddings`
- * (lazy column re-dimensioning), not here.
+ * Policy: chunking is free and always persisted ('chunked'). The compatibility
+ * `indexItemChunks` path keeps embedding best-effort and stays 'chunked' on
+ * Provider/persistence failure; job-owned `embedPlatformItem` instead requires
+ * durable chunks and propagates operational failures. Dimension changes across
+ * model switches live in `upsertChunkEmbeddings` (lazy column re-dimensioning).
  */
 
 export type IndexedContentState = 'chunked' | 'embedded';
@@ -239,8 +239,8 @@ export async function indexItemChunks(
 
 /**
  * Single-item embedding addressed by platform identity. The item must already
- * be at the durable `chunked` seam; missing chunks return null, while DB or
- * Provider failures reject so job owners cannot report false completion.
+ * be at the durable `chunked` seam; missing chunks and operational failures
+ * reject so the owning Pipeline Run cannot report a false completion.
  */
 export async function embedPlatformItem(
   platform: string,
@@ -295,15 +295,7 @@ export async function embedPlatformItem(
 
     const target = targets[0];
     diagnostic = { ...diagnostic, itemId: target.id };
-    if (target.contentState === 'embedded') {
-      embeddingTrace('single-item:completed', {
-        ...diagnostic,
-        phase: 'already-embedded',
-        elapsedMs: Date.now() - startedAt,
-      });
-      return 'embedded';
-    }
-    if (target.contentState !== 'chunked') {
+    if (target.contentState !== 'chunked' && target.contentState !== 'embedded') {
       embeddingTrace('single-item:completed', {
         ...diagnostic,
         phase: 'not-chunked',
@@ -332,12 +324,18 @@ export async function embedPlatformItem(
       elapsedMs: Date.now() - startedAt,
     });
     if (chunks.length === 0) {
-      embeddingTrace('single-item:skipped', {
+      throw new Error(
+        `Collection Item ${platform}:${platformItemId} has no durable chunks; ` +
+          'content persistence must be repaired before Embedding.',
+      );
+    }
+    if (target.contentState === 'embedded') {
+      embeddingTrace('single-item:completed', {
         ...contentDetails,
-        phase: 'no-chunks',
+        phase: 'already-embedded',
         elapsedMs: Date.now() - startedAt,
       });
-      return null;
+      return 'embedded';
     }
 
     phase = 'config';
@@ -363,7 +361,6 @@ export async function embedPlatformItem(
       });
       return 'chunked';
     }
-
     phase = 'embedding';
     await embedChunks(db, target.id, chunks, config, embed, diagnostic);
     emitDomainEvent('item-embedded', { platform, platformItemId });
@@ -666,16 +663,20 @@ export async function embedPlatformBacklog(
         phase: 'chunks',
         elapsedMs: Date.now() - itemStartedAt,
       });
-      // Race guard: chunks may have been replaced/cleared since the backlog
-      // query — an item without chunks must not become 'embedded'.
-      if (chunks.length > 0) {
-        itemPhase = 'embedding';
-        await embedChunks(db, itemId, chunks, config, embed, itemDiagnostic);
-        emitDomainEvent('item-embedded', { platform, platformItemId });
+      // The candidate query proved chunks existed. Losing them before this read
+      // is a persistence invariant breach, not a successful no-op.
+      if (chunks.length === 0) {
+        throw new Error(
+          `Collection Item ${platform}:${platformItemId} lost its durable chunks ` +
+            'before Embedding.',
+        );
       }
+      itemPhase = 'embedding';
+      await embedChunks(db, itemId, chunks, config, embed, itemDiagnostic);
+      emitDomainEvent('item-embedded', { platform, platformItemId });
       embeddingTrace('item:completed', {
         ...contentDetails,
-        phase: chunks.length > 0 ? 'embedded' : 'no-chunks',
+        phase: 'embedded',
         elapsedMs: Date.now() - itemStartedAt,
       });
     } catch (err) {

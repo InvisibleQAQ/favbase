@@ -36,7 +36,7 @@ export async function replaceItemChunks(
     await tx.delete(itemChunks).where(eq(itemChunks.itemId, itemId));
     if (chunks.length === 0) return [];
 
-    return tx
+    const inserted = await tx
       .insert(itemChunks)
       .values(
         chunks.map((chunk, i) => ({
@@ -52,6 +52,13 @@ export async function replaceItemChunks(
         chunkIndex: itemChunks.chunkIndex,
         chunkText: itemChunks.chunkText,
       });
+    if (inserted.length !== chunks.length) {
+      throw new Error(
+        `Chunk persistence invariant failed for item ${itemId}: ` +
+          `expected ${chunks.length} rows, inserted ${inserted.length}.`,
+      );
+    }
+    return inserted;
   });
 }
 

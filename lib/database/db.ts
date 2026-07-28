@@ -27,7 +27,7 @@ export async function initDbMain(): Promise<FavbaseDb> {
     try {
       const pg = await PGlite.create(DB_DATA_DIR, {
         extensions: { vector, uuid_ossp, pg_trgm },
-        relaxedDurability: true,
+        relaxedDurability: false,
       });
       pgliteInstance = pg;
 
@@ -38,7 +38,7 @@ export async function initDbMain(): Promise<FavbaseDb> {
       dbInstance = drizzle({ client: pg, schema });
       return dbInstance;
     } catch (err) {
-      handler.stop();
+      await handler.stop();
       throw err;
     }
   })();
@@ -80,7 +80,7 @@ export function getPGlite(): PGlite {
 
 export async function closeDb(): Promise<void> {
   if (pgliteInstance) {
-    DatabaseRpcHandler.getInstance().stop();
+    await DatabaseRpcHandler.getInstance().stop();
     await pgliteInstance.close();
     pgliteInstance = null;
   }

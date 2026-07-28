@@ -245,7 +245,7 @@ describe('bookmark-content-service (in-memory PGlite)', () => {
     expect(second).toEqual({ processed: 0, chunkedItemIds: [], noContent: 0, transient: 0 });
   });
 
-  it('does not publish chunked work when chunk insertion persists zero rows', async () => {
+  it('rejects a zero-row chunk insert and recovers from stored content on retry', async () => {
     const url = 'https://zero-chunks.example.com/post';
     await syncBookmarkTreeToDb(db, tree([bm(url)]));
     await pg.exec(`
@@ -257,7 +257,7 @@ describe('bookmark-content-service (in-memory PGlite)', () => {
     `);
 
     const extracted: string[] = [];
-    const result = await (async () => {
+    const first = await (async () => {
       try {
         return await extractPendingBookmarks({
           db,
@@ -274,10 +274,18 @@ describe('bookmark-content-service (in-memory PGlite)', () => {
     })();
 
     const item = await getItem(url);
-    expect(result).toEqual({ processed: 1, chunkedItemIds: [], noContent: 1, transient: 0 });
+    expect(first).toEqual({ processed: 1, chunkedItemIds: [], noContent: 0, transient: 1 });
     expect(extracted).toEqual([]);
-    expect(item.contentState).toBe('no_content');
+    expect(item.contentState).toBe('pending');
+    expect(await getContent(item.id)).toBeDefined();
     expect(await getChunks(item.id)).toEqual([]);
+
+    const fetchPage = vi.fn<BookmarkPageFetcher>();
+    const second = await extractPendingBookmarks({ db, delayMs: 0, fetchPage });
+    expect(fetchPage).not.toHaveBeenCalled();
+    expect(second.chunkedItemIds).toEqual([url]);
+    expect((await getItem(url)).contentState).toBe('chunked');
+    expect(await getChunks(item.id)).not.toHaveLength(0);
   });
 
   it('emits item-content-updated after each durable settled state', async () => {
