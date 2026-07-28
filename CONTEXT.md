@@ -70,6 +70,10 @@ _Avoid_: Collection Item, chat log, session cache
 An outbound guidance entry ("请求新平台 / Request a platform") that opens a prefilled new-issue form on the project repository so users can ask for an unsupported platform. It is an action link, not a platform: it never becomes a nav route, never joins the platform registry, and holds no Collection Items.
 _Avoid_: Seventh platform, platform page, feedback page
 
+**Onboarding Platform Preference**:
+The canonical-order subset of supported platforms a user picks during onboarding, used only to place those platforms first in Collection navigation without changing platform availability.
+_Avoid_: Enabled platforms, platform gate, click order
+
 ## Relationships
 
 - The **Dashboard** presents **Collection Analytics**
@@ -91,6 +95,7 @@ _Avoid_: Seventh platform, platform page, feedback page
 - A **Tag Drill-down** leaves the **Dashboard** and opens matching **Collection Items** in the aggregate collection
 - Chat reads **Collection Items** and their derived knowledge as read-only; the only records Chat writes are **Conversations**
 - A **Platform Request** entry may follow the platform list in navigation or onboarding, but is visually marked as an outbound action and never participates in platform aggregation, sync, or active-route highlighting
+- An **Onboarding Platform Preference** prioritizes zero or more supported platform leaves while every unselected platform remains available after them
 
 ## Example dialogue
 
@@ -99,8 +104,12 @@ _Avoid_: Seventh platform, platform page, feedback page
 >
 > **Dev:** "Does Fetch at 100% mean every remote favorite exists locally?"
 > **Domain expert:** "No. It means that **Pipeline Run** finished; remote completeness may still be unknowable."
+>
+> **Dev:** "Does leaving GitHub out of the **Onboarding Platform Preference** disable GitHub Stars?"
+> **Domain expert:** "No. GitHub Stars stays available; selected platforms only move ahead of it in Collection navigation."
 
 ## Flagged ambiguities
 
 - "Progress" previously meant both a live **Pipeline Run** and idle **Processing Coverage**; these are now distinct, although a platform Collection page may combine them in one compact control.
 - External platforms do not expose a durable remote-total snapshot, so **Processing Coverage** must not be described as remote sync completeness.
+- "Selected platform" in onboarding previously sounded like an availability gate; it is now defined as an **Onboarding Platform Preference**, never a platform enablement setting.

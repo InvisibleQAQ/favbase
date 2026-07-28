@@ -17,7 +17,7 @@ import { useJobsBadge } from '../../hooks/use-jobs-badge';
 import { BackgroundJobsIndicator } from './background-jobs-indicator';
 import { layoutClasses } from '../core/classes';
 import { dashboardLayoutVars } from './css-vars';
-import { navData } from '../nav-config';
+import type { NavItem } from '../nav-config';
 import { MainSection } from '../core/main-section';
 import { HeaderSection } from '../core/header-section';
 import { LayoutSection } from '../core/layout-section';
@@ -28,12 +28,14 @@ type LayoutBaseProps = Pick<LayoutSectionProps, 'sx' | 'children' | 'cssVars'>;
 
 export type DashboardLayoutProps = LayoutBaseProps & {
   layoutQuery?: Breakpoint;
+  navigation: NavItem[];
 };
 
 export function DashboardLayout({
   sx,
   cssVars,
   children,
+  navigation,
   layoutQuery = 'md',
 }: DashboardLayoutProps) {
   const theme = useTheme();
@@ -106,9 +108,9 @@ export function DashboardLayout({
       headerSection={renderHeader()}
       sidebarSection={
         <>
-          <NavDesktop data={navData} layoutQuery={layoutQuery} pinned={pinned} />
+          <NavDesktop data={navigation} layoutQuery={layoutQuery} pinned={pinned} />
           <NavMobile
-            data={navData}
+            data={navigation}
             open={mobileOpen}
             onClose={() => setMobileOpen(false)}
           />

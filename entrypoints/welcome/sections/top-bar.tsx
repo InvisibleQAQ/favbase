@@ -1,17 +1,15 @@
 import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
 import Container from '@mui/material/Container';
 import Typography from '@mui/material/Typography';
 import { varAlpha } from 'minimal-shared/utils';
 
 import { useTranslation } from '@/lib/i18n/use-translation';
-import { Iconify } from '@/entrypoints/app/components/iconify';
 // Theme switch + language menu + repo link, verbatim from the dashboard header.
 import { HeaderActions } from '@/entrypoints/app/layouts/dashboard/header-actions';
 
 export const TOP_BAR_HEIGHT = 64;
 
-export function TopBar({ onSkip }: { onSkip: () => void }) {
+export function TopBar() {
   const { t } = useTranslation();
 
   return (
@@ -61,16 +59,6 @@ export function TopBar({ onSkip }: { onSkip: () => void }) {
         <Box sx={{ flex: 1 }} />
 
         <HeaderActions />
-
-        <Button
-          color="inherit"
-          size="small"
-          onClick={onSkip}
-          endIcon={<Iconify icon="eva:arrow-ios-forward-fill" width={16} />}
-          sx={{ color: 'text.secondary', flexShrink: 0 }}
-        >
-          {t('welcome.skip')}
-        </Button>
       </Container>
     </Box>
   );

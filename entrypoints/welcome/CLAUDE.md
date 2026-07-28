@@ -6,11 +6,13 @@
 
 - **触发**：`entrypoints/background.ts` 的 `onInstalled` 在 `details.reason === 'install'` 时调 `openWelcomePage()`（`lib/background/app-handlers.ts`）。**真正的闸门是 `onboardingStorage`**，不是 reason——unpacked 扩展每次 reload 都报 `'install'`，只看 reason 会在整个开发期反复弹标签页
 - **出口**：`use-onboarding-exit.ts` 的 `exit(picked)` 先写 `onboardingStorage`（`{ completedAt, platforms }`），再 `location.replace(app.html + landingHash)`。用 `replace` 而非 `assign`：复用当前标签页且把 welcome 从 history 抹掉，返回键不会把用户重新拽回引导
-- 顶栏「跳过引导」= `exit([])`——**同样写记录**，所以跳过后不会再弹
+- **没有独立跳过入口**：用户从平台选择区进入 app；零选择仍允许提交 `exit([])`，写完成记录并落到 Dashboard
 
 ## 平台选择的语义（重要）
 
-`local:onboarding` 的 `platforms` **纯信息性，不做任何 gating**：六平台在 app.html 里始终可见可用，nav / `/collections` 聚合页 / `useDailyAutoSync` 一律不读它。选择只决定 CTA 落在哪个路由，规则在 `landing.ts`（纯函数 + `landing.test.ts`）：
+`local:onboarding` 的 `platforms` 是 **Onboarding Platform Preference**（领域定义见根 `CONTEXT.md`），**只影响落地路由与 Collections 子叶优先级，不做任何 gating**：所有平台始终可见可用，`/collections` 聚合与 `useDailyAutoSync` 不读它。`app.html` 在首次 render 前由 `load-navigation.ts` 读取一次，`nav-config.tsx#createNavData` 按 registry 稳定分区为「选中在前、未选在后」，两组内部都保持 registry 顺序；不 watch、不修改全局 registry。
+
+CTA 落地规则在 `landing.ts`（纯函数 + `landing.test.ts`）：
 
 - `normalizePicks` — 去重 + 排成 registry 顺序（点击顺序是噪声）
 - `needsCredentials(platform)` — `github`/`youtube` 需要 token/key，其余靠浏览器登录态或本地读取
@@ -38,7 +40,7 @@
 
 ### sections/
 
-- `top-bar.tsx` — 固定顶栏：图标 + wordmark + tagline，右侧**直接复用 dashboard 的 `HeaderActions`**（主题开关 / 语言菜单 / 仓库链接，零复制）+ 跳过按钮。导出 `TOP_BAR_HEIGHT` 供 Hero 留白
+- `top-bar.tsx` — 固定顶栏：图标 + wordmark + tagline，右侧**直接复用 dashboard 的 `HeaderActions`**（主题开关 / 语言菜单 / 仓库链接，零复制）。无跳过按钮；导出 `TOP_BAR_HEIGHT` 供 Hero 留白
 - `hero.tsx` — 100vh 首屏：aurora 双色斑（motion 慢漂）+ 文案 stagger + `OrbitCore` + 滚动提示。两个 CTA 是纯 `href="#welcome-picker"` / `"#welcome-flow"` 锚点（本页无 router，交给 CSS 平滑滚动）。标题是全页**唯一的 h1**：外层 `Box component="h1"`，两行各自 `FadeIn component="span"`（reveal mask）包 `Headline component="span"`——渐变留在每行，挂到 h1 上会横跨两行改变观感，且 background-clip:text 在 transformed 子元素上有渲染 glitch
 - `capability-marquee.tsx` — 双行反向 pill 跑马灯，**由页面滚动驱动**（`useScroll` + `useTransform`）而非 CSS 无限循环：读者停下它就停，不跟正文抢注意力。行内容三倍复制保证两端不露白，两侧 `maskImage` 渐隐。`useReducedMotion()` 为真时不绑 `style={{x}}`，pill 行静止
 - `how-it-works.tsx` — 三步 sticky 叠卡。`useScroll` 测整栈进度，每张卡 `1 - (total-1-index) * 0.04` 目标缩放做景深；卡内右侧 `StepGlyph`（rows / grid / bubble 三种抽象装饰）。sticky 在 `md+` 生效，窄屏退化为普通堆叠；reduce-motion 时不绑 `style={{scale}}`，卡片全尺寸堆叠

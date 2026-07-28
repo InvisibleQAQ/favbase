@@ -43,7 +43,7 @@ export async function handleOpenAppPage(msg: OpenAppPageRequest): Promise<void> 
  * `onInstalled` reports reason 'install' for a fresh install *and* for every
  * reload of an unpacked extension, so the reason alone would re-open the tab
  * all through development. The onboarding record is the real gate: once the
- * user has entered favbase or skipped the flow, this becomes a no-op.
+ * user has completed the flow, with or without picks, this becomes a no-op.
  */
 export async function openWelcomePage(): Promise<void> {
   if (await onboardingStorage.getValue()) return;

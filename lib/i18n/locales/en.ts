@@ -560,7 +560,6 @@ const en: Record<LocaleKeys, string> = {
 
   // Welcome / first-run onboarding (welcome.html)
   'welcome.brandTagline': 'A local-first knowledge base for your favorites',
-  'welcome.skip': 'Skip intro',
   'welcome.scrollHint': 'Scroll',
 
   'welcome.hero.eyebrow': 'Browser extension · nothing leaves this machine',

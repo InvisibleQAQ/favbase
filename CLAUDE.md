@@ -64,7 +64,7 @@ WXT 入口点及运行时角色总览，详细结构见对应目录 `CLAUDE.md`�
 - `entrypoints/app/sections/chat/CLAUDE.md` — Chat 一级页面（Agentic RAG 知识库助手，只读 PGlite）：多步 tool-calling agent + 流式回答 + hybrid 检索 + 可点来源卡片 + 工具四态 + 多会话持久化（WXT storage）+ markdown 渲染
 
 ### 首装引导页（welcome.html）
-- `entrypoints/welcome/CLAUDE.md` — 安装触发与 onboarding 闸门、平台选择只做落地路由不做 gating、motion 动画原语（MotionBox/FadeIn/AnimatedText/Magnet/OrbitCore）与六个段落
+- `entrypoints/welcome/CLAUDE.md` — 安装触发与 onboarding 闸门、平台选择驱动落地路由与侧栏优先级但不做 gating、motion 动画原语（MotionBox/FadeIn/AnimatedText/Magnet/OrbitCore）与六个段落
 
 ### B站视频页 Content Script
 - `entrypoints/bilibili-video.content/CLAUDE.md` — 右侧栏面板 UI 挂载 + Shadow DOM 约定

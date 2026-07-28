@@ -69,7 +69,7 @@ describe('openWelcomePage', () => {
   // The gate that matters: reloading an unpacked extension also reports
   // onInstalled reason 'install', so without this check the tab would reappear
   // on every dev reload.
-  it('is a no-op once the flow was completed or skipped', async () => {
+  it('is a no-op once the flow was completed', async () => {
     await onboardingStorage.setValue({ completedAt: 1, platforms: [] });
     const { tabs } = stubBrowser();
 
@@ -79,7 +79,7 @@ describe('openWelcomePage', () => {
     expect(tabs.create).not.toHaveBeenCalled();
   });
 
-  it('treats a skip (no platforms picked) as completed', async () => {
+  it('treats completion with no platforms picked as completed', async () => {
     await onboardingStorage.setValue({ completedAt: 2, platforms: [] });
     const { tabs } = stubBrowser();
 

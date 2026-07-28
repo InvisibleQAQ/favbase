@@ -14,7 +14,6 @@ import { PlatformPicker } from './sections/platform-picker';
 import { PlatformRequest } from './sections/platform-request';
 import { CapabilityMarquee } from './sections/capability-marquee';
 import { BilibiliShowcase } from './sections/bilibili-showcase';
-import { useOnboardingExit } from './use-onboarding-exit';
 
 /** Hairline reading indicator above the header. */
 function ScrollProgress() {
@@ -37,9 +36,6 @@ function ScrollProgress() {
 }
 
 export function WelcomeView() {
-  // Header "skip" leaves with no picks — the record still gets written, so the
-  // install-time tab does not come back.
-  const { exit } = useOnboardingExit();
   const { locale } = useTranslation();
 
   // Keep <html lang> in step with the live locale (screen readers pick
@@ -53,7 +49,7 @@ export function WelcomeView() {
   return (
     <Box sx={{ position: 'relative', overflowX: 'clip', bgcolor: 'background.default' }}>
       <ScrollProgress />
-      <TopBar onSkip={() => exit([])} />
+      <TopBar />
 
       <Hero />
       <CapabilityMarquee />

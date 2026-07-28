@@ -102,7 +102,7 @@ describe('useOnboardingExit', () => {
     expect(replace).toHaveBeenCalledWith('chrome-extension://fake/app.html#/settings');
   });
 
-  // The header "skip" path: it still writes, so the install-time tab stays gone.
+  // Empty picker submission still writes, so the install-time tab stays gone.
   it('still records a completion when nothing was picked', async () => {
     const hook = renderHook(container);
     root = hook.root;

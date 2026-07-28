@@ -8,6 +8,7 @@ import { varAlpha } from 'minimal-shared/utils';
 
 import { initDbProxy } from '@/lib/database';
 import App from './App';
+import { loadNavigationData } from './load-navigation';
 import { DashboardLayout } from './layouts/dashboard';
 
 // Fire-and-forget: establish DB connection through PortBridge → Offscreen.
@@ -49,39 +50,44 @@ function LoadingFallback() {
   );
 }
 
-const router = createHashRouter([
-  {
-    Component: App,
-    children: [
-      {
-        element: (
-          <DashboardLayout>
-            <Suspense fallback={<LoadingFallback />}>
-              <Outlet />
-            </Suspense>
-          </DashboardLayout>
-        ),
-        children: [
-          { index: true, element: <DashboardPage /> },
-          { path: 'collections', element: <CollectionsPage /> },
-          { path: 'collections/bilibili', element: <BilibiliPage /> },
-          { path: 'collections/bilibili/:mediaId', element: <BilibiliPage /> },
-          { path: 'collections/github', element: <GithubStarsPage /> },
-          { path: 'collections/bookmarks', element: <BookmarksPage /> },
-          { path: 'collections/bookmarks/:folderId', element: <BookmarksPage /> },
-          { path: 'collections/x', element: <XPage /> },
-          { path: 'collections/zhihu', element: <ZhihuPage /> },
-          { path: 'collections/youtube', element: <YoutubePage /> },
-          { path: 'chat', element: <ChatPage /> },
-          { path: 'settings', element: <SettingsPage /> },
-        ],
-      },
-    ],
-  },
-]);
+async function bootstrap() {
+  const navigation = await loadNavigationData();
+  const router = createHashRouter([
+    {
+      Component: App,
+      children: [
+        {
+          element: (
+            <DashboardLayout navigation={navigation}>
+              <Suspense fallback={<LoadingFallback />}>
+                <Outlet />
+              </Suspense>
+            </DashboardLayout>
+          ),
+          children: [
+            { index: true, element: <DashboardPage /> },
+            { path: 'collections', element: <CollectionsPage /> },
+            { path: 'collections/bilibili', element: <BilibiliPage /> },
+            { path: 'collections/bilibili/:mediaId', element: <BilibiliPage /> },
+            { path: 'collections/github', element: <GithubStarsPage /> },
+            { path: 'collections/bookmarks', element: <BookmarksPage /> },
+            { path: 'collections/bookmarks/:folderId', element: <BookmarksPage /> },
+            { path: 'collections/x', element: <XPage /> },
+            { path: 'collections/zhihu', element: <ZhihuPage /> },
+            { path: 'collections/youtube', element: <YoutubePage /> },
+            { path: 'chat', element: <ChatPage /> },
+            { path: 'settings', element: <SettingsPage /> },
+          ],
+        },
+      ],
+    },
+  ]);
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <RouterProvider router={router} />
-  </StrictMode>
-);
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <RouterProvider router={router} />
+    </StrictMode>,
+  );
+}
+
+void bootstrap();

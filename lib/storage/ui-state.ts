@@ -39,17 +39,17 @@ export const xLastSyncStorage = storage.defineItem<XLastSync | null>(
 
 /** Outcome of the first-run welcome flow (welcome.html). */
 export interface OnboardingState {
-  /** Epoch ms the user left welcome.html — either "enter favbase" or "skip". */
+  /** Epoch ms the user left welcome.html, with or without platform picks. */
   completedAt: number;
   /**
-   * Platforms picked in the welcome flow, in registry order. Purely
-   * informational: nothing is gated on it. Every platform stays visible and
-   * usable in app.html regardless — the picks only decide where the CTA lands.
+   * Platforms picked in the welcome flow, in registry order. The app uses this
+   * preference for CTA landing and Collections navigation priority only; every
+   * platform stays visible, usable, and eligible for normal sync behavior.
    */
   platforms: CollectionPlatform[];
 }
 
-// `null` = the welcome flow was never finished nor skipped, which is the gate
+// `null` = the welcome flow was never completed, which is the gate
 // for opening welcome.html on install (reloading an unpacked extension also
 // reports reason 'install', so the reason alone is not a reliable first-run
 // signal). Written once by the welcome page.
