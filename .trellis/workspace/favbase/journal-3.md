@@ -19,7 +19,10 @@ Collapsed the 3rd byte-identical char-soft-split chunker (zhihu/youtube/x) into 
 
 ### Main Changes
 
-(Add details)
+- Revised `README.md` and `README_zh_CN.md` to describe the current source integrations as extensible rather than a fixed six-platform scope.
+- Formalized the product overview and capability descriptions, and documented GitHub Releases as the primary Chromium build download path.
+- Retained source-build instructions as a secondary path and removed obsolete pre-release wording.
+- Added `.env.example` to `.gitignore` to avoid accidentally tracking configuration files containing API-key fields.
 
 ### Git Commits
 
@@ -29,7 +32,9 @@ Collapsed the 3rd byte-identical char-soft-split chunker (zhihu/youtube/x) into 
 
 ### Testing
 
-- [OK] (Add test results)
+- [OK] `pnpm.cmd compile`
+- [OK] `pnpm.cmd test` — 115 test files and 894 tests passed
+- [OK] README acceptance checks and `git diff --check`
 
 ### Status
 
@@ -1582,6 +1587,40 @@ Redesigned the bilingual repository README, added English and Simplified Chinese
 | Hash | Message |
 |------|---------|
 | `594ec03` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 165: Revise bilingual README product messaging
+
+**Date**: 2026-07-29
+**Task**: Revise bilingual README product messaging
+**Branch**: `main`
+
+### Summary
+
+Updated English and Simplified Chinese READMEs to describe current source support as extensible, present GitHub Releases as the primary Chromium build download, retain source-build instructions, and formalize released-product messaging. Added .env.example to .gitignore.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4b35103` | (see git log) |
+| `fb253f1` | (see git log) |
 
 ### Testing
 
