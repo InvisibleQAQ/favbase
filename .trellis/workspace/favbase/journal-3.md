@@ -19,19 +19,7 @@ Collapsed the 3rd byte-identical char-soft-split chunker (zhihu/youtube/x) into 
 
 ### Main Changes
 
-- Reproduced cross-proxy transaction loss with two production RPC proxies over
-  one handler and one real PGlite session: INSERT returning succeeded, a foreign
-  rollback erased the transaction, and the later COMMIT resolved with no rows.
-- Moved transaction ownership into the Offscreen handler with explicit
-  transaction identities, Port ownership, dispatch deadlines, disconnect/stop
-  rollback, and Port-scoped request correlation.
-- Disabled relaxed IndexedDB durability, enforced exact chunk INSERT returning
-  counts, and made missing chunks plus Provider/DB failures reject truthful
-  Embedding jobs.
-- Preserved stored-content Bookmark recovery so existing content-without-chunk
-  rows can be rebuilt locally without refetching.
-- Captured the durable-success and `job:completed` diagnostic contracts in the
-  local Trellis database bridge, processing queue, and cross-layer specs.
+(Add details)
 
 ### Git Commits
 
@@ -41,11 +29,7 @@ Collapsed the 3rd byte-identical char-soft-split chunker (zhihu/youtube/x) into 
 
 ### Testing
 
-- [OK] Focused regression suite: 6 files, 72 tests
-- [OK] Full Vitest suite: 113 files, 888 tests
-- [OK] TypeScript `tsc --noEmit`
-- [OK] Chrome MV3 production build
-- [OK] `git diff --check`
+- [OK] (Add test results)
 
 ### Status
 
@@ -1542,7 +1526,19 @@ Fixed cross-proxy PGlite transaction ownership so chunk writes survive commit, e
 
 ### Main Changes
 
-(Add details)
+- Reproduced cross-proxy transaction loss with two production RPC proxies over
+  one handler and one real PGlite session: INSERT returning succeeded, a foreign
+  rollback erased the transaction, and the later COMMIT resolved with no rows.
+- Moved transaction ownership into the Offscreen handler with explicit
+  transaction identities, Port ownership, dispatch deadlines, disconnect/stop
+  rollback, and Port-scoped request correlation.
+- Disabled relaxed IndexedDB durability, enforced exact chunk INSERT returning
+  counts, and made missing chunks plus Provider/DB failures reject truthful
+  Embedding jobs.
+- Preserved stored-content Bookmark recovery so existing content-without-chunk
+  rows can be rebuilt locally without refetching.
+- Captured the durable-success and `job:completed` diagnostic contracts in the
+  local Trellis database bridge, processing queue, and cross-layer specs.
 
 ### Git Commits
 
@@ -1552,7 +1548,11 @@ Fixed cross-proxy PGlite transaction ownership so chunk writes survive commit, e
 
 ### Testing
 
-- [OK] (Add test results)
+- [OK] Focused regression suite: 6 files, 72 tests
+- [OK] Full Vitest suite: 113 files, 888 tests
+- [OK] TypeScript `tsc --noEmit`
+- [OK] Chrome MV3 production build
+- [OK] `git diff --check`
 
 ### Status
 
