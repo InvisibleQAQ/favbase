@@ -2,21 +2,21 @@
   <strong>English</strong> · <a href="./README_zh_CN.md">简体中文</a>
 </p>
 
-<img src="./assets/readme/hero.svg" alt="favbase brings favorites from Bilibili, GitHub, browser bookmarks, X, Zhihu, and YouTube into one local knowledge base" width="100%">
+<img src="./assets/readme/hero.svg" alt="favbase consolidates saved content from supported sources into a local knowledge base" width="100%">
 
-favbase is a local-first Chromium extension for people whose useful links are scattered across platforms. It collects saved content into a browser-local library, makes it searchable, and lets you ask questions with links back to the originals.
+favbase is a local-first Chromium browser extension that consolidates saved content from multiple sources into a browser-local knowledge base. It provides unified collection management, keyword and semantic search, AI-assisted organization, and question answering with references to the original content.
 
-> [!IMPORTANT]
-> favbase is under active development. There is no browser-store package or GitHub Release yet, so trying it currently requires a [source build](#install-from-source).
+> [!NOTE]
+> favbase has been released and remains under active development. Download the latest Chromium build from [GitHub Releases](https://github.com/InvisibleQAQ/favbase/releases/latest). Support for additional content sources will be introduced over time.
 
-## What you can do
+## Core capabilities
 
-- **Bring six libraries together.** Browse favorites, stars, bookmarks, and playlists without jumping between platform UIs.
-- **Turn saved content into knowledge.** Extract text, split it into searchable chunks, create tags, and build embeddings in a local PGlite database.
-- **Find more than exact words.** Combine keyword and semantic retrieval across the collection.
-- **Ask with evidence.** Chat over collected content and open the cited saved item behind each answer.
-- **Recover useful video text.** Use official Bilibili subtitles when available, with configurable ASR as a fallback.
-- **Keep an exit path.** Export a JSON or CSV backup, or generate an Obsidian-ready ZIP.
+- **Unified source management.** Browse favorites, stars, bookmarks, and playlists from supported sources in one interface.
+- **Local knowledge processing.** Extract text, divide it into searchable chunks, create tags, and generate embeddings in a local PGlite database.
+- **Hybrid retrieval.** Combine keyword and semantic search across the collected library.
+- **Source-grounded answers.** Ask questions about collected content and open the original item referenced by each answer.
+- **Video text extraction.** Use official Bilibili subtitles when available, with configurable ASR as a fallback.
+- **Portable data exports.** Create JSON or CSV backups, or generate an Obsidian-compatible ZIP archive.
 
 ## How it works
 
@@ -25,6 +25,8 @@ favbase is a local-first Chromium extension for people whose useful links are sc
 The diagram is a product-flow explanation, not a screenshot. A collected favorite becomes a **Collection Item** with its source URL and metadata. When content is available, favbase can chunk, tag, and embed it for retrieval. Search and Chat keep results tied to the original item so you can verify the context yourself.
 
 ## Supported sources
+
+favbase currently integrates with the sources listed below. This list reflects the current release and will expand as additional integrations become available.
 
 | Source | What favbase collects | Connection |
 | --- | --- | --- |
@@ -48,15 +50,29 @@ GitHub and YouTube must be configured under **Settings → Connections** before 
 
 You can import and browse collected items without configuring every AI service. Semantic retrieval, AI tagging, Chat, and transcription fallbacks require their corresponding provider settings.
 
-## Install from source
+## Installation
 
-### Requirements
+### Install a release build
+
+1. Open the [latest GitHub Release](https://github.com/InvisibleQAQ/favbase/releases/latest).
+2. Download the Chromium build provided under **Assets**.
+3. Extract the downloaded archive.
+4. Open the browser's extensions page, such as `chrome://extensions`.
+5. Enable **Developer mode**.
+6. Choose **Load unpacked**.
+7. Select the extracted extension directory that contains `manifest.json`.
+
+After installation, open favbase, select a source, and run its first sync. Configure GitHub or YouTube credentials before using either source. Semantic retrieval requires an embedding provider; Chat and AI-generated tags require an LLM provider.
+
+### Build from source
+
+#### Requirements
 
 - A Chromium-based browser
 - [Git](https://git-scm.com/)
 - [Node.js](https://nodejs.org/) and [pnpm](https://pnpm.io/)
 
-### Build and load
+#### Build and load
 
 ```bash
 git clone https://github.com/InvisibleQAQ/favbase.git
@@ -69,8 +85,6 @@ pnpm build
 2. Enable **Developer mode**.
 3. Choose **Load unpacked**.
 4. Select the generated `.output/chrome-mv3` directory.
-
-After installation, open favbase, choose a source, and run its first sync. Configure GitHub or YouTube credentials first if either is your starting source. Configure an embedding provider for semantic retrieval and an LLM provider for Chat or AI-generated tags.
 
 ## Development
 
@@ -87,6 +101,6 @@ Architecture notes and implementation specifications live in [`docs/`](./docs/).
 
 ## Project status and license
 
-favbase is pre-release software. Expect incomplete flows and migration risk; keep backups of data you care about. Issues and focused pull requests are welcome.
+favbase has been released and remains under active development. Additional source integrations and workflow improvements are planned. Keep current backups of important library data while the storage model continues to evolve. Issues and focused pull requests are welcome.
 
 Licensed under the [GNU General Public License v3.0](./LICENSE).
