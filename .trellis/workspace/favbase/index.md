@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-3.md`
-- **Total Sessions**: 162
+- **Total Sessions**: 163
 - **Last Active**: 2026-07-28
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-3.md` | ~1514 | Active |
+| `journal-3.md` | ~1547 | Active |
 | `journal-2.md` | ~1993 | Archived |
 | `journal-1.md` | ~1976 | Archived |
 <!-- @@@/auto:active-documents -->
@@ -31,6 +31,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 163 | 2026-07-28 | Fix shared PGlite chunk persistence | `6ea9be3` | `main` |
 | 162 | 2026-07-28 | Repair bookmark chunk persistence and embedding completion | `3331a50`, `5e80543` | `main` |
 | 161 | 2026-07-28 | Fix stalled collection embedding pipeline | `7272119` | `main` |
 | 160 | 2026-07-27 | Bilibili streaming processing | `1906a02`, `75e018d`, `81fa054` | `main` |

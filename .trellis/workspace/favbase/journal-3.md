@@ -1512,3 +1512,36 @@ Added embedding pipeline diagnostics, identified zero-chunk false completion, re
 ### Next Steps
 
 - None - task complete
+
+
+## Session 163: Fix shared PGlite chunk persistence
+
+**Date**: 2026-07-28
+**Task**: Fix shared PGlite chunk persistence
+**Branch**: `main`
+
+### Summary
+
+Fixed cross-proxy PGlite transaction ownership so chunk writes survive commit, enforced strict durability and truthful Embedding failure semantics, added stored-content recovery and regression coverage, and captured the debugging contract in Trellis specs.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6ea9be3` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
