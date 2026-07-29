@@ -12,6 +12,11 @@ Turn your social media Favorites into a searchable knowledge base just with a lo
 - **存储**: WXT `storage.defineItem`（设置/缓存） + PGlite 0.5 + Drizzle ORM 0.45 + pgvector（知识库）
 - **包管理**: pnpm
 
+## Chrome 发布
+
+- 根 `package.json` 的 `version` 是扩展版本的单一事实源；每次提交 Chrome Web Store 前必须递增，且不能全为零。
+- 依次运行 `pnpm compile`、`pnpm test`、`pnpm zip`；上传 `.output/*-chrome.zip`，无需手工生成 CRX。
+
 ## 当前状态
 
 MVP 阶段，首个功能：B站视频收藏夹知识库。未来会支持多个平台收藏夹, 集成更多知识库. 
