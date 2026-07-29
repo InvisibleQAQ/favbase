@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-3.md`
-- **Total Sessions**: 165
+- **Total Sessions**: 166
 - **Last Active**: 2026-07-29
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-3.md` | ~1630 | Active |
+| `journal-3.md` | ~1668 | Active |
 | `journal-2.md` | ~1993 | Archived |
 | `journal-1.md` | ~1976 | Archived |
 <!-- @@@/auto:active-documents -->
@@ -31,6 +31,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 166 | 2026-07-29 | Use project logo in app sidebar | `81364bd` | `main` |
 | 165 | 2026-07-29 | Revise bilingual README product messaging | `4b35103`, `fb253f1` | `main` |
 | 164 | 2026-07-29 | README redesign and Chinese visual localization | `594ec03` | `main` |
 | 163 | 2026-07-28 | Fix shared PGlite chunk persistence | `6ea9be3` | `main` |

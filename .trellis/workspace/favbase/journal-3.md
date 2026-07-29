@@ -57,7 +57,8 @@ Collapsed the 3rd byte-identical char-soft-split chunker (zhihu/youtube/x) into 
 
 ### Main Changes
 
-(Add details)
+- Replaced the 36px sidebar `F` placeholder with the existing `/icon/128.png` project logo while preserving pinned, unpinned, and mobile navigation behavior.
+- Added a focused navigation regression test and synchronized `entrypoints/app/layouts/CLAUDE.md`.
 
 ### Git Commits
 
@@ -67,7 +68,9 @@ Collapsed the 3rd byte-identical char-soft-split chunker (zhihu/youtube/x) into 
 
 ### Testing
 
-- [OK] (Add test results)
+- [OK] `pnpm compile`
+- [OK] `pnpm test` (116 files, 896 tests)
+- [OK] `pnpm build`
 
 ### Status
 
@@ -1621,6 +1624,39 @@ Updated English and Simplified Chinese READMEs to describe current source suppor
 |------|---------|
 | `4b35103` | (see git log) |
 | `fb253f1` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 166: Use project logo in app sidebar
+
+**Date**: 2026-07-29
+**Task**: Use project logo in app sidebar
+**Branch**: `main`
+
+### Summary
+
+Replaced the app sidebar F placeholder with the existing project logo, added a regression test, synchronized layout documentation, and verified typecheck, the full test suite, and the production build.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `81364bd` | (see git log) |
 
 ### Testing
 
