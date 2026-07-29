@@ -428,21 +428,16 @@ function NavContent({ data, sx, pinned = true }: NavContentProps) {
         }}
       >
         <Box
+          component="img"
+          src="/icon/128.png"
+          alt=""
           sx={{
             width: 36,
             height: 36,
             borderRadius: 1,
-            bgcolor: 'primary.main',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
             flexShrink: 0,
           }}
-        >
-          <Typography variant="h6" sx={{ color: 'common.white', fontWeight: 800, lineHeight: 1 }}>
-            F
-          </Typography>
-        </Box>
+        />
         {pinned && (
           <Typography variant="h6" sx={{ fontWeight: 700 }}>
             favbase

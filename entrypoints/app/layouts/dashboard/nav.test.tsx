@@ -76,6 +76,13 @@ describe('Collections sidebar navigation', () => {
     );
   });
 
+  it('renders the project logo in the sidebar brand', () => {
+    const logo = container.querySelector('img[src="/icon/128.png"]');
+
+    expect(logo).not.toBeNull();
+    expect(logo?.getAttribute('alt')).toBe('');
+  });
+
   it('toggles the submenu from the chevron without navigating', () => {
     const toggle = container.querySelector('button[aria-expanded="false"]');
 
