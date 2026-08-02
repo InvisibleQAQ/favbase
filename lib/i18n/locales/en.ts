@@ -320,6 +320,13 @@ const en: Record<LocaleKeys, string> = {
   'chat.deleteConversation': 'Delete conversation',
   'chat.openHistory': 'Open conversation history',
   'chat.historyLoadFailed': 'Failed to load conversation history. Refresh the page to retry.',
+  'chat.conversationHistory': 'Conversation history',
+  'chat.messageHistory': 'Message history',
+  'chat.composerLabel': 'Message',
+  'chat.loading': 'Preparing assistant…',
+  'chat.closeHistory': 'Close conversation history',
+  'chat.userMessage': 'Your message',
+  'chat.assistantMessage': 'Assistant response',
 
   'header.githubAria': 'View repository on GitHub',
   'header.languageAria': 'Switch interface language',

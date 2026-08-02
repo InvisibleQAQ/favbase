@@ -1,7 +1,7 @@
 import Box from '@mui/material/Box';
-import Card from '@mui/material/Card';
+import ButtonBase from '@mui/material/ButtonBase';
 import Typography from '@mui/material/Typography';
-import Stack from '@mui/material/Stack';
+import type { Theme } from '@mui/material/styles';
 import { varAlpha } from 'minimal-shared/utils';
 
 import { isCollectionPlatform } from '@/lib/collections';
@@ -26,9 +26,10 @@ const PLATFORM_META = new Map(collectionPlatformRegistry.map((c) => [c.id, c]));
 export function SourceCards({ sources }: { sources: ChatSource[] }) {
   const { t } = useTranslation();
   if (sources.length === 0) return null;
+  const sourcesLabel = t('chat.sourcesTitle', { n: sources.length });
 
   return (
-    <Box sx={{ mt: 1 }}>
+    <Box sx={{ mt: 1.25 }}>
       <Typography
         variant="caption"
         sx={(theme) => ({
@@ -38,13 +39,26 @@ export function SourceCards({ sources }: { sources: ChatSource[] }) {
           color: theme.vars.palette.text.secondary,
         })}
       >
-        {t('chat.sourcesTitle', { n: sources.length })}
+        {sourcesLabel}
       </Typography>
-      <Stack spacing={0.75}>
+      <Box
+        component="ul"
+        aria-label={sourcesLabel}
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: 'repeat(2, minmax(0, 1fr))' },
+          gap: 0.75,
+          m: 0,
+          p: 0,
+          listStyle: 'none',
+        }}
+      >
         {sources.map((source) => (
-          <SourceCardItem key={source.itemId} source={source} openLabel={t('chat.openSource')} />
+          <Box component="li" key={source.itemId} sx={{ minWidth: 0 }}>
+            <SourceCardItem source={source} openLabel={t('chat.openSource')} />
+          </Box>
         ))}
-      </Stack>
+      </Box>
     </Box>
   );
 }
@@ -64,36 +78,36 @@ function SourceCardItem({ source, openLabel }: SourceCardItemProps) {
     if (canOpen) window.open(source.url, '_blank', 'noopener,noreferrer');
   };
 
-  return (
-    <Card
-      role={canOpen ? 'button' : undefined}
-      tabIndex={canOpen ? 0 : undefined}
-      aria-label={canOpen ? `${openLabel}: ${source.title}` : undefined}
-      onClick={handleOpen}
-      onKeyDown={(e) => {
-        if (canOpen && (e.key === 'Enter' || e.key === ' ')) {
-          e.preventDefault();
-          handleOpen();
-        }
-      }}
-      sx={(theme) => ({
-        display: 'flex',
-        alignItems: 'center',
-        gap: 1,
-        px: 1.5,
-        py: 1,
-        cursor: canOpen ? 'pointer' : 'default',
-        boxShadow: 'none',
-        border: `1px solid ${varAlpha(theme.vars.palette.grey['500Channel'], 0.16)}`,
-        transition: theme.transitions.create(['border-color', 'background-color']),
-        '&:hover': canOpen
-          ? {
-              borderColor: varAlpha(theme.vars.palette.primary.mainChannel, 0.4),
-              bgcolor: varAlpha(theme.vars.palette.primary.mainChannel, 0.04),
-            }
-          : undefined,
-      })}
-    >
+  const itemSx = (theme: Theme) => ({
+    display: 'flex',
+    width: 1,
+    minHeight: 60,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    gap: 1,
+    px: 1.25,
+    py: 0.875,
+    borderRadius: 1,
+    border: `1px solid ${varAlpha(theme.vars.palette.grey['500Channel'], 0.16)}`,
+    bgcolor: varAlpha(theme.vars.palette.grey['500Channel'], 0.04),
+    color: theme.vars.palette.text.primary,
+    textAlign: 'left' as const,
+    transition: theme.transitions.create(['border-color', 'background-color', 'transform']),
+    ...(canOpen && {
+      '&:hover': {
+        borderColor: varAlpha(theme.vars.palette.primary.mainChannel, 0.4),
+        bgcolor: varAlpha(theme.vars.palette.primary.mainChannel, 0.05),
+      },
+      '&:active': { transform: 'translateY(1px)' },
+      '&.Mui-focusVisible': {
+        outline: `2px solid ${theme.vars.palette.primary.main}`,
+        outlineOffset: 1,
+      },
+    }),
+  });
+
+  const content = (
+    <>
       {meta && (
         <Iconify
           icon={meta.icon}
@@ -104,14 +118,22 @@ function SourceCardItem({ source, openLabel }: SourceCardItemProps) {
       <Box sx={{ minWidth: 0, flexGrow: 1 }}>
         <Typography
           variant="body2"
-          noWrap
-          sx={(theme) => ({ color: theme.vars.palette.text.primary })}
+          sx={(theme) => ({
+            display: '-webkit-box',
+            overflow: 'hidden',
+            fontWeight: theme.typography.fontWeightMedium,
+            color: theme.vars.palette.text.primary,
+            lineHeight: 1.35,
+            WebkitBoxOrient: 'vertical',
+            WebkitLineClamp: 2,
+          })}
         >
           {source.title || source.url}
         </Typography>
         <Typography
           variant="caption"
-          sx={(theme) => ({ color: theme.vars.palette.text.disabled })}
+          noWrap
+          sx={(theme) => ({ display: 'block', mt: 0.25, color: theme.vars.palette.text.secondary })}
         >
           {platformLabel}
           {typeof source.score === 'number' ? ` · ${source.score.toFixed(2)}` : ''}
@@ -119,11 +141,24 @@ function SourceCardItem({ source, openLabel }: SourceCardItemProps) {
       </Box>
       {canOpen && (
         <Iconify
-          icon="eva:arrow-ios-forward-fill"
+          icon="eva:diagonal-arrow-right-up-fill"
           width={16}
-          sx={(theme) => ({ flexShrink: 0, color: theme.vars.palette.text.disabled })}
+          sx={(theme) => ({ flexShrink: 0, color: theme.vars.palette.text.secondary })}
         />
       )}
-    </Card>
+    </>
+  );
+
+  if (!canOpen) return <Box sx={itemSx}>{content}</Box>;
+
+  return (
+    <ButtonBase
+      type="button"
+      aria-label={`${openLabel}: ${source.title || source.url}`}
+      onClick={handleOpen}
+      sx={itemSx}
+    >
+      {content}
+    </ButtonBase>
   );
 }

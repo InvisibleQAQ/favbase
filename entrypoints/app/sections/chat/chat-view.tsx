@@ -1,17 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 
 import Typography from '@mui/material/Typography';
-import Card from '@mui/material/Card';
-import CardContent from '@mui/material/CardContent';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
-import Grid from '@mui/material/Grid';
+import Paper from '@mui/material/Paper';
 import TextField from '@mui/material/TextField';
 import Button from '@mui/material/Button';
+import ButtonBase from '@mui/material/ButtonBase';
 import IconButton from '@mui/material/IconButton';
 import Drawer from '@mui/material/Drawer';
 import Alert from '@mui/material/Alert';
 import CircularProgress from '@mui/material/CircularProgress';
+import Tooltip from '@mui/material/Tooltip';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme } from '@mui/material/styles';
 import { varAlpha } from 'minimal-shared/utils';
@@ -30,6 +30,11 @@ import { SourceCards } from './source-card';
 import { ChatMarkdown } from './chat-markdown';
 
 type Translate = (key: LocaleKeys, params?: Record<string, string | number>) => string;
+type ChatAgent = ReturnType<typeof useChatAgent>;
+
+interface ChatWorkspaceProps {
+  agent: ChatAgent;
+}
 
 /**
  * Chat view: multi-session knowledge-base assistant. Left rail lists persisted
@@ -40,12 +45,16 @@ type Translate = (key: LocaleKeys, params?: Record<string, string | number>) => 
  * caption in the rail instead of silently showing an empty list. Assistant answers
  * render through `<ChatMarkdown>` (react-markdown, no rehype-raw); user messages
  * stay plain text.
- * Below the `md` breakpoint the rail hides and opens as a temporary left Drawer
+ * Below the `lg` breakpoint the rail hides and opens as a temporary left Drawer
  * from the history button in the title row (auto-closed if the viewport widens
- * past `md`). Composer: Enter sends, Ctrl/⌘+Enter
+ * past `lg`). Composer: Enter sends, Ctrl/⌘+Enter
  * and Shift+Enter insert a newline (Enter is ignored mid-IME composition).
  */
 export function ChatView() {
+  return <ChatWorkspace agent={useChatAgent()} />;
+}
+
+export function ChatWorkspace({ agent }: ChatWorkspaceProps) {
   const { t } = useTranslation();
   const {
     messages,
@@ -64,21 +73,21 @@ export function ChatView() {
     newConversation,
     switchConversation,
     deleteConversation,
-  } = useChatAgent();
+  } = agent;
 
   const [input, setInput] = useState('');
   const [historyOpen, setHistoryOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const theme = useTheme();
-  const isMdUp = useMediaQuery(theme.breakpoints.up('md'));
+  const isLgUp = useMediaQuery(theme.breakpoints.up('lg'));
 
-  // Close the history drawer when the viewport widens past `md`. Merely hiding
+  // Close the history drawer when the viewport widens past `lg`. Merely hiding
   // an open Modal via CSS (`display: none`) would strand the body scroll lock
   // and the focus trap with no visible way to dismiss them.
   useEffect(() => {
-    if (isMdUp) setHistoryOpen(false);
-  }, [isMdUp]);
+    if (isLgUp) setHistoryOpen(false);
+  }, [isLgUp]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
@@ -93,37 +102,64 @@ export function ChatView() {
   const showEmptyState = messages.length === 0 && !isStreaming;
 
   return (
-    <DashboardContent maxWidth="lg">
-      <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: { xs: 3, md: 4 } }}>
+    <DashboardContent
+      maxWidth="xl"
+      sx={{
+        height: {
+          xs: 'calc(100dvh - var(--layout-header-mobile-height))',
+          md: 'calc(100dvh - var(--layout-header-desktop-height))',
+        },
+        minHeight: 0,
+        overflow: 'hidden',
+        pb: { xs: 1.5, md: 2.5 },
+      }}
+    >
+      <Stack
+        direction="row"
+        alignItems="center"
+        spacing={1.25}
+        sx={{ minHeight: 40, mb: 1.5, flexShrink: 0 }}
+      >
         <Box
           component="img"
           src="/icon/128.png"
           alt=""
-          sx={{ width: 32, height: 32, flexShrink: 0 }}
+          sx={{ width: 28, height: 28, flexShrink: 0 }}
         />
-        <Typography variant="h4" sx={{ flexGrow: 1 }}>
+        <Typography id="chat-page-title" variant="h4" sx={{ flexGrow: 1 }}>
           {t('chat.title')}
         </Typography>
-        <IconButton
-          aria-label={t('chat.openHistory')}
-          onClick={() => setHistoryOpen(true)}
-          sx={{ display: { xs: 'inline-flex', md: 'none' } }}
-        >
-          <Iconify icon="solar:chat-round-dots-bold" width={22} />
-        </IconButton>
+        <Tooltip title={t('chat.openHistory')}>
+          <IconButton
+            aria-label={t('chat.openHistory')}
+            onClick={() => setHistoryOpen(true)}
+            sx={{ display: { xs: 'inline-flex', lg: 'none' } }}
+          >
+            <Iconify icon="solar:chat-round-dots-bold" width={22} />
+          </IconButton>
+        </Tooltip>
       </Stack>
 
       <Drawer
         anchor="left"
         open={historyOpen}
         onClose={() => setHistoryOpen(false)}
-        sx={{ display: { md: 'none' } }}
-        slotProps={{ paper: { sx: { width: 300, p: 1.5 } } }}
+        sx={{ display: { lg: 'none' }, zIndex: 'calc(var(--layout-nav-zIndex) + 1)' }}
+        slotProps={{
+          paper: {
+            sx: {
+              left: { xs: 0, md: 'var(--layout-nav-vertical-width)' },
+              width: 'min(320px, 92vw)',
+              p: 0,
+            },
+          },
+        }}
       >
         <ConversationRail
           conversations={conversations}
           activeId={activeConversationId}
           loadError={historyError}
+          onClose={() => setHistoryOpen(false)}
           onNew={() => {
             newConversation();
             setHistoryOpen(false);
@@ -137,80 +173,144 @@ export function ChatView() {
         />
       </Drawer>
 
-      <Grid container spacing={3}>
-        <Grid size={{ md: 3 }} sx={{ display: { xs: 'none', md: 'block' } }}>
-          <Card sx={{ p: 1.5 }}>
-            <ConversationRail
-              conversations={conversations}
-              activeId={activeConversationId}
-              loadError={historyError}
-              onNew={newConversation}
-              onSelect={switchConversation}
-              onDelete={deleteConversation}
-              t={t}
-            />
-          </Card>
-        </Grid>
+      <Paper
+        component="section"
+        aria-labelledby="chat-page-title"
+        variant="outlined"
+        sx={(theme) => ({
+          display: 'grid',
+          gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: '248px minmax(0, 1fr)' },
+          flex: '1 1 auto',
+          minHeight: 0,
+          minWidth: 0,
+          overflow: 'hidden',
+          borderRadius: 2,
+          borderColor: theme.vars.palette.divider,
+          boxShadow: 'none',
+        })}
+      >
+        <Box
+          sx={(theme) => ({
+            display: { xs: 'none', lg: 'flex' },
+            minHeight: 0,
+            minWidth: 0,
+            borderRight: `1px solid ${theme.vars.palette.divider}`,
+            bgcolor: varAlpha(theme.vars.palette.grey['500Channel'], 0.04),
+          })}
+        >
+          <ConversationRail
+            conversations={conversations}
+            activeId={activeConversationId}
+            loadError={historyError}
+            onNew={newConversation}
+            onSelect={switchConversation}
+            onDelete={deleteConversation}
+            t={t}
+          />
+        </Box>
 
-        <Grid size={{ xs: 12, md: 9 }}>
-          <Card>
-            <CardContent>
-              {!loading && !configured ? (
-                <Alert severity="info">{t('chat.llmNotConfigured')}</Alert>
-              ) : (
-                <Stack spacing={2}>
-                  <Box
-                    ref={scrollRef}
-                    sx={{
-                      maxHeight: 460,
-                      minHeight: 200,
-                      overflowY: 'auto',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 1.5,
-                    }}
-                  >
-                    {showEmptyState ? (
-                      <Stack
-                        spacing={1.5}
-                        alignItems="center"
-                        sx={(theme) => ({
-                          m: 'auto',
-                          color: theme.vars.palette.text.secondary,
-                          textAlign: 'center',
-                        })}
-                      >
-                        <Box
-                          component="img"
-                          src="/icon/128.png"
-                          alt=""
-                          sx={{ width: 56, height: 56 }}
-                        />
-                        <Typography variant="body2">{t('chat.emptyHint')}</Typography>
-                      </Stack>
-                    ) : (
-                      messages.map((message) => <MessageBubble key={message.id} message={message} />)
-                    )}
-
-                    {isStreaming && (
-                      <MessageBubble
-                        message={{ id: 'streaming', role: 'assistant', content: streamingText }}
-                        activityLabel={activityLabel(toolActivity, t)}
-                        pending={streamingText.length === 0}
+        <Box sx={{ display: 'flex', minWidth: 0, minHeight: 0, flexDirection: 'column' }}>
+          {loading ? (
+            <Stack
+              spacing={1.5}
+              alignItems="center"
+              justifyContent="center"
+              sx={{ flex: '1 1 auto', minHeight: 0 }}
+            >
+              <CircularProgress size={24} />
+              <Typography variant="body2" color="text.secondary">
+                {t('chat.loading')}
+              </Typography>
+            </Stack>
+          ) : !configured ? (
+            <Box sx={{ width: 1, maxWidth: 880, mx: 'auto', p: { xs: 2, md: 3 } }}>
+              <Alert severity="info">{t('chat.llmNotConfigured')}</Alert>
+            </Box>
+          ) : (
+            <>
+              <Box
+                ref={scrollRef}
+                role="log"
+                aria-label={t('chat.messageHistory')}
+                aria-busy={isStreaming}
+                sx={{
+                  display: 'flex',
+                  flex: '1 1 auto',
+                  minHeight: 0,
+                  overflowY: 'auto',
+                  overscrollBehavior: 'contain',
+                  px: { xs: 2, sm: 3, lg: 4 },
+                  py: { xs: 2.5, md: 3 },
+                }}
+              >
+                <Stack
+                  spacing={{ xs: 2.5, md: 3 }}
+                  sx={{ width: 1, maxWidth: 880, minHeight: '100%', mx: 'auto' }}
+                >
+                  {showEmptyState ? (
+                    <Stack
+                      spacing={1.5}
+                      alignItems="center"
+                      justifyContent="center"
+                      sx={(theme) => ({
+                        flex: '1 1 auto',
+                        color: theme.vars.palette.text.secondary,
+                        textAlign: 'center',
+                      })}
+                    >
+                      <Box
+                        component="img"
+                        src="/icon/128.png"
+                        alt=""
+                        sx={{ width: 48, height: 48 }}
                       />
-                    )}
-                  </Box>
-
-                  {status === 'error' && (
-                    <Alert severity="error">
-                      {errorKind === 'network' ? t('chat.errorNetwork') : t('chat.errorGeneric')}
-                    </Alert>
+                      <Typography variant="body2" sx={{ maxWidth: 440 }}>
+                        {t('chat.emptyHint')}
+                      </Typography>
+                    </Stack>
+                  ) : (
+                    messages.map((message) => <MessageBubble key={message.id} message={message} />)
                   )}
 
+                  {isStreaming && (
+                    <MessageBubble
+                      message={{ id: 'streaming', role: 'assistant', content: streamingText }}
+                      activityLabel={activityLabel(toolActivity, t)}
+                      pending={streamingText.length === 0}
+                    />
+                  )}
+                </Stack>
+              </Box>
+
+              {status === 'error' && (
+                <Box sx={{ flexShrink: 0, px: { xs: 2, sm: 3, lg: 4 }, pt: 1.5 }}>
+                  <Alert severity="error" sx={{ maxWidth: 880, mx: 'auto' }}>
+                    {errorKind === 'network' ? t('chat.errorNetwork') : t('chat.errorGeneric')}
+                  </Alert>
+                </Box>
+              )}
+
+              <Box
+                component="form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  handleSend();
+                }}
+                sx={(theme) => ({
+                  flexShrink: 0,
+                  borderTop: `1px solid ${theme.vars.palette.divider}`,
+                  bgcolor: theme.vars.palette.background.paper,
+                  px: { xs: 1.5, sm: 3, lg: 4 },
+                  py: { xs: 1.5, md: 2 },
+                })}
+              >
+                <Box sx={{ width: 1, maxWidth: 880, mx: 'auto' }}>
                   <TextField
                     fullWidth
                     multiline
-                    minRows={2}
+                    minRows={1}
+                    maxRows={6}
+                    slotProps={{ htmlInput: { 'aria-label': t('chat.composerLabel') } }}
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     placeholder={t('chat.composerPlaceholder')}
@@ -220,7 +320,7 @@ export function ChatView() {
                       if (e.shiftKey) return;
                       e.preventDefault();
                       if (e.ctrlKey || e.metaKey) {
-                        // Textarea only inserts a newline on plain Enter, so Ctrl/⌘+Enter
+                        // Textarea only inserts a newline on plain Enter, so Ctrl/Cmd+Enter
                         // has to splice one in at the caret manually.
                         const el = e.target as HTMLTextAreaElement;
                         const start = el.selectionStart ?? input.length;
@@ -235,32 +335,29 @@ export function ChatView() {
                     }}
                   />
 
-                  <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 1.25 }}>
                     {isStreaming ? (
                       <Button
+                        type="button"
                         variant="outlined"
                         color="inherit"
                         onClick={stop}
-                        startIcon={<CircularProgress size={16} color="inherit" />}
+                        startIcon={<Iconify icon="solar:stop-bold" width={17} />}
                       >
                         {t('chat.stop')}
                       </Button>
                     ) : (
-                      <Button
-                        variant="contained"
-                        onClick={handleSend}
-                        disabled={!input.trim() || loading}
-                      >
+                      <Button type="submit" variant="contained" disabled={!input.trim()}>
                         {t('chat.send')}
                       </Button>
                     )}
                   </Box>
-                </Stack>
-              )}
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
+                </Box>
+              </Box>
+            </>
+          )}
+        </Box>
+      </Paper>
     </DashboardContent>
   );
 }
@@ -270,6 +367,7 @@ interface ConversationRailProps {
   activeId: string | null;
   /** History failed to load from PGlite — show an error instead of an empty list. */
   loadError: boolean;
+  onClose?: () => void;
   onNew: () => void;
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
@@ -280,62 +378,83 @@ function ConversationRail({
   conversations,
   activeId,
   loadError,
+  onClose,
   onNew,
   onSelect,
   onDelete,
   t,
 }: ConversationRailProps) {
   return (
-    <Box>
-      <Button
-        fullWidth
-        variant="outlined"
-        color="inherit"
-        startIcon={<Iconify icon="mingcute:add-line" width={18} />}
-        onClick={onNew}
-        sx={{ mb: 1.5 }}
-      >
-        {t('chat.newConversation')}
-      </Button>
-
-      {loadError ? (
-        <Typography
-          variant="caption"
-          sx={(theme) => ({
-            display: 'block',
-            px: 1,
-            py: 0.5,
-            color: theme.vars.palette.error.main,
-          })}
-        >
-          {t('chat.historyLoadFailed')}
-        </Typography>
-      ) : conversations.length === 0 ? (
-        <Typography
-          variant="caption"
-          sx={(theme) => ({
-            display: 'block',
-            px: 1,
-            py: 0.5,
-            color: theme.vars.palette.text.disabled,
-          })}
-        >
-          {t('chat.noConversations')}
-        </Typography>
-      ) : (
-        <Stack spacing={0.5}>
-          {conversations.map((conv) => (
-            <ConversationRow
-              key={conv.id}
-              conversation={conv}
-              active={conv.id === activeId}
-              onSelect={() => onSelect(conv.id)}
-              onDelete={() => onDelete(conv.id)}
-              t={t}
-            />
-          ))}
+    <Box
+      component="nav"
+      aria-label={t('chat.conversationHistory')}
+      sx={{ display: 'flex', width: 1, height: 1, minHeight: 0, flexDirection: 'column' }}
+    >
+      <Box sx={{ flexShrink: 0, p: 1.5, pb: 1 }}>
+        <Stack direction="row" alignItems="center" spacing={1}>
+          <Typography variant="subtitle2" sx={{ flexGrow: 1 }}>
+            {t('chat.conversationHistory')}
+          </Typography>
+          {onClose && (
+            <Tooltip title={t('chat.closeHistory')}>
+              <IconButton size="small" aria-label={t('chat.closeHistory')} onClick={onClose}>
+                <Iconify icon="mingcute:close-line" width={18} />
+              </IconButton>
+            </Tooltip>
+          )}
         </Stack>
-      )}
+        <Button
+          fullWidth
+          variant="outlined"
+          color="inherit"
+          startIcon={<Iconify icon="mingcute:add-line" width={18} />}
+          onClick={onNew}
+          sx={{ mt: 1.25 }}
+        >
+          {t('chat.newConversation')}
+        </Button>
+      </Box>
+
+      <Box sx={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', px: 1, pb: 1.5 }}>
+        {loadError ? (
+          <Typography
+            variant="caption"
+            sx={(theme) => ({
+              display: 'block',
+              px: 1,
+              py: 0.75,
+              color: theme.vars.palette.error.main,
+            })}
+          >
+            {t('chat.historyLoadFailed')}
+          </Typography>
+        ) : conversations.length === 0 ? (
+          <Typography
+            variant="caption"
+            sx={(theme) => ({
+              display: 'block',
+              px: 1,
+              py: 0.75,
+              color: theme.vars.palette.text.secondary,
+            })}
+          >
+            {t('chat.noConversations')}
+          </Typography>
+        ) : (
+          <Stack spacing={0.5}>
+            {conversations.map((conv) => (
+              <ConversationRow
+                key={conv.id}
+                conversation={conv}
+                active={conv.id === activeId}
+                onSelect={() => onSelect(conv.id)}
+                onDelete={() => onDelete(conv.id)}
+                t={t}
+              />
+            ))}
+          </Stack>
+        )}
+      </Box>
     </Box>
   );
 }
@@ -349,62 +468,71 @@ interface ConversationRowProps {
 }
 
 function ConversationRow({ conversation, active, onSelect, onDelete, t }: ConversationRowProps) {
+  const conversationLabel = conversation.title || t('chat.untitledConversation');
+
   return (
     <Box
       sx={(theme) => ({
         display: 'flex',
         alignItems: 'center',
-        borderRadius: 1.5,
-        pl: 1,
-        pr: 0.5,
+        gap: 0.25,
+        p: 0.25,
+        borderRadius: 1,
         transition: theme.transitions.create(['background-color']),
         ...(active
           ? { bgcolor: varAlpha(theme.vars.palette.primary.mainChannel, 0.08) }
           : { '&:hover': { bgcolor: varAlpha(theme.vars.palette.grey['500Channel'], 0.08) } }),
       })}
     >
-      <Box
-        role="button"
-        tabIndex={0}
+      <ButtonBase
+        aria-current={active ? 'true' : undefined}
         onClick={onSelect}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            onSelect();
-          }
-        }}
-        sx={{ flexGrow: 1, minWidth: 0, py: 0.75, cursor: 'pointer' }}
+        sx={(theme) => ({
+          flexGrow: 1,
+          minWidth: 0,
+          justifyContent: 'flex-start',
+          borderRadius: 0.75,
+          px: 0.75,
+          py: 0.625,
+          textAlign: 'left',
+          '&.Mui-focusVisible': {
+            outline: `2px solid ${theme.vars.palette.primary.main}`,
+            outlineOffset: 1,
+          },
+        })}
       >
-        <Typography
-          variant="body2"
-          noWrap
-          sx={(theme) => ({
-            fontWeight: active
-              ? theme.typography.fontWeightSemiBold
-              : theme.typography.fontWeightRegular,
-            color: active ? theme.vars.palette.primary.main : theme.vars.palette.text.primary,
-          })}
+        <Box sx={{ minWidth: 0 }}>
+          <Typography
+            variant="body2"
+            noWrap
+            sx={(theme) => ({
+              fontWeight: active
+                ? theme.typography.fontWeightSemiBold
+                : theme.typography.fontWeightRegular,
+              color: active ? theme.vars.palette.primary.main : theme.vars.palette.text.primary,
+            })}
+          >
+            {conversationLabel}
+          </Typography>
+          <Typography
+            variant="caption"
+            noWrap
+            sx={(theme) => ({ display: 'block', color: theme.vars.palette.text.secondary })}
+          >
+            {formatDateTime(conversation.updatedAt)}
+          </Typography>
+        </Box>
+      </ButtonBase>
+      <Tooltip title={t('chat.deleteConversation')}>
+        <IconButton
+          size="small"
+          aria-label={`${t('chat.deleteConversation')}: ${conversationLabel}`}
+          onClick={onDelete}
+          sx={(theme) => ({ color: theme.vars.palette.text.secondary, flexShrink: 0 })}
         >
-          {conversation.title || t('chat.untitledConversation')}
-        </Typography>
-        <Typography
-          variant="caption"
-          sx={(theme) => ({ color: theme.vars.palette.text.disabled })}
-        >
-          {formatDateTime(conversation.updatedAt)}
-        </Typography>
-      </Box>
-      <IconButton
-        size="small"
-        aria-label={t('chat.deleteConversation')}
-        onClick={(e) => {
-          e.stopPropagation();
-          onDelete();
-        }}
-        sx={(theme) => ({ color: theme.vars.palette.text.disabled, flexShrink: 0 })}
-      >
-        <Iconify icon="solar:trash-bin-trash-bold" width={16} />
-      </IconButton>
+          <Iconify icon="solar:trash-bin-trash-bold" width={16} />
+        </IconButton>
+      </Tooltip>
     </Box>
   );
 }
@@ -435,39 +563,59 @@ interface MessageBubbleProps {
 }
 
 function MessageBubble({ message, activityLabel: activity, pending }: MessageBubbleProps) {
+  const { t } = useTranslation();
   const isUser = message.role === 'user';
   return (
-    <Box sx={{ display: 'flex', justifyContent: isUser ? 'flex-end' : 'flex-start' }}>
-      <Box sx={{ maxWidth: '82%', display: 'flex', flexDirection: 'column' }}>
-        <Box
-          sx={(theme) => ({
-            px: 2,
-            py: 1.25,
-            borderRadius: 2,
-            // User messages stay plain text (pre-wrap preserves line breaks);
-            // assistant messages are rendered via <ChatMarkdown> which owns its own spacing.
-            ...(isUser && { whiteSpace: 'pre-wrap' }),
-            wordBreak: 'break-word',
-            bgcolor: isUser
-              ? varAlpha(theme.vars.palette.primary.mainChannel, 0.12)
-              : theme.vars.palette.background.neutral,
-            color: theme.vars.palette.text.primary,
-          })}
-        >
-          {activity && (
+    <Box
+      component="article"
+      aria-label={t(isUser ? 'chat.userMessage' : 'chat.assistantMessage')}
+      sx={{ display: 'flex', minWidth: 0, justifyContent: isUser ? 'flex-end' : 'flex-start' }}
+    >
+      <Box
+        sx={{
+          display: 'flex',
+          width: isUser ? 'auto' : 1,
+          maxWidth: isUser ? { xs: '92%', sm: '76%' } : '100%',
+          minWidth: 0,
+          flexDirection: 'column',
+        }}
+      >
+        {activity && (
+          <Stack
+            direction="row"
+            alignItems="center"
+            spacing={0.75}
+            aria-live="polite"
+            sx={{ mb: 0.75 }}
+          >
+            {pending && <CircularProgress size={12} color="inherit" />}
             <Typography
               variant="caption"
-              sx={(theme) => ({
-                display: 'block',
-                mb: 0.5,
-                color: theme.vars.palette.text.secondary,
-              })}
+              sx={(theme) => ({ color: theme.vars.palette.text.secondary })}
             >
               {activity}
             </Typography>
-          )}
+          </Stack>
+        )}
+        <Box
+          sx={(theme) => ({
+            // User messages stay plain text (pre-wrap preserves line breaks);
+            // assistant messages are rendered via <ChatMarkdown> which owns its own spacing.
+            ...(isUser
+              ? {
+                  px: 2,
+                  py: 1.25,
+                  borderRadius: 2,
+                  whiteSpace: 'pre-wrap',
+                  bgcolor: varAlpha(theme.vars.palette.primary.mainChannel, 0.12),
+                }
+              : { px: 0, py: 0 }),
+            wordBreak: 'break-word',
+            color: theme.vars.palette.text.primary,
+          })}
+        >
           {isUser ? message.content : <ChatMarkdown>{message.content}</ChatMarkdown>}
-          {pending && !activity && <CircularProgress size={14} sx={{ ml: 0.5 }} />}
+          {pending && !activity && <CircularProgress size={14} color="inherit" />}
         </Box>
         {!isUser && message.sources && message.sources.length > 0 && (
           <SourceCards sources={message.sources} />

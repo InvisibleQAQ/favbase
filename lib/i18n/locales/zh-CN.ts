@@ -313,6 +313,13 @@ const zhCN = {
   'chat.deleteConversation': '删除对话',
   'chat.openHistory': '打开会话历史',
   'chat.historyLoadFailed': '会话历史加载失败，请刷新页面重试。',
+  'chat.conversationHistory': '对话历史',
+  'chat.messageHistory': '消息记录',
+  'chat.composerLabel': '提问内容',
+  'chat.loading': '正在准备助手…',
+  'chat.closeHistory': '关闭对话历史',
+  'chat.userMessage': '你的消息',
+  'chat.assistantMessage': '助手回复',
 
   'header.githubAria': '在 GitHub 上查看仓库',
   'header.languageAria': '切换界面语言',
