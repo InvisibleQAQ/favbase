@@ -105,6 +105,7 @@ describe('ChatWorkspace', () => {
   afterEach(() => {
     act(() => root.unmount());
     container.remove();
+    vi.useRealTimers();
     vi.clearAllMocks();
   });
 
@@ -144,7 +145,8 @@ describe('ChatWorkspace', () => {
     expect(container.querySelector('textarea')).toBeNull();
   });
 
-  it('opens mobile conversation history with an explicit close control', () => {
+  it('restores focus only after mobile history releases the hidden app root', async () => {
+    vi.useFakeTimers();
     mediaState.isLgUp = false;
 
     act(() => {
@@ -160,11 +162,42 @@ describe('ChatWorkspace', () => {
     );
     expect(openButton).not.toBeNull();
 
-    act(() => openButton?.click());
+    await act(async () => {
+      openButton?.focus();
+      await Promise.resolve();
+    });
+    expect(document.activeElement).toBe(openButton);
 
-    expect(
-      document.body.querySelector('button[aria-label="chat.closeHistory"]'),
-    ).not.toBeNull();
+    const ariaHiddenWhenTriggerRefocused: Array<string | null> = [];
+    openButton?.addEventListener('focus', () => {
+      ariaHiddenWhenTriggerRefocused.push(container.getAttribute('aria-hidden'));
+    });
+
+    await act(async () => {
+      openButton?.click();
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+
+    expect(container.getAttribute('aria-hidden')).toBe('true');
+
+    const closeButton = document.body.querySelector<HTMLButtonElement>(
+      'button[aria-label="chat.closeHistory"]',
+    );
+    expect(closeButton).not.toBeNull();
+
+    await act(async () => {
+      closeButton?.click();
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+
+    expect({
+      ariaHiddenWhenTriggerRefocused,
+      ariaHiddenAfterClose: container.getAttribute('aria-hidden'),
+    }).toEqual({
+      ariaHiddenWhenTriggerRefocused: [null],
+      ariaHiddenAfterClose: null,
+    });
+    expect(document.activeElement).toBe(openButton);
   });
 
   it('marks the active Conversation without nesting its delete action', () => {

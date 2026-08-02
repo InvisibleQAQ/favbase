@@ -78,6 +78,8 @@ export function ChatWorkspace({ agent }: ChatWorkspaceProps) {
   const [input, setInput] = useState('');
   const [historyOpen, setHistoryOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const historyTriggerRef = useRef<HTMLButtonElement>(null);
+  const historyDrawerRef = useRef<HTMLDivElement>(null);
 
   const theme = useTheme();
   const isLgUp = useMediaQuery(theme.breakpoints.up('lg'));
@@ -131,6 +133,7 @@ export function ChatWorkspace({ agent }: ChatWorkspaceProps) {
         </Typography>
         <Tooltip title={t('chat.openHistory')}>
           <IconButton
+            ref={historyTriggerRef}
             aria-label={t('chat.openHistory')}
             onClick={() => setHistoryOpen(true)}
             sx={{ display: { xs: 'inline-flex', lg: 'none' } }}
@@ -144,9 +147,29 @@ export function ChatWorkspace({ agent }: ChatWorkspaceProps) {
         anchor="left"
         open={historyOpen}
         onClose={() => setHistoryOpen(false)}
+        ModalProps={{
+          disableRestoreFocus: true,
+          onTransitionExited: () => {
+            // Runs before ModalManager hides the modal; release its focused descendant first.
+            const activeElement = document.activeElement;
+            if (
+              activeElement instanceof HTMLElement &&
+              historyDrawerRef.current?.contains(activeElement)
+            ) {
+              activeElement.blur();
+            }
+          },
+        }}
         sx={{ display: { lg: 'none' }, zIndex: 'calc(var(--layout-nav-zIndex) + 1)' }}
         slotProps={{
+          transition: {
+            onExited: () => {
+              // Slide calls this after ModalManager has removed #root's aria-hidden.
+              if (!isLgUp) historyTriggerRef.current?.focus();
+            },
+          },
           paper: {
+            ref: historyDrawerRef,
             sx: {
               left: { xs: 0, md: 'var(--layout-nav-vertical-width)' },
               width: 'min(320px, 92vw)',
