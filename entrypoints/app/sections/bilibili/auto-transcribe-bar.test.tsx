@@ -29,6 +29,7 @@ import { AutoTranscribeBar } from './auto-transcribe-bar';
 function idleState(overrides: Partial<AutoTranscribeState> = {}): AutoTranscribeState {
   return {
     phase: 'idle',
+    asrBlocked: false,
     currentVideoTitle: '',
     currentVideoId: '',
     currentVideo: null,

@@ -15,6 +15,7 @@ import type { TranscribeErrorInfo } from '@/lib/transcription/types';
 
 const INITIAL_STATE: AutoTranscribeState = {
   phase: 'idle',
+  asrBlocked: false,
   currentVideoTitle: '',
   currentVideoId: '',
   currentVideo: null,
@@ -91,10 +92,13 @@ export class AutoTranscribePipeline {
     if (this.isActive()) throw new Error('Auto-transcribe session already active');
 
     const queue: AutoTranscribeVideo[] = [];
+    const blockedAsr: AutoTranscribeVideo[] = [];
     const seen = new Set<string>();
     let closed = false;
     let started = false;
     let wake: (() => void) | null = null;
+    let asrWait: Promise<void> | null = null;
+    let asrWaitError: unknown = null;
     this.sessionActive = true;
     this.state = { ...INITIAL_STATE };
     this.emit();
@@ -107,13 +111,43 @@ export class AutoTranscribePipeline {
     };
     this.closeActiveSession = close;
 
+    const watchForAsrConfiguration = (): void => {
+      if (asrWait) return;
+
+      asrWait = this.adapter.waitForAsrKey().then(
+        () => {
+          asrWait = null;
+          asrWaitError = null;
+          queue.unshift(...blockedAsr.splice(0));
+          this.patch({ asrBlocked: false, phase: 'transcribing' });
+          wake?.();
+          wake = null;
+        },
+        (error: unknown) => {
+          asrWait = null;
+          asrWaitError = error;
+          wake?.();
+          wake = null;
+        },
+      );
+    };
+
     const waitForItem = async (): Promise<boolean> => {
-      while (queue.length === 0 && !closed) {
+      if (
+        queue.length === 0
+        && blockedAsr.length > 0
+        && this.state.phase !== 'configuration_required'
+      ) {
+        this.patch({ phase: 'configuration_required' });
+      }
+      while (queue.length === 0 && (!closed || blockedAsr.length > 0)) {
+        if (asrWaitError) throw asrWaitError;
         await new Promise<void>((resolve) => {
           wake = resolve;
         });
         wake = null;
       }
+      if (asrWaitError) throw asrWaitError;
       return queue.length > 0;
     };
 
@@ -187,6 +221,7 @@ export class AutoTranscribePipeline {
 
             try {
               let response: Awaited<ReturnType<AutoTranscribeAdapter['transcribe']>>;
+              let parkedForAsr = false;
               let rateLimitRetried = false;
               while (true) {
                 response = await this.adapter.transcribe(
@@ -199,11 +234,14 @@ export class AutoTranscribePipeline {
                   && response.error.code === 'ASR_INVALID_KEY'
                   && !(await this.adapter.hasAsrKey())
                 ) {
-                  this.patch({ phase: 'configuration_required' });
-                  await this.adapter.waitForAsrKey();
-                  await control?.checkpoint();
-                  this.patch({ phase: 'transcribing', videoProgress: 0, videoStage: 'start' });
-                  continue;
+                  blockedAsr.push(item);
+                  this.patch({
+                    phase: queue.length > 0 ? 'transcribing' : 'configuration_required',
+                    asrBlocked: true,
+                  });
+                  watchForAsrConfiguration();
+                  parkedForAsr = true;
+                  break;
                 }
                 if (
                   !response.success
@@ -227,6 +265,7 @@ export class AutoTranscribePipeline {
                 }
                 break;
               }
+              if (parkedForAsr) continue;
               if (response.success) {
                 const stats = { ...this.state.stats };
                 if (response.data.source === 'official') stats.cc += 1;
@@ -262,6 +301,7 @@ export class AutoTranscribePipeline {
 
           this.patch({
             phase: 'done',
+            asrBlocked: false,
             currentVideoTitle: '',
             currentVideoId: '',
             currentVideo: null,
@@ -272,7 +312,7 @@ export class AutoTranscribePipeline {
           if ((error as Error)?.name !== 'AbortError' && !ac.signal.aborted) {
             console.error('[auto-transcribe] Pipeline error:', error);
           }
-          this.patch({ phase: 'cancelled' });
+          this.patch({ phase: 'cancelled', asrBlocked: false });
         } finally {
           this.running = false;
           this.sessionActive = false;

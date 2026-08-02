@@ -49,6 +49,8 @@ export interface AutoTranscribeCurrentVideo {
 
 export interface AutoTranscribeState {
   phase: AutoTranscribePhase;
+  /** True while one or more session items are parked for missing ASR config. */
+  asrBlocked: boolean;
   currentVideoTitle: string;
   currentVideoId: string;
   currentVideo: AutoTranscribeCurrentVideo | null;

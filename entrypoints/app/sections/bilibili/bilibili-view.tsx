@@ -294,7 +294,7 @@ function BilibiliCollectionPage({
             platform={PLATFORM}
             coverage={coverage}
             coverageStatus={coverageStatus}
-            asrBlocked={autoTranscribe.state.phase === 'configuration_required'}
+            asrBlocked={autoTranscribe.state.asrBlocked}
           />
         ) : undefined
       }

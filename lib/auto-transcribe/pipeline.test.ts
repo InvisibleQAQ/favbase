@@ -217,6 +217,121 @@ describe('AutoTranscribePipeline streaming session', () => {
     }
   });
 
+  it('continues with later videos while one item waits for ASR configuration', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const configured = deferred<void>();
+    const transcribe = vi.fn()
+      .mockResolvedValueOnce(missingAsrConfiguration())
+      .mockResolvedValueOnce(success())
+      .mockResolvedValueOnce(success());
+    const waitForAsrKey = vi.fn(() => configured.promise);
+    const pipeline = new AutoTranscribePipeline(makeAdapter({
+      transcribe,
+      hasAsrKey: vi.fn().mockResolvedValue(false),
+      waitForAsrKey,
+    }));
+
+    try {
+      const session = pipeline.createSession();
+      session.append([video('BV-NEEDS-ASR'), video('BV-OFFICIAL')]);
+      session.close();
+      const run = session.run();
+
+      await vi.waitFor(() => expect(transcribe).toHaveBeenCalledTimes(2));
+      expect(transcribe.mock.calls.map(([videoId]) => videoId)).toEqual([
+        'BV-NEEDS-ASR',
+        'BV-OFFICIAL',
+      ]);
+      expect(waitForAsrKey).toHaveBeenCalledOnce();
+      expect(pipeline.getSnapshot()).toMatchObject({
+        asrBlocked: true,
+        currentIndex: 1,
+        stats: { remaining: 1 },
+      });
+
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(pipeline.getSnapshot()).toMatchObject({
+        phase: 'configuration_required',
+        asrBlocked: true,
+      });
+
+      configured.resolve();
+      await vi.advanceTimersByTimeAsync(20_000);
+      await vi.waitFor(() => expect(transcribe).toHaveBeenCalledTimes(3));
+      expect(transcribe.mock.calls[2][0]).toBe('BV-NEEDS-ASR');
+      await vi.advanceTimersByTimeAsync(20_000);
+      await run;
+
+      expect(pipeline.getSnapshot()).toMatchObject({
+        phase: 'done',
+        asrBlocked: false,
+        currentIndex: 2,
+        stats: { remaining: 0 },
+      });
+    } finally {
+      pipeline.dispose();
+    }
+  });
+
+  it('shares one ASR configuration watcher across multiple parked items', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const configured = deferred<void>();
+    const transcribe = vi.fn()
+      .mockResolvedValueOnce(missingAsrConfiguration())
+      .mockResolvedValueOnce(missingAsrConfiguration())
+      .mockResolvedValueOnce(success())
+      .mockResolvedValueOnce(success());
+    const waitForAsrKey = vi.fn(() => configured.promise);
+    const pipeline = new AutoTranscribePipeline(makeAdapter({
+      transcribe,
+      hasAsrKey: vi.fn().mockResolvedValue(false),
+      waitForAsrKey,
+    }));
+
+    try {
+      const session = pipeline.createSession();
+      session.append([video('BV-ASR-1'), video('BV-ASR-2')]);
+      session.close();
+      const run = session.run();
+
+      await vi.waitFor(() => expect(transcribe).toHaveBeenCalledTimes(2));
+      expect(transcribe.mock.calls.map(([videoId]) => videoId)).toEqual([
+        'BV-ASR-1',
+        'BV-ASR-2',
+      ]);
+      expect(waitForAsrKey).toHaveBeenCalledOnce();
+      expect(pipeline.getSnapshot()).toMatchObject({
+        asrBlocked: true,
+        currentIndex: 0,
+        stats: { remaining: 2 },
+      });
+
+      configured.resolve();
+      await vi.waitFor(() => expect(transcribe).toHaveBeenCalledTimes(3));
+      await vi.advanceTimersByTimeAsync(20_000);
+      await vi.waitFor(() => expect(transcribe).toHaveBeenCalledTimes(4));
+      expect(transcribe.mock.calls.map(([videoId]) => videoId)).toEqual([
+        'BV-ASR-1',
+        'BV-ASR-2',
+        'BV-ASR-1',
+        'BV-ASR-2',
+      ]);
+      await vi.advanceTimersByTimeAsync(20_000);
+      await run;
+
+      expect(pipeline.getSnapshot()).toMatchObject({
+        phase: 'done',
+        asrBlocked: false,
+        currentIndex: 2,
+        stats: { remaining: 0 },
+      });
+    } finally {
+      pipeline.dispose();
+    }
+  });
+
   it('marks an ordinary item failure and continues draining the session', async () => {
     vi.useFakeTimers();
     const transcribe = vi.fn()
