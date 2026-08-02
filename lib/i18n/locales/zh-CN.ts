@@ -279,7 +279,7 @@ const zhCN = {
   'configurationBlocker.configure.embedding': '配置 Embedding',
   'configurationBlocker.configure.llm': '配置 LLM',
 
-  'nav.dashboard': 'Dashboard',
+  'nav.dashboard': 'Analytics',
   'nav.collections': '收藏夹',
   'nav.bilibiliFavorites': 'B 站收藏夹',
   'nav.githubStars': 'GitHub Stars',

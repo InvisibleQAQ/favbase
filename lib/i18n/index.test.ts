@@ -68,6 +68,14 @@ describe('t() plural resolution', () => {
 });
 
 describe('platform labels', () => {
+  it('labels the analytics navigation consistently in both locales', () => {
+    setLocale('en');
+    expect(t('nav.dashboard')).toBe('Analytics');
+
+    setLocale('zh-CN');
+    expect(t('nav.dashboard')).toBe('Analytics');
+  });
+
   it('identifies browser bookmarks consistently in navigation and page title', () => {
     setLocale('en');
     expect(t('nav.bookmarks')).toBe('Browser Bookmarks');

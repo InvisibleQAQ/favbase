@@ -30,11 +30,6 @@ export function createNavData(
 
   return [
     {
-      title: 'nav.dashboard',
-      path: '/',
-      icon: <Iconify icon="solar:home-angle-bold-duotone" width={24} />,
-    },
-    {
       title: 'nav.collections',
       path: '/collections',
       icon: <Iconify icon="solar:videocamera-record-bold-duotone" width={24} />,
@@ -54,6 +49,11 @@ export function createNavData(
           icon: <Iconify icon="mingcute:add-line" width={18} />,
         },
       ],
+    },
+    {
+      title: 'nav.dashboard',
+      path: '/',
+      icon: <Iconify icon="solar:home-angle-bold-duotone" width={24} />,
     },
     {
       title: 'nav.chat',

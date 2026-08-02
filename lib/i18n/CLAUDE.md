@@ -8,6 +8,7 @@ Collection provider 阻塞统一使用 `configurationBlocker.*`。ASR 只在视�
 
 ## 平台命名
 
+- Analytics 一级导航在中英文环境都显示为 `Analytics`；只改 `nav.dashboard` 的文案值，稳定键和 `/` 路由保持不变。
 - Bilibili 页面标题使用 `collections.sidebarTitle`，主分类标题使用 `collections.foldersTitle`；两者职责不可混用。
 - Bilibili 全量同步进度使用 `collections.bilibiliSyncProgress`，插值固定包含累计条目、收藏夹序号/总数/标题和页码/总页数；中英文键集合必须同步。
 - 本地浏览器书签平台显示名固定为 `Browser Bookmarks` / `浏览器书签`；`nav.bookmarks` 与 `bookmarks.title` 必须一致，后台任务提示复用 `nav.bookmarks`。

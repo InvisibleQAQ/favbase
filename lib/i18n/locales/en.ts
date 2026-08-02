@@ -286,7 +286,7 @@ const en: Record<LocaleKeys, string> = {
   'configurationBlocker.configure.embedding': 'Configure Embedding',
   'configurationBlocker.configure.llm': 'Configure LLM',
 
-  'nav.dashboard': 'Dashboard',
+  'nav.dashboard': 'Analytics',
   'nav.collections': 'Collections',
   'nav.bilibiliFavorites': 'Bilibili Favorites',
   'nav.githubStars': 'GitHub Stars',

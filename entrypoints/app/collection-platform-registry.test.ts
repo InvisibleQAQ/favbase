@@ -5,6 +5,15 @@ import { collectionPlatformRegistry } from './collection-platform-registry';
 import { createNavData } from './layouts/nav-config';
 
 describe('collection platform registry', () => {
+  it('places Collections before Analytics in the top-level navigation', () => {
+    expect(createNavData().map((item) => item.path)).toEqual([
+      '/collections',
+      '/',
+      '/chat',
+      '/settings',
+    ]);
+  });
+
   it('covers every persisted collection platform in canonical order', () => {
     expect(collectionPlatformRegistry.map((platform) => platform.id)).toEqual(
       COLLECTION_PLATFORMS,
