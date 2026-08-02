@@ -1669,3 +1669,36 @@ Replaced the app sidebar F placeholder with the existing project logo, added a r
 ### Next Steps
 
 - None - task complete
+
+
+## Session 167: Fix Bilibili ASR blocker scope
+
+**Date**: 2026-08-02
+**Task**: Fix Bilibili ASR blocker scope
+**Branch**: `main`
+
+### Summary
+
+Park only Bilibili videos that require missing ASR configuration, continue processing videos with official subtitles, requeue parked items after configuration, and add regression coverage.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e29839f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
