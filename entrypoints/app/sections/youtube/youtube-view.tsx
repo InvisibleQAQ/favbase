@@ -6,6 +6,7 @@ import Button from '@mui/material/Button';
 import { t, formatDateTime } from '@/lib/i18n';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify } from '../../components/iconify';
+import { CollectionConfigurationNotice } from '../../components/configuration-blocker';
 import { DashboardContent } from '../../layouts/dashboard';
 import {
   StateBox,
@@ -240,6 +241,13 @@ export function YoutubeView() {
           syncing={yt.syncing}
           onSync={yt.sync}
           onGoToSettings={() => navigate('/settings')}
+        />
+      }
+      configurationNotice={
+        <CollectionConfigurationNotice
+          platform={PLATFORM}
+          coverage={coverage}
+          coverageStatus={coverageStatus}
         />
       }
       pipeline={

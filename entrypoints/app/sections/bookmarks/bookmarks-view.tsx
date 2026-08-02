@@ -13,6 +13,7 @@ import {
 } from '../../hooks/pipeline-segments';
 import { useProcessingCoverage } from '../../hooks/use-processing-coverage';
 import { Iconify } from '../../components/iconify';
+import { CollectionConfigurationNotice } from '../../components/configuration-blocker';
 import { BookmarkCard } from './bookmark-card';
 import { BookmarkExtractionPanel } from './bookmark-extraction-panel';
 import { BookmarkGridSkeleton } from './bookmark-grid-skeleton';
@@ -158,6 +159,13 @@ export function BookmarksView() {
         ) : null
       }
       emptyState={<EmptyState />}
+      configurationNotice={
+        <CollectionConfigurationNotice
+          platform={PLATFORM}
+          coverage={coverage}
+          coverageStatus={coverageStatus}
+        />
+      }
       pipeline={pipeline}
     />
   );

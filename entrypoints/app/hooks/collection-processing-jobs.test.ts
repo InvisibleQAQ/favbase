@@ -9,6 +9,7 @@ vi.mock('@/lib/storage', () => ({
 import { getJob, pauseJob, resumeJob, setJobGate } from './background-jobs-store';
 import {
   enqueueCollectionProcessingItem,
+  startCollectionProcessingBacklog,
   startCollectionProcessingJobs,
 } from './collection-processing-jobs';
 
@@ -23,6 +24,49 @@ function deferred<T = void>() {
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe('collection processing jobs', () => {
+  it('dispatches an Embedding resume to the Embed lane only', async () => {
+    const embed = vi.fn().mockResolvedValue(undefined);
+    const tag = vi.fn().mockResolvedValue(undefined);
+
+    startCollectionProcessingBacklog(
+      { jobPlatform: 'p-embed-resume', itemPlatform: 'github', capability: 'embedding' },
+      { embed, tag },
+    );
+    await flush();
+
+    expect(embed).toHaveBeenCalledTimes(1);
+    expect(embed.mock.calls[0][0]).toBe('github');
+    expect(tag).not.toHaveBeenCalled();
+    expect(getJob('p-embed-resume', 'embed')?.phase).toBe('completed');
+    expect(getJob('p-embed-resume', 'tag')).toBeNull();
+  });
+
+  it('queues one follow-up backlog run when the same capability lane is active', async () => {
+    const releaseFirst = deferred();
+    const tag = vi
+      .fn()
+      .mockImplementationOnce(() => releaseFirst.promise)
+      .mockResolvedValue(undefined);
+
+    startCollectionProcessingBacklog(
+      { jobPlatform: 'p-resume', itemPlatform: 'x', capability: 'llm' },
+      { embed: async () => {}, tag },
+    );
+    startCollectionProcessingBacklog(
+      { jobPlatform: 'p-resume', itemPlatform: 'x', capability: 'llm' },
+      { embed: async () => {}, tag },
+    );
+    await flush();
+
+    expect(tag).toHaveBeenCalledTimes(1);
+
+    releaseFirst.resolve();
+    await flush();
+    await flush();
+
+    expect(tag).toHaveBeenCalledTimes(2);
+  });
+
   it('traces Embed batch dispatch, active-run collision, and retry', async () => {
     const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
     const releaseFirst = deferred();

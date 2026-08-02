@@ -1,11 +1,7 @@
 import { useCallback, useSyncExternalStore } from 'react';
 
 // Pure discriminator module (no DB imports) — the barrel would drag drizzle in.
-import {
-  COLLECTION_PLATFORMS,
-  isCollectionPlatform,
-  type CollectionPlatform,
-} from '@/lib/collections/platforms';
+import { isCollectionPlatform, type CollectionPlatform } from '@/lib/collections/platforms';
 import { libraryGateStorage } from '@/lib/storage';
 
 import {
@@ -14,6 +10,10 @@ import {
   setJobGate,
   type BackgroundJobKind,
 } from './background-jobs-store';
+import {
+  collectionPlatformForJob,
+  jobPlatformForCollection,
+} from './collection-job-platform';
 
 // ---------------------------------------------------------------------------
 // Per-platform knowledge-base build gate.
@@ -29,24 +29,7 @@ import {
 // born-running in the same tick it creates the run.
 // ---------------------------------------------------------------------------
 
-/**
- * Gate key (persisted discriminator) → `startJob` namespace. Four of the six
- * platforms use a job namespace that differs from the discriminator, so the two
- * vocabularies are translated here and nowhere else. Typed as an exhaustive
- * Record so platform N+1 is a compile error until it declares its namespace.
- */
-const JOB_PLATFORM_BY_GATE: Record<CollectionPlatform, string> = {
-  bilibili: 'bilibili',
-  github: 'github-stars',
-  bookmarks: 'bookmarks',
-  x: 'x-bookmarks',
-  zhihu: 'zhihu-favorites',
-  youtube: 'youtube-playlists',
-};
-
-const GATE_BY_JOB_PLATFORM = new Map<string, CollectionPlatform>(
-  COLLECTION_PLATFORMS.map((platform) => [JOB_PLATFORM_BY_GATE[platform], platform]),
-);
+export const gatePlatformOf = collectionPlatformForJob;
 
 /** Every job kind a paused platform must stop producing. */
 const GATED_JOB_KINDS: BackgroundJobKind[] = [
@@ -100,7 +83,7 @@ function fanOutGate(
   platform: CollectionPlatform,
   action: (jobPlatform: string, kind: BackgroundJobKind) => void,
 ): void {
-  const jobPlatform = JOB_PLATFORM_BY_GATE[platform];
+  const jobPlatform = jobPlatformForCollection(platform);
   for (const kind of GATED_JOB_KINDS) action(jobPlatform, kind);
 }
 
@@ -109,17 +92,6 @@ function sanitize(list: readonly string[] | null | undefined): Set<CollectionPla
   const next = new Set<CollectionPlatform>();
   for (const value of list ?? []) if (isCollectionPlatform(value)) next.add(value);
   return next;
-}
-
-/**
- * Translate a `startJob` namespace into its gate key. Falls back to the
- * discriminator itself so a caller passing `itemPlatform` is still gated
- * instead of silently slipping through.
- */
-export function gatePlatformOf(jobPlatform: string): CollectionPlatform | null {
-  const mapped = GATE_BY_JOB_PLATFORM.get(jobPlatform);
-  if (mapped) return mapped;
-  return isCollectionPlatform(jobPlatform) ? jobPlatform : null;
 }
 
 /** Synchronous read for non-React callers (`startJob`, the daily coordinator). */

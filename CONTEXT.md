@@ -54,6 +54,10 @@ _Avoid_: Remote sync completeness, job history, processing dashboard
 One bounded execution attempt for a Collection pipeline stage; its completion does not claim that local items fully cover the external platform.
 _Avoid_: Processing Coverage, remote sync completeness
 
+**Configuration Blocker**:
+A platform-local processing condition where eligible Collection Items cannot enter a pipeline stage because its required provider configuration is absent.
+_Avoid_: Provider failure, slow Pipeline Run, remote sync failure
+
 **Tag Drill-down**:
 Navigation from a Collection Analytics tag ranking to the aggregate collection filtered by that Used Tag.
 _Avoid_: Dashboard item browser
@@ -84,6 +88,8 @@ _Avoid_: Enabled platforms, platform gate, click order
 - A **Collection Item** belongs to one or more **Sources** when the platform exposes containers
 - A platform Collection page may present **Processing Coverage** for its locally persisted **Collection Items**
 - A platform Collection page may present a **Pipeline Run** together with idle **Processing Coverage**
+- A platform Collection page presents a **Configuration Blocker** only when local eligible work is waiting, not merely because a provider key is absent
+- Resolving a **Configuration Blocker** resumes the affected platform's pending work in the current app-page runtime
 - Each **Pipeline Run** belongs to one pipeline stage and is controlled independently; stage controls do not imply an atomic whole-pipeline operation
 - Fetch, Embed, and Tags **Pipeline Runs** share one control contract across all supported Collection platforms
 - A pause request lets the current **Pipeline Run** item settle, then stops before the stage claims its next item
@@ -113,3 +119,4 @@ _Avoid_: Enabled platforms, platform gate, click order
 - "Progress" previously meant both a live **Pipeline Run** and idle **Processing Coverage**; these are now distinct, although a platform Collection page may combine them in one compact control.
 - External platforms do not expose a durable remote-total snapshot, so **Processing Coverage** must not be described as remote sync completeness.
 - "Selected platform" in onboarding previously sounded like an availability gate; it is now defined as an **Onboarding Platform Preference**, never a platform enablement setting.
+- "Stuck" previously mixed missing provider configuration with slow, failed, or paused work; only missing configuration with eligible pending work is a **Configuration Blocker**.

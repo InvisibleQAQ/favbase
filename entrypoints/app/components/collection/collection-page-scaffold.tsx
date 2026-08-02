@@ -129,6 +129,8 @@ export interface CollectionPageScaffoldProps<T> {
   authFailedState?: ReactNode;
   /** Compact, always-visible platform pipeline. Authentication gates stay outside the scaffold. */
   pipeline?: ReactNode;
+  /** Pre-built provider configuration guidance, rendered directly after Search. */
+  configurationNotice?: ReactNode;
   /** Sync progress bar. Rendered only while syncing; omit for platforms without one. */
   progressBar?: ReactNode;
   /** Post-sync background-job captions (embed / tag progress). Rendered
@@ -182,6 +184,7 @@ export function CollectionPageScaffold<T>({
   emptyState,
   authFailedState,
   pipeline,
+  configurationNotice,
   progressBar,
   backgroundJobsBar,
 }: CollectionPageScaffoldProps<T>) {
@@ -348,6 +351,8 @@ export function CollectionPageScaffold<T>({
         onChange={onSearchInput}
         placeholder={copy.searchPlaceholder}
       />
+
+      {configurationNotice}
 
       {/* Platform business action — page-level by default. */}
       {operation && sectionInScope(operationScope) ? operation : null}

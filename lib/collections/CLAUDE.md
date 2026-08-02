@@ -7,7 +7,8 @@
 - `platforms.ts` — `COLLECTION_PLATFORMS` / `CollectionPlatform` / `isCollectionPlatform`，持久化平台判别符的唯一白名单
 - `collections-query.ts` — `getCollectionItems`：限定平台注册项，标题/作者 ILIKE 搜索，全局分页；排序按平台现有时间语义（Bilibili `fav_time`、GitHub `starredAt`、YouTube `addedAt`，其余 `publishedAt`），无日期条目置后并以 `createdAt`/id 稳定排序；分页后批量加载 tags
 - `collection-analytics.ts` — `getCollectionAnalytics`：一次返回去重 Item Count、Used Tags、Tagged Items、六平台构成、Top Tags 和平台原生维度；补齐零平台、稳定排序并限制榜单长度
-- `processing-coverage.ts` — `getProcessingCoverage(platform, db?)`：单次平台聚合返回 acquisition/content/embedding/tagging 的 Item 级覆盖率；远端总量固定 unknown，Bilibili `attr=9` 排除所有下游分母，React 不接触 schema/SQL
+- `downstream-eligibility.ts` — Coverage 与 backlog worker 共享的下游资格 SQL 唯一事实源；Bilibili `attr=9` 只在此定义一次。
+- `processing-coverage.ts` — `getProcessingCoverage(platform, db?)`：单次平台聚合返回 acquisition/content/embedding/tagging 的 Item 级覆盖率，消费共享 eligibility，React 不接触 schema/SQL。
 - `cooperative-checkpoint.ts` — 领域 worker 只依赖的最小暂停协议 `{ checkpoint(): Promise<void> }`；app runtime 持有状态机，lib 不反向依赖 React/store。
 - `collection-analytics.test.ts` — in-memory PGlite 守护六平台维度、membership 与 item 计数差异、未知平台排除、标签口径和排名稳定性
 - `collections-query.test.ts` — in-memory PGlite 守护混合排序、平台过滤、搜索转义、分页和标签水合

@@ -13,6 +13,7 @@ import type { ResolvedTaggingConfig } from './config';
 import type { TaggingInput } from './prompt';
 import {
   tagPlatformItem,
+  tagPlatformBacklog,
   tagNewItems,
   getAllUsedTags,
   getTagsForPlatformItems,
@@ -359,6 +360,89 @@ describe('tagging-service (in-memory PGlite)', () => {
       await tagNewItems('x', ['tc1', 'tc2'], deps(), undefined, { checkpoint });
 
       expect(checkpoint).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('tagPlatformBacklog', () => {
+    it('reports an empty run without opening the DB when LLM configuration is disabled', async () => {
+      const dbAccess = vi.fn(() => {
+        throw new Error('DB should not be opened');
+      });
+      const onProgress = vi.fn();
+
+      await tagPlatformBacklog(
+        'x',
+        {
+          db: dbAccess,
+          getConfig: async () => disabledConfig,
+          generate: makeGenerate(),
+        },
+        onProgress,
+      );
+
+      expect(dbAccess).not.toHaveBeenCalled();
+      expect(onProgress).toHaveBeenCalledWith({ done: 0, total: 0 });
+    });
+
+    it('tags only untagged chunked or embedded items from the requested platform', async () => {
+      await seedItem('x-embedded', 'x');
+      const chunkedId = await seedItem('x-chunked', 'x');
+      await db
+        .update(schema.items)
+        .set({ contentState: 'chunked' })
+        .where(eq(schema.items.id, chunkedId));
+      for (const contentState of ['pending', 'has_content', 'no_content', 'error'] as const) {
+        const excludedId = await seedItem(`x-${contentState}`, 'x');
+        await db
+          .update(schema.items)
+          .set({ contentState })
+          .where(eq(schema.items.id, excludedId));
+      }
+      await seedItem('github-ready', 'github');
+      await seedItem('x-tagged', 'x');
+      await addTagToPlatformItem('x', 'x-tagged', 'existing', db);
+      const generate = makeGenerate(['backlog']);
+      const onProgress = vi.fn();
+
+      await tagPlatformBacklog('x', deps({ generate }), onProgress);
+
+      expect(generate).toHaveBeenCalledTimes(2);
+      expect(generate.mock.calls.map((call) => call[1].title).sort()).toEqual([
+        'Title of x-chunked',
+        'Title of x-embedded',
+      ]);
+      expect(onProgress.mock.calls.map((call) => call[0])).toEqual([
+        { done: 0, total: 2 },
+        { done: 1, total: 2 },
+        { done: 2, total: 2 },
+      ]);
+    });
+
+    it('shares the Bilibili downstream eligibility rule with Processing Coverage', async () => {
+      await seedItem('BV-VALID');
+      const invalidId = await seedItem('BV-INVALID');
+      await db
+        .update(schema.items)
+        .set({ platformMeta: { attr: 9 } })
+        .where(eq(schema.items.id, invalidId));
+      const generate = makeGenerate(['eligible']);
+
+      await tagPlatformBacklog('bilibili', deps({ generate }));
+
+      expect(generate).toHaveBeenCalledTimes(1);
+      expect(generate.mock.calls[0][1].title).toBe('Title of BV-VALID');
+    });
+
+    it('is idempotent across backlog reruns', async () => {
+      await seedItem('x-idempotent', 'x');
+      const generate = makeGenerate(['once']);
+      const secondProgress = vi.fn();
+
+      await tagPlatformBacklog('x', deps({ generate }));
+      await tagPlatformBacklog('x', deps({ generate }), secondProgress);
+
+      expect(generate).toHaveBeenCalledTimes(1);
+      expect(secondProgress).toHaveBeenCalledWith({ done: 0, total: 0 });
     });
   });
 

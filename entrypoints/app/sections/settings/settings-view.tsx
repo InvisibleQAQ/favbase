@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Typography from '@mui/material/Typography';
@@ -12,7 +12,13 @@ import MenuItem from '@mui/material/MenuItem';
 import Box from '@mui/material/Box';
 
 import { DashboardContent } from '../../layouts/dashboard';
-import { useSettings } from '@/lib/hooks/useSettings';
+import { isCollectionPlatform, type CollectionPlatform } from '@/lib/collections/platforms';
+import { resumeCollectionProcessing } from '../../hooks/collection-processing-resume';
+import {
+  useSettings,
+  type EmbeddingDraft,
+  type LlmDraft,
+} from '@/lib/hooks/useSettings';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import type { LocalePreference } from '@/lib/storage';
 import { LlmConfigCard } from './llm-config-card';
@@ -30,6 +36,14 @@ type AiSection = 'llm' | 'asr' | 'embedding';
 type ConnSection = 'github' | 'youtube';
 type StorageSection = 'export' | 'webdav';
 
+function parseAiSection(value: string | null): AiSection {
+  return value === 'asr' || value === 'embedding' || value === 'llm' ? value : 'llm';
+}
+
+function parseResumePlatform(value: string | null): CollectionPlatform | null {
+  return value != null && isCollectionPlatform(value) ? value : null;
+}
+
 /** Every tab shares the same two-column shape: left rail + right content. */
 function RailLayout({ rail, children }: { rail: ReactNode; children: ReactNode }) {
   return (
@@ -44,12 +58,27 @@ export function SettingsView() {
   const s = useSettings();
   const { t, preference, setLocale } = useTranslation();
   const [searchParams] = useSearchParams();
+  const resumePlatform = parseResumePlatform(searchParams.get('resume'));
   const [tab, setTab] = useState<SettingsTab>('ai');
   const [aiSection, setAiSection] = useState<AiSection>(() =>
-    searchParams.get('section') === 'asr' ? 'asr' : 'llm',
+    parseAiSection(searchParams.get('section')),
   );
   const [connSection, setConnSection] = useState<ConnSection>('github');
   const [storageSection, setStorageSection] = useState<StorageSection>('export');
+  const saveLlm = useCallback(
+    async (draft: LlmDraft) => {
+      await s.saveLlm(draft);
+      if (resumePlatform) resumeCollectionProcessing(resumePlatform, 'llm');
+    },
+    [resumePlatform, s.saveLlm],
+  );
+  const saveEmbedding = useCallback(
+    async (draft: EmbeddingDraft) => {
+      await s.saveEmbedding(draft);
+      if (resumePlatform) resumeCollectionProcessing(resumePlatform, 'embedding');
+    },
+    [resumePlatform, s.saveEmbedding],
+  );
 
   const tabs: SettingsTabItem[] = [
     { value: 'ai', label: t('settings.tabAi'), icon: 'solar:magic-stick-3-bold-duotone' },
@@ -90,10 +119,10 @@ export function SettingsView() {
 
       {tab === 'ai' && (
         <RailLayout rail={<SectionRail value={aiSection} onChange={setAiSection} items={aiNavItems} />}>
-          {aiSection === 'llm' && <LlmConfigCard settings={s.settings} saveLlm={s.saveLlm} />}
+          {aiSection === 'llm' && <LlmConfigCard settings={s.settings} saveLlm={saveLlm} />}
           {aiSection === 'asr' && <AsrConfigCard settings={s.settings} saveAsr={s.saveAsr} />}
           {aiSection === 'embedding' && (
-            <EmbeddingConfigCard settings={s.settings} saveEmbedding={s.saveEmbedding} />
+            <EmbeddingConfigCard settings={s.settings} saveEmbedding={saveEmbedding} />
           )}
         </RailLayout>
       )}

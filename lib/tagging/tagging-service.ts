@@ -1,7 +1,9 @@
-import { and, eq, inArray, sql, desc } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, notExists, sql } from 'drizzle-orm';
 import { getDb, type FavbaseDb } from '@/lib/database';
 import { emitDomainEvent } from '@/lib/events';
 import type { CooperativeCheckpoint } from '@/lib/collections';
+import type { CollectionPlatform } from '@/lib/collections/platforms';
+import { getDownstreamEligibilityCondition } from '@/lib/collections/downstream-eligibility';
 import { items } from '@/lib/database/entities/items';
 import { itemContents } from '@/lib/database/entities/item-contents';
 import { tags } from '@/lib/database/entities/tags';
@@ -161,6 +163,48 @@ export async function tagNewItems(
     done += 1;
     onProgress?.({ done, total });
   }
+}
+
+/** Retry the unfinished AI-tagging work for one Collection platform. */
+export async function tagPlatformBacklog(
+  platform: CollectionPlatform,
+  deps?: Partial<TaggingDeps>,
+  onProgress?: (progress: { done: number; total: number }) => void,
+  control?: CooperativeCheckpoint,
+): Promise<void> {
+  const d = { ...defaultDeps, ...deps };
+  const config = await d.getConfig();
+  if (!config.enabled) {
+    onProgress?.({ done: 0, total: 0 });
+    return;
+  }
+
+  const db = d.db();
+  const candidates = await db
+    .select({ platformItemId: items.platformItemId })
+    .from(items)
+    .where(
+      and(
+        eq(items.platform, platform),
+        getDownstreamEligibilityCondition(platform),
+        inArray(items.contentState, ['chunked', 'embedded']),
+        notExists(
+          db
+            .select({ value: sql`1` })
+            .from(itemTags)
+            .where(eq(itemTags.itemId, items.id)),
+        ),
+      ),
+    )
+    .orderBy(asc(items.createdAt), asc(items.id));
+
+  await tagNewItems(
+    platform,
+    candidates.map((item) => item.platformItemId),
+    { ...d, getConfig: async () => config },
+    onProgress,
+    control,
+  );
 }
 
 // ---------------------------------------------------------------------------

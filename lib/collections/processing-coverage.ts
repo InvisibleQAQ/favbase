@@ -1,20 +1,11 @@
-import { and, eq, exists, inArray, sql, type SQL } from 'drizzle-orm';
+import { and, eq, exists, inArray, sql } from 'drizzle-orm';
 
 import { getDb, type FavbaseDb } from '@/lib/database';
 import { items } from '@/lib/database/entities/items';
 import { itemTags } from '@/lib/database/entities/item-tags';
 
 import type { CollectionPlatform } from './platforms';
-
-const ALL_ITEMS = sql<boolean>`true`;
-const DOWNSTREAM_ELIGIBILITY: Record<CollectionPlatform, SQL<boolean>> = {
-  bilibili: sql<boolean>`coalesce(${items.platformMeta}->>'attr', '') <> '9'`,
-  github: ALL_ITEMS,
-  bookmarks: ALL_ITEMS,
-  x: ALL_ITEMS,
-  zhihu: ALL_ITEMS,
-  youtube: ALL_ITEMS,
-};
+import { getDownstreamEligibilityCondition } from './downstream-eligibility';
 
 export interface ProcessingCoverageCount {
   done: number;
@@ -41,7 +32,7 @@ export async function getProcessingCoverage(
   platform: CollectionPlatform,
   db: FavbaseDb = getDb(),
 ): Promise<ProcessingCoverage> {
-  const downstreamEligible = DOWNSTREAM_ELIGIBILITY[platform];
+  const downstreamEligible = getDownstreamEligibilityCondition(platform);
   const settledContent = inArray(items.contentState, [
     'chunked',
     'embedded',

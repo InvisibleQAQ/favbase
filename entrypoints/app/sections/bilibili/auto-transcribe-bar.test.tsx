@@ -2,7 +2,6 @@
 
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AutoTranscribeState } from '@/lib/auto-transcribe/types';
@@ -108,22 +107,17 @@ describe('AutoTranscribeBar (pure progress display)', () => {
     expect(container.querySelector('button')).toBeNull();
   });
 
-  it('links missing ASR configuration directly to the ASR settings section', () => {
+  it('does not duplicate the shared configuration notice for the ASR wait state', () => {
     act(() => {
       root.render(
-        <MemoryRouter>
-          <AutoTranscribeBar
-            state={idleState({ phase: 'configuration_required' })}
-            running
-          />
-        </MemoryRouter>,
+        <AutoTranscribeBar
+          state={idleState({ phase: 'configuration_required' })}
+          running
+        />,
       );
     });
 
-    expect(container.querySelector('[role="alert"]')).not.toBeNull();
-    expect(container.textContent).toContain('autoTranscribe.configurationRequiredTitle');
-    expect(container.textContent).toContain('autoTranscribe.configurationRequired');
-    expect(container.textContent).not.toContain('error.ASR_INVALID_KEY');
-    expect(container.querySelector('a')?.getAttribute('href')).toBe('/settings?section=asr');
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(container.querySelector('a')).toBeNull();
   });
 });

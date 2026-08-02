@@ -3,8 +3,6 @@ import type { ReactNode } from 'react';
 import LinearProgress from '@mui/material/LinearProgress';
 import Typography from '@mui/material/Typography';
 import Chip from '@mui/material/Chip';
-import Button from '@mui/material/Button';
-import { Link as RouterLink } from 'react-router-dom';
 
 import { formatDateTime, t } from '@/lib/i18n';
 import { useTranslation } from '@/lib/i18n/use-translation';
@@ -171,23 +169,7 @@ export function AutoTranscribeBar({ state, running }: AutoTranscribeBarProps) {
   const showProgress = running || isDone;
 
   if (phase === 'configuration_required') {
-    return (
-      <WarningPanel
-        title={t('autoTranscribe.configurationRequiredTitle')}
-        message={t('autoTranscribe.configurationRequired')}
-        action={
-          <Button
-            component={RouterLink}
-            to="/settings?section=asr"
-            variant="outlined"
-            color="warning"
-            startIcon={<Iconify icon="solar:settings-bold-duotone" width={18} />}
-          >
-            {t('autoTranscribe.configureAsr')}
-          </Button>
-        }
-      />
-    );
+    return null;
   }
 
   if (phase === 'quota_paused') {

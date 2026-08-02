@@ -5,6 +5,7 @@ import Link from '@mui/material/Link';
 import { t, formatDateTime } from '@/lib/i18n';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify } from '../../components/iconify';
+import { CollectionConfigurationNotice } from '../../components/configuration-blocker';
 import {
   StateBox,
   SyncNowButton,
@@ -216,6 +217,13 @@ export function ZhihuView() {
       ) : null}
       emptyState={<EmptyLibraryState syncing={zhihu.syncing} onSync={zhihu.sync} />}
       authFailedState={<NotLoggedInState syncing={zhihu.syncing} onSync={zhihu.sync} />}
+      configurationNotice={
+        <CollectionConfigurationNotice
+          platform={PLATFORM}
+          coverage={coverage}
+          coverageStatus={coverageStatus}
+        />
+      }
       pipeline={zhihu.syncError?.kind === 'auth' ? undefined : pipeline}
     />
   );

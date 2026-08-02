@@ -5,6 +5,7 @@ import Link from '@mui/material/Link';
 import { t, formatDateTime } from '@/lib/i18n';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify } from '../../components/iconify';
+import { CollectionConfigurationNotice } from '../../components/configuration-blocker';
 import {
   StateBox,
   SyncNowButton,
@@ -232,6 +233,13 @@ export function XView() {
       ) : null}
       emptyState={<EmptyLibraryState syncing={x.syncing} onSync={x.sync} />}
       authFailedState={<NotLoggedInState syncing={x.syncing} onSync={x.sync} />}
+      configurationNotice={
+        <CollectionConfigurationNotice
+          platform={PLATFORM}
+          coverage={coverage}
+          coverageStatus={coverageStatus}
+        />
+      }
       pipeline={x.syncError?.kind === 'auth' ? undefined : pipeline}
     />
   );

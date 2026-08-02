@@ -19,6 +19,7 @@ import {
 import { useProcessingCoverage } from '../../hooks/use-processing-coverage';
 import { useJob } from '../../hooks/background-jobs-store';
 import { Iconify } from '../../components/iconify';
+import { CollectionConfigurationNotice } from '../../components/configuration-blocker';
 import { AutoTranscribeBar } from './auto-transcribe-bar';
 import { FolderChips } from './folder-chips';
 import { TaggedVideoCard } from './tagged-video-card';
@@ -287,15 +288,25 @@ function BilibiliCollectionPage({
         <TaggedVideoCard item={item} onEditTags={openEditor} />
       )}
       skeleton={<VideoGridSkeleton />}
+      configurationNotice={
+        loginState === 'logged_in' ? (
+          <CollectionConfigurationNotice
+            platform={PLATFORM}
+            coverage={coverage}
+            coverageStatus={coverageStatus}
+            asrBlocked={autoTranscribe.state.phase === 'configuration_required'}
+          />
+        ) : undefined
+      }
       pipeline={loginState === 'logged_in' ? pipeline : undefined}
-      operation={
+      operation={autoTranscribe.state.phase === 'configuration_required' ? undefined : (
         <Box sx={{ mb: 2.5 }}>
           <AutoTranscribeBar
             state={autoTranscribe.state}
             running={autoTranscribe.running}
           />
         </Box>
-      }
+      )}
       operationScope="primary-category"
       primaryCategory={
         <FolderChips
@@ -441,6 +452,15 @@ function BilibiliFallbackPage({
       }
       emptyState={<SelectFolderState />}
       authFailedState={<NotLoggedIn onRetry={onSync} />}
+      configurationNotice={
+        loginState === 'logged_in' ? (
+          <CollectionConfigurationNotice
+            platform={PLATFORM}
+            coverage={coverage}
+            coverageStatus={coverageStatus}
+          />
+        ) : undefined
+      }
       pipeline={loginState === 'logged_in' ? pipeline : undefined}
     />
   );

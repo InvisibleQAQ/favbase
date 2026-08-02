@@ -6,6 +6,7 @@ import Skeleton from '@mui/material/Skeleton';
 import { t, formatDateTime } from '@/lib/i18n';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify } from '../../components/iconify';
+import { CollectionConfigurationNotice } from '../../components/configuration-blocker';
 import { DashboardContent } from '../../layouts/dashboard';
 import {
   StateBox,
@@ -239,6 +240,13 @@ export function GithubStarsView() {
         />
       ) : null}
       emptyState={<EmptyLibraryState syncing={gh.syncing} onSync={gh.sync} />}
+      configurationNotice={
+        <CollectionConfigurationNotice
+          platform={PLATFORM}
+          coverage={coverage}
+          coverageStatus={coverageStatus}
+        />
+      }
       pipeline={
         !gh.settingsLoading && gh.hasToken && gh.syncError?.kind !== 'auth'
           ? pipeline

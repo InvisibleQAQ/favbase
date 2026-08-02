@@ -53,6 +53,7 @@ WXT 入口点及运行时角色总览，详细结构见对应目录 `CLAUDE.md`�
 - `entrypoints/app/layouts/CLAUDE.md` — 仪表盘布局系统 + 侧边栏 Pin/Unpin
 - `entrypoints/app/components/iconify/CLAUDE.md` — Iconify 离线图标系统
 - `entrypoints/app/components/collection/CLAUDE.md` — 平台 section 共享展示哑组件（StateBox/标题栏/搜索框/卡片网格+分页/chip 行外壳）
+- `entrypoints/app/components/configuration-blocker/CLAUDE.md` — Collection provider 配置阻塞提醒（resolver + coverage + Settings 深链）
 - `entrypoints/app/components/library-gate/CLAUDE.md` — 知识库闸门智能组件（自带 i18n + `useLibraryGate` 订阅；⏸暂停/▶继续构建知识库按钮，scaffold pipeline 行尾常驻）
 - `entrypoints/app/components/tags/CLAUDE.md` — 平台无关标签 UI 子系统（hooks + popover + 筛选 chips + render-prop 网格）
 - `entrypoints/app/hooks/CLAUDE.md` — app.html 共享 hooks（useCollectionLibrary 平台无关收藏页状态机，github/x/zhihu/youtube 数据 hook 的底座）

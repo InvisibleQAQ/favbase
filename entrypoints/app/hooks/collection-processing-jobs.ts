@@ -1,4 +1,4 @@
-import type { CooperativeCheckpoint } from '@/lib/collections';
+import type { CollectionPlatform, CooperativeCheckpoint } from '@/lib/collections';
 import {
   embedPlatformBacklog,
   embedPlatformItem,
@@ -12,6 +12,7 @@ import {
 } from '@/lib/embedding/diagnostics';
 import {
   tagNewItems,
+  tagPlatformBacklog,
   tagPlatformItem,
   type TagItemResult,
 } from '@/lib/tagging';
@@ -39,6 +40,25 @@ export interface StartCollectionProcessingJobsInput {
   jobPlatform: string;
   itemPlatform: string;
   itemIds: string[];
+}
+
+type ProcessingBacklogWorker = (
+  platform: CollectionPlatform,
+  onProgress: (progress: ProcessingProgress) => void,
+  control: CooperativeCheckpoint,
+) => Promise<void>;
+
+export interface CollectionProcessingBacklogDeps {
+  embed: ProcessingBacklogWorker;
+  tag: ProcessingBacklogWorker;
+}
+
+export type CollectionProcessingCapability = 'embedding' | 'llm';
+
+export interface StartCollectionProcessingBacklogInput {
+  jobPlatform: string;
+  itemPlatform: CollectionPlatform;
+  capability: CollectionProcessingCapability;
 }
 
 export interface EnqueueCollectionProcessingItemInput {
@@ -88,6 +108,41 @@ const defaultDeps: CollectionProcessingJobDeps = {
   tag: (platform, itemIds, onProgress, control) =>
     tagNewItems(platform, itemIds, undefined, onProgress, control),
 };
+
+const defaultBacklogDeps: CollectionProcessingBacklogDeps = {
+  embed: (platform, onProgress, control) =>
+    embedPlatformBacklog(platform, undefined, onProgress, control),
+  tag: (platform, onProgress, control) =>
+    tagPlatformBacklog(platform, undefined, onProgress, control),
+};
+
+/** Schedule one provider-specific platform backlog through the existing lane. */
+export function startCollectionProcessingBacklog(
+  { jobPlatform, itemPlatform, capability }: StartCollectionProcessingBacklogInput,
+  deps: CollectionProcessingBacklogDeps = defaultBacklogDeps,
+): void {
+  if (capability === 'llm') {
+    startBatchLane(jobPlatform, 'tag', (setProgress, control) =>
+      deps.tag(itemPlatform, setProgress, control),
+    );
+    return;
+  }
+
+  const diagnostic: EmbeddingTraceDetails = {
+    traceId: createEmbeddingTraceId('resume'),
+    platform: itemPlatform,
+    jobPlatform,
+    source: 'resume',
+    stage: 'scheduler',
+  };
+  embeddingTrace('scheduler:batch-dispatch', diagnostic);
+  startBatchLane(
+    jobPlatform,
+    'embed',
+    (setProgress, control) => deps.embed(itemPlatform, setProgress, control),
+    diagnostic,
+  );
+}
 
 export function startCollectionProcessingJobs(
   { jobPlatform, itemPlatform, itemIds }: StartCollectionProcessingJobsInput,

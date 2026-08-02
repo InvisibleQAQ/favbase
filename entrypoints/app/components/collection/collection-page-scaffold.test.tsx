@@ -143,6 +143,7 @@ describe('CollectionPageScaffold section contract', () => {
         <CollectionPageScaffold
           {...baseProps}
           pipeline={<div data-section="pipeline" />}
+          configurationNotice={<div data-section="configuration-notice" />}
           operation={<div data-section="operation" />}
           secondaryCategory={<div data-section="secondary-category" />}
         />,
@@ -153,6 +154,7 @@ describe('CollectionPageScaffold section contract', () => {
       'title',
       'pipeline',
       'search',
+      'configuration-notice',
       'operation',
       'primary-category',
       'tags',
