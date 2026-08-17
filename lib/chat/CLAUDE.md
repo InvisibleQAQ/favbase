@@ -37,8 +37,10 @@ chat 检索面（`retrieval.ts` / `tools.ts` / `agent.ts`）对知识库表**只
 
 ## 多会话持久化（P4，2026-07 迁至 PGlite）
 
+- `conversation-runtime.ts` — Conversation 异步运行所有权 Module，也是并发测试 Surface。对外提供不可变 snapshot + `subscribe` 以及 load/new/switch/delete/send/stop 命令；单调 generation 让 stale load/stream/catch/finally 无权提交，stream 的 Conversation id、model messages、draft 与 sources 都是 run-local 快照。主动 `stop` 不撤销 owner，故 partial answer 仍折回原 Conversation；switch/new/active-delete 才撤权并 abort。持久化只接收捕获的 `ChatConversation`，同 id 的 save/delete 经 mutation lane 串行，delete tombstone 保证删除是最终 mutation。生产 Store Adapter 复用 `history.ts` + `initDbProxy()`，LLM Adapter 懒加载 `agent.ts`，避免纯 ownership 测试触发 WXT storage 模块图。
+
 - `history.ts` — 会话 CRUD over PGlite `chat_conversations` 表（每会话一行，`model_messages` jsonb **全量**存储；entity 见 `lib/database/entities/chat-conversations.ts`，迁移 v005）。CRUD 显式 `db: FavbaseDb` 首参（镜像 `retrieval.ts` 仓库模式，亦是 in-memory PGlite 测试的前提）。
-  - `ChatConversation = { id: string; title: string; modelMessages: ModelMessage[]; createdAt: number; updatedAt: number }`（域类型不变，时间戳 ms epoch number；行映射 `rowToConversation` 做 timestamptz Date ↔ number 转换）。**持久 `modelMessages`（模型态，含 tool-call/tool-result 轮次）为唯一事实源**——display 气泡 + 每条 assistant 的来源卡片都在加载时从它重建（见 `sections/chat/use-chat-agent.rebuildDisplayMessages`）。`id` 用 `crypto.randomUUID()`（app.html 可用）。
+  - `ChatConversation = { id: string; title: string; modelMessages: ModelMessage[]; createdAt: number; updatedAt: number }`（域类型不变，时间戳 ms epoch number；行映射 `rowToConversation` 做 timestamptz Date ↔ number 转换）。**持久 `modelMessages`（模型态，含 tool-call/tool-result 轮次）为唯一事实源**——display 气泡 + 每条 assistant 的来源卡片都在加载时由 `conversation-runtime.ts` 重建。`id` 用 `crypto.randomUUID()`（app.html 可用）。
   - CRUD：`listConversations(db)`（`updatedAt` 降序）/ `loadConversation(db, id)` / `saveConversation(db, conv)`（`onConflictDoUpdate` upsert，**不 trim 存全量**——滑窗职责移到喂模型处；update 路径 v001 `updated_at` 触发器刷新时间戳）/ `createConversation()`（新空会话，未落盘）/ `deleteConversation(db, id)`。
   - `deriveTitle(modelMessages)` — 从首条 user 消息取文本、折叠空白、截断 40 字（`modelMessageText` 兼容 string / text-part 数组两种 content）。
   - `trimMessages(messages, max=MAX_MESSAGES=40)` — 滑动窗口：取末 `max` 条后**丢弃开头非 user 消息**，使窗口从 user 轮开始，避免模型看到孤立的 tool-result 脱离其 tool-call（部分 provider 会拒绝）。**调用点在 `use-chat-agent.send` 喂 `createChatStream` 前**（模型上下文预算），存储层不裁剪。
@@ -46,6 +48,7 @@ chat 检索面（`retrieval.ts` / `tools.ts` / `agent.ts`）对知识库表**只
 
 ## 测试
 
+- `conversation-runtime.test.ts` — fake Conversation Store/stream Adapter 的确定性并发契约：load 乱序、stale stream 不串写、旧 finally 不清新运行、save/delete 最终顺序、主动 stop 在有 partial answer 或首 token 前都保留并持久化当前 Conversation。
 - `rrf.test.ts` — 纯函数：空输入 / 单列表 1/(k+rank) / 多列表重叠累加 / 分数并列 id 升序 / k 影响 / topK 截断 / 列表内重复 id 只计首次。
 - `retrieval.test.ts` — in-memory PGlite（`PGlite.create` + vector/uuid_ossp/pg_trgm + `runMigrations`，同 `vector-store.test.ts` 搭法）：blank query→[] / 仅关键词臂（`embedQuery`→null）/ 两臂融合（注入 oneHot 向量 + minScore，双臂命中 chunk 居首）/ 维度不匹配降级不抛 / 平台过滤 / 标签过滤 / 无匹配→[] / 不选非命中 chunk。所有测试注入 `embedQuery`，故 storage 不入图、无需 mock。
 - `tools.test.ts` — `vi.mock('./retrieval')` + `vi.mock('@/lib/tagging')`（免网络），`getItemContent` 走真 in-memory PGlite：search 拍平结构 + 过滤透传 + top_k 默认 8 + platform enum 约束（`inputSchema.safeParse`）；getItemContent 命中/缺失；listTags 拍平 + 参数透传。经 fake `ToolExecutionOptions`（`experimental_context: { db }`）调 `execute`。
