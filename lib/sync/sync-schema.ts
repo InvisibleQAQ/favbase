@@ -1,27 +1,34 @@
 import { z } from 'zod';
+import { canonicalizeSettings } from '@/lib/storage/settings-schema';
 import type { RemoteConfig, RemoteSys } from './types';
+import { CONFIG_VERSION } from './constants';
 
 /**
- * Zod guards for everything read back from WebDAV. Any remote JSON is parsed
- * through these BEFORE touching local state — a conflict copy, a truncated
- * write, or a hand-edited file `safeParse`s to failure and is treated as "no
- * remote data" (never crashes local, never corrupts settings).
- *
- * `settings` is validated only as a non-empty object (not the full UserSettings
- * shape): it's the user's own config round-tripping through their own server,
- * and coupling this guard to every UserSettings field would reject otherwise
- * valid data whenever the settings schema evolves. Whole-config LWW trusts the
- * object; the envelope guard just rejects garbage.
+ * WebDAV envelope guards run before sync decisions. Invalid envelopes are
+ * treated as missing remote data; an incompatible version or invalid Settings
+ * payload throws a typed error so the engine stops instead of pushing over it.
+ * Settings shape, defaults, migration, and forward-compatible passthrough stay
+ * owned by the storage Module's canonicalizer.
  */
 
 const LocaleSchema = z.enum(['auto', 'zh-CN', 'en']);
+const RequiredSettingsInputSchema = z
+  .unknown()
+  .refine((value) => value !== undefined, { message: 'settings is required' });
 
 export const RemoteConfigSchema = z.object({
-  version: z.number(),
-  updatedAt: z.number(),
-  settings: z.record(z.string(), z.unknown()),
+  version: z.number().int().nonnegative(),
+  updatedAt: z.number().finite().nonnegative(),
+  settings: RequiredSettingsInputSchema,
   locale: LocaleSchema,
 });
+
+export class RemoteConfigVersionError extends Error {
+  constructor(readonly version: number) {
+    super(`Unsupported remote config version: ${version}`);
+    this.name = 'RemoteConfigVersionError';
+  }
+}
 
 export const RemoteSysSchema = z.object({
   lock_status: z.enum(['locked', 'unlocked']),
@@ -30,12 +37,14 @@ export const RemoteSysSchema = z.object({
   last_sync_time: z.number(),
 });
 
-/** Parse remote config.json; returns null on any validation failure. */
+/** Parse and canonicalize config.json; invalid Settings/version errors throw. */
 export function parseRemoteConfig(raw: unknown): RemoteConfig | null {
   const r = RemoteConfigSchema.safeParse(raw);
-  // Loosely-validated envelope (settings is a plain object) → cast through
-  // unknown; whole-config LWW trusts the user's own round-tripped config.
-  return r.success ? (r.data as unknown as RemoteConfig) : null;
+  if (!r.success) return null;
+  if (r.data.version !== CONFIG_VERSION) {
+    throw new RemoteConfigVersionError(r.data.version);
+  }
+  return { ...r.data, settings: canonicalizeSettings(r.data.settings) };
 }
 
 /** Parse remote sys.json; returns null on any validation failure. */

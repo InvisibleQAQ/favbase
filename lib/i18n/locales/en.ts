@@ -127,6 +127,10 @@ const en: Record<LocaleKeys, string> = {
   'settings.sync.err.auth': 'Authentication failed — check the username and password / app token',
   'settings.sync.err.locked': 'Another device is syncing — try again shortly',
   'settings.sync.err.permission': 'Missing permission to access this domain',
+  'settings.sync.err.invalid-settings':
+    'Remote settings are invalid — your local settings were not changed',
+  'settings.sync.err.incompatible-version':
+    'Remote settings were written by an incompatible Favbase version — update Favbase and retry',
   'settings.sync.err.unknown': 'Sync failed — please retry',
 
   'settings.embeddingCard.title': 'Semantic Search',

@@ -10,7 +10,7 @@
 
 import type { LLMProviderId } from '../providers';
 import { getAsrProviderDef, getProviderDef } from '../providers';
-import type { UserSettings } from './settings';
+import type { UserSettings } from './settings-schema';
 
 export function getEnvApiKey(providerId: string): string {
   const key = `VITE_${providerId.toUpperCase()}_API_KEY`;

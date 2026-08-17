@@ -4,7 +4,10 @@ export { STORAGE_KEYS, STORAGE_PREFIXES } from './keys';
 
 export {
   type UserSettings,
+  type SettingsValidationIssue,
   DEFAULT_SETTINGS,
+  canonicalizeSettings,
+  SettingsValidationError,
   settingsStorage,
   resolveAsrConfig,
   resolveLlmConfig,

@@ -45,6 +45,8 @@ export type WebdavErrorCode =
   | 'auth'
   | 'locked'
   | 'permission'
+  | 'invalid-settings'
+  | 'incompatible-version'
   | 'unknown';
 
 /** Remote `config.json` payload (Phase 1). */

@@ -22,6 +22,7 @@ WebDAV 双向同步领域。**第一期只同步配置**（`UserSettings` + loca
 - **引擎只在 Background SW 跑**（`sync-engine.ts`）。配置同步只碰 WXT storage（SW 可读写）；后台定时也必须在 SW。UI「立即同步」经消息 `WEBDAV_SYNC_NOW` → SW `doSync`；状态经 `webdav-sync-status` storage watch 回流 UI。
 - **配置整体 LWW**（非字段级 merge）。`webdav-sync-meta.localConfigUpdatedAt` 是本地时钟，与远端 `config.json.updatedAt` 比大小决定 push/pull/noop（`sync-logic.decideConfigSync`）。
 - **防 ping-pong 用内容哈希**（不用时间窗口，抗 `storage.watch` 异步乱序）。`lastKnownConfigHash` = 上次已知配置指纹。真编辑 → `noteLocalConfigChange` bump 时钟；**pull 写回前先 `adoptPulledConfig` 把 hash 设成远端 hash**，于是 pull 触发的 watch 算出的 hash 相等 → 跳过 bump，不会反弹回 push。
+- **Settings 先 canonicalize 再参与 LWW**：`parseRemoteConfig` 先验证 envelope/version，再调用 Storage Module 的 `canonicalizeSettings`。只有 canonical 值能进入 hash、`adoptPulledConfig` 和 local write。非法 Settings → `invalid-settings`；未知 `CONFIG_VERSION` → `incompatible-version`；两者都保留本地 Settings 与 pull metadata。
 - **首配时钟从真实编辑时间 seed**（`seedConfigClockIfUnset` 读 `settings.configSavedAt` 最大值，不用 `now`）。让第二台设备首配时倾向 pull 第一台的配置而非覆盖它。
 - **两级闸门**：`isConfigSyncable`（enabled + 凭据）门自动触发（scheduler）；`hasWebdavCredentials`（仅凭据）门手动同步（`doSync`）——`enabled` 只关自动，手动「立即同步」凭据齐全即可。
 - **凭据轻混淆**：`crypto.ts` AES-GCM（固定 key + 随机 IV）只混淆本地存储的 password，**非真加密**（config.json 传上 WebDAV 仍含明文 API Key，E2E 留后期）。解密失败回退当明文。
@@ -31,13 +32,13 @@ WebDAV 双向同步领域。**第一期只同步配置**（`UserSettings` + loca
 
 - `constants.ts` — 远端路径 / 锁超时（10min）/ alarm 名 / 周期（30min）/ 防抖（5min）/ config version。
 - `types.ts` — `WebdavConfig`（解密后形态）/ `WebdavSyncMeta`（LWW 时钟）/ `WebdavSyncStatus`（UI 态）/ `RemoteConfig`/`RemoteSys` / `WebdavErrorCode` / 消息类型。
-- `sync-schema.ts` — Zod 守卫：`parseRemoteConfig`/`parseRemoteSys`，**所有远端 JSON 进内存前 safeParse，失败当「远端无该数据」**（防坚果云冲突副本/脏数据击穿本地）。`settings` 只校验为非空对象（不深校验 UserSettings 每字段，避免 schema 演进即拒真数据）。
+- `sync-schema.ts` — Zod envelope 守卫：`parseRemoteConfig`/`parseRemoteSys`。无效 envelope 仍视为无远端；存在但不兼容的 version 或非法 Settings 抛 typed error，防止 LWW 误判后反向覆盖。Settings 字段规则、旧 ASR 迁移和未知字段 passthrough 由 `lib/storage/settings-schema.ts` 单一负责。
 - `sync-logic.ts` — **纯函数（单测 `sync-logic.test.ts`）**：`canonicalStringify`/`hashString`/`hashConfig`（键排序稳定指纹）+ `decideConfigSync`（LWW 三分支）+ `canAcquireLock`（超时夺锁）。
 - `crypto.ts` — AES-GCM `encryptSecret`/`decryptSecret`（单测 `sync-schema.test.ts`）。
 - `webdav-client.ts` — `webdav` npm 包薄封装 `WebdavClient`：`getJSON`(404→null)/`putJSON`(先 ensureDir)/`ensureDirectory`(逐级 MKCOL 容错)/`deletePath`/`testConnection`，Basic Auth。
 - `sync-config-storage.ts` — `local:webdav-config` 读写（password 经 crypto）+ `hasWebdavCredentials`/`isConfigSyncable`/`watchWebdavConfig`。
 - `sync-meta-storage.ts` — `local:webdav-sync-meta`（时钟/版本）+ `local:webdav-sync-status`（UI 态）+ `noteLocalConfigChange`(返回是否真变)/`adoptPulledConfig`/`seedConfigClockIfUnset`/`setSyncStatus`/`watchSyncStatus`。
-- `sync-engine.ts` — `doSync`（ensureDir → acquireLock → syncConfig → releaseLock，finally 释放 + 落状态，**永不抛**）/ `clearRemote`（删 `/FavbaseSync` 逃生）/ 错误分类 `classifyError`（401/403→auth，TypeError→network）。
+- `sync-engine.ts` — `doSync`（ensureDir → acquireLock → syncConfig → releaseLock，finally 释放 + 落状态，**永不抛**）/ `clearRemote`（删 `/FavbaseSync` 逃生）/ 错误分类 `classifyError`（Settings/version typed errors、401/403→auth、TypeError→network）。
 - `scheduler.ts` — `initWebdavSyncScheduler`：`chrome.alarms`（周期 30min + 变更防抖 5min）+ settings/locale watch（bump 时钟 + 排防抖）+ 启动补偿（≥30min 未同步即跑）。**MV3 必须 alarms 不能 setTimeout**，监听器同步注册。
 - `index.ts` — barrel（import `@/lib/sync`）。
 
@@ -51,4 +52,4 @@ WebDAV 双向同步领域。**第一期只同步配置**（`UserSettings` + loca
 
 ## 测试
 
-`sync-logic.test.ts`（LWW 三分支 / 锁超时夺锁 / 哈希稳定）+ `sync-schema.test.ts`（Zod 脏数据回退 / crypto 往返）。`pnpm test`。
+`sync-logic.test.ts`（LWW 三分支 / 锁超时夺锁 / 哈希稳定）+ `sync-schema.test.ts`（envelope、Settings canonicalization、version / crypto 往返）+ `sync-engine.test.ts`（pull 写入顺序与非法远端不覆盖）。`pnpm test`。

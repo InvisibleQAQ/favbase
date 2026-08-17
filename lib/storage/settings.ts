@@ -1,92 +1,76 @@
 import { storage } from 'wxt/utils/storage';
-import type { LLMProviderId, ASRProviderId, EmbeddingProviderId } from '../providers';
 import { STORAGE_KEYS } from './keys';
 import { resolveAsrConfig } from './resolve';
+import {
+  canonicalizeSettings,
+  DEFAULT_SETTINGS,
+  SettingsValidationError,
+  type UserSettings,
+} from './settings-schema';
 
-export interface UserSettings {
-  // LLM
-  provider: LLMProviderId;
-  providerApiKeys: Record<string, string>;
-  providerModels: Record<string, string>;
-  customBaseUrl: string;
-  customModel: string;
-  customProtocol: 'openai' | 'claude';
+export {
+  canonicalizeSettings,
+  DEFAULT_SETTINGS,
+  SettingsValidationError,
+  type SettingsValidationIssue,
+  type UserSettings,
+} from './settings-schema';
 
-  // ASR
-  asrProvider: ASRProviderId;
-  asrConfigs: Record<string, { apiKey: string; model: string }>;
+type SettingsWatcher = (
+  newValue: UserSettings,
+  oldValue: UserSettings | null,
+) => void;
 
-  // Embedding (semantic search)
-  embeddingProvider: EmbeddingProviderId;
-  /**
-   * `dimensions`: optional output truncation (Matryoshka). Forwarded to
-   * providers that support it (OpenAI v3 `dimensions`, Gemini
-   * `outputDimensionality`, openai-compatible passthrough); unset = model
-   * native dimension. Raw user input — validation/filtering happens in
-   * `resolveEmbeddingConfig` (`lib/embedding/config.ts`).
-   */
-  embeddingConfigs: Record<
-    string,
-    { apiKey: string; baseUrl?: string; model?: string; dimensions?: number }
-  >;
+const rawSettingsStorage = storage.defineItem<unknown>(STORAGE_KEYS.settings, {
+  fallback: DEFAULT_SETTINGS,
+});
 
-  // Platform connections
-  /** GitHub Personal Access Token (Connections tab). Absent/empty = not connected. */
-  githubToken?: string;
-  /**
-   * YouTube Data API v3 key + channel (Connections tab). Public-playlists
-   * sync needs no OAuth — an API key reads public data. `youtubeChannel` is
-   * the RAW user input (@handle, UC… id, or a channel URL); resolution to a
-   * channelId happens at probe/sync time (lib/youtube). Absent/empty = not
-   * configured.
-   */
-  youtubeApiKey?: string;
-  youtubeChannel?: string;
-
-  // Mode
-  prefMode: 'quality' | 'efficiency';
-
-  // Advanced
-  temperature: number;
-  maxTokens: number;
-
-  /**
-   * Per-section manual-save timestamps (ms epoch). Written only by the
-   * explicit save actions in `useSettings`; absence = the section was never
-   * manually saved (pre-feature installs need no migration).
-   */
-  configSavedAt?: Partial<Record<'llm' | 'asr' | 'embedding' | 'github' | 'youtube', number>>;
+function reportInvalidStoredSettings(error: SettingsValidationError): void {
+  console.error('[favbase settings] invalid persisted settings', error.message);
 }
 
-export const DEFAULT_SETTINGS: UserSettings = {
-  // LLM
-  provider: (import.meta.env.VITE_LLM_PROVIDER as LLMProviderId) || 'modelscope',
-  providerApiKeys: {},
-  providerModels: {},
-  customBaseUrl: (import.meta.env.VITE_LLM_BASE_URL as string) || '',
-  customModel: '',
-  customProtocol: (import.meta.env.VITE_LLM_PROTOCOL as 'openai' | 'claude') || 'openai',
+function canonicalOrDefault(input: unknown): UserSettings {
+  try {
+    return canonicalizeSettings(input);
+  } catch (error) {
+    if (!(error instanceof SettingsValidationError)) throw error;
+    reportInvalidStoredSettings(error);
+    return canonicalizeSettings({});
+  }
+}
 
-  // ASR
-  asrProvider: (import.meta.env.VITE_ASR_PROVIDER as ASRProviderId) || 'groq',
-  asrConfigs: {},
+export const settingsStorage = {
+  async getValue(): Promise<UserSettings> {
+    return canonicalOrDefault(await rawSettingsStorage.getValue());
+  },
 
-  // Embedding (semantic search)
-  embeddingProvider: (import.meta.env.VITE_EMBEDDING_PROVIDER as EmbeddingProviderId) || 'openai',
-  embeddingConfigs: {},
+  async setValue(value: UserSettings): Promise<void> {
+    await rawSettingsStorage.setValue(canonicalizeSettings(value));
+  },
 
-  // Mode
-  prefMode: 'efficiency',
+  watch(callback: SettingsWatcher): () => void {
+    return rawSettingsStorage.watch((newValue, oldValue) => {
+      let canonical: UserSettings;
+      try {
+        canonical = canonicalizeSettings(newValue);
+      } catch (error) {
+        if (!(error instanceof SettingsValidationError)) throw error;
+        reportInvalidStoredSettings(error);
+        return;
+      }
 
-  // Advanced
-  temperature: 0.3,
-  maxTokens: 100000,
+      let previous: UserSettings | null = null;
+      if (oldValue !== null && oldValue !== undefined) {
+        try {
+          previous = canonicalizeSettings(oldValue);
+        } catch {
+          previous = null;
+        }
+      }
+      callback(canonical, previous);
+    });
+  },
 };
-
-export const settingsStorage = storage.defineItem<UserSettings>(
-  STORAGE_KEYS.settings,
-  { fallback: DEFAULT_SETTINGS },
-);
 
 // Pure resolvers live in `./resolve` (no wxt storage import) and are
 // re-exported here so `@/lib/storage` remains the single import surface.
@@ -105,31 +89,16 @@ export async function getAsrSettings(): Promise<{ apiKey: string; model: string;
 }
 
 export async function migrateSettingsIfNeeded(): Promise<void> {
-  const raw = await settingsStorage.getValue();
+  const raw = await rawSettingsStorage.getValue();
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return;
+  const record = raw as Record<string, unknown>;
+  const hasLegacyAsrFields = [
+    'groqApiKey',
+    'groqModel',
+    'siliconFlowApiKey',
+    'siliconFlowAsrModel',
+  ].some((field) => Object.hasOwn(record, field));
+  if (!hasLegacyAsrFields) return;
 
-  if (raw.asrConfigs && Object.keys(raw.asrConfigs).length > 0) return;
-
-  const anyRaw = raw as unknown as Record<string, unknown>;
-  const hasOldFields =
-    anyRaw.groqApiKey || anyRaw.groqModel ||
-    anyRaw.siliconFlowApiKey || anyRaw.siliconFlowAsrModel;
-
-  if (!hasOldFields) return;
-
-  const asrConfigs: Record<string, { apiKey: string; model: string }> = {};
-
-  if (anyRaw.groqApiKey || anyRaw.groqModel) {
-    asrConfigs.groq = {
-      apiKey: (anyRaw.groqApiKey as string) ?? '',
-      model: (anyRaw.groqModel as string) ?? '',
-    };
-  }
-  if (anyRaw.siliconFlowApiKey || anyRaw.siliconFlowAsrModel) {
-    asrConfigs.siliconflow = {
-      apiKey: (anyRaw.siliconFlowApiKey as string) ?? '',
-      model: (anyRaw.siliconFlowAsrModel as string) ?? '',
-    };
-  }
-
-  await settingsStorage.setValue({ ...raw, asrConfigs });
+  await rawSettingsStorage.setValue(canonicalizeSettings(raw));
 }

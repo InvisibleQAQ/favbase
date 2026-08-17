@@ -1,6 +1,11 @@
-import { settingsStorage, localeStorage, type UserSettings } from '@/lib/storage';
+import { settingsStorage, localeStorage } from '@/lib/storage';
+import { SettingsValidationError } from '@/lib/storage/settings-schema';
 import { WebdavClient } from './webdav-client';
-import { parseRemoteConfig, parseRemoteSys } from './sync-schema';
+import {
+  parseRemoteConfig,
+  parseRemoteSys,
+  RemoteConfigVersionError,
+} from './sync-schema';
 import { decideConfigSync, canAcquireLock, hashConfig } from './sync-logic';
 import { getWebdavConfig, isConfigSyncable } from './sync-config-storage';
 import {
@@ -38,6 +43,10 @@ function genVersion(): string {
 /** Map a thrown error to a structured, translatable code. */
 function classifyError(err: unknown): { code: WebdavErrorCode; detail: string } {
   const detail = err instanceof Error ? err.message : String(err);
+  if (err instanceof SettingsValidationError) return { code: 'invalid-settings', detail };
+  if (err instanceof RemoteConfigVersionError) {
+    return { code: 'incompatible-version', detail };
+  }
   const status = (err as { status?: number })?.status;
   if (status === 401 || status === 403) return { code: 'auth', detail };
   // `webdav` surfaces network failures as TypeError from fetch.
@@ -88,7 +97,7 @@ async function syncConfig(client: WebdavClient, now: number): Promise<void> {
   const decision = decideConfigSync(meta.localConfigUpdatedAt, remote);
 
   if (decision === 'pull' && remote) {
-    const remoteSettings = remote.settings as UserSettings;
+    const remoteSettings = remote.settings;
     const remoteHash = hashConfig(remoteSettings, remote.locale);
     // Both writes fire our own storage.watch — register the intermediate
     // (new settings + current locale) and final hashes so the LWW clock isn't

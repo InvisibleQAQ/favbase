@@ -124,6 +124,8 @@ const zhCN = {
   'settings.sync.err.auth': '认证失败，请检查用户名与密码 / 授权码',
   'settings.sync.err.locked': '另一台设备正在同步，请稍后再试',
   'settings.sync.err.permission': '缺少访问该域名的权限',
+  'settings.sync.err.invalid-settings': '云端设置数据无效，本地设置未被修改',
+  'settings.sync.err.incompatible-version': '云端设置来自不兼容的 Favbase 版本，请升级后重试',
   'settings.sync.err.unknown': '同步出错，请重试',
 
   'settings.embeddingCard.title': 'Embedding 语义搜索',

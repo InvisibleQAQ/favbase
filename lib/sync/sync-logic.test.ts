@@ -8,9 +8,13 @@ import {
 } from './sync-logic';
 import { LOCK_TIMEOUT_MS } from './constants';
 import type { RemoteConfig, RemoteSys } from './types';
-import type { UserSettings } from '@/lib/storage';
+import { DEFAULT_SETTINGS } from '@/lib/storage/settings-schema';
 
-const baseSettings = { provider: 'openai', providerApiKeys: { openai: 'k' } } as unknown as UserSettings;
+const baseSettings = {
+  ...DEFAULT_SETTINGS,
+  provider: 'openai' as const,
+  providerApiKeys: { openai: 'k' },
+};
 
 function remoteConfig(updatedAt: number): RemoteConfig {
   return { version: 1, updatedAt, settings: baseSettings, locale: 'auto' };
@@ -44,15 +48,15 @@ describe('canonicalStringify', () => {
 
 describe('hashConfig', () => {
   it('is deterministic and order-independent', () => {
-    const a = { ...baseSettings, providerApiKeys: { openai: 'k', anthropic: 'z' } } as UserSettings;
-    const b = { ...baseSettings, providerApiKeys: { anthropic: 'z', openai: 'k' } } as UserSettings;
+    const a = { ...baseSettings, providerApiKeys: { openai: 'k', claude: 'z' } };
+    const b = { ...baseSettings, providerApiKeys: { claude: 'z', openai: 'k' } };
     expect(hashConfig(a, 'zh-CN')).toBe(hashConfig(b, 'zh-CN'));
   });
 
   it('changes when settings or locale change', () => {
     const base = hashConfig(baseSettings, 'auto');
     expect(hashConfig(baseSettings, 'en')).not.toBe(base);
-    const edited = { ...baseSettings, provider: 'anthropic' } as unknown as UserSettings;
+    const edited = { ...baseSettings, provider: 'claude' as const };
     expect(hashConfig(edited, 'auto')).not.toBe(base);
   });
 

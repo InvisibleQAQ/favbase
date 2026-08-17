@@ -6,6 +6,8 @@ ASR quota 文案只消费结构化 `ASR_QUOTA_EXCEEDED/resetAt`：自动转录 U
 
 Collection provider 阻塞统一使用 `configurationBlocker.*`。ASR 只在视频确实无可用官方字幕、状态机进入 `configuration_required` 且 resolver 无 key 时显示；Embedding/Tags 还必须有 ready coverage backlog。按钮深链 AI section 并携带 `resume=<platform>`；不得把空 ASR key 做成 Fetch 前置门。
 
+WebDAV Settings 拒绝使用结构化 `invalid-settings` / `incompatible-version`，对应 `settings.sync.err.*` 双语键；文案必须明确本地 Settings 未被覆盖或需要升级，raw validation detail 只作 debug，不进入翻译键。
+
 ## 平台命名
 
 - Analytics 一级导航在中英文环境都显示为 `Analytics`；只改 `nav.dashboard` 的文案值，稳定键和 `/` 路由保持不变。
