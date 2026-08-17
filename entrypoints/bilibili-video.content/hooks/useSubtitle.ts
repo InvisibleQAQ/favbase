@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { fetchSubtitle } from '@/lib/bilibili/bilibili-api';
 import { processSubtitles } from '@/lib/bilibili/subtitle-processor';
 import { onBiliMessage } from '@/lib/bilibili/messaging';
+import { sendBackgroundMessage } from '@/lib/background/client';
 import { onVideoCacheChange } from '@/lib/cache/video-cache';
 import type { SubtitleRow, SubtitleSource } from '@/lib/subtitle/types';
 
@@ -62,8 +63,7 @@ export function useSubtitle(
     });
 
     // Step 1: Check cache first (highest priority)
-    browser.runtime
-      .sendMessage({ type: 'GET_VIDEO_CACHE', platform: 'bilibili', videoId: bvid })
+    sendBackgroundMessage({ type: 'GET_VIDEO_CACHE', platform: 'bilibili', videoId: bvid })
       .then(
         (
           result: {
@@ -111,8 +111,7 @@ export function useSubtitle(
 
       // Write B-site subtitles to cache
       if (hasRows) {
-        browser.runtime
-          .sendMessage({
+        sendBackgroundMessage({
             type: 'CACHE_SUBTITLE',
             platform: 'bilibili',
             videoId: bvid,
@@ -152,8 +151,7 @@ export function useSubtitle(
 
                 // Write to cache
                 if (hasRows) {
-                  browser.runtime
-                    .sendMessage({
+                  sendBackgroundMessage({
                       type: 'CACHE_SUBTITLE',
                       platform: 'bilibili',
                       videoId: bvid!,

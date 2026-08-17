@@ -1,4 +1,3 @@
-import type { SubtitleSource } from '@/lib/subtitle/types';
 import type {
   TranscribeStage,
   TranscribeErrorInfo,
@@ -11,6 +10,7 @@ import {
 } from './transcribe-utils';
 import { getEmbeddedBvids, type PersistContentResult } from './bili-sync-service';
 import { onVideoCacheChange } from '@/lib/cache/video-cache';
+import { sendBackgroundMessage } from '@/lib/background/client';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -127,11 +127,10 @@ export class TranscriptionCoordinator {
 
     const cacheQuery = Promise.all(
       bvids.map((bvid) =>
-        browser.runtime
-          .sendMessage({ type: 'GET_VIDEO_CACHE', platform: 'bilibili', videoId: bvid })
-          .then((entry: unknown) => ({
+        sendBackgroundMessage({ type: 'GET_VIDEO_CACHE', platform: 'bilibili', videoId: bvid })
+          .then((entry) => ({
             bvid,
-            entry: entry as { rows: unknown[]; source: SubtitleSource } | null,
+            entry,
           }))
           .catch(() => ({ bvid, entry: null })),
       ),

@@ -12,6 +12,8 @@
 
 ## 约定
 
+- Background 页面抓取消息必须使用 `lib/background/client.ts` 的 `sendBackgroundMessage({ type: 'FETCH_BOOKMARK_PAGE', url })`；client 负责 envelope 与 `FetchPageResult` runtime decode。禁止直接调用 `browser.runtime.sendMessage` 或把响应强转为 `FetchPageResult`，畸形响应按 `BackgroundProtocolError` 失败。
+
 - **共享骨架**：写侧走 `ingestCollection`（`lib/ingest/`，docs/16 HIGH-1——事务边界/insert-only/分批/id-map 均由管线持有）；读侧 `escapeLike` 自 `lib/database/sql-utils.ts`，`getBookmarks` 走 `pagedItemsQuery`、`getLastSyncedAt` 走 `getPlatformLastSyncedAt`（`lib/database/collection-queries.ts`）——本文件只留平台特有 filter/orderBy/mapRow，勿再拷贝
 - **Insert-only（与 B站/github 同 ADR）**：items/authors/item_sources 只 insert（`onConflictDoNothing`，first-write-wins），不 update 不 delete。重新同步（每次访问自动触发）只追加新书签；标题/元数据不刷新；删除的书签不删行；书签跨文件夹移动**保留双 link**（与 bilibili 一致）。唯一例外：`sources` 文件夹行 upsert 刷新 `title`/`platformMeta.path`/`lastFetchedAt`（文件夹重命名经此反映）。完整 ADR 见 `.trellis/spec/frontend/database-bridge.md`
 - **items 行映射**：`platformItemId=normalizedUrl`（稳定去重键，非 chrome 节点 id——节点 id 跨设备不稳定）、`title=bookmark.title`（空回退 url）、`authorName=domain`、`originalUrl=bookmark.url`、`publishedAt=new Date(dateAdded)`、`contentState='pending'`（等待内容提取；提取成功 → `'chunked'`（Markdown 落 `item_contents.plainText` + `charSplit` 切块；`persistItemContent` 返回值 = chunk 行是否写入，零 chunk 一律 `'no_content'`——`'chunked'` 不许无 chunk 行），永久失败（死链/4xx（429 除外）/非 HTML/空正文/内网 URL）→ `'no_content'`，瞬时失败（5xx/429/超时/网络）保持 `'pending'` 自愈。无内容刷新/重抓——与 github README 同 insert-only 快照 ADR）

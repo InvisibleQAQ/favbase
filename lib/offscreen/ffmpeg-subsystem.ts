@@ -15,6 +15,7 @@ import {
   AUDIO_MIME_TYPE,
 } from '@/lib/transcription/constants';
 import { requestGroqTranscription } from '@/lib/transcription/groq-client';
+import { sendOffscreenProgress } from './client';
 import {
   estimateSafeChunkSeconds,
   buildOverlappedChunkPlan,
@@ -296,7 +297,7 @@ async function doTranscribe(msg: OffscreenTranscribeRequest): Promise<SubtitleRo
     touchSession(msg.sessionId);
     const { bytes, plan } = session.chunks[i];
 
-    chrome.runtime.sendMessage({
+    sendOffscreenProgress({
       type: 'OFFSCREEN_CHUNK_PROGRESS',
       sessionId: msg.sessionId,
       chunkIndex: i,

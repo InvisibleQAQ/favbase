@@ -1,5 +1,7 @@
+import type { BackgroundPushMessage } from './message-protocol';
+
 export interface BackgroundContext {
-  sendToTab(tabId: number, message: unknown): void;
+  sendToTab(tabId: number, message: BackgroundPushMessage): void;
   ensureOffscreen(): Promise<void>;
 
   startTranscription(tabId: number, videoId: string): AbortController | null;

@@ -1,6 +1,7 @@
 import { useTranslation } from '@/lib/i18n/use-translation';
 import type { LocalePreference } from '@/lib/storage';
 import type { OpenAppPageRequest } from '@/lib/background/messages';
+import { sendBackgroundMessage } from '@/lib/background/client';
 
 // AI config editing lives exclusively in app.html (draft + test-gated manual
 // save); this panel keeps only panel-local preferences (language) plus a jump
@@ -8,7 +9,7 @@ import type { OpenAppPageRequest } from '@/lib/background/messages';
 // the app page is delegated to the background SW.
 function openAppSettings() {
   const msg: OpenAppPageRequest = { type: 'OPEN_APP_PAGE', hash: '#/settings' };
-  void browser.runtime.sendMessage(msg).catch((err) => {
+  void sendBackgroundMessage(msg).catch((err) => {
     console.error('[favbase] failed to open app settings:', err);
   });
 }

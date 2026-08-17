@@ -31,8 +31,8 @@ import {
   watchSyncStatus,
   type WebdavConfig,
   type WebdavSyncStatus,
-  type SyncResult,
 } from '@/lib/sync';
+import { sendBackgroundMessage } from '@/lib/background/client';
 import { Iconify } from '../../components/iconify';
 import { useHostPermission } from './use-host-permission';
 import { permissionErrorKey } from './permission-error';
@@ -87,7 +87,7 @@ export function WebdavSyncCard() {
     }
     await persist({ ...form, url });
     // The SW owns the engine + the persisted grant; status flows back via watch.
-    const result = (await browser.runtime.sendMessage({ type: 'WEBDAV_SYNC_NOW' })) as SyncResult;
+    const result = await sendBackgroundMessage({ type: 'WEBDAV_SYNC_NOW' });
     if (!result?.ok && result?.errorCode) {
       setLocalError(t(`settings.sync.err.${result.errorCode}`));
     }
@@ -98,9 +98,9 @@ export function WebdavSyncCard() {
     setLocalError(null);
     setClearing(true);
     try {
-      const result = (await browser.runtime.sendMessage({
+      const result = await sendBackgroundMessage({
         type: 'WEBDAV_CLEAR_REMOTE',
-      })) as SyncResult;
+      });
       if (!result?.ok && result?.errorCode) {
         setLocalError(t(`settings.sync.err.${result.errorCode}`));
       }

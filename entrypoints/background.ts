@@ -1,31 +1,17 @@
-import type { BgMessage } from '@/lib/background/messages';
 import type { BackgroundContext } from '@/lib/background/types';
 import { initCacheStorageListener } from '@/lib/cache/video-cache';
 import { ensure as ensureOffscreen } from '@/lib/offscreen/lifecycle';
 import { initPortBridge } from '@/lib/background/port-bridge';
 import { DB_CHANNEL_NAME } from '@/lib/database/constants';
 import { runStorageMigrations } from '@/lib/storage';
-import {
-  handleTranscribe,
-  handleTranscribeAbort,
-  handleOffscreenProgress,
-} from '@/lib/background/transcription-handlers';
-import {
-  handleGetVideoCache,
-  handleCacheSubtitle,
-} from '@/lib/background/cache-handlers';
-import {
-  handleSummarize,
-  handleSummarizeAbort,
-  handleGetSummaryCache,
-} from '@/lib/background/summary-handlers';
 import { createJobRegistry } from '@/lib/background/job-registry';
-import { handleOpenAppPage, openWelcomePage } from '@/lib/background/app-handlers';
-import { handleFetchBookmarkPage } from '@/lib/background/bookmark-handlers';
-import { handleWebdavSyncNow, handleWebdavClearRemote } from '@/lib/background/sync-handlers';
+import { openWelcomePage } from '@/lib/background/app-handlers';
 import { initJobsBadgeJanitor } from '@/lib/background/jobs-badge';
 import { initWebdavSyncScheduler } from '@/lib/sync';
 import { captureXTokens } from '@/lib/x/x-auth';
+import { dispatchBackgroundMessage } from '@/lib/background/dispatcher';
+import { routeBackgroundMessage } from '@/lib/background/routes';
+import { encodeBackgroundPush } from '@/lib/background/message-protocol';
 
 function createBackgroundContext(): BackgroundContext {
   const transcription = createJobRegistry();
@@ -34,7 +20,9 @@ function createBackgroundContext(): BackgroundContext {
 
   return {
     sendToTab(tabId, message) {
-      browser.tabs.sendMessage(tabId, message).catch(() => {});
+      const encoded = encodeBackgroundPush(message);
+      if (!encoded) return;
+      browser.tabs.sendMessage(tabId, encoded).catch(() => {});
     },
     ensureOffscreen,
 
@@ -98,40 +86,7 @@ export default defineBackground(() => {
   const ctx = createBackgroundContext();
 
   browser.runtime.onMessage.addListener(
-    (
-      msg: BgMessage,
-      sender: { tab?: { id?: number } },
-    ): void | Promise<unknown> => {
-      switch (msg.type) {
-        case 'OFFSCREEN_CHUNK_PROGRESS':
-          handleOffscreenProgress(msg, sender, ctx);
-          return;
-        case 'TRANSCRIBE_ABORT':
-          return handleTranscribeAbort(msg, sender, ctx);
-        case 'TRANSCRIBE_AUDIO':
-          return handleTranscribe(msg, sender, ctx);
-        case 'GET_VIDEO_CACHE':
-          return handleGetVideoCache(msg);
-        case 'CACHE_SUBTITLE':
-          return handleCacheSubtitle(msg);
-        case 'SUMMARIZE_VIDEO':
-          return handleSummarize(msg, sender, ctx);
-        case 'SUMMARIZE_ABORT':
-          return handleSummarizeAbort(msg, sender, ctx);
-        case 'GET_SUMMARY_CACHE':
-          return handleGetSummaryCache(msg);
-        case 'OPEN_APP_PAGE':
-          return handleOpenAppPage(msg);
-        case 'FETCH_BOOKMARK_PAGE':
-          return handleFetchBookmarkPage(msg);
-        case 'WEBDAV_SYNC_NOW':
-          return handleWebdavSyncNow(msg);
-        case 'WEBDAV_CLEAR_REMOTE':
-          return handleWebdavClearRemote(msg);
-        default:
-          return;
-      }
-    },
+    (msg: unknown, sender) => dispatchBackgroundMessage(msg, sender, ctx, routeBackgroundMessage),
   );
 
   chrome.runtime.onInstalled.addListener((details) => {

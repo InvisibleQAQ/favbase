@@ -1,4 +1,5 @@
 import type { OffscreenStatus } from './types';
+import { sendOffscreenMessage } from './client';
 
 let pending: Promise<void> | null = null;
 
@@ -24,5 +25,5 @@ export function ensure(): Promise<void> {
 
 export async function getSubsystemStatus(): Promise<OffscreenStatus> {
   await ensure();
-  return chrome.runtime.sendMessage({ type: 'OFFSCREEN_STATUS' });
+  return sendOffscreenMessage({ type: 'OFFSCREEN_STATUS' });
 }

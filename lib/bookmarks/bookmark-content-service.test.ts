@@ -12,8 +12,8 @@ import { onDomainEvent } from '@/lib/events';
 
 const { backgroundSendMessage } = vi.hoisted(() => ({ backgroundSendMessage: vi.fn() }));
 
-vi.mock('wxt/browser', () => ({
-  browser: { runtime: { sendMessage: backgroundSendMessage } },
+vi.mock('@/lib/background/client', () => ({
+  sendBackgroundMessage: backgroundSendMessage,
 }));
 
 import {

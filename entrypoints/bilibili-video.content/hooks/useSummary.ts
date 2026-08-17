@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   SummaryErrorInfo,
-  SummaryResponse,
   SummaryResult,
-  SummaryStatusPush,
   VideoSegment,
 } from '@/lib/summary/types';
+import { onBackgroundPush, sendBackgroundMessage } from '@/lib/background/client';
 
 const PLATFORM = 'bilibili';
 
@@ -65,11 +64,9 @@ export function useSummary(bvid: string | null, title: string): UseSummaryReturn
   /** Read-only cache probe — never triggers an LLM call. */
   const probeCache = useCallback(
     (id: string) => {
-      browser.runtime
-        .sendMessage({ type: 'GET_SUMMARY_CACHE', platform: PLATFORM, videoId: id })
-        .then((response: unknown) => {
+      sendBackgroundMessage({ type: 'GET_SUMMARY_CACHE', platform: PLATFORM, videoId: id })
+        .then((cached) => {
           if (isStale(id)) return;
-          const cached = response as SummaryResult | null;
           if (cached) setState(toState({ ...cached, cached: true }));
         })
         .catch(() => {});
@@ -95,15 +92,10 @@ export function useSummary(bvid: string | null, title: string): UseSummaryReturn
 
   // Streaming partials
   useEffect(() => {
-    const handler = (msg: unknown) => {
-      const push = msg as SummaryStatusPush;
-      if (push?.type !== 'SUMMARY_STATUS') return;
+    return onBackgroundPush('SUMMARY_STATUS', (push) => {
       if (push.videoId.toLowerCase() !== bvid?.toLowerCase()) return;
       setState((prev) => (prev.generating ? { ...prev, markdown: push.markdown } : prev));
-    };
-
-    browser.runtime.onMessage.addListener(handler);
-    return () => browser.runtime.onMessage.removeListener(handler);
+    });
   }, [bvid]);
 
   const run = useCallback(
@@ -118,17 +110,15 @@ export function useSummary(bvid: string | null, title: string): UseSummaryReturn
         segments: force ? [] : prev.segments,
       }));
 
-      browser.runtime
-        .sendMessage({
+      sendBackgroundMessage({
           type: 'SUMMARIZE_VIDEO',
           platform: PLATFORM,
           videoId: bvid,
           title,
           force,
         })
-        .then((response: unknown) => {
+        .then((res) => {
           if (isStale(bvid)) return;
-          const res = response as SummaryResponse;
           if (res.success) {
             setState(toState(res.data));
           } else {
@@ -156,7 +146,7 @@ export function useSummary(bvid: string | null, title: string): UseSummaryReturn
 
   const cancel = useCallback(() => {
     if (!bvid) return;
-    browser.runtime.sendMessage({ type: 'SUMMARIZE_ABORT', videoId: bvid }).catch(() => {});
+    sendBackgroundMessage({ type: 'SUMMARIZE_ABORT', videoId: bvid }).catch(() => {});
     // Drop the half-streamed text — it was never persisted and must not look
     // like a finished summary — then fall back to whatever the cache holds.
     setState(EMPTY);

@@ -95,12 +95,20 @@ WXT 入口点及运行时角色总览，详细结构见对应目录 `CLAUDE.md`�
 - `lib/cache/CLAUDE.md` — 视频字幕缓存（平台感知）
 - `lib/auto-transcribe/CLAUDE.md` — 自动转录状态机（平台无关）
 - `lib/background/CLAUDE.md` — Background SW dispatcher + 消息桥 + CDN 请求头
+- `lib/runtime-message/CLAUDE.md` — 跨 runtime 协议共享 primitive（只复用 schema 片段，不注册具体消息）
 
 ### 数据库
 - `lib/database/CLAUDE.md` — PGlite + Drizzle RPC Proxy 架构
 - `lib/database/entities/CLAUDE.md` — Per-table Drizzle schema
 - `lib/database/bridges/CLAUDE.md` — RPC 桥接层
 - `lib/database/migrations/CLAUDE.md` — 自定义迁移系统
+
+### 跨 runtime 协议
+
+- Bilibili 页面桥、Background runtime、Offscreen runtime 各自维护协议 Module；不要创建横跨页面、Background、Offscreen 与 Database RPC 的全知协议。
+- runtime 边界的 `unknown` 必须先经所属 decoder；调用方使用 typed client，禁止对 `sendMessage` 响应做裸类型断言。新消息须同时注册请求/响应 schema、路由和 contract test。
+- 协议 envelope 的 `channel`/`protocolVersion` 是可选兼容元数据：新发送方发送 v1，旧消息仍可接收；未知 type、非法 payload、错误 sender 静默拒绝，非法响应在本地抛协议错误。
+- Background → tab 的 status push 也必须经 encoder/decoder；Database Port RPC 仍由 `lib/database/bridges/` 自己负责，不并入这些 browser runtime 协议。
 
 ### 基础设施
 - `lib/ai/CLAUDE.md` — Vercel AI SDK 集成（LLM + Embedding provider/client）+ Provider 定义（`lib/providers.ts`）

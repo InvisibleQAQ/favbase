@@ -5,10 +5,7 @@ import type {
   TranscribeStatusPush,
   TranscribeErrorInfo,
 } from '@/lib/transcription/types';
-import type {
-  OffscreenPrepareRequest,
-  OffscreenTranscribeRequest,
-} from '@/lib/offscreen/types';
+import { sendOffscreenMessage } from '@/lib/offscreen/client';
 import {
   ensureGroqConnectivity,
   requestGroqTranscription,
@@ -99,36 +96,26 @@ export function createTranscribeAudio(
     const sessionId = `${videoId}_${Date.now()}`;
     ctx.registerChunkSession(sessionId, tabId);
     try {
-      const prepareRes: { success: boolean; error?: TranscribeErrorInfo } =
-        await chrome.runtime.sendMessage({
-          type: 'OFFSCREEN_CHUNK_PREPARE',
-          sessionId,
-          audioUrl,
-          maxBytes: GROQ_MAX_AUDIO_BYTES,
-        } satisfies OffscreenPrepareRequest);
+      const prepareRes = await sendOffscreenMessage({
+        type: 'OFFSCREEN_CHUNK_PREPARE',
+        sessionId,
+        audioUrl,
+        maxBytes: GROQ_MAX_AUDIO_BYTES,
+      });
+      if (!prepareRes.success) throw prepareRes.error;
 
-      if (!prepareRes.success) throw prepareRes.error!;
-
-      const transcribeRes: {
-        success: boolean;
-        rows?: SubtitleRow[];
-        error?: TranscribeErrorInfo;
-      } = await chrome.runtime.sendMessage({
+      const transcribeRes = await sendOffscreenMessage({
         type: 'OFFSCREEN_CHUNK_TRANSCRIBE',
         sessionId,
         apiKey: config.apiKey,
         model: config.model,
         title,
         baseUrl: config.baseUrl,
-      } satisfies OffscreenTranscribeRequest);
-
-      chrome.runtime
-        .sendMessage({ type: 'OFFSCREEN_CHUNK_RELEASE', sessionId })
-        .catch(() => {});
-
-      if (!transcribeRes.success) throw transcribeRes.error!;
-      return transcribeRes.rows!;
+      });
+      if (!transcribeRes.success) throw transcribeRes.error;
+      return transcribeRes.rows;
     } finally {
+      await sendOffscreenMessage({ type: 'OFFSCREEN_CHUNK_RELEASE', sessionId }).catch(() => {});
       ctx.unregisterChunkSession(sessionId);
     }
   };

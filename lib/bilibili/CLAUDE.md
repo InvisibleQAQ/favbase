@@ -4,7 +4,7 @@ B站字幕获取 (Step 1 — 已完成，Bilitato 对齐)。双通道架构：Ma
 
 ## 模块结构
 
-- `messaging.ts` — BiliMessageMap（消息类型注册表）+ postBiliMessage()（类型安全发送，支持 defer 延迟）+ onBiliMessage()（类型安全订阅，返回 unsub，内部封装 source 校验）
+- `messaging.ts` — Bilibili 页面协议 Module：BiliMessageMap + per-type Zod decoder/encoder；postBiliMessage()（支持 defer 延迟）和 onBiliMessage()（返回 unsub，校验 `event.source`、字段、行数与总文本预算）。接受 legacy wire shape，并可附带 `channel:'favbase-bilibili'`/`protocolVersion:1`；同页 `postMessage` 不能认证发送者，只能做形状、路由和容量约束
 - `types.ts` — RawSubtitleItem, BiliAuthInfo, BiliFavFolder, BiliFavVideo, BiliFavOrder, BiliFavVideoListResponse, SubtitleTrack, DashAudioStream 等 bilibili 领域类型
 - `url-utils.ts` — 纯 URL 工具函数（零 chrome.* 依赖，Main World 安全）：extractBvid()（保留原始大小写）, extractPageNum(), isSubtitleCdnUrl()
 - `bilibili-api.ts` — B站 API 层深模块：内部 ENDPOINTS URL builder + BiliAuthError + buildFetchInit(auth?) helper（有 auth 时显式 Cookie header，否则 credentials:'include'）。导出 getBiliAuth()（chrome.cookies 读 SESSDATA/DedeUserID）, fetchFavFolders(auth)（收藏夹列表）, fetchFavVideos(auth, mediaId, page, ps=20, order='mtime', keyword='')（收藏夹视频分页列表，`/x/v3/fav/resource/list`，`order`=`BiliFavOrder`(mtime/view/pubtime) 服务端全量降序排序；非空 `keyword` 追加 `&type=0&keyword=` 做当前夹标题搜索）, fetchSubtitle(bvid, cid, auth?)（字幕 API + CDN，Content Script 省略 auth / Extension Page 传 auth）, fetchCidByPageList(bvid, pageNum, auth?)（CID 获取，同上）, fetchPlayUrl(bvid, cid)（DASH manifest）, extractBiliAudioUrl(bvid, cid)（DASH manifest 最优音频流 URL 提取，供 transcription-handlers.ts 注入 pipeline deps）
@@ -24,7 +24,7 @@ B站字幕获取 (Step 1 — 已完成，Bilitato 对齐)。双通道架构：Ma
 - BVID 规范化: `extractBvid()` 保留原始大小写（B站 API 区分大小写），`normalizeVideoId()`（`lib/cache/video-cache.ts`）在缓存层做纯 lowercase 规范化（平台无关，无 BV 正则）。storage key 格式 `vc:{platform}:{videoId}` 含平台命名空间；API 调用和消息传递保留原始大小写，比较时用 `.toLowerCase()` 做大小写无关匹配
 - Step 1 字幕获取: 双通道架构 — Main World 脚本（`bilibili-inject.content.ts`）拦截 fetch/XHR 被动捕获字幕优先，3s 超时降级到 Content Script 同源 API 调用
 - CID 获取: Main World 读取 `window.__INITIAL_STATE__` 优先（定期重发直到 content script 接收），降级到 `/x/player/pagelist` API（轻量，不需要 WBI 签名）
-- postMessage 桥接: Main World -> Isolated World，通过 `lib/bilibili/messaging.ts` 统一收发。BiliMessageMap 定义所有消息类型，发送用 postBiliMessage()，接收用 onBiliMessage()。消息流：`BILI_ROUTE_SWITCH`(bvid, 路由变化即时通知) → `BILI_SUBTITLE_HANDSHAKE`(bvid+cid, 800ms延迟) → `BILI_SUBTITLE_DATA`(字幕数据, defer 发送)。新增消息类型只需在 BiliMessageMap 加一行
+- postMessage 桥接: Main World -> Isolated World，通过 `lib/bilibili/messaging.ts` 统一收发。所有输入先 decode，畸形/未知消息只记录一次 warning 后丢弃，不进入字幕处理或缓存。BiliMessageMap、schema 和测试必须一起更新；消息流：`BILI_ROUTE_SWITCH`(bvid, 路由变化即时通知) → `BILI_SUBTITLE_HANDSHAKE`(bvid+cid, 800ms延迟) → `BILI_SUBTITLE_DATA`(字幕数据, defer 发送)。新增消息不能只改 TypeScript union
 - 字幕后处理: pipeline 通过 `PipelineDeps.postProcess` 注入平台特有的字幕后处理。B 站注入 `processSubtitles()`（四步管线，不合并，逐条独立）。Content Script 侧（useSubtitle）直接 import `processSubtitles`（同域，方向正确）
 - B 站认证: manifest 声明 `cookies` 权限。`lib/bilibili/bilibili-api.ts` 的 `getBiliAuth()` 通过 `chrome.cookies.get()` 读取 SESSDATA + DedeUserID，检查 expirationDate。需要认证的 API（如 fetchFavFolders）手动拼 `Cookie: SESSDATA=xxx` header，Content Script 侧 API 通过 `credentials: 'include'` 自动带 cookie
 - Bilibili 领域同步：`bili-sync-service.ts` 持有 Bilibili 查询与编排知识；共享写入不变量集中在 `lib/ingest`。app runtime 只能通过 `syncAllFavoriteVideos` 的 durable callback 消费新条目；service 不 import app job store，adapter 不反向抓 favorites page 或查 pending

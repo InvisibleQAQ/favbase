@@ -2,6 +2,7 @@ import { t, formatDateTime } from '@/lib/i18n';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import type { LocaleKeys } from '@/lib/i18n/locales/zh-CN';
 import type { OpenAppPageRequest } from '@/lib/background/messages';
+import { sendBackgroundMessage } from '@/lib/background/client';
 import type { SummaryErrorCode, VideoSegment } from '@/lib/summary/types';
 import type { UseSummaryReturn } from '../hooks/useSummary';
 import { formatClock } from '@/lib/format';
@@ -10,7 +11,7 @@ import { Markdown } from './Markdown';
 
 function openAppSettings() {
   const msg: OpenAppPageRequest = { type: 'OPEN_APP_PAGE', hash: '#/settings' };
-  void browser.runtime.sendMessage(msg).catch((err) => {
+  void sendBackgroundMessage(msg).catch((err) => {
     console.error('[favbase] failed to open app settings:', err);
   });
 }

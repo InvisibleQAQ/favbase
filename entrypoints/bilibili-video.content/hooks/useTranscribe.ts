@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SubtitleRow } from '@/lib/subtitle/types';
 import type {
-  TranscribeResponse,
-  TranscribeStatusPush,
   TranscribeStage,
   TranscribeErrorInfo,
 } from '@/lib/transcription/types';
+import { onBackgroundPush, sendBackgroundMessage } from '@/lib/background/client';
 import { useRetryCountdown } from '@/lib/hooks/useRetryCountdown';
 
 export interface TranscribeState {
@@ -66,10 +65,8 @@ export function useTranscribe(
   }, [bvid, resetCountdown]);
 
   useEffect(() => {
-    const handler = (msg: unknown) => {
-      const m = msg as TranscribeStatusPush;
-      if (m?.type !== 'TRANSCRIBE_STATUS') return;
-      if (m.videoId && m.videoId.toLowerCase() !== bvid?.toLowerCase()) return;
+    return onBackgroundPush('TRANSCRIBE_STATUS', (m) => {
+      if (m.videoId.toLowerCase() !== bvid?.toLowerCase()) return;
 
       setState((prev) => ({
         ...prev,
@@ -78,10 +75,7 @@ export function useTranscribe(
         stageParams: m.stageParams,
         error: m.error ?? prev.error,
       }));
-    };
-
-    browser.runtime.onMessage.addListener(handler);
-    return () => browser.runtime.onMessage.removeListener(handler);
+    });
   }, [bvid]);
 
   const startTranscribe = useCallback(() => {
@@ -96,11 +90,9 @@ export function useTranscribe(
     }));
     resetCountdown();
 
-    browser.runtime
-      .sendMessage({ type: 'TRANSCRIBE_AUDIO', platform: 'bilibili', videoId: bvid, cid, title })
-      .then((response: unknown) => {
+    sendBackgroundMessage({ type: 'TRANSCRIBE_AUDIO', platform: 'bilibili', videoId: bvid, cid, title })
+      .then((res) => {
         if (bvidRef.current?.toLowerCase() !== bvid?.toLowerCase()) return;
-        const res = response as TranscribeResponse;
 
         if (res.success) {
           setState((prev) => ({
@@ -141,7 +133,7 @@ export function useTranscribe(
 
   const cancelTranscribe = useCallback(() => {
     if (!bvid) return;
-    browser.runtime.sendMessage({ type: 'TRANSCRIBE_ABORT', videoId: bvid }).catch(() => {});
+    sendBackgroundMessage({ type: 'TRANSCRIBE_ABORT', videoId: bvid }).catch(() => {});
     setState((prev) => ({
       ...prev,
       transcribing: false,

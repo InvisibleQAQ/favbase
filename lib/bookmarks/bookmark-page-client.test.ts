@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 const { sendMessage } = vi.hoisted(() => ({ sendMessage: vi.fn() }));
 
-vi.mock('wxt/browser', () => ({
-  browser: { runtime: { sendMessage } },
+vi.mock('@/lib/background/client', () => ({
+  sendBackgroundMessage: sendMessage,
 }));
 
 import { fetchBookmarkPageInBackground } from './bookmark-page-client';
