@@ -1,9 +1,9 @@
-import { and, asc, desc, eq, inArray, notExists, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { getDb, type FavbaseDb } from '@/lib/database';
 import { emitDomainEvent } from '@/lib/events';
 import type { CooperativeCheckpoint } from '@/lib/collections';
 import type { CollectionPlatform } from '@/lib/collections/platforms';
-import { getDownstreamEligibilityCondition } from '@/lib/collections/downstream-eligibility';
+import { createCollectionProcessingPolicy } from '@/lib/collections/collection-processing-policy';
 import { items } from '@/lib/database/entities/items';
 import { itemContents } from '@/lib/database/entities/item-contents';
 import { tags } from '@/lib/database/entities/tags';
@@ -83,6 +83,7 @@ export async function tagPlatformItem(
     if (!config.enabled) return 'skipped';
 
     const db = d.db();
+    const policy = createCollectionProcessingPolicy(db, platform);
     const itemRows = await db
       .select({
         id: items.id,
@@ -91,17 +92,10 @@ export async function tagPlatformItem(
         platformMeta: items.platformMeta,
       })
       .from(items)
-      .where(and(eq(items.platform, platform), eq(items.platformItemId, platformItemId)))
+      .where(and(eq(items.platformItemId, platformItemId), policy.tagging.pendingCandidate))
       .limit(1);
     if (itemRows.length === 0) return 'skipped';
     const item = itemRows[0];
-
-    const linked = await db
-      .select({ tagId: itemTags.tagId })
-      .from(itemTags)
-      .where(eq(itemTags.itemId, item.id))
-      .limit(1);
-    if (linked.length > 0) return 'skipped';
 
     const contentRows = await db
       .select({ plainText: itemContents.plainText })
@@ -180,22 +174,11 @@ export async function tagPlatformBacklog(
   }
 
   const db = d.db();
+  const policy = createCollectionProcessingPolicy(db, platform);
   const candidates = await db
     .select({ platformItemId: items.platformItemId })
     .from(items)
-    .where(
-      and(
-        eq(items.platform, platform),
-        getDownstreamEligibilityCondition(platform),
-        inArray(items.contentState, ['chunked', 'embedded']),
-        notExists(
-          db
-            .select({ value: sql`1` })
-            .from(itemTags)
-            .where(eq(itemTags.itemId, items.id)),
-        ),
-      ),
-    )
+    .where(policy.tagging.pendingCandidate)
     .orderBy(asc(items.createdAt), asc(items.id));
 
   await tagNewItems(

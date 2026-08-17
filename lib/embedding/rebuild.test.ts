@@ -76,19 +76,22 @@ describe('rebuildPendingEmbeddings', () => {
    * `createdAt` pins the deterministic processing order (rebuild sorts by it).
    */
   async function seedItem(opts: {
+    platform?: string;
     platformItemId: string;
     contentState: string;
     chunkTexts?: string[];
     createdAt: Date;
+    platformMeta?: Record<string, unknown>;
   }): Promise<string> {
+    const platform = opts.platform ?? 'test';
     const [author] = await db
       .insert(schema.authors)
-      .values({ platform: 'test', platformAuthorId: `a-${opts.platformItemId}`, name: 'A' })
+      .values({ platform, platformAuthorId: `a-${opts.platformItemId}`, name: 'A' })
       .returning();
     const [item] = await db
       .insert(schema.items)
       .values({
-        platform: 'test',
+        platform,
         platformItemId: opts.platformItemId,
         authorId: author.id,
         title: 'T',
@@ -96,6 +99,7 @@ describe('rebuildPendingEmbeddings', () => {
         originalUrl: 'http://x',
         contentState: opts.contentState,
         createdAt: opts.createdAt,
+        platformMeta: opts.platformMeta ?? {},
       })
       .returning();
 
@@ -172,6 +176,36 @@ describe('rebuildPendingEmbeddings', () => {
       { completed: 1, total: 2 },
       { completed: 2, total: 2 },
     ]);
+  });
+
+  it('excludes Collection Items rejected by the shared processing policy', async () => {
+    const valid = await seedItem({
+      platformItemId: 'r-policy-valid',
+      contentState: 'chunked',
+      chunkTexts: ['valid'],
+      createdAt: T0,
+    });
+    const invalid = await seedItem({
+      platform: 'bilibili',
+      platformItemId: 'r-policy-invalid',
+      contentState: 'chunked',
+      chunkTexts: ['invalid'],
+      createdAt: T1,
+      platformMeta: { attr: 9 },
+    });
+    const embed = vi.fn(async (_config: ResolvedEmbeddingConfig, texts: string[]) =>
+      fakeVectors(texts.length),
+    );
+
+    const outcome = await rebuildPendingEmbeddings(db, {
+      getConfig: async () => fakeConfig(true),
+      embed,
+    });
+
+    expect(outcome).toEqual({ status: 'completed', completed: 1, total: 1 });
+    expect(await getContentState(valid)).toBe('embedded');
+    expect(await getContentState(invalid)).toBe('chunked');
+    expect(embed).toHaveBeenCalledWith(expect.anything(), ['valid']);
   });
 
   it('stops at the first failing item and resumes with only the remainder', async () => {

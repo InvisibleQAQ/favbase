@@ -76,6 +76,7 @@ describe('embedPlatformBacklog', () => {
     contentState: string;
     chunkTexts?: string[];
     createdAt?: Date;
+    platformMeta?: Record<string, unknown>;
   }): Promise<string> {
     const platform = opts.platform ?? 'test';
     const [author] = await db
@@ -97,6 +98,7 @@ describe('embedPlatformBacklog', () => {
         originalUrl: 'http://x',
         contentState: opts.contentState,
         createdAt: opts.createdAt ?? new Date('2026-01-01T00:00:00Z'),
+        platformMeta: opts.platformMeta ?? {},
       })
       .returning();
 
@@ -241,6 +243,37 @@ describe('embedPlatformBacklog', () => {
     expect(embed).toHaveBeenCalledWith(expect.anything(), ['in']);
   });
 
+  it('excludes Collection Items rejected by the shared processing policy', async () => {
+    const valid = await seedItem({
+      platform: 'bilibili',
+      platformItemId: 'BV-VALID',
+      contentState: 'chunked',
+      chunkTexts: ['valid'],
+      platformMeta: { attr: 0 },
+    });
+    const invalid = await seedItem({
+      platform: 'bilibili',
+      platformItemId: 'BV-INVALID',
+      contentState: 'chunked',
+      chunkTexts: ['invalid'],
+      platformMeta: { attr: 9 },
+    });
+    const embed = vi.fn(async (_config: ResolvedEmbeddingConfig, texts: string[]) =>
+      fakeVectors(texts.length),
+    );
+
+    await embedPlatformBacklog('bilibili', {
+      db: () => db,
+      getConfig: async () => fakeConfig(true),
+      embed,
+    });
+
+    expect(await getContentState(valid)).toBe('embedded');
+    expect(await getContentState(invalid)).toBe('chunked');
+    expect(embed).toHaveBeenCalledTimes(1);
+    expect(embed).toHaveBeenCalledWith(expect.anything(), ['valid']);
+  });
+
   it('skips non-chunked items and chunked items without chunk rows', async () => {
     const embedded = await seedItem({
       platformItemId: 'n-skip-embedded',
@@ -366,6 +399,30 @@ describe('embedPlatformBacklog', () => {
     }
 
     expect(seen).toEqual(['BV-EVENT']);
+  });
+
+  it('skips a directly addressed Item rejected by the shared processing policy', async () => {
+    const invalid = await seedItem({
+      platform: 'bilibili',
+      platformItemId: 'BV-DIRECT-INVALID',
+      contentState: 'chunked',
+      chunkTexts: ['invalid'],
+      platformMeta: { attr: 9 },
+    });
+    const embed = vi.fn(async (_config: ResolvedEmbeddingConfig, texts: string[]) =>
+      fakeVectors(texts.length),
+    );
+
+    await expect(
+      embedPlatformItem('bilibili', 'BV-DIRECT-INVALID', {
+        db: () => db,
+        getConfig: async () => fakeConfig(true),
+        embed,
+      }),
+    ).resolves.toBeNull();
+
+    expect(embed).not.toHaveBeenCalled();
+    expect(await getContentState(invalid)).toBe('chunked');
   });
 
   it('rejects a chunked item without chunks instead of reporting job completion', async () => {

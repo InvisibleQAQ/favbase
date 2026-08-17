@@ -1,8 +1,9 @@
-import { and, asc, eq, exists, sql } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import type { FavbaseDb } from '@/lib/database';
 import { getDb, schema } from '@/lib/database';
 import { emitDomainEvent } from '@/lib/events';
 import type { CooperativeCheckpoint } from '@/lib/collections';
+import { createCollectionProcessingPolicy } from '@/lib/collections/collection-processing-policy';
 import { createEmbeddingModel, embedTexts } from '@/lib/ai';
 import { getEmbeddingSettings, type ResolvedEmbeddingConfig } from './config';
 import {
@@ -272,10 +273,11 @@ export async function embedPlatformItem(
       phase,
       elapsedMs: Date.now() - startedAt,
     });
+    const policy = createCollectionProcessingPolicy(db, platform);
     const targets = await db
       .select({ id: items.id, contentState: items.contentState })
       .from(items)
-      .where(and(eq(items.platform, platform), eq(items.platformItemId, platformItemId)))
+      .where(and(eq(items.platformItemId, platformItemId), policy.embedding.total))
       .limit(1);
     embeddingTrace('query:completed', {
       ...diagnostic,
@@ -424,20 +426,11 @@ export async function rebuildPendingEmbeddings(
 
   // One query for the whole backlog (no N+1 candidate scan): 'chunked' items
   // that actually have chunk rows. Ordered for deterministic resume runs.
+  const policy = createCollectionProcessingPolicy(db);
   const pending = await db
     .select({ id: items.id })
     .from(items)
-    .where(
-      and(
-        eq(items.contentState, 'chunked'),
-        exists(
-          db
-            .select({ one: sql`1` })
-            .from(itemChunks)
-            .where(eq(itemChunks.itemId, items.id)),
-        ),
-      ),
-    )
+    .where(policy.embedding.pendingCandidate)
     .orderBy(asc(items.createdAt), asc(items.id));
 
   const total = pending.length;
@@ -570,21 +563,11 @@ export async function embedPlatformBacklog(
   });
   let targets: Array<{ id: string; platformItemId: string }>;
   try {
+    const policy = createCollectionProcessingPolicy(db, platform);
     targets = await db
       .select({ id: items.id, platformItemId: items.platformItemId })
       .from(items)
-      .where(
-        and(
-          eq(items.platform, platform),
-          eq(items.contentState, 'chunked'),
-          exists(
-            db
-              .select({ one: sql`1` })
-              .from(itemChunks)
-              .where(eq(itemChunks.itemId, items.id)),
-          ),
-        ),
-      )
+      .where(policy.embedding.pendingCandidate)
       .orderBy(asc(items.createdAt), asc(items.id));
   } catch (error) {
     const details: EmbeddingTraceDetails = {

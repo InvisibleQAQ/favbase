@@ -183,6 +183,19 @@ describe('tagging-service (in-memory PGlite)', () => {
       expect(d.generate).not.toHaveBeenCalled();
     });
 
+    it('skips an Item rejected by the shared processing policy', async () => {
+      const itemId = await seedItem('BV-POLICY-INVALID');
+      await db
+        .update(schema.items)
+        .set({ platformMeta: { attr: 9 } })
+        .where(eq(schema.items.id, itemId));
+      const d = deps();
+
+      expect(await tagPlatformItem('bilibili', 'BV-POLICY-INVALID', d)).toBe('skipped');
+      expect(d.generate).not.toHaveBeenCalled();
+      expect(await db.select().from(schema.itemTags)).toHaveLength(0);
+    });
+
     it('returns failed and leaves no rows when the LLM call throws', async () => {
       const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       await seedItem('BV6FAIL');
