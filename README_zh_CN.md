@@ -7,7 +7,7 @@
 favbase 是一款本地优先的 Chromium 浏览器扩展，用于将多个来源的收藏内容统一整理到浏览器本地知识库中。它提供收藏管理、关键词与语义检索、AI 辅助整理，以及附带原始来源的知识问答能力。
 
 > [!NOTE]
-> favbase 已正式发布，并仍在持续开发。可从 [GitHub Releases](https://github.com/InvisibleQAQ/favbase/releases/latest) 下载最新的 Chromium 构建版本；后续版本将继续增加更多内容来源。
+> favbase 已正式上线 [Chrome 应用商店](https://chromewebstore.google.com/detail/favbase/pkefmfmeggodccoiejodihnobcmdmidh)，并仍在持续开发；后续版本将继续增加更多内容来源。
 
 ## 核心功能
 
@@ -52,19 +52,12 @@ GitHub 和 YouTube 首次同步前必须在 **设置 → 连接** 中配置凭�
 
 ## 安装
 
-### 安装 Release 构建版本
+### 从 Chrome 应用商店安装
 
-1. 打开[最新 GitHub Release](https://github.com/InvisibleQAQ/favbase/releases/latest)。
-2. 在 **Assets** 中下载 Chromium 构建包。
-3. 解压下载的归档文件。
-4. 打开浏览器扩展管理页，例如 `chrome://extensions`。
-5. 启用**开发者模式**。
-6. 点击**加载已解压的扩展程序**。
-7. 选择包含 `manifest.json` 的扩展目录。
+1. 打开 Chrome 应用商店中的 [favbase 页面](https://chromewebstore.google.com/detail/favbase/pkefmfmeggodccoiejodihnobcmdmidh)。
+2. 点击**添加至 Chrome**并确认安装。
 
-安装后打开 favbase，选择一个来源并执行首次同步。使用 GitHub 或 YouTube 前需要先配置相应凭据。语义检索需要 Embedding 服务；Chat 和 AI 标签需要 LLM 服务。
-
-### 从源码构建
+### 从源码构建并安装
 
 #### 环境要求
 
@@ -85,6 +78,8 @@ pnpm build
 2. 启用**开发者模式**。
 3. 点击**加载已解压的扩展程序**。
 4. 选择构建生成的 `.output/chrome-mv3` 目录。
+
+安装后打开 favbase，选择一个来源并执行首次同步。使用 GitHub 或 YouTube 前需要先配置相应凭据。语义检索需要 Embedding 服务；Chat 和 AI 标签需要 LLM 服务。
 
 ## 开发
 

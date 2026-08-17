@@ -7,7 +7,7 @@
 favbase is a local-first Chromium browser extension that consolidates saved content from multiple sources into a browser-local knowledge base. It provides unified collection management, keyword and semantic search, AI-assisted organization, and question answering with references to the original content.
 
 > [!NOTE]
-> favbase has been released and remains under active development. Download the latest Chromium build from [GitHub Releases](https://github.com/InvisibleQAQ/favbase/releases/latest). Support for additional content sources will be introduced over time.
+> favbase is officially available on the [Chrome Web Store](https://chromewebstore.google.com/detail/favbase/pkefmfmeggodccoiejodihnobcmdmidh) and remains under active development. Support for additional content sources will be introduced over time.
 
 ## Core capabilities
 
@@ -52,19 +52,12 @@ You can import and browse collected items without configuring every AI service. 
 
 ## Installation
 
-### Install a release build
+### Install from the Chrome Web Store
 
-1. Open the [latest GitHub Release](https://github.com/InvisibleQAQ/favbase/releases/latest).
-2. Download the Chromium build provided under **Assets**.
-3. Extract the downloaded archive.
-4. Open the browser's extensions page, such as `chrome://extensions`.
-5. Enable **Developer mode**.
-6. Choose **Load unpacked**.
-7. Select the extracted extension directory that contains `manifest.json`.
+1. Open [favbase on the Chrome Web Store](https://chromewebstore.google.com/detail/favbase/pkefmfmeggodccoiejodihnobcmdmidh).
+2. Select **Add to Chrome** and confirm the installation.
 
-After installation, open favbase, select a source, and run its first sync. Configure GitHub or YouTube credentials before using either source. Semantic retrieval requires an embedding provider; Chat and AI-generated tags require an LLM provider.
-
-### Build from source
+### Build and install from source
 
 #### Requirements
 
@@ -85,6 +78,8 @@ pnpm build
 2. Enable **Developer mode**.
 3. Choose **Load unpacked**.
 4. Select the generated `.output/chrome-mv3` directory.
+
+After installation, open favbase, select a source, and run its first sync. Configure GitHub or YouTube credentials before using either source. Semantic retrieval requires an embedding provider; Chat and AI-generated tags require an LLM provider.
 
 ## Development
 
