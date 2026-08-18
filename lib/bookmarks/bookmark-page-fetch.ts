@@ -1,6 +1,8 @@
-/** Network-only bookmark page retrieval. Safe to import from the background SW. */
+/** Network-only bookmark page retrieval. Safe to import from the background SW.
+ *  Request deadline comes from the unified lib/http seam (VITE_HTTP_DEADLINE_SECONDS). */
 
-export const FETCH_TIMEOUT_MS = 15_000;
+import { fetchWithDeadline } from '@/lib/http/fetch-with-deadline';
+
 export const MAX_HTML_BYTES = 5 * 1024 * 1024;
 const META_PRESCAN_BYTES = 1024;
 
@@ -93,12 +95,11 @@ async function readBodyCapped(res: Response): Promise<ArrayBuffer | null> {
 
 export async function fetchBookmarkPage(
   url: string,
-  fetchFn: FetchFn = (input, init) => fetch(input, init),
+  fetchFn: FetchFn = fetchWithDeadline,
 ): Promise<FetchPageResult> {
   try {
     const response = await fetchFn(url, {
       credentials: 'omit',
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       headers: { Accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.5' },
     });
 
@@ -118,7 +119,7 @@ export async function fetchBookmarkPage(
     return { kind: 'ok', html: decodeHtmlBytes(buffer, contentType) };
   } catch (error) {
     const name = (error as { name?: string } | null)?.name;
-    if (name === 'TimeoutError' || name === 'AbortError') {
+    if (name === 'HttpDeadlineError' || name === 'TimeoutError' || name === 'AbortError') {
       return { kind: 'transient', reason: 'timeout' };
     }
     return { kind: 'transient', reason: 'network' };

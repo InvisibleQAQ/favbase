@@ -120,6 +120,7 @@ WXT 入口点及运行时角色总览，详细结构见对应目录 `CLAUDE.md`�
 - `lib/tagging/CLAUDE.md` — AI 标签（转录/收藏同步后自动打标 + 标签 CRUD）
 - `lib/export/CLAUDE.md` — PGlite 全量导出（JSON/CSV）
 - `lib/hooks/CLAUDE.md` — 共享 Hooks（useSettings/useRetryCountdown）
+- `lib/http/CLAUDE.md` — HTTP 执行 seam：`fetchWithDeadline` 统一全平台请求 deadline（`.env.local` 的 `VITE_HTTP_DEADLINE_SECONDS`，单位秒，默认 30s；守卫测试禁止 lib 层裸 `fetch(`，新平台自动强制）
 - `lib/storage/CLAUDE.md` — 存储命名空间统一管理
 - `lib/format.ts` — 跨 context 纯格式化（`formatClock`：秒 → `m:ss`/`h:mm:ss`），app.html 时长角标 / CS 面板时间戳 / summary prompt 共用，无 CLAUDE.md（单文件）
 - `lib/repo.ts` — 仓库链接单一事实源（`REPO_URL` + `PLATFORM_REQUEST_ISSUE_URL` 预填 new-issue），header GitHub 按钮 / nav Platform Request 叶子 / welcome 尾节共用，无 CLAUDE.md（单文件）。Platform Request 领域定义见 `CONTEXT.md`：动作外链，不是平台，禁止进 `collectionPlatformRegistry`

@@ -6,7 +6,7 @@ YouTube 公开播放列表收录领域（第六个平台，多 source 形态镜�
 
 ## 模块结构
 
-- `youtube-api.ts` — Data API v3「API」层（无 DB 导入、无 UI 文案）。认证 = apiKey 直传（`buildUrl` 统一拼 `key=`）：
+- `youtube-api.ts` — Data API v3「API」层（无 DB 导入、无 UI 文案，请求统一走 `fetchWithDeadline`——`lib/http/` 全平台共用 deadline）。认证 = apiKey 直传（`buildUrl` 统一拼 `key=`）：
   - `parseChannelInput(raw) → { kind: 'id'|'handle', value } | null` 纯函数：剥 youtube.com URL 前缀（含 `channel/` 段），`UC` + 22 字符判 ID，其余按 handle（`@` 可选，API 两者都收）。守护测试 `youtube-api.test.ts`
   - `resolveChannel(apiKey, input)` — `channels.list?id=/forHandle=` → `{channelId, title, avatarUrl}`。兼作设置卡「测试连接」探针。**channels.list 零匹配时 200 响应整个缺 `items` 键**（唯一豁免盲信防御的端点，`allowMissingItems`）→ 无匹配抛 `channel not found` Error
   - `fetchPlaylists(apiKey, channelId)` — `playlists.list?channelId=` 串行分页 → `YoutubePlaylist { playlistId, title, itemCount }[]`（API key 只见公开列表，正好是产品范围）

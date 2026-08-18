@@ -23,7 +23,6 @@ export {
   classifyUrl,
   decodeHtmlBytes,
   fetchBookmarkPage,
-  FETCH_TIMEOUT_MS,
   MAX_HTML_BYTES,
   type FetchFn,
   type FetchPageResult,

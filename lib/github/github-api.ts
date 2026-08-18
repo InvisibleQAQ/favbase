@@ -5,6 +5,7 @@
  */
 
 import type { CooperativeCheckpoint } from '@/lib/collections';
+import { fetchWithDeadline } from '@/lib/http/fetch-with-deadline';
 
 // ---------------------------------------------------------------------------
 // Internal helpers (not exported)
@@ -171,7 +172,7 @@ async function fetchStarredPage(
   token: string,
   page: number,
 ): Promise<{ repos: GithubStarredRepo[]; linkHeader: string | null }> {
-  const res = await fetch(ENDPOINTS.starred(page), { headers: buildHeaders(token) });
+  const res = await fetchWithDeadline(ENDPOINTS.starred(page), { headers: buildHeaders(token) });
   if (!res.ok) throwForStatus(res);
 
   const entries: RawStarredEntry[] = await res.json();
@@ -217,7 +218,7 @@ export async function fetchAllStarred(
  * caller decides whether to degrade.
  */
 export async function fetchReadme(token: string, fullName: string): Promise<string | null> {
-  const res = await fetch(ENDPOINTS.readme(fullName), {
+  const res = await fetchWithDeadline(ENDPOINTS.readme(fullName), {
     headers: { ...buildHeaders(token), Accept: 'application/vnd.github.raw+json' },
   });
   if (res.status === 404) return null;
@@ -227,7 +228,7 @@ export async function fetchReadme(token: string, fullName: string): Promise<stri
 
 /** Validate a PAT via GET /user. Throws GithubAuthError on 401. */
 export async function validateToken(token: string): Promise<GithubUser> {
-  const res = await fetch(ENDPOINTS.user(), { headers: buildHeaders(token) });
+  const res = await fetchWithDeadline(ENDPOINTS.user(), { headers: buildHeaders(token) });
   if (!res.ok) throwForStatus(res);
 
   const json: { login: string; avatar_url: string } = await res.json();

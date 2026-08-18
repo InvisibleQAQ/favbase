@@ -5,6 +5,7 @@
  */
 
 import type { SubtitleResult, SubtitleRow } from '@/lib/subtitle/types';
+import { fetchWithDeadline } from '@/lib/http/fetch-with-deadline';
 import type { BiliAuthInfo, BiliFavFolder, BiliFavOrder, BiliFavVideoListResponse, DashAudioStream, SubtitleTrack } from './types';
 
 // ---------------------------------------------------------------------------
@@ -82,7 +83,7 @@ export async function fetchFavFolders(
   auth: BiliAuthInfo,
 ): Promise<BiliFavFolder[]> {
   const url = ENDPOINTS.favFolderListAll(auth.mid);
-  const res = await fetch(url, {
+  const res = await fetchWithDeadline(url, {
     headers: { Cookie: `SESSDATA=${auth.sessdata}` },
   });
 
@@ -114,7 +115,7 @@ export async function fetchFavVideos(
   keyword: string = '',
 ): Promise<BiliFavVideoListResponse> {
   const url = ENDPOINTS.favResourceList(mediaId, page, ps, order, keyword);
-  const res = await fetch(url, {
+  const res = await fetchWithDeadline(url, {
     headers: { Cookie: `SESSDATA=${auth.sessdata}` },
   });
 
@@ -155,7 +156,7 @@ export async function fetchSubtitle(
   auth?: BiliAuthInfo,
 ): Promise<SubtitleResult> {
   const playerUrl = ENDPOINTS.playerV2(bvid, cid);
-  const playerRes = await fetch(playerUrl, buildFetchInit(auth));
+  const playerRes = await fetchWithDeadline(playerUrl, buildFetchInit(auth));
 
   if (!playerRes.ok) {
     return { status: 'error', rows: [], error: `Player API HTTP ${playerRes.status}` };
@@ -183,7 +184,7 @@ export async function fetchSubtitle(
   }
 
   const subtitleUrl = rawUrl.startsWith('//') ? `https:${rawUrl}` : rawUrl;
-  const subRes = await fetch(subtitleUrl, buildFetchInit(auth));
+  const subRes = await fetchWithDeadline(subtitleUrl, buildFetchInit(auth));
 
   if (!subRes.ok) {
     return { status: 'error', rows: [], error: `Subtitle CDN HTTP ${subRes.status}` };
@@ -219,7 +220,7 @@ export async function fetchSubtitle(
 /** Fetch CID for a video page via pagelist API. Works from any extension context. */
 export async function fetchCidByPageList(bvid: string, pageNum: number = 1, auth?: BiliAuthInfo): Promise<number> {
   const url = ENDPOINTS.pageList(bvid);
-  const res = await fetch(url, buildFetchInit(auth));
+  const res = await fetchWithDeadline(url, buildFetchInit(auth));
   if (!res.ok) throw new Error(`Pagelist API HTTP ${res.status}`);
   const json = await res.json();
   const pages: { cid: number; page: number }[] = json?.data ?? [];
@@ -239,7 +240,7 @@ export interface DashManifest {
 /** Fetch DASH manifest from playurl API. Content Script context. */
 export async function fetchPlayUrl(bvid: string, cid: number): Promise<DashManifest> {
   const url = ENDPOINTS.playUrl(bvid, cid);
-  const res = await fetch(url, { credentials: 'include' });
+  const res = await fetchWithDeadline(url, { credentials: 'include' });
 
   if (!res.ok) {
     throw new Error(`playurl API failed: HTTP ${res.status}`);

@@ -179,7 +179,7 @@ describe('decodeHtmlBytes', () => {
 // ---------------------------------------------------------------------------
 
 describe('fetchBookmarkPage', () => {
-  it('returns decoded html on 200 text/html and sends anonymous, timed-out GET', async () => {
+  it('returns decoded html on 200 text/html and sends an anonymous GET', async () => {
     const inits: RequestInit[] = [];
     const fetchFn: FetchFn = async (_url, init) => {
       inits.push(init!);
@@ -191,7 +191,9 @@ describe('fetchBookmarkPage', () => {
     const result = await fetchBookmarkPage('https://example.com/a', fetchFn);
     expect(result).toEqual({ kind: 'ok', html: '<html><body>hello</body></html>' });
     expect(inits[0].credentials).toBe('omit');
-    expect(inits[0].signal).toBeDefined();
+    // The request deadline is owned by the default fetchFn (fetchWithDeadline,
+    // lib/http) — fetchBookmarkPage itself no longer attaches a signal.
+    expect(inits[0].signal).toBeUndefined();
   });
 
   it('decodes non-UTF-8 bodies via the header charset', async () => {

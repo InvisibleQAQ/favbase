@@ -32,6 +32,7 @@
  */
 
 import type { CooperativeCheckpoint } from '@/lib/collections';
+import { fetchWithDeadline } from '@/lib/http/fetch-with-deadline';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -408,7 +409,7 @@ async function fetchZhihuJson(
   let attempt = 0;
 
   while (true) {
-    const res = await fetch(url, {
+    const res = await fetchWithDeadline(url, {
       method: 'GET',
       credentials: 'include',
       headers: extraHeaders,

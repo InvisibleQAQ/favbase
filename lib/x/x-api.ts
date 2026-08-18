@@ -25,6 +25,7 @@
 
 import type { XAuth } from './x-auth';
 import type { CooperativeCheckpoint } from '@/lib/collections';
+import { fetchWithDeadline } from '@/lib/http/fetch-with-deadline';
 
 // Auth lives in x-auth.ts (session-storage-backed capture); re-export so the
 // sync service keeps a single `./x-api` import surface.
@@ -496,7 +497,7 @@ export async function fetchPageWithBackoff(
     // X received a cookieless request and answered 401/403 (2026-07 root
     // cause). The explicit Cookie header is allowed here because extension
     // contexts with host permission may set forbidden headers.
-    const res = await fetch(url, { method: 'GET', headers, redirect: 'follow' });
+    const res = await fetchWithDeadline(url, { method: 'GET', headers, redirect: 'follow' });
 
     if (res.status === 401) {
       throw new XAuthError('X session invalid or expired (401)', 'rejected');

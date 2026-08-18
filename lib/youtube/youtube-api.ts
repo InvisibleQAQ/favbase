@@ -21,6 +21,7 @@
  */
 
 import type { CooperativeCheckpoint } from '@/lib/collections';
+import { fetchWithDeadline } from '@/lib/http/fetch-with-deadline';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -285,7 +286,7 @@ async function apiFetch(
   url: string,
   opts: { allowMissingItems?: boolean } = {},
 ): Promise<unknown> {
-  const res = await fetch(url, { headers: { Accept: 'application/json' } });
+  const res = await fetchWithDeadline(url, { headers: { Accept: 'application/json' } });
   const rawBody = await res.text();
 
   if (res.status === 400 || res.status === 403) {
