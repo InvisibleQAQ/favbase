@@ -20,12 +20,14 @@ import { items } from '@/lib/database/entities/items';
 import type { BiliFavFolder, BiliFavOrder, BiliFavVideo } from './types';
 import type { SubtitleRow, SubtitleSource } from '@/lib/subtitle/types';
 import type { CooperativeCheckpoint } from '@/lib/collections';
+import { envNumber } from '@/lib/env';
 
 export { BiliAuthError };
 export type { BiliFavoritesSyncProgress } from './favorites-sync-runner';
 
 const PLATFORM = 'bilibili';
-const PAGE_SIZE = 20;
+/** fav resource API page size (endpoint convention). */
+const PAGE_SIZE = envNumber('VITE_BILIBILI_PAGE_SIZE', 20);
 
 function assertVideosPersisted(result: SyncResult, sourceId: string | number): void {
   if (result.dropped > 0) {

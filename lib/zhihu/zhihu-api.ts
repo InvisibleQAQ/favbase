@@ -32,6 +32,8 @@
  */
 
 import type { CooperativeCheckpoint } from '@/lib/collections';
+import { envNumber } from '@/lib/env';
+import { backoffDelayMs, jitteredDelayMs, sleep } from '@/lib/http/backoff';
 import { fetchWithDeadline } from '@/lib/http/fetch-with-deadline';
 
 // ---------------------------------------------------------------------------
@@ -45,20 +47,20 @@ const ME_URL = `${WWW_BASE}/api/v4/me`;
 /** v4 items endpoint requires this (RSSHub sends it on every items request). */
 const ITEMS_API_VERSION = '3.0.91';
 /** Items per page — 20 is the documented server-side cap for this endpoint. */
-const ITEMS_PAGE_SIZE = 20;
+const ITEMS_PAGE_SIZE = envNumber('VITE_ZHIHU_ITEMS_PAGE_SIZE', 20);
 
 // --- Anti-rate-limit pacing constants (mirrors lib/x/x-api.ts) ---
 /** Per-page base delay before the next request. */
-const BASE_DELAY_MS = 1000;
+const BASE_DELAY_MS = envNumber('VITE_ZHIHU_BASE_DELAY_MS', 1000);
 /** Added as `Math.random() * JITTER_MS` to simulate human scroll cadence. */
-const JITTER_MS = 500;
+const JITTER_MS = envNumber('VITE_ZHIHU_JITTER_MS', 500);
 /** Cap retries for transient 429/5xx — never loop forever. */
-const MAX_RETRIES = 5;
+const MAX_RETRIES = envNumber('VITE_ZHIHU_MAX_RETRIES', 5);
 /** Base for `base * 2^n + jitter` transient backoff. */
-const BACKOFF_BASE_MS = 1000;
+const BACKOFF_BASE_MS = envNumber('VITE_ZHIHU_BACKOFF_BASE_MS', 1000);
 /** Runaway guards — a healthy account never comes close to these. */
-const MAX_COLLECTION_PAGES = 50;
-const MAX_ITEM_PAGES_PER_COLLECTION = 500;
+const MAX_COLLECTION_PAGES = envNumber('VITE_ZHIHU_MAX_COLLECTION_PAGES', 50);
+const MAX_ITEM_PAGES_PER_COLLECTION = envNumber('VITE_ZHIHU_MAX_ITEM_PAGES_PER_COLLECTION', 500);
 
 // ---------------------------------------------------------------------------
 // Errors — structured, no UI copy (i18n seam is at the UI boundary)
@@ -380,12 +382,8 @@ export function mapCollectionItem(
 // Fetch core — serial, paced, backoff; HTTP 200 never trusted
 // ---------------------------------------------------------------------------
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 function jitteredDelay(): Promise<void> {
-  return sleep(BASE_DELAY_MS + Math.random() * JITTER_MS);
+  return sleep(jitteredDelayMs(BASE_DELAY_MS, JITTER_MS));
 }
 
 /** Zhihu v4 error body: `{ error: { message, code, name } }`. */
@@ -428,7 +426,7 @@ async function fetchZhihuJson(
         throw new ZhihuRateLimitError('Zhihu rate limit exceeded (429)');
       }
       attempt += 1;
-      await sleep(BACKOFF_BASE_MS * 2 ** (attempt - 1) + Math.random() * JITTER_MS);
+      await sleep(backoffDelayMs(attempt, BACKOFF_BASE_MS, JITTER_MS));
       continue;
     }
     if (res.status >= 500) {
@@ -436,7 +434,7 @@ async function fetchZhihuJson(
         throw new Error(`Zhihu API HTTP ${res.status}: ${await bodySnippet(res)}`);
       }
       attempt += 1;
-      await sleep(BACKOFF_BASE_MS * 2 ** (attempt - 1) + Math.random() * JITTER_MS);
+      await sleep(backoffDelayMs(attempt, BACKOFF_BASE_MS, JITTER_MS));
       continue;
     }
     if (!res.ok) {

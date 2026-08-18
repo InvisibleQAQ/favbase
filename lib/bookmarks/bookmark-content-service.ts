@@ -35,13 +35,15 @@ import {
 } from './bookmark-content';
 import { fetchBookmarkPageInBackground } from './bookmark-page-client';
 import type { FetchPageResult } from './bookmark-page-fetch';
+import { envNumber } from '@/lib/env';
+import { sleep } from '@/lib/http/backoff';
 
 export type BookmarkPageFetcher = (url: string) => Promise<FetchPageResult>;
 
 /** Queue page size — one SELECT per batch, small enough to interleave with UI reads. */
-const BATCH_SIZE = 50;
+const BATCH_SIZE = envNumber('VITE_BOOKMARKS_BATCH_SIZE', 50);
 /** Default pause between network requests (politeness / anti-ban). */
-const DEFAULT_DELAY_MS = 1000;
+const DEFAULT_DELAY_MS = envNumber('VITE_BOOKMARKS_DEFAULT_DELAY_MS', 1000);
 
 export interface ExtractionProgress {
   /** Items settled this run (all outcomes). */
@@ -205,6 +207,3 @@ export async function extractPendingBookmarks(
   return result;
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}

@@ -50,6 +50,7 @@ import {
   type YoutubePlaylistVideo,
 } from './youtube-api';
 import { charSplit } from '@/lib/embedding';
+import { envNumber } from '@/lib/env';
 import type { CooperativeCheckpoint } from '@/lib/collections';
 
 // Re-export what service consumers actually need: structured errors + the
@@ -60,7 +61,7 @@ export type { YoutubePlaylist, YoutubePlaylistVideo } from './youtube-api';
 
 const PLATFORM = 'youtube';
 /** platformMeta keeps a card-sized description slice; full text → item_contents. */
-const META_DESCRIPTION_MAX_CHARS = 500;
+const META_DESCRIPTION_MAX_CHARS = envNumber('VITE_YOUTUBE_META_DESCRIPTION_MAX_CHARS', 500);
 
 // ---------------------------------------------------------------------------
 // Types

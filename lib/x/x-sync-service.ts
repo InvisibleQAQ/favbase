@@ -44,6 +44,7 @@ import {
 // it must import charSplit from the leaf module. Same offscreen rule as the
 // './vector-store' / '@/lib/storage/keys' leaf imports above.
 import { charSplit } from '@/lib/embedding/char-split';
+import { envNumber } from '@/lib/env';
 import type { CooperativeCheckpoint } from '@/lib/collections';
 
 // Re-export what service consumers actually need: structured errors + the types
@@ -55,7 +56,7 @@ const PLATFORM = 'x';
 const BOOKMARKS_SOURCE_ID = 'bookmarks';
 const BOOKMARKS_SOURCE_TITLE = 'X Bookmarks';
 /** Card title = first N chars of the tweet text (full text lives in platformMeta). */
-const TITLE_MAX_CHARS = 140;
+const TITLE_MAX_CHARS = envNumber('VITE_X_TITLE_MAX_CHARS', 140);
 
 // ---------------------------------------------------------------------------
 // Types

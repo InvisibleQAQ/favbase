@@ -36,6 +36,7 @@ import { ghostItemCondition, ingestCollection } from '@/lib/ingest/ingest';
 // (use-github-stars syncFn). Same rule as lib/x/x-sync-service.ts; keeps
 // lib/github's load graph storage-free and its pure tests mock-free.
 import { charSplit } from '@/lib/embedding/char-split';
+import { envNumber } from '@/lib/env';
 import type { CooperativeCheckpoint } from '@/lib/collections';
 import {
   fetchAllStarred,
@@ -55,13 +56,13 @@ const PLATFORM = 'github';
 const STARS_SOURCE_ID = 'stars';
 const STARS_SOURCE_TITLE = 'GitHub Stars';
 /** Pacing between serial README requests (mirrors PAGE_DELAY_MS in github-api). */
-const README_DELAY_MS = 100;
+const README_DELAY_MS = envNumber('VITE_GITHUB_README_DELAY_MS', 100);
 /**
  * Head-preserving cap on persisted README text — guards embedding cost against
  * pathological READMEs. Enforced at the ingest boundary (`textOf`), exported
  * for the guard test.
  */
-export const MAX_README_CHARS = 100_000;
+export const MAX_README_CHARS = envNumber('VITE_GITHUB_MAX_README_CHARS', 100_000);
 
 // ---------------------------------------------------------------------------
 // Types

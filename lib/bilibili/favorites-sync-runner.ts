@@ -1,11 +1,16 @@
 import type { BiliFavFolder, BiliFavVideo } from './types';
 import type { CooperativeCheckpoint } from '@/lib/collections';
+import { envNumber } from '@/lib/env';
+import { jitteredDelayMs } from '@/lib/http/backoff';
 
-const PAGE_DELAY_MIN_MS = 7_000;
-const PAGE_DELAY_JITTER_MS = 3_000;
+// 7–10s between favorites pages — shorter delays triggered bilibili's HTTP 412
+// anti-crawler block (task 07-24 incident); lower the env overrides at your
+// own risk.
+const PAGE_DELAY_MIN_MS = envNumber('VITE_BILIBILI_PAGE_DELAY_MIN_MS', 7_000);
+const PAGE_DELAY_JITTER_MS = envNumber('VITE_BILIBILI_PAGE_DELAY_JITTER_MS', 3_000);
 
 export function favoritePageDelayMs(random: () => number = Math.random): number {
-  return PAGE_DELAY_MIN_MS + random() * PAGE_DELAY_JITTER_MS;
+  return jitteredDelayMs(PAGE_DELAY_MIN_MS, PAGE_DELAY_JITTER_MS, random);
 }
 
 export interface FavoriteVideosPage {

@@ -18,6 +18,7 @@
 
 import Defuddle from 'defuddle/full';
 import { parseHTML } from 'linkedom';
+import { envNumber } from '@/lib/env';
 
 export {
   classifyUrl,
@@ -29,7 +30,7 @@ export {
 } from './bookmark-page-fetch';
 
 /** Minimum trimmed Markdown length to count as real content. */
-export const MIN_CONTENT_CHARS = 200;
+export const MIN_CONTENT_CHARS = envNumber('VITE_BOOKMARKS_MIN_CONTENT_CHARS', 200);
 
 // ---------------------------------------------------------------------------
 // Extraction

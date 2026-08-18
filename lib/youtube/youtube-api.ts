@@ -21,6 +21,8 @@
  */
 
 import type { CooperativeCheckpoint } from '@/lib/collections';
+import { envNumber } from '@/lib/env';
+import { sleep } from '@/lib/http/backoff';
 import { fetchWithDeadline } from '@/lib/http/fetch-with-deadline';
 
 // ---------------------------------------------------------------------------
@@ -28,10 +30,11 @@ import { fetchWithDeadline } from '@/lib/http/fetch-with-deadline';
 // ---------------------------------------------------------------------------
 
 const API_BASE = 'https://www.googleapis.com/youtube/v3';
-/** API hard maximum for playlists.list / playlistItems.list / videos.list. */
-const PAGE_SIZE = 50;
+// API hard maximum for playlists.list / playlistItems.list / videos.list —
+// raising the env override past 50 breaks the requests.
+const PAGE_SIZE = envNumber('VITE_YOUTUBE_PAGE_SIZE', 50);
 /** Polite inter-page delay (quota is ample; this is courtesy, not throttling). */
-const PAGE_DELAY_MS = 200;
+const PAGE_DELAY_MS = envNumber('VITE_YOUTUBE_PAGE_DELAY_MS', 200);
 
 /** 403 reasons that mean quota/rate limiting (Google sends NO reset header). */
 const RATE_LIMIT_REASONS = new Set([
@@ -241,10 +244,6 @@ interface RawVideosResponse {
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 /** Prefer `medium` (320x180 — card-sized), fall back high → default → ''. */
 function pickThumbnail(thumbs: RawThumbnails | undefined): string {

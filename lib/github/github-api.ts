@@ -5,6 +5,7 @@
  */
 
 import type { CooperativeCheckpoint } from '@/lib/collections';
+import { envNumber } from '@/lib/env';
 import { fetchWithDeadline } from '@/lib/http/fetch-with-deadline';
 
 // ---------------------------------------------------------------------------
@@ -12,8 +13,9 @@ import { fetchWithDeadline } from '@/lib/http/fetch-with-deadline';
 // ---------------------------------------------------------------------------
 
 const API_BASE = 'https://api.github.com';
-const PER_PAGE = 100; // GitHub hard maximum
-const PAGE_DELAY_MS = 100;
+// GitHub hard maximum — raising the env override past 100 breaks pagination.
+const PER_PAGE = envNumber('VITE_GITHUB_PER_PAGE', 100);
+const PAGE_DELAY_MS = envNumber('VITE_GITHUB_PAGE_DELAY_MS', 100);
 
 /** `sort=created&direction=desc` = starred time descending — stable order for pagination. */
 const ENDPOINTS = {

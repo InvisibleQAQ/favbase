@@ -1,10 +1,13 @@
 /** Network-only bookmark page retrieval. Safe to import from the background SW.
  *  Request deadline comes from the unified lib/http seam (VITE_HTTP_DEADLINE_SECONDS). */
 
+import { envNumber } from '@/lib/env';
 import { fetchWithDeadline } from '@/lib/http/fetch-with-deadline';
 
-export const MAX_HTML_BYTES = 5 * 1024 * 1024;
-const META_PRESCAN_BYTES = 1024;
+/** Page-size ceiling for fetched bookmark HTML (default 5_242_880 = 5 MiB). */
+export const MAX_HTML_BYTES = envNumber('VITE_BOOKMARKS_MAX_HTML_BYTES', 5_242_880);
+/** Head window scanned for a `<meta charset>` declaration. */
+const META_PRESCAN_BYTES = envNumber('VITE_BOOKMARKS_META_PRESCAN_BYTES', 1024);
 
 export type FetchPageResult =
   | { kind: 'ok'; html: string }

@@ -25,6 +25,8 @@
 
 import type { XAuth } from './x-auth';
 import type { CooperativeCheckpoint } from '@/lib/collections';
+import { envNumber } from '@/lib/env';
+import { backoffDelayMs, jitteredDelayMs, sleep } from '@/lib/http/backoff';
 import { fetchWithDeadline } from '@/lib/http/fetch-with-deadline';
 
 // Auth lives in x-auth.ts (session-storage-backed capture); re-export so the
@@ -87,19 +89,19 @@ const TWITTER_API_FEATURES: Record<string, boolean> = {
 
 // --- Anti-detection pacing constants (research/anti-detection-strategy.md §2) ---
 /** Rows per page. supermemory uses 100 (fewer requests → faster full sync). */
-const PAGE_SIZE = 100;
+const PAGE_SIZE = envNumber('VITE_X_PAGE_SIZE', 100);
 /** Per-page base delay before the next request. */
-const BASE_DELAY_MS = 1000;
+const BASE_DELAY_MS = envNumber('VITE_X_BASE_DELAY_MS', 1000);
 /** Added as `Math.random() * JITTER_MS` to simulate human scroll cadence. */
-const JITTER_MS = 500;
+const JITTER_MS = envNumber('VITE_X_JITTER_MS', 500);
 /** Pause until reset when `x-rate-limit-remaining` drops to/below this. */
-const REMAINING_STOP_THRESHOLD = 3;
+const REMAINING_STOP_THRESHOLD = envNumber('VITE_X_REMAINING_STOP_THRESHOLD', 3);
 /** Cap exponential backoff for transient 5xx — never loop forever. */
-const MAX_RETRIES = 5;
+const MAX_RETRIES = envNumber('VITE_X_MAX_RETRIES', 5);
 /** Base for `base * 2^n + jitter` transient backoff. */
-const BACKOFF_BASE_MS = 1000;
+const BACKOFF_BASE_MS = envNumber('VITE_X_BACKOFF_BASE_MS', 1000);
 /** Floor when `x-rate-limit-reset` is in the past (clock skew). */
-const MIN_SLEEP_ON_RESET_MS = 1000;
+const MIN_SLEEP_ON_RESET_MS = envNumber('VITE_X_MIN_SLEEP_ON_RESET_MS', 1000);
 
 /** Appended to thrown error messages so a live failure names the queryId used. */
 const DIAG_SUFFIX = ` [queryId=${BOOKMARKS_QUERY_ID}]`;
@@ -362,10 +364,6 @@ function extractInstructions(json: unknown): RawInstruction[] {
 // Pacing helpers
 // ---------------------------------------------------------------------------
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 /** First 300 chars of the response body, for diagnosable thrown errors. */
 async function bodySnippet(res: Response): Promise<string> {
   try {
@@ -463,7 +461,7 @@ export async function fetchAllBookmarks(
       await sleep(sleepUntilReset(res.headers.get('x-rate-limit-reset')));
     } else {
       // Jittered inter-page delay to mimic human scroll.
-      await sleep(BASE_DELAY_MS + Math.random() * JITTER_MS);
+      await sleep(jitteredDelayMs(BASE_DELAY_MS, JITTER_MS));
     }
   }
 
@@ -525,7 +523,7 @@ export async function fetchPageWithBackoff(
         throw new Error(`X API HTTP ${res.status}: ${await bodySnippet(res)}${DIAG_SUFFIX}`);
       }
       attempt += 1;
-      await sleep(BACKOFF_BASE_MS * 2 ** (attempt - 1) + Math.random() * JITTER_MS);
+      await sleep(backoffDelayMs(attempt, BACKOFF_BASE_MS, JITTER_MS));
       continue;
     }
 

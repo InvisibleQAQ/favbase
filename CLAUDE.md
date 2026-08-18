@@ -120,8 +120,9 @@ WXT 入口点及运行时角色总览，详细结构见对应目录 `CLAUDE.md`�
 - `lib/tagging/CLAUDE.md` — AI 标签（转录/收藏同步后自动打标 + 标签 CRUD）
 - `lib/export/CLAUDE.md` — PGlite 全量导出（JSON/CSV）
 - `lib/hooks/CLAUDE.md` — 共享 Hooks（useSettings/useRetryCountdown）
-- `lib/http/CLAUDE.md` — HTTP 执行 seam：`fetchWithDeadline` 统一全平台请求 deadline（`.env.local` 的 `VITE_HTTP_DEADLINE_SECONDS`，单位秒，默认 30s；守卫测试禁止 lib 层裸 `fetch(`，新平台自动强制）
+- `lib/http/CLAUDE.md` — HTTP 执行 seam：`fetchWithDeadline` 统一全平台请求 deadline（`.env.local` 的 `VITE_HTTP_DEADLINE_SECONDS`，单位秒，默认 30s；守卫测试禁止 lib 层裸 `fetch(`，新平台自动强制）+ `backoff.ts` 共享节流/退避原语（`sleep`/`jitteredDelayMs`/`backoffDelayMs`，注入 random 可测；只共享机制，数值留各平台）
 - `lib/storage/CLAUDE.md` — 存储命名空间统一管理
+- `lib/env.ts` — 平台数值策略参数 env 覆盖 helper（`envNumber('VITE_<PLATFORM>_<NAME>', default)`：有限非负数才覆盖、缺省/非法静默回退、默认值留平台常量定义原位），六平台全部数值标量常量经此可配置（变量注释文档在 `.env.example`/`.env.local` 平台分组块；守卫 `tests/platform-env-constants-guard.test.ts` 禁平台目录裸数值 const/手写 `import.meta.env`，并锁 fallback=默认值 + 三方同步），无 CLAUDE.md（单文件）
 - `lib/format.ts` — 跨 context 纯格式化（`formatClock`：秒 → `m:ss`/`h:mm:ss`），app.html 时长角标 / CS 面板时间戳 / summary prompt 共用，无 CLAUDE.md（单文件）
 - `lib/repo.ts` — 仓库链接单一事实源（`REPO_URL` + `PLATFORM_REQUEST_ISSUE_URL` 预填 new-issue），header GitHub 按钮 / nav Platform Request 叶子 / welcome 尾节共用，无 CLAUDE.md（单文件）。Platform Request 领域定义见 `CONTEXT.md`：动作外链，不是平台，禁止进 `collectionPlatformRegistry`
 
