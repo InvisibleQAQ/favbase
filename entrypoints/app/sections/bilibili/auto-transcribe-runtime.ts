@@ -37,29 +37,24 @@ function toAutoTranscribeVideo(video: BiliFavVideo): AutoTranscribeVideo {
 }
 
 async function dispatchTranscriptSession(session: AutoTranscribeSession): Promise<void> {
-  while (true) {
-    const handle = startJob(PLATFORM, 'transcribe', async (setProgress, control) => {
-      const publishProgress = (): void => {
-        const state = biliAutoTranscribePipeline.getSnapshot();
-        if (state.totalVideos > 0) {
-          setProgress({ done: state.currentIndex, total: state.totalVideos });
-        }
-      };
-      const unsubscribe = biliAutoTranscribePipeline.subscribe(publishProgress);
-      publishProgress();
-      try {
-        await session.run(control);
-      } finally {
-        unsubscribe();
+  // 'queue' parks the session behind whatever holds the shared
+  // 'bilibili:transcribe' key (a manual per-video run) and starts it at
+  // settlement — the store owns the redispatch that used to be a loop here.
+  await startJob(PLATFORM, 'transcribe', async (setProgress, control) => {
+    const publishProgress = (): void => {
+      const state = biliAutoTranscribePipeline.getSnapshot();
+      if (state.totalVideos > 0) {
+        setProgress({ done: state.currentIndex, total: state.totalVideos });
       }
-    });
-
-    if (handle.started) {
-      await handle.settled;
-      return;
+    };
+    const unsubscribe = biliAutoTranscribePipeline.subscribe(publishProgress);
+    publishProgress();
+    try {
+      await session.run(control);
+    } finally {
+      unsubscribe();
     }
-    await handle.settled;
-  }
+  }, 'queue').settled;
 }
 
 interface TranscriptProducer {

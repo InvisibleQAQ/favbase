@@ -67,7 +67,7 @@ describe('collection processing jobs', () => {
     expect(tag).toHaveBeenCalledTimes(2);
   });
 
-  it('traces Embed batch dispatch, active-run collision, and retry', async () => {
+  it('traces Embed batch dispatch, store-side queueing, and coalescing', async () => {
     const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
     const releaseFirst = deferred();
 
@@ -80,12 +80,17 @@ describe('collection processing jobs', () => {
         { jobPlatform: 'p-trace-batch', itemPlatform: 'x', itemIds: ['b'] },
         { embed: async () => {}, tag: async () => {} },
       );
+      startCollectionProcessingJobs(
+        { jobPlatform: 'p-trace-batch', itemPlatform: 'x', itemIds: ['c'] },
+        { embed: async () => {}, tag: async () => {} },
+      );
       await flush();
 
       expect(infoSpy.mock.calls.map((call) => call[1])).toEqual(
         expect.arrayContaining([
           'scheduler:batch-dispatch',
-          'scheduler:batch-collision',
+          'scheduler:batch-queued',
+          'scheduler:batch-coalesced',
           'job:started',
         ]),
       );
@@ -94,13 +99,109 @@ describe('collection processing jobs', () => {
       await flush();
       await flush();
 
-      expect(infoSpy.mock.calls.map((call) => call[1])).toContain(
-        'scheduler:batch-retry',
-      );
       expect(infoSpy.mock.calls.map((call) => call[1])).toContain('job:completed');
     } finally {
       infoSpy.mockRestore();
     }
+  });
+
+  it('runs three colliding tag batches in dispatch order (queue policy)', async () => {
+    const releaseFirst = deferred();
+    const calls: string[] = [];
+    const depsFor = (label: string, hold?: Promise<void>) => ({
+      embed: async () => {},
+      tag: async () => {
+        calls.push(label);
+        if (hold) await hold;
+      },
+    });
+
+    startCollectionProcessingJobs(
+      { jobPlatform: 'p-three-batches', itemPlatform: 'x', itemIds: ['a'] },
+      depsFor('a', releaseFirst.promise),
+    );
+    startCollectionProcessingJobs(
+      { jobPlatform: 'p-three-batches', itemPlatform: 'x', itemIds: ['b'] },
+      depsFor('b'),
+    );
+    startCollectionProcessingJobs(
+      { jobPlatform: 'p-three-batches', itemPlatform: 'x', itemIds: ['c'] },
+      depsFor('c'),
+    );
+    await flush();
+    expect(calls).toEqual(['a']);
+
+    releaseFirst.resolve();
+    await flush();
+    await flush();
+    expect(calls).toEqual(['a', 'b', 'c']);
+    expect(getJob('p-three-batches', 'tag')?.phase).toBe('completed');
+  });
+
+  it('coalesces a third colliding embed backlog into the pending drain', async () => {
+    const releaseFirst = deferred();
+    const embedRuns: string[] = [];
+    const depsFor = (label: string, hold?: Promise<void>) => ({
+      embed: async () => {
+        embedRuns.push(label);
+        if (hold) await hold;
+      },
+      tag: async () => {},
+    });
+
+    startCollectionProcessingJobs(
+      { jobPlatform: 'p-embed-coalesce', itemPlatform: 'x', itemIds: [] },
+      depsFor('a', releaseFirst.promise),
+    );
+    startCollectionProcessingJobs(
+      { jobPlatform: 'p-embed-coalesce', itemPlatform: 'x', itemIds: [] },
+      depsFor('b'),
+    );
+    startCollectionProcessingJobs(
+      { jobPlatform: 'p-embed-coalesce', itemPlatform: 'x', itemIds: [] },
+      depsFor('c'),
+    );
+    await flush();
+    expect(embedRuns).toEqual(['a']);
+
+    releaseFirst.resolve();
+    await flush();
+    await flush();
+    // The third dispatch merged into the pending run — its whole-backlog drain
+    // covers the third batch's items by definition. Exactly two runs, no loss.
+    expect(embedRuns).toEqual(['a', 'b']);
+    expect(getJob('p-embed-coalesce', 'embed')?.phase).toBe('completed');
+  });
+
+  it('parks a streaming drain behind an active batch run on the same lane', async () => {
+    const releaseBatch = deferred();
+    const embedded: string[] = [];
+
+    startCollectionProcessingJobs(
+      { jobPlatform: 'p-batch-stream', itemPlatform: 'x', itemIds: ['seed'] },
+      { embed: () => releaseBatch.promise, tag: async () => {} },
+    );
+    await flush();
+
+    const ticket = enqueueCollectionProcessingItem(
+      { jobPlatform: 'p-batch-stream', itemPlatform: 'x', itemId: 'a' },
+      {
+        embed: async (_platform, itemId) => {
+          embedded.push(itemId);
+          return 'embedded' as const;
+        },
+        tag: async () => 'tagged' as const,
+      },
+    );
+    await flush();
+    // The drain is queued behind the batch run, never interleaved with it.
+    expect(embedded).toEqual([]);
+
+    releaseBatch.resolve();
+    await Promise.all([ticket.embed, ticket.tag]);
+    expect(embedded).toEqual(['a']);
+    await flush();
+    expect(getJob('p-batch-stream', 'embed')?.phase).toBe('completed');
   });
 
   it('traces Embed job progress and failure from the owning scheduler', async () => {
@@ -315,7 +416,10 @@ describe('collection processing jobs', () => {
     await flush();
     await flush();
 
-    expect(calls).toEqual(['embed:a', 'tag:a', 'embed:b', 'tag:b']);
+    // Per-lane FIFO is the contract; embed and tag are independent lanes, so
+    // their cross-lane interleaving is unspecified.
+    expect(calls.filter((c) => c.startsWith('embed:'))).toEqual(['embed:a', 'embed:b']);
+    expect(calls.filter((c) => c.startsWith('tag:'))).toEqual(['tag:a', 'tag:b']);
   });
 
   it('holds a gated batch born-paused and resumes it without losing the batch', async () => {

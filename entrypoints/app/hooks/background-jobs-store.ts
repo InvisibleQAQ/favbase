@@ -18,6 +18,12 @@ import {
 // job state here means navigating away and back re-subscribes to the SAME
 // in-flight job (progress reconnects) instead of losing it, and the running
 // guard dedupes across mounts (a remount cannot start a second identical job).
+//
+// This module is ALSO the scheduler: what a collision with an active run means
+// is an explicit per-dispatch policy ('drop' | 'queue' | 'coalesce'), never
+// something callers reimplement with settled-promise retry loops. The store
+// owns the pending queue, dequeues on settlement (success AND failure), and
+// evaluates the library gate when a run actually starts — including at dequeue.
 // ---------------------------------------------------------------------------
 
 export type BackgroundJobKind = 'sync' | 'extract' | 'embed' | 'tag' | 'transcribe';
@@ -45,17 +51,58 @@ export interface BackgroundJob<TProgress = unknown> {
   generation: number;
 }
 
+export type BackgroundJobRunner = (
+  setProgress: (progress: unknown) => void,
+  control: CooperativeCheckpoint,
+) => Promise<void>;
+
+/**
+ * What to do when a dispatch finds the same platform+kind already running:
+ * - 'drop': refuse — the active run already covers the caller (cross-mount
+ *   dedupe for sync/extract). The handle reports `started: false`.
+ * - 'queue': FIFO behind the active run; starts when it settles (success OR
+ *   failure). Every queued runner eventually runs.
+ * - 'coalesce': merge into the newest pending run that was itself dispatched
+ *   with 'coalesce' (this call's runner is discarded), else behave like
+ *   'queue'. Interchangeability is a property the dispatch declares, so a
+ *   coalesce never merges into a 'queue' entry (e.g. a streaming drain) whose
+ *   runner does different work — only whole-backlog-style runs absorb each
+ *   other.
+ */
+export type JobCollisionPolicy = 'drop' | 'queue' | 'coalesce';
+
+export type BackgroundJobDispatch = 'started' | 'queued' | 'coalesced' | 'dropped';
+
+export interface BackgroundJobRunHandle {
+  /** false only when the dispatch was refused (`collision: 'drop'` while active). */
+  started: boolean;
+  /** How the scheduler placed this dispatch. */
+  dispatch: BackgroundJobDispatch;
+  /**
+   * Settles when this dispatch's run settles: the new run ('started'), this
+   * caller's queued run ('queued'), the pending run it merged into
+   * ('coalesced'), or the active run that caused the refusal ('dropped').
+   */
+  settled: Promise<void>;
+}
+
+interface PendingRun {
+  platform: string;
+  kind: BackgroundJobKind;
+  runner: BackgroundJobRunner;
+  /** Enqueued with 'coalesce' — later coalesce dispatches may merge into it. */
+  coalescible: boolean;
+  settled: Promise<void>;
+  resolveSettled: () => void;
+}
+
 const jobs = new Map<string, BackgroundJob>();
 const listeners = new Set<() => void>();
 const trackedRunGroups = new Map<string, { active: number; error: unknown }>();
 const activeRunOwners = new Map<string, symbol>();
 const activeRunControls = new Map<string, PipelineRunControl>();
 const activeRunSettlements = new Map<string, Promise<void>>();
-
-export interface BackgroundJobRunHandle {
-  started: boolean;
-  settled: Promise<void>;
-}
+const pendingRuns = new Map<string, PendingRun[]>();
 
 /**
  * Reader for the per-platform library gate, INJECTED (never imported): this
@@ -133,34 +180,71 @@ export function getRunningJobCount(): number {
 }
 
 /**
- * Start a background job, re-entrant safe: a call while this platform+kind is
- * already running is a no-op (cross-mount dedupe — this is what a component-local
- * guard cannot do). The runner receives a setProgress sink; throwing surfaces as
+ * Start a background job. What a collision with an active run means is the
+ * caller-declared policy (default 'drop': a call while this platform+kind is
+ * already running is a no-op — the cross-mount dedupe a component-local guard
+ * cannot do). The runner receives a setProgress sink; throwing surfaces as
  * job.error, success bumps generation. Fire-and-forget, no AbortSignal — closing
  * app.html kills the page and pending work resumes semantics live in the queues.
  */
 export function startJob(
   platform: string,
   kind: BackgroundJobKind,
-  runner: (
-    setProgress: (progress: unknown) => void,
-    control: CooperativeCheckpoint,
-  ) => Promise<void>,
+  runner: BackgroundJobRunner,
+  collision: JobCollisionPolicy = 'drop',
 ): BackgroundJobRunHandle {
   const key = keyOf(platform, kind);
-  const existing = jobs.get(key);
-  if (existing?.running) {
-    return {
-      started: false,
-      settled: activeRunSettlements.get(key) ?? Promise.resolve(),
-    };
+  if (jobs.get(key)?.running) {
+    if (collision === 'drop') {
+      return {
+        started: false,
+        dispatch: 'dropped',
+        settled: activeRunSettlements.get(key) ?? Promise.resolve(),
+      };
+    }
+    const queue = pendingRuns.get(key) ?? [];
+    if (queue.length === 0) pendingRuns.set(key, queue);
+    if (collision === 'coalesce') {
+      for (let i = queue.length - 1; i >= 0; i -= 1) {
+        const entry = queue[i];
+        if (entry.coalescible) {
+          return { started: true, dispatch: 'coalesced', settled: entry.settled };
+        }
+      }
+    }
+    let resolveSettled!: () => void;
+    const settled = new Promise<void>((resolve) => {
+      resolveSettled = resolve;
+    });
+    queue.push({
+      platform,
+      kind,
+      runner,
+      coalescible: collision === 'coalesce',
+      settled,
+      resolveSettled,
+    });
+    return { started: true, dispatch: 'queued', settled };
   }
+  return { started: true, dispatch: 'started', settled: beginRun(key, platform, kind, runner) };
+}
+
+/**
+ * Occupy the key with a new run. The library gate is read HERE — at start time,
+ * not enqueue time — so a queued run dequeued under a paused gate is born
+ * 'paused' exactly like a direct dispatch. A gated platform still creates the
+ * job and starts the runner — the run merely blocks at its first checkpoint;
+ * refusing to start would resolve queued work into nothing.
+ */
+function beginRun(
+  key: string,
+  platform: string,
+  kind: BackgroundJobKind,
+  runner: BackgroundJobRunner,
+): Promise<void> {
+  const existing = jobs.get(key);
   const owner = Symbol(key);
   activeRunOwners.set(key, owner);
-  // A gated platform still creates the job and starts the runner — the run is
-  // merely born 'paused' and blocks at its first checkpoint. Refusing to start
-  // (started:false) would spin startBatchLane/wakeLane's "retry after the active
-  // run settles" path forever, because the settlement is already resolved.
   const bornPaused = isGatePaused(platform);
   const control = createPipelineRunControl((phase) => {
     if (activeRunOwners.get(key) !== owner) return;
@@ -218,9 +302,26 @@ export function startJob(
     })
     .finally(() => {
       if (activeRunSettlements.get(key) === settled) activeRunSettlements.delete(key);
+      drainPending(key);
     });
   activeRunSettlements.set(key, settled);
-  return { started: true, settled };
+  return settled;
+}
+
+/**
+ * Dequeue-on-settlement. Runs in every run's settle continuation (startJob runs
+ * AND trackJobRun groups), synchronously after the terminal setJob, so between
+ * "key is free" and "next pending run occupies it" no external code can jump
+ * the queue. If something re-occupied the key first (a synchronous listener),
+ * the pending list stays intact — that run's own settlement drains it.
+ */
+function drainPending(key: string): void {
+  if (jobs.get(key)?.running) return;
+  const queue = pendingRuns.get(key);
+  const next = queue?.shift();
+  if (queue && queue.length === 0) pendingRuns.delete(key);
+  if (!next) return;
+  void beginRun(key, next.platform, next.kind, next.runner).finally(next.resolveSettled);
 }
 
 export function pauseJob(platform: string, kind: BackgroundJobKind): void {
@@ -269,16 +370,20 @@ export function trackJobRun(
 
     trackedRunGroups.delete(key);
     const currentJob = jobs.get(key);
-    if (!currentJob) return;
-    setJob(key, {
-      ...currentJob,
-      phase: currentGroup.error == null ? 'completed' : 'failed',
-      running: false,
-      progress: null,
-      error: currentGroup.error,
-      generation:
-        currentGroup.error == null ? currentJob.generation + 1 : currentJob.generation,
-    });
+    if (currentJob) {
+      setJob(key, {
+        ...currentJob,
+        phase: currentGroup.error == null ? 'completed' : 'failed',
+        running: false,
+        progress: null,
+        error: currentGroup.error,
+        generation:
+          currentGroup.error == null ? currentJob.generation + 1 : currentJob.generation,
+      });
+    }
+    // A tracked group can hold a key that queued startJob dispatches wait on
+    // (the 'bilibili:transcribe' key mixes observer and owner runs).
+    drainPending(key);
   };
 
   void run.then(() => settle(null), settle);

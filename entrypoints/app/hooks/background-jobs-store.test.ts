@@ -233,6 +233,265 @@ describe('backgroundJobs store', () => {
   });
 });
 
+describe('backgroundJobs collision policies', () => {
+  afterEach(() => {
+    setJobGate(null);
+  });
+
+  it("drop: reports dispatch 'dropped' and exposes the active run's settlement", async () => {
+    const gate = deferred();
+    const first = startJob('p-policy-drop', 'sync', () => gate.promise);
+    const second = startJob('p-policy-drop', 'sync', async () => {});
+    expect(first.dispatch).toBe('started');
+    expect(second).toMatchObject({ started: false, dispatch: 'dropped' });
+
+    let settled = false;
+    void second.settled.then(() => {
+      settled = true;
+    });
+    await flush();
+    expect(settled).toBe(false);
+
+    gate.resolve();
+    await flush();
+    expect(settled).toBe(true);
+  });
+
+  it('queue: three colliding dispatches run FIFO, each handle settling with its own run', async () => {
+    const releaseA = deferred();
+    const order: string[] = [];
+    const a = startJob(
+      'p-policy-queue',
+      'tag',
+      async () => {
+        order.push('a');
+        await releaseA.promise;
+      },
+      'queue',
+    );
+    const b = startJob(
+      'p-policy-queue',
+      'tag',
+      async () => {
+        order.push('b');
+      },
+      'queue',
+    );
+    const c = startJob(
+      'p-policy-queue',
+      'tag',
+      async () => {
+        order.push('c');
+      },
+      'queue',
+    );
+    expect(a.dispatch).toBe('started');
+    expect(b.dispatch).toBe('queued');
+    expect(c.dispatch).toBe('queued');
+    expect(order).toEqual(['a']);
+
+    let bSettled = false;
+    void b.settled.then(() => {
+      bSettled = true;
+    });
+
+    releaseA.resolve();
+    await flush();
+    await flush();
+    expect(order).toEqual(['a', 'b', 'c']);
+    expect(bSettled).toBe(true);
+    expect(getJob('p-policy-queue', 'tag')?.phase).toBe('completed');
+  });
+
+  it('queue: a failing active run still starts the queued run', async () => {
+    const releaseA = deferred();
+    const order: string[] = [];
+    startJob('p-policy-queue-fail', 'embed', async () => {
+      order.push('a');
+      await releaseA.promise;
+    });
+    startJob(
+      'p-policy-queue-fail',
+      'embed',
+      async () => {
+        order.push('b');
+      },
+      'queue',
+    );
+
+    releaseA.reject(new Error('first failed'));
+    await flush();
+    await flush();
+    expect(order).toEqual(['a', 'b']);
+    expect(getJob('p-policy-queue-fail', 'embed')?.phase).toBe('completed');
+  });
+
+  it('coalesce: merges into the newest pending run instead of queueing a third', async () => {
+    const releaseA = deferred();
+    const runs: string[] = [];
+    const a = startJob(
+      'p-policy-coalesce',
+      'embed',
+      async () => {
+        runs.push('a');
+        await releaseA.promise;
+      },
+      'coalesce',
+    );
+    const b = startJob(
+      'p-policy-coalesce',
+      'embed',
+      async () => {
+        runs.push('b');
+      },
+      'coalesce',
+    );
+    const c = startJob(
+      'p-policy-coalesce',
+      'embed',
+      async () => {
+        runs.push('c');
+      },
+      'coalesce',
+    );
+    expect(a.dispatch).toBe('started');
+    expect(b.dispatch).toBe('queued');
+    expect(c.dispatch).toBe('coalesced');
+    // The merged handle settles with the pending run it merged into.
+    expect(c.settled).toBe(b.settled);
+
+    releaseA.resolve();
+    await flush();
+    await flush();
+    expect(runs).toEqual(['a', 'b']);
+    expect(getJob('p-policy-coalesce', 'embed')?.phase).toBe('completed');
+  });
+
+  it('coalesce: never merges into a pending queue entry doing different work', async () => {
+    const releaseA = deferred();
+    const runs: string[] = [];
+    startJob('p-policy-mixed', 'embed', async () => {
+      runs.push('active');
+      await releaseA.promise;
+    });
+    // A 'queue' entry (e.g. a streaming drain) is NOT interchangeable...
+    const drain = startJob(
+      'p-policy-mixed',
+      'embed',
+      async () => {
+        runs.push('drain');
+      },
+      'queue',
+    );
+    // ...so a coalesce dispatch must append its own run, not merge into it.
+    const backlog = startJob(
+      'p-policy-mixed',
+      'embed',
+      async () => {
+        runs.push('backlog');
+      },
+      'coalesce',
+    );
+    // A second coalesce merges into the coalescible entry, skipping the queue entry.
+    const merged = startJob(
+      'p-policy-mixed',
+      'embed',
+      async () => {
+        runs.push('merged');
+      },
+      'coalesce',
+    );
+    expect(drain.dispatch).toBe('queued');
+    expect(backlog.dispatch).toBe('queued');
+    expect(merged.dispatch).toBe('coalesced');
+    expect(merged.settled).toBe(backlog.settled);
+
+    releaseA.resolve();
+    await flush();
+    await flush();
+    expect(runs).toEqual(['active', 'drain', 'backlog']);
+  });
+
+  it('queue: evaluates the library gate at dequeue time (pending run born-paused)', async () => {
+    const releaseA = deferred();
+    let paused = false;
+    setJobGate((platform) => platform === 'p-policy-late-gate' && paused);
+    const worked: string[] = [];
+
+    startJob('p-policy-late-gate', 'embed', async () => {
+      await releaseA.promise;
+    });
+    startJob(
+      'p-policy-late-gate',
+      'embed',
+      async (_setProgress, control) => {
+        await control.checkpoint();
+        worked.push('b');
+      },
+      'queue',
+    );
+
+    // The gate flips while b is still pending — b must be born paused.
+    paused = true;
+    releaseA.resolve();
+    await flush();
+    expect(getJob('p-policy-late-gate', 'embed')).toMatchObject({
+      phase: 'paused',
+      running: true,
+    });
+    expect(worked).toEqual([]);
+
+    resumeJob('p-policy-late-gate', 'embed');
+    await flush();
+    expect(worked).toEqual(['b']);
+    expect(getJob('p-policy-late-gate', 'embed')?.phase).toBe('completed');
+  });
+
+  it('queue: drains behind a tracked fire-and-forget group on the same key', async () => {
+    const tracked = deferred();
+    const worked: string[] = [];
+
+    trackJobRun('p-policy-tracked', 'embed', tracked.promise);
+    const queued = startJob(
+      'p-policy-tracked',
+      'embed',
+      async () => {
+        worked.push('run');
+      },
+      'queue',
+    );
+    expect(queued.dispatch).toBe('queued');
+    await flush();
+    expect(worked).toEqual([]);
+
+    tracked.resolve();
+    await flush();
+    await flush();
+    expect(worked).toEqual(['run']);
+    expect(getJob('p-policy-tracked', 'embed')?.phase).toBe('completed');
+  });
+
+  it('gate registration alone never parks an already-running run (init-order contract)', async () => {
+    const midway = deferred();
+    const steps: string[] = [];
+    startJob('p-gate-late-reg', 'sync', async (_setProgress, control) => {
+      steps.push('before');
+      await midway.promise;
+      await control.checkpoint();
+      steps.push('after');
+    });
+    expect(getJob('p-gate-late-reg', 'sync')?.phase).toBe('running');
+
+    // The gate module loads late: registering the reader must not touch live
+    // runs — library-gate's applyPaused fan-out (pauseJob) is what parks them.
+    setJobGate(() => true);
+    midway.resolve();
+    await flush();
+    expect(steps).toEqual(['before', 'after']);
+    expect(getJob('p-gate-late-reg', 'sync')?.phase).toBe('completed');
+  });
+});
+
 describe('backgroundJobs library gate', () => {
   afterEach(() => {
     setJobGate(null);

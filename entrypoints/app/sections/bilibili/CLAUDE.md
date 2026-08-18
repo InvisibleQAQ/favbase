@@ -14,7 +14,7 @@ app.html B站收藏夹页面 adapter，消费共享 `CollectionPageScaffold`。�
 - `use-bili-fav-videos.ts` — 收藏夹视频浏览 hook：调用 fetch-only `bili-sync-service.fetchFavoriteVideosPage(mediaId, page, order, keyword)` 获取当前 UI 页，不写库、不污染全量同步基线；goToPage、服务端排序/搜索与 `fetchIdRef` 过期响应保护保持不变
 - `use-video-transcribe.ts` — 手动转录薄 hook；`bilibili:transcribe` 仍独立，Embedding/Tagging 通过 `bilibili-processing-adapter.ts` 入共享双 lane，不观察已启动 Promise。
 - `bilibili-processing-adapter.ts` — app/lib 边界薄 Adapter：把单个 bvid enqueue 到共享处理 inbox，返回独立 Embed/Tag ticket；领域层因此不依赖 app job store。
-- `auto-transcribe-runtime.ts` — 模块级 pipeline 单例 + `runBiliStreamingSync(folders, onProgress?, control?)`。每个 Fetch producer 懒建一个 session：首个 durable 新条目启动唯一 `bilibili:transcribe` job，后页 append，同步成功/失败都在 finally close；Fetch 不 await Transcript。多个 producer 只在 Transcript lane 串行，Fetch 不被锁。手动转录占 job key 时 session 保留条目并等 settlement 后派发
+- `auto-transcribe-runtime.ts` — 模块级 pipeline 单例 + `runBiliStreamingSync(folders, onProgress?, control?)`。每个 Fetch producer 懒建一个 session：首个 durable 新条目启动唯一 `bilibili:transcribe` job，后页 append，同步成功/失败都在 finally close；Fetch 不 await Transcript。多个 producer 只在 Transcript lane 串行，Fetch 不被锁。session 派发用 `startJob(..., 'queue')`——手动转录占 job key 时由 job store 排队、settlement 后自动接续（原 `while(true)` 重派发循环已删，audit 2026-08-17 #7）
 - `use-auto-transcribe.ts` — 单例 pipeline 的纯 `useSyncExternalStore` 订阅；无 mount 查询、start、stop、dispose side effect
 - `auto-transcribe-bar.tsx` — 纯进度展示。缺 ASR 的条目由共享 runtime 停放，后续有官方字幕的视频仍继续处理；页面统一 `CollectionConfigurationNotice` 消费 `AutoTranscribeState.asrBlocked`，不在进度条重复绘制 warning。`quota_paused` 继续在本组件显示 durable guard。
 

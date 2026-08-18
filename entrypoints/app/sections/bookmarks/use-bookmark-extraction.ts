@@ -8,7 +8,6 @@ import {
 import { countPendingExtractions } from '@/lib/bookmarks/bookmarks-sync-service';
 
 import {
-  getJob,
   startJob,
   useJob,
   type BackgroundJob,
@@ -56,7 +55,6 @@ export interface BookmarkExtractionState {
  * the auto-continuation target — bookmark sync chains it after success.
  */
 export function startBookmarkExtraction(): void {
-  if (getJob('bookmarks', 'extract')?.running) return;
   startJob('bookmarks', 'extract', async (setProgress, control) => {
     const db = await initDbProxy(); // idempotent — joins the in-flight init
     await extractPendingBookmarks({

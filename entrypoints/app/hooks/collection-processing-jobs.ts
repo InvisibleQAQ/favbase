@@ -17,7 +17,7 @@ import {
   type TagItemResult,
 } from '@/lib/tagging';
 
-import { getJob, startJob } from './background-jobs-store';
+import { getJob, startJob, type JobCollisionPolicy } from './background-jobs-store';
 
 interface ProcessingProgress {
   done: number;
@@ -180,14 +180,20 @@ function startBatchLane(
   run: Parameters<typeof startJob>[2],
   diagnostic?: EmbeddingTraceDetails,
 ): void {
-  const handle = startObservedJob(jobPlatform, lane, run, diagnostic);
-  if (handle.started) return;
-
-  if (diagnostic) embeddingTrace('scheduler:batch-collision', diagnostic);
-  void handle.settled.then(() => {
-    if (diagnostic) embeddingTrace('scheduler:batch-retry', diagnostic);
-    startBatchLane(jobPlatform, lane, run, diagnostic);
-  });
+  // Collision policy is declared here, executed by the job store: embed batch
+  // runners are interchangeable whole-backlog drains, so colliding dispatches
+  // coalesce into ONE pending drain; tag batches carry distinct fresh ids, so
+  // every dispatch queues and runs. Neither ever discards work.
+  const handle = startObservedJob(
+    jobPlatform,
+    lane,
+    run,
+    lane === 'embed' ? 'coalesce' : 'queue',
+    diagnostic,
+  );
+  if (diagnostic && handle.dispatch !== 'started') {
+    embeddingTrace(`scheduler:batch-${handle.dispatch}`, diagnostic);
+  }
 }
 
 function progressTraceDetails(progress: unknown): EmbeddingTraceDetails {
@@ -204,48 +210,57 @@ function startObservedJob(
   jobPlatform: string,
   lane: 'embed' | 'tag',
   run: Parameters<typeof startJob>[2],
+  collision: JobCollisionPolicy,
   diagnostic?: EmbeddingTraceDetails,
 ) {
+  if (!diagnostic) return startJob(jobPlatform, lane, run, collision);
+
+  // Terminal traces live INSIDE the wrapper (not on handle.settled): by the
+  // time a queued run's settled resolves, the store may already have started
+  // the next pending run, so a snapshot read there could describe the wrong
+  // run. The wrapper knows this run's outcome and last progress first-hand.
+  // A coalesced dispatch's wrapper is discarded with its runner — the pending
+  // run it merged into logs its own single terminal event.
   const startedAt = Date.now();
-  const observedRun: Parameters<typeof startJob>[2] = diagnostic
-    ? (setProgress, control) => {
-        embeddingTrace('job:started', {
+  let lastProgress: unknown = null;
+  const observedRun: Parameters<typeof startJob>[2] = async (setProgress, control) => {
+    embeddingTrace('job:started', {
+      ...diagnostic,
+      stage: 'job',
+      phase: getJob(jobPlatform, lane)?.phase,
+      elapsedMs: Date.now() - startedAt,
+    });
+    try {
+      await run((progress) => {
+        lastProgress = progress;
+        setProgress(progress);
+        embeddingTrace('job:progress', {
           ...diagnostic,
+          ...progressTraceDetails(progress),
           stage: 'job',
-          phase: getJob(jobPlatform, lane)?.phase,
+          phase: 'running',
           elapsedMs: Date.now() - startedAt,
         });
-        return run((progress) => {
-          setProgress(progress);
-          embeddingTrace('job:progress', {
-            ...diagnostic,
-            ...progressTraceDetails(progress),
-            stage: 'job',
-            phase: 'running',
-            elapsedMs: Date.now() - startedAt,
-          });
-        }, control);
-      }
-    : run;
-  const handle = startJob(jobPlatform, lane, observedRun);
-  if (!diagnostic || !handle.started) return handle;
-
-  void handle.settled.then(() => {
-    const job = getJob(jobPlatform, lane);
-    const details: EmbeddingTraceDetails = {
-      ...diagnostic,
-      ...progressTraceDetails(job?.lastProgress),
-      stage: 'job',
-      phase: job?.phase,
-      elapsedMs: Date.now() - startedAt,
-    };
-    if (job?.phase === 'failed') {
-      embeddingTraceError('job:failed', job.error, details);
-    } else {
-      embeddingTrace('job:completed', details);
+      }, control);
+      embeddingTrace('job:completed', {
+        ...diagnostic,
+        ...progressTraceDetails(lastProgress),
+        stage: 'job',
+        phase: 'completed',
+        elapsedMs: Date.now() - startedAt,
+      });
+    } catch (error) {
+      embeddingTraceError('job:failed', error, {
+        ...diagnostic,
+        ...progressTraceDetails(lastProgress),
+        stage: 'job',
+        phase: 'failed',
+        elapsedMs: Date.now() - startedAt,
+      });
+      throw error;
     }
-  });
-  return handle;
+  };
+  return startJob(jobPlatform, lane, observedRun, collision);
 }
 
 export function enqueueCollectionProcessingItem(
@@ -332,6 +347,8 @@ function wakeLane(
     });
   }
 
+  // 'queue' parks the drain behind an active batch run on the same lane; the
+  // store starts it at settlement. Items keep joining the inbox meanwhile.
   const handle = startObservedJob(jobPlatform, lane, async (setProgress, control) => {
     let firstError: unknown = null;
     setProgress({ done: state.done, total: state.total });
@@ -376,17 +393,15 @@ function wakeLane(
       });
     }
     if (firstError != null) throw firstError;
-  }, laneDiagnostic);
+  }, 'queue', laneDiagnostic);
 
-  if (!handle.started && laneDiagnostic) {
-    embeddingTrace('scheduler:stream-collision', laneDiagnostic);
+  if (handle.dispatch === 'queued' && laneDiagnostic) {
+    embeddingTrace('scheduler:stream-queued', laneDiagnostic);
   }
 
   void handle.settled.finally(() => {
     state.active = false;
-    if (state.queue.length > 0) {
-      if (laneDiagnostic) embeddingTrace('scheduler:stream-retry', laneDiagnostic);
-      wakeLane(jobPlatform, lane, state);
-    }
+    // Items can land between the drain loop's last empty check and settlement.
+    if (state.queue.length > 0) wakeLane(jobPlatform, lane, state);
   });
 }
