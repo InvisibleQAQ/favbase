@@ -5,7 +5,6 @@ import { getPlatformLastSyncedAt } from '@/lib/database/collection-queries';
 
 import { AUTO_SYNC_PLATFORMS, type AutoSyncPlatform } from './auto-sync-registry';
 import { startJob } from './background-jobs-store';
-import { startCollectionProcessingJobs } from './collection-processing-jobs';
 import { shouldAutoSync } from './daily-sync-gate';
 import { isLibraryPaused } from './library-gate';
 
@@ -22,7 +21,6 @@ export interface DailyAutoSyncDeps {
   getLastSynced: (platform: string) => Promise<Date | null>;
   isPaused: (jobPlatform: string) => boolean;
   startJob: typeof startJob;
-  startProcessing: typeof startCollectionProcessingJobs;
 }
 
 const defaultDeps: DailyAutoSyncDeps = {
@@ -31,7 +29,6 @@ const defaultDeps: DailyAutoSyncDeps = {
   getLastSynced: (platform) => getPlatformLastSyncedAt(platform, getDb()),
   isPaused: isLibraryPaused,
   startJob,
-  startProcessing: startCollectionProcessingJobs,
 };
 
 async function evaluatePlatform(
@@ -47,14 +44,12 @@ async function evaluatePlatform(
   if (deps.isPaused(platform.jobPlatform)) return;
   if (!(await platform.probeReady())) return;
 
+  // The shared Sync Adapter owns everything past this point (auth resolution,
+  // domain sync, persistence side effects, processing dispatch) — the runner
+  // only adds the auto trigger's silent-error policy.
   deps.startJob(platform.jobPlatform, 'sync', async (setProgress, control) => {
     try {
-      const itemIds = await platform.runSync(setProgress, control);
-      deps.startProcessing({
-        jobPlatform: platform.jobPlatform,
-        itemPlatform: platform.itemPlatform,
-        itemIds,
-      });
+      await platform.runSync(setProgress, control);
     } catch (err) {
       // A logged-out / not-ready error is not a failure — complete silently.
       if (platform.isSilentError?.(err)) return;

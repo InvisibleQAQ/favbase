@@ -1,9 +1,7 @@
 import { useCallback } from 'react';
 
 import { useSettings } from '@/lib/hooks/useSettings';
-import type { CooperativeCheckpoint } from '@/lib/collections';
 import {
-  syncYoutubePlaylists,
   getPlaylistVideos,
   getPlaylistCounts,
   getLastSyncedAt,
@@ -18,12 +16,10 @@ import {
   type CollectionQueryParams,
 } from '../../hooks/use-collection-library';
 import type { BackgroundJob } from '../../hooks/background-jobs-store';
-import { startCollectionProcessingJobs } from '../../hooks/collection-processing-jobs';
+import { runYoutubePlaylistsSync } from './youtube-sync-adapter';
 
 /** Job namespace key (reused as `useCollectionLibrary` logTag). */
 const LOG_TAG = 'youtube-playlists';
-/** DB platform discriminator for tag/embed (distinct from the UI job key). */
-const PLATFORM = 'youtube';
 
 /**
  * Structured sync error — the view maps kinds to locale keys (i18n seam at the
@@ -100,30 +96,6 @@ export function useYoutubePlaylists(): UseYoutubePlaylistsReturn {
   const channel = settings.youtubeChannel ?? '';
   const hasConfig = Boolean(apiKey && channel);
 
-  // Config resolution stays inside the adapter's syncFn closure (spec rule:
-  // the generic layer reads zero storage / zero platform auth).
-  const syncFn = useCallback(
-    async (
-      onProgress: (progress: YoutubePlaylistsProgress) => void,
-      control: CooperativeCheckpoint,
-    ) => {
-      if (!apiKey || !channel) return;
-      onProgress({ fetchedCount: 0, playlistIndex: 0, playlistCount: 0 });
-      const result = await syncYoutubePlaylists({ apiKey, channel }, onProgress, control);
-      // Auto-tag + auto-embed the descriptions just persisted, registered as
-      // background jobs (survive route switches, cross-mount dedupe, feed the
-      // global "don't close" reminder, done/total captions). Moved UP from the
-      // lib wrapper (ST3) so all four collection platforms share this single
-      // hook-layer seam.
-      startCollectionProcessingJobs({
-        jobPlatform: LOG_TAG,
-        itemPlatform: PLATFORM,
-        itemIds: result.newItemIds,
-      });
-    },
-    [apiKey, channel],
-  );
-
   const lib = useCollectionLibrary<
     YoutubeVideoItem,
     PlaylistCount,
@@ -133,7 +105,10 @@ export function useYoutubePlaylists(): UseYoutubePlaylistsReturn {
     queryFn,
     facetsFn: getPlaylistCounts,
     lastSyncedFn: getLastSyncedAt,
-    syncFn,
+    // The shared Sync Adapter (module ref = stable): config resolution, progress
+    // mapping and the post-sync embed/tag dispatch all live there — the daily
+    // auto-sync coordinator runs the exact same function.
+    syncFn: runYoutubePlaylistsSync,
     classifyError: classifyYoutubeSyncError,
     logTag: LOG_TAG,
   });

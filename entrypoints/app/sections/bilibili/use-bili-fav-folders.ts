@@ -10,22 +10,11 @@ import {
   useJob,
   type BackgroundJob,
 } from '../../hooks/background-jobs-store';
-import { runBiliStreamingSync } from './auto-transcribe-runtime';
+import { runBilibiliSync } from './bilibili-sync-adapter';
 
 const PLATFORM = 'bilibili';
 
 type LoginState = 'unknown' | 'logged_in' | 'not_logged_in';
-
-/**
- * Move the route-selected Source to the front of the Fetch producer. The
- * Transcript inbox inherits this order from persisted page notifications.
- */
-function orderFolders(folders: BiliFavFolder[], routeFolderId?: number): BiliFavFolder[] {
-  if (routeFolderId == null) return folders;
-  const selected = folders.find((folder) => folder.id === routeFolderId);
-  if (!selected) return folders;
-  return [selected, ...folders.filter((folder) => folder.id !== routeFolderId)];
-}
 
 interface UseFavFoldersReturn {
   folders: BiliFavFolder[];
@@ -69,24 +58,19 @@ export function useBiliFavFolders(routeFolderId?: number): UseFavFoldersReturn {
   const sync = useCallback(async () => {
     setLoadError(null);
     startJob(PLATFORM, 'sync', async (setProgress, control) => {
-      setProgress({
-        fetchedCount: 0,
-        folderIndex: 0,
-        folderCount: 0,
-        folderTitle: '',
-        page: 0,
-        totalPages: 0,
+      // The shared Sync Adapter: folder sync, the streaming Fetch→Transcript
+      // runtime and the backlog embed dispatch all live there — the daily
+      // auto-sync coordinator runs the exact same function. Only the manual
+      // trigger's Fetch-producer priority and UI mirroring are added here.
+      await runBilibiliSync(setProgress, control, {
+        preferFolderId: routeFolderRef.current,
+        onFolders: (folderList) => {
+          if (mountedRef.current) {
+            setLoginState('logged_in');
+            setFolders(folderList);
+          }
+        },
       });
-      const folderList = await fetchAndSyncFolders(control);
-      if (mountedRef.current) {
-        setLoginState('logged_in');
-        setFolders(folderList);
-      }
-      await runBiliStreamingSync(
-        orderFolders(folderList, routeFolderRef.current),
-        (progress) => setProgress(progress),
-        control,
-      );
       if (mountedRef.current) setLastSyncedAt(new Date());
     });
   }, []);

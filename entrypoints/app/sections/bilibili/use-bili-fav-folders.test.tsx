@@ -21,6 +21,12 @@ vi.mock('@/lib/bilibili/bili-sync-service', () => ({
 
 vi.mock('./auto-transcribe-runtime', () => runtimeMocks);
 
+// The shared Sync Adapter pulls it in; the real module loads the
+// embedding/tagging barrels (chrome.storage at load).
+vi.mock('../../hooks/collection-processing-jobs', () => ({
+  startCollectionProcessingJobs: vi.fn(),
+}));
+
 import { useBiliFavFolders } from './use-bili-fav-folders';
 
 function makeFolder(id: number, title: string): BiliFavFolder {

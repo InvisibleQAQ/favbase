@@ -12,7 +12,6 @@ import type { CooperativeCheckpoint } from '@/lib/collections';
 // importing the hook never pulls chrome/AI deps. Fake platforms are injected per
 // test, so the real AUTO_SYNC_PLATFORMS export is unused.
 vi.mock('./auto-sync-registry', () => ({ AUTO_SYNC_PLATFORMS: [] }));
-vi.mock('./collection-processing-jobs', () => ({ startCollectionProcessingJobs: vi.fn() }));
 vi.mock('./background-jobs-store', () => ({ startJob: vi.fn() }));
 vi.mock('./library-gate', () => ({ isLibraryPaused: () => false }));
 vi.mock('@/lib/database', () => ({ initDbProxy: vi.fn(), getDb: vi.fn() }));
@@ -55,7 +54,6 @@ function makeDeps(overrides: Partial<DailyAutoSyncDeps> = {}): {
     getLastSynced: vi.fn(async () => null),
     isPaused: () => false,
     startJob,
-    startProcessing: vi.fn(),
     ...overrides,
   };
 
@@ -65,7 +63,7 @@ function makeDeps(overrides: Partial<DailyAutoSyncDeps> = {}): {
 function platform(over: Partial<AutoSyncPlatform> & Pick<AutoSyncPlatform, 'jobPlatform' | 'itemPlatform'>): AutoSyncPlatform {
   return {
     probeReady: async () => true,
-    runSync: async () => [],
+    runSync: async () => undefined,
     ...over,
   };
 }
@@ -110,29 +108,20 @@ describe('useDailyAutoSync', () => {
     expect(started).toHaveLength(0);
   });
 
-  it('dispatches sync for a ready, not-today platform and enqueues newItemIds', async () => {
-    const startProcessing = vi.fn();
+  it('dispatches the shared Sync Adapter for a ready, not-today platform', async () => {
+    const runSync = vi.fn(async () => undefined);
     const { deps, started } = makeDeps({
       getLastSynced: vi.fn(async () => new Date(2026, 6, 25, 10, 0, 0)),
-      startProcessing,
     });
     render(
-      [
-        platform({
-          jobPlatform: 'github-stars',
-          itemPlatform: 'github',
-          runSync: async () => ['id1', 'id2'],
-        }),
-      ],
+      [platform({ jobPlatform: 'github-stars', itemPlatform: 'github', runSync })],
       deps,
     );
     await flush();
     expect(started).toHaveLength(1);
-    expect(startProcessing).toHaveBeenCalledWith({
-      jobPlatform: 'github-stars',
-      itemPlatform: 'github',
-      itemIds: ['id1', 'id2'],
-    });
+    // Post-sync processing dispatch lives INSIDE the adapter, so the runner
+    // hands it nothing but the job's progress sink + checkpoint.
+    expect(runSync).toHaveBeenCalledWith(expect.any(Function), NOOP_CONTROL);
   });
 
   it('skips a paused platform before probing it (no auth request, gate untouched)', async () => {
@@ -165,8 +154,7 @@ describe('useDailyAutoSync', () => {
 
   it('swallows a silent (logged-out) error without failing the job', async () => {
     class LoggedOut extends Error {}
-    const startProcessing = vi.fn();
-    const { deps, started } = makeDeps({ startProcessing });
+    const { deps, started } = makeDeps();
     render(
       [
         platform({
@@ -181,7 +169,6 @@ describe('useDailyAutoSync', () => {
     await flush();
     expect(started).toHaveLength(1);
     expect(started[0].rejected).toBe(false);
-    expect(startProcessing).not.toHaveBeenCalled();
   });
 
   it('rethrows a non-silent error so the job is marked failed', async () => {

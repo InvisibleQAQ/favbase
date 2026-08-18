@@ -1,5 +1,4 @@
 import {
-  syncFavorites,
   getFavorites,
   getCollectionCounts,
   getLastSyncedAt,
@@ -8,18 +7,19 @@ import {
   type ZhihuFavoriteItem,
   type ZhihuCollectionCount,
 } from '@/lib/zhihu/zhihu-sync-service';
-import type { CooperativeCheckpoint } from '@/lib/collections';
 import {
   useCollectionLibrary,
   type CollectionQueryParams,
 } from '../../hooks/use-collection-library';
 import type { BackgroundJob } from '../../hooks/background-jobs-store';
-import { startCollectionProcessingJobs } from '../../hooks/collection-processing-jobs';
+import { runZhihuFavoritesSync, type ZhihuSyncProgress } from './zhihu-sync-adapter';
 
 /** Job namespace key (reused as `useCollectionLibrary` logTag). */
 const LOG_TAG = 'zhihu-favorites';
-/** DB platform discriminator for tag/embed (distinct from the UI job key). */
-const PLATFORM = 'zhihu';
+
+// Re-exported so consumers keep importing the progress type from the hook; the
+// type + mapping live in the shared Sync Adapter (single trigger surface).
+export type { ZhihuSyncProgress } from './zhihu-sync-adapter';
 
 /**
  * Structured sync error — the view maps kinds to locale keys (i18n seam at the
@@ -35,16 +35,6 @@ export function classifyZhihuSyncError(err: unknown): ZhihuSyncError {
   if (err instanceof ZhihuAuthError) return { kind: 'auth' };
   if (err instanceof ZhihuRateLimitError) return { kind: 'rate-limit' };
   return { kind: 'unknown', message: err instanceof Error ? err.message : String(err) };
-}
-
-/** Progress for the zhihu sync — collection cursor + cumulative fetched count.
- *  The bar stays indeterminate (per-collection item totals are lazy). */
-export interface ZhihuSyncProgress {
-  fetchedCount: number;
-  /** 1-based index of the collection currently being fetched. */
-  current: number;
-  /** Total public collections. */
-  total: number;
 }
 
 export interface UseZhihuFavoritesReturn {
@@ -92,32 +82,6 @@ function queryFn({ filter, search, page, pageSize }: CollectionQueryParams) {
   });
 }
 
-async function syncFn(
-  onProgress: (progress: ZhihuSyncProgress) => void,
-  control: CooperativeCheckpoint,
-) {
-  onProgress({ fetchedCount: 0, current: 0, total: 0 });
-  // Auth is the browser's own zhihu cookie jar (credentials:'include' +
-  // host permission) — nothing to resolve here; a logged-out session
-  // surfaces as ZhihuAuthError from the fetch layer.
-  const result = await syncFavorites(
-    (fetchedCount, current, totalCollections) => {
-      onProgress({ fetchedCount, current, total: totalCollections });
-    },
-    control,
-  );
-  // Auto-tag + auto-embed the content just persisted, registered as background
-  // jobs (survive route switches, cross-mount dedupe, feed the global "don't
-  // close" reminder, done/total captions). Moved UP from the lib wrapper (ST3)
-  // so all four collection platforms share this single hook-layer seam; the
-  // store is a module singleton, so a module-level function can call startJob.
-  startCollectionProcessingJobs({
-    jobPlatform: LOG_TAG,
-    itemPlatform: PLATFORM,
-    itemIds: result.newItemIds,
-  });
-}
-
 /** Thin adapter over the shared collection-library state machine. */
 export function useZhihuFavorites(): UseZhihuFavoritesReturn {
   const lib = useCollectionLibrary<
@@ -129,7 +93,10 @@ export function useZhihuFavorites(): UseZhihuFavoritesReturn {
     queryFn,
     facetsFn: getCollectionCounts,
     lastSyncedFn: getLastSyncedAt,
-    syncFn,
+    // The shared Sync Adapter (module ref = stable): progress mapping and the
+    // post-sync embed/tag dispatch live there — the daily auto-sync coordinator
+    // runs the exact same function.
+    syncFn: runZhihuFavoritesSync,
     classifyError: classifyZhihuSyncError,
     logTag: LOG_TAG,
   });

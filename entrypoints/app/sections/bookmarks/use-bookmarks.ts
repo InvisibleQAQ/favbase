@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { initDbProxy } from '@/lib/database';
 import {
-  syncBookmarks,
   getBookmarks,
   getFolders,
   getLastSyncedAt,
@@ -14,8 +13,7 @@ import {
   useJob,
   type BackgroundJob,
 } from '../../hooks/background-jobs-store';
-import { startCollectionProcessingJobs } from '../../hooks/collection-processing-jobs';
-import { startBookmarkExtraction } from './use-bookmark-extraction';
+import { runBookmarksSync } from './bookmarks-sync-adapter';
 
 const PAGE_SIZE = 24;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -126,24 +124,11 @@ export function useBookmarks(folderId: string | undefined): UseBookmarksReturn {
   const sync = useCallback(() => {
     startJob('bookmarks', 'sync', async (setProgress, control) => {
       await initDbProxy();
-      setProgress({ done: 0, total: null });
-      const result = await syncBookmarks(control);
-      setProgress({ done: result.totalBookmarks, total: null });
-      // Chain the content-extraction worker after new bookmarks land as
-      // 'pending' (mount auto-sync AND the manual fetch button both pass
-      // here). Fire-and-forget module singleton — survives route changes, its
-      // startJob guard dedupes concurrent starts, and the library gate can
-      // pause it.
-      startBookmarkExtraction();
-      // Drain the embed backlog too: bookmarks left 'chunked' by an
-      // interrupted earlier run are not re-picked by extraction (it only sees
-      // 'pending'), so the batch embed lane is their retry path. Empty ids =
-      // backlog-only dispatch, no tag lane.
-      startCollectionProcessingJobs({
-        jobPlatform: 'bookmarks',
-        itemPlatform: 'bookmarks',
-        itemIds: [],
-      });
+      // The shared Sync Adapter: tree sync, chained content extraction and the
+      // backlog embed dispatch all live there — the daily auto-sync coordinator
+      // runs the exact same function (mount auto-sync AND the manual fetch
+      // button both pass here).
+      await runBookmarksSync(setProgress, control);
     });
   }, []);
 

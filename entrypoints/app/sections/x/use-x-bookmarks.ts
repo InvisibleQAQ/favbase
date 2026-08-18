@@ -1,41 +1,33 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import {
-  syncBookmarks,
   getBookmarks,
   getAuthorCounts,
   getLastSyncedAt,
   type XBookmarkItem,
   type AuthorCount,
 } from '@/lib/x/x-sync-service';
-import { getXAuth } from '@/lib/x/x-auth';
 import { classifyXSyncError, type XSyncError } from '@/lib/x/x-messages';
 import { xLastSyncStorage, type XLastSync } from '@/lib/storage';
-import type { CooperativeCheckpoint } from '@/lib/collections';
 
 import {
   useCollectionLibrary,
   type CollectionQueryParams,
 } from '../../hooks/use-collection-library';
 import type { BackgroundJob } from '../../hooks/background-jobs-store';
-import { startCollectionProcessingJobs } from '../../hooks/collection-processing-jobs';
 import { COOLDOWN_MS, remainingCooldown } from './cooldown';
+import { runXBookmarksSync, type XSyncProgress } from './x-sync-adapter';
 
 /** Job namespace key (reused as `useCollectionLibrary` logTag). */
 const LOG_TAG = 'x-bookmarks';
-/** DB platform discriminator for tag/embed (distinct from the UI job key). */
-const PLATFORM = 'x';
 
 // Re-exported so the view keeps importing XSyncError from the hook; the type +
 // classifier live in lib/x (shared classifier; single trigger surface now).
 export type { XSyncError };
 
-/** Progress for the (cursor-paginated) X sync — total is unknowable, so this is
- *  always indeterminate; we surface the running fetched count + page number. */
-export interface XSyncProgress {
-  fetchedCount: number;
-  page: number;
-}
+// Re-exported so consumers keep importing the progress type from the hook; the
+// type + mapping live in the shared Sync Adapter (single trigger surface).
+export type { XSyncProgress } from './x-sync-adapter';
 
 export interface UseXBookmarksReturn {
   // Paged query results (from PGlite via x-sync-service — no API reads)
@@ -88,69 +80,40 @@ function queryFn({ filter, search, page, pageSize }: CollectionQueryParams) {
 
 /** Thin adapter over the shared collection-library state machine. */
 export function useXBookmarks(): UseXBookmarksReturn {
-  // "N new this run" — seeded from storage so it survives a reload, refreshed
-  // synchronously the instant a sync completes (from result.inserted).
-  const [lastInserted, setLastInserted] = useState<number | null>(null);
+  // Last-sync summary ("N new this run" + cooldown anchor) — the shared Sync
+  // Adapter persists it on every successful sync (manual AND daily auto), so
+  // the hook subscribes to the storage item instead of seeding it itself: an
+  // auto-sync finishing while this page is mounted refreshes the caption and
+  // locks the cooldown just like a manual one.
+  const [lastSync, setLastSync] = useState<XLastSync | null>(null);
   useEffect(() => {
     let cancelled = false;
     xLastSyncStorage.getValue().then((v) => {
-      if (!cancelled) setLastInserted(v?.inserted ?? null);
+      if (!cancelled) setLastSync(v ?? null);
     });
+    const unwatch = xLastSyncStorage.watch((v) => setLastSync(v ?? null));
     return () => {
       cancelled = true;
+      unwatch();
     };
   }, []);
-
-  // Immediate cooldown seed: `useCollectionLibrary` refreshes `lastSyncedAt`
-  // from the DB after a sync, but we also seed the tick-source here so the
-  // button locks the exact instant the sync resolves (no wait for meta refresh).
-  const [syncedAtSeed, setSyncedAtSeed] = useState<number | null>(null);
-
-  const syncFn = useCallback(async (
-    onProgress: (progress: XSyncProgress) => void,
-    control: CooperativeCheckpoint,
-  ) => {
-    onProgress({ fetchedCount: 0, page: 0 });
-    // Auth is resolved HERE (app.html is a storage-capable trusted context);
-    // syncBookmarks itself never touches storage — it also runs import-safe for
-    // the offscreen document, which has no chrome.storage.
-    const auth = await getXAuth();
-    const result = await syncBookmarks(
-      auth,
-      (fetchedCount, page) => {
-        onProgress({ fetchedCount, page });
-      },
-      control,
-    );
-    // Auto-tag + auto-embed the tweets just persisted, registered as background
-    // jobs so they survive route switches, dedupe across mounts, feed the global
-    // "don't close" reminder, and surface done/total progress captions. Same
-    // storage-context reasoning as auth: the tagging/embedding import chains need
-    // chrome.storage, so the triggers live in this app.html caller.
-    startCollectionProcessingJobs({
-      jobPlatform: LOG_TAG,
-      itemPlatform: PLATFORM,
-      itemIds: result.newItemIds,
-    });
-
-    // Persist the "N new this run" summary + lock the cooldown immediately.
-    const summary: XLastSync = { syncedAt: Date.now(), inserted: result.inserted };
-    void xLastSyncStorage.setValue(summary);
-    setLastInserted(result.inserted);
-    setSyncedAtSeed(summary.syncedAt);
-  }, []);
+  const lastInserted = lastSync?.inserted ?? null;
+  const syncedAtSeed = lastSync?.syncedAt ?? null;
 
   const lib = useCollectionLibrary<XBookmarkItem, AuthorCount, XSyncProgress, XSyncError>({
     queryFn,
     facetsFn: getAuthorCounts,
     lastSyncedFn: getLastSyncedAt,
-    syncFn,
+    // The shared Sync Adapter (module ref = stable): auth resolution, progress
+    // mapping, the post-sync embed/tag dispatch and the last-sync summary all
+    // live there — the daily auto-sync coordinator runs the exact same function.
+    syncFn: runXBookmarksSync,
     classifyError: classifyXSyncError,
     logTag: LOG_TAG,
   });
 
   // Cooldown source = the later of the DB last-synced time (survives reloads)
-  // and the in-session seed (locks instantly on sync completion).
+  // and the storage summary (lands the instant the sync resolves).
   const dbSyncedAt = lib.lastSyncedAt?.getTime() ?? null;
   const effectiveSyncedAt =
     dbSyncedAt !== null && syncedAtSeed !== null
