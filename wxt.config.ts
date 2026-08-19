@@ -1,5 +1,9 @@
 import { defineConfig } from 'wxt';
 import { LLM_PROVIDERS, EMBEDDING_PROVIDERS, ASR_PROVIDERS } from './lib/providers';
+import {
+  COLLECTION_PLATFORMS,
+  type CollectionPlatform,
+} from './lib/collections/platforms';
 
 // See https://wxt.dev/api/config.html
 
@@ -25,43 +29,30 @@ const providerHostPermissions = [
   ),
 ];
 
-const bilibiliHostPermissions = [
-  'https://*.bilibili.com/*',
-  'https://api.bilibili.com/*',
-  'https://*.hdslb.com/*',
-  'https://*.bilivideo.com/*',
-  'https://*.bilivideo.cn/*',
-];
+/** Built-in platform origins, kept in build configuration rather than app runtime. */
+export const PLATFORM_HOST_PERMISSIONS = {
+  bilibili: [
+    'https://*.bilibili.com/*',
+    'https://api.bilibili.com/*',
+    'https://*.hdslb.com/*',
+    'https://*.bilivideo.com/*',
+    'https://*.bilivideo.cn/*',
+  ],
+  github: ['https://api.github.com/*'],
+  // Bookmark content extraction deliberately needs broad access and sends credentials:'omit'.
+  bookmarks: ['<all_urls>'],
+  // X auth headers are captured from the logged-in web client's own requests.
+  x: ['*://x.com/*'],
+  // Zhihu uses extension-context fetch with credentials:'include'.
+  zhihu: ['https://www.zhihu.com/*', 'https://api.zhihu.com/*'],
+  // YouTube public playlists use the official Data API with an API key.
+  youtube: ['https://www.googleapis.com/*'],
+} as const satisfies Record<CollectionPlatform, readonly string[]>;
 
-const githubHostPermissions = ['https://api.github.com/*'];
-
-// X (Twitter) bookmarks: the private GraphQL endpoint on x.com. Auth headers
-// (full Cookie + csrf + bearer) are captured from the logged-in web client's
-// own requests via the background webRequest listener (see lib/x/x-auth.ts) and
-// replayed verbatim — no DNR / Origin / Referer rewrite (a host-permitted
-// extension-context fetch is treated as same-site, mirroring supermemory).
-const xHostPermissions = ['*://x.com/*'];
-
-// Zhihu favorites: web v4 items API (www.zhihu.com) + App API collections list
-// (api.zhihu.com). Auth is bilibili-style — the extension-context fetch runs
-// with `credentials:'include'` and the host permission makes the browser
-// attach the user's real zhihu session cookies (no webRequest capture, no
-// chrome.cookies, no Connections card). See lib/zhihu/zhihu-api.ts.
-const zhihuHostPermissions = ['https://www.zhihu.com/*', 'https://api.zhihu.com/*'];
-
-// YouTube public playlists: official Data API v3 with the user's own API key
-// (public data needs no OAuth — see lib/youtube/youtube-api.ts).
-const youtubeHostPermissions = ['https://www.googleapis.com/*'];
-
-// Bookmark content extraction fetches arbitrary bookmarked sites from the
-// background SW; app.html receives decoded HTML and parses it with an inert DOM.
-// Keeping fetch outside a Document prevents third-party HTTP Link resource hints
-// from being applied to app.html. Static
-// <all_urls> is a deliberate ADR: install-time warning + longer CWS review
-// accepted (SingleFile precedent) in exchange for zero runtime-grant UX.
-// NOTE: host-permission fetches attach the user's cookies by default — the
-// extraction fetch MUST use credentials:'omit' (see bookmark-page-fetch.ts).
-const bookmarkContentHostPermissions = ['<all_urls>'];
+/** Final platform permission list; the manifest spreads this single Adapter. */
+export const PLATFORM_HOST_PERMISSION_LIST = COLLECTION_PLATFORMS.flatMap(
+  (platform) => PLATFORM_HOST_PERMISSIONS[platform],
+);
 
 export default defineConfig({
   modules: ['@wxt-dev/module-react'],
@@ -86,12 +77,7 @@ export default defineConfig({
       'favicon',
     ],
     host_permissions: [
-      ...bilibiliHostPermissions,
-      ...githubHostPermissions,
-      ...xHostPermissions,
-      ...zhihuHostPermissions,
-      ...youtubeHostPermissions,
-      ...bookmarkContentHostPermissions,
+      ...PLATFORM_HOST_PERMISSION_LIST,
       ...providerHostPermissions,
     ],
     // <all_urls> also covers user-entered API and WebDAV origins. The runtime

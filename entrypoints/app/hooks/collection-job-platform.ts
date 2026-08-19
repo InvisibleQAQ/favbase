@@ -4,21 +4,23 @@ import {
   type CollectionPlatform,
 } from '@/lib/collections/platforms';
 
-const JOB_PLATFORM_BY_COLLECTION: Record<CollectionPlatform, string> = {
+export const JOB_PLATFORM_BY_COLLECTION = {
   bilibili: 'bilibili',
   github: 'github-stars',
   bookmarks: 'bookmarks',
   x: 'x-bookmarks',
   zhihu: 'zhihu-favorites',
   youtube: 'youtube-playlists',
-};
+} as const satisfies Record<CollectionPlatform, string>;
+
+export type CollectionJobPlatform = (typeof JOB_PLATFORM_BY_COLLECTION)[CollectionPlatform];
 
 const COLLECTION_PLATFORM_BY_JOB = new Map<string, CollectionPlatform>(
   COLLECTION_PLATFORMS.map((platform) => [JOB_PLATFORM_BY_COLLECTION[platform], platform]),
 );
 
 /** Translate a Collection discriminator into its background-job namespace. */
-export function jobPlatformForCollection(platform: CollectionPlatform): string {
+export function jobPlatformForCollection(platform: CollectionPlatform): CollectionJobPlatform {
   return JOB_PLATFORM_BY_COLLECTION[platform];
 }
 

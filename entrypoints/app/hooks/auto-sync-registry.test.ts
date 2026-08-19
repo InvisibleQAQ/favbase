@@ -58,6 +58,17 @@ describe('auto-sync registry', () => {
     mocks.remainingCooldown.mockReset().mockReturnValue(0);
   });
 
+  it('keeps the existing evaluation order while using a keyed registry', () => {
+    expect(AUTO_SYNC_PLATFORMS.map((platform) => platform.itemPlatform)).toEqual([
+      'github',
+      'x',
+      'zhihu',
+      'youtube',
+      'bookmarks',
+      'bilibili',
+    ]);
+  });
+
   it('every entry runs the SAME Sync Adapter the manual page uses', () => {
     expect(entry('github-stars').runSync).toBe(runGithubStarsSync);
     expect(entry('x-bookmarks').runSync).toBe(runXBookmarksSync);

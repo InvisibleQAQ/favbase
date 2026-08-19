@@ -4,7 +4,8 @@ MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRo
 
 ## 模块结构
 
-- `main.tsx` — 入口：fire-and-forget `initDbProxy()` 建立 DB RPC 连接；首次 React render 前 await `loadNavigationData()`，再创建 Hash Router；lazy 页面加载 + LoadingFallback
+- `main.tsx` — 入口：fire-and-forget `initDbProxy()` 建立 DB RPC 连接；首次 React render 前 await `loadNavigationData()`，再创建 Hash Router；基础 `/collections/<platform>` 路由展开 `collection-platform-pages.ts`，Bilibili/Bookmarks 详情路由仍显式保留；lazy 页面加载 + LoadingFallback
+- `collection-platform-pages.ts` — app 侧每个平台的 lazy page Adapter 与基础 route 派生；新增平台必须补 `COLLECTION_PAGE_LOADERS`，契约测试会检查 import、页面文件和 main 的 spread
 - `load-navigation.ts` — app 启动时读取一次 `onboardingStorage`，校验持久化平台判别符并调用 `createNavData`；读取失败记录错误并回退 canonical 导航，保证 app 继续启动。偏好由 welcome 写一次，故不 watch
 - `collection-platform-registry.ts` — app 侧 canonical 平台 UI 元数据（label/path/icon），导航 factory 与聚合页 platform chips 的唯一事实源；用户偏好不得重排本 registry。判别符顺序来自 `@/lib/collections/platforms`（**必须走这个纯模块，不走 `@/lib/collections` barrel**——barrel 经 `collections-query` 把 drizzle + `@/lib/database` 拖进静态图，welcome.html 复用本 registry 但根本不碰数据库）
 - `App.tsx` — 根组件：ThemeProvider + Outlet；顶层调用 `useDailyAutoSync()`（`hooks/use-daily-auto-sync.ts`）——每日首次打开 app.html（mount + tab 切回可见）自动同步所有「就绪」平台，闸门复用 `sources.lastFetchedAt`（per-platform，当天含手动拉过即跳过）

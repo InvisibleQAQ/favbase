@@ -1,5 +1,6 @@
 import { getBiliAuth } from '@/lib/bilibili/bilibili-api';
-import type { CooperativeCheckpoint } from '@/lib/collections';
+import { type CollectionPlatform } from '@/lib/collections/platforms';
+import type { CooperativeCheckpoint } from '@/lib/collections/cooperative-checkpoint';
 import { getDb } from '@/lib/database';
 import { getPlatformLastSyncedAt } from '@/lib/database/collection-queries';
 import { settingsStorage } from '@/lib/storage';
@@ -13,6 +14,7 @@ import { remainingCooldown } from '../sections/x/cooldown';
 import { runXBookmarksSync } from '../sections/x/x-sync-adapter';
 import { runYoutubePlaylistsSync } from '../sections/youtube/youtube-sync-adapter';
 import { runZhihuFavoritesSync } from '../sections/zhihu/zhihu-sync-adapter';
+import type { CollectionJobPlatform } from './collection-job-platform';
 
 /**
  * One platform's automatic-sync trigger policy. The daily-auto-sync coordinator
@@ -27,9 +29,9 @@ import { runZhihuFavoritesSync } from '../sections/zhihu/zhihu-sync-adapter';
  */
 export interface AutoSyncPlatform {
   /** startJob namespace key (e.g. 'github-stars'). Reuses the indicator's labels. */
-  jobPlatform: string;
+  jobPlatform: CollectionJobPlatform;
   /** DB platform discriminator (e.g. 'github'), for the daily gate query. */
-  itemPlatform: string;
+  itemPlatform: CollectionPlatform;
   /** Live readiness probe — zero persistence. False => silently skipped. */
   probeReady(): Promise<boolean>;
   /** The platform's shared Sync Adapter (missing auth/config is a silent no-op). */
@@ -44,16 +46,17 @@ export interface AutoSyncPlatform {
   isSilentError?(err: unknown): boolean;
 }
 
-export const AUTO_SYNC_PLATFORMS: AutoSyncPlatform[] = [
-  {
+type AutoSyncDefinition = Omit<AutoSyncPlatform, 'itemPlatform'>;
+
+/** Trigger policy Adapter keyed by the persisted Collection discriminator. */
+export const AUTO_SYNC_PLATFORM_BY_COLLECTION: Record<CollectionPlatform, AutoSyncDefinition> = {
+  github: {
     jobPlatform: 'github-stars',
-    itemPlatform: 'github',
     probeReady: async () => Boolean((await settingsStorage.getValue()).githubToken),
     runSync: runGithubStarsSync,
   },
-  {
+  x: {
     jobPlatform: 'x-bookmarks',
-    itemPlatform: 'x',
     probeReady: async () => {
       if ((await getXAuth()) === null) return false;
       // Honor the X-specific 5-minute cooldown across the day boundary: the daily
@@ -64,34 +67,38 @@ export const AUTO_SYNC_PLATFORMS: AutoSyncPlatform[] = [
     },
     runSync: runXBookmarksSync,
   },
-  {
+  zhihu: {
     jobPlatform: 'zhihu-favorites',
-    itemPlatform: 'zhihu',
     probeReady: async () => true,
     runSync: runZhihuFavoritesSync,
     isSilentError: (err) => err instanceof ZhihuAuthError,
   },
-  {
+  youtube: {
     jobPlatform: 'youtube-playlists',
-    itemPlatform: 'youtube',
     probeReady: async () => {
       const s = await settingsStorage.getValue();
       return Boolean(s.youtubeApiKey && s.youtubeChannel);
     },
     runSync: runYoutubePlaylistsSync,
   },
-  {
+  bookmarks: {
     jobPlatform: 'bookmarks',
-    itemPlatform: 'bookmarks',
     // Local browser data — always ready.
     probeReady: async () => true,
     runSync: runBookmarksSync,
   },
-  {
+  bilibili: {
     jobPlatform: 'bilibili',
-    itemPlatform: 'bilibili',
     probeReady: async () => (await getBiliAuth()) !== null,
     // No preferFolderId: the API's natural Source order runs.
     runSync: runBilibiliSync,
   },
-];
+};
+
+/** Ordered array retained for the daily coordinator's existing interface. */
+export const AUTO_SYNC_PLATFORMS: AutoSyncPlatform[] = Object.entries(
+  AUTO_SYNC_PLATFORM_BY_COLLECTION,
+).map(([itemPlatform, definition]) => ({
+  itemPlatform: itemPlatform as CollectionPlatform,
+  ...definition,
+}));

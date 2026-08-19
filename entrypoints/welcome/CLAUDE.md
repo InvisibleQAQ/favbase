@@ -15,6 +15,7 @@
 CTA 落地规则在 `landing.ts`（纯函数 + `landing.test.ts`）：
 
 - `normalizePicks` — 去重 + 排成 registry 顺序（点击顺序是噪声）
+- `WELCOME_READINESS_BY_PLATFORM` — 穷举声明 `credentials` / `login` / `local` 三种就绪形态；`needsCredentials(platform)` 与 picker readiness 都从此 Adapter 派生，新增平台不能静默落入默认分支
 - `needsCredentials(platform)` — `github`/`youtube` 需要 token/key，其余靠浏览器登录态或本地读取
 - `landingHash(picked)` — 首个（registry 序）选择需要凭证 → `#/settings`；否则 → `#/collections/<platform>`；零选择 → 裸 app.html（dashboard）
 
@@ -25,7 +26,7 @@ CTA 落地规则在 `landing.ts`（纯函数 + `landing.test.ts`）：
 - `index.html` / `main.tsx` — 入口。`main.tsx` 复用 app 的 `ThemeProvider` + `global.css`（字体 + reset），再叠 `welcome.css`；外层 `MotionConfig reducedMotion="user"` 让全页 motion 组件统一尊重系统「减弱动效」。**它只管声明式 `animate`**：`style` 绑定的 MotionValue（scroll-linked parallax / scale）不受其约束，须在组件里用 `useReducedMotion()` 手动 gate（现有：capability-marquee、how-it-works）
 - `welcome.css` — 只放 sx 表达不了的东西：`.fb-headline` 渐变裁字（`background-clip:text` 必须挂在画字的那个元素上）+ 两个 aurora 色值 CSS var（`[data-color-scheme='dark']` 覆盖，与 `public/theme-init.js` 的属性同源）+ `.fb-caret` 流式光标 keyframes + `scroll-behavior: smooth`（包在 `prefers-reduced-motion: no-preference` 里）
 - `welcome-view.tsx` — 段落装配 + 顶部滚动进度条；并订阅 `useTranslation().locale` 同步 `document.documentElement.lang`（a11y。**只准在 welcome 入口做**——`lib/i18n` 共享给 Content Script，绝不能改宿主页的 lang）。根 Box 用 `overflowX: 'clip'` 而非 `hidden`：`clip` 不建立滚动容器，sticky 叠卡才活得下来
-- `landing.ts` / `landing.test.ts` — 落地路由纯函数（见上）
+- `landing.ts` / `landing.test.ts` — 落地路由纯函数与穷举 readiness Adapter（见上）
 - `use-onboarding-exit.ts` / `use-onboarding-exit.test.tsx` — 写记录 + 跳转，返回 `{ exit, leaving }`（`leaving` 禁用 CTA 防重复点）。写失败只 console.error 后照常跳转——记录写不上最多让引导多出现一次，不能把用户困在这页（此行为有测试守着）
 
 ### components/
@@ -46,7 +47,7 @@ CTA 落地规则在 `landing.ts`（纯函数 + `landing.test.ts`）：
 - `how-it-works.tsx` — 三步 sticky 叠卡。`useScroll` 测整栈进度，每张卡 `1 - (total-1-index) * 0.04` 目标缩放做景深；卡内右侧 `StepGlyph`（rows / grid / bubble 三种抽象装饰）。sticky 在 `md+` 生效，窄屏退化为普通堆叠；reduce-motion 时不绑 `style={{scale}}`，卡片全尺寸堆叠
 - `chat-showcase.tsx` — **主功能演示**。`useInView(once)` 触发脚本化播放：提问 → tool call（转圈 → ✓ 命中 N 条）→ 打字机流式作答 → 来源卡片 stagger。phase 常量 + 定时器数组，`useReducedMotion` 时直接跳到终态（流式动画没有「慢一点」的降级）。面板 `minHeight` 按终态尺寸给足，避免播放中把页面顶下去
 - `bilibili-showcase.tsx` — B 站视频页 CS 面板演示：左侧播放器骨架 + 右侧面板 mock（字幕 / AI 总结双 tab，`layoutId` 让选中胶囊滑动）。入场 2.8s 后自动切到总结 tab 展示第二种能力，但 `pickedRef` 记录真人点击后不再自动切。tab 行 `role="tablist"`、`TabButton` 带 `role="tab"`/`aria-selected` + `Mui-focusVisible` 焦点环；播放器进度条动画走 `scaleX`（`transformOrigin: left`）而非 `width`，不逐帧 relayout
-- `platform-picker.tsx` — 六平台多选卡（`collectionPlatformRegistry` 驱动）+ 就绪态标签（`readiness()`：需密钥 / 用登录态 / 开箱即用）+ 进入按钮。CTA 文案与 caption 随选择数变化（`welcome.picker.selected` 走复数 key）。卡片未选中态边框 `2px solid transparent`（选中亮 primary；宽度恒定防 layout shift），键盘焦点走 `Mui-focusVisible` 环；readiness 文字 `text.secondary` 保对比度
+- `platform-picker.tsx` — 六平台多选卡（`collectionPlatformRegistry` 驱动）+ 就绪态标签（`readinessFor()`：需密钥 / 用登录态 / 开箱即用）+ 进入按钮。CTA 文案与 caption 随选择数变化（`welcome.picker.selected` 走复数 key）。卡片未选中态边框 `2px solid transparent`（选中亮 primary；宽度恒定防 layout shift），键盘焦点走 `Mui-focusVisible` 环；readiness 文字 `text.secondary` 保对比度
 - `platform-request.tsx` — 页尾 Platform Request 引导（`welcome.request.*`）：Headline + 一句引导 + outlined 按钮外跳 `lib/repo.ts` 的预填 new-issue URL（`target="_blank"`）。刻意克制（outlined、无光晕）不抢上方 picker 主 CTA；它是动作外链不是平台，不进 registry（领域定义见根 `CONTEXT.md`）
 
 ### hooks/

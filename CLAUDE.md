@@ -37,6 +37,8 @@ WXT 入口点及运行时角色总览，详细结构见对应目录 `CLAUDE.md`�
 - `docs/03_favbase-prd.md` — 完整 PRD（知识库全功能）
 - `docs/04_bilibili-transcription-spec.md` — B站视频转录功能实现规格
 - `.trellis/` — Trellis 开发工作流配置
+- `tests/platform-completeness-contract.test.ts` — 单一聚合失败的跨层平台接入契约；以 TypeScript AST 对账 app/welcome/build/test 各层 Adapter，避免加载 DB 或页面 runtime
+- `wxt.config.ts` — built-in platform host permissions 由 `PLATFORM_HOST_PERMISSIONS` keyed map 声明，`PLATFORM_HOST_PERMISSION_LIST` 负责 manifest spread；Bookmark `<all_urls>` 仍是显式平台 Adapter
 
 ## 参考项目
 

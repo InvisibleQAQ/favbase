@@ -15,7 +15,7 @@ import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify } from '@/entrypoints/app/components/iconify';
 import { collectionPlatformRegistry } from '@/entrypoints/app/collection-platform-registry';
 
-import { needsCredentials } from '../landing';
+import { readinessFor } from '../landing';
 import { FadeIn } from '../components/fade-in';
 import { MotionBox, MotionButtonBase } from '../components/motion-box';
 import { useOnboardingExit } from '../use-onboarding-exit';
@@ -32,10 +32,11 @@ const HINT_KEYS: Record<CollectionPlatform, LocaleKeys> = {
 
 /** What the user has to do before this platform can sync, at a glance. */
 function readiness(platform: CollectionPlatform): { labelKey: LocaleKeys; icon: IconifyName } {
-  if (needsCredentials(platform)) {
+  const state = readinessFor(platform);
+  if (state === 'credentials') {
     return { labelKey: 'welcome.picker.needsKey', icon: 'solar:shield-keyhole-bold-duotone' };
   }
-  if (platform === 'bookmarks') {
+  if (state === 'local') {
     return { labelKey: 'welcome.picker.readyNow', icon: 'eva:done-all-fill' };
   }
   return { labelKey: 'welcome.picker.needsLogin', icon: 'solar:global-bold-duotone' };

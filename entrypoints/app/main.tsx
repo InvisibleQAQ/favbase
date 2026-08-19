@@ -8,6 +8,7 @@ import { varAlpha } from 'minimal-shared/utils';
 
 import { initDbProxy } from '@/lib/database';
 import App from './App';
+import { COLLECTION_PAGE_LOADERS, collectionPlatformRoutes } from './collection-platform-pages';
 import { loadNavigationData } from './load-navigation';
 import { DashboardLayout } from './layouts/dashboard';
 
@@ -19,12 +20,8 @@ initDbProxy().catch((err) =>
 
 const DashboardPage = lazy(() => import('./pages/dashboard'));
 const CollectionsPage = lazy(() => import('./pages/collections'));
-const BilibiliPage = lazy(() => import('./pages/bilibili'));
-const GithubStarsPage = lazy(() => import('./pages/github-stars'));
-const BookmarksPage = lazy(() => import('./pages/bookmarks'));
-const XPage = lazy(() => import('./pages/x'));
-const ZhihuPage = lazy(() => import('./pages/zhihu'));
-const YoutubePage = lazy(() => import('./pages/youtube'));
+const BilibiliPage = COLLECTION_PAGE_LOADERS.bilibili;
+const BookmarksPage = COLLECTION_PAGE_LOADERS.bookmarks;
 const ChatPage = lazy(() => import('./pages/chat'));
 const SettingsPage = lazy(() => import('./pages/settings'));
 
@@ -67,14 +64,12 @@ async function bootstrap() {
           children: [
             { index: true, element: <DashboardPage /> },
             { path: 'collections', element: <CollectionsPage /> },
-            { path: 'collections/bilibili', element: <BilibiliPage /> },
+            ...collectionPlatformRoutes.map(({ path, Page }) => ({
+              path,
+              element: <Page />,
+            })),
             { path: 'collections/bilibili/:mediaId', element: <BilibiliPage /> },
-            { path: 'collections/github', element: <GithubStarsPage /> },
-            { path: 'collections/bookmarks', element: <BookmarksPage /> },
             { path: 'collections/bookmarks/:folderId', element: <BookmarksPage /> },
-            { path: 'collections/x', element: <XPage /> },
-            { path: 'collections/zhihu', element: <ZhihuPage /> },
-            { path: 'collections/youtube', element: <YoutubePage /> },
             { path: 'chat', element: <ChatPage /> },
             { path: 'settings', element: <SettingsPage /> },
           ],

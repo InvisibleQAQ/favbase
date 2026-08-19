@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import path from 'node:path';
 
+import { PLATFORM_DIRS, PLATFORM_KEY_LINE } from './platform-env-guard-contract';
+
 /**
  * Guardrail (platform-constants survey 2026-08-18, final plan v3): every
  * numeric SCALAR policy constant in a platform directory must be
@@ -28,15 +30,6 @@ import path from 'node:path';
  */
 
 const ROOT = path.resolve(__dirname, '..');
-
-const PLATFORM_DIRS = [
-  'lib/bilibili',
-  'lib/github',
-  'lib/x',
-  'lib/zhihu',
-  'lib/youtube',
-  'lib/bookmarks',
-];
 
 /** Files allowed to keep bare numeric module constants, with the reason WHY. */
 const ALLOWED_BARE_NUMERIC: Record<string, string> = {
@@ -223,11 +216,9 @@ describe('platform env constants guard', () => {
       ).toEqual([]);
 
       const known = new Set(EXPECTED_ENV_CONSTANTS.map((e) => e.key));
-      const platformKeyLine =
-        /^#?\s*(VITE_(?:BILIBILI|GITHUB|X|ZHIHU|YOUTUBE|BOOKMARKS)_[A-Z0-9_]+)=/;
       const orphans: string[] = [];
       for (const line of content.split('\n')) {
-        const m = line.match(platformKeyLine);
+        const m = line.match(PLATFORM_KEY_LINE);
         if (m && !known.has(m[1])) orphans.push(m[1]);
       }
       expect(
