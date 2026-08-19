@@ -7,6 +7,7 @@ export {
   type CollectionItemsQuery,
   type CollectionPlatform,
 } from './collections-query';
+export { PLATFORM_SORT_KEYS, type PlatformSortKey } from './platform-sort-keys';
 export {
   getCollectionAnalytics,
   type CollectionAnalyticsDimension,

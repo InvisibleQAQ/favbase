@@ -5,7 +5,8 @@
 ## 模块结构
 
 - `platforms.ts` — `COLLECTION_PLATFORMS` / `CollectionPlatform` / `isCollectionPlatform`，持久化平台判别符的唯一白名单
-- `collections-query.ts` — `getCollectionItems`：限定平台注册项，标题/作者 ILIKE 搜索，全局分页；排序按平台现有时间语义（Bilibili `fav_time`、GitHub `starredAt`、YouTube `addedAt`，其余 `publishedAt`），无日期条目置后并以 `createdAt`/id 稳定排序；分页后批量加载 tags
+- `platform-sort-keys.ts` — `PlatformSortKey` + `PLATFORM_SORT_KEYS`，穷举声明每个平台的原生排序时间来源与格式
+- `collections-query.ts` — `getCollectionItems`：限定平台注册项，标题/作者 ILIKE 搜索，全局分页；按 `COLLECTION_PLATFORMS` 遍历 `PLATFORM_SORT_KEYS` 生成绑定参数的排序 `CASE`（无日期条目置后并以 `createdAt`/id 稳定排序）；分页后批量加载 tags
 - `collection-analytics.ts` — `getCollectionAnalytics`：一次返回去重 Item Count、Used Tags、Tagged Items、六平台构成、Top Tags 和平台原生维度；补齐零平台、稳定排序并限制榜单长度
 - `collection-processing-policy.ts` — Collection processing stage SQL facts 的唯一 Implementation：可选 platform scope、Bilibili `attr=9` exclusion、Content/Embedding/Tags 的 `total`/`done` 与 pending candidate；Coverage 和各 worker Adapter 不重写资格规则。
 - `processing-coverage.ts` — `getProcessingCoverage(platform, db?)`：单次平台聚合返回 acquisition/content/embedding/tagging 的 Item 级覆盖率，只消费 processing policy，React 不接触 schema/SQL。
@@ -17,7 +18,9 @@
 ## 约定
 
 - 新平台必须先加入 `COLLECTION_PLATFORMS`，再补 app 侧元数据与卡片 adapter；未知 platform 不进入聚合结果
+- 新平台必须同时在 `PLATFORM_SORT_KEYS` 声明排序键；删掉任一平台声明应由 `Record<CollectionPlatform, ...>` 触发编译错误
 - 时间字段只在本 module 解释，禁止在 React 中抓多平台页面后客户端 merge/sort（会破坏全局分页）
+- `collections-query.ts` 的排序 SQL 必须从声明表生成；平台判别符、JSON 字段名、格式正则都使用绑定参数，不得把平台/字段字面量拼进 SQL
 - 查询参数始终绑定，LIKE 输入必须经 `escapeLike`；UI 通过 `getCollectionItems` 读取，零 entity/getDb 导入
 - `CollectionItemsQuery.tagId` 是可选单标签 SQL 条件，必须在 count/order/limit/offset 前过滤；不得改用无分页的 `getItemsByTags`
 - analytics 来源榜单按 `item_sources` membership 计数，总量/平台构成按 `items` 计数；Top Tags 按 distinct item-tag link，Used Tags 排除孤立标签

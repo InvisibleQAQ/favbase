@@ -13,6 +13,7 @@ export {
   type CollectionPlatform,
 } from './platforms';
 import { COLLECTION_PLATFORMS, type CollectionPlatform } from './platforms';
+import { PLATFORM_SORT_KEYS } from './platform-sort-keys';
 
 export interface CollectionItem extends Omit<TaggedItem, 'platform'> {
   platform: CollectionPlatform;
@@ -42,22 +43,37 @@ export interface CollectionItemsPage {
  * bookmarks, X, and Zhihu already mirror their usable timestamp into
  * `items.publishedAt`. The regex guards prevent malformed optional metadata
  * from turning a read into a cast error. Rows without a usable native key are
- * ordered after dated rows and then by the insert timestamp below.
+ * ordered after dated rows and then by the insert timestamp below. `ELSE NULL`
+ * is only reachable for malformed or missing metadata on a registered platform.
  */
-const effectiveSortAt = sql<Date | null>`CASE
-  WHEN ${items.platform} = 'bilibili'
-    AND (${items.platformMeta}->>'fav_time') ~ '^[0-9]+(\\.[0-9]+)?$'
-    THEN to_timestamp((${items.platformMeta}->>'fav_time')::double precision)
-  WHEN ${items.platform} = 'github'
-    AND (${items.platformMeta}->>'starredAt') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T'
-    THEN ((${items.platformMeta}->>'starredAt')::timestamptz)
-  WHEN ${items.platform} = 'youtube'
-    AND (${items.platformMeta}->>'addedAt') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T'
-    THEN ((${items.platformMeta}->>'addedAt')::timestamptz)
-  WHEN ${items.platform} IN ('bookmarks', 'x', 'zhihu')
-    THEN ${items.publishedAt}
-  ELSE NULL
-END`;
+const UNIX_SECONDS_REGEX = '^[0-9]+(\\.[0-9]+)?$';
+const ISO8601_REGEX = '^[0-9]{4}-[0-9]{2}-[0-9]{2}T';
+
+function buildEffectiveSortAt(): SQL<Date | null> {
+  const branches = COLLECTION_PLATFORMS.map((platform) => {
+    const sortKey = PLATFORM_SORT_KEYS[platform];
+
+    if (sortKey.source === 'publishedAt') {
+      return sql`WHEN ${items.platform} = ${platform} THEN ${items.publishedAt}`;
+    }
+
+    const metaValue = sql`(${items.platformMeta}->>${sortKey.field})`;
+    const regex = sortKey.format === 'unixSeconds' ? UNIX_SECONDS_REGEX : ISO8601_REGEX;
+    const parsedValue =
+      sortKey.format === 'unixSeconds'
+        ? sql`to_timestamp(${metaValue}::double precision)`
+        : sql`${metaValue}::timestamptz`;
+
+    return sql`
+      WHEN ${items.platform} = ${platform}
+        AND ${metaValue} ~ ${regex}
+        THEN ${parsedValue}`;
+  });
+
+  return sql<Date | null>`CASE ${sql.join(branches, sql` `)} ELSE NULL END`;
+}
+
+const effectiveSortAt = buildEffectiveSortAt();
 
 function normalizedPage(value: number): number {
   return Number.isFinite(value) ? Math.max(1, Math.floor(value)) : 1;

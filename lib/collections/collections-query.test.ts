@@ -9,7 +9,12 @@ import type { FavbaseDb } from '@/lib/database';
 import { runMigrations } from '@/lib/database/migrations';
 import * as schema from '@/lib/database/schema';
 
-import { getCollectionItems, type CollectionPlatform } from './collections-query';
+import {
+  COLLECTION_PLATFORMS,
+  getCollectionItems,
+  type CollectionPlatform,
+} from './collections-query';
+import { PLATFORM_SORT_KEYS } from './platform-sort-keys';
 
 interface SeedItem {
   platform: CollectionPlatform;
@@ -19,6 +24,17 @@ interface SeedItem {
   publishedAt?: Date | null;
   platformMeta?: Record<string, unknown>;
   createdAt?: Date;
+}
+
+function nativeSortInput(platform: CollectionPlatform, date: Date): Pick<SeedItem, 'publishedAt' | 'platformMeta'> {
+  const sortKey = PLATFORM_SORT_KEYS[platform];
+  if (sortKey.source === 'publishedAt') return { publishedAt: date };
+
+  return {
+    platformMeta: {
+      [sortKey.field]: sortKey.format === 'unixSeconds' ? date.getTime() / 1000 : date.toISOString(),
+    },
+  };
 }
 
 describe('getCollectionItems (in-memory PGlite)', () => {
@@ -122,6 +138,36 @@ describe('getCollectionItems (in-memory PGlite)', () => {
       'youtube',
       'missing-date',
     ]);
+  });
+
+  it('keeps every registered platform native-dated rows ahead of missing dates', async () => {
+    for (const platform of COLLECTION_PLATFORMS) {
+      const newest = new Date('2026-02-01T00:00:00Z');
+      const older = new Date('2026-01-01T00:00:00Z');
+      await seedItem({
+        platform,
+        platformItemId: `${platform}-newest`,
+        ...nativeSortInput(platform, newest),
+      });
+      await seedItem({
+        platform,
+        platformItemId: `${platform}-older`,
+        ...nativeSortInput(platform, older),
+      });
+      await seedItem({
+        platform,
+        platformItemId: `${platform}-missing`,
+        createdAt: new Date('2027-01-01T00:00:00Z'),
+      });
+
+      const result = await getCollectionItems({ platform, page: 1, pageSize: 20 }, db);
+
+      expect(result.rows.map((row) => row.platformItemId)).toEqual([
+        `${platform}-newest`,
+        `${platform}-older`,
+        `${platform}-missing`,
+      ]);
+    }
   });
 
   it('filters by platform, escapes literal search wildcards, and paginates globally', async () => {
