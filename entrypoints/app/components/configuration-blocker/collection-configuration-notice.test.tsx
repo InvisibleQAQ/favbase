@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { ProcessingCoverage } from '@/lib/collections';
 
+import { ThemeProvider } from '../../theme/theme-provider';
 import {
   CollectionConfigurationNotice,
   deriveConfigurationBlockers,
@@ -126,24 +127,32 @@ describe('deriveConfigurationBlockers', () => {
 });
 
 describe('CollectionConfigurationNotice', () => {
-  it('renders one alert with a platform-scoped settings link for every blocker', () => {
+  it('renders one passive status banner with a platform-scoped settings link for every blocker', () => {
     const container = document.createElement('div');
     document.body.append(container);
     const root = createRoot(container);
 
     act(() => {
       root.render(
+        <ThemeProvider>
         <MemoryRouter>
           <CollectionConfigurationNotice
             platform="github"
             coverage={{ ...coverage, tagging: { done: 0, total: 3 } }}
             coverageStatus="ready"
           />
-        </MemoryRouter>,
+        </MemoryRouter>
+        </ThemeProvider>,
       );
     });
 
-    expect(container.querySelectorAll('[role="alert"]')).toHaveLength(1);
+    // A banner that describes the library, not an alert: no live region
+    // interrupts page load.
+    expect(container.querySelectorAll('[role="alert"]')).toHaveLength(0);
+    expect(container.querySelectorAll('[role="status"]')).toHaveLength(1);
+    expect(container.textContent).toContain('configurationBlocker.title');
+    expect(container.textContent).toContain('configurationBlocker.embedding:2');
+    expect(container.textContent).toContain('configurationBlocker.llm:3');
     expect(Array.from(container.querySelectorAll('a')).map((link) => link.getAttribute('href')))
       .toEqual([
         '/settings?section=embedding&resume=github',
@@ -162,16 +171,19 @@ describe('CollectionConfigurationNotice', () => {
 
     act(() => {
       root.render(
+        <ThemeProvider>
         <MemoryRouter>
           <CollectionConfigurationNotice
             platform="github"
             coverage={coverage}
             coverageStatus="ready"
           />
-        </MemoryRouter>,
+        </MemoryRouter>
+        </ThemeProvider>,
       );
     });
 
+    expect(container.querySelector('[role="status"]')).toBeNull();
     expect(container.querySelector('[role="alert"]')).toBeNull();
 
     act(() => root.unmount());

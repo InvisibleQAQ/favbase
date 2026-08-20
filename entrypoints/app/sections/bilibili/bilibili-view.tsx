@@ -59,7 +59,7 @@ function EmptyFolderState() {
   const { t } = useTranslation();
   return (
     <StateBox>
-      <Typography variant="h6" sx={{ color: 'text.disabled' }}>
+      <Typography variant="h6" sx={{ color: 'text.secondary' }}>
         {t('collections.emptyFolderTitle')}
       </Typography>
       <Typography variant="body2" sx={{ color: 'text.secondary' }}>
@@ -73,7 +73,7 @@ function SelectFolderState() {
   const { t } = useTranslation();
   return (
     <StateBox minHeight={240}>
-      <Typography variant="body1" sx={{ color: 'text.disabled' }}>
+      <Typography variant="body1" sx={{ color: 'text.secondary' }}>
         {t('collections.selectFolder')}
       </Typography>
     </StateBox>
@@ -95,7 +95,7 @@ function SortControl({
 }) {
   const { t } = useTranslation();
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 2, flexWrap: 'wrap' }}>
+    <Box role="group" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 2, flexWrap: 'wrap' }}>
       {SORT_OPTIONS.map((option) => {
         const active = order === option.value;
         return (
@@ -103,20 +103,24 @@ function SortControl({
             key={option.value}
             size="small"
             variant="text"
+            color="inherit"
+            aria-pressed={active}
             startIcon={<Iconify icon={option.icon} width={18} />}
             onClick={() => onChange(option.value)}
-            sx={{
+            sx={(theme) => ({
               minWidth: 0,
               px: 1,
-              color: active ? 'primary.main' : 'text.secondary',
+              color: active ? theme.vars.palette.text.primary : theme.vars.palette.text.secondary,
               fontWeight: active ? 600 : 400,
-              textDecoration: active ? 'underline' : 'none',
-              textUnderlineOffset: 4,
-              '&:hover': {
-                bgcolor: 'transparent',
-                color: active ? 'primary.dark' : 'text.primary',
+              bgcolor: active ? theme.vars.palette.primary.lighter : 'transparent',
+              '& .MuiButton-startIcon': {
+                color: active ? theme.vars.palette.primary.main : 'inherit',
               },
-            }}
+              '&:hover': {
+                bgcolor: active ? theme.vars.palette.primary.lighter : theme.vars.palette.action.hover,
+                color: theme.vars.palette.text.primary,
+              },
+            })}
           >
             {t(option.labelKey)}
           </Button>
@@ -300,12 +304,10 @@ function BilibiliCollectionPage({
       }
       pipeline={loginState === 'logged_in' ? pipeline : undefined}
       operation={autoTranscribe.state.phase === 'configuration_required' ? undefined : (
-        <Box sx={{ mb: 2.5 }}>
-          <AutoTranscribeBar
-            state={autoTranscribe.state}
-            running={autoTranscribe.running}
-          />
-        </Box>
+        <AutoTranscribeBar
+          state={autoTranscribe.state}
+          running={autoTranscribe.running}
+        />
       )}
       operationScope="primary-category"
       primaryCategory={

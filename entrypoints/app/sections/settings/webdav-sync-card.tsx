@@ -237,7 +237,7 @@ export function WebdavSyncCard() {
             <Box
               sx={(theme) => ({
                 p: 2,
-                borderRadius: 1.5,
+                borderRadius: 1,
                 bgcolor: varAlpha(theme.vars.palette.grey['500Channel'], 0.08),
               })}
             >

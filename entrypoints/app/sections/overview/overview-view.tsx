@@ -163,7 +163,7 @@ function PlatformComposition({
       {hasItems && (
         <Box
           aria-hidden="true"
-          sx={{ display: 'flex', width: 1, height: 10, overflow: 'hidden', borderRadius: 0.75, mb: 2 }}
+          sx={{ display: 'flex', width: 1, height: 10, overflow: 'hidden', borderRadius: 1, mb: 2 }}
         >
           {platforms.map((platform) => (
             <Box

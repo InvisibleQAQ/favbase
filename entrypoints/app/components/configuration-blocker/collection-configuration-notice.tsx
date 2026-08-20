@@ -5,6 +5,7 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
+import { varAlpha } from 'minimal-shared/utils';
 
 import type { ProcessingCoverage } from '@/lib/collections';
 import type { CollectionPlatform } from '@/lib/collections/platforms';
@@ -63,6 +64,14 @@ export interface CollectionConfigurationNoticeProps {
   asrBlocked?: boolean;
 }
 
+/**
+ * Full-width configuration banner rendered right after the page search: a
+ * title, one line per blocker and a Configure link for each. A passive
+ * `role="status"` region — never an alert: it describes the library, it does
+ * not interrupt the user. Colors follow the catalog-card tokens: `warning.lighter`
+ * ground (alpha wash in dark), ink text, `text.accent` links and icon — no coral
+ * text, no white-on-coral.
+ */
 export function CollectionConfigurationNotice({
   platform,
   coverage,
@@ -86,9 +95,21 @@ export function CollectionConfigurationNotice({
 
   return (
     <Alert
+      role="status"
       severity="warning"
       variant="outlined"
-      sx={{ mb: 2, alignItems: 'flex-start', '& .MuiAlert-message': { width: '100%' } }}
+      sx={(theme) => ({
+        mb: 2,
+        alignItems: 'flex-start',
+        color: theme.vars.palette.text.primary,
+        backgroundColor: theme.vars.palette.warning.lighter,
+        borderColor: theme.vars.palette.warning.light,
+        '& .MuiAlert-icon': { color: theme.vars.palette.text.accent },
+        '& .MuiAlert-message': { width: '100%' },
+        ...theme.applyStyles('dark', {
+          backgroundColor: varAlpha(theme.vars.palette.warning.mainChannel, 0.16),
+        }),
+      })}
     >
       <Typography variant="subtitle2" sx={{ mb: 0.75, fontWeight: 700 }}>
         {t('configurationBlocker.title')}
@@ -115,7 +136,6 @@ export function CollectionConfigurationNotice({
             <Button
               component={RouterLink}
               to={`/settings?section=${blocker.capability}&resume=${platform}`}
-              color="warning"
               size="small"
               startIcon={<Iconify icon="solar:settings-bold-duotone" width={16} />}
               sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}

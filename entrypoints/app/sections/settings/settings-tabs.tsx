@@ -1,9 +1,9 @@
 import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
-import { varAlpha } from 'minimal-shared/utils';
 
 import { Iconify } from '../../components/iconify';
 import type { IconifyName } from '../../components/iconify';
+import { segmentedTabsSx } from './segmented-tabs-sx';
 
 export interface SettingsTabItem {
   value: string;
@@ -23,27 +23,7 @@ export function SettingsTabs({ value, onChange, tabs }: SettingsTabsProps) {
       value={value}
       onChange={(_, v) => onChange(v)}
       variant="fullWidth"
-      sx={(theme) => ({
-        minHeight: 48,
-        p: 0.5,
-        borderRadius: 2,
-        bgcolor: varAlpha(theme.vars.palette.grey['500Channel'], 0.08),
-        '& .MuiTabs-indicator': { display: 'none' },
-        '& .MuiTabs-flexContainer': { gap: 0.5 },
-        '& .MuiTab-root': {
-          minHeight: 40,
-          borderRadius: 1.5,
-          fontWeight: theme.typography.fontWeightMedium,
-          color: theme.vars.palette.text.secondary,
-          transition: theme.transitions.create(['color', 'background-color', 'box-shadow']),
-          '&:hover': { color: theme.vars.palette.text.primary },
-          '&.Mui-selected': {
-            color: theme.vars.palette.text.primary,
-            bgcolor: theme.vars.palette.background.paper,
-            boxShadow: theme.vars.customShadows.z1,
-          },
-        },
-      })}
+      sx={(theme) => ({ minHeight: 48, ...segmentedTabsSx(theme, { compact: true }) })}
     >
       {tabs.map((tab) => (
         <Tab

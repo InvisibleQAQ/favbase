@@ -26,7 +26,9 @@ export const baseTheme: ThemeOptions = {
   },
   components,
   typography,
-  shape: { borderRadius: 8 },
+  // One radius unit: ×1 (4px) for stamps / chips / inputs, ×3 (12px) for
+  // entries and dialogs. Nothing in between.
+  shape: { borderRadius: 4 },
   cssVariables: themeConfig.cssVariables,
 };
 

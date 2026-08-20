@@ -1,5 +1,3 @@
-import Card from '@mui/material/Card';
-import CardActionArea from '@mui/material/CardActionArea';
 import Box from '@mui/material/Box';
 import Avatar from '@mui/material/Avatar';
 import Typography from '@mui/material/Typography';
@@ -8,6 +6,7 @@ import { formatCompactNumber, formatDateTime } from '@/lib/i18n';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify } from '../../components/iconify';
 import type { IconifyName } from '../../components/iconify/register-icons';
+import { CollectionCard } from '../../components/collection';
 import { TagRow } from '../../components/tags';
 import type { XBookmarkItem } from '@/lib/x/x-sync-service';
 import type { TagRef } from '@/lib/tagging';
@@ -19,29 +18,15 @@ export interface XCardProps {
   onEditTags?: (anchor: HTMLElement) => void;
 }
 
-/** A single image/video thumbnail from the tweet's media list. */
-function MediaThumb({ url }: { url: string }) {
-  return (
-    <Box
-      component="img"
-      src={url}
-      alt=""
-      loading="lazy"
-      sx={{
-        width: 1,
-        height: 96,
-        objectFit: 'cover',
-        borderRadius: 1,
-        display: 'block',
-      }}
-    />
-  );
+/** Blank lines inside a tweet would clamp into an orphaned "…" row. */
+export function normalizeTweetText(text: string): string {
+  return text.replace(/\n{2,}/g, '\n').trim();
 }
 
 function StatItem({ icon, value }: { icon: IconifyName; value: number }) {
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
-      <Iconify icon={icon} width={14} sx={{ color: 'text.disabled' }} />
+      <Iconify icon={icon} width={14} sx={{ color: 'text.secondary' }} />
       <Typography variant="caption" sx={{ color: 'text.secondary' }}>
         {formatCompactNumber(value)}
       </Typography>
@@ -53,86 +38,56 @@ export function XCard({ bookmark, tags, onEditTags }: XCardProps) {
   // Subscribe to locale changes so formatCompactNumber/formatDateTime re-render.
   useTranslation();
 
-  const handleClick = () => {
-    window.open(bookmark.originalUrl, '_blank');
-  };
-
-  // Show at most the first media item as a thumbnail (compact card).
-  const thumb = bookmark.media.find((m) => m.url)?.url;
+  // The first media item is the entry's cover (compact card).
+  const thumb = bookmark.media.find((m) => m.url)?.url ?? null;
+  const text = normalizeTweetText(bookmark.text || bookmark.title);
 
   return (
-    <Card
-      sx={(theme) => ({
-        height: 1,
-        overflow: 'hidden',
-        display: 'flex',
-        flexDirection: 'column',
-        boxShadow: theme.vars.customShadows.card,
-        transition: 'box-shadow 0.2s',
-        '&:hover': { boxShadow: theme.vars.customShadows.z8 },
-      })}
-    >
-      <CardActionArea
-        onClick={handleClick}
-        sx={{ flex: '1 1 auto', display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}
-      >
-        <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1, flex: '1 1 auto' }}>
-          {/* Author avatar + name + @handle */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-            <Avatar src={bookmark.avatarUrl ?? undefined} sx={{ width: 32, height: 32 }}>
-              <Iconify icon="mdi:twitter" width={18} />
-            </Avatar>
-            <Box sx={{ minWidth: 0 }}>
-              <Typography variant="subtitle2" sx={{ fontWeight: 600 }} noWrap title={bookmark.authorName}>
-                {bookmark.authorName}
-              </Typography>
-              {bookmark.authorHandle && (
-                <Typography variant="caption" sx={{ color: 'text.secondary' }} noWrap>
-                  {`@${bookmark.authorHandle}`}
-                </Typography>
-              )}
-            </Box>
-          </Box>
-
-          {/* Tweet text — 3-line clamp */}
-          {bookmark.text && (
-            <Typography
-              variant="body2"
-              title={bookmark.text}
-              sx={{
-                color: 'text.primary',
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word',
-                display: '-webkit-box',
-                WebkitLineClamp: 3,
-                WebkitBoxOrient: 'vertical',
-                overflow: 'hidden',
-              }}
-            >
-              {bookmark.text}
+    <CollectionCard
+      href={bookmark.originalUrl}
+      media={
+        thumb
+          ? {
+              src: thumb,
+              alt: '',
+              aspect: '1/1',
+              fallbackIcon: <Iconify icon="mdi:twitter" width={24} />,
+            }
+          : undefined
+      }
+      header={
+        <>
+          <Avatar src={bookmark.avatarUrl ?? undefined} sx={{ width: 24, height: 24 }}>
+            <Iconify icon="mdi:twitter" width={16} />
+          </Avatar>
+          <Box sx={{ flex: '1 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+            <Typography variant="caption" sx={{ fontWeight: 600 }} noWrap title={bookmark.authorName}>
+              {bookmark.authorName}
             </Typography>
-          )}
-
-          {/* First media thumbnail, if any */}
-          {thumb && <MediaThumb url={thumb} />}
-
-          {/* Footer: engagement stats + published time */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mt: 'auto', pt: 0.5 }}>
-            <StatItem icon="mdi:heart-outline" value={bookmark.likeCount} />
-            <StatItem icon="mdi:repeat-variant" value={bookmark.retweetCount} />
-            <StatItem icon="mdi:comment-outline" value={bookmark.replyCount} />
-
-            {bookmark.publishedAt && (
-              <Typography variant="caption" sx={{ color: 'text.disabled', ml: 'auto' }} noWrap>
-                {formatDateTime(bookmark.publishedAt.getTime())}
+            {bookmark.authorHandle && (
+              <Typography
+                variant="caption"
+                sx={{ color: 'text.secondary' }}
+                noWrap
+                title={`@${bookmark.authorHandle}`}
+              >
+                {`@${bookmark.authorHandle}`}
               </Typography>
             )}
           </Box>
-        </Box>
-      </CardActionArea>
-
-      {/* Tag row — outside CardActionArea so chips/edit don't trigger navigation */}
-      {tags && <TagRow tags={tags} onEditTags={onEditTags} />}
-    </Card>
+        </>
+      }
+      title={text}
+      titleLines={3}
+      date={bookmark.publishedAt ? formatDateTime(bookmark.publishedAt.getTime()) : undefined}
+      stats={
+        <>
+          <StatItem icon="mdi:heart-outline" value={bookmark.likeCount} />
+          <StatItem icon="mdi:repeat-variant" value={bookmark.retweetCount} />
+          <StatItem icon="mdi:comment-outline" value={bookmark.replyCount} />
+        </>
+      }
+      tags={tags ? <TagRow tags={tags} onEditTags={onEditTags} /> : undefined}
+    />
   );
 }

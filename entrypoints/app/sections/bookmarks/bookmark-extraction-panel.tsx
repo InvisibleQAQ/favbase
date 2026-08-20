@@ -35,7 +35,7 @@ export function BookmarkExtractionPanel({ extraction }: BookmarkExtractionPanelP
         mb: 2.5,
         p: 2,
         border: '1px solid',
-        borderRadius: 2,
+        borderRadius: 3,
         borderColor: varAlpha(theme.vars.palette.primary.mainChannel, 0.2),
         bgcolor: varAlpha(theme.vars.palette.primary.mainChannel, 0.06),
       })}
@@ -101,7 +101,7 @@ export function BookmarkExtractionPanel({ extraction }: BookmarkExtractionPanelP
         {active && hasTotal && (
           <Typography
             variant="subtitle2"
-            sx={{ flexShrink: 0, color: 'primary.main', fontVariantNumeric: 'tabular-nums' }}
+            sx={{ flexShrink: 0, color: 'text.accent' }}
           >
             {Math.round(progress)}%
           </Typography>

@@ -123,7 +123,7 @@ export function GithubConnectionCard({ settings, saveGithub }: GithubConnectionC
               sx={(theme) => ({
                 mt: 2,
                 p: 2,
-                borderRadius: 1.5,
+                borderRadius: 1,
                 bgcolor: varAlpha(theme.vars.palette.grey['500Channel'], 0.08),
               })}
             >

@@ -60,7 +60,7 @@ export function EmbeddingStatsPanel({
             <Box
               sx={(theme) => ({
                 p: 2,
-                borderRadius: 2,
+                borderRadius: 3,
                 bgcolor: varAlpha(theme.vars.palette.grey['500Channel'], 0.08),
               })}
             >

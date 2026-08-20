@@ -59,18 +59,36 @@ describe('AutoTranscribeBar (pure progress display)', () => {
     container.remove();
   });
 
-  it('renders the idle preview with no buttons and no invented pending count', () => {
+  it('draws nothing while idle — the pipeline strip already carries Transcribe coverage', () => {
     act(() => {
       root.render(<AutoTranscribeBar state={idleState()} running={false} />);
     });
 
-    expect(container.textContent).toContain('autoTranscribe.title');
-    expect(container.textContent).not.toContain('autoTranscribe.pendingCount');
-    // Transcription auto-continues after a fetch — the bar exposes no controls.
+    expect(container.childElementCount).toBe(0);
+    expect(container.textContent).toBe('');
+  });
+
+  it('summarises a finished run on one passive status line without controls', () => {
+    act(() => {
+      root.render(
+        <AutoTranscribeBar
+          state={idleState({
+            phase: 'done',
+            stats: { existing: 2, cc: 1, asr: 0, skipped: 0, remaining: 0 },
+          })}
+          running={false}
+        />,
+      );
+    });
+
+    expect(container.querySelector('[role="status"]')).not.toBeNull();
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(container.textContent).toContain('autoTranscribe.doneTitle');
+    expect(container.textContent).toContain('autoTranscribe.statsExisting:2');
     expect(container.querySelector('button')).toBeNull();
   });
 
-  it('shows the auto-resume quota copy without a restart control', () => {
+  it('shows the auto-resume quota copy as a status line, not an alert, without a restart control', () => {
     act(() => {
       root.render(
         <AutoTranscribeBar
@@ -86,6 +104,8 @@ describe('AutoTranscribeBar (pure progress display)', () => {
 
     expect(container.textContent).toContain('autoTranscribe.quotaPausedUntil');
     expect(container.textContent).toContain('date:4600000');
+    expect(container.querySelector('[role="status"]')).not.toBeNull();
+    expect(container.querySelector('[role="alert"]')).toBeNull();
     expect(container.querySelector('button')).toBeNull();
   });
 

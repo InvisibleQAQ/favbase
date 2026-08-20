@@ -2,12 +2,13 @@ import { useEffect } from 'react';
 
 import { useTranslation } from '@/lib/i18n/use-translation';
 
+import { themeConfig } from '../theme/theme-config';
 import { useRunningJobs } from './background-jobs-store';
 
-// theme-config.ts palette.warning.main — the indicator chip's tone, hardcoded
-// because the theme object lives in React land and this value feeds a plain
-// browser API. Chrome auto-picks contrasting badge text (M110+).
-const BADGE_COLOR = '#FFAB00';
+// The indicator chip's tone. Read from the palette constants (not the React
+// theme object) because this value feeds a plain browser API. Chrome
+// auto-picks contrasting badge text (M110+).
+const BADGE_COLOR = themeConfig.palette.warning.main;
 
 /**
  * Write the running-job count onto the toolbar action badge, with the

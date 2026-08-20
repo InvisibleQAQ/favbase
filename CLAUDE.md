@@ -36,6 +36,7 @@ WXT 入口点及运行时角色总览，详细结构见对应目录 `CLAUDE.md`�
 - 使用wxt框架进行开发, 必须使用 `context7 mcp`查询 wxt文档.
 - `docs/03_favbase-prd.md` — 完整 PRD（知识库全功能）
 - `docs/04_bilibili-transcription-spec.md` — B站视频转录功能实现规格
+- `docs/19_app-design-critique-2026-08-20.md` — app.html 设计审查与分阶段整改计划（Phase 0 token 层 + P0 已落地：`theme/`、`components/collection/collection-card.tsx`；P0-1 的三行 scaffold 被用户否决并于 2026-08-20 恢复原堆叠，仅保留 `role=status` 与色彩；Phase 2-4 待做）；产品事实见 `PRODUCT.md`
 - `.trellis/` — Trellis 开发工作流配置
 - `tests/platform-completeness-contract.test.ts` — 单一聚合失败的跨层平台接入契约；以 TypeScript AST 对账 app/welcome/build/test 各层 Adapter，避免加载 DB 或页面 runtime
 - `wxt.config.ts` — built-in platform host permissions 由 `PLATFORM_HOST_PERMISSIONS` keyed map 声明，`PLATFORM_HOST_PERMISSION_LIST` 负责 manifest spread；Bookmark `<all_urls>` 仍是显式平台 Adapter
@@ -43,7 +44,7 @@ WXT 入口点及运行时角色总览，详细结构见对应目录 `CLAUDE.md`�
 ## 参考项目
 
 - `C:\Users\18368\Desktop\00_myCode\24_cyberSquirrel\02_Bilitato` — Bilitato 开源项目，B站视频 AI 助手，是视频转录功能的主要参考实现
-- `C:\Users\18368\Desktop\00_myCode\24_cyberSquirrel\06_material-kit-react` — Material Kit React，MUI v7 Dashboard 模板，app.html UI 风格参考
+- `C:\Users\18368\Desktop\00_myCode\24_cyberSquirrel\06_material-kit-react` — Material Kit React，MUI v7 Dashboard 模板，app.html 布局骨架与主题机制参考（视觉 token 值已按 `docs/19` 换成目录卡片库方向，不再沿用其配色）
 
 ## 目录文档索引
 
@@ -54,7 +55,7 @@ WXT 入口点及运行时角色总览，详细结构见对应目录 `CLAUDE.md`�
 - `entrypoints/app/theme/CLAUDE.md` — MUI v7 主题系统（palette/typography/shadows/components）
 - `entrypoints/app/layouts/CLAUDE.md` — 仪表盘布局系统 + 侧边栏 Pin/Unpin
 - `entrypoints/app/components/iconify/CLAUDE.md` — Iconify 离线图标系统
-- `entrypoints/app/components/collection/CLAUDE.md` — 平台 section 共享展示哑组件（StateBox/标题栏/搜索框/卡片网格+分页/chip 行外壳）
+- `entrypoints/app/components/collection/CLAUDE.md` — 平台 section 共享展示哑组件（StateBox/标题栏/搜索框/卡片网格+分页/chip 行外壳/**`CollectionCard` 六平台条目外壳**）+ `CollectionPageScaffold` 页面编排
 - `entrypoints/app/components/configuration-blocker/CLAUDE.md` — Collection provider 配置阻塞提醒（resolver + coverage + Settings 深链）
 - `entrypoints/app/components/library-gate/CLAUDE.md` — 知识库闸门智能组件（自带 i18n + `useLibraryGate` 订阅；⏸暂停/▶继续构建知识库按钮，scaffold pipeline 行尾常驻）
 - `entrypoints/app/components/tags/CLAUDE.md` — 平台无关标签 UI 子系统（hooks + popover + 筛选 chips + render-prop 网格）

@@ -6,10 +6,15 @@ import { grey, common } from './palette';
 
 import type { ThemeColorScheme } from '../types';
 
-function createShadows(colorChannel: string): Shadows {
-  const color1 = varAlpha(colorChannel, 0.2);
-  const color2 = varAlpha(colorChannel, 0.14);
-  const color3 = varAlpha(colorChannel, 0.12);
+/**
+ * MUI's 25-level elevation scale, recolored to the warm ink channel. Light
+ * casts warm ink (grey 800) at low alpha; dark casts black at a higher alpha
+ * because warm surfaces there sit close to the ground.
+ */
+function createShadows(colorChannel: string, strength: number): Shadows {
+  const color1 = varAlpha(colorChannel, 0.2 * strength);
+  const color2 = varAlpha(colorChannel, 0.14 * strength);
+  const color3 = varAlpha(colorChannel, 0.12 * strength);
 
   return [
     'none',
@@ -41,6 +46,6 @@ function createShadows(colorChannel: string): Shadows {
 }
 
 export const shadows: Partial<Record<ThemeColorScheme, Shadows>> = {
-  light: createShadows(grey['500Channel']),
-  dark: createShadows(common.blackChannel),
+  light: createShadows(grey['800Channel'], 0.9),
+  dark: createShadows(common.blackChannel, 2.5),
 };

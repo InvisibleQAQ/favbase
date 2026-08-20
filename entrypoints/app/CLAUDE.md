@@ -1,6 +1,6 @@
 # Extension Page Dashboard (app.html)
 
-MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRouter`（Chrome 扩展页面不支持路径路由）。路由结构：`/`(只读 Collection Analytics Dashboard), `/collections`(跨平台聚合页，支持 `?tag=<uuid>` 单标签深链), `/collections/bilibili`(B站收藏夹概览), `/collections/bilibili/:mediaId`(B站收藏夹视频列表), `/collections/github`(GitHub Stars 收藏页), `/collections/bookmarks`(浏览器书签「全部」), `/collections/bookmarks/:folderId`(书签按文件夹), `/collections/x`(X/Twitter 书签，扁平单集合无详情路由), `/collections/zhihu`(知乎收藏，收藏夹经 chips 筛选无详情路由), `/collections/youtube`(YouTube 公开播放列表，播放列表经 chips 筛选无详情路由), `/settings`。多平台模式：`/collections` 聚合所有平台注册条目；每个平台保留独立 `/collections/<platform>` 路由 + 对应 section。
+MUI v7 Dashboard，视觉语言为「目录卡片库」（`docs/19_app-design-critique-2026-08-20.md` §7.0.1；token 见 `theme/CLAUDE.md`，条目外壳见 `components/collection/CLAUDE.md`；方向契约以 HTML 注释写在 `index.html` `<body>` 首子节点）。使用 `createHashRouter`（Chrome 扩展页面不支持路径路由）。路由结构：`/`(只读 Collection Analytics Dashboard), `/collections`(跨平台聚合页，支持 `?tag=<uuid>` 单标签深链), `/collections/bilibili`(B站收藏夹概览), `/collections/bilibili/:mediaId`(B站收藏夹视频列表), `/collections/github`(GitHub Stars 收藏页), `/collections/bookmarks`(浏览器书签「全部」), `/collections/bookmarks/:folderId`(书签按文件夹), `/collections/x`(X/Twitter 书签，扁平单集合无详情路由), `/collections/zhihu`(知乎收藏，收藏夹经 chips 筛选无详情路由), `/collections/youtube`(YouTube 公开播放列表，播放列表经 chips 筛选无详情路由), `/settings`。多平台模式：`/collections` 聚合所有平台注册条目；每个平台保留独立 `/collections/<platform>` 路由 + 对应 section。
 
 ## 模块结构
 
@@ -13,4 +13,4 @@ MUI v7 Dashboard，复刻 material-kit-react 视觉风格。使用 `createHashRo
 
 ## 约定
 
-- Extension Page (app.html): MUI v7 + Emotion CSS-in-JS + `createHashRouter`。Chrome 扩展页面 URL 不支持路径路由，必须用 hash router。主题系统复刻 material-kit-react（`minimal-shared` 工具库 + `@iconify/react` 图标）。新增页面：在 `pages/` 添加 lazy 组件 + `main.tsx` 路由配置 + `nav-config.tsx` 导航项
+- Extension Page (app.html): MUI v7 + Emotion CSS-in-JS + `createHashRouter`。Chrome 扩展页面 URL 不支持路径路由，必须用 hash router。主题系统基于 `minimal-shared` 工具库（`varAlpha`/`createPaletteChannel`）+ `@iconify/react` 图标，值已从 material-kit-react 换成目录卡片库方向。新增页面：在 `pages/` 添加 lazy 组件 + `main.tsx` 路由配置 + `nav-config.tsx` 导航项

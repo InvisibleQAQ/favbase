@@ -31,8 +31,8 @@ const LANGUAGE_OPTIONS: { value: SupportedLocale; labelKey: LocaleKeys; flag: Ic
   { value: 'en', labelKey: 'settings.languageEn', flag: 'flagpack:gb' },
 ];
 
-// iOS-style pill: checked (thumb right) = dark. Track turns indigo #5C6BC0 to
-// echo the moon's night hue (no indigo token — theme primary is coral #FC7E5B).
+// iOS-style pill: checked (thumb right) = dark. The checked track is warm ink
+// (grey 700) — the moon glyph carries its own night color; the control does not.
 const ThemeSwitch = styled(Switch)(({ theme }) => ({
   width: 40,
   height: 22,
@@ -43,9 +43,9 @@ const ThemeSwitch = styled(Switch)(({ theme }) => ({
     transitionDuration: '250ms',
     '&.Mui-checked': {
       transform: 'translateX(18px)',
-      color: '#fff',
+      color: theme.vars.palette.common.white,
       '& + .MuiSwitch-track': {
-        backgroundColor: '#5C6BC0',
+        backgroundColor: theme.vars.palette.grey[700],
         opacity: 1,
         border: 0,
       },
@@ -140,7 +140,7 @@ export function HeaderActions() {
           aria-label={t('header.languageAria')}
           onClick={(e) => setAnchorEl(e.currentTarget)}
         >
-          <Iconify icon={activeFlag} width={FLAG_WIDTH} height={FLAG_HEIGHT} sx={{ borderRadius: 0.5 }} />
+          <Iconify icon={activeFlag} width={FLAG_WIDTH} height={FLAG_HEIGHT} sx={{ borderRadius: 1 }} />
         </IconButton>
       </Tooltip>
 
@@ -158,7 +158,7 @@ export function HeaderActions() {
             onClick={() => handleSelect(opt.value)}
           >
             <ListItemIcon sx={{ minWidth: 0, mr: 1.25 }}>
-              <Iconify icon={opt.flag} width={FLAG_WIDTH} height={FLAG_HEIGHT} sx={{ borderRadius: 0.5 }} />
+              <Iconify icon={opt.flag} width={FLAG_WIDTH} height={FLAG_HEIGHT} sx={{ borderRadius: 1 }} />
             </ListItemIcon>
             <ListItemText>{t(opt.labelKey)}</ListItemText>
             {locale === opt.value && (

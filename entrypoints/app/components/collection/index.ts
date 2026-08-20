@@ -21,6 +21,12 @@ export {
 } from './card-grid';
 export { ChipRowShell, FilterChip, type ChipRowShellProps, type FilterChipProps } from './chip-row';
 export {
+  CollectionCard,
+  CoverBadge,
+  type CollectionCardProps,
+  type CollectionCardMedia,
+} from './collection-card';
+export {
   CollapsibleChipRow,
   type CollapsibleChipRowProps,
 } from './collapsible-chip-row';

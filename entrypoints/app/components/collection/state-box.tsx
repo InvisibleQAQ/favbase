@@ -36,7 +36,7 @@ export function StateBox({
         justifyContent: 'center',
         minHeight,
         gap: 2,
-        borderRadius: 2,
+        borderRadius: 3,
         border: `2px dashed ${varAlpha(theme.vars.palette.grey['500Channel'], 0.24)}`,
         p: 4,
       })}

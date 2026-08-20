@@ -20,6 +20,23 @@ import { Iconify } from '../../components/iconify';
 import { findActiveChildPath } from '../nav-active';
 import type { NavItem } from '../nav-config';
 
+// ---------------------------------------------------------------------------
+// Active state shared by every nav row: coral wash under ink text, weight up,
+// coral only on the icon glyph. Coral is never the text color (2.5:1 on paper).
+// ---------------------------------------------------------------------------
+
+const NAV_ICON_CLASS = 'favbase-nav-icon';
+
+function navActiveSx(theme: Theme) {
+  return {
+    fontWeight: 'fontWeightSemiBold',
+    color: theme.vars.palette.text.primary,
+    bgcolor: theme.vars.palette.primary.lighter,
+    '&:hover': { bgcolor: theme.vars.palette.primary.lighter },
+    [`& .${NAV_ICON_CLASS}`]: { color: theme.vars.palette.primary.main },
+  } as const;
+}
+
 export type NavContentProps = {
   data: NavItem[];
   sx?: SxProps<Theme>;
@@ -48,7 +65,7 @@ export function NavDesktop({
         bgcolor: 'background.default',
         zIndex: 'var(--layout-nav-zIndex)',
         width: 'var(--layout-nav-vertical-width)',
-        borderRight: `1px solid ${varAlpha(theme.vars.palette.grey['500Channel'], 0.12)}`,
+        borderRight: `1px solid ${theme.vars.palette.divider}`,
         transition: theme.transitions.create(['width', 'padding'], {
           easing: 'var(--layout-transition-easing)',
           duration: 'var(--layout-transition-duration)',
@@ -120,24 +137,17 @@ function NavLeafButton({
           py: 1,
           gap: pinned ? 2 : 0,
           pr: pinned ? 1.5 : 0,
-          borderRadius: 0.75,
+          borderRadius: 1,
           typography: 'body2',
           fontWeight: 'fontWeightMedium',
           color: theme.vars.palette.text.secondary,
           minHeight: 44,
           justifyContent: pinned ? 'flex-start' : 'center',
-          ...(isActive && {
-            fontWeight: 'fontWeightSemiBold',
-            color: theme.vars.palette.primary.main,
-            bgcolor: varAlpha(theme.vars.palette.primary.mainChannel, 0.08),
-            '&:hover': {
-              bgcolor: varAlpha(theme.vars.palette.primary.mainChannel, 0.16),
-            },
-          }),
+          ...(isActive && navActiveSx(theme)),
         }),
       ]}
     >
-      <Box component="span" sx={{ width: 24, height: 24, display: 'flex' }}>
+      <Box component="span" className={NAV_ICON_CLASS} sx={{ width: 24, height: 24, display: 'flex' }}>
         {item.icon}
       </Box>
       {pinned && (
@@ -240,7 +250,7 @@ function NavChildLeaf({
             pl: 1,
             py: 0.75,
             pr: 1,
-            borderRadius: 0.75,
+            borderRadius: 1,
             minHeight: 36,
             gap: 1,
             alignItems: 'center',
@@ -248,20 +258,14 @@ function NavChildLeaf({
             color: item.external
               ? theme.vars.palette.text.disabled
               : theme.vars.palette.text.secondary,
-            ...(isActive && {
-              fontWeight: 'fontWeightSemiBold',
-              color: theme.vars.palette.primary.main,
-              bgcolor: varAlpha(theme.vars.palette.primary.mainChannel, 0.08),
-              '&:hover': {
-                bgcolor: varAlpha(theme.vars.palette.primary.mainChannel, 0.16),
-              },
-            }),
+            ...(isActive && navActiveSx(theme)),
           }),
         ]}
       >
         {item.icon && (
           <Box
             component="span"
+            className={NAV_ICON_CLASS}
             sx={{
               width: 20,
               height: 20,
@@ -330,7 +334,7 @@ function CollectionsBranch({ item, pinned }: { item: NavItem; pinned: boolean })
           (theme) => ({
             display: 'flex',
             alignItems: 'center',
-            borderRadius: 0.75,
+            borderRadius: 1,
             typography: 'body2',
             fontWeight: 'fontWeightMedium',
             color: theme.vars.palette.text.secondary,
@@ -338,14 +342,7 @@ function CollectionsBranch({ item, pinned }: { item: NavItem; pinned: boolean })
             '&:hover': {
               bgcolor: theme.vars.palette.action.hover,
             },
-            ...(isActive && {
-              fontWeight: 'fontWeightSemiBold',
-              color: theme.vars.palette.primary.main,
-              bgcolor: varAlpha(theme.vars.palette.primary.mainChannel, 0.08),
-              '&:hover': {
-                bgcolor: varAlpha(theme.vars.palette.primary.mainChannel, 0.16),
-              },
-            }),
+            ...(isActive && navActiveSx(theme)),
           }),
         ]}
       >
@@ -363,11 +360,11 @@ function CollectionsBranch({ item, pinned }: { item: NavItem; pinned: boolean })
             alignSelf: 'stretch',
             color: 'inherit',
             fontWeight: 'inherit',
-            borderRadius: 0.75,
+            borderRadius: 1,
             '&:hover': { bgcolor: 'transparent' },
           }}
         >
-          <Box component="span" sx={{ width: 24, height: 24, display: 'flex' }}>
+          <Box component="span" className={NAV_ICON_CLASS} sx={{ width: 24, height: 24, display: 'flex' }}>
             {item.icon}
           </Box>
           <Box component="span" sx={{ flexGrow: 1 }}>
@@ -380,7 +377,7 @@ function CollectionsBranch({ item, pinned }: { item: NavItem; pinned: boolean })
           aria-controls={expanded ? submenuId : undefined}
           aria-expanded={expanded}
           onClick={() => setExpanded((prev) => !prev)}
-          sx={{ width: 44, height: 44, flexShrink: 0, color: 'inherit', borderRadius: 0.75 }}
+          sx={{ width: 44, height: 44, flexShrink: 0, color: 'inherit', borderRadius: 1 }}
         >
           <ExpandChevron expanded={expanded} />
         </IconButton>

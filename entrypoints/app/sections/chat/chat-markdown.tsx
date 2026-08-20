@@ -25,7 +25,7 @@ const markdownComponents: Components = {
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      sx={(theme) => ({ color: theme.vars.palette.primary.main })}
+      sx={(theme) => ({ color: theme.vars.palette.text.accent })}
     >
       {children}
     </Link>
@@ -93,7 +93,7 @@ const markdownComponents: Components = {
         <Box
           component="code"
           className={className}
-          sx={{ fontFamily: 'monospace', fontSize: '0.85em' }}
+          sx={(theme) => ({ fontFamily: 'monospace', fontSize: theme.typography.caption.fontSize })}
         >
           {children}
         </Box>
@@ -105,9 +105,9 @@ const markdownComponents: Components = {
         sx={(theme) => ({
           px: 0.5,
           py: 0.125,
-          borderRadius: 0.75,
+          borderRadius: 1,
           fontFamily: 'monospace',
-          fontSize: '0.85em',
+          fontSize: theme.typography.caption.fontSize,
           bgcolor: varAlpha(theme.vars.palette.grey['500Channel'], 0.12),
         })}
       >
@@ -124,7 +124,7 @@ const markdownComponents: Components = {
         borderRadius: 1,
         overflowX: 'auto',
         fontFamily: 'monospace',
-        fontSize: '0.85em',
+        fontSize: theme.typography.caption.fontSize,
         lineHeight: 1.5,
         bgcolor: varAlpha(theme.vars.palette.grey['500Channel'], 0.12),
       })}
@@ -139,7 +139,7 @@ const markdownComponents: Components = {
         sx={(theme) => ({
           borderCollapse: 'collapse',
           width: '100%',
-          fontSize: '0.85em',
+          fontSize: theme.typography.caption.fontSize,
           '& th, & td': {
             border: `1px solid ${varAlpha(theme.vars.palette.grey['500Channel'], 0.24)}`,
             px: 1,

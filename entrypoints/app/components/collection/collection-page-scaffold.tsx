@@ -341,7 +341,14 @@ export function CollectionPageScaffold<T>({
 
       {/* Sync failure banner (library still shows its persisted data). */}
       {hasSyncError && libraryCount > 0 && (
-        <Typography variant="body2" sx={{ color: 'error.main', mb: 2 }}>
+        <Typography
+          variant="body2"
+          sx={(theme) => ({
+            mb: 2,
+            color: theme.vars.palette.error.dark,
+            ...theme.applyStyles('dark', { color: theme.vars.palette.error.light }),
+          })}
+        >
           {copy.syncFailedBanner}
         </Typography>
       )}

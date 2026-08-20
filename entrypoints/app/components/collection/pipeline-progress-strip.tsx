@@ -1,3 +1,5 @@
+import type { Theme } from '@mui/material/styles';
+
 import Box from '@mui/material/Box';
 import LinearProgress, { linearProgressClasses } from '@mui/material/LinearProgress';
 import Typography from '@mui/material/Typography';
@@ -67,7 +69,15 @@ export function PipelineProgressStrip({ segments }: PipelineProgressStripProps) 
         const active = segment.state === 'running' || segment.state === 'pausing' || segment.state === 'paused';
         const unknownRunning = (segment.state === 'running' || segment.state === 'pausing') && segment.total == null;
         const percent = visiblePercent(segment);
-        const color = segment.state === 'failed' ? 'error.main' : active ? 'primary.main' : 'text.disabled';
+        // Text never borrows the stamp color: active reads in the accent shade,
+        // failure in the scheme-safe error shade, everything else in secondary.
+        // Coral and error.main stay on the bar fill, where they are blocks.
+        // Palette paths (not `theme.vars`) so the strip still renders outside
+        // the app ThemeProvider, as its contract test does.
+        const textColor = (theme: Theme) =>
+          segment.state === 'failed'
+            ? { color: 'error.dark', ...theme.applyStyles('dark', { color: 'error.light' }) }
+            : { color: active ? 'text.accent' : 'text.secondary' };
 
         return (
           <Box
@@ -91,19 +101,18 @@ export function PipelineProgressStrip({ segments }: PipelineProgressStripProps) 
                 variant="caption"
                 noWrap
                 title={segment.label}
-                sx={{ color: segment.state === 'idle' ? 'text.secondary' : color, minWidth: 0 }}
+                sx={(theme) => ({ ...textColor(theme), minWidth: 0 })}
               >
                 {segment.label}
               </Typography>
               <Typography
                 variant="caption"
-                sx={{
-                  color,
+                sx={(theme) => ({
+                  ...textColor(theme),
                   fontWeight: active ? 700 : 500,
-                  fontVariantNumeric: 'tabular-nums',
                   whiteSpace: 'nowrap',
                   flexShrink: 0,
-                }}
+                })}
               >
                 {segment.done ?? '--'}/{segment.total ?? '--'}
                 {percent == null ? null : ` ${percent}%`}
@@ -116,10 +125,10 @@ export function PipelineProgressStrip({ segments }: PipelineProgressStripProps) 
               color={segment.state === 'failed' ? 'error' : 'primary'}
               sx={{
                 height: 3,
-                borderRadius: 0.5,
+                borderRadius: 1,
                 bgcolor: 'action.hover',
                 [`& .${linearProgressClasses.bar}`]: {
-                  borderRadius: 0.5,
+                  borderRadius: 1,
                   opacity: segment.state === 'idle' ? 0.48 : 1,
                 },
               }}

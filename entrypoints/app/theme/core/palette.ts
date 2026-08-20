@@ -17,6 +17,13 @@ export type CommonColorsExtend = {
 
 export type TypeTextExtend = {
   disabledChannel: string;
+  /**
+   * The one shade of the brand hue allowed as text (links, emphasis, outlined /
+   * text buttons). Scheme-aware: light `primary.darker`, dark `primary.light`.
+   * Never use `primary.main` as a text color.
+   */
+  accent: string;
+  accentChannel: string;
 };
 
 export type TypeBackgroundExtend = {
@@ -45,6 +52,11 @@ export type GreyExtend = {
 };
 
 export const primary = createPaletteChannel(themeConfig.palette.primary);
+/** Dark scheme keeps the brand hue; only the `lighter` wash is re-inked. */
+export const primaryDark = createPaletteChannel({
+  ...themeConfig.palette.primary,
+  lighter: themeConfig.scheme.dark.primaryLighter,
+});
 export const secondary = createPaletteChannel(themeConfig.palette.secondary);
 export const info = createPaletteChannel(themeConfig.palette.info);
 export const success = createPaletteChannel(themeConfig.palette.success);
@@ -55,27 +67,30 @@ export const grey = createPaletteChannel(themeConfig.palette.grey);
 
 export const text = {
   light: createPaletteChannel({
-    primary: grey[800],
+    primary: '#1F1B17',
     secondary: grey[600],
+    // Disabled controls only — never card dates or captions.
     disabled: grey[500],
+    accent: themeConfig.scheme.light.accentText,
   }),
   dark: createPaletteChannel({
-    primary: '#FFFFFF',
-    secondary: grey[500],
-    disabled: grey[600],
+    primary: '#F3EEE7',
+    secondary: '#A89F94',
+    disabled: '#7A7168',
+    accent: themeConfig.scheme.dark.accentText,
   }),
 };
 
 export const background = {
   light: createPaletteChannel({
     paper: '#FFFFFF',
-    default: grey[100],
-    neutral: grey[200],
+    default: '#F8F4EE',
+    neutral: '#F1ECE4',
   }),
   dark: createPaletteChannel({
-    paper: grey[800],
-    default: grey[900],
-    neutral: '#28323D',
+    paper: '#221E1B',
+    default: '#1A1715',
+    neutral: '#2A2521',
   }),
 };
 
@@ -95,7 +110,6 @@ export const action = {
 };
 
 export const basePalette = {
-  primary,
   secondary,
   info,
   success,
@@ -103,18 +117,21 @@ export const basePalette = {
   error,
   common,
   grey,
-  divider: varAlpha(grey['500Channel'], 0.2),
+  // The hairline is the only elevation a surface declares.
+  divider: varAlpha(grey['500Channel'], 0.24),
 };
 
 export const palette: Partial<Record<ThemeColorScheme, ColorSystemOptions['palette']>> = {
   light: {
     ...basePalette,
+    primary,
     text: text.light,
     background: background.light,
     action: action.light,
   },
   dark: {
     ...basePalette,
+    primary: primaryDark,
     text: text.dark,
     background: background.dark,
     action: action.dark,

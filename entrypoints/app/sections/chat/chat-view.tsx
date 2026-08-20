@@ -207,7 +207,7 @@ export function ChatWorkspace({ agent }: ChatWorkspaceProps) {
           minHeight: 0,
           minWidth: 0,
           overflow: 'hidden',
-          borderRadius: 2,
+          borderRadius: 3,
           borderColor: theme.vars.palette.divider,
           boxShadow: 'none',
         })}
@@ -502,8 +502,10 @@ function ConversationRow({ conversation, active, onSelect, onDelete, t }: Conver
         p: 0.25,
         borderRadius: 1,
         transition: theme.transitions.create(['background-color']),
+        // Selected row = coral wash under ink text (the nav active pattern);
+        // coral is never the text color.
         ...(active
-          ? { bgcolor: varAlpha(theme.vars.palette.primary.mainChannel, 0.08) }
+          ? { bgcolor: theme.vars.palette.primary.lighter }
           : { '&:hover': { bgcolor: varAlpha(theme.vars.palette.grey['500Channel'], 0.08) } }),
       })}
     >
@@ -514,7 +516,7 @@ function ConversationRow({ conversation, active, onSelect, onDelete, t }: Conver
           flexGrow: 1,
           minWidth: 0,
           justifyContent: 'flex-start',
-          borderRadius: 0.75,
+          borderRadius: 1,
           px: 0.75,
           py: 0.625,
           textAlign: 'left',
@@ -532,7 +534,7 @@ function ConversationRow({ conversation, active, onSelect, onDelete, t }: Conver
               fontWeight: active
                 ? theme.typography.fontWeightSemiBold
                 : theme.typography.fontWeightRegular,
-              color: active ? theme.vars.palette.primary.main : theme.vars.palette.text.primary,
+              color: theme.vars.palette.text.primary,
             })}
           >
             {conversationLabel}
@@ -628,7 +630,7 @@ function MessageBubble({ message, activityLabel: activity, pending }: MessageBub
               ? {
                   px: 2,
                   py: 1.25,
-                  borderRadius: 2,
+                  borderRadius: 3,
                   whiteSpace: 'pre-wrap',
                   bgcolor: varAlpha(theme.vars.palette.primary.mainChannel, 0.12),
                 }

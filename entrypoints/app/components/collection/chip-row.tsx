@@ -1,4 +1,5 @@
 import type { ReactElement, ReactNode } from 'react';
+import type { Theme, SxProps } from '@mui/material/styles';
 
 import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
@@ -13,12 +14,14 @@ export interface ChipRowShellProps {
   headerExtra?: ReactNode;
   /** Chip row content — chips, skeletons, or an empty-state caption. */
   children: ReactNode;
+  /** Optional overrides merged after the default `mb: 3` outer spacing. */
+  sx?: SxProps<Theme>;
 }
 
 /** Filter chip row shell: icon + bold subtitle header above a wrapping chip row. */
-export function ChipRowShell({ icon, title, headerExtra, children }: ChipRowShellProps) {
+export function ChipRowShell({ icon, title, headerExtra, children, sx }: ChipRowShellProps) {
   return (
-    <Box sx={{ mb: 3 }}>
+    <Box sx={[{ mb: 3 }, ...(Array.isArray(sx) ? sx : [sx])]}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
         {icon}
         <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
@@ -42,7 +45,7 @@ export interface FilterChipProps {
   maxWidth?: number;
 }
 
-/** Filter chip with the shared selected style: filled primary vs outlined default. */
+/** Filter chip: the coral stamp (filled primary, ink text) when selected, a hairline outline otherwise. */
 export function FilterChip({ label, selected, onClick, icon, maxWidth }: FilterChipProps) {
   return (
     <Chip

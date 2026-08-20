@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { ReactElement, ReactNode } from 'react';
+import type { Theme, SxProps } from '@mui/material/styles';
 
 import Chip from '@mui/material/Chip';
 
@@ -34,6 +35,8 @@ export interface CollapsibleChipRowProps<T> {
   maxWidth?: number;
   /** Optional leading icon for each item chip. */
   getIcon?: (item: T) => ReactElement | undefined;
+  /** Optional overrides forwarded to the `ChipRowShell` (merged after its default `mb: 3`). */
+  sx?: SxProps<Theme>;
 }
 
 export function resolveCollapsedItems<T>(
@@ -76,6 +79,7 @@ export function CollapsibleChipRow<T>({
   collapsedCount = 8,
   maxWidth = 220,
   getIcon,
+  sx,
 }: CollapsibleChipRowProps<T>) {
   const [expanded, setExpanded] = useState(false);
 
@@ -89,7 +93,7 @@ export function CollapsibleChipRow<T>({
   const collapsible = overflow > 0;
 
   return (
-    <ChipRowShell icon={icon} title={title} headerExtra={headerExtra}>
+    <ChipRowShell icon={icon} title={title} headerExtra={headerExtra} sx={sx}>
       {allLabel != null && (
         <FilterChip label={allLabel} selected={selected === null} onClick={() => onSelect(null)} />
       )}

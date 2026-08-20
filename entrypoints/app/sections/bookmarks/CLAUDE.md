@@ -1,6 +1,6 @@
 # sections/bookmarks
 
-浏览器书签收藏页（显示名固定为 `Browser Bookmarks` / `浏览器书签`，路由为 `/collections/bookmarks` + `/collections/bookmarks/:folderId`）。消费共享 `CollectionPageScaffold`，固定顺序：标题/系统状态（含统一「立即获取」按钮）→ 搜索 → 正文提取进度面板 → 文件夹主分类 → 标签 → 卡片列表。同步挂载时自动触发一次（`startJob` 去重使按钮与 auto-sync 互不冲突）；**同步成功后自动链式启动正文提取**（2026-07-26 推翻 `5a04c87` 的「手动提取」决策——控制面收敛为统一获取按钮 + per-platform 闸门，暂停/继续经 `pauseLibrary('bookmarks')`，不再有平台私有启停按钮）。
+浏览器书签收藏页（显示名固定为 `Browser Bookmarks` / `浏览器书签`，路由为 `/collections/bookmarks` + `/collections/bookmarks/:folderId`）。消费共享 `CollectionPageScaffold`，固定顺序：标题/系统状态（含统一「立即获取」按钮）→ 搜索 → 配置提醒横幅（若有）→ 正文提取进度面板 → 文件夹主分类 → 标签 → 卡片列表。同步挂载时自动触发一次（`startJob` 去重使按钮与 auto-sync 互不冲突）；**同步成功后自动链式启动正文提取**（2026-07-26 推翻 `5a04c87` 的「手动提取」决策——控制面收敛为统一获取按钮 + per-platform 闸门，暂停/继续经 `pauseLibrary('bookmarks')`，不再有平台私有启停按钮）。
 
 ## 模块结构
 
@@ -10,7 +10,7 @@
 - `bookmarks-sync-adapter.ts` — 共享 Sync Adapter（audit #6）：`runBookmarksSync(onProgress, control)` 单点定义「书签同步成功意味着什么」——本地书签树同步（无凭据）、**成功后链式 `startBookmarkExtraction()`**（恢复 `5a04c87` 删掉的链路，控制面归闸门；动态 import 保持 defuddle/linkedom worker 不进 App 启动 chunk）+ **派发 backlog embed lane**（`startCollectionProcessingJobs` 空 `itemIds`——提取只领 `'pending'`，早前中断留下的 `'chunked'` 未嵌积压靠这条批处理 lane 重试）。手动页面 runner 与 daily registry 引用**同一函数**。契约测试 `bookmarks-sync-adapter.test.ts`
 - `use-bookmarks.ts` — 数据 hook。挂载时 `sync()` 自动跑一次（runner = `initDbProxy` + `runBookmarksSync`），负责分页查询与元信息刷新。搜索 300ms 防抖，folderId/search/page 驱动查询，undefined folderId = 「全部」。
 - `folder-chips.tsx` — 文件夹 chip 行：共享 `ChipRowShell`（folder icon + `bookmarks.foldersTitle`）+ `FilterChip`——「全部({{count}})」chip（选中态 = 无 folderId）+ 各文件夹（`maxWidth 200`，**无 per-chip 计数**，bilibili 风纯名称）。点击 = `onSelect(folderId|undefined)` 驱动 navigate
-- `bookmark-card.tsx` — 书签卡片（不复用 RepoCard）：favicon（Avatar rounded，MV3 本地 `_favicon` API `chrome.runtime.getURL('/_favicon/?pageUrl=…&size=32')`，无图回退 bookmark icon）+ title（2 行截断）+ 底部行（domain + `formatDateTime(dateAdded)`）+ 标签行（共享 `TagRow`，CardActionArea **之外**防误触 `window.open` 跳转；`tags?` undefined 时整区不渲染）。`BookmarkCardProps { bookmark, tags?, onEditTags? }`。点击 `window.open(url)`。`useTranslation()` 订阅保证 locale 切换 re-render 格式化输出
+- `bookmark-card.tsx` — 书签卡片 = 共享 `CollectionCard` 装配：`header` favicon（Avatar rounded 20px，MV3 本地 `_favicon` API `chrome.runtime.getURL('/_favicon/?pageUrl=…&size=32')`，无图回退 bookmark icon）+ domain caption；`title` 2 行 clamp；`date` `formatDateTime(dateAdded)`（外壳右格 noWrap）；`tags`（共享 `TagRow`，外壳保证在链接之外；undefined 时整行不渲染）。`BookmarkCardProps { bookmark, tags?, onEditTags? }`。`href = url` 真实锚点新标签打开（不再 `window.open`）。`useTranslation()` 订阅保证 locale 切换 re-render 格式化输出
 - `tagged-bookmark-card.tsx` — `TaggedBookmarkCard`：TaggedItemGrid `renderCard` 的书签 adapter。`toBookmarkItem` 把平台无关 `TaggedItem` 映射回 `BookmarkItem`（url 取 `item.originalUrl`；platformMeta 防御式取 domain/dateAdded，缺失给安全默认，镜像 `toGithubRepoItem`）。**adapter 知识归 adapter**：`BookmarkItem` 类型导入只在本文件与 card
 - `bookmark-grid-skeleton.tsx` — `BookmarkGridSkeleton`：共享 `CardGridSkeleton` 外壳（grid-of-8）+ rounded 96 高（匹配紧凑书签卡片），view 与 TaggedItemGrid（`skeleton` prop）共用
 

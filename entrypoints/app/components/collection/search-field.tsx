@@ -1,3 +1,5 @@
+import type { Theme, SxProps } from '@mui/material/styles';
+
 import TextField from '@mui/material/TextField';
 import InputAdornment from '@mui/material/InputAdornment';
 
@@ -9,10 +11,12 @@ export interface SearchFieldProps {
   value?: string;
   onChange?: (value: string) => void;
   disabled?: boolean;
+  /** Optional overrides merged after the default `mb: 3` outer spacing. */
+  sx?: SxProps<Theme>;
 }
 
 /** Full-width search input with the shared magnifier adornment. */
-export function SearchField({ placeholder, value, onChange, disabled }: SearchFieldProps) {
+export function SearchField({ placeholder, value, onChange, disabled, sx }: SearchFieldProps) {
   return (
     <TextField
       fullWidth
@@ -20,12 +24,12 @@ export function SearchField({ placeholder, value, onChange, disabled }: SearchFi
       value={value}
       onChange={onChange ? (e) => onChange(e.target.value) : undefined}
       placeholder={placeholder}
-      sx={{ mb: 3 }}
+      sx={[{ mb: 3 }, ...(Array.isArray(sx) ? sx : [sx])]}
       slotProps={{
         input: {
           startAdornment: (
             <InputAdornment position="start">
-              <Iconify icon="eva:search-fill" width={20} sx={{ color: 'text.disabled' }} />
+              <Iconify icon="eva:search-fill" width={20} sx={{ color: 'text.secondary' }} />
             </InputAdornment>
           ),
         },

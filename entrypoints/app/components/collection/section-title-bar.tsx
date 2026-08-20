@@ -9,7 +9,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import { Iconify } from '../iconify';
 
 export interface SectionTitleBarProps {
-  /** h5 title — pass a <Skeleton> while loading. */
+  /** h5 title (rendered as the page's h1) — pass a <Skeleton> while loading. */
   title: ReactNode;
   /** Caption next to the title (count / last-synced); omit to hide. */
   caption?: ReactNode;
@@ -31,7 +31,10 @@ export interface SectionTitleBarProps {
   syncDisabledTooltip?: string;
 }
 
-/** Title row shared by platform sections: title + caption + spacer + optional sync button. */
+/**
+ * Title row shared by platform sections: title + caption + spacer + optional
+ * sync button. The title keeps its h5 look but is the page's single h1.
+ */
 export function SectionTitleBar({
   title,
   caption,
@@ -63,7 +66,7 @@ export function SectionTitleBar({
 
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 2, flexWrap: 'wrap' }}>
-      <Typography variant="h5" sx={{ flexShrink: 0 }} noWrap>
+      <Typography variant="h5" component="h1" sx={{ flexShrink: 0 }} noWrap>
         {title}
       </Typography>
 
