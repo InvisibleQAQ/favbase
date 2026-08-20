@@ -9,10 +9,10 @@ MUI v7 主题系统（palette/typography/shadows/custom-shadows/components），
 - `theme-provider.tsx` — ThemeVarsProvider + CssBaseline 包装。`defaultMode="system"`（首次跟随 OS）+ `modeStorageKey=COLOR_MODE_STORAGE_KEY`（`'favbase-color-mode'`，localStorage 持久化）。导出 `COLOR_MODE_STORAGE_KEY` 常量，**必须与 `public/theme-init.js` 的 FOUC 脚本 key 保持一致**
 - `extend-theme-types.d.ts` — MUI 类型扩展（customShadows, fontSecondaryFamily, palette 扩展）
 - `core/palette.ts` — 完整色彩系统，使用 `minimal-shared` 的 `createPaletteChannel` + `varAlpha`。`text`/`background`/`action`/`palette` 均含 `.light` + `.dark`（dark 取 Minimal 标准：`background.dark` paper=grey800/default=grey900/neutral=#28323D，`text.dark` primary=#FFF/secondary=grey500，`action.dark` active=grey500）
-- `core/typography.ts` — 排版比例，h1-h6 响应式 + body/caption/overline/button
+- `core/typography.ts` — 排版比例，h1-h6 响应式 + body/caption/overline/button。h1/h2/h3（Barlow 重字重大字号）带 -0.02/-0.015/-0.01em 负字距，overline 带 0.08em 正字距
 - `core/shadows.ts` — 25 级 MUI 标准阴影。`shadows.light` 用 `grey['500Channel']`，`shadows.dark` 用 `common.blackChannel`
 - `core/custom-shadows.ts` — card/dialog/dropdown + z1-z24 + 各色彩阴影。`.light`/`.dark` 同上（dark 用 `common.blackChannel`）
-- `core/components.tsx` — MUI 组件样式覆盖（Card 圆角 16px，Button 无 elevation，Paper 无 backgroundImage 等）
+- `core/components.tsx` — MUI 组件样式覆盖（Card 圆角 16px，Button 无 elevation，Paper 无 backgroundImage 等）。浏览器面主题化在 `MuiCssBaseline`（8px webkit 滚动条 / `::selection` 珊瑚 24% / input caret / `a,button` 键盘 focus-visible 焦点环——channel alpha 双模式自适应）；Tooltip 实底 grey800（dark 经 `theme.applyStyles('dark')` 升 grey700，灰阶 scheme 不变量必须这样分支）；Popover/Dialog 接 `customShadows.dropdown/dialog` + 圆角 10/16px；MenuItem 圆角 hover pill；LinearProgress 圆角；outlined **default** Chip 边框统一 `varAlpha(grey500, 0.24)`（彩色 outlined Chip 不受影响）
 
 ## 约定
 

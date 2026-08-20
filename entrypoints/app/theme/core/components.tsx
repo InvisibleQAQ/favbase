@@ -2,6 +2,31 @@ import type { Theme, Components } from '@mui/material/styles';
 
 import { varAlpha } from 'minimal-shared/utils';
 
+const MuiCssBaseline: Components<Theme>['MuiCssBaseline'] = {
+  // Browser-owned surfaces (scrollbars, text selection, caret, focus ring)
+  // ship with UA defaults that ignore the theme; grey/primary channel alphas
+  // resolve per color scheme, so one rule set covers light and dark.
+  styleOverrides: (theme) => ({
+    '*::-webkit-scrollbar': { width: 8, height: 8 },
+    '*::-webkit-scrollbar-thumb': {
+      borderRadius: 4,
+      backgroundColor: varAlpha(theme.vars.palette.grey['500Channel'], 0.32),
+    },
+    '*::-webkit-scrollbar-thumb:hover': {
+      backgroundColor: varAlpha(theme.vars.palette.grey['500Channel'], 0.48),
+    },
+    '*::-webkit-scrollbar-corner': { backgroundColor: 'transparent' },
+    '::selection': {
+      backgroundColor: varAlpha(theme.vars.palette.primary.mainChannel, 0.24),
+    },
+    'input, textarea': { caretColor: theme.vars.palette.primary.main },
+    'a:focus-visible, button:focus-visible': {
+      outline: `2px solid ${varAlpha(theme.vars.palette.primary.mainChannel, 0.48)}`,
+      outlineOffset: 2,
+    },
+  }),
+};
+
 const MuiBackdrop: Components<Theme>['MuiBackdrop'] = {
   styleOverrides: {
     root: ({ theme }) => ({
@@ -55,6 +80,60 @@ const MuiOutlinedInput: Components<Theme>['MuiOutlinedInput'] = {
   },
 };
 
+const MuiTooltip: Components<Theme>['MuiTooltip'] = {
+  styleOverrides: {
+    tooltip: ({ theme }) => ({
+      backgroundColor: theme.vars.palette.grey[800],
+      borderRadius: Number(theme.shape.borderRadius) * 0.75,
+      // grey is scheme-invariant; on dark paper (grey800) step up to grey700.
+      ...theme.applyStyles('dark', {
+        backgroundColor: theme.vars.palette.grey[700],
+      }),
+    }),
+    arrow: ({ theme }) => ({
+      color: theme.vars.palette.grey[800],
+      ...theme.applyStyles('dark', { color: theme.vars.palette.grey[700] }),
+    }),
+  },
+};
+
+const MuiPopover: Components<Theme>['MuiPopover'] = {
+  styleOverrides: {
+    // Also covers Menu and Select dropdown papers.
+    paper: ({ theme }) => ({
+      boxShadow: theme.vars.customShadows.dropdown,
+      borderRadius: Number(theme.shape.borderRadius) * 1.25,
+    }),
+  },
+};
+
+const MuiDialog: Components<Theme>['MuiDialog'] = {
+  styleOverrides: {
+    paper: ({ theme }) => ({
+      boxShadow: theme.vars.customShadows.dialog,
+      borderRadius: Number(theme.shape.borderRadius) * 2,
+    }),
+  },
+};
+
+const MuiLinearProgress: Components<Theme>['MuiLinearProgress'] = {
+  styleOverrides: {
+    root: { borderRadius: 4 },
+  },
+};
+
+const MuiChip: Components<Theme>['MuiChip'] = {
+  styleOverrides: {
+    outlined: ({ theme }) => ({
+      // Default-color filter chips align with the system border alpha;
+      // semantic-color outlined chips keep their own border.
+      '&.MuiChip-colorDefault': {
+        borderColor: varAlpha(theme.vars.palette.grey['500Channel'], 0.24),
+      },
+    }),
+  },
+};
+
 const MuiPaper: Components<Theme>['MuiPaper'] = {
   defaultProps: { elevation: 0 },
   styleOverrides: {
@@ -78,7 +157,11 @@ const MuiTableCell: Components<Theme>['MuiTableCell'] = {
 
 const MuiMenuItem: Components<Theme>['MuiMenuItem'] = {
   styleOverrides: {
-    root: ({ theme }) => ({ ...theme.typography.body2 }),
+    root: ({ theme }) => ({
+      ...theme.typography.body2,
+      borderRadius: Number(theme.shape.borderRadius) * 0.75,
+      marginInline: theme.spacing(0.5),
+    }),
   },
 };
 
@@ -94,13 +177,19 @@ const MuiFormControlLabel: Components<Theme>['MuiFormControlLabel'] = {
 
 export const components = {
   MuiCard,
+  MuiChip,
   MuiLink,
   MuiPaper,
   MuiButton,
+  MuiDialog,
+  MuiPopover,
+  MuiTooltip,
   MuiBackdrop,
   MuiMenuItem,
   MuiTableCell,
   MuiCardHeader,
+  MuiCssBaseline,
   MuiOutlinedInput,
+  MuiLinearProgress,
   MuiFormControlLabel,
 };

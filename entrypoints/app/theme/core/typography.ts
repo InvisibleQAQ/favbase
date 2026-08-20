@@ -38,11 +38,14 @@ export const typography: TypographyVariantsOptions = {
   fontWeightMedium: '500',
   fontWeightSemiBold: '600',
   fontWeightBold: '700',
+  // Barlow at heavy display weights sets loose; a touch of negative tracking
+  // (scaled down with the size) keeps large headings compact without clipping.
   h1: {
     fontFamily: secondaryFont,
     fontWeight: 800,
     lineHeight: 80 / 64,
     fontSize: pxToRem(40),
+    letterSpacing: '-0.02em',
     ...responsiveFontSizes({ sm: 52, md: 58, lg: 64 }),
   },
   h2: {
@@ -50,6 +53,7 @@ export const typography: TypographyVariantsOptions = {
     fontWeight: 800,
     lineHeight: 64 / 48,
     fontSize: pxToRem(32),
+    letterSpacing: '-0.015em',
     ...responsiveFontSizes({ sm: 40, md: 44, lg: 48 }),
   },
   h3: {
@@ -57,6 +61,7 @@ export const typography: TypographyVariantsOptions = {
     fontWeight: 700,
     lineHeight: 1.5,
     fontSize: pxToRem(24),
+    letterSpacing: '-0.01em',
     ...responsiveFontSizes({ sm: 26, md: 30, lg: 32 }),
   },
   h4: {
@@ -86,6 +91,7 @@ export const typography: TypographyVariantsOptions = {
     fontWeight: 700,
     lineHeight: 1.5,
     fontSize: pxToRem(12),
+    letterSpacing: '0.08em',
     textTransform: 'uppercase',
   },
   button: {

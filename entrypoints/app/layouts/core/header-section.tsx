@@ -85,8 +85,8 @@ const HeaderRoot = styled(AppBar, {
     width: '100%',
     height: '100%',
     zIndex: -1,
-    backdropFilter: 'blur(6px)',
-    WebkitBackdropFilter: 'blur(6px)',
+    backdropFilter: 'blur(var(--layout-header-blur))',
+    WebkitBackdropFilter: 'blur(var(--layout-header-blur))',
     backgroundColor: varAlpha(theme.vars.palette.background.defaultChannel, 0.8),
     ...(isOffset && { opacity: 1, visibility: 'visible' }),
   };

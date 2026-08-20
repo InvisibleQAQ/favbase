@@ -5,7 +5,7 @@
 ## 模块结构
 
 - `core/layout-section.tsx` — 布局骨架：sidebar + sidebarContainer(header+main+footer)，注入 CSS vars via GlobalStyles
-- `core/header-section.tsx` — 粘性 AppBar + 滚动毛玻璃效果（backdrop-filter blur(6px)），slots: leftArea/rightArea/centerArea
+- `core/header-section.tsx` — 粘性 AppBar + 滚动毛玻璃效果（backdrop-filter 用 `var(--layout-header-blur)`，值在 `core/css-vars.ts` 定义为 8px），slots: leftArea/rightArea/centerArea
 - `core/main-section.tsx` — flex column 主内容区
 - `core/css-vars.ts` — 布局 CSS 变量（nav-zIndex/header-height/nav-width）
 - `dashboard/layout.tsx` — DashboardLayout：通过必填 `navigation` prop 接收 app composition root 已解析的不可变导航，同一份数据传给 NavDesktop + NavMobile；布局本身不读 onboarding。读取 `sidebarPinnedStorage` 控制侧边栏 pinned/unpinned 状态，Header 左侧 toggle 按钮（lg+ 可见）切换，CSS 变量 `--layout-nav-vertical-width` 动态切换 280px/72px。Header `rightArea` slot 挂 `BackgroundJobsIndicator` + `HeaderActions`（一个 flex Box 包裹）。**常驻挂载 `useJobsBadge()`**（`app/hooks/use-jobs-badge.ts`）把运行中任务数写到工具栏图标 badge——与 indicator 同源同生命周期
