@@ -37,8 +37,11 @@ const copy: Record<string, string> = {
   'dashboard.title': 'Library analytics',
   'dashboard.subtitle': 'Current collection composition',
   'dashboard.totalItems': 'Items',
-  'dashboard.usedTags': 'Used tags',
-  'dashboard.taggedItems': 'Tagged items',
+  'dashboard.platformsInUse': 'Platforms in use',
+  'dashboard.tagCoverage': 'Tag coverage',
+  'dashboard.tagCount': '{{value}} tags',
+  'dashboard.taggedCount': '{{value}} tagged items',
+  'dashboard.noTags': 'No tags in use yet',
   'dashboard.platformComposition': 'Platform composition',
   'dashboard.topTags': 'Top tags',
   'dashboard.platformDetails': 'Platform details',
@@ -161,11 +164,14 @@ describe('CollectionAnalyticsContent', () => {
     );
 
     expect(container.textContent).toContain('No collection data yet');
+    expect(document.querySelectorAll('h1')).toHaveLength(1);
     const tabs = Array.from(container.querySelectorAll('[role="tab"]'));
     expect(tabs).toHaveLength(6);
     expect(tabs[0].getAttribute('aria-controls')).toBe('dashboard-platform-panel-bilibili');
     expect(tabs.slice(1).every((tab) => !tab.hasAttribute('aria-controls'))).toBe(true);
     expect(container.querySelector('a[href="/collections"]')).not.toBeNull();
+    // The zero-tag state is carried by the summary band; no empty Top tags section.
+    expect(container.textContent).not.toContain('Top tags');
   });
 
   it('renders real metrics and top-tag drill-down links', () => {
@@ -204,6 +210,8 @@ describe('CollectionAnalyticsContent', () => {
     );
 
     expect(container.textContent).toContain('3');
+    expect(container.textContent).toContain('1 / 6');
+    expect(container.textContent).toContain('66.7%');
     expect(container.textContent).toContain('frontend');
     expect(
       container.querySelector(

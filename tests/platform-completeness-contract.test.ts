@@ -258,6 +258,20 @@ describe('platform completeness contract', () => {
       'wxt.config.ts',
       'PLATFORM_HOST_PERMISSIONS',
     );
+    // Brand identity color: the six-key tables in palette.ts are explicit (no spread)
+    // so black-logo brands that intentionally map to ink are still declared per key.
+    collectRegistryCoverage(
+      missing,
+      'platform brand palette (light)',
+      'entrypoints/app/theme/core/palette.ts',
+      'PLATFORM_PALETTE_LIGHT',
+    );
+    collectRegistryCoverage(
+      missing,
+      'platform brand palette (dark)',
+      'entrypoints/app/theme/core/palette.ts',
+      'PLATFORM_PALETTE_DARK',
+    );
 
     if (pageLoaders) {
       const main = sourceModule('entrypoints/app/main.tsx');

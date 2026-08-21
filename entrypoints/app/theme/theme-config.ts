@@ -1,7 +1,15 @@
 import type { CommonColors } from '@mui/material/styles';
 
+import type { CollectionPlatform } from '@/lib/collections/platforms';
+
 import type { ThemeCssVariables } from './types';
 import type { PaletteColorNoChannels } from './core/palette';
+
+/**
+ * Platforms whose logo has a hue. GitHub and X are black-logo brands and stay
+ * ink (`text.primary`) — see `core/palette.ts`, which maps all six keys.
+ */
+export type BrandColoredPlatform = Exclude<CollectionPlatform, 'github' | 'x'>;
 
 type ThemeConfig = {
   classesPrefix: string;
@@ -31,6 +39,12 @@ type ThemeConfig = {
       accentText: string;
     }
   >;
+  /**
+   * Platform identity colors, consumed as `theme.vars.palette.platform[platform]`.
+   * They land ONLY on a platform's icon glyph and its own data graphic (share bar);
+   * never text, never a background, never a selection state (coral owns selection).
+   */
+  platform: Record<'light' | 'dark', Record<BrandColoredPlatform, string>>;
 };
 
 /**
@@ -113,6 +127,16 @@ export const themeConfig: ThemeConfig = {
   scheme: {
     light: { primaryLighter: '#FEE9E1', accentText: '#7A2714' },
     dark: { primaryLighter: '#3A2A24', accentText: '#FDA48A' },
+  },
+  // Brand hues re-inked for each ground. Values come from the dataviz palette
+  // validator (adjacent-pairs mode, all six checks pass on both the ground and
+  // the neutral tile of each scheme; raw brand hexes such as bilibili #FB7299
+  // fail contrast at 2.4:1). Changing a value REQUIRES re-running the validator
+  // and updating `.trellis/tasks/08-20-analytics-platform-brand-colors/research/palette-validation.md`.
+  // `core/palette.test.ts` locks every value at >= 3:1 against both surfaces.
+  platform: {
+    light: { bilibili: '#C2185B', bookmarks: '#B8760A', zhihu: '#1A73E8', youtube: '#C62828' },
+    dark: { bilibili: '#E8497F', bookmarks: '#BF8A10', zhihu: '#3B8BEA', youtube: '#D94040' },
   },
   cssVariables: {
     cssVarPrefix: '',

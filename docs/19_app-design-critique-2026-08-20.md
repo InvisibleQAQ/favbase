@@ -57,6 +57,7 @@
 - 知乎卡（type chip + 标题 + 摘要）是唯一按内容设计的卡
 
 **色彩层级缺失**：六个平台品牌色（B站粉、X 青、知乎紫、YouTube 红、GitHub 黑、书签黄）与珊瑚主色并排无规则；`/` 的构成条五种等权饱和色，珊瑚 nav pill 成第六种。
+→ 2026-08-20 Analytics 平台架已按「品牌色 = 身份、珊瑚 = 选中」落地：`theme.vars.palette.platform[platform]`（`theme-config.ts` 四个经 dataviz 验证器再染色的品牌色 + github/x = 墨）只落在图标字形与该平台自己的份额条；选中仍是珊瑚 tile + 淡珊瑚底。其余页面（nav 子图标、聚合页 chips、卡片印章、welcome 平台选择）未动。
 
 ---
 
@@ -271,6 +272,10 @@ DESIGN.md 在 Phase 1 完成后由 impeccable documenter 从建成的系统生�
 ### Phase 4 — P2-1 语义与可访问性
 
 第 3 节 P2-1。
+
+### Analytics 页「两个 0」（第 6 节 Jordan 红旗）— 2026-08-20 已落地
+
+`#/` 重做为平台账本主从视图（任务 `08-20-analytics-page-redesign`）：摘要带改为 Items / Platforms in use / Tag coverage（零标签给一句解释而非裸 `0 / 0`）；平台构成即选择器（纵向 Tabs），删除 `PLATFORM_COLORS` 语义色当平台色；维度榜单加比例条；Top tags 空态不再渲染；`h1` 唯一、`h3` 数字走 Barlow。
 
 ### Backlog
 

@@ -1,0 +1,71 @@
+import { describe, expect, it } from 'vitest';
+
+import { COLLECTION_PLATFORMS } from '@/lib/collections/platforms';
+
+import { createTheme } from '../create-theme';
+import { themeConfig, type BrandColoredPlatform } from '../theme-config';
+import { background, platform, text } from './palette';
+
+const SCHEMES = ['light', 'dark'] as const;
+const BRAND_COLORED = Object.keys(themeConfig.platform.light) as BrandColoredPlatform[];
+
+/** WCAG 2.x relative luminance of a `#RRGGBB` color. */
+function relativeLuminance(hex: string): number {
+  const [r, g, b] = [1, 3, 5].map((offset) => {
+    const channel = parseInt(hex.slice(offset, offset + 2), 16) / 255;
+    return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+function contrastRatio(foreground: string, background: string): number {
+  const [lighter, darker] = [relativeLuminance(foreground), relativeLuminance(background)].sort(
+    (a, b) => b - a,
+  );
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+describe('palette.platform', () => {
+  it.each(SCHEMES)('%s scheme maps exactly the six Collection platforms', (scheme) => {
+    const keys = Object.keys(platform[scheme]).filter((key) => !key.endsWith('Channel'));
+    expect(keys.sort()).toEqual([...COLLECTION_PLATFORMS].sort());
+    for (const id of COLLECTION_PLATFORMS) {
+      expect(platform[scheme][`${id}Channel`]).toMatch(/^\d+ \d+ \d+$/);
+    }
+  });
+
+  it.each(SCHEMES)('%s scheme keeps black-logo brands (github, x) as ink', (scheme) => {
+    expect(platform[scheme].github).toBe(text[scheme].primary);
+    expect(platform[scheme].x).toBe(text[scheme].primary);
+  });
+
+  it.each(SCHEMES)('%s scheme takes the hued four from themeConfig.platform', (scheme) => {
+    for (const id of BRAND_COLORED) {
+      expect(platform[scheme][id]).toBe(themeConfig.platform[scheme][id]);
+    }
+  });
+
+  // Locks the dataviz validator's conclusion into the repo: every brand color is a
+  // 3:1 graphic on both the page ground and the neutral tile of its scheme. Do not
+  // "brighten" a value without re-running the validator (see theme-config.ts).
+  it.each(SCHEMES)('%s brand colors hold >= 3:1 on background.default and background.neutral', (scheme) => {
+    for (const id of BRAND_COLORED) {
+      const color = themeConfig.platform[scheme][id];
+      expect(contrastRatio(color, background[scheme].default), `${scheme} ${id} on default`).toBeGreaterThanOrEqual(3);
+      expect(contrastRatio(color, background[scheme].neutral), `${scheme} ${id} on neutral`).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  // MUI must keep the non-standard `platform` palette key through createTheme and
+  // expose it as one CSS var per platform, or `theme.vars.palette.platform[id]` in
+  // the consumer silently resolves to undefined (the Tile would render with no color).
+  it('survives createTheme as one CSS variable per platform in both schemes', () => {
+    const theme = createTheme();
+    for (const id of COLLECTION_PLATFORMS) {
+      // MUI appends the default-scheme value as the var() fallback; only the name is the contract.
+      expect(theme.vars.palette.platform[id]).toMatch(new RegExp(String.raw`^var\(--palette-platform-${id}[,)]`));
+      expect(theme.colorSchemes.light?.palette.platform[id]).toBe(platform.light[id]);
+      expect(theme.colorSchemes.dark?.palette.platform[id]).toBe(platform.dark[id]);
+    }
+  });
+});
