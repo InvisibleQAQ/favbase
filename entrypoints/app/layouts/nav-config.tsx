@@ -9,6 +9,8 @@ export type NavItem = {
   path: string;
   /** Top-level items and nested child leaves can carry an icon. */
   icon?: React.ReactNode;
+  /** Collection platform identity used by the sidebar icon color contract. */
+  platform?: CollectionPlatform;
   info?: React.ReactNode;
   /**
    * Outbound action link: opens `path` (a full URL) in a new tab instead of
@@ -34,9 +36,10 @@ export function createNavData(
       path: '/collections',
       icon: <Iconify icon="solar:videocamera-record-bold-duotone" width={24} />,
       children: [
-        ...orderedPlatforms.map(({ title, path, icon }) => ({
+        ...orderedPlatforms.map(({ id, title, path, icon }) => ({
           title,
           path,
+          platform: id,
           icon: <Iconify icon={icon} width={18} />,
         })),
         // Platform Request (CONTEXT.md): an action link, not a platform — kept

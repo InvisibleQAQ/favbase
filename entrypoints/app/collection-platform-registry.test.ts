@@ -28,8 +28,8 @@ describe('collection platform registry', () => {
     const collectionsNav = navData.find((item) => item.path === '/collections');
     const platformLeaves = collectionsNav?.children?.filter((child) => !child.external);
 
-    expect(platformLeaves?.map(({ title, path }) => ({ title, path }))).toEqual(
-      collectionPlatformRegistry.map(({ title, path }) => ({ title, path })),
+    expect(platformLeaves?.map(({ title, path, platform }) => ({ title, path, platform }))).toEqual(
+      collectionPlatformRegistry.map(({ id, title, path }) => ({ title, path, platform: id })),
     );
   });
 

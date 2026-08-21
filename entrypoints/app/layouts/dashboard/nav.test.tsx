@@ -14,6 +14,7 @@ vi.mock('@/lib/storage', () => ({
 }));
 
 import { ThemeProvider } from '../../theme/theme-provider';
+import { themeConfig } from '../../theme/theme-config';
 import type { NavItem } from '../nav-config';
 import { NavDesktop } from './nav';
 
@@ -22,7 +23,14 @@ const COLLECTIONS_NAV: NavItem[] = [
     title: 'nav.collections',
     path: '/collections',
     icon: <span />,
-    children: [{ title: 'nav.collections', path: '/collections/bilibili' }],
+    children: [
+      {
+        title: 'nav.collections',
+        path: '/collections/bilibili',
+        platform: 'bilibili',
+        icon: <span data-testid="platform-icon" />,
+      },
+    ],
   },
 ];
 
@@ -98,5 +106,34 @@ describe('Collections sidebar navigation', () => {
     expect(container.querySelector('[data-testid="location"]')?.textContent).toBe(
       '/settings',
     );
+  });
+
+  it('uses the platform palette token for an inactive platform icon', () => {
+    const toggle = container.querySelector('button[aria-expanded="false"]');
+
+    expect(toggle).not.toBeNull();
+    click(toggle!);
+
+    const icon = container.querySelector('a[href="/collections/bilibili"] .favbase-nav-icon');
+
+    expect(icon).not.toBeNull();
+    expect(getComputedStyle(icon!).color).toBe(themeConfig.platform.light.bilibili);
+  });
+
+  it('keeps the active platform icon on the shared coral selection color', () => {
+    const toggle = container.querySelector('button[aria-expanded="false"]');
+
+    expect(toggle).not.toBeNull();
+    click(toggle!);
+
+    const platformLink = container.querySelector('a[href="/collections/bilibili"]');
+
+    expect(platformLink).not.toBeNull();
+    click(platformLink!);
+
+    const icon = container.querySelector('a[href="/collections/bilibili"] .favbase-nav-icon');
+
+    expect(icon).not.toBeNull();
+    expect(getComputedStyle(icon!).color).toBe(themeConfig.palette.primary.main);
   });
 });

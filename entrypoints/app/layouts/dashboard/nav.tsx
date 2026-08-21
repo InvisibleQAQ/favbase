@@ -245,21 +245,29 @@ function NavChildLeaf({
           ? ({ component: 'a', href: item.path, target: '_blank', rel: 'noopener noreferrer' } as const)
           : { component: RouterLink, to: item.path })}
         sx={[
-          (theme) => ({
-            ml: `${FISHBONE_RIB}px`,
-            pl: 1,
-            py: 0.75,
-            pr: 1,
-            borderRadius: 1,
-            minHeight: 36,
-            gap: 1,
-            alignItems: 'center',
-            typography: 'body2',
-            color: item.external
+          (theme) => {
+            const itemColor = item.external
               ? theme.vars.palette.text.disabled
-              : theme.vars.palette.text.secondary,
-            ...(isActive && navActiveSx(theme)),
-          }),
+              : theme.vars.palette.text.secondary;
+            const iconColor = item.platform
+              ? theme.vars.palette.platform[item.platform]
+              : itemColor;
+
+            return {
+              ml: `${FISHBONE_RIB}px`,
+              pl: 1,
+              py: 0.75,
+              pr: 1,
+              borderRadius: 1,
+              minHeight: 36,
+              gap: 1,
+              alignItems: 'center',
+              typography: 'body2',
+              color: itemColor,
+              [`& .${NAV_ICON_CLASS}`]: { color: iconColor },
+              ...(isActive && navActiveSx(theme)),
+            };
+          },
         ]}
       >
         {item.icon && (

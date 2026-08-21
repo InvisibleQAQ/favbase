@@ -57,7 +57,7 @@
 - 知乎卡（type chip + 标题 + 摘要）是唯一按内容设计的卡
 
 **色彩层级缺失**：六个平台品牌色（B站粉、X 青、知乎紫、YouTube 红、GitHub 黑、书签黄）与珊瑚主色并排无规则；`/` 的构成条五种等权饱和色，珊瑚 nav pill 成第六种。
-→ 2026-08-20 Analytics 平台架已按「品牌色 = 身份、珊瑚 = 选中」落地：`theme.vars.palette.platform[platform]`（`theme-config.ts` 四个经 dataviz 验证器再染色的品牌色 + github/x = 墨）只落在图标字形与该平台自己的份额条；选中仍是珊瑚 tile + 淡珊瑚底。其余页面（nav 子图标、聚合页 chips、卡片印章、welcome 平台选择）未动。
+→ 2026-08-21 Analytics 平台架与 Collections 侧栏平台叶子已按「品牌色 = 身份、珊瑚 = 选中」落地：`theme.vars.palette.platform[platform]`（`theme-config.ts` 四个经 dataviz 验证器再染色的品牌色 + github/x = 墨）只落在图标字形与该平台自己的份额条；侧栏平台 ID 从 `collectionPlatformRegistry` 传递，active 仍由共享导航样式覆盖为珊瑚。聚合页 chips、卡片印章、welcome 平台选择仍未使用平台身份色。
 
 ---
 
