@@ -11,7 +11,7 @@
 | 编号 | 初版严重度 | 修订严重度 | 修订要点 |
 | --- | --- | --- | --- |
 | 高-1 | 高 | 中 | 泄漏属实且已实证；但 offscreen 风险是虚的（当前 offscreen 不加载任何平台 sync），x 的 mock 证据是错引 |
-| 高-2 | 高 | 中 | 清单属实；"分层 catalog" 方案大部分已是现状，实质差异只剩嵌套路由登记 |
+| 高-2 | 高 | 中 | 清单属实；"分层 catalog" 方案大部分已是现状，实质差异只剩嵌套路由登记（已落地 2026-08-22） |
 | 高-3 | 高 | 中 | registry 反向 import 属实；"backlog 语义复制六份"是错的，语义已单一 owner |
 | 高-4 | 高 | 高 | 属实且比初版更糟：`INVALID_ATTR` 的 owner 在 UI 层，领域层裸写字面量 |
 | 中-5 | 中 | 中（但最先做） | `[UNKNOWN]` 可消：`persistContent` 零生产调用方，`startProcessingDirectly` 生产不可达 |
@@ -177,6 +177,12 @@ barrel 的 Interface 没有表达运行时能力要求。调用方必须知道�
 ### 严重度理由（修订）
 
 当前 contract 已把风险压到“改动扇出大但不会静默漏项”。剩余改动 10 行，降为中。
+
+### 落地记录（2026-08-22）
+
+- `entrypoints/app/collection-platform-pages.ts` 新增穷举表 `COLLECTION_PAGE_CHILD_ROUTES: Record<CollectionPlatform, readonly string[]>`（bilibili `[':mediaId']`、bookmarks `[':folderId']`，其余四平台显式 `[]`）；`collectionPlatformRoutes` 改为 `COLLECTION_PLATFORMS.flatMap` 派生基础路由 + 子路由（同一 Page，每平台基础路由在前、子路由紧随其后；HEAD 原是六条基础路由后再追加两条子路由，声明顺序有变但 react-router v7 按 rank 匹配，解析结果与 HEAD 一致），`CollectionPlatformRoute.path` 放宽为含 `/${string}` 后缀。未按方案的 `childRoutes?` 可选字段做，改为显式穷举表——与 `PLATFORM_HOST_PERMISSIONS` 的“显式空列表”惯例一致，新平台必须表态。
+- `entrypoints/app/main.tsx` 删除 `COLLECTION_PAGE_LOADERS` import、`BilibiliPage`/`BookmarksPage` 两个 const 与两行 `collections/bilibili/:mediaId`、`collections/bookmarks/:folderId` 路由；只剩一次 `...collectionPlatformRoutes.map(...)` spread。
+- `tests/platform-completeness-contract.test.ts` 增加 `COLLECTION_PAGE_CHILD_ROUTES` 对账（缺项/过期键 + 每平台初始化器必须是数组字面量）与 `main.tsx` 源码守卫（由 `COLLECTION_PLATFORMS` 派生正则，禁止任何 `collections/<platform>` 字面量，失败项 `all: main.tsx still declares a platform-specific route`）。TDD 先红（6 条 registry missing + 1 条 main.tsx 字面量）后绿。
 
 ---
 
@@ -461,7 +467,7 @@ zhihu/youtube 改 leaf，删三处过期 offscreen 注释，删 x 冗余 mock，
 
 ### 第 6 阶段：嵌套路由登记（高-2）
 
-`collection-platform-pages.ts` 加 `childRoutes`，`main.tsx` 删两行特殊行。约 10 行。
+`collection-platform-pages.ts` 加 `childRoutes`，`main.tsx` 删两行特殊行。约 10 行。**已落地 2026-08-22**（实际落为穷举表 `COLLECTION_PAGE_CHILD_ROUTES`，见高-2 落地记录）。
 
 ### 第 7 阶段（可选）：pipeline 再抽一层（中-7）
 
@@ -475,7 +481,7 @@ zhihu/youtube 改 leaf，删三处过期 offscreen 注释，删 x 冗余 mock，
 - `auto-sync-registry.ts` 不手写 `jobPlatform`。
 - `use-collection-library` 是所有“单列表 + facet + manual sync”页面的唯一状态机；`use-bookmarks.ts` 不再含 debounce/paged query/generation 主循环。
 - Tagged query 和 Tag Drill-down 使用同一平台 meta decoder；`tagged-bookmark-card.tsx`、`tagged-video-card.tsx` 不直接 `typeof meta.*`。
-- `main.tsx` 不含平台专属路由行。
+- `main.tsx` 不含平台专属路由行。（已落地 2026-08-22，契约守卫）
 - 运行时行为保持兼容：`pnpm.cmd compile`、`pnpm.cmd test` 以及平台完整性 contract 全部通过。
 
 ## 最终判断（修订）

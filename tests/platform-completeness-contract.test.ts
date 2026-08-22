@@ -273,10 +273,30 @@ describe('platform completeness contract', () => {
       'PLATFORM_PALETTE_DARK',
     );
 
+    // Child param segments (detail routes) are a platform fact too: every platform
+    // declares an explicit list (possibly empty) and main.tsx never names a platform.
+    const childRoutes = collectRegistryCoverage(
+      missing,
+      'page child routes',
+      'entrypoints/app/collection-platform-pages.ts',
+      'COLLECTION_PAGE_CHILD_ROUTES',
+    );
+    if (childRoutes) {
+      for (const platform of COLLECTION_PLATFORMS) {
+        const value = childRoutes.properties.get(platform)?.initializer;
+        if (!value || !ts.isArrayLiteralExpression(unwrap(value))) {
+          missing.push(`${platform}: page child-route list is not explicit`);
+        }
+      }
+    }
+
     if (pageLoaders) {
       const main = sourceModule('entrypoints/app/main.tsx');
       if (!hasIdentifierSpread(main, 'collectionPlatformRoutes')) {
         missing.push('all: main route registry spread');
+      }
+      if (new RegExp(`collections/(${COLLECTION_PLATFORMS.join('|')})`).test(main.source)) {
+        missing.push('all: main.tsx still declares a platform-specific route');
       }
       if (!pageLoaders.source.source.includes('path: `collections/${platform}`')) {
         missing.push('all: collection route path is not derived from the platform id');

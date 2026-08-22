@@ -8,7 +8,7 @@ import { varAlpha } from 'minimal-shared/utils';
 
 import { initDbProxy } from '@/lib/database';
 import App from './App';
-import { COLLECTION_PAGE_LOADERS, collectionPlatformRoutes } from './collection-platform-pages';
+import { collectionPlatformRoutes } from './collection-platform-pages';
 import { loadNavigationData } from './load-navigation';
 import { DashboardLayout } from './layouts/dashboard';
 
@@ -20,8 +20,6 @@ initDbProxy().catch((err) =>
 
 const DashboardPage = lazy(() => import('./pages/dashboard'));
 const CollectionsPage = lazy(() => import('./pages/collections'));
-const BilibiliPage = COLLECTION_PAGE_LOADERS.bilibili;
-const BookmarksPage = COLLECTION_PAGE_LOADERS.bookmarks;
 const ChatPage = lazy(() => import('./pages/chat'));
 const SettingsPage = lazy(() => import('./pages/settings'));
 
@@ -68,8 +66,6 @@ async function bootstrap() {
               path,
               element: <Page />,
             })),
-            { path: 'collections/bilibili/:mediaId', element: <BilibiliPage /> },
-            { path: 'collections/bookmarks/:folderId', element: <BookmarksPage /> },
             { path: 'chat', element: <ChatPage /> },
             { path: 'settings', element: <SettingsPage /> },
           ],
