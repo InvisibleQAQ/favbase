@@ -7,11 +7,8 @@ import {
   PipelineProgressStrip,
   StateBox,
 } from '../../components/collection';
-import {
-  backgroundJobRuntime,
-  buildPipelineSegments,
-} from '../../hooks/pipeline-segments';
-import { useProcessingCoverage } from '../../hooks/use-processing-coverage';
+import { backgroundJobRuntime } from '../../hooks/pipeline-segments';
+import { useCollectionPipeline } from '../../hooks/use-collection-pipeline';
 import { Iconify } from '../../components/iconify';
 import { CollectionConfigurationNotice } from '../../components/configuration-blocker';
 import { BookmarkCard } from './bookmark-card';
@@ -48,10 +45,19 @@ export function BookmarksView() {
   const navigate = useNavigate();
   const bm = useBookmarks(folderId);
   const extraction = useBookmarkExtraction(bm.lastSyncedAt?.getTime());
-  const { coverage, status: coverageStatus } = useProcessingCoverage(
-    PLATFORM,
-    `${bm.syncing}:${extraction.running}`,
-  );
+  const { coverage, coverageStatus, segments } = useCollectionPipeline({
+    platform: PLATFORM,
+    syncing: bm.syncing,
+    fetch: backgroundJobRuntime(bm.syncJob),
+    content: {
+      id: 'extraction',
+      label: t('pipeline.extraction'),
+      runtime: backgroundJobRuntime(extraction.extractJob),
+    },
+    embedJob: extraction.embedJob,
+    tagJob: extraction.tagJob,
+    extraRefreshKey: extraction.running,
+  });
 
   const captionParts: string[] = [];
   if (bm.libraryCount > 0) {
@@ -64,45 +70,7 @@ export function BookmarksView() {
       }),
     );
   }
-  const fetchLabel = t('pipeline.fetch');
-  const embeddingLabel = t('pipeline.embedding');
-  const taggingLabel = t('pipeline.tagging');
-
-  const pipeline = (
-    <PipelineProgressStrip
-      segments={buildPipelineSegments({
-        coverage,
-        coverageStatus,
-        stages: [
-          {
-            id: 'fetch',
-            label: fetchLabel,
-            coverage: 'acquisition',
-            completedProgress: 'last-run',
-            runtime: backgroundJobRuntime(bm.syncJob),
-          },
-          {
-            id: 'extraction',
-            label: t('pipeline.extraction'),
-            coverage: 'content',
-            runtime: backgroundJobRuntime(extraction.extractJob),
-          },
-          {
-            id: 'embedding',
-            label: embeddingLabel,
-            coverage: 'embedding',
-            runtime: backgroundJobRuntime(extraction.embedJob),
-          },
-          {
-            id: 'tagging',
-            label: taggingLabel,
-            coverage: 'tagging',
-            runtime: backgroundJobRuntime(extraction.tagJob),
-          },
-        ],
-      })}
-    />
-  );
+  const pipeline = <PipelineProgressStrip segments={segments} />;
 
   return (
     <CollectionPageScaffold

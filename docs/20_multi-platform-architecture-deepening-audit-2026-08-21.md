@@ -381,6 +381,14 @@ Bookmarks 的行为差异真实存在且初版漏记；中等深化机会，不�
 
 初版要求的主体已落地，降为低。
 
+### 处置记录（2026-08-22，已落地）
+
+- 源码复核：重复点是 **6 处**而非 4 处——`bookmarks-view.tsx` 与 `bilibili-view.tsx`（`BilibiliCollectionPage` + `BilibiliFallbackPage`）同样各持一份 stages 数组、三行 `t('pipeline.*')` 和 key 模板；`progress ? { done: progress.fetchedCount, total: null } : null` 在 5 处一字不差。
+- `entrypoints/app/hooks/pipeline-segments.ts` 新增 `collectionPipelineStages({ labels, fetch, content?, embedJob, tagJob })`（Fetch → 可选 content 段 → Embedding → Tagging 的唯一声明点）与 `fetchedCountProgress`。
+- 新 hook `entrypoints/app/hooks/use-collection-pipeline.ts`：`useCollectionPipeline({ platform, syncing, fetch, content?, embedJob, tagJob, extraRefreshKey? })` → `{ coverage, coverageStatus, segments }`，内部拥有 `useProcessingCoverage` 的 key 派生（`collectionCoverageRefreshKey`）、`pipeline.fetch/embedding/tagging` 翻译与段装配。`syncing` 与 `fetch.running` 分开传，因为 github 在 readme 相位把 Fetch 段提前 settle。
+- 六处 view 改为消费该 hook（net −124 行）；github 的 readme/settled 特例留在 view，bilibili 两页共用本地 `transcriptionStage` helper。行为等价：各 view 的 segment id/label/coverage/runtime 逐项不变；bookmarks 的 refresh key 多出 embed/tag generation（只影响 coverage 再查询时机；bookmarks 的 embed/tag 是按 lane 整批 drain 的单个 job，generation 每次 drain 只加一，不是逐条）；bilibili 两页的 key 成分与改前相同，仅顺序重排（`syncing:embed:tag` 在前、平台附加信号在后）。
+- 测试：`pipeline-segments.test.ts` 新增 `collectionPipelineStages`/`fetchedCountProgress` 用例；`use-collection-pipeline.test.tsx` 锁 key 派生、标签翻译与段顺序。
+
 ---
 
 ## 中-8：`platformMeta` 的解码知识仍在平台服务和 Tagged Card 之间分裂
@@ -505,6 +513,8 @@ zhihu/youtube 改 leaf，删三处过期 offscreen 注释，删 x 冗余 mock，
 
 ### 第 7 阶段（可选）：pipeline 再抽一层（中-7）
 
+`useCollectionPipeline` + `collectionPipelineStages`。**已落地 2026-08-22**（见中-7 处置记录）。
+
 ### 第 8 阶段：按证据拆宽 service（低-9）
 
 ## 验收指标（修订）
@@ -516,6 +526,7 @@ zhihu/youtube 改 leaf，删三处过期 offscreen 注释，删 x 冗余 mock，
 - `use-collection-library` 是所有“单列表 + facet + manual sync”页面的唯一状态机；`use-bookmarks.ts` 不再含 debounce/paged query/generation 主循环。（已落地 2026-08-22）
 - Tagged query 和 Tag Drill-down 使用同一平台 meta decoder；`tagged-bookmark-card.tsx`、`tagged-video-card.tsx` 不直接 `typeof meta.*`。
 - `main.tsx` 不含平台专属路由行。（已落地 2026-08-22，契约守卫）
+- 六个 Collection view 不再出现 `buildPipelineSegments`/`coverage: 'acquisition'`/`t('pipeline.embedding')`/手写 `fetchedCount` 映射；pipeline 形状只在 `collectionPipelineStages` 声明。（已落地 2026-08-22）
 - 运行时行为保持兼容：`pnpm.cmd compile`、`pnpm.cmd test` 以及平台完整性 contract 全部通过。
 
 ## 最终判断（修订）

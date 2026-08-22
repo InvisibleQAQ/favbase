@@ -12,11 +12,8 @@ import {
   PipelineProgressStrip,
   CollectionPageScaffold,
 } from '../../components/collection';
-import {
-  backgroundJobRuntime,
-  buildPipelineSegments,
-} from '../../hooks/pipeline-segments';
-import { useProcessingCoverage } from '../../hooks/use-processing-coverage';
+import { backgroundJobRuntime, fetchedCountProgress } from '../../hooks/pipeline-segments';
+import { useCollectionPipeline } from '../../hooks/use-collection-pipeline';
 import { useZhihuFavorites, type ZhihuSyncError } from './use-zhihu-favorites';
 import { CollectionChips } from './collection-chips';
 import { ZhihuCard } from './zhihu-card';
@@ -115,10 +112,13 @@ function EmptyLibraryState({ syncing, onSync }: { syncing: boolean; onSync: () =
 export function ZhihuView() {
   const { t } = useTranslation();
   const zhihu = useZhihuFavorites();
-  const { coverage, status: coverageStatus } = useProcessingCoverage(
-    PLATFORM,
-    `${zhihu.syncing}:${zhihu.embedJob?.generation ?? 0}:${zhihu.tagJob?.generation ?? 0}`,
-  );
+  const { coverage, coverageStatus, segments } = useCollectionPipeline({
+    platform: PLATFORM,
+    syncing: zhihu.syncing,
+    fetch: backgroundJobRuntime(zhihu.syncJob, fetchedCountProgress),
+    embedJob: zhihu.embedJob,
+    tagJob: zhihu.tagJob,
+  });
 
   const captionParts: string[] = [];
   if (zhihu.libraryCount > 0) {
@@ -129,44 +129,7 @@ export function ZhihuView() {
   }
 
   const syncErrorText = zhihu.syncError ? syncErrorMessage(zhihu.syncError) : '';
-  const fetchLabel = t('pipeline.fetch');
-  const embeddingLabel = t('pipeline.embedding');
-  const taggingLabel = t('pipeline.tagging');
-
-  const pipeline = (
-    <PipelineProgressStrip
-      segments={buildPipelineSegments({
-        coverage,
-        coverageStatus,
-        stages: [
-          {
-            id: 'fetch',
-            label: fetchLabel,
-            coverage: 'acquisition',
-            completedProgress: 'last-run',
-            runtime: backgroundJobRuntime(
-              zhihu.syncJob,
-              (progress) => progress
-                ? { done: progress.fetchedCount, total: null }
-                : null,
-            ),
-          },
-          {
-            id: 'embedding',
-            label: embeddingLabel,
-            coverage: 'embedding',
-            runtime: backgroundJobRuntime(zhihu.embedJob),
-          },
-          {
-            id: 'tagging',
-            label: taggingLabel,
-            coverage: 'tagging',
-            runtime: backgroundJobRuntime(zhihu.tagJob),
-          },
-        ],
-      })}
-    />
-  );
+  const pipeline = <PipelineProgressStrip segments={segments} />;
 
   return (
     <CollectionPageScaffold
