@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { PGlite } from '@electric-sql/pglite';
 import { vector } from '@electric-sql/pglite-pgvector';
 import { uuid_ossp } from '@electric-sql/pglite/contrib/uuid_ossp';
@@ -9,13 +9,8 @@ import * as schema from '@/lib/database/schema';
 import { runMigrations } from '@/lib/database/migrations';
 import type { FavbaseDb } from '@/lib/database';
 
-// The service transitively imports `@/lib/embedding` (replaceItemChunks), whose
-// barrel touches `@/lib/storage` (chrome.runtime) + `@/lib/ai` at load time. The
-// DB path never embeds inline (D3), so mock storage away.
-vi.mock('@/lib/storage', () => ({
-  settingsStorage: { getValue: vi.fn().mockResolvedValue({}) },
-}));
-
+// No storage mock: the service's load graph is storage-free by contract
+// (tests/lib-import-smoke.test.ts). The DB path never embeds inline (D3).
 import {
   syncBookmarksToDb,
   getBookmarks,

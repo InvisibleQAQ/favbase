@@ -37,8 +37,9 @@ import { itemChunks } from '@/lib/database/entities/item-chunks';
 import { itemContents } from '@/lib/database/entities/item-contents';
 import { itemSources } from '@/lib/database/entities/item-sources';
 import { ingestCollection, persistItemContent } from '@/lib/ingest/ingest';
-// Leaf import (NOT the '@/lib/embedding' barrel): the barrel eagerly touches
-// chrome.storage at module load — same rule as lib/github/github-sync-service.
+// Leaf import, never the '@/lib/embedding' barrel (its value re-export of
+// './config' reaches '@/lib/storage' at module load). Guarded by
+// tests/lib-import-smoke.test.ts.
 import { charSplit } from '@/lib/embedding/char-split';
 import { readBookmarkTree, type BookmarkTree } from './bookmarks-api';
 import type { CooperativeCheckpoint } from '@/lib/collections';

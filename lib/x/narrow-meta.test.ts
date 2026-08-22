@@ -1,12 +1,7 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 
-// Defensive (mirrors x-sync-service.test.ts): the service transitively imports
-// @/lib/embedding + @/lib/tagging, whose barrels touch @/lib/storage
-// (chrome.runtime) at load time. Pure narrowing needs none of it.
-vi.mock('@/lib/storage', () => ({
-  settingsStorage: { getValue: vi.fn().mockResolvedValue({}) },
-}));
-
+// No storage mock: the service's load graph is storage-free by contract
+// (tests/lib-import-smoke.test.ts).
 import { narrowXMeta } from './x-sync-service';
 
 const fb = { title: 'Row Title', authorName: 'Row Author' };

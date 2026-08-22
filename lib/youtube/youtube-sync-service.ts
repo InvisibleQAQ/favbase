@@ -49,7 +49,10 @@ import {
   type PlaylistEntry,
   type YoutubePlaylistVideo,
 } from './youtube-api';
-import { charSplit } from '@/lib/embedding';
+// Leaf import, never the '@/lib/embedding' barrel (its value re-export of
+// './config' reaches '@/lib/storage' at module load). Guarded by
+// tests/lib-import-smoke.test.ts.
+import { charSplit } from '@/lib/embedding/char-split';
 import { envNumber } from '@/lib/env';
 import type { CooperativeCheckpoint } from '@/lib/collections';
 

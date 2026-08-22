@@ -1,11 +1,7 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 
-// Defensive (mirrors zhihu-sync-service.test.ts): the storage barrel touches
-// chrome.runtime at load time when pulled in transitively via @/lib/tagging.
-vi.mock('@/lib/storage', () => ({
-  settingsStorage: { getValue: vi.fn().mockResolvedValue({}) },
-}));
-
+// No storage mock: the service's load graph is storage-free by contract
+// (tests/lib-import-smoke.test.ts).
 import { narrowZhihuMeta } from './zhihu-sync-service';
 
 const fb = { authorName: 'RowAuthor' };

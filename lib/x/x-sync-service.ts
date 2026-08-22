@@ -26,9 +26,6 @@ import type { FavbaseDb } from '@/lib/database';
 import { escapeLike } from '@/lib/database/sql-utils';
 import { getPlatformLastSyncedAt, pagedItemsQuery } from '@/lib/database/collection-queries';
 import { items } from '@/lib/database/entities/items';
-// The ingest pipeline is offscreen-safe (leaf-imports vector-store, zero
-// '@/lib/storage' reach) — this sync also runs in offscreen documents, which
-// have no chrome.storage. Same rule as x-auth.ts importing '@/lib/storage/keys'.
 import { ingestCollection } from '@/lib/ingest/ingest';
 import {
   fetchAllBookmarks,
@@ -38,11 +35,10 @@ import {
   type XMedia,
   type BookmarksProgressCallback,
 } from './x-api';
-// Leaf import (NOT the '@/lib/embedding' barrel): the barrel value-re-exports
-// './config' → '@/lib/storage', whose module load eagerly touches
-// chrome.storage. This sync runs in offscreen documents (no chrome.storage), so
-// it must import charSplit from the leaf module. Same offscreen rule as the
-// './vector-store' / '@/lib/storage/keys' leaf imports above.
+// Leaf import, never the '@/lib/embedding' barrel (its value re-export of
+// './config' reaches '@/lib/storage' at module load). lib-layer platform
+// services must not import storage-backed barrels; guarded by
+// tests/lib-import-smoke.test.ts.
 import { charSplit } from '@/lib/embedding/char-split';
 import { envNumber } from '@/lib/env';
 import type { CooperativeCheckpoint } from '@/lib/collections';
@@ -83,9 +79,9 @@ export interface SyncBookmarksResult {
   /**
    * platformItemIds whose content was persisted this run — auto-tagging +
    * auto-embed input. The trigger lives in the app.html CALLER
-   * (use-x-bookmarks syncFn), NOT here: this service is import-safe for the
-   * offscreen document (leaf imports only), where the tagging/embedding barrel
-   * (LLM/embedding config → chrome.storage) cannot load.
+   * (use-x-bookmarks syncFn), NOT here: the tagging/embedding barrels resolve
+   * LLM/embedding config from chrome.storage, which this lib-layer service
+   * must not reach (tests/lib-import-smoke.test.ts).
    */
   newItemIds: string[];
 }
@@ -135,9 +131,10 @@ export interface AuthorCount {
 /**
  * One-shot bookmarks sync: fetch ALL bookmarks (paged, paced, incremental
  * stop-on-known-id) → persist insert-only. `auth` must be resolved by the
- * CALLER via `getXAuth()` — offscreen documents have no `chrome.storage`, so
- * only storage-capable contexts (app.html page, background SW) can read the
- * captured tokens. Throws XAuthError when auth is null (not logged in / not
+ * CALLER via `getXAuth()` — this service stays storage-free (it never reads
+ * chrome.storage itself); only storage-capable contexts (app.html page,
+ * background SW) read the captured tokens and pass them in. Throws XAuthError
+ * when auth is null (not logged in / not
  * captured yet); fetch/rate-limit errors propagate to the caller.
  */
 export async function syncBookmarks(

@@ -246,17 +246,4 @@ describe('transcribeAndPersist', () => {
     expect(boundary.generateObject).not.toHaveBeenCalled();
     expect(onIndexed).toHaveBeenCalledWith(null);
   });
-
-  it('keeps the combined persistContent interface backward compatible', async () => {
-    await seedItem('BV-COMPAT');
-    boundary.embedTexts.mockResolvedValueOnce([embeddingVector()]);
-
-    const result = await (await import('./bili-sync-service')).persistContent(
-      'BV-COMPAT',
-      [{ start: 0, end: 2, text: 'compatibility path' }],
-      'official',
-    );
-
-    expect(result).toBe('embedded');
-  });
 });

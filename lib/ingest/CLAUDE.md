@@ -20,7 +20,7 @@
 - **preExisting 差集**：content 对本轮新插入 item 写 + 幽灵自愈（见上方「幽灵消除」，健康的 preExisting 仍绝不重写）
 - **两段式 content 写入**：item_contents upsert + `replaceItemChunks` 在事务**外**逐条执行（`replaceItemChunks` 自开事务，单连接 proxy 嵌套死锁）；声明 `'chunked'` 的 item 事务内先落 `'has_content'`，chunk 行写成后才逐条置 `'chunked'`（空文本 → `'no_content'`）；embedding 不 inline（D3——管线保持零 storage/AI 依赖；同步后由 app.html 侧派发共享 embed lane 排空平台积压，设置页「重建向量」为手动兜底）
 - **Existing-item replacement**：以 `(platform, platformItemId)` 寻址；prepared chunks 允许 Bilibili 保留 start/end 时间戳；重转录覆盖 plain text、事务重建 chunks，并把 `embedded` 等旧状态回退到 durable `chunked` seam。该 operation 不启动 Embedding/Tagging/Processing Queue
-- **Offscreen 安全**：零 `@/lib/storage` 触达，`replaceItemChunks` 从 `@/lib/embedding/vector-store` leaf 导入（barrel 有 chrome.storage 模块加载副作用；x 同步跑在无 chrome.storage 的 offscreen）
+- **Storage-free 加载图**：零 `@/lib/storage` 触达，`replaceItemChunks` 从 `@/lib/embedding/vector-store` leaf 导入（barrel 有 chrome.storage 模块加载副作用）；`ingest/ingest` 与六个平台 sync-service 一起由 `tests/lib-import-smoke.test.ts` 守卫（docs/20 高-1）
 
 ## 约定
 

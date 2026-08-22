@@ -13,7 +13,10 @@ import {
   type FavoriteVideosSyncResult,
 } from './favorites-sync-runner';
 import { syncFavVideosToDb, type SyncResult } from './videos-sync';
-import { chunkSubtitleRows, embedPlatformItem } from '@/lib/embedding';
+// Leaf import, never the '@/lib/embedding' barrel (its value re-export of
+// './config' reaches '@/lib/storage' at module load). Guarded by
+// tests/lib-import-smoke.test.ts.
+import { chunkSubtitleRows } from '@/lib/embedding/chunker';
 import { persistExistingItemContent } from '@/lib/ingest/ingest';
 import { getDb } from '@/lib/database';
 import { items } from '@/lib/database/entities/items';
@@ -172,20 +175,6 @@ export async function persistContentChunks(
     console.error(`[bili-sync] Content persistence failed for bvid=${bvid}:`, err);
     return null;
   }
-}
-
-/**
- * Backward-compatible combined operation. New orchestration should use
- * `persistContentChunks` and start its post-processors from that data seam.
- */
-export async function persistContent(
-  bvid: string,
-  rows: SubtitleRow[],
-  source: SubtitleSource,
-): Promise<PersistContentResult> {
-  const persisted = await persistContentChunks(bvid, rows, source);
-  if (!persisted) return null;
-  return embedPlatformItem(PLATFORM, bvid);
 }
 
 /** Subset of the given bvids whose content_state is 'embedded' (indexed chip). */

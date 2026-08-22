@@ -37,8 +37,10 @@ WXT 入口点及运行时角色总览，详细结构见对应目录 `CLAUDE.md`�
 - `docs/03_favbase-prd.md` — 完整 PRD（知识库全功能）
 - `docs/04_bilibili-transcription-spec.md` — B站视频转录功能实现规格
 - `docs/19_app-design-critique-2026-08-20.md` — app.html 设计审查与分阶段整改计划（Phase 0 token 层 + P0 已落地：`theme/`、`components/collection/collection-card.tsx`；P0-1 的三行 scaffold 被用户否决并于 2026-08-20 恢复原堆叠，仅保留 `role=status` 与色彩；Phase 2-4 待做）；产品事实见 `PRODUCT.md`
+- `docs/20_multi-platform-architecture-deepening-audit-2026-08-21.md` — 多平台架构深化审计（2026-08-22 修正版：9 条发现逐条源码复核 + 无 mock import 冒烟实证；修订后主线是中-5→高-4/中-8 收回 Bilibili 平台事实、高-1 用 import-smoke contract 取代注释规则；offscreen 不加载任何平台 sync。**高-1 已落地 2026-08-22**（`tests/lib-import-smoke.test.ts` + zhihu/youtube/bilibili 改 leaf + 六处防御性 storage mock 删除），中-5 第 1 步 `persistContent` 随之删除；`startProcessingDirectly` 仍是死代码待删）
 - `.trellis/` — Trellis 开发工作流配置
 - `tests/platform-completeness-contract.test.ts` — 单一聚合失败的跨层平台接入契约；以 TypeScript AST 对账 app/welcome/build/test 各层 Adapter，避免加载 DB 或页面 runtime
+- `tests/lib-import-smoke.test.ts` — lib 层 import-smoke 契约（docs/20 高-1）：六个平台 sync-service（由 `COLLECTION_PLATFORMS` 派生、自动发现 `lib/<platform>/*-sync-service.ts`）+ `embedding/chunker`/`char-split`、`collections/platforms`、`ingest/ingest`、`database` 在无 `chrome` 全局、零 `vi.mock` 下 `import()` 零未处理 rejection；取代注释与散落的防御性 storage mock
 - `wxt.config.ts` — built-in platform host permissions 由 `PLATFORM_HOST_PERMISSIONS` keyed map 声明，`PLATFORM_HOST_PERMISSION_LIST` 负责 manifest spread；Bookmark `<all_urls>` 仍是显式平台 Adapter
 
 ## 参考项目

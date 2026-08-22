@@ -30,11 +30,11 @@ import { escapeLike } from '@/lib/database/sql-utils';
 import { getPlatformLastSyncedAt, pagedItemsQuery } from '@/lib/database/collection-queries';
 import { items } from '@/lib/database/entities/items';
 import { ghostItemCondition, ingestCollection } from '@/lib/ingest/ingest';
-// Leaf import (NOT the '@/lib/embedding' barrel): the barrel eagerly touches
-// chrome.storage at module load. charSplit is all this service needs — the
-// embed/tag dispatch seam lives in the app.html caller
-// (use-github-stars syncFn). Same rule as lib/x/x-sync-service.ts; keeps
-// lib/github's load graph storage-free and its pure tests mock-free.
+// Leaf import, never the '@/lib/embedding' barrel (its value re-export of
+// './config' reaches '@/lib/storage' at module load). The embed/tag dispatch
+// seam lives in the app.html caller (use-github-stars syncFn); lib-layer
+// platform services must not import storage-backed barrels. Guarded by
+// tests/lib-import-smoke.test.ts.
 import { charSplit } from '@/lib/embedding/char-split';
 import { envNumber } from '@/lib/env';
 import type { CooperativeCheckpoint } from '@/lib/collections';
