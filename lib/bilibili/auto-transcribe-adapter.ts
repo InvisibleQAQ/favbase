@@ -17,11 +17,12 @@ import {
 } from '@/lib/storage';
 
 export interface BiliAutoTranscribeAdapterOptions {
-  startProcessing?: StartTranscribeProcessing;
+  /** App-owned Embed/Tag lanes; the adapter never calls a provider itself. */
+  startProcessing: StartTranscribeProcessing;
 }
 
 export function createBiliAutoTranscribeAdapter(
-  options: BiliAutoTranscribeAdapterOptions = {},
+  options: BiliAutoTranscribeAdapterOptions,
 ): AutoTranscribeAdapter {
   return {
     async transcribe(videoId: string, title: string, onIndexing?: () => void): Promise<TranscribeResponse> {

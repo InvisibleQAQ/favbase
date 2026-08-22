@@ -69,17 +69,18 @@ export class TranscriptionCoordinator {
   private cacheUnsubscribes: Array<() => void> = [];
 
   /**
-   * Optional injection seam used by the app layer to reflect a running manual
-   * transcription as a global background job (running-state only). The
-   * coordinator itself stays store-agnostic (zero React / app-layer imports —
-   * layering preserved); the app-layer hook passes a callback that wraps the
-   * floating `transcribeAndPersist` promise into `startJob('bilibili',
-   * 'transcribe', …). The second callback starts the independent app-owned
-   * processing lanes after persistence. A no-arg coordinator still works.
+   * Injection seams owned by the app layer. The coordinator itself stays
+   * store-agnostic (zero React / app-layer imports — layering preserved).
+   * `startProcessing` is required: it hands each durable bvid to the app-owned
+   * Embed/Tag lanes (processing queue); the domain layer never calls a
+   * provider itself. `trackRun` is optional: it reflects the running manual
+   * transcription as a global background job (running-state only) by wrapping
+   * the floating `transcribeAndPersist` promise into
+   * `startJob('bilibili', 'transcribe', …)`.
    */
   constructor(
+    private startProcessing: StartTranscribeProcessing,
     private trackRun?: (bvid: string, run: Promise<unknown>) => void,
-    private startProcessing?: StartTranscribeProcessing,
   ) {}
 
   // --- useSyncExternalStore contract ---

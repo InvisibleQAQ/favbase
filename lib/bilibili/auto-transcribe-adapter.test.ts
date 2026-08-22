@@ -54,7 +54,7 @@ describe('Bilibili auto-transcribe adapter processing seam', () => {
       resetAt: 5_000,
     });
     storageMocks.settingsStorage.getValue.mockResolvedValue({ asrProvider: 'groq' });
-    const adapter = createBiliAutoTranscribeAdapter();
+    const adapter = createBiliAutoTranscribeAdapter({ startProcessing: vi.fn() });
 
     await expect(adapter.getQuotaPause()).resolves.toEqual({
       providerId: 'groq',
@@ -77,7 +77,7 @@ describe('Bilibili auto-transcribe adapter processing seam', () => {
       onChange = callback;
       return unwatch;
     });
-    const adapter = createBiliAutoTranscribeAdapter();
+    const adapter = createBiliAutoTranscribeAdapter({ startProcessing: vi.fn() });
 
     const waiting = adapter.waitForAsrKey();
     onChange({

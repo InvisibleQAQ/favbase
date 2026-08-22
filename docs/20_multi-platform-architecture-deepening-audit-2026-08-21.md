@@ -127,7 +127,7 @@ barrel 的 Interface 没有表达运行时能力要求。调用方必须知道�
 
 - 方案第 1-4 步完成：zhihu/youtube → `@/lib/embedding/char-split`，bilibili → `@/lib/embedding/chunker`（`persistContent` 随中-5 第 1 步一并删除，`embedPlatformItem` import 消失）；x/github/bookmarks 三处 "runs in offscreen" 注释改为陈述真实规则并指向 contract；`tests/lib-import-smoke.test.ts` 新增，用 `process.on('unhandledRejection')` 逐入口捕获、`vi.resetModules()` 保证归因到触发的入口，先红（bilibili/zhihu/youtube 各 7 条）后绿。
 - 超出方案的一处：除 narrow-meta 三处外，x/zhihu/youtube 的 `*-sync-service.test.ts` 中同样防御性的 `vi.mock('@/lib/storage')` 也一并删除（contract 证明不必要）。
-- 第 5 步（`@/lib/collections` barrel 的 DB 拖入）按原判断不动。中-5 第 2-3 步（`startProcessingDirectly` 删除、`startProcessing` 改必填）未做，`transcribe-utils.test.ts:49`、`auto-transcribe-adapter.test.ts:28` 的 storage mock 因此保留。
+- 第 5 步（`@/lib/collections` barrel 的 DB 拖入）按原判断不动。中-5 第 2-3 步（`startProcessingDirectly` 删除、`startProcessing` 改必填）当时未做，`transcribe-utils.test.ts:49`、`auto-transcribe-adapter.test.ts:28` 的 storage mock 因此保留；同日稍后落地，见中-5 处置记录（`transcribe-utils.test.ts` 的 mock 已删，`auto-transcribe-adapter.test.ts` 的是功能性 mock 保留）。
 
 ### 严重度理由（修订）
 
@@ -308,6 +308,14 @@ Deletion test 通过：删除共享 policy 中的 Bilibili 分支，只保留通
 
 没有用户可见故障，也没有真正的编排绕过；严重度维持中。但它是全部发现中**成本最低、零行为风险、且直接消掉高-1 三分之一污染**的一项，实施顺序第一。
 
+### 处置（2026-08-22，已落地）
+
+- 第 1 步已随高-1 落地（`persistContent` 删除、`bili-sync-service` leaf import）。
+- 第 2 步：`transcribe-utils.ts` 删 `startProcessingDirectly` 及 `@/lib/embedding`/`@/lib/tagging` import；`TranscribePersistHooks.startProcessing` 与 `hooks` 参数改必填。
+- 第 3 步：`TranscriptionCoordinator` 构造器改为 `(startProcessing, trackRun?)`（TS 不允许必填参数跟在可选参数后，故调换顺序，唯一调用方 `use-video-transcribe.ts` 同步）；`createBiliAutoTranscribeAdapter({ startProcessing })` 必填且无默认 options。
+- 第 4 步：`lib/bilibili/CLAUDE.md` 三行更新；`.trellis/spec/frontend/platform-onboarding.md` 删去「Keep compatibility helpers for old callers」并把 Wrong/Correct 示例换成 `persistContentChunks` + 必填 seam。
+- 第 5 步（修正）：`transcribe-utils.test.ts` 的 `@/lib/storage`/`@/lib/ai`/`ai` mock 全部删除，五个用例改为注入 fake ticket，并新增「`startProcessing` 触发时 chunks 已 durable」与「转录失败零持久化零 enqueue」断言；`@/lib/bilibili/transcribe-utils` 加入 `tests/lib-import-smoke.test.ts` 的 `PURE_ENTRIES`（先红 7 条 `chrome.runtime` 后绿）。**初版关于 `auto-transcribe-adapter.test.ts:28` storage mock 可删的判断有误**：该 adapter 自身合法 import `@/lib/storage`（ASR 设置 + quota pause），其测试 mock 是功能性的而非防御性，保留。
+
 ---
 
 ## 中-6：Bookmarks 复制 `useCollectionLibrary` 的查询/分页/同步状态机
@@ -464,7 +472,7 @@ Bookmarks 的行为差异真实存在且初版漏记；中等深化机会，不�
 
 ### 第 1 阶段：删 Bilibili 死代码（中-5）
 
-删 `persistContent`、`startProcessingDirectly`，`startProcessing` 改必填，`lib/bilibili` 改 leaf import。零行为风险。
+删 `persistContent`、`startProcessingDirectly`，`startProcessing` 改必填，`lib/bilibili` 改 leaf import。零行为风险。**已落地 2026-08-22**（见中-5 处置记录）。
 
 ### 第 2 阶段：修 import 图 + 加 contract（高-1）
 
@@ -493,7 +501,7 @@ zhihu/youtube 改 leaf，删三处过期 offscreen 注释，删 x 冗余 mock，
 ## 验收指标（修订）
 
 - `tests/lib-import-smoke.test.ts` 通过：六个平台 sync-service、纯 chunker、`collections/platforms`、`ingest`、`database` 在无 `chrome` 全局、无 mock 环境下加载零未处理错误。
-- `lib/bilibili` 不含 `@/lib/embedding`/`@/lib/tagging` 的 value import；`persistContent`、`startProcessingDirectly` 不存在。
+- `lib/bilibili` 不含 `@/lib/embedding`/`@/lib/tagging` 的 value import；`persistContent`、`startProcessingDirectly` 不存在。（已落地 2026-08-22，`@/lib/bilibili/transcribe-utils` 进 import-smoke 清单）
 - `lib/collections/collection-processing-policy.ts` 不包含平台字面量（契约守卫）；Bilibili 内存判定与 SQL predicate 有 parity test；`=== 9` 字面量只出现在 `lib/bilibili/video-eligibility.ts`。（已落地 2026-08-22）
 - daily auto-sync registry（`entrypoints/app/collection-platform-auto-sync.ts`）不手写 `jobPlatform`；`entrypoints/app/hooks/` 不 import `sections/`。（已落地 2026-08-22，契约守卫）
 - `use-collection-library` 是所有“单列表 + facet + manual sync”页面的唯一状态机；`use-bookmarks.ts` 不再含 debounce/paged query/generation 主循环。

@@ -1,8 +1,6 @@
 import type { TranscribeResponse, TranscribeStatusPush } from '@/lib/transcription/types';
 import { onBackgroundPush, sendBackgroundMessage } from '@/lib/background/client';
-import { embedPlatformItem } from '@/lib/embedding';
 import { emitDomainEvent } from '@/lib/events';
-import { tagPlatformItem } from '@/lib/tagging';
 import { persistContentChunks, type PersistContentResult } from './bili-sync-service';
 
 const PLATFORM = 'bilibili';
@@ -19,24 +17,24 @@ export interface TranscribePersistHooks {
   onIndexing?: () => void;
   /** Fired when Embedding settles with the reached content state (null = persist failed). */
   onIndexed?: (result: PersistContentResult) => void;
-  /** Starts independent post-processing lanes after content is durable. */
-  startProcessing?: StartTranscribeProcessing;
+  /**
+   * Starts independent post-processing lanes after content is durable. The
+   * app runtime owns Embedding/Tagging (processing queue); this domain module
+   * never calls a provider itself, so the seam is required, not defaulted.
+   */
+  startProcessing: StartTranscribeProcessing;
 }
-
-const startProcessingDirectly: StartTranscribeProcessing = (bvid) => ({
-  embed: embedPlatformItem(PLATFORM, bvid),
-  tag: tagPlatformItem(PLATFORM, bvid),
-});
 
 /**
  * Transcribe via the background pipeline, persist content + chunks locally,
- * then start Embedding and Tagging independently. Durable content releases the
- * producer immediately; post-processing never blocks the next transcription.
+ * then hand the durable item to the injected post-processing seam. Durable
+ * content releases the producer immediately; post-processing never blocks the
+ * next transcription.
  */
 export async function transcribeAndPersist(
   bvid: string,
   title: string,
-  hooks?: TranscribePersistHooks,
+  hooks: TranscribePersistHooks,
 ): Promise<TranscribeResponse> {
   const response: TranscribeResponse = await sendBackgroundMessage({
     type: 'TRANSCRIBE_AUDIO',
@@ -46,20 +44,20 @@ export async function transcribeAndPersist(
   });
 
   if (response.success) {
-    hooks?.onIndexing?.();
+    hooks.onIndexing?.();
     const persisted = await persistContentChunks(bvid, response.data.rows, response.data.source);
     if (!persisted) {
-      hooks?.onIndexed?.(null);
+      hooks.onIndexed?.(null);
       return response;
     }
 
     emitDomainEvent('item-content-updated', { platform: PLATFORM, platformItemId: bvid });
 
-    const processing = (hooks?.startProcessing ?? startProcessingDirectly)(bvid);
+    const processing = hooks.startProcessing(bvid);
     void processing.tag;
     void processing.embed.then(
-      (result) => hooks?.onIndexed?.(result),
-      () => hooks?.onIndexed?.('chunked'),
+      (result) => hooks.onIndexed?.(result),
+      () => hooks.onIndexed?.('chunked'),
     );
   }
 

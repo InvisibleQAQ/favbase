@@ -27,7 +27,7 @@ import { TranscriptionCoordinator } from './transcription-coordinator';
 describe('TranscriptionCoordinator processing seam', () => {
   it('forwards the injected processing starter to transcription persistence', () => {
     const startProcessing = vi.fn();
-    const coordinator = new TranscriptionCoordinator(undefined, startProcessing);
+    const coordinator = new TranscriptionCoordinator(startProcessing);
 
     coordinator.transcribe({ bvid: 'BV1', title: 'Video', attr: 0 } as BiliFavVideo);
 
@@ -47,7 +47,7 @@ describe('TranscriptionCoordinator processing seam', () => {
         data: { rows: [], source: 'asr' as const, cached: false },
       };
     });
-    const coordinator = new TranscriptionCoordinator();
+    const coordinator = new TranscriptionCoordinator(vi.fn());
 
     coordinator.transcribe({ bvid: 'BV-LATE-EMBED', title: 'Video', attr: 0 } as BiliFavVideo);
     await vi.waitFor(() =>

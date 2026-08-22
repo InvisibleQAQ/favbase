@@ -16,6 +16,9 @@
  *     the `@/lib/embedding` barrel, and never `@/lib/storage`/`@/lib/tagging`.
  *   - the shared ingest pipeline, database entry, chunkers and the platform
  *     discriminator list stay storage-free.
+ *   - the Bilibili transcription seam (`transcribe-utils`) never value-imports
+ *     `@/lib/embedding`/`@/lib/tagging`; post-processing is injected via
+ *     `startProcessing` (docs/20 中-5).
  *
  * No `vi.mock` anywhere in this file — that is the point. Each entry is
  * imported after `vi.resetModules()` so a leak is attributed to the entry
@@ -45,6 +48,7 @@ function platformSyncServiceModule(platform: string): string {
 }
 
 const PURE_ENTRIES: readonly string[] = [
+  '@/lib/bilibili/transcribe-utils',
   '@/lib/embedding/chunker',
   '@/lib/embedding/char-split',
   '@/lib/collections/platforms',

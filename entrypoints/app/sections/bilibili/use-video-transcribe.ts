@@ -33,8 +33,8 @@ export function useVideoTranscribe(
   const coordRef = useRef<TranscriptionCoordinator>(null);
   if (!coordRef.current) {
     coordRef.current = new TranscriptionCoordinator(
-      trackTranscribeRun,
       enqueueBiliCollectionProcessing,
+      trackTranscribeRun,
     );
   }
 

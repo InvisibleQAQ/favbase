@@ -4,19 +4,23 @@ import { vector } from '@electric-sql/pglite-pgvector';
 import { uuid_ossp } from '@electric-sql/pglite/contrib/uuid_ossp';
 import { pg_trgm } from '@electric-sql/pglite/contrib/pg_trgm';
 import { drizzle } from 'drizzle-orm/pglite';
+import { count, eq } from 'drizzle-orm';
 
 import * as schema from '@/lib/database/schema';
 import { runMigrations } from '@/lib/database/migrations';
 import type { FavbaseDb } from '@/lib/database';
 import { onDomainEvent } from '@/lib/events';
-import type { UserSettings } from '@/lib/storage';
 import type { TranscribeResponse } from '@/lib/transcription/types';
+import type { PersistContentResult } from './bili-sync-service';
+import type { TranscribeProcessingTicket } from './transcribe-utils';
 
+// Boundary: the background bridge (browser.runtime) and the DB. Nothing else
+// is mocked. Embedding/Tagging are not reachable from this module; the app
+// runtime injects them through `startProcessing` (docs/20 item 5), so no
+// provider, storage or AI mock belongs here.
 const boundary = vi.hoisted(() => ({
   db: null as FavbaseDb | null,
   sendMessage: vi.fn(),
-  embedTexts: vi.fn(),
-  generateObject: vi.fn(),
 }));
 
 vi.mock('@/lib/database', async (importOriginal) => {
@@ -30,55 +34,20 @@ vi.mock('@/lib/database', async (importOriginal) => {
   };
 });
 
-const settings: UserSettings = {
-  provider: 'openai',
-  providerApiKeys: { openai: 'llm-key' },
-  providerModels: { openai: 'llm-model' },
-  customBaseUrl: '',
-  customModel: '',
-  customProtocol: 'openai',
-  asrProvider: 'groq',
-  asrConfigs: {},
-  embeddingProvider: 'openai',
-  embeddingConfigs: { openai: { apiKey: 'embedding-key', model: 'embedding-model' } },
-  prefMode: 'efficiency',
-  temperature: 0.3,
-  maxTokens: 100000,
-};
-
-vi.mock('@/lib/storage', () => ({
-  settingsStorage: {
-    getValue: () => Promise.resolve(settings),
-    setValue: () => Promise.resolve(),
-    watch: () => () => {},
-  },
-  getEnvApiKey: () => '',
-  getEnvModel: () => '',
-}));
-
-vi.mock('@/lib/ai', () => ({
-  createEmbeddingModel: vi.fn(() => ({ kind: 'embedding-model' })),
-  embedTexts: boundary.embedTexts,
-  createLanguageModel: vi.fn(() => ({ kind: 'language-model' })),
-  supportsSchemaDelivery: () => true,
-}));
-
-vi.mock('ai', () => ({
-  generateObject: boundary.generateObject,
-}));
-
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((done) => {
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((done, fail) => {
     resolve = done;
+    reject = fail;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
-function embeddingVector(): number[] {
-  const value = new Array(1536).fill(0);
-  value[0] = 1;
-  return value;
+const NEVER = new Promise<never>(() => undefined);
+
+function settledTicket(embed: PersistContentResult = 'embedded'): TranscribeProcessingTicket {
+  return { embed: Promise.resolve(embed), tag: Promise.resolve() };
 }
 
 describe('transcribeAndPersist', () => {
@@ -123,6 +92,15 @@ describe('transcribeAndPersist', () => {
     });
   }
 
+  async function chunkCount(platformItemId: string): Promise<number> {
+    const [row] = await db
+      .select({ value: count() })
+      .from(schema.itemChunks)
+      .innerJoin(schema.items, eq(schema.items.id, schema.itemChunks.itemId))
+      .where(eq(schema.items.platformItemId, platformItemId));
+    return Number(row?.value ?? 0);
+  }
+
   function successResponse(): TranscribeResponse {
     return {
       success: true,
@@ -134,42 +112,43 @@ describe('transcribeAndPersist', () => {
     };
   }
 
-  it('returns after persistence while Embedding and Tagging continue independently', async () => {
-    await seedItem('BV-CONCURRENT');
+  it('hands the durable item to the injected seam and returns without awaiting either ticket', async () => {
+    await seedItem('BV-PROCESSING-RUNS');
     const response = successResponse();
-    const embedding = deferred<number[][]>();
-    const tagging = deferred<{ object: { tags: string[] } }>();
     boundary.sendMessage.mockResolvedValueOnce(response);
-    boundary.embedTexts.mockReturnValueOnce(embedding.promise);
-    boundary.generateObject.mockReturnValueOnce(tagging.promise);
+    const embedding = deferred<PersistContentResult>();
+    const chunksAtStart: number[] = [];
+    const startProcessing = vi.fn((bvid: string) => {
+      // Probe taken when the seam fires: chunks must already be durable.
+      void chunkCount(bvid).then((n) => chunksAtStart.push(n));
+      return { embed: embedding.promise, tag: NEVER };
+    });
     const onIndexing = vi.fn();
     const onIndexed = vi.fn();
 
     const run = (await import('./transcribe-utils')).transcribeAndPersist(
-      'BV-CONCURRENT',
-      'Concurrent pipeline',
-      { onIndexing, onIndexed },
+      'BV-PROCESSING-RUNS',
+      'Tracked processing',
+      { onIndexing, onIndexed, startProcessing },
     );
 
-    await vi.waitFor(() => expect(boundary.embedTexts).toHaveBeenCalledTimes(1));
-    await vi.waitFor(() => expect(boundary.generateObject).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(startProcessing).toHaveBeenCalledWith('BV-PROCESSING-RUNS'));
     expect(onIndexing).toHaveBeenCalledTimes(1);
     expect(onIndexed).not.toHaveBeenCalled();
 
     await expect(run).resolves.toEqual(response);
     expect(onIndexed).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(chunksAtStart).toEqual([1]));
 
-    embedding.resolve([embeddingVector()]);
+    embedding.resolve('embedded');
 
     await vi.waitFor(() => expect(onIndexed).toHaveBeenCalledWith('embedded'));
-    expect(boundary.generateObject).toHaveBeenCalledTimes(1);
+    expect(startProcessing).toHaveBeenCalledTimes(1);
   });
 
   it('emits item-content-updated after transcription content is durably persisted', async () => {
     await seedItem('BV-CONTENT-EVENT');
     boundary.sendMessage.mockResolvedValueOnce(successResponse());
-    boundary.embedTexts.mockResolvedValueOnce([embeddingVector()]);
-    boundary.generateObject.mockResolvedValueOnce({ object: { tags: [] } });
     const seen: string[] = [];
     const off = onDomainEvent('item-content-updated', (event) => seen.push(event.platformItemId));
 
@@ -177,6 +156,7 @@ describe('transcribeAndPersist', () => {
       await (await import('./transcribe-utils')).transcribeAndPersist(
         'BV-CONTENT-EVENT',
         'Content event',
+        { startProcessing: () => settledTicket() },
       );
     } finally {
       off();
@@ -185,65 +165,66 @@ describe('transcribeAndPersist', () => {
     expect(seen).toEqual(['BV-CONTENT-EVENT']);
   });
 
-  it('returns after durable content without waiting for the injected Embedding ticket', async () => {
-    await seedItem('BV-PROCESSING-RUNS');
-    boundary.sendMessage.mockResolvedValueOnce(successResponse());
-    const embedding = deferred<'embedded'>();
-    const tagging = new Promise<never>(() => undefined);
-    const startProcessing = vi.fn(() => ({ embed: embedding.promise, tag: tagging }));
-    const onIndexed = vi.fn();
-
-    const run = (await import('./transcribe-utils')).transcribeAndPersist(
-      'BV-PROCESSING-RUNS',
-      'Tracked processing',
-      { startProcessing, onIndexed },
-    );
-
-    await vi.waitFor(() => expect(startProcessing).toHaveBeenCalledWith('BV-PROCESSING-RUNS'));
-    expect(onIndexed).not.toHaveBeenCalled();
-
-    await expect(run).resolves.toEqual(successResponse());
-    expect(onIndexed).not.toHaveBeenCalled();
-
-    embedding.resolve('embedded');
-
-    await vi.waitFor(() => expect(onIndexed).toHaveBeenCalledWith('embedded'));
-  });
-
-  it('keeps tagging independent when embedding fails', async () => {
+  it('reports chunked when the Embedding ticket rejects and leaves the Tag ticket independent', async () => {
     await seedItem('BV-EMBED-FAIL');
     const response = successResponse();
-    const tagging = deferred<{ object: { tags: string[] } }>();
     boundary.sendMessage.mockResolvedValueOnce(response);
-    boundary.embedTexts.mockRejectedValueOnce(new Error('embedding unavailable'));
-    boundary.generateObject.mockReturnValueOnce(tagging.promise);
+    const embedding = deferred<PersistContentResult>();
     const onIndexed = vi.fn();
 
     const run = (await import('./transcribe-utils')).transcribeAndPersist(
       'BV-EMBED-FAIL',
       'Concurrent pipeline',
-      { onIndexed },
+      { onIndexed, startProcessing: () => ({ embed: embedding.promise, tag: NEVER }) },
     );
 
     await expect(run).resolves.toEqual(response);
-    await vi.waitFor(() => expect(boundary.generateObject).toHaveBeenCalledTimes(1));
-    expect(onIndexed).toHaveBeenCalledWith('chunked');
+    expect(onIndexed).not.toHaveBeenCalled();
+
+    embedding.reject(new Error('embedding unavailable'));
+
+    await vi.waitFor(() => expect(onIndexed).toHaveBeenCalledWith('chunked'));
+    expect(onIndexed).toHaveBeenCalledTimes(1);
   });
 
   it('starts no post-processors when transcript persistence fails', async () => {
     const response = successResponse();
     boundary.sendMessage.mockResolvedValueOnce(response);
+    const startProcessing = vi.fn(() => settledTicket());
     const onIndexed = vi.fn();
 
     const run = (await import('./transcribe-utils')).transcribeAndPersist(
       'BV-MISSING',
       'Missing item',
-      { onIndexed },
+      { onIndexed, startProcessing },
     );
 
     await expect(run).resolves.toEqual(response);
-    expect(boundary.embedTexts).not.toHaveBeenCalled();
-    expect(boundary.generateObject).not.toHaveBeenCalled();
+    expect(startProcessing).not.toHaveBeenCalled();
     expect(onIndexed).toHaveBeenCalledWith(null);
+  });
+
+  it('neither persists nor starts post-processors when transcription fails', async () => {
+    await seedItem('BV-TRANSCRIBE-FAIL');
+    const response: TranscribeResponse = {
+      success: false,
+      error: { code: 'ASR_UNKNOWN', message: 'boom' },
+    };
+    boundary.sendMessage.mockResolvedValueOnce(response);
+    const startProcessing = vi.fn(() => settledTicket());
+    const onIndexing = vi.fn();
+    const onIndexed = vi.fn();
+
+    const run = (await import('./transcribe-utils')).transcribeAndPersist(
+      'BV-TRANSCRIBE-FAIL',
+      'Failed transcription',
+      { onIndexing, onIndexed, startProcessing },
+    );
+
+    await expect(run).resolves.toEqual(response);
+    expect(onIndexing).not.toHaveBeenCalled();
+    expect(onIndexed).not.toHaveBeenCalled();
+    expect(startProcessing).not.toHaveBeenCalled();
+    await expect(chunkCount('BV-TRANSCRIBE-FAIL')).resolves.toBe(0);
   });
 });
