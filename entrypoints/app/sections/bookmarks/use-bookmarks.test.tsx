@@ -32,7 +32,13 @@ vi.mock('./use-bookmark-extraction', () => extractionMocks);
 // Real module pulls the embedding/tagging barrels (chrome.storage at load).
 vi.mock('../../hooks/collection-processing-jobs', () => processingMocks);
 
-import { useBookmarks } from './use-bookmarks';
+import { useBookmarks, type UseBookmarksReturn } from './use-bookmarks';
+
+async function flush(): Promise<void> {
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 0));
+  });
+}
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -117,5 +123,43 @@ describe('useBookmarks sync ownership', () => {
       itemPlatform: 'bookmarks',
       itemIds: [],
     });
+  });
+
+  it('maps the route folder to the query and returns to page 1 when the folder changes', async () => {
+    let latest!: UseBookmarksReturn;
+    function FolderProbe({ folderId }: { folderId: string | undefined }) {
+      latest = useBookmarks(folderId);
+      return null;
+    }
+    const pageQueries = () =>
+      serviceMocks.getBookmarks.mock.calls
+        .map(([query]) => query as { folderId?: string; page: number; pageSize: number })
+        .filter((q) => q.pageSize !== 1);
+
+    await act(async () => {
+      root.render(<FolderProbe folderId="f1" />);
+    });
+    await flush();
+    expect(pageQueries().at(-1)).toMatchObject({ folderId: 'f1', page: 1 });
+
+    act(() => latest.goToPage(2));
+    await flush();
+    expect(pageQueries().at(-1)).toMatchObject({ folderId: 'f1', page: 2 });
+
+    await act(async () => {
+      root.render(<FolderProbe folderId="f2" />);
+    });
+    await flush();
+
+    expect(latest.page).toBe(1);
+    expect(pageQueries().at(-1)).toMatchObject({ folderId: 'f2', page: 1 });
+    // The route is the only folder source of truth: no query with (new folder, old page).
+    expect(pageQueries()).not.toContainEqual(expect.objectContaining({ folderId: 'f2', page: 2 }));
+
+    await act(async () => {
+      root.render(<FolderProbe folderId={undefined} />);
+    });
+    await flush();
+    expect(pageQueries().at(-1)).toMatchObject({ folderId: undefined, page: 1 });
   });
 });

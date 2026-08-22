@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect } from 'react';
 
-import { initDbProxy } from '@/lib/database';
 import {
   getBookmarks,
   getFolders,
@@ -9,14 +8,14 @@ import {
   type BookmarkFolderRef,
 } from '@/lib/bookmarks/bookmarks-sync-service';
 import {
-  startJob,
-  useJob,
-  type BackgroundJob,
-} from '../../hooks/background-jobs-store';
-import { runBookmarksSync } from './bookmarks-sync-adapter';
+  useCollectionLibrary,
+  type CollectionQueryParams,
+} from '../../hooks/use-collection-library';
+import type { BackgroundJob } from '../../hooks/background-jobs-store';
+import { runBookmarksSync, type BookmarksSyncProgress } from './bookmarks-sync-adapter';
 
-const PAGE_SIZE = 24;
-const SEARCH_DEBOUNCE_MS = 300;
+/** Job namespace key (reused as `useCollectionLibrary` logTag). */
+const LOG_TAG = 'bookmarks';
 
 export interface UseBookmarksReturn {
   // Paged query results (from PGlite via bookmarks-sync-service)
@@ -27,7 +26,7 @@ export interface UseBookmarksReturn {
   queryError: string | null;
   retryQuery: () => void;
 
-  // Search + pagination
+  // Search + pagination (the folder filter is the route's, not the hook's)
   searchInput: string;
   setSearchInput: (value: string) => void;
   page: number;
@@ -43,159 +42,74 @@ export interface UseBookmarksReturn {
   syncing: boolean;
   syncError: string | null;
   syncJob: BackgroundJob | null;
-  sync: () => void;
+  sync: () => Promise<void>;
+}
+
+/** `filter` is the route folder id; `null` (route "All") = whole library. */
+function queryFn({ filter, search, page, pageSize }: CollectionQueryParams) {
+  return getBookmarks({
+    folderId: filter ?? undefined,
+    search: search || undefined,
+    page,
+    pageSize,
+  });
+}
+
+/** Local browser data throws plain errors — the view shows the message verbatim. */
+function classifySyncError(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }
 
 /**
- * Owns the bookmarks page data: auto-syncs the local bookmark tree into PGlite
- * on mount (mirrors bilibili's fetchAndSync-on-mount), then serves a paged,
- * folder-scoped, searchable query. `folderId` (from the route) narrows the
- * query; undefined = whole library ("All").
+ * Thin adapter over the shared collection-library state machine. Bookmarks'
+ * only deviations from the flat remote pages live here: the folder filter is
+ * CONTROLLED by the route (`/collections/bookmarks/:folderId`, undefined =
+ * "All"), and the sync auto-runs on mount (local data is instant — no button
+ * gate; the job store dedupes against the daily coordinator and the fetch
+ * button, so a remount re-joins an in-flight run).
  */
 export function useBookmarks(folderId: string | undefined): UseBookmarksReturn {
-  // Query state
-  const [searchInput, setSearchInput] = useState('');
-  const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
-  const [queryVersion, setQueryVersion] = useState(0);
+  const lib = useCollectionLibrary<
+    BookmarkItem,
+    BookmarkFolderRef,
+    BookmarksSyncProgress,
+    string
+  >({
+    queryFn,
+    facetsFn: getFolders,
+    lastSyncedFn: getLastSyncedAt,
+    // The shared Sync Adapter (module ref = stable): tree sync, chained content
+    // extraction and the backlog embed dispatch all live there — the daily
+    // auto-sync coordinator runs the exact same function.
+    syncFn: runBookmarksSync,
+    classifyError: classifySyncError,
+    logTag: LOG_TAG,
+    controlledFilter: folderId ?? null,
+  });
 
-  const [bookmarks, setBookmarks] = useState<BookmarkItem[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [queryError, setQueryError] = useState<string | null>(null);
-
-  // Library meta
-  const [folders, setFolders] = useState<BookmarkFolderRef[]>([]);
-  const [libraryCount, setLibraryCount] = useState(0);
-  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
-  const [metaLoading, setMetaLoading] = useState(true);
-
-  const syncJob = useJob('bookmarks', 'sync');
-  const syncing = syncJob?.running ?? false;
-  const syncError = syncJob?.error == null
-    ? null
-    : syncJob.error instanceof Error
-      ? syncJob.error.message
-      : String(syncJob.error);
-
-  const mountedRef = useRef(true);
+  const { sync } = lib;
   useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
-
-  // Debounce search input; reset to page 1 only on an actual value change.
-  const searchRef = useRef('');
-  useEffect(() => {
-    const id = setTimeout(() => {
-      const next = searchInput.trim();
-      if (next === searchRef.current) return;
-      searchRef.current = next;
-      setSearch(next);
-      setPage(1);
-    }, SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(id);
-  }, [searchInput]);
-
-  // Changing folder resets to page 1 (no double-query: search unchanged).
-  useEffect(() => {
-    setPage(1);
-  }, [folderId]);
-
-  const goToPage = useCallback((p: number) => setPage(p), []);
-  const retryQuery = useCallback(() => setQueryVersion((v) => v + 1), []);
-
-  const refreshMeta = useCallback(async () => {
-    await initDbProxy();
-    const [fs, syncedAt, countResult] = await Promise.all([
-      getFolders(),
-      getLastSyncedAt(),
-      // Unfiltered total = library size — drives the empty-state decision.
-      getBookmarks({ page: 1, pageSize: 1 }),
-    ]);
-    if (!mountedRef.current) return;
-    setFolders(fs);
-    setLastSyncedAt(syncedAt);
-    setLibraryCount(countResult.total);
-  }, []);
-
-  const sync = useCallback(() => {
-    startJob('bookmarks', 'sync', async (setProgress, control) => {
-      await initDbProxy();
-      // The shared Sync Adapter: tree sync, chained content extraction and the
-      // backlog embed dispatch all live there — the daily auto-sync coordinator
-      // runs the exact same function (mount auto-sync AND the manual fetch
-      // button both pass here).
-      await runBookmarksSync(setProgress, control);
-    });
-  }, []);
-
-  useEffect(() => {
-    sync();
+    void sync();
   }, [sync]);
 
-  useEffect(() => {
-    if (syncJob?.running) return;
-    void refreshMeta()
-      .catch((err: unknown) => console.error('[bookmarks] meta load failed:', err))
-      .finally(() => {
-        if (!mountedRef.current) return;
-        setMetaLoading(false);
-        setQueryVersion((v) => v + 1);
-      });
-  }, [refreshMeta, syncJob?.running, syncJob?.generation]);
-
-  // Paged query — refetch on folder/search/page change and after sync.
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setQueryError(null);
-
-    (async () => {
-      try {
-        await initDbProxy();
-        const result = await getBookmarks({
-          folderId,
-          search: search || undefined,
-          page,
-          pageSize: PAGE_SIZE,
-        });
-        if (cancelled) return;
-        setBookmarks(result.rows);
-        setTotal(result.total);
-      } catch (err) {
-        if (cancelled) return;
-        setQueryError(err instanceof Error ? err.message : 'Query failed');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [folderId, search, page, queryVersion]);
-
   return {
-    bookmarks,
-    total,
-    totalPages: Math.max(1, Math.ceil(total / PAGE_SIZE)),
-    loading,
-    queryError,
-    retryQuery,
-    searchInput,
-    setSearchInput,
-    page,
-    goToPage,
-    folders,
-    libraryCount,
-    lastSyncedAt,
-    metaLoading,
-    syncing,
-    syncError,
-    syncJob,
+    bookmarks: lib.items,
+    total: lib.total,
+    totalPages: lib.totalPages,
+    loading: lib.loading,
+    queryError: lib.queryError,
+    retryQuery: lib.retryQuery,
+    searchInput: lib.searchInput,
+    setSearchInput: lib.setSearchInput,
+    page: lib.page,
+    goToPage: lib.goToPage,
+    folders: lib.facets,
+    libraryCount: lib.libraryCount,
+    lastSyncedAt: lib.lastSyncedAt,
+    metaLoading: lib.metaLoading,
+    syncing: lib.syncing,
+    syncError: lib.syncError,
+    syncJob: lib.syncJob,
     sync,
   };
 }
