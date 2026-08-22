@@ -2,11 +2,13 @@ import {
   fetchAndSyncFolders,
   type BiliFavoritesSyncProgress,
 } from '@/lib/bilibili/bili-sync-service';
+import { getBiliAuth } from '@/lib/bilibili/bilibili-api';
 import type { BiliFavFolder } from '@/lib/bilibili/types';
 import type { CooperativeCheckpoint } from '@/lib/collections';
 
 import { jobPlatformForCollection } from '../../hooks/collection-job-platform';
 import { startCollectionProcessingJobs } from '../../hooks/collection-processing-jobs';
+import type { AutoSyncPolicy } from '../../hooks/use-daily-auto-sync';
 
 const ITEM_PLATFORM = 'bilibili';
 const JOB_PLATFORM = jobPlatformForCollection(ITEM_PLATFORM);
@@ -65,3 +67,8 @@ export async function runBilibiliSync(
     itemIds: [],
   });
 }
+
+/** Daily auto-sync trigger policy: a logged-in cookie session. */
+export const bilibiliAutoSyncPolicy: AutoSyncPolicy = {
+  probeReady: async () => (await getBiliAuth()) !== null,
+};

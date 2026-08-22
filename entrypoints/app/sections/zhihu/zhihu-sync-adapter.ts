@@ -1,8 +1,9 @@
 import type { CooperativeCheckpoint } from '@/lib/collections';
-import { syncFavorites } from '@/lib/zhihu/zhihu-sync-service';
+import { syncFavorites, ZhihuAuthError } from '@/lib/zhihu/zhihu-sync-service';
 
 import { jobPlatformForCollection } from '../../hooks/collection-job-platform';
 import { startCollectionProcessingJobs } from '../../hooks/collection-processing-jobs';
+import type { AutoSyncPolicy } from '../../hooks/use-daily-auto-sync';
 
 const ITEM_PLATFORM = 'zhihu';
 const JOB_PLATFORM = jobPlatformForCollection(ITEM_PLATFORM);
@@ -46,3 +47,12 @@ export async function runZhihuFavoritesSync(
     itemIds: result.newItemIds,
   });
 }
+
+/**
+ * Daily auto-sync trigger policy: the cookie jar is always worth a try, and a
+ * logged-out session (ZhihuAuthError) completes silently instead of failing.
+ */
+export const zhihuAutoSyncPolicy: AutoSyncPolicy = {
+  probeReady: async () => true,
+  isSilentError: (err) => err instanceof ZhihuAuthError,
+};

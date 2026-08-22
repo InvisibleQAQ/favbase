@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import * as ts from 'typescript';
@@ -192,6 +192,15 @@ function hasArrayPropertySpread(
   return found;
 }
 
+const HOOKS_DIR = 'entrypoints/app/hooks';
+
+/** Non-test hook modules, as repo-relative paths. */
+function hookModules(): string[] {
+  return readdirSync(path.join(ROOT, HOOKS_DIR))
+    .filter((name) => /\.tsx?$/.test(name) && !/\.test\.tsx?$/.test(name))
+    .map((name) => `${HOOKS_DIR}/${name}`);
+}
+
 function resolveImportedPage(relativeImport: string): string | undefined {
   const base = path.join(ROOT, 'entrypoints/app', relativeImport);
   for (const candidate of [base, `${base}.ts`, `${base}.tsx`, `${base}.js`, `${base}.jsx`]) {
@@ -249,7 +258,7 @@ describe('platform completeness contract', () => {
     const autoSync = collectRegistryCoverage(
       missing,
       'daily auto-sync Adapter',
-      'entrypoints/app/hooks/auto-sync-registry.ts',
+      'entrypoints/app/collection-platform-auto-sync.ts',
       'AUTO_SYNC_PLATFORM_BY_COLLECTION',
     );
     const hostPermissions = collectRegistryCoverage(
@@ -328,10 +337,20 @@ describe('platform completeness contract', () => {
         if (!propertyValue(autoSync, platform, 'runSync')) {
           missing.push(`${platform}: auto-sync runSync`);
         }
-        const actual = stringValue(propertyValue(autoSync, platform, 'jobPlatform'));
-        if (actual !== jobPlatformForCollection(platform)) {
-          missing.push(`${platform}: auto-sync job namespace value`);
+        // The job namespace is derived from the Collection discriminator via
+        // jobPlatformForCollection — a second hand-written copy is the defect.
+        if (propertyValue(autoSync, platform, 'jobPlatform')) {
+          missing.push(`${platform}: auto-sync job namespace is hand-written`);
         }
+      }
+    }
+
+    // Global hooks never reverse-import a UI section: the per-platform Sync
+    // Adapters are aggregated at the app root (collection-platform-*.ts), and
+    // the coordinator hook receives that registry by injection.
+    for (const file of hookModules()) {
+      if (/(?:from|import\()\s*['"][^'"]*sections\//.test(sourceModule(file).source)) {
+        missing.push(`all: ${file} imports sections/`);
       }
     }
 

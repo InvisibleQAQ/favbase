@@ -1,10 +1,12 @@
 import { useEffect, useRef } from 'react';
 
+import type { CooperativeCheckpoint } from '@/lib/collections/cooperative-checkpoint';
+import type { CollectionPlatform } from '@/lib/collections/platforms';
 import { getDb, initDbProxy } from '@/lib/database';
 import { getPlatformLastSyncedAt } from '@/lib/database/collection-queries';
 
-import { AUTO_SYNC_PLATFORMS, type AutoSyncPlatform } from './auto-sync-registry';
 import { startJob } from './background-jobs-store';
+import type { CollectionJobPlatform } from './collection-job-platform';
 import { shouldAutoSync } from './daily-sync-gate';
 import { isLibraryPaused } from './library-gate';
 
@@ -14,6 +16,49 @@ import { isLibraryPaused } from './library-gate';
  * 30s window is plenty (the daily gate + startJob dedupe absorb the rest).
  */
 export const EVALUATE_THROTTLE_MS = 30_000;
+
+/**
+ * A platform's automatic-sync trigger policy, declared next to its Sync
+ * Adapter (`sections/<platform>/<platform>-sync-adapter.ts`). Zero sync
+ * semantics live here — only "is auto-sync worth attempting right now" and
+ * "which thrown error means logged-out rather than failed".
+ */
+export interface AutoSyncPolicy {
+  /** Live readiness probe — zero persistence. False => silently skipped. */
+  probeReady(): Promise<boolean>;
+  /**
+   * When true for a thrown error, treat it as "not ready / logged out": complete
+   * the job silently instead of marking it failed (e.g. zhihu logged out).
+   */
+  isSilentError?(err: unknown): boolean;
+}
+
+/** Trigger policy paired with the platform's shared Sync Adapter. */
+export interface AutoSyncDefinition extends AutoSyncPolicy {
+  /**
+   * The platform's shared Sync Adapter — the SAME function the manual
+   * collection page runs (missing auth/config is a silent no-op). It owns
+   * auth/config resolution, the domain sync with typed progress, platform
+   * persistence side effects, and the post-sync processing dispatch; the
+   * coordinator only adds trigger policy around it.
+   */
+  runSync(
+    setProgress: (progress: unknown) => void,
+    control: CooperativeCheckpoint,
+  ): Promise<void>;
+}
+
+/**
+ * One fully-keyed registry entry as the coordinator consumes it. The app root
+ * (`collection-platform-auto-sync.ts`) aggregates the per-platform definitions
+ * and derives `jobPlatform`; this hooks directory never imports a section.
+ */
+export interface AutoSyncPlatform extends AutoSyncDefinition {
+  /** startJob namespace key (e.g. 'github-stars'), derived via jobPlatformForCollection. */
+  jobPlatform: CollectionJobPlatform;
+  /** DB platform discriminator (e.g. 'github'), for the daily gate query. */
+  itemPlatform: CollectionPlatform;
+}
 
 export interface DailyAutoSyncDeps {
   initDb: () => Promise<unknown>;
@@ -60,7 +105,8 @@ async function evaluatePlatform(
 
 /**
  * Daily first-open auto-sync coordinator. Mounted once at the app.html top level
- * (App.tsx) so it runs regardless of the active route. On mount and whenever the
+ * (App.tsx, which injects the app-root `AUTO_SYNC_PLATFORMS` registry) so it
+ * runs regardless of the active route. On mount and whenever the
  * tab becomes visible again, it re-evaluates every platform's per-day gate and
  * dispatches a sync for each ready platform that hasn't synced today. Manual
  * syncs share `sources.lastFetchedAt`, so a manually-synced platform is skipped.
@@ -69,7 +115,7 @@ async function evaluatePlatform(
  * + `startJob` dedupe + the throttle below make repeat evaluations harmless.
  */
 export function useDailyAutoSync(
-  platforms: AutoSyncPlatform[] = AUTO_SYNC_PLATFORMS,
+  platforms: AutoSyncPlatform[],
   deps: DailyAutoSyncDeps = defaultDeps,
 ): void {
   const lastEvalAtRef = useRef<number>(Number.NEGATIVE_INFINITY);

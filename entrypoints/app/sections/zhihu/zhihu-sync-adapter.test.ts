@@ -7,7 +7,10 @@ const mocks = vi.hoisted(() => ({
   startCollectionProcessingJobs: vi.fn(),
 }));
 
-vi.mock('@/lib/zhihu/zhihu-sync-service', () => ({ syncFavorites: mocks.syncFavorites }));
+vi.mock('@/lib/zhihu/zhihu-sync-service', () => ({
+  syncFavorites: mocks.syncFavorites,
+  ZhihuAuthError: class ZhihuAuthError extends Error {},
+}));
 // Real module pulls the embedding/tagging barrels (chrome.storage at load).
 vi.mock('../../hooks/collection-processing-jobs', () => ({
   startCollectionProcessingJobs: mocks.startCollectionProcessingJobs,

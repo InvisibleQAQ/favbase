@@ -7,6 +7,7 @@ import {
 
 import { jobPlatformForCollection } from '../../hooks/collection-job-platform';
 import { startCollectionProcessingJobs } from '../../hooks/collection-processing-jobs';
+import type { AutoSyncPolicy } from '../../hooks/use-daily-auto-sync';
 
 const ITEM_PLATFORM = 'youtube';
 const JOB_PLATFORM = jobPlatformForCollection(ITEM_PLATFORM);
@@ -40,3 +41,11 @@ export async function runYoutubePlaylistsSync(
     itemIds: result.newItemIds,
   });
 }
+
+/** Daily auto-sync trigger policy: both the API key and the channel are configured. */
+export const youtubeAutoSyncPolicy: AutoSyncPolicy = {
+  probeReady: async () => {
+    const settings = await settingsStorage.getValue();
+    return Boolean(settings.youtubeApiKey && settings.youtubeChannel);
+  },
+};

@@ -215,6 +215,14 @@ barrel 的 Interface 没有表达运行时能力要求。调用方必须知道�
 
 行为已经一致、语义已单一 owner；剩余是依赖方向和一处重复表，降为中。
 
+### 落地记录（2026-08-22）
+
+- 聚合点搬到 app 根：新建 `entrypoints/app/collection-platform-auto-sync.ts`（与 `collection-platform-pages.ts`/`collection-platform-registry.ts` 同级同惯例），`AUTO_SYNC_PLATFORM_BY_COLLECTION` 每条 `{ runSync: run<P>Sync, ...<p>AutoSyncPolicy }`；`AUTO_SYNC_PLATFORMS` 由其派生，`jobPlatform: jobPlatformForCollection(itemPlatform)`，六处手写字面量删除。声明顺序（github, x, zhihu, youtube, bookmarks, bilibili）与 HEAD 一致。`hooks/auto-sync-registry.ts` 删除，其测试移为 `collection-platform-auto-sync.test.ts`（加"每条 `jobPlatform` 等于派生值"断言，`toBe` 身份锁定保留）。
+- 六个 `sections/<p>/<p>-sync-adapter.ts` 各 `export const <p>AutoSyncPolicy: AutoSyncPolicy`，与 HEAD registry 的 `probeReady`/`isSilentError` 逐条等价（x 的 cooldown 探针随之带上 `@/lib/database` 与 `./cooldown` import；bilibili 带上 `getBiliAuth`；zhihu 带上 `ZhihuAuthError`）。`run<P>Sync` 零改动。
+- 类型归协调器：`hooks/use-daily-auto-sync.ts` 拥有 `AutoSyncPolicy`/`AutoSyncDefinition`/`AutoSyncPlatform`；`useDailyAutoSync(platforms, deps?)` 的 `platforms` 改必填，`App.tsx` 注入 `AUTO_SYNC_PLATFORMS`。`hooks/` 目录对 `sections/` 零 import。
+- 契约测试：registry 路径改新文件；每平台仍须显式 `runSync`，**出现 `jobPlatform` 属性即失败**（`<platform>: auto-sync job namespace is hand-written`）；新增目录守卫——`entrypoints/app/hooks/` 下任一非测试模块 import `sections/` 即失败（`all: hooks/<file> imports sections/`）。TDD 先红（6 条 registry 缺文件 + 1 条 hooks 反向 import）后绿。
+- 未做：`runBilibiliSync` 第三参数保持可选——协调器只按二元调用，`preferFolderId`/`onFolders` 已在手动页闭包；包 wrapper 会破坏 `toBe` 身份锁定。`finishCollectionSync` 收敛未做（adapter 内已是 `jobPlatformForCollection(ITEM_PLATFORM)` 派生，非手写）。
+
 ---
 
 ## 高-4（维持高）：Bilibili 的无效视频规则泄漏进通用 Collection processing policy
@@ -459,7 +467,7 @@ zhihu/youtube 改 leaf，删三处过期 offscreen 注释，删 x 冗余 mock，
 
 ### 第 4 阶段：registry 小修（高-3）
 
-`jobPlatform` 派生；adapter 导出 `autoSyncPolicy`；聚合点移出 `hooks/`；统一 `runSync` 签名。
+`jobPlatform` 派生；adapter 导出 `autoSyncPolicy`；聚合点移出 `hooks/`；统一 `runSync` 签名。**已落地 2026-08-22**（见高-3 落地记录；`runSync` 签名以协调器二元调用视为已统一，bilibili 第三参数保持可选）。
 
 ### 第 5 阶段：吸收 Bookmarks 状态机（中-6）
 
@@ -478,7 +486,7 @@ zhihu/youtube 改 leaf，删三处过期 offscreen 注释，删 x 冗余 mock，
 - `tests/lib-import-smoke.test.ts` 通过：六个平台 sync-service、纯 chunker、`collections/platforms`、`ingest`、`database` 在无 `chrome` 全局、无 mock 环境下加载零未处理错误。
 - `lib/bilibili` 不含 `@/lib/embedding`/`@/lib/tagging` 的 value import；`persistContent`、`startProcessingDirectly` 不存在。
 - `lib/collections/collection-processing-policy.ts` 不包含平台字面量（契约守卫）；Bilibili 内存判定与 SQL predicate 有 parity test；`=== 9` 字面量只出现在 `lib/bilibili/video-eligibility.ts`。
-- `auto-sync-registry.ts` 不手写 `jobPlatform`。
+- daily auto-sync registry（`entrypoints/app/collection-platform-auto-sync.ts`）不手写 `jobPlatform`；`entrypoints/app/hooks/` 不 import `sections/`。（已落地 2026-08-22，契约守卫）
 - `use-collection-library` 是所有“单列表 + facet + manual sync”页面的唯一状态机；`use-bookmarks.ts` 不再含 debounce/paged query/generation 主循环。
 - Tagged query 和 Tag Drill-down 使用同一平台 meta decoder；`tagged-bookmark-card.tsx`、`tagged-video-card.tsx` 不直接 `typeof meta.*`。
 - `main.tsx` 不含平台专属路由行。（已落地 2026-08-22，契约守卫）

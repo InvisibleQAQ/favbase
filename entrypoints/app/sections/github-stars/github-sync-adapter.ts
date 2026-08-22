@@ -4,6 +4,7 @@ import { settingsStorage } from '@/lib/storage';
 
 import { jobPlatformForCollection } from '../../hooks/collection-job-platform';
 import { startCollectionProcessingJobs } from '../../hooks/collection-processing-jobs';
+import type { AutoSyncPolicy } from '../../hooks/use-daily-auto-sync';
 
 const ITEM_PLATFORM = 'github';
 const JOB_PLATFORM = jobPlatformForCollection(ITEM_PLATFORM);
@@ -78,3 +79,8 @@ export async function runGithubStarsSync(
     itemIds: result.newItemIds,
   });
 }
+
+/** Daily auto-sync trigger policy: a stored token means worth attempting. */
+export const githubAutoSyncPolicy: AutoSyncPolicy = {
+  probeReady: async () => Boolean((await settingsStorage.getValue()).githubToken),
+};

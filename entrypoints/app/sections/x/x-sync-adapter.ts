@@ -1,10 +1,14 @@
 import type { CooperativeCheckpoint } from '@/lib/collections';
+import { getDb } from '@/lib/database';
+import { getPlatformLastSyncedAt } from '@/lib/database/collection-queries';
 import { xLastSyncStorage, type XLastSync } from '@/lib/storage';
 import { getXAuth } from '@/lib/x/x-auth';
 import { syncBookmarks } from '@/lib/x/x-sync-service';
 
 import { jobPlatformForCollection } from '../../hooks/collection-job-platform';
 import { startCollectionProcessingJobs } from '../../hooks/collection-processing-jobs';
+import type { AutoSyncPolicy } from '../../hooks/use-daily-auto-sync';
+import { remainingCooldown } from './cooldown';
 
 const ITEM_PLATFORM = 'x';
 const JOB_PLATFORM = jobPlatformForCollection(ITEM_PLATFORM);
@@ -54,3 +58,17 @@ export async function runXBookmarksSync(
   const summary: XLastSync = { syncedAt: Date.now(), inserted: result.inserted };
   await xLastSyncStorage.setValue(summary);
 }
+
+/**
+ * Daily auto-sync trigger policy: captured auth present AND outside the
+ * 5-minute cooldown. The daily gate already blocks same-day re-sync, but a
+ * sync at 23:58 followed by a next-day evaluation at 00:01 would otherwise
+ * fire inside the cooldown.
+ */
+export const xAutoSyncPolicy: AutoSyncPolicy = {
+  probeReady: async () => {
+    if ((await getXAuth()) === null) return false;
+    const last = await getPlatformLastSyncedAt(ITEM_PLATFORM, getDb());
+    return remainingCooldown(last ? last.getTime() : null, Date.now()) === 0;
+  },
+};

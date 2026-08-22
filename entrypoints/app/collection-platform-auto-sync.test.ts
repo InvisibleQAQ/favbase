@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// The registry statically imports every platform Sync Adapter (which import the
-// platform libs + storage) — stub them all so the test never touches
-// chrome/network/DB. The adapters' own behavior lives in their co-located
+// The app-root registry statically imports every platform Sync Adapter (which
+// import the platform libs + storage) — stub them all so the test never touches
+// chrome/network/DB. The adapters' own sync behavior lives in their co-located
 // *-sync-adapter.test.ts files; the coordinator's dispatch semantics live in
-// use-daily-auto-sync.test.tsx. This file pins the registry's trigger policy.
+// hooks/use-daily-auto-sync.test.tsx. This file pins the aggregated trigger
+// policy and the derived job namespace.
 const mocks = vi.hoisted(() => ({
   getSettings: vi.fn(),
   getXAuth: vi.fn(),
@@ -32,16 +33,19 @@ vi.mock('@/lib/zhihu/zhihu-sync-service', () => ({
   ZhihuAuthError: class ZhihuAuthError extends Error {},
 }));
 vi.mock('@/lib/youtube/youtube-sync-service', () => ({ syncYoutubePlaylists: vi.fn() }));
-vi.mock('../sections/x/cooldown', () => ({ remainingCooldown: mocks.remainingCooldown }));
-vi.mock('./collection-processing-jobs', () => ({ startCollectionProcessingJobs: vi.fn() }));
+vi.mock('./sections/x/cooldown', () => ({ remainingCooldown: mocks.remainingCooldown }));
+vi.mock('./hooks/collection-processing-jobs', () => ({
+  startCollectionProcessingJobs: vi.fn(),
+}));
 
-import { AUTO_SYNC_PLATFORMS } from './auto-sync-registry';
-import { runBilibiliSync } from '../sections/bilibili/bilibili-sync-adapter';
-import { runBookmarksSync } from '../sections/bookmarks/bookmarks-sync-adapter';
-import { runGithubStarsSync } from '../sections/github-stars/github-sync-adapter';
-import { runXBookmarksSync } from '../sections/x/x-sync-adapter';
-import { runYoutubePlaylistsSync } from '../sections/youtube/youtube-sync-adapter';
-import { runZhihuFavoritesSync } from '../sections/zhihu/zhihu-sync-adapter';
+import { AUTO_SYNC_PLATFORMS } from './collection-platform-auto-sync';
+import { jobPlatformForCollection } from './hooks/collection-job-platform';
+import { runBilibiliSync } from './sections/bilibili/bilibili-sync-adapter';
+import { runBookmarksSync } from './sections/bookmarks/bookmarks-sync-adapter';
+import { runGithubStarsSync } from './sections/github-stars/github-sync-adapter';
+import { runXBookmarksSync } from './sections/x/x-sync-adapter';
+import { runYoutubePlaylistsSync } from './sections/youtube/youtube-sync-adapter';
+import { runZhihuFavoritesSync } from './sections/zhihu/zhihu-sync-adapter';
 
 function entry(jobPlatform: string) {
   const found = AUTO_SYNC_PLATFORMS.find((p) => p.jobPlatform === jobPlatform);
@@ -67,6 +71,12 @@ describe('auto-sync registry', () => {
       'bookmarks',
       'bilibili',
     ]);
+  });
+
+  it('derives every job namespace from the Collection discriminator', () => {
+    for (const platform of AUTO_SYNC_PLATFORMS) {
+      expect(platform.jobPlatform).toBe(jobPlatformForCollection(platform.itemPlatform));
+    }
   });
 
   it('every entry runs the SAME Sync Adapter the manual page uses', () => {

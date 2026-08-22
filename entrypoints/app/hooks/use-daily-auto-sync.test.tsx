@@ -8,17 +8,20 @@ import type { CooperativeCheckpoint } from '@/lib/collections';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-// Keep the hook module self-contained: stub the heavy registry + lib barrels so
-// importing the hook never pulls chrome/AI deps. Fake platforms are injected per
-// test, so the real AUTO_SYNC_PLATFORMS export is unused.
-vi.mock('./auto-sync-registry', () => ({ AUTO_SYNC_PLATFORMS: [] }));
+// Keep the hook module self-contained: stub the lib barrels so importing the
+// hook never pulls chrome/AI deps. Platforms are injected per test — the hook
+// has no registry default (the app root owns it).
 vi.mock('./background-jobs-store', () => ({ startJob: vi.fn() }));
 vi.mock('./library-gate', () => ({ isLibraryPaused: () => false }));
 vi.mock('@/lib/database', () => ({ initDbProxy: vi.fn(), getDb: vi.fn() }));
 vi.mock('@/lib/database/collection-queries', () => ({ getPlatformLastSyncedAt: vi.fn() }));
 
-import type { AutoSyncPlatform } from './auto-sync-registry';
-import { EVALUATE_THROTTLE_MS, useDailyAutoSync, type DailyAutoSyncDeps } from './use-daily-auto-sync';
+import {
+  EVALUATE_THROTTLE_MS,
+  useDailyAutoSync,
+  type AutoSyncPlatform,
+  type DailyAutoSyncDeps,
+} from './use-daily-auto-sync';
 
 const NOOP_CONTROL: CooperativeCheckpoint = { checkpoint: async () => {} };
 

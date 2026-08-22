@@ -3,6 +3,7 @@ import type { CooperativeCheckpoint } from '@/lib/collections';
 
 import { jobPlatformForCollection } from '../../hooks/collection-job-platform';
 import { startCollectionProcessingJobs } from '../../hooks/collection-processing-jobs';
+import type { AutoSyncPolicy } from '../../hooks/use-daily-auto-sync';
 
 const ITEM_PLATFORM = 'bookmarks';
 const JOB_PLATFORM = jobPlatformForCollection(ITEM_PLATFORM);
@@ -45,3 +46,8 @@ export async function runBookmarksSync(
     itemIds: [],
   });
 }
+
+/** Daily auto-sync trigger policy: local browser data — always ready. */
+export const bookmarksAutoSyncPolicy: AutoSyncPolicy = {
+  probeReady: async () => true,
+};

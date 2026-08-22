@@ -19,7 +19,7 @@ import {
 // Per-platform knowledge-base build gate.
 //
 // This is the platform-AWARE layer of app/hooks (same tier as
-// auto-sync-registry.ts): it reads storage and knows the platform vocabulary.
+// use-daily-auto-sync.ts): it reads storage and knows the platform vocabulary.
 // The generic layer (background-jobs-store / pipeline-run-control) never
 // imports it — the gate pushes itself in through setJobGate instead.
 //
