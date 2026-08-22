@@ -261,6 +261,15 @@ Deletion test 通过：删除共享 policy 中的 Bilibili 分支，只保留通
 
 共享数据库处理路径中的平台专属分支，可能让内容静默跳过 Embedding/Tagging，且错误发生在 UI 之外。owner 倒置（UI 持有常量）使其比初版评估更值得优先。维持高。
 
+### 落地记录（2026-08-22）
+
+- 第 1 步：`lib/bilibili/video-eligibility.ts` 新建（`INVALID_VIDEO_ATTR`、`isProcessableVideo(video)`、`bilibiliDownstreamEligibleSql()`）；`transcription-coordinator.ts:112,169`、`auto-transcribe-runtime.ts:93`、`bilibili-view.tsx:278`、`video-card.tsx:76` 全部改调内存判定，`video-card.tsx` 的 `INVALID_ATTR` 导出删除。`=== 9` 只剩 owner 一处；常量加入 `tests/platform-env-constants-guard.test.ts` 允许项（协议事实，非可调参数）。
+- 第 2 步：SQL adapter 与内存判定同文件，`coalesce(platform_meta->>'attr','') <> $1` 绑定参数，语义与 HEAD 逐字等价（attr 缺失/其他值 eligible）。
+- 第 3 步（有意修订）：`lib/collections/platform-eligibility.ts` 用**穷举** `Record<CollectionPlatform, SQL | null>` 而非 `Partial`（与 `PLATFORM_SORT_KEYS` 同模式，新平台必须显式写 `null`）；`createCollectionProcessingPolicy(db, platform?, eligibility = PLATFORM_DOWNSTREAM_ELIGIBILITY)` 第三参数**默认取 registry** 而非"默认平台无关 + 调用方注入"——六个调用点（indexing ×3、tagging-service ×2、processing-coverage ×1）零改动，且不存在"忘记注入让失效视频回流 Embedding"的静默退化路径；注入参数只作测试 seam。unscoped 合并按方案：`platform <> X OR eligible(X)` 合取。
+- 第 4 步：`lib/bilibili/video-eligibility.test.ts` 同一组 attr 夹具（0/1/9/缺失）分别跑 `isProcessableVideo` 与 seed+query，断言 ID 集一致；`collection-processing-policy.test.ts` 新增注入 seam 用例（假想 github 排除规则证明平台 N+1 不碰 policy）。既有 `attr: 9` 夹具测试（policy/coverage/tagging/embedding）全部保留为行为锁。
+- 第 5 步：`tests/platform-completeness-contract.test.ts` 新增 `PLATFORM_DOWNSTREAM_ELIGIBILITY` 六平台 AST 对账 + `collection-processing-policy.ts` 不得含平台字面量/`platformMeta`/`->>`，先红（7 条）后绿。
+- 未做：中-8 的 `narrowBiliVideoMeta`（`tagged-video-card.tsx` 的 `attr` 解码保持原样），另开任务时与 `video-eligibility.ts` 同 owner。
+
 ---
 
 ## 中-5（维持中，实施顺序第一）：Bilibili 转录领域层直接耦合 Embedding/Tagging
@@ -463,7 +472,7 @@ zhihu/youtube 改 leaf，删三处过期 offscreen 注释，删 x 冗余 mock，
 
 ### 第 3 阶段：Bilibili owner 收拢（高-4 + 中-8 合并）
 
-`lib/bilibili/video-eligibility.ts`（常量 + 内存判定 + SQL predicate）+ `narrowBiliVideoMeta`；通用 policy 改注入；parity test；契约守卫“policy 无平台字面量”。顺手给 bookmarks 收敛 `narrowBookmarkMeta`。
+`lib/bilibili/video-eligibility.ts`（常量 + 内存判定 + SQL predicate）+ `narrowBiliVideoMeta`；通用 policy 改注入；parity test；契约守卫“policy 无平台字面量”。顺手给 bookmarks 收敛 `narrowBookmarkMeta`。**高-4 部分已落地 2026-08-22**（见高-4 落地记录；中-8 的两个 `narrow*Meta` 未做）。
 
 ### 第 4 阶段：registry 小修（高-3）
 
@@ -485,7 +494,7 @@ zhihu/youtube 改 leaf，删三处过期 offscreen 注释，删 x 冗余 mock，
 
 - `tests/lib-import-smoke.test.ts` 通过：六个平台 sync-service、纯 chunker、`collections/platforms`、`ingest`、`database` 在无 `chrome` 全局、无 mock 环境下加载零未处理错误。
 - `lib/bilibili` 不含 `@/lib/embedding`/`@/lib/tagging` 的 value import；`persistContent`、`startProcessingDirectly` 不存在。
-- `lib/collections/collection-processing-policy.ts` 不包含平台字面量（契约守卫）；Bilibili 内存判定与 SQL predicate 有 parity test；`=== 9` 字面量只出现在 `lib/bilibili/video-eligibility.ts`。
+- `lib/collections/collection-processing-policy.ts` 不包含平台字面量（契约守卫）；Bilibili 内存判定与 SQL predicate 有 parity test；`=== 9` 字面量只出现在 `lib/bilibili/video-eligibility.ts`。（已落地 2026-08-22）
 - daily auto-sync registry（`entrypoints/app/collection-platform-auto-sync.ts`）不手写 `jobPlatform`；`entrypoints/app/hooks/` 不 import `sections/`。（已落地 2026-08-22，契约守卫）
 - `use-collection-library` 是所有“单列表 + facet + manual sync”页面的唯一状态机；`use-bookmarks.ts` 不再含 debounce/paged query/generation 主循环。
 - Tagged query 和 Tag Drill-down 使用同一平台 meta decoder；`tagged-bookmark-card.tsx`、`tagged-video-card.tsx` 不直接 `typeof meta.*`。

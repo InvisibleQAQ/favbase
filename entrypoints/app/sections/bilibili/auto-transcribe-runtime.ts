@@ -13,6 +13,7 @@ import type {
 } from '@/lib/bilibili/favorites-sync-runner';
 import type { BiliFavFolder, BiliFavVideo } from '@/lib/bilibili/types';
 import { normalizeCover } from '@/lib/bilibili/url-utils';
+import { isProcessableVideo } from '@/lib/bilibili/video-eligibility';
 import type { CooperativeCheckpoint } from '@/lib/collections';
 
 import { startJob } from '../../hooks/background-jobs-store';
@@ -90,7 +91,7 @@ function createTranscriptProducer(): TranscriptProducer {
     append(videos) {
       if (closed) return;
       const accepted = videos
-        .filter((video) => video.attr !== 9 && Boolean(video.bvid))
+        .filter((video) => isProcessableVideo(video) && Boolean(video.bvid))
         .map(toAutoTranscribeVideo);
       if (accepted.length === 0) return;
       if (session) session.append(accepted);

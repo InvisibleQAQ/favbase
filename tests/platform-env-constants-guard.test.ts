@@ -35,6 +35,8 @@ const ROOT = path.resolve(__dirname, '..');
 const ALLOWED_BARE_NUMERIC: Record<string, string> = {
   'lib/bilibili/messaging.ts':
     'cross-runtime protocol contract (BILI_PROTOCOL_VERSION + payload caps shared by sender/receiver schemas) — an env override would desync the two ends',
+  'lib/bilibili/video-eligibility.ts':
+    'Bilibili API protocol fact (INVALID_VIDEO_ATTR: attr=9 marks a taken-down video) — an env override would silently re-admit invalid videos into transcription/embedding/tagging',
 };
 
 /**

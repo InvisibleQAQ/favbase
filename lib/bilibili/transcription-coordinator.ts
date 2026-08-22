@@ -3,6 +3,7 @@ import type {
   TranscribeErrorInfo,
 } from '@/lib/transcription/types';
 import type { BiliFavVideo } from './types';
+import { isProcessableVideo } from './video-eligibility';
 import {
   transcribeAndPersist,
   createStatusListener,
@@ -109,7 +110,7 @@ export class TranscriptionCoordinator {
     this.generation++;
     const gen = this.generation;
 
-    const validVideos = videos.filter((v) => v.attr !== 9 && v.bvid);
+    const validVideos = videos.filter((v) => isProcessableVideo(v) && v.bvid);
     if (validVideos.length === 0) return;
 
     const bvids = validVideos.map((v) => v.bvid);
@@ -166,7 +167,7 @@ export class TranscriptionCoordinator {
 
   transcribe(video: BiliFavVideo): void {
     if (this.activeBvid) return;
-    if (video.attr === 9) return;
+    if (!isProcessableVideo(video)) return;
 
     const { bvid, title } = video;
     this.activeBvid = bvid;

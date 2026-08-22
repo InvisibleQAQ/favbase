@@ -367,6 +367,23 @@ describe('platform completeness contract', () => {
       }
     }
 
+    // Downstream eligibility is a platform fact: the shared processing policy
+    // composes an exhaustive per-platform registry (null = no exclusion) and
+    // never names a platform or a platform_meta field itself.
+    collectRegistryCoverage(
+      missing,
+      'downstream eligibility predicate',
+      'lib/collections/platform-eligibility.ts',
+      'PLATFORM_DOWNSTREAM_ELIGIBILITY',
+    );
+    const policy = sourceModule('lib/collections/collection-processing-policy.ts');
+    if (
+      new RegExp(`['"](${COLLECTION_PLATFORMS.join('|')})['"]`).test(policy.source)
+      || /platformMeta|->>/.test(policy.source)
+    ) {
+      missing.push('all: collection-processing-policy.ts encodes a platform rule');
+    }
+
     const envDirectories = new Set(PLATFORM_DIRS);
     for (const platform of COLLECTION_PLATFORMS) {
       const directory = `lib/${platform}`;

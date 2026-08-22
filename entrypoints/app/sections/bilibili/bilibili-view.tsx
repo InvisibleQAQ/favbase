@@ -6,6 +6,7 @@ import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 
 import type { BiliFavOrder } from '@/lib/bilibili/types';
+import { isProcessableVideo } from '@/lib/bilibili/video-eligibility';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import {
   CollectionPageScaffold,
@@ -27,7 +28,7 @@ import { useAutoTranscribe } from './use-auto-transcribe';
 import { useBiliFavFolders } from './use-bili-fav-folders';
 import { useBiliFavVideos } from './use-bili-fav-videos';
 import { useVideoTranscribe } from './use-video-transcribe';
-import { INVALID_ATTR, VideoCard } from './video-card';
+import { VideoCard } from './video-card';
 import { VideoGridSkeleton } from './video-grid-skeleton';
 
 const PLATFORM = 'bilibili';
@@ -275,7 +276,7 @@ function BilibiliCollectionPage({
         syncFailedBanner: t('collections.syncFailed', { error: syncError ?? '' }),
       }}
       renderCard={(video, tags, onEditTags) => {
-        const invalid = video.attr === INVALID_ATTR;
+        const invalid = !isProcessableVideo(video);
         return (
           <VideoCard
             video={video}

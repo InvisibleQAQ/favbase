@@ -9,6 +9,10 @@ export {
 } from './collections-query';
 export { PLATFORM_SORT_KEYS, type PlatformSortKey } from './platform-sort-keys';
 export {
+  PLATFORM_DOWNSTREAM_ELIGIBILITY,
+  type PlatformDownstreamEligibility,
+} from './platform-eligibility';
+export {
   getCollectionAnalytics,
   type CollectionAnalyticsDimension,
   type CollectionAnalyticsDimensionKind,

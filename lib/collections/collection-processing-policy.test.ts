@@ -3,6 +3,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { pg_trgm } from '@electric-sql/pglite/contrib/pg_trgm';
 import { uuid_ossp } from '@electric-sql/pglite/contrib/uuid_ossp';
 import { vector } from '@electric-sql/pglite-pgvector';
+import { sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/pglite';
 
 import type { FavbaseDb } from '@/lib/database';
@@ -10,6 +11,10 @@ import { runMigrations } from '@/lib/database/migrations';
 import * as schema from '@/lib/database/schema';
 
 import { createCollectionProcessingPolicy } from './collection-processing-policy';
+import {
+  PLATFORM_DOWNSTREAM_ELIGIBILITY,
+  type PlatformDownstreamEligibility,
+} from './platform-eligibility';
 
 describe('createCollectionProcessingPolicy (in-memory PGlite)', () => {
   let pg: PGlite;
@@ -105,6 +110,34 @@ describe('createCollectionProcessingPolicy (in-memory PGlite)', () => {
     await expect(selectIds(allPlatforms.content.total)).resolves.toEqual([
       'bili-valid',
       'unknown-platform',
+    ]);
+  });
+
+  it('composes injected per-platform predicates without naming a platform itself', async () => {
+    // A hypothetical github rule proves platform N+1 never touches the policy:
+    // it only registers a predicate. bilibili keeps its own rule untouched.
+    const eligibility: PlatformDownstreamEligibility = {
+      ...PLATFORM_DOWNSTREAM_ELIGIBILITY,
+      github: sql<boolean>`coalesce(${schema.items.platformMeta}->>'archived', '') <> 'true'`,
+    };
+    await seedItem('github', 'gh-archived', { platformMeta: { archived: 'true' } });
+    await seedItem('github', 'gh-live', { platformMeta: { archived: 'false' } });
+    await seedItem('bilibili', 'bili-invalid', { platformMeta: { attr: 9 } });
+    await seedItem('bilibili', 'bili-valid');
+    await seedItem('x', 'x-any', { platformMeta: { archived: 'true' } });
+    await seedItem('legacy', 'legacy-any', { platformMeta: { archived: 'true', attr: 9 } });
+
+    const github = createCollectionProcessingPolicy(db, 'github', eligibility);
+    const legacy = createCollectionProcessingPolicy(db, 'legacy', eligibility);
+    const all = createCollectionProcessingPolicy(db, undefined, eligibility);
+
+    await expect(selectIds(github.content.total)).resolves.toEqual(['gh-live']);
+    await expect(selectIds(legacy.content.total)).resolves.toEqual(['legacy-any']);
+    await expect(selectIds(all.content.total)).resolves.toEqual([
+      'bili-valid',
+      'gh-live',
+      'legacy-any',
+      'x-any',
     ]);
   });
 

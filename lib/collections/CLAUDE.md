@@ -8,7 +8,8 @@
 - `platform-sort-keys.ts` — `PlatformSortKey` + `PLATFORM_SORT_KEYS`，穷举声明每个平台的原生排序时间来源与格式
 - `collections-query.ts` — `getCollectionItems`：限定平台注册项，标题/作者 ILIKE 搜索，全局分页；按 `COLLECTION_PLATFORMS` 遍历 `PLATFORM_SORT_KEYS` 生成绑定参数的排序 `CASE`（无日期条目置后并以 `createdAt`/id 稳定排序）；分页后批量加载 tags
 - `collection-analytics.ts` — `getCollectionAnalytics`：一次返回去重 Item Count、Used Tags、Tagged Items、六平台构成、Top Tags 和平台原生维度；补齐零平台、稳定排序并限制榜单长度
-- `collection-processing-policy.ts` — Collection processing stage SQL facts 的唯一 Implementation：可选 platform scope、Bilibili `attr=9` exclusion、Content/Embedding/Tags 的 `total`/`done` 与 pending candidate；Coverage 和各 worker Adapter 不重写资格规则。
+- `platform-eligibility.ts` — `PLATFORM_DOWNSTREAM_ELIGIBILITY: Record<CollectionPlatform, SQL | null>`，穷举登记每个平台的 downstream eligibility predicate（`null` = 无专属排除；bilibili 取 `lib/bilibili/video-eligibility.ts` 的 `bilibiliDownstreamEligibleSql()`）。规则归平台 owner，本表只登记，契约测试按 AST 对账六平台显式键
+- `collection-processing-policy.ts` — Collection processing stage SQL facts 的唯一 Implementation：可选 platform scope、按 registry 注入的 per-platform downstream eligibility（scoped 取该平台 predicate，未知平台字符串仍 eligible；unscoped 把每条 predicate 放宽为 `platform <> X OR eligible(X)` 后合取）、Content/Embedding/Tags 的 `total`/`done` 与 pending candidate。第三参数默认 `PLATFORM_DOWNSTREAM_ELIGIBILITY`，调用方零改动、不可能忘注入；源码不含任何平台字面量/`platformMeta`（契约守卫）。Coverage 和各 worker Adapter 不重写资格规则。
 - `processing-coverage.ts` — `getProcessingCoverage(platform, db?)`：单次平台聚合返回 acquisition/content/embedding/tagging 的 Item 级覆盖率，只消费 processing policy，React 不接触 schema/SQL。
 - `cooperative-checkpoint.ts` — 领域 worker 只依赖的最小暂停协议 `{ checkpoint(): Promise<void> }`；app runtime 持有状态机，lib 不反向依赖 React/store。
 - `collection-analytics.test.ts` — in-memory PGlite 守护六平台维度、membership 与 item 计数差异、未知平台排除、标签口径和排名稳定性
@@ -19,6 +20,7 @@
 
 - 新平台必须先加入 `COLLECTION_PLATFORMS`，再补 app 侧元数据与卡片 adapter；未知 platform 不进入聚合结果
 - 新平台必须同时在 `PLATFORM_SORT_KEYS` 声明排序键；删掉任一平台声明应由 `Record<CollectionPlatform, ...>` 触发编译错误
+- 新平台必须在 `PLATFORM_DOWNSTREAM_ELIGIBILITY` 显式声明（无排除写 `null`）；平台专属排除的 SQL 必须定义在 `lib/<platform>/` 并与内存判定同 owner，禁止把平台 JSONB 字段或业务数值写进 `collection-processing-policy.ts`
 - 时间字段只在本 module 解释，禁止在 React 中抓多平台页面后客户端 merge/sort（会破坏全局分页）
 - `collections-query.ts` 的排序 SQL 必须从声明表生成；平台判别符、JSON 字段名、格式正则都使用绑定参数，不得把平台/字段字面量拼进 SQL
 - 查询参数始终绑定，LIKE 输入必须经 `escapeLike`；UI 通过 `getCollectionItems` 读取，零 entity/getDb 导入

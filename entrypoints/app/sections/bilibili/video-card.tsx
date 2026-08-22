@@ -14,6 +14,7 @@ import { CollectionCard, CoverBadge } from '../../components/collection';
 import { TagRow } from '../../components/tags';
 import { formatDuration } from '../../utils/format-duration';
 import type { BiliFavVideo } from '@/lib/bilibili/types';
+import { isProcessableVideo } from '@/lib/bilibili/video-eligibility';
 import type { TagRef } from '@/lib/tagging';
 import type { VideoTranscribeState } from './use-video-transcribe';
 
@@ -50,8 +51,6 @@ function translateError(
   return t(key, params);
 }
 
-export const INVALID_ATTR = 9;
-
 export interface VideoCardProps {
   video: BiliFavVideo;
   transcribeState?: VideoTranscribeState;
@@ -73,7 +72,7 @@ export function VideoCard({
   onEditTags,
 }: VideoCardProps) {
   useTranslation();
-  const isInvalid = video.attr === INVALID_ATTR;
+  const isInvalid = !isProcessableVideo(video);
   const cover = video.cover?.startsWith('//') ? `https:${video.cover}` : video.cover;
   const title = isInvalid ? t('card.invalidVideo') : video.title;
 
