@@ -113,5 +113,13 @@ export default defineBackground(() => {
     );
   });
 
+  if (import.meta.env.VITE_AGENT_BRIDGE_SPIKE === '1') {
+    void import('@/spikes/agent-bridge/background-spike')
+      .then(({ runAgentBridgePhase0Spike }) => runAgentBridgePhase0Spike())
+      .catch((err) =>
+        console.error('[agent-bridge:phase-0] unhandled spike failure', err),
+      );
+  }
+
   console.log('favbase background ready', { id: browser.runtime.id });
 });

@@ -1,0 +1,273 @@
+{
+  "startedAt": "2026-08-23T10:49:33.721606+00:00",
+  "configuration": {
+    "host": "127.0.0.1",
+    "port": 17836,
+    "durationSeconds": 330.0,
+    "intervalSeconds": 20.0
+  },
+  "events": [
+    {
+      "atSeconds": 0.099,
+      "message": {
+        "type": "connected",
+        "instanceId": "03d8ee16-6db4-445c-b5d5-a1313cf1cafe",
+        "startedAt": 1787482175134,
+        "manifestHostPermissions": [
+          "https://*.bilibili.com/*",
+          "https://api.bilibili.com/*",
+          "https://*.hdslb.com/*",
+          "https://*.bilivideo.com/*",
+          "https://*.bilivideo.cn/*",
+          "https://api.github.com/*",
+          "*://x.com/*",
+          "https://www.zhihu.com/*",
+          "https://api.zhihu.com/*",
+          "https://www.googleapis.com/*",
+          "https://api-inference.modelscope.cn/*",
+          "https://open.bigmodel.cn/*",
+          "https://generativelanguage.googleapis.com/*",
+          "https://api.openai.com/*",
+          "https://openrouter.ai/*",
+          "https://api.deepseek.com/*",
+          "https://api.moonshot.cn/*",
+          "https://api.anthropic.com/*",
+          "https://api.siliconflow.cn/*",
+          "https://api.groq.com/*"
+        ],
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"
+      }
+    },
+    {
+      "atSeconds": 0.099,
+      "message": {
+        "type": "pong",
+        "seq": 1,
+        "instanceId": "03d8ee16-6db4-445c-b5d5-a1313cf1cafe",
+        "uptimeMs": 102
+      }
+    },
+    {
+      "atSeconds": 2.512,
+      "message": {
+        "type": "spike-result",
+        "instanceId": "03d8ee16-6db4-445c-b5d5-a1313cf1cafe",
+        "checks": {
+          "dbProxy": {
+            "ok": true,
+            "resultCount": 0,
+            "durationMs": 2385
+          },
+          "jsonSchemas": {
+            "ok": true,
+            "toolCount": 3,
+            "descriptors": [
+              {
+                "name": "searchKnowledgeBase",
+                "hasDescription": true,
+                "dialect": "https://json-schema.org/draft/2020-12/schema"
+              },
+              {
+                "name": "getItemContent",
+                "hasDescription": true,
+                "dialect": "https://json-schema.org/draft/2020-12/schema"
+              },
+              {
+                "name": "listTags",
+                "hasDescription": true,
+                "dialect": "https://json-schema.org/draft/2020-12/schema"
+              }
+            ]
+          },
+          "execute": {
+            "ok": true,
+            "resultCount": 0
+          }
+        }
+      }
+    },
+    {
+      "atSeconds": 20.014,
+      "message": {
+        "type": "pong",
+        "seq": 2,
+        "instanceId": "03d8ee16-6db4-445c-b5d5-a1313cf1cafe",
+        "uptimeMs": 20017
+      }
+    },
+    {
+      "atSeconds": 40.017,
+      "message": {
+        "type": "pong",
+        "seq": 3,
+        "instanceId": "03d8ee16-6db4-445c-b5d5-a1313cf1cafe",
+        "uptimeMs": 40020
+      }
+    },
+    {
+      "atSeconds": 60.018,
+      "message": {
+        "type": "pong",
+        "seq": 4,
+        "instanceId": "03d8ee16-6db4-445c-b5d5-a1313cf1cafe",
+        "uptimeMs": 60021
+      }
+    },
+    {
+      "atSeconds": 80.022,
+      "message": {
+        "type": "pong",
+        "seq": 5,
+        "instanceId": "03d8ee16-6db4-445c-b5d5-a1313cf1cafe",
+        "uptimeMs": 80025
+      }
+    },
+    {
+      "atSeconds": 100.024,
+      "message": {
+        "type": "pong",
+        "seq": 6,
+        "instanceId": "03d8ee16-6db4-445c-b5d5-a1313cf1cafe",
+        "uptimeMs": 100027
+      }
+    },
+    {
+      "atSeconds": 120.027,
+      "message": {
+        "type": "pong",
+        "seq": 7,
+        "instanceId": "03d8ee16-6db4-445c-b5d5-a1313cf1cafe",
+        "uptimeMs": 120030
+      }
+    },
+    {
+      "atSeconds": 140.029,
+      "message": {
+        "type": "pong",
+        "seq": 8,
+        "instanceId": "03d8ee16-6db4-445c-b5d5-a1313cf1cafe",
+        "uptimeMs": 140032
+      }
+    },
+    {
+      "atSeconds": 160.031,
+      "message": {
+        "type": "pong",
+        "seq": 9,
+        "instanceId": "03d8ee16-6db4-445c-b5d5-a1313cf1cafe",
+        "uptimeMs": 160034
+      }
+    },
+    {
+      "atSeconds": 180.043,
+      "message": {
+        "type": "pong",
+        "seq": 10,
+        "instanceId": "03d8ee16-6db4-445c-b5d5-a1313cf1cafe",
+        "uptimeMs": 180045
+      }
+    },
+    {
+      "atSeconds": 200.045,
+      "message": {
+        "type": "pong",
+        "seq": 11,
+        "instanceId": "03d8ee16-6db4-445c-b5d5-a1313cf1cafe",
+        "uptimeMs": 200048
+      }
+    },
+    {
+      "atSeconds": 220.059,
+      "message": {
+        "type": "pong",
+        "seq": 12,
+        "instanceId": "03d8ee16-6db4-445c-b5d5-a1313cf1cafe",
+        "uptimeMs": 220062
+      }
+    },
+    {
+      "atSeconds": 240.067,
+      "message": {
+        "type": "pong",
+        "seq": 13,
+        "instanceId": "03d8ee16-6db4-445c-b5d5-a1313cf1cafe",
+        "uptimeMs": 240070
+      }
+    },
+    {
+      "atSeconds": 260.077,
+      "message": {
+        "type": "pong",
+        "seq": 14,
+        "instanceId": "03d8ee16-6db4-445c-b5d5-a1313cf1cafe",
+        "uptimeMs": 260079
+      }
+    },
+    {
+      "atSeconds": 280.09,
+      "message": {
+        "type": "pong",
+        "seq": 15,
+        "instanceId": "03d8ee16-6db4-445c-b5d5-a1313cf1cafe",
+        "uptimeMs": 280092
+      }
+    },
+    {
+      "atSeconds": 300.091,
+      "message": {
+        "type": "pong",
+        "seq": 16,
+        "instanceId": "03d8ee16-6db4-445c-b5d5-a1313cf1cafe",
+        "uptimeMs": 300094
+      }
+    },
+    {
+      "atSeconds": 320.092,
+      "message": {
+        "type": "pong",
+        "seq": 17,
+        "instanceId": "03d8ee16-6db4-445c-b5d5-a1313cf1cafe",
+        "uptimeMs": 320095
+      }
+    }
+  ],
+  "errors": [],
+  "origin": "chrome-extension://hpblhmggemancnemfmedmfeobejlcpbn",
+  "finishedAt": "2026-08-23T10:55:05.150374+00:00",
+  "summary": {
+    "dbProxyHybridRetrieve": true,
+    "jsonSchemaThreeTools": true,
+    "toolExecute": true,
+    "serviceWorkerAliveOverFiveMinutes": true,
+    "hostPermissionNotRequired": true,
+    "connectionDurationSeconds": 330.012,
+    "pongSpanSeconds": 319.993,
+    "pongCount": 17,
+    "serviceWorkerInstanceIds": [
+      "03d8ee16-6db4-445c-b5d5-a1313cf1cafe"
+    ],
+    "manifestHostPermissions": [
+      "https://*.bilibili.com/*",
+      "https://api.bilibili.com/*",
+      "https://*.hdslb.com/*",
+      "https://*.bilivideo.com/*",
+      "https://*.bilivideo.cn/*",
+      "https://api.github.com/*",
+      "*://x.com/*",
+      "https://www.zhihu.com/*",
+      "https://api.zhihu.com/*",
+      "https://www.googleapis.com/*",
+      "https://api-inference.modelscope.cn/*",
+      "https://open.bigmodel.cn/*",
+      "https://generativelanguage.googleapis.com/*",
+      "https://api.openai.com/*",
+      "https://openrouter.ai/*",
+      "https://api.deepseek.com/*",
+      "https://api.moonshot.cn/*",
+      "https://api.anthropic.com/*",
+      "https://api.siliconflow.cn/*",
+      "https://api.groq.com/*"
+    ],
+    "verdict": "GO"
+  }
+}
