@@ -12,11 +12,8 @@ import {
   PipelineProgressStrip,
   CollectionPageScaffold,
 } from '../../components/collection';
-import {
-  backgroundJobRuntime,
-  buildPipelineSegments,
-} from '../../hooks/pipeline-segments';
-import { useProcessingCoverage } from '../../hooks/use-processing-coverage';
+import { backgroundJobRuntime, fetchedCountProgress } from '../../hooks/pipeline-segments';
+import { useCollectionPipeline } from '../../hooks/use-collection-pipeline';
 import { useXBookmarks, type XSyncError } from './use-x-bookmarks';
 import { formatCountdown } from './cooldown';
 import { AuthorChips } from './author-chips';
@@ -117,10 +114,13 @@ function EmptyLibraryState({ syncing, onSync }: { syncing: boolean; onSync: () =
 export function XView() {
   const { t } = useTranslation();
   const x = useXBookmarks();
-  const { coverage, status: coverageStatus } = useProcessingCoverage(
-    PLATFORM,
-    `${x.syncing}:${x.embedJob?.generation ?? 0}:${x.tagJob?.generation ?? 0}`,
-  );
+  const { coverage, coverageStatus, segments } = useCollectionPipeline({
+    platform: PLATFORM,
+    syncing: x.syncing,
+    fetch: backgroundJobRuntime(x.syncJob, fetchedCountProgress),
+    embedJob: x.embedJob,
+    tagJob: x.tagJob,
+  });
 
   const captionParts: string[] = [];
   if (x.libraryCount > 0) {
@@ -136,44 +136,7 @@ export function XView() {
   }
 
   const syncErrorText = x.syncError ? syncErrorMessage(x.syncError) : '';
-  const fetchLabel = t('pipeline.fetch');
-  const embeddingLabel = t('pipeline.embedding');
-  const taggingLabel = t('pipeline.tagging');
-
-  const pipeline = (
-    <PipelineProgressStrip
-      segments={buildPipelineSegments({
-        coverage,
-        coverageStatus,
-        stages: [
-          {
-            id: 'fetch',
-            label: fetchLabel,
-            coverage: 'acquisition',
-            completedProgress: 'last-run',
-            runtime: backgroundJobRuntime(
-              x.syncJob,
-              (progress) => progress
-                ? { done: progress.fetchedCount, total: null }
-                : null,
-            ),
-          },
-          {
-            id: 'embedding',
-            label: embeddingLabel,
-            coverage: 'embedding',
-            runtime: backgroundJobRuntime(x.embedJob),
-          },
-          {
-            id: 'tagging',
-            label: taggingLabel,
-            coverage: 'tagging',
-            runtime: backgroundJobRuntime(x.tagJob),
-          },
-        ],
-      })}
-    />
-  );
+  const pipeline = <PipelineProgressStrip segments={segments} />;
 
   // X-only 5-minute cooldown after a successful sync — hard-disables the
   // title-bar sync button with a live mm:ss countdown label.

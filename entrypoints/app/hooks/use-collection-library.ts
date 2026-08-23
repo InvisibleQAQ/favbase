@@ -46,6 +46,14 @@ export interface UseCollectionLibraryConfig<TItem, TFacet, TProgress, TError> {
   /** console.error prefix, e.g. 'x-bookmarks'. */
   logTag: string;
   pageSize?: number;
+  /**
+   * Controlled facet filter. Leave `undefined` for the default uncontrolled
+   * filter (`setFilter` owns it). Pass a value (`null` = no filter) when the
+   * filter's source of truth lives outside the hook (e.g. a route param): the
+   * hook reads it, resets to page 1 whenever it changes, and `setFilter`
+   * becomes a no-op — one source of truth, never two.
+   */
+  controlledFilter?: string | null;
 }
 
 export interface UseCollectionLibraryReturn<TItem, TFacet, TProgress, TError> {
@@ -71,7 +79,8 @@ export interface UseCollectionLibraryReturn<TItem, TFacet, TProgress, TError> {
   lastSyncedAt: Date | null;
   metaLoading: boolean;
 
-  // One-shot sync (manual trigger — never auto-on-mount)
+  // One-shot sync. WHEN to trigger (button / mount / daily coordinator) is the
+  // adapter's policy; the store dedupes concurrent triggers per logTag.
   syncing: boolean;
   syncProgress: TProgress | null;
   syncError: TError | null;
@@ -88,23 +97,36 @@ export interface UseCollectionLibraryReturn<TItem, TFacet, TProgress, TError> {
 }
 
 /**
- * Platform-neutral state machine for "single list + facet chips + manual sync"
- * collection pages (github / x / zhihu). Owns: search debounce, paged query
- * with cancellation, library meta refresh, and sync orchestration. Platform
- * adapters rename the generic fields back to their domain vocabulary.
+ * Platform-neutral state machine for "single list + facet chips + one-shot
+ * sync" collection pages (github / x / zhihu / youtube / bookmarks). Owns:
+ * search debounce, paged query with cancellation, library meta refresh, and
+ * sync orchestration. Platform adapters rename the generic fields back to
+ * their domain vocabulary and layer their own trigger policy on top.
  */
 export function useCollectionLibrary<TItem, TFacet, TProgress, TError>(
   config: UseCollectionLibraryConfig<TItem, TFacet, TProgress, TError>,
 ): UseCollectionLibraryReturn<TItem, TFacet, TProgress, TError> {
-  const { queryFn, facetsFn, lastSyncedFn, syncFn, classifyError, logTag } = config;
+  const { queryFn, facetsFn, lastSyncedFn, syncFn, classifyError, logTag, controlledFilter } =
+    config;
   const pageSize = config.pageSize ?? DEFAULT_PAGE_SIZE;
 
   // Filters
-  const [filter, setFilterState] = useState<string | null>(null);
+  const [filterState, setFilterState] = useState<string | null>(null);
+  const isControlled = controlledFilter !== undefined;
+  const filter = isControlled ? controlledFilter : filterState;
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [queryVersion, setQueryVersion] = useState(0);
+
+  // A controlled filter change resets the page DURING render (React's
+  // "adjust state from a prop" pattern, not an effect) so the query effect
+  // never fires once with the new filter and a stale page.
+  const [prevControlledFilter, setPrevControlledFilter] = useState(controlledFilter);
+  if (controlledFilter !== prevControlledFilter) {
+    setPrevControlledFilter(controlledFilter);
+    setPage(1);
+  }
 
   // Paged query results
   const [items, setItems] = useState<TItem[]>([]);
@@ -159,10 +181,14 @@ export function useCollectionLibrary<TItem, TFacet, TProgress, TError>(
     return () => clearTimeout(id);
   }, [searchInput]);
 
-  const setFilter = useCallback((next: string | null) => {
-    setFilterState(next);
-    setPage(1);
-  }, []);
+  const setFilter = useCallback(
+    (next: string | null) => {
+      if (isControlled) return;
+      setFilterState(next);
+      setPage(1);
+    },
+    [isControlled],
+  );
 
   const goToPage = useCallback((p: number) => setPage(p), []);
   const retryQuery = useCallback(() => setQueryVersion((v) => v + 1), []);

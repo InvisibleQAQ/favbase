@@ -49,6 +49,27 @@ export interface BuildPipelineSegmentsInput {
   stages: PipelineStageInput[];
 }
 
+export interface CollectionPipelineLabels {
+  fetch: string;
+  embedding: string;
+  tagging: string;
+}
+
+/** Platform content stage (readme / extraction / transcription) between Fetch and Embedding. */
+export interface CollectionPipelineContentStage {
+  id: string;
+  label: string;
+  runtime: PipelineRuntimeSnapshot | null;
+}
+
+export interface CollectionPipelineStagesInput {
+  labels: CollectionPipelineLabels;
+  fetch: PipelineRuntimeSnapshot | null;
+  content?: CollectionPipelineContentStage | null;
+  embedJob: BackgroundJob | null;
+  tagJob: BackgroundJob | null;
+}
+
 /**
  * Map a worker-backed job to the display-only runtime snapshot. Pause/resume is
  * no longer a per-segment control — the per-platform library gate owns it.
@@ -66,6 +87,13 @@ export function backgroundJobRuntime<TProgress = unknown>(
     lastProgress: progressAdapter(job.lastProgress),
     error: job.error,
   };
+}
+
+/** Fetch progress adapter for sync jobs that report a running `fetchedCount` (remote total unknown). */
+export function fetchedCountProgress(
+  progress: { fetchedCount: number } | null,
+): ProcessingCoverageCount | null {
+  return progress ? { done: progress.fetchedCount, total: null } : null;
 }
 
 /** Runtime progress wins only while a stage is active; idle always reflects DB coverage. */
@@ -132,6 +160,43 @@ export function buildPipelineSegments({
       coverageStatus,
     });
   });
+}
+
+/**
+ * The one declaration of a collection page's pipeline shape:
+ * Fetch (acquisition, retains last run) → optional content stage → Embedding → Tagging.
+ */
+export function collectionPipelineStages({
+  labels,
+  fetch,
+  content,
+  embedJob,
+  tagJob,
+}: CollectionPipelineStagesInput): PipelineStageInput[] {
+  return [
+    {
+      id: 'fetch',
+      label: labels.fetch,
+      coverage: 'acquisition',
+      completedProgress: 'last-run',
+      runtime: fetch,
+    },
+    ...(content
+      ? [{ id: content.id, label: content.label, coverage: 'content' as const, runtime: content.runtime }]
+      : []),
+    {
+      id: 'embedding',
+      label: labels.embedding,
+      coverage: 'embedding',
+      runtime: backgroundJobRuntime(embedJob),
+    },
+    {
+      id: 'tagging',
+      label: labels.tagging,
+      coverage: 'tagging',
+      runtime: backgroundJobRuntime(tagJob),
+    },
+  ];
 }
 
 /** Narrow the background store's intentionally-unknown progress payload. */

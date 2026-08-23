@@ -13,12 +13,9 @@ import {
   PipelineProgressStrip,
   StateBox,
 } from '../../components/collection';
-import {
-  backgroundJobRuntime,
-  buildPipelineSegments,
-} from '../../hooks/pipeline-segments';
-import { useProcessingCoverage } from '../../hooks/use-processing-coverage';
-import { useJob } from '../../hooks/background-jobs-store';
+import { backgroundJobRuntime, fetchedCountProgress } from '../../hooks/pipeline-segments';
+import { useCollectionPipeline } from '../../hooks/use-collection-pipeline';
+import { useJob, type BackgroundJob } from '../../hooks/background-jobs-store';
 import { Iconify } from '../../components/iconify';
 import { CollectionConfigurationNotice } from '../../components/configuration-blocker';
 import { AutoTranscribeBar } from './auto-transcribe-bar';
@@ -33,6 +30,11 @@ import { VideoGridSkeleton } from './video-grid-skeleton';
 
 const PLATFORM = 'bilibili';
 const SEARCH_DEBOUNCE_MS = 300;
+
+/** Transcription is bilibili's content stage on both the folder page and the fallback page. */
+function transcriptionStage(label: string, transcribeJob: BackgroundJob | null) {
+  return { id: 'transcription', label, runtime: backgroundJobRuntime(transcribeJob) };
+}
 
 function NotLoggedIn({ onRetry }: { onRetry: () => void }) {
   const { t } = useTranslation();
@@ -183,10 +185,15 @@ function BilibiliCollectionPage({
   const transcribeJob = useJob(PLATFORM, 'transcribe');
   const embedJob = useJob(PLATFORM, 'embed');
   const tagJob = useJob(PLATFORM, 'tag');
-  const { coverage, status: coverageStatus } = useProcessingCoverage(
-    PLATFORM,
-    `${syncing}:${autoTranscribe.running}:${activeBvid ?? ''}:${transcribeJob?.generation ?? 0}:${embedJob?.generation ?? 0}:${tagJob?.generation ?? 0}`,
-  );
+  const { coverage, coverageStatus, segments } = useCollectionPipeline({
+    platform: PLATFORM,
+    syncing,
+    fetch: backgroundJobRuntime(syncJob, fetchedCountProgress),
+    content: transcriptionStage(t('pipeline.transcription'), transcribeJob),
+    embedJob,
+    tagJob,
+    extraRefreshKey: `${autoTranscribe.running}:${activeBvid ?? ''}:${transcribeJob?.generation ?? 0}`,
+  });
 
   const captionParts: string[] = [];
   if (!loading && folderTitle) captionParts.push(folderTitle);
@@ -198,50 +205,7 @@ function BilibiliCollectionPage({
       t('collections.lastSynced', { time: lastSyncedAt.toLocaleTimeString() }),
     );
   }
-  const fetchLabel = t('pipeline.fetch');
-  const embeddingLabel = t('pipeline.embedding');
-  const taggingLabel = t('pipeline.tagging');
-
-  const pipeline = (
-    <PipelineProgressStrip
-      segments={buildPipelineSegments({
-        coverage,
-        coverageStatus,
-        stages: [
-          {
-            id: 'fetch',
-            label: fetchLabel,
-            coverage: 'acquisition',
-            completedProgress: 'last-run',
-            runtime: backgroundJobRuntime(
-              syncJob,
-              (progress) => progress
-                ? { done: progress.fetchedCount, total: null }
-                : null,
-            ),
-          },
-          {
-            id: 'transcription',
-            label: t('pipeline.transcription'),
-            coverage: 'content',
-            runtime: backgroundJobRuntime(transcribeJob),
-          },
-          {
-            id: 'embedding',
-            label: embeddingLabel,
-            coverage: 'embedding',
-            runtime: backgroundJobRuntime(embedJob),
-          },
-          {
-            id: 'tagging',
-            label: taggingLabel,
-            coverage: 'tagging',
-            runtime: backgroundJobRuntime(tagJob),
-          },
-        ],
-      })}
-    />
-  );
+  const pipeline = <PipelineProgressStrip segments={segments} />;
 
   return (
     <CollectionPageScaffold
@@ -362,53 +326,16 @@ function BilibiliFallbackPage({
   const transcribeJob = useJob(PLATFORM, 'transcribe');
   const embedJob = useJob(PLATFORM, 'embed');
   const tagJob = useJob(PLATFORM, 'tag');
-  const { coverage, status: coverageStatus } = useProcessingCoverage(
-    PLATFORM,
-    `${syncing}:${transcribeJob?.generation ?? 0}:${embedJob?.generation ?? 0}:${tagJob?.generation ?? 0}`,
-  );
-  const fetchLabel = t('pipeline.fetch');
-  const embeddingLabel = t('pipeline.embedding');
-  const taggingLabel = t('pipeline.tagging');
-  const pipeline = (
-    <PipelineProgressStrip
-      segments={buildPipelineSegments({
-        coverage,
-        coverageStatus,
-        stages: [
-          {
-            id: 'fetch',
-            label: fetchLabel,
-            coverage: 'acquisition',
-            completedProgress: 'last-run',
-            runtime: backgroundJobRuntime(
-              syncJob,
-              (progress) => progress
-                ? { done: progress.fetchedCount, total: null }
-                : null,
-            ),
-          },
-          {
-            id: 'transcription',
-            label: t('pipeline.transcription'),
-            coverage: 'content',
-            runtime: backgroundJobRuntime(transcribeJob),
-          },
-          {
-            id: 'embedding',
-            label: embeddingLabel,
-            coverage: 'embedding',
-            runtime: backgroundJobRuntime(embedJob),
-          },
-          {
-            id: 'tagging',
-            label: taggingLabel,
-            coverage: 'tagging',
-            runtime: backgroundJobRuntime(tagJob),
-          },
-        ],
-      })}
-    />
-  );
+  const { coverage, coverageStatus, segments } = useCollectionPipeline({
+    platform: PLATFORM,
+    syncing,
+    fetch: backgroundJobRuntime(syncJob, fetchedCountProgress),
+    content: transcriptionStage(t('pipeline.transcription'), transcribeJob),
+    embedJob,
+    tagJob,
+    extraRefreshKey: transcribeJob?.generation ?? 0,
+  });
+  const pipeline = <PipelineProgressStrip segments={segments} />;
   return (
     <CollectionPageScaffold
       platform={PLATFORM}

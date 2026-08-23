@@ -14,11 +14,8 @@ import {
   PipelineProgressStrip,
   CollectionPageScaffold,
 } from '../../components/collection';
-import {
-  backgroundJobRuntime,
-  buildPipelineSegments,
-} from '../../hooks/pipeline-segments';
-import { useProcessingCoverage } from '../../hooks/use-processing-coverage';
+import { backgroundJobRuntime, fetchedCountProgress } from '../../hooks/pipeline-segments';
+import { useCollectionPipeline } from '../../hooks/use-collection-pipeline';
 import { useYoutubePlaylists, type YoutubeSyncError } from './use-youtube-playlists';
 import { PlaylistChips } from './playlist-chips';
 import { YoutubeCard } from './youtube-card';
@@ -124,10 +121,13 @@ export function YoutubeView() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const yt = useYoutubePlaylists();
-  const { coverage, status: coverageStatus } = useProcessingCoverage(
-    PLATFORM,
-    `${yt.syncing}:${yt.embedJob?.generation ?? 0}:${yt.tagJob?.generation ?? 0}`,
-  );
+  const { coverage, coverageStatus, segments } = useCollectionPipeline({
+    platform: PLATFORM,
+    syncing: yt.syncing,
+    fetch: backgroundJobRuntime(yt.syncJob, fetchedCountProgress),
+    embedJob: yt.embedJob,
+    tagJob: yt.tagJob,
+  });
 
   // Not configured (API key / channel missing from settings): the whole page
   // short-circuits into the connect guide. A single synchronous gate — the
@@ -149,44 +149,7 @@ export function YoutubeView() {
   }
 
   const syncErrorText = yt.syncError ? syncErrorMessage(yt.syncError) : '';
-  const fetchLabel = t('pipeline.fetch');
-  const embeddingLabel = t('pipeline.embedding');
-  const taggingLabel = t('pipeline.tagging');
-
-  const pipeline = (
-    <PipelineProgressStrip
-      segments={buildPipelineSegments({
-        coverage,
-        coverageStatus,
-        stages: [
-          {
-            id: 'fetch',
-            label: fetchLabel,
-            coverage: 'acquisition',
-            completedProgress: 'last-run',
-            runtime: backgroundJobRuntime(
-              yt.syncJob,
-              (progress) => progress
-                ? { done: progress.fetchedCount, total: null }
-                : null,
-            ),
-          },
-          {
-            id: 'embedding',
-            label: embeddingLabel,
-            coverage: 'embedding',
-            runtime: backgroundJobRuntime(yt.embedJob),
-          },
-          {
-            id: 'tagging',
-            label: taggingLabel,
-            coverage: 'tagging',
-            runtime: backgroundJobRuntime(yt.tagJob),
-          },
-        ],
-      })}
-    />
-  );
+  const pipeline = <PipelineProgressStrip segments={segments} />;
 
   return (
     <CollectionPageScaffold

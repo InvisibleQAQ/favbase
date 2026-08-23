@@ -351,6 +351,15 @@ Deletion test 通过：删除共享 policy 中的 Bilibili 分支，只保留通
 
 Bookmarks 的行为差异真实存在且初版漏记；中等深化机会，不是高危重写。
 
+### 处置（2026-08-22，已落地）
+
+- `useCollectionLibrary` 加 `controlledFilter?: string | null`：`undefined` = 非受控（五个远程平台零改动）；给值即外部事实源拥有，变化时在 render 期（prev-state 调整，非 effect）把 page 回 1，`setFilter` 变 no-op。新增 `hooks/use-collection-library.test.tsx`（非受控 `setFilter` 回归 / 受控跟随 prop 且无「新 filter + 旧 page」废查询 / 受控 `null` + `setFilter` no-op）。
+- `use-bookmarks.ts` 改薄 adapter（201 → 115 行，零 `setTimeout`/`queryVersion`/`generation`/`startJob`）：`queryFn` 映射 `filter → folderId`，`controlledFilter: folderId ?? null`，挂载 `useEffect(() => sync())` 留在 adapter。`use-bookmarks.test.tsx` 保留三个 sync 归属用例，新增 route→folder 映射 + 换 folder 回页 1（该用例在 HEAD 上红：旧的 effect 式重置会先发一次 `(f2, page 2)` 查询）。
+- **对本节方案的两处修正**：
+  1. **`autoSyncOnMount` 不进共享 hook**。`hooks/CLAUDE.md` 与 `.trellis/spec/frontend/state-management.md` 已规定触发策略归 adapter（github token 门、x cooldown 同理）；adapter 一行 `useEffect` 即可，共享 hook 不该为一个平台加开关。
+  2. **「metaLoading 必须延后到首个 sync 结束」不成立**。`hooks/collection-phase.ts:48` 的阶梯是 `metaLoading || syncingEmpty → 'skeleton'` 先于 `libraryEmpty`，scaffold 传 `syncingEmpty = syncing && libraryCount === 0`——首次同步期间 `syncing` 为真即锁 skeleton，空态闪帧不可能发生。且旧 `use-bookmarks.ts:139-148` 的 meta effect 在挂载 flush 内捕获的 `syncJob` 是 `null`（store 更新触发的 re-render 在 passive effect flush 末尾），实际也是挂载即 `refreshMeta`，与共享 hook 语义一致。唯一真实差异：旧实现在 sync **失败**（generation 不跳）时也会 refreshMeta + 重查，共享 hook 不会；失败 run 不改数据（ingest insert-only 事务），重查无收益，接受共享语义。
+- 文档：`hooks/CLAUDE.md`（seam 说明 + 消费方列表改口）、`sections/bookmarks/CLAUDE.md`、`.trellis/spec/frontend/state-management.md`「never forks it」约定改为五平台。
+
 ---
 
 ## 中-7（修订为低）：四个 Collection view 的 pipeline 编排重复
@@ -371,6 +380,14 @@ Bookmarks 的行为差异真实存在且初版漏记；中等深化机会，不�
 ### 严重度理由（修订）
 
 初版要求的主体已落地，降为低。
+
+### 处置记录（2026-08-22，已落地）
+
+- 源码复核：重复点是 **6 处**而非 4 处——`bookmarks-view.tsx` 与 `bilibili-view.tsx`（`BilibiliCollectionPage` + `BilibiliFallbackPage`）同样各持一份 stages 数组、三行 `t('pipeline.*')` 和 key 模板；`progress ? { done: progress.fetchedCount, total: null } : null` 在 5 处一字不差。
+- `entrypoints/app/hooks/pipeline-segments.ts` 新增 `collectionPipelineStages({ labels, fetch, content?, embedJob, tagJob })`（Fetch → 可选 content 段 → Embedding → Tagging 的唯一声明点）与 `fetchedCountProgress`。
+- 新 hook `entrypoints/app/hooks/use-collection-pipeline.ts`：`useCollectionPipeline({ platform, syncing, fetch, content?, embedJob, tagJob, extraRefreshKey? })` → `{ coverage, coverageStatus, segments }`，内部拥有 `useProcessingCoverage` 的 key 派生（`collectionCoverageRefreshKey`）、`pipeline.fetch/embedding/tagging` 翻译与段装配。`syncing` 与 `fetch.running` 分开传，因为 github 在 readme 相位把 Fetch 段提前 settle。
+- 六处 view 改为消费该 hook（net −124 行）；github 的 readme/settled 特例留在 view，bilibili 两页共用本地 `transcriptionStage` helper。行为等价：各 view 的 segment id/label/coverage/runtime 逐项不变；bookmarks 的 refresh key 多出 embed/tag generation（只影响 coverage 再查询时机；bookmarks 的 embed/tag 是按 lane 整批 drain 的单个 job，generation 每次 drain 只加一，不是逐条）；bilibili 两页的 key 成分与改前相同，仅顺序重排（`syncing:embed:tag` 在前、平台附加信号在后）。
+- 测试：`pipeline-segments.test.ts` 新增 `collectionPipelineStages`/`fetchedCountProgress` 用例；`use-collection-pipeline.test.tsx` 锁 key 派生、标签翻译与段顺序。
 
 ---
 
@@ -488,13 +505,15 @@ zhihu/youtube 改 leaf，删三处过期 offscreen 注释，删 x 冗余 mock，
 
 ### 第 5 阶段：吸收 Bookmarks 状态机（中-6）
 
-共享 hook 加 `controlledFilter` + `autoSyncOnMount`（含 metaLoading 延后语义）。
+共享 hook 加 `controlledFilter` + `autoSyncOnMount`（含 metaLoading 延后语义）。**已落地 2026-08-22**（只加 `controlledFilter`；`autoSyncOnMount` 与 metaLoading 延后经源码复核不需要，见中-6 处置记录）。
 
 ### 第 6 阶段：嵌套路由登记（高-2）
 
 `collection-platform-pages.ts` 加 `childRoutes`，`main.tsx` 删两行特殊行。约 10 行。**已落地 2026-08-22**（实际落为穷举表 `COLLECTION_PAGE_CHILD_ROUTES`，见高-2 落地记录）。
 
 ### 第 7 阶段（可选）：pipeline 再抽一层（中-7）
+
+`useCollectionPipeline` + `collectionPipelineStages`。**已落地 2026-08-22**（见中-7 处置记录）。
 
 ### 第 8 阶段：按证据拆宽 service（低-9）
 
@@ -504,9 +523,10 @@ zhihu/youtube 改 leaf，删三处过期 offscreen 注释，删 x 冗余 mock，
 - `lib/bilibili` 不含 `@/lib/embedding`/`@/lib/tagging` 的 value import；`persistContent`、`startProcessingDirectly` 不存在。（已落地 2026-08-22，`@/lib/bilibili/transcribe-utils` 进 import-smoke 清单）
 - `lib/collections/collection-processing-policy.ts` 不包含平台字面量（契约守卫）；Bilibili 内存判定与 SQL predicate 有 parity test；`=== 9` 字面量只出现在 `lib/bilibili/video-eligibility.ts`。（已落地 2026-08-22）
 - daily auto-sync registry（`entrypoints/app/collection-platform-auto-sync.ts`）不手写 `jobPlatform`；`entrypoints/app/hooks/` 不 import `sections/`。（已落地 2026-08-22，契约守卫）
-- `use-collection-library` 是所有“单列表 + facet + manual sync”页面的唯一状态机；`use-bookmarks.ts` 不再含 debounce/paged query/generation 主循环。
+- `use-collection-library` 是所有“单列表 + facet + manual sync”页面的唯一状态机；`use-bookmarks.ts` 不再含 debounce/paged query/generation 主循环。（已落地 2026-08-22）
 - Tagged query 和 Tag Drill-down 使用同一平台 meta decoder；`tagged-bookmark-card.tsx`、`tagged-video-card.tsx` 不直接 `typeof meta.*`。
 - `main.tsx` 不含平台专属路由行。（已落地 2026-08-22，契约守卫）
+- 六个 Collection view 不再出现 `buildPipelineSegments`/`coverage: 'acquisition'`/`t('pipeline.embedding')`/手写 `fetchedCount` 映射；pipeline 形状只在 `collectionPipelineStages` 声明。（已落地 2026-08-22）
 - 运行时行为保持兼容：`pnpm.cmd compile`、`pnpm.cmd test` 以及平台完整性 contract 全部通过。
 
 ## 最终判断（修订）

@@ -17,10 +17,10 @@ import {
 } from '../../components/collection';
 import {
   backgroundJobRuntime,
-  buildPipelineSegments,
+  fetchedCountProgress,
   type PipelineRuntimeSnapshot,
 } from '../../hooks/pipeline-segments';
-import { useProcessingCoverage } from '../../hooks/use-processing-coverage';
+import { useCollectionPipeline } from '../../hooks/use-collection-pipeline';
 import { useGithubStars, type GithubSyncError } from './use-github-stars';
 import { LanguageChips } from './language-chips';
 import { RepoCard } from './repo-card';
@@ -101,10 +101,36 @@ export function GithubStarsView() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const gh = useGithubStars();
-  const { coverage, status: coverageStatus } = useProcessingCoverage(
-    PLATFORM,
-    `${gh.syncing}:${gh.embedJob?.generation ?? 0}:${gh.tagJob?.generation ?? 0}`,
-  );
+
+  // Two-phase sync: Fetch settles the moment the readme phase starts (the
+  // stars pass is done even though the sync job stays running), and the
+  // readme stage only shows live progress inside its own phase.
+  const syncPhase = gh.syncJob?.progress?.phase ?? gh.syncJob?.lastProgress?.phase;
+  const fetchRuntime = backgroundJobRuntime(gh.syncJob, fetchedCountProgress);
+  const readmeRuntime = syncPhase === 'stars' && gh.syncJob?.running
+    ? null
+    : backgroundJobRuntime(
+        gh.syncJob,
+        (progress) => progress?.phase === 'readme'
+          ? { done: progress.done, total: progress.total }
+          : null,
+      );
+  const settledFetchRuntime: PipelineRuntimeSnapshot | null =
+    syncPhase === 'readme' && gh.syncJob?.running && fetchRuntime
+      ? {
+          running: false,
+          phase: 'completed',
+          lastProgress: fetchRuntime.progress,
+        }
+      : fetchRuntime;
+  const { coverage, coverageStatus, segments } = useCollectionPipeline({
+    platform: PLATFORM,
+    syncing: gh.syncing,
+    fetch: settledFetchRuntime,
+    content: { id: 'readme', label: t('pipeline.readme'), runtime: readmeRuntime },
+    embedJob: gh.embedJob,
+    tagJob: gh.tagJob,
+  });
 
   // No token: the whole page short-circuits into the connect guide.
   if (!gh.settingsLoading && !gh.hasToken) {
@@ -127,68 +153,7 @@ export function GithubStarsView() {
 
   const syncErrorText = gh.syncError ? syncErrorMessage(gh.syncError) : '';
 
-  const fetchLabel = t('pipeline.fetch');
-  const readmeLabel = t('pipeline.readme');
-  const embeddingLabel = t('pipeline.embedding');
-  const taggingLabel = t('pipeline.tagging');
-  const syncPhase = gh.syncJob?.progress?.phase ?? gh.syncJob?.lastProgress?.phase;
-  const fetchRuntime = backgroundJobRuntime(
-    gh.syncJob,
-    (progress) => progress
-      ? { done: progress.fetchedCount, total: null }
-      : null,
-  );
-  const readmeRuntime = syncPhase === 'stars' && gh.syncJob?.running
-    ? null
-    : backgroundJobRuntime(
-        gh.syncJob,
-        (progress) => progress?.phase === 'readme'
-          ? { done: progress.done, total: progress.total }
-          : null,
-      );
-  const settledFetchRuntime: PipelineRuntimeSnapshot | null =
-    syncPhase === 'readme' && gh.syncJob?.running && fetchRuntime
-      ? {
-          running: false,
-          phase: 'completed',
-          lastProgress: fetchRuntime.progress,
-        }
-      : fetchRuntime;
-  const pipeline = (
-    <PipelineProgressStrip
-      segments={buildPipelineSegments({
-        coverage,
-        coverageStatus,
-        stages: [
-          {
-            id: 'fetch',
-            label: fetchLabel,
-            coverage: 'acquisition',
-            completedProgress: 'last-run',
-            runtime: settledFetchRuntime,
-          },
-          {
-            id: 'readme',
-            label: readmeLabel,
-            coverage: 'content',
-            runtime: readmeRuntime,
-          },
-          {
-            id: 'embedding',
-            label: embeddingLabel,
-            coverage: 'embedding',
-            runtime: backgroundJobRuntime(gh.embedJob),
-          },
-          {
-            id: 'tagging',
-            label: taggingLabel,
-            coverage: 'tagging',
-            runtime: backgroundJobRuntime(gh.tagJob),
-          },
-        ],
-      })}
-    />
-  );
+  const pipeline = <PipelineProgressStrip segments={segments} />;
 
   return (
     <CollectionPageScaffold
