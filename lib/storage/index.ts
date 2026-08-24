@@ -30,6 +30,22 @@ export {
   libraryGateStorage,
 } from './ui-state';
 
+export {
+  type AgentBridgeConfig,
+  type AgentBridgeConnectionState,
+  type AgentBridgeStatus,
+  DEFAULT_AGENT_BRIDGE_CONFIG,
+  DEFAULT_AGENT_BRIDGE_STATUS,
+  agentBridgeConfigStorage,
+  agentBridgeStatusStorage,
+  getAgentBridgeConfig,
+  setAgentBridgeConfig,
+  watchAgentBridgeConfig,
+  getAgentBridgeStatus,
+  setAgentBridgeStatus,
+  watchAgentBridgeStatus,
+} from './agent-bridge';
+
 export async function runStorageMigrations(): Promise<void> {
   await migrateSettingsIfNeeded();
 }

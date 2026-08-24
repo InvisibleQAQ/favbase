@@ -54,6 +54,20 @@ describe('Background typed client', () => {
     }));
   });
 
+  it('encodes the Agent Bridge immediate-connect command with a void response', async () => {
+    const sendMessage = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('browser', { runtime: { sendMessage } });
+
+    await expect(sendBackgroundMessage({
+      type: 'AGENT_BRIDGE_CONNECT_NOW',
+    })).resolves.toBeUndefined();
+    expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'AGENT_BRIDGE_CONNECT_NOW',
+      channel: 'favbase-background',
+      protocolVersion: 1,
+    }));
+  });
+
   it('ignores malformed push messages before subscriber callbacks', () => {
     const addListener = vi.fn();
     const removeListener = vi.fn();

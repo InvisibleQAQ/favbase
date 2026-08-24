@@ -12,8 +12,11 @@ import { captureXTokens } from '@/lib/x/x-auth';
 import { dispatchBackgroundMessage } from '@/lib/background/dispatcher';
 import { routeBackgroundMessage } from '@/lib/background/routes';
 import { encodeBackgroundPush } from '@/lib/background/message-protocol';
+import { AgentBridgeClient } from '@/lib/agent-bridge/client';
+import { initAgentBridgeScheduler } from '@/lib/agent-bridge/scheduler';
+import { initReadDbProxy } from '@/lib/database/read-proxy-db';
 
-function createBackgroundContext(): BackgroundContext {
+function createBackgroundContext(connectAgentBridge: () => Promise<void>): BackgroundContext {
   const transcription = createJobRegistry();
   const summary = createJobRegistry();
   const sessionTabMap = new Map<string, number>();
@@ -25,6 +28,7 @@ function createBackgroundContext(): BackgroundContext {
       browser.tabs.sendMessage(tabId, encoded).catch(() => {});
     },
     ensureOffscreen,
+    connectAgentBridge,
 
     startTranscription: transcription.start,
     abortTranscription: transcription.abort,
@@ -53,6 +57,11 @@ function createBackgroundContext(): BackgroundContext {
 
 export default defineBackground(() => {
   initPortBridge(DB_CHANNEL_NAME, ensureOffscreen);
+
+  const agentBridgeClient = new AgentBridgeClient({
+    getDb: () => initReadDbProxy(ensureOffscreen),
+  });
+  const agentBridgeScheduler = initAgentBridgeScheduler(agentBridgeClient);
 
   initCacheStorageListener();
 
@@ -83,7 +92,7 @@ export default defineBackground(() => {
     ['requestHeaders', 'extraHeaders'],
   );
 
-  const ctx = createBackgroundContext();
+  const ctx = createBackgroundContext(agentBridgeScheduler.connectNow);
 
   browser.runtime.onMessage.addListener(
     (msg: unknown, sender) => dispatchBackgroundMessage(msg, sender, ctx, routeBackgroundMessage),

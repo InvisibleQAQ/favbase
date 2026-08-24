@@ -58,6 +58,8 @@ const PURE_ENTRIES: readonly string[] = [
   '@/lib/collections/platforms',
   '@/lib/ingest/ingest',
   '@/lib/database',
+  '@/lib/database/proxy-db',
+  '@/lib/database/read-proxy-db',
 ];
 
 const rejections: unknown[] = [];

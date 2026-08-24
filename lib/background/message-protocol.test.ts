@@ -40,6 +40,7 @@ const validMessages = [
   { type: 'GET_SUMMARY_CACHE', platform: 'bilibili', videoId: 'BV1protocol' },
   { type: 'OPEN_APP_PAGE', hash: '#/settings' },
   { type: 'FETCH_BOOKMARK_PAGE', url: 'https://example.com/article' },
+  { type: 'AGENT_BRIDGE_CONNECT_NOW' },
   { type: 'WEBDAV_SYNC_NOW' },
   { type: 'WEBDAV_CLEAR_REMOTE' },
   {

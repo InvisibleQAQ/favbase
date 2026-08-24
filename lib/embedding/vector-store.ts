@@ -1,6 +1,6 @@
 import { sql, eq, isNotNull } from 'drizzle-orm';
 import type { FavbaseDb } from '@/lib/database';
-import { schema } from '@/lib/database';
+import * as schema from '@/lib/database/schema';
 import {
   EmbeddingDimensionError,
   EmbeddingDimensionLimitError,

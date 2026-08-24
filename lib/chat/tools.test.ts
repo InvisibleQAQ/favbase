@@ -13,10 +13,10 @@ import type { RetrievalHit } from './types';
 // Mock the retrieval + tagging arms so tool tests are network-free and
 // deterministic; getItemContent runs against real in-memory PGlite.
 vi.mock('./retrieval', () => ({ hybridRetrieve: vi.fn() }));
-vi.mock('@/lib/tagging', () => ({ getAllUsedTags: vi.fn() }));
+vi.mock('@/lib/tagging/tag-queries', () => ({ getAllUsedTags: vi.fn() }));
 
 import { hybridRetrieve } from './retrieval';
-import { getAllUsedTags } from '@/lib/tagging';
+import { getAllUsedTags } from '@/lib/tagging/tag-queries';
 import { chatTools } from './tools';
 
 const hybridRetrieveMock = vi.mocked(hybridRetrieve);

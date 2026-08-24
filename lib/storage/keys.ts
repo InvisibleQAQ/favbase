@@ -20,6 +20,10 @@ export const STORAGE_KEYS = {
   webdavConfig: 'local:webdav-config',
   webdavSyncMeta: 'local:webdav-sync-meta',
   webdavSyncStatus: 'local:webdav-sync-status',
+  // Agent Bridge config + UI-facing/runtime status. Authentication backoff is
+  // persisted with status so MV3 worker suspension cannot reset it.
+  agentBridge: 'local:agent-bridge',
+  agentBridgeStatus: 'local:agent-bridge-status',
   // First-run welcome flow outcome ({ completedAt, platforms }). Absent = the
   // user has never completed welcome.html, which is what gates the
   // install-time tab. See entrypoints/welcome/CLAUDE.md.

@@ -197,6 +197,10 @@ const backgroundMessageSchemas = {
     type: z.literal('FETCH_BOOKMARK_PAGE'),
     url: z.string().min(1).max(8_192),
   }),
+  AGENT_BRIDGE_CONNECT_NOW: z.object({
+    ...envelopeShape,
+    type: z.literal('AGENT_BRIDGE_CONNECT_NOW'),
+  }),
   WEBDAV_SYNC_NOW: z.object({
     ...envelopeShape,
     type: z.literal('WEBDAV_SYNC_NOW'),
@@ -244,6 +248,7 @@ export type BackgroundResponseMap = {
   GET_SUMMARY_CACHE: SummaryResult | null;
   OPEN_APP_PAGE: void;
   FETCH_BOOKMARK_PAGE: FetchPageResult;
+  AGENT_BRIDGE_CONNECT_NOW: void;
   WEBDAV_SYNC_NOW: SyncResult;
   WEBDAV_CLEAR_REMOTE: SyncResult;
 };
@@ -269,6 +274,7 @@ const backgroundResponseSchemas = {
   GET_SUMMARY_CACHE: summaryResultSchema.nullable(),
   OPEN_APP_PAGE: z.undefined(),
   FETCH_BOOKMARK_PAGE: fetchPageResultSchema,
+  AGENT_BRIDGE_CONNECT_NOW: z.undefined(),
   WEBDAV_SYNC_NOW: syncResultSchema,
   WEBDAV_CLEAR_REMOTE: syncResultSchema,
 } satisfies BackgroundResponseSchemaMap;

@@ -9,4 +9,10 @@ describe('Chrome host permissions', () => {
     expect(manifest?.host_permissions).toContain('<all_urls>');
     expect(manifest).not.toHaveProperty('optional_host_permissions');
   });
+
+  it('requires Chrome 116 for WebSocket-kept service workers', () => {
+    const manifest = (config as { manifest?: Record<string, unknown> }).manifest;
+
+    expect(manifest?.minimum_chrome_version).toBe('116');
+  });
 });

@@ -7,83 +7,53 @@ import * as schema from './schema';
 import { runMigrations } from './migrations';
 import { DB_DATA_DIR, DB_CHANNEL_NAME } from './constants';
 import { DatabaseRpcHandler } from './bridges/rpc-handler';
-import { PGliteSharedProxy } from './bridges/proxy-driver';
-import { createChromePortTransport } from './bridges/chrome-port-rpc';
+import {
+  getDb,
+  getPGliteInstance,
+  hasPGliteInstance,
+  initializeDb,
+  resetDbState,
+  setPGliteInstance,
+} from './db-state';
+import type { FavbaseDb } from './db-types';
 
-export type FavbaseDb = ReturnType<typeof drizzle<typeof schema>>;
-
-let pgliteInstance: PGlite | null = null;
-let dbInstance: FavbaseDb | null = null;
-let initPromise: Promise<FavbaseDb> | null = null;
+export type { FavbaseDb } from './db-types';
+export { initDbProxy } from './proxy-db';
 
 export async function initDbMain(): Promise<FavbaseDb> {
-  if (dbInstance) return dbInstance;
-  if (initPromise) return initPromise;
-
-  const handler = DatabaseRpcHandler.getInstance();
-  handler.startListening(DB_CHANNEL_NAME);
-
-  initPromise = (async () => {
+  return initializeDb(async () => {
+    const handler = DatabaseRpcHandler.getInstance();
+    handler.startListening(DB_CHANNEL_NAME);
     try {
       const pg = await PGlite.create(DB_DATA_DIR, {
         extensions: { vector, uuid_ossp, pg_trgm },
         relaxedDurability: false,
       });
-      pgliteInstance = pg;
+      setPGliteInstance(pg);
 
       await runMigrations(pg);
 
       handler.setPGlite(pg);
 
-      dbInstance = drizzle({ client: pg, schema });
-      return dbInstance;
+      return drizzle({ client: pg, schema });
     } catch (err) {
       await handler.stop();
       throw err;
     }
-  })();
-
-  return initPromise;
-}
-
-export async function initDbProxy(
-  ensureOffscreen?: () => Promise<void>,
-): Promise<FavbaseDb> {
-  if (dbInstance) return dbInstance;
-  if (initPromise) return initPromise;
-
-  initPromise = (async () => {
-    const transport = await createChromePortTransport({
-      channelName: DB_CHANNEL_NAME,
-      ensureOffscreen,
-    });
-
-    const proxy = new PGliteSharedProxy(transport);
-    await proxy.waitReady;
-
-    dbInstance = drizzle({ client: proxy as unknown as PGlite, schema });
-    return dbInstance;
-  })();
-
-  return initPromise;
-}
-
-export function getDb(): FavbaseDb {
-  if (!dbInstance) throw new Error('Database not initialized. Call initDbMain() or initDbProxy() first.');
-  return dbInstance;
+  });
 }
 
 export function getPGlite(): PGlite {
-  if (!pgliteInstance) throw new Error('PGlite not available (proxy mode or not initialized)');
-  return pgliteInstance;
+  return getPGliteInstance();
 }
 
 export async function closeDb(): Promise<void> {
-  if (pgliteInstance) {
+  if (hasPGliteInstance()) {
+    const pgliteInstance = getPGliteInstance();
     await DatabaseRpcHandler.getInstance().stop();
     await pgliteInstance.close();
-    pgliteInstance = null;
   }
-  dbInstance = null;
-  initPromise = null;
+  resetDbState();
 }
+
+export { getDb };

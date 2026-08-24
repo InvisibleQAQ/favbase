@@ -1,6 +1,6 @@
 import { and, eq, exists, inArray, sql } from 'drizzle-orm';
 import type { FavbaseDb } from '@/lib/database';
-import { schema } from '@/lib/database';
+import * as schema from '@/lib/database/schema';
 import { escapeLike } from '@/lib/database/sql-utils';
 import { createEmbeddingModel, embedText } from '@/lib/ai';
 import { semanticSearchChunks } from '@/lib/embedding/vector-store';

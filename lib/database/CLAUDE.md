@@ -8,7 +8,11 @@ RPC Proxy 架构（参考 memorall 3-hop PortBridge 模式）：Offscreen Docume
 - `entities/` — Per-table Drizzle schema 定义（entity-per-file）
 - `schema.ts` — 集中导出所有表定义（轻量，无 PGlite 运行时依赖）
 - `types.ts` — 仅 type 导出（Author/Item/Source 等 Select/Insert 类型）
-- `db.ts` — `initDbMain()`（Offscreen 端：用 strict durability 创建 PGlite + 跑迁移 + 启动 RPC handler）、`initDbProxy()`（调用端：创建 PGliteSharedProxy + Drizzle）、`getDb()`/`closeDb()`（等待 handler 回滚 active owner 后再关闭 PGlite）
+- `db.ts` — 兼容入口与 Offscreen 主实现：`initDbMain()` 用 strict durability 创建 PGlite、跑迁移并启动 RPC handler；继续转出旧有 `initDbProxy()`/`getDb()`/`closeDb()` 公共接口
+- `proxy-db.ts` — app/常规调用端的完整 PGlite Drizzle adapter：创建 `PGliteSharedProxy` + Drizzle；Background 禁止 value-import 此文件或 `db.ts`/`index.ts`
+- `proxy-client.ts` — main-agnostic RPC client construction：创建 transport/proxy 并等待 health ready，供普通与只读 Drizzle adapter 复用
+- `read-proxy-db.ts` — Agent Bridge Background 专用只读 Drizzle adapter，使用 `drizzle-orm/pg-proxy` 并兼容现有 raw `db.execute().rows` 形状；不支持事务，禁止给 app 写路径使用
+- `db-state.ts` / `db-types.ts` — main/proxy 共用的初始化状态与纯类型；状态只能在此持有，不得在两端复制
 - `bridges/` — RPC 桥接层
 - `migrations/` — 自定义迁移系统
 - `index.ts` — Public API barrel

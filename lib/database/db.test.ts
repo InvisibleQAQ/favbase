@@ -58,4 +58,26 @@ describe('initDbMain durability', () => {
     expect(mocks.stop).toHaveBeenCalledOnce();
     expect(pg.close).toHaveBeenCalledOnce();
   });
+
+  it('registers the RPC listener synchronously and deduplicates concurrent initialization', async () => {
+    let resolveCreate!: (pg: { close(): Promise<void> }) => void;
+    const pg = { close: vi.fn(async () => {}) };
+    mocks.create.mockReturnValue(new Promise((resolve) => {
+      resolveCreate = resolve;
+    }));
+    const { initDbMain, closeDb } = await import('./db');
+
+    const first = initDbMain();
+    const second = initDbMain();
+
+    expect(mocks.startListening).toHaveBeenCalledOnce();
+    expect(mocks.create).toHaveBeenCalledOnce();
+
+    resolveCreate(pg);
+    const [firstDb, secondDb] = await Promise.all([first, second]);
+    expect(firstDb).toBe(secondDb);
+    expect(mocks.runMigrations).toHaveBeenCalledOnce();
+
+    await closeDb();
+  });
 });

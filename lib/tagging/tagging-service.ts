@@ -11,6 +11,9 @@ import { itemTags } from '@/lib/database/entities/item-tags';
 import { getTaggingConfig, type ResolvedTaggingConfig } from './config';
 import { generateTags } from './tagger';
 import type { TaggingInput } from './prompt';
+import { getAllUsedTags, type UsedTag } from './tag-queries';
+
+export { getAllUsedTags, type UsedTag } from './tag-queries';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -19,10 +22,6 @@ import type { TaggingInput } from './prompt';
 export interface TagRef {
   id: string;
   name: string;
-}
-
-export interface UsedTag extends TagRef {
-  count: number;
 }
 
 export interface TaggedItem {
@@ -193,37 +192,6 @@ export async function tagPlatformBacklog(
 // ---------------------------------------------------------------------------
 // UI reads
 // ---------------------------------------------------------------------------
-
-/**
- * All tags linked to at least one item, most-used first. Orphan tags (all
- * links removed) are invisible here by construction — no cleanup job needed.
- * Optional `platform` restricts both the tag list and the counts to that
- * platform's items (page-scoped filter chips); omit for the whole library.
- */
-export async function getAllUsedTags(
-  platform?: string | readonly string[],
-  db: FavbaseDb = getDb(),
-): Promise<UsedTag[]> {
-  const platforms = typeof platform === 'string' ? [platform] : platform;
-  const platformCondition = platforms
-    ? platforms.length > 0
-      ? inArray(items.platform, [...platforms])
-      : sql<boolean>`false`
-    : undefined;
-  const rows = await db
-    .select({
-      id: tags.id,
-      name: tags.name,
-      count: sql<number>`count(${itemTags.itemId})::int`,
-    })
-    .from(tags)
-    .innerJoin(itemTags, eq(itemTags.tagId, tags.id))
-    .innerJoin(items, eq(items.id, itemTags.itemId))
-    .where(platformCondition)
-    .groupBy(tags.id, tags.name)
-    .orderBy(sql`count(${itemTags.itemId}) desc`, tags.name);
-  return rows;
-}
 
 /** Batch tag lookup for a page of cards: platformItemId → tags (name-sorted). */
 export async function getTagsForPlatformItems(

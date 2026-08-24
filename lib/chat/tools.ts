@@ -2,7 +2,7 @@ import { tool } from 'ai';
 import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import type { FavbaseDb } from '@/lib/database';
-import { schema } from '@/lib/database';
+import * as schema from '@/lib/database/schema';
 import { COLLECTION_PLATFORMS } from '@/lib/collections/platforms';
 import { hybridRetrieve } from './retrieval';
 
@@ -113,7 +113,7 @@ const listTags = tool({
   ),
   execute: async ({ platform }, { experimental_context }) => {
     const db = contextDb(experimental_context);
-    const { getAllUsedTags } = await import('@/lib/tagging');
+    const { getAllUsedTags } = await import('@/lib/tagging/tag-queries');
     const tags = await getAllUsedTags(platform, db);
     return {
       count: tags.length,

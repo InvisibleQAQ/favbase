@@ -59,6 +59,7 @@ export default defineConfig({
   manifest: {
     name: 'favbase',
     description: 'Turn your social media bookmarks into a searchable knowledge base',
+    minimum_chrome_version: '116',
     permissions: [
       'storage',
       'unlimitedStorage',

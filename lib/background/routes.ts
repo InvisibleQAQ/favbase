@@ -15,6 +15,7 @@ import {
 import { handleOpenAppPage } from './app-handlers';
 import { handleFetchBookmarkPage } from './bookmark-handlers';
 import { handleWebdavSyncNow, handleWebdavClearRemote } from './sync-handlers';
+import { handleAgentBridgeConnectNow } from './agent-bridge-handlers';
 
 export function routeBackgroundMessage(
   message: BgMessage,
@@ -43,6 +44,8 @@ export function routeBackgroundMessage(
       return handleOpenAppPage(message);
     case 'FETCH_BOOKMARK_PAGE':
       return handleFetchBookmarkPage(message);
+    case 'AGENT_BRIDGE_CONNECT_NOW':
+      return handleAgentBridgeConnectNow(message, ctx);
     case 'WEBDAV_SYNC_NOW':
       return handleWebdavSyncNow(message);
     case 'WEBDAV_CLEAR_REMOTE':

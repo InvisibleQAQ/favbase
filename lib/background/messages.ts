@@ -23,6 +23,10 @@ export interface FetchBookmarkPageRequest {
   url: string;
 }
 
+export interface AgentBridgeConnectNowRequest {
+  type: 'AGENT_BRIDGE_CONNECT_NOW';
+}
+
 export type BgClientMessage =
   | TranscribeRequest
   | TranscribeAbort
@@ -33,6 +37,7 @@ export type BgClientMessage =
   | GetSummaryCacheRequest
   | FetchBookmarkPageRequest
   | OpenAppPageRequest
+  | AgentBridgeConnectNowRequest
   | WebdavSyncNowRequest
   | WebdavClearRemoteRequest;
 
