@@ -8,6 +8,8 @@ Collection provider 阻塞统一使用 `configurationBlocker.*`。ASR 只在视�
 
 WebDAV Settings 拒绝使用结构化 `invalid-settings` / `incompatible-version`，对应 `settings.sync.err.*` 双语键；文案必须明确本地 Settings 未被覆盖或需要升级，raw validation detail 只作 debug，不进入翻译键。
 
+Agent Bridge 设置页使用 `settings.agentBridge.*`；连接状态只消费 `AgentBridgeStatus` 的稳定 state/error code，未知或 runtime 原始错误统一映射为可恢复的本地连接提示，不把 raw transport message 暴露给用户。Bridge Token 固定称为 `Bridge Token`，不得写成 API key/provider key。
+
 ## 平台命名
 
 - Analytics 一级导航在中英文环境都显示为 `Analytics`；只改 `nav.dashboard` 的文案值，稳定键和 `/` 路由保持不变。

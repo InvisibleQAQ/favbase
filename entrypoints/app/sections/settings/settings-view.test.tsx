@@ -38,10 +38,41 @@ vi.mock('../../layouts/dashboard', () => ({
   DashboardContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 vi.mock('./settings-tabs', () => ({
-  SettingsTabs: () => null,
+  SettingsTabs: ({
+    onChange,
+    tabs,
+  }: {
+    onChange: (value: string) => void;
+    tabs: Array<{ value: string }>;
+  }) => (
+    <div>
+      {tabs.map((tab) => (
+        <button key={tab.value} type="button" onClick={() => onChange(tab.value)}>
+          {tab.value}
+        </button>
+      ))}
+    </div>
+  ),
 }));
 vi.mock('./section-rail', () => ({
-  SectionRail: ({ value }: { value: string }) => <div data-testid="rail-value">{value}</div>,
+  SectionRail: ({
+    value,
+    onChange,
+    items,
+  }: {
+    value: string;
+    onChange: (value: string) => void;
+    items: Array<{ value: string }>;
+  }) => (
+    <div>
+      <div data-testid="rail-value">{value}</div>
+      {items.map((item) => (
+        <button key={item.value} type="button" onClick={() => onChange(item.value)}>
+          {item.value}
+        </button>
+      ))}
+    </div>
+  ),
 }));
 vi.mock('./llm-config-card', () => ({
   LlmConfigCard: (props: { saveLlm: (draft: unknown) => Promise<void> }) => {
@@ -60,6 +91,9 @@ vi.mock('./embedding/embedding-config-card', () => ({
 }));
 vi.mock('./github-connection-card', () => ({ GithubConnectionCard: () => null }));
 vi.mock('./youtube-connection-card', () => ({ YoutubeConnectionCard: () => null }));
+vi.mock('./agent-bridge-card', () => ({
+  AgentBridgeCard: () => <div data-testid="agent-bridge-card" />,
+}));
 vi.mock('../overview/export-card', () => ({ ExportCard: () => null }));
 vi.mock('./webdav-sync-card', () => ({ WebdavSyncCard: () => null }));
 
@@ -176,5 +210,28 @@ describe('SettingsView deep links', () => {
 
     expect(settingsState.saveLlm).toHaveBeenCalledOnce();
     expect(resumeCollectionProcessing).not.toHaveBeenCalled();
+  });
+
+  it('renders Agent Bridge from the Connections section rail', () => {
+    act(() => {
+      root.render(
+        <MemoryRouter initialEntries={['/settings']}>
+          <SettingsView />
+        </MemoryRouter>,
+      );
+    });
+
+    const connections = [...container.querySelectorAll('button')]
+      .find((button) => button.textContent === 'connections');
+    if (!(connections instanceof HTMLButtonElement)) throw new Error('Connections tab not found');
+    act(() => connections.click());
+
+    const agentBridge = [...container.querySelectorAll('button')]
+      .find((button) => button.textContent === 'agent-bridge');
+    if (!(agentBridge instanceof HTMLButtonElement)) throw new Error('Agent Bridge rail item not found');
+    act(() => agentBridge.click());
+
+    expect(container.querySelector('[data-testid="rail-value"]')?.textContent).toBe('agent-bridge');
+    expect(container.querySelector('[data-testid="agent-bridge-card"]')).not.toBeNull();
   });
 });

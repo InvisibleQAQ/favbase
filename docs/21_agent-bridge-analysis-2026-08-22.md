@@ -1,6 +1,6 @@
 # Agent Bridge：让 Claude Code / Codex 等外部 agent 检索 favbase 数据 —— 分析、决策、设计与路线（2026-08-22）
 
-> 状态：**Phase 0 Spike、Phase 1 协议 + 工具注册、Phase 2 Node MCP 包与 Phase 3 扩展 SW 侧已于 2026-08-24 完成；Phase 4+ 未开工**。当前 Trellis 任务 `08-23-feat-agent-bridge-mcp-skill-phase-1-6`。
+> 状态：**Phase 0 Spike、Phase 1 协议 + 工具注册、Phase 2 Node MCP 包、Phase 3 扩展 SW 侧与 Phase 4 设置 UI 已于 2026-08-24 完成；Phase 5+ 未开工**。Phase 4 Trellis 任务 `08-24-agent-bridge-settings-ui`。
 > 已决（用户逐题确认）：Q1–Q10，见第 4 节。
 > 术语已入 `CONTEXT.md`（Agent Bridge / Knowledge Tool / Bridge Token）；架构决策见 `docs/adr/0002-agent-bridge-extension-outbound-websocket.md`。
 > 事实来源：本仓库源码逐条核对（file:line）、Chrome 官方文档、GitHub 参考项目源码与 issue（`gh api` + deepwiki）。未核实的点一律标 `[UNKNOWN]`。
@@ -68,7 +68,7 @@
 ### 3.4 Agent 侧事实
 
 - Claude Code：`claude mcp add [--transport stdio|http|sse] <name> [-e KEY=VAL] -- <cmd>`；scope user（`~/.claude.json`）/ project（`.mcp.json`，需审批）；工具名 `mcp__<server>__<tool>`；大服务器有 tool search / 延迟加载；Plugin 可把 `.mcp.json` + `skills/` 打成一个安装单元（仅 Claude Code）。
-- Codex CLI：`config.toml [mcp_servers.*]` / `codex mcp add`，stdio + HTTP；Skills 走 agentskills.io 标准。`[UNKNOWN]` env 透传的确切 CLI 语法，发布前实测。
+- Codex CLI：`config.toml [mcp_servers.*]` / `codex mcp add`，stdio + HTTP；Skills 走 agentskills.io 标准。2026-08-24 已用官方 OpenAI 配置文档与本机 `codex mcp add --help` 验证 stdio env 语法为 `--env KEY=VALUE`。
 - Cursor / Gemini CLI / OpenCode：均支持 MCP；Cursor、Gemini CLI 支持 agentskills.io Skill。
 - Agent Skills 标准（agentskills.io，2025-12 发布）：`SKILL.md` YAML frontmatter（`name`/`description`，可选 `allowed-tools`）+ Markdown 正文；一份跨 40+ 产品。
 
@@ -182,8 +182,9 @@ Envelope：`{ channel: 'favbase-agent-bridge', protocolVersion: 1, id: string, t
 ### 6.6 用户安装流程（目标体验）
 
 1. 设置 → Connections → Agent Bridge：打开开关，看到端口与 token，点"复制 Claude Code 命令"：
-   `claude mcp add favbase -e FAVBASE_TOKEN=<token> -- npx -y favbase-mcp`
-   或"复制 Codex 命令"（语法待实测）。
+   `claude mcp add favbase -e FAVBASE_TOKEN=<token> -e FAVBASE_BRIDGE_PORT=<port> -- npx -y favbase-mcp`
+   或"复制 Codex 命令"：
+   `codex mcp add favbase --env FAVBASE_TOKEN=<token> --env FAVBASE_BRIDGE_PORT=<port> -- npx -y favbase-mcp`。
 2. 终端粘贴执行。
 3. 打开 Claude Code，提问；最坏 30s 内扩展连上；工具 `mcp__favbase__searchKnowledgeBase` 等出现。
 4. （可选）`npx skills add InvisibleQAQ/favbase` 装 Skill。
@@ -196,9 +197,9 @@ Envelope：`{ channel: 'favbase-agent-bridge', protocolVersion: 1, id: string, t
 | **1 协议 + 工具注册**（TDD，已完成） | `lib/agent-bridge/protocol.ts`、`tool-registry.ts` + contract test、import-smoke 清单、默认端口 `17836` | `describeTools()` 恰好 3 个且为 JSON Schema Draft 2020-12；`callTool` 以稳定错误码拒绝未知工具/非法参数；两模块无 `chrome` 全局可导入 | 低 |
 | **2 Node 包**（已完成） | workspace `packages:`、根 tsconfig `exclude: ["packages"]`、根 `compile` 串 `pnpm -r compile`、vitest node 环境；MCP server + bridge server + 认证 + `EADDRINUSE` + 有界等待；用假扩展（ws client）做集成测试 | `tools/list` 在 hello 前返回空并写 stderr 提示；hello 后动态工具表/调用往返；bad-token 拒绝；非 `/bridge` / 非扩展 Origin upgrade 拒绝；第二实例退出码 1；根全量 1155 + Node 7 测试通过 | MCP SDK 精确锁定 `1.29.0`；tsup 已实证把 `../../lib` protocol leaf 打入 17.98 KB CLI，无未解析仓库相对 import |
 | **3 扩展 SW 侧**（已完成） | storage key + defaults、scheduler、client（`BridgeTransport` 接口）、background.ts 接线、`AGENT_BRIDGE_CONNECT_NOW` 消息（schema/route/contract test）、`minimum_chrome_version` | 假 WebSocket 单测覆盖 hello/welcome/call/ping/close/退避；开关关→零 alarm；生产 background bundle 不含 PGlite 主实现 | SW 生命周期仍只能实机验证 |
-| **4 设置 UI** | `agent-bridge-card.tsx` + i18n + 复制命令 + 状态 | CJK 守卫、settings-view 测试 | 低 |
+| **4 设置 UI**（已完成） | `agent-bridge-card.tsx` + i18n + 复制命令 + 状态订阅；app.html 打开与配置变更即时请求连接 | CJK 守卫、card/settings-view/App 测试；Codex `--env` 已验证 | 低 |
 | **5 Skill + 文档** | `skills/favbase/SKILL.md`、README 安装段、`lib/agent-bridge/CLAUDE.md`、`packages/favbase-mcp/CLAUDE.md`、设置页 CLAUDE.md、根 CLAUDE.md 索引、`.env.example` 变量 | 文档即代码 | 低 |
-| **6 E2E + 发布** | Windows 实机：Claude Code 与 Codex 各走一遍；`pnpm compile` → `test` → `zip`；npm publish `favbase-mcp`；扩展 `version` 递增 | 验收：agent 调 `searchKnowledgeBase` 与 Chat 同查询同结果集；扩展未连接时可读错误而非挂起 | Codex env 语法；npm 首发 |
+| **6 E2E + 发布** | Windows 实机：Claude Code 与 Codex 各走一遍；`pnpm compile` → `test` → `zip`；npm publish `favbase-mcp`；扩展 `version` 递增 | 验收：agent 调 `searchKnowledgeBase` 与 Chat 同查询同结果集；扩展未连接时可读错误而非挂起 | Windows 端到端；npm 首发 |
 
 ### v2 backlog（不进本任务）
 - B' daemon 拆分（多 agent 并发）
@@ -240,7 +241,7 @@ Envelope：`{ channel: 'favbase-agent-bridge', protocolVersion: 1, id: string, t
 |---|---|---|
 | 30s 轮询对电量/性能影响 | `[UNKNOWN]` | 只在开关开启时轮询；Phase 6 观察 |
 | `pnpm compile`/`vitest` 与 workspace 共存 | **已解决**：根配置排除 packages，脚本再以 `pnpm -r` 执行包内 Node 配置 | Phase 2 根 `compile`、1155 + 7 测试通过 |
-| Codex `mcp add` env 透传语法 | `[UNKNOWN]` | Phase 6 实测 |
+| Codex `mcp add` env 透传语法 | **已解决**：`--env KEY=VALUE`（可重复） | 官方 OpenAI 配置文档 + 本机 CLI help；Phase 6 仍做端到端验证 |
 | `npx skills add` 命令最终形态 | `[UNKNOWN]` | Phase 5 查 agentskills.io |
 | Claude Code 对超大 tool result 的截断 | `[UNKNOWN]` | Phase 6 用长正文实测 |
 | 默认端口值 | **已解决**：`17836` | 扩展共享协议与 Node bundle 同源于 `protocol.ts` 常量 |

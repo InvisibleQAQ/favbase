@@ -26,6 +26,7 @@ import { AsrConfigCard } from './asr-config-card';
 import { EmbeddingConfigCard } from './embedding/embedding-config-card';
 import { GithubConnectionCard } from './github-connection-card';
 import { YoutubeConnectionCard } from './youtube-connection-card';
+import { AgentBridgeCard } from './agent-bridge-card';
 import { ExportCard } from '../overview/export-card';
 import { WebdavSyncCard } from './webdav-sync-card';
 import { SettingsTabs, type SettingsTabItem } from './settings-tabs';
@@ -33,7 +34,7 @@ import { SectionRail, type SectionRailItem } from './section-rail';
 
 type SettingsTab = 'ai' | 'connections' | 'general' | 'storage';
 type AiSection = 'llm' | 'asr' | 'embedding';
-type ConnSection = 'github' | 'youtube';
+type ConnSection = 'github' | 'youtube' | 'agent-bridge';
 type StorageSection = 'export' | 'webdav';
 
 function parseAiSection(value: string | null): AiSection {
@@ -96,6 +97,11 @@ export function SettingsView() {
   const connNavItems: SectionRailItem<ConnSection>[] = [
     { value: 'github', label: t('settings.github.title'), icon: 'mdi:github' },
     { value: 'youtube', label: t('settings.youtube.title'), icon: 'mdi:youtube' },
+    {
+      value: 'agent-bridge',
+      label: t('settings.agentBridge.title'),
+      icon: 'solar:code-bold-duotone',
+    },
   ];
 
   const generalNavItems: SectionRailItem<'language'>[] = [
@@ -135,6 +141,7 @@ export function SettingsView() {
           {connSection === 'youtube' && (
             <YoutubeConnectionCard settings={s.settings} saveYoutube={s.saveYoutube} />
           )}
+          {connSection === 'agent-bridge' && <AgentBridgeCard />}
         </RailLayout>
       )}
 
