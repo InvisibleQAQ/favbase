@@ -1,6 +1,6 @@
 # Agent Bridge：让 Claude Code / Codex 等外部 agent 检索 favbase 数据 —— 分析、决策、设计与路线（2026-08-22）
 
-> 状态：**Phase 0 Spike 已完成，结论 GO；Phase 1 协议 + 工具注册已于 2026-08-24 完成；Phase 2+ 未开工**。当前 Trellis 任务 `08-23-feat-agent-bridge-mcp-skill-phase-1-6`。
+> 状态：**Phase 0 Spike 已完成，结论 GO；Phase 1 协议 + 工具注册与 Phase 2 Node MCP 包已于 2026-08-24 完成；Phase 3+ 未开工**。当前 Trellis 任务 `08-23-feat-agent-bridge-mcp-skill-phase-1-6`。
 > 已决（用户逐题确认）：Q1–Q10，见第 4 节。
 > 术语已入 `CONTEXT.md`（Agent Bridge / Knowledge Tool / Bridge Token）；架构决策见 `docs/adr/0002-agent-bridge-extension-outbound-websocket.md`。
 > 事实来源：本仓库源码逐条核对（file:line）、Chrome 官方文档、GitHub 参考项目源码与 issue（`gh api` + deepwiki）。未核实的点一律标 `[UNKNOWN]`。
@@ -35,7 +35,7 @@
 - **协议约定**：每个 runtime 边界一套 zod schema map + `encode/decode` + contract test（`lib/background/message-protocol.ts`、`lib/offscreen/protocol.ts`），envelope 带可选 `channel`/`protocolVersion`，未知 type/非法 payload 静默拒绝。新桥协议照此模板，独立成套。
 - **导出**：JSON/CSV/Obsidian 均为 app.html 内一次性 `<a download>`（`lib/export/download.ts`），embedding 默认不导；无 `downloads` 权限、无 File System Access。
 - **`lib/events` 只在 app.html 单 context**，跨 context 转发未实现。
-- **工程**：`pnpm-workspace.yaml` 存在但只有 `allowBuilds`，未声明 `packages`；`.wxt/tsconfig.json` `include: ["../**/*"]`（根 `pnpm compile` 会编译仓库内所有 `.ts`，类型环境是 chrome、无 `@types/node`）；根 `vitest.config.ts` 无 `include` 限制、环境 `happy-dom`；`wxt zip` 只打包 `.output/`。依赖中无 `ws`、`@modelcontextprotocol/sdk`、`@types/node`。npm 包名 `favbase-mcp` 与 `@favbase/mcp` 均未被占用（2026-08-22 `npm view` 404）。仓库 `REPO_URL = https://github.com/InvisibleQAQ/favbase`（`lib/repo.ts:6`）。
+- **工程**：`pnpm-workspace.yaml` 已纳入 `packages/*`；根 tsconfig 排除 `packages`，根 Vitest 排除 `packages/**` 后由 `pnpm -r` 分别运行包内 Node 配置。`packages/favbase-mcp` 精确锁定 MCP SDK `1.29.0`，以 tsup 打包相对 import 的共享 protocol leaf；`pnpm pack --dry-run` 只含 `dist/`、`LICENSE`、`package.json`。`wxt zip` 仍只打包 `.output/`。npm 包名 `favbase-mcp` 与 `@favbase/mcp` 均未被占用（2026-08-22 `npm view` 404）。仓库 `REPO_URL = https://github.com/InvisibleQAQ/favbase`（`lib/repo.ts:6`）。
 - **设置页**：Connections tab 已有 `webdav-sync-card.tsx`、`github-connection-card.tsx`、`youtube-connection-card.tsx`（`entrypoints/app/sections/settings/`），新卡片照此模式。
 - **文档**：`CONTEXT.md` 有 Chat 只读铁律（表级边界，ADR 0001）；ADR 0002 已由本任务占用；`docs/` 编号 21（本文）。
 
@@ -194,7 +194,7 @@ Envelope：`{ channel: 'favbase-agent-bridge', protocolVersion: 1, id: string, t
 |---|---|---|---|
 | **0 Spike**（已完成，**GO**） | (a) SW 内 `ensureOffscreen()` → `initDbProxy()` → 跑一次 `hybridRetrieve`；(b) SW 出站 `new WebSocket('ws://127.0.0.1:<port>')` + 对端 20s ping，观察 SW 存活 >5min；(c) 是否需要 host permission；(d) `z.toJSONSchema` + `execute` 调用路径 | `spikes/agent-bridge/` + 第 9 节实测记录；四项均通过 | Windows Chrome 149 实测；未外推 Firefox |
 | **1 协议 + 工具注册**（TDD，已完成） | `lib/agent-bridge/protocol.ts`、`tool-registry.ts` + contract test、import-smoke 清单、默认端口 `17836` | `describeTools()` 恰好 3 个且为 JSON Schema Draft 2020-12；`callTool` 以稳定错误码拒绝未知工具/非法参数；两模块无 `chrome` 全局可导入 | 低 |
-| **2 Node 包** | workspace `packages:`、根 tsconfig `exclude: ["packages"]`、根 `compile` 串 `pnpm -r compile`、vitest node 环境；MCP server + bridge server + 认证 + `EADDRINUSE` + 有界等待；用假扩展（ws client）做集成测试 | `tools/list` 在 hello 前返回空并报错提示；bad-token 拒绝；第二实例退出码 1 | `@modelcontextprotocol/sdk` 版本锁定；tsup 对 `../../lib` 的相对打包 |
+| **2 Node 包**（已完成） | workspace `packages:`、根 tsconfig `exclude: ["packages"]`、根 `compile` 串 `pnpm -r compile`、vitest node 环境；MCP server + bridge server + 认证 + `EADDRINUSE` + 有界等待；用假扩展（ws client）做集成测试 | `tools/list` 在 hello 前返回空并写 stderr 提示；hello 后动态工具表/调用往返；bad-token 拒绝；非 `/bridge` / 非扩展 Origin upgrade 拒绝；第二实例退出码 1；根全量 1155 + Node 7 测试通过 | MCP SDK 精确锁定 `1.29.0`；tsup 已实证把 `../../lib` protocol leaf 打入 17.98 KB CLI，无未解析仓库相对 import |
 | **3 扩展 SW 侧** | storage key + defaults、scheduler、client（`BridgeTransport` 接口）、background.ts 接线、`AGENT_BRIDGE_CONNECT_NOW` 消息（schema/route/contract test）、`minimum_chrome_version` | 假 WebSocket 单测：hello/welcome/call/ping/close/退避；开关关→零 alarm | SW 生命周期只能实机验证 |
 | **4 设置 UI** | `agent-bridge-card.tsx` + i18n + 复制命令 + 状态 | CJK 守卫、settings-view 测试 | 低 |
 | **5 Skill + 文档** | `skills/favbase/SKILL.md`、README 安装段、`lib/agent-bridge/CLAUDE.md`、`packages/favbase-mcp/CLAUDE.md`、设置页 CLAUDE.md、根 CLAUDE.md 索引、`.env.example` 变量 | 文档即代码 | 低 |
@@ -239,11 +239,11 @@ Envelope：`{ channel: 'favbase-agent-bridge', protocolVersion: 1, id: string, t
 | 项 | 状态 | 解法 |
 |---|---|---|
 | 30s 轮询对电量/性能影响 | `[UNKNOWN]` | 只在开关开启时轮询；Phase 6 观察 |
-| `pnpm compile`/`vitest` 与 workspace 共存 | 约束已查明（tsconfig include、vitest 无 include） | Phase 2 按 6.2 处理 |
+| `pnpm compile`/`vitest` 与 workspace 共存 | **已解决**：根配置排除 packages，脚本再以 `pnpm -r` 执行包内 Node 配置 | Phase 2 根 `compile`、1155 + 7 测试通过 |
 | Codex `mcp add` env 透传语法 | `[UNKNOWN]` | Phase 6 实测 |
 | `npx skills add` 命令最终形态 | `[UNKNOWN]` | Phase 5 查 agentskills.io |
 | Claude Code 对超大 tool result 的截断 | `[UNKNOWN]` | Phase 6 用长正文实测 |
-| 默认端口值 | 未定 | Phase 1 定一个不常用端口，扩展与包同源于 `protocol.ts` 常量 |
+| 默认端口值 | **已解决**：`17836` | 扩展共享协议与 Node bundle 同源于 `protocol.ts` 常量 |
 | 主工作区 `main` 同时有别的会话在改（CLAUDE.md 中-6） | 已知 | 本任务只在 worktree 改，合并时 rebase |
 
 ## 10. 参考

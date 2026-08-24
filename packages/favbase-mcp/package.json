@@ -1,0 +1,39 @@
+{
+  "name": "favbase-mcp",
+  "version": "0.1.0",
+  "description": "Local MCP bridge for the favbase browser extension",
+  "license": "GPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/InvisibleQAQ/favbase.git",
+    "directory": "packages/favbase-mcp"
+  },
+  "type": "module",
+  "bin": {
+    "favbase-mcp": "dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "compile": "tsc --noEmit",
+    "prepack": "pnpm run build",
+    "test": "pnpm run build && vitest run"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "ws": "8.18.3",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "@types/ws": "8.18.1",
+    "tsup": "8.5.0",
+    "typescript": "5.9.3",
+    "vitest": "4.1.9"
+  }
+}

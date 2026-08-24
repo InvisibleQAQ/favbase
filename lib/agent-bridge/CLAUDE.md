@@ -1,14 +1,15 @@
 # Agent Bridge
 
-Phase 1 owns the transport-neutral wire contract and the adapter to Chat's
-read-only Knowledge Tools. Transport, scheduling, storage, settings UI, and the
-Node MCP package are implemented in later phases.
+This directory owns the transport-neutral wire contract and the adapter to
+Chat's read-only Knowledge Tools. The Node MCP package consumes the protocol
+leaf; extension scheduling, storage, settings UI, and the production WebSocket
+client remain later phases.
 
 ## Modules
 
 - `protocol.ts` — strict `favbase-agent-bridge` v1 envelope, all seven message
   payload schemas, shared error codes, and `DEFAULT_AGENT_BRIDGE_PORT` (`17836`).
-  This is a leaf shared with the future Node package and may depend only on Zod.
+  This is a leaf bundled by `packages/favbase-mcp` and may depend only on Zod.
 - `tool-registry.ts` — derives MCP-compatible tool descriptors from `chatTools`
   and validates every call with the owning Zod schema before execution. Tool
   names, descriptions, and schemas must never be copied here.
@@ -21,6 +22,8 @@ Node MCP package are implemented in later phases.
   Tool execution failures remain untouched for the transport layer to map.
 - Both production modules are enrolled in `tests/lib-import-smoke.test.ts` and
   must load without a `chrome` global or mocks.
+- The Node package imports `protocol.ts` through the reviewed relative path and
+  must never import `tool-registry.ts`; Knowledge Tool facts stay extension-owned.
 
 ## Tests
 
