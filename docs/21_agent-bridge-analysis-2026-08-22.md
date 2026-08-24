@@ -1,6 +1,6 @@
 # Agent Bridge：让 Claude Code / Codex 等外部 agent 检索 favbase 数据 —— 分析、决策、设计与路线（2026-08-22）
 
-> 状态：**Phase 0 Spike 已完成，结论 GO；Phase 1+ 未开工**。Trellis 任务 `08-22-feat-agent-bridge-mcp-skill-for-external-agents-to-search-favbase-data`，分支 `feat/agent-bridge`，worktree `C:/tmp/favbase-agent-bridge`。
+> 状态：**Phase 0 Spike 已完成，结论 GO；Phase 1 协议 + 工具注册已于 2026-08-24 完成；Phase 2+ 未开工**。当前 Trellis 任务 `08-23-feat-agent-bridge-mcp-skill-phase-1-6`。
 > 已决（用户逐题确认）：Q1–Q10，见第 4 节。
 > 术语已入 `CONTEXT.md`（Agent Bridge / Knowledge Tool / Bridge Token）；架构决策见 `docs/adr/0002-agent-bridge-extension-outbound-websocket.md`。
 > 事实来源：本仓库源码逐条核对（file:line）、Chrome 官方文档、GitHub 参考项目源码与 issue（`gh api` + deepwiki）。未核实的点一律标 `[UNKNOWN]`。
@@ -193,7 +193,7 @@ Envelope：`{ channel: 'favbase-agent-bridge', protocolVersion: 1, id: string, t
 | Phase | 内容 | 产出 / 验收 | 风险 |
 |---|---|---|---|
 | **0 Spike**（已完成，**GO**） | (a) SW 内 `ensureOffscreen()` → `initDbProxy()` → 跑一次 `hybridRetrieve`；(b) SW 出站 `new WebSocket('ws://127.0.0.1:<port>')` + 对端 20s ping，观察 SW 存活 >5min；(c) 是否需要 host permission；(d) `z.toJSONSchema` + `execute` 调用路径 | `spikes/agent-bridge/` + 第 9 节实测记录；四项均通过 | Windows Chrome 149 实测；未外推 Firefox |
-| **1 协议 + 工具注册**（TDD） | `lib/agent-bridge/protocol.ts`、`tool-registry.ts` + contract test、import-smoke 清单、默认端口常量 | `describeTools()` 恰好 3 个、schema 合法；`callTool` 非法参数拒绝；leaf 零 chrome | 低 |
+| **1 协议 + 工具注册**（TDD，已完成） | `lib/agent-bridge/protocol.ts`、`tool-registry.ts` + contract test、import-smoke 清单、默认端口 `17836` | `describeTools()` 恰好 3 个且为 JSON Schema Draft 2020-12；`callTool` 以稳定错误码拒绝未知工具/非法参数；两模块无 `chrome` 全局可导入 | 低 |
 | **2 Node 包** | workspace `packages:`、根 tsconfig `exclude: ["packages"]`、根 `compile` 串 `pnpm -r compile`、vitest node 环境；MCP server + bridge server + 认证 + `EADDRINUSE` + 有界等待；用假扩展（ws client）做集成测试 | `tools/list` 在 hello 前返回空并报错提示；bad-token 拒绝；第二实例退出码 1 | `@modelcontextprotocol/sdk` 版本锁定；tsup 对 `../../lib` 的相对打包 |
 | **3 扩展 SW 侧** | storage key + defaults、scheduler、client（`BridgeTransport` 接口）、background.ts 接线、`AGENT_BRIDGE_CONNECT_NOW` 消息（schema/route/contract test）、`minimum_chrome_version` | 假 WebSocket 单测：hello/welcome/call/ping/close/退避；开关关→零 alarm | SW 生命周期只能实机验证 |
 | **4 设置 UI** | `agent-bridge-card.tsx` + i18n + 复制命令 + 状态 | CJK 守卫、settings-view 测试 | 低 |

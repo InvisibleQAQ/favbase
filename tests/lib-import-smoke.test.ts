@@ -12,6 +12,8 @@
  *
  * Rules this contract replaces (previously held by comments + defensive
  * `vi.mock('@/lib/storage')` in pure decoder tests):
+ *   - Agent Bridge protocol and tool registry load without Chrome; Chat's
+ *     `listTags` loads the tagging facade only when the tool executes.
  *   - lib-layer platform sync-services import `@/lib/embedding/<leaf>`, never
  *     the `@/lib/embedding` barrel, and never `@/lib/storage`/`@/lib/tagging`.
  *   - the shared ingest pipeline, database entry, chunkers and the platform
@@ -48,6 +50,8 @@ function platformSyncServiceModule(platform: string): string {
 }
 
 const PURE_ENTRIES: readonly string[] = [
+  '@/lib/agent-bridge/protocol',
+  '@/lib/agent-bridge/tool-registry',
   '@/lib/bilibili/transcribe-utils',
   '@/lib/embedding/chunker',
   '@/lib/embedding/char-split',

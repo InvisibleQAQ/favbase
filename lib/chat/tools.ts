@@ -4,7 +4,6 @@ import { eq } from 'drizzle-orm';
 import type { FavbaseDb } from '@/lib/database';
 import { schema } from '@/lib/database';
 import { COLLECTION_PLATFORMS } from '@/lib/collections/platforms';
-import { getAllUsedTags } from '@/lib/tagging';
 import { hybridRetrieve } from './retrieval';
 
 const { itemContents } = schema;
@@ -114,6 +113,7 @@ const listTags = tool({
   ),
   execute: async ({ platform }, { experimental_context }) => {
     const db = contextDb(experimental_context);
+    const { getAllUsedTags } = await import('@/lib/tagging');
     const tags = await getAllUsedTags(platform, db);
     return {
       count: tags.length,
