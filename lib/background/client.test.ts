@@ -54,19 +54,32 @@ describe('Background typed client', () => {
     }));
   });
 
-  it('encodes the Agent Bridge immediate-connect command with a void response', async () => {
-    const sendMessage = vi.fn().mockResolvedValue(undefined);
+  it('validates the Agent Bridge immediate-connect acknowledgement', async () => {
+    const sendMessage = vi.fn().mockResolvedValue({ success: true });
     vi.stubGlobal('browser', { runtime: { sendMessage } });
 
     await expect(sendBackgroundMessage({
       type: 'AGENT_BRIDGE_CONNECT_NOW',
-    })).resolves.toBeUndefined();
+    })).resolves.toEqual({ success: true });
     expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
       type: 'AGENT_BRIDGE_CONNECT_NOW',
       channel: 'favbase-background',
       protocolVersion: 1,
     }));
   });
+
+  it.each([undefined, null, {}, { success: false }])(
+    'rejects an invalid Agent Bridge acknowledgement represented as %s',
+    async (response) => {
+      vi.stubGlobal('browser', {
+        runtime: { sendMessage: vi.fn().mockResolvedValue(response) },
+      });
+
+      await expect(sendBackgroundMessage({
+        type: 'AGENT_BRIDGE_CONNECT_NOW',
+      })).rejects.toBeInstanceOf(BackgroundProtocolError);
+    },
+  );
 
   it('ignores malformed push messages before subscriber callbacks', () => {
     const addListener = vi.fn();

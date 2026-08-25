@@ -21,7 +21,10 @@ vi.mock('./sync-handlers', () => ({
   handleWebdavClearRemote: vi.fn(),
 }));
 vi.mock('./agent-bridge-handlers', () => ({
-  handleAgentBridgeConnectNow: vi.fn((_message, ctx) => ctx.connectAgentBridge()),
+  handleAgentBridgeConnectNow: vi.fn(async (_message, ctx) => {
+    await ctx.connectAgentBridge();
+    return { success: true };
+  }),
 }));
 
 import { handleAgentBridgeConnectNow } from './agent-bridge-handlers';
@@ -34,8 +37,9 @@ describe('Background message routes', () => {
     const ctx = { connectAgentBridge } as unknown as BackgroundContext;
     const message = { type: 'AGENT_BRIDGE_CONNECT_NOW' } as const;
 
-    await routeBackgroundMessage(message, { id: 'extension-id' }, ctx);
+    const response = await routeBackgroundMessage(message, { id: 'extension-id' }, ctx);
 
+    expect(response).toEqual({ success: true });
     expect(handleAgentBridgeConnectNow).toHaveBeenCalledWith(message, ctx);
     expect(connectAgentBridge).toHaveBeenCalledOnce();
   });
