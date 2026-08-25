@@ -55,80 +55,83 @@ function createBackgroundContext(connectAgentBridge: () => Promise<void>): Backg
   };
 }
 
-export default defineBackground(() => {
-  initPortBridge(DB_CHANNEL_NAME, ensureOffscreen);
+export default defineBackground({
+  type: 'module',
+  main() {
+    initPortBridge(DB_CHANNEL_NAME, ensureOffscreen);
 
-  const agentBridgeClient = new AgentBridgeClient({
-    getDb: () => initReadDbProxy(ensureOffscreen),
-  });
-  const agentBridgeScheduler = initAgentBridgeScheduler(agentBridgeClient);
+    const agentBridgeClient = new AgentBridgeClient({
+      getDb: () => initReadDbProxy(ensureOffscreen),
+    });
+    const agentBridgeScheduler = initAgentBridgeScheduler(agentBridgeClient);
 
-  initCacheStorageListener();
+    initCacheStorageListener();
 
-  // WebDAV sync scheduler: alarms + settings/locale watch + startup catch-up.
-  // Registers its listeners synchronously so the SW can be woken by them.
-  initWebdavSyncScheduler();
+    // WebDAV sync scheduler: alarms + settings/locale watch + startup catch-up.
+    // Registers its listeners synchronously so the SW can be woken by them.
+    initWebdavSyncScheduler();
 
-  // Jobs-badge janitor: app.html writes the badge, the SW wipes it once the
-  // last app tab is gone (badge text would otherwise outlive the jobs).
-  initJobsBadgeJanitor();
+    // Jobs-badge janitor: app.html writes the badge, the SW wipes it once the
+    // last app tab is gone (badge text would otherwise outlive the jobs).
+    initJobsBadgeJanitor();
 
-  // Capture X (Twitter) auth headers from the logged-in web client's own
-  // requests (observational webRequest — returns nothing). x-api.ts replays
-  // them verbatim to read bookmarks; see lib/x/x-auth.ts. host_permission for
-  // x.com is required for the headers to be visible.
-  browser.webRequest.onBeforeSendHeaders.addListener(
-    (details) => {
-      captureXTokens(details)
-        .then((captured) => {
-          // One log per (deduped) token set — diagnoses "no-token" sync errors:
-          // if this never appears, the capture chain itself is broken.
-          if (captured) console.log('[favbase x-auth] captured X session headers');
-        })
-        .catch((err) => console.warn('[favbase x-auth] token capture failed:', err));
-      return undefined;
-    },
-    { urls: ['*://x.com/*'] },
-    ['requestHeaders', 'extraHeaders'],
-  );
-
-  const ctx = createBackgroundContext(agentBridgeScheduler.connectNow);
-
-  browser.runtime.onMessage.addListener(
-    (msg: unknown, sender) => dispatchBackgroundMessage(msg, sender, ctx, routeBackgroundMessage),
-  );
-
-  chrome.runtime.onInstalled.addListener((details) => {
-    ensureOffscreen().catch((err) =>
-      console.error('[background] onInstalled: ensureOffscreen failed', err),
+    // Capture X (Twitter) auth headers from the logged-in web client's own
+    // requests (observational webRequest — returns nothing). x-api.ts replays
+    // them verbatim to read bookmarks; see lib/x/x-auth.ts. host_permission for
+    // x.com is required for the headers to be visible.
+    browser.webRequest.onBeforeSendHeaders.addListener(
+      (details) => {
+        captureXTokens(details)
+          .then((captured) => {
+            // One log per (deduped) token set — diagnoses "no-token" sync errors:
+            // if this never appears, the capture chain itself is broken.
+            if (captured) console.log('[favbase x-auth] captured X session headers');
+          })
+          .catch((err) => console.warn('[favbase x-auth] token capture failed:', err));
+        return undefined;
+      },
+      { urls: ['*://x.com/*'] },
+      ['requestHeaders', 'extraHeaders'],
     );
-    runStorageMigrations().catch((err) =>
-      console.error('[background] onInstalled: storage migration failed', err),
+
+    const ctx = createBackgroundContext(agentBridgeScheduler.connectNow);
+
+    browser.runtime.onMessage.addListener(
+      (msg: unknown, sender) => dispatchBackgroundMessage(msg, sender, ctx, routeBackgroundMessage),
     );
-    // First run only: introduce the product and let the user pick platforms.
-    // Self-gated on the onboarding record (see openWelcomePage).
-    if (details.reason === 'install') {
-      openWelcomePage().catch((err) =>
-        console.error('[background] onInstalled: open welcome failed', err),
+
+    chrome.runtime.onInstalled.addListener((details) => {
+      ensureOffscreen().catch((err) =>
+        console.error('[background] onInstalled: ensureOffscreen failed', err),
       );
+      runStorageMigrations().catch((err) =>
+        console.error('[background] onInstalled: storage migration failed', err),
+      );
+      // First run only: introduce the product and let the user pick platforms.
+      // Self-gated on the onboarding record (see openWelcomePage).
+      if (details.reason === 'install') {
+        openWelcomePage().catch((err) =>
+          console.error('[background] onInstalled: open welcome failed', err),
+        );
+      }
+    });
+    chrome.runtime.onStartup.addListener(() => {
+      ensureOffscreen().catch((err) =>
+        console.error('[background] onStartup: ensureOffscreen failed', err),
+      );
+      runStorageMigrations().catch((err) =>
+        console.error('[background] onStartup: storage migration failed', err),
+      );
+    });
+
+    if (import.meta.env.VITE_AGENT_BRIDGE_SPIKE === '1') {
+      void import('@/spikes/agent-bridge/background-spike')
+        .then(({ runAgentBridgePhase0Spike }) => runAgentBridgePhase0Spike())
+        .catch((err) =>
+          console.error('[agent-bridge:phase-0] unhandled spike failure', err),
+        );
     }
-  });
-  chrome.runtime.onStartup.addListener(() => {
-    ensureOffscreen().catch((err) =>
-      console.error('[background] onStartup: ensureOffscreen failed', err),
-    );
-    runStorageMigrations().catch((err) =>
-      console.error('[background] onStartup: storage migration failed', err),
-    );
-  });
 
-  if (import.meta.env.VITE_AGENT_BRIDGE_SPIKE === '1') {
-    void import('@/spikes/agent-bridge/background-spike')
-      .then(({ runAgentBridgePhase0Spike }) => runAgentBridgePhase0Spike())
-      .catch((err) =>
-        console.error('[agent-bridge:phase-0] unhandled spike failure', err),
-      );
-  }
-
-  console.log('favbase background ready', { id: browser.runtime.id });
+    console.log('favbase background ready', { id: browser.runtime.id });
+  },
 });

@@ -10,6 +10,14 @@ function source(relativePath: string): string {
 }
 
 describe('Agent Bridge background bundle contract', () => {
+  it('builds the Background Service Worker as an ES module', () => {
+    const background = source('entrypoints/background.ts');
+
+    expect(background).toMatch(
+      /defineBackground\(\{\s*type: 'module',\s*main\(\)/,
+    );
+  });
+
   it('imports only the PGlite proxy leaf', () => {
     const background = source('entrypoints/background.ts');
 
