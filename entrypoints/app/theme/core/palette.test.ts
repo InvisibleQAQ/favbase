@@ -25,6 +25,13 @@ function contrastRatio(foreground: string, background: string): number {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
+describe('palette.background', () => {
+  it('keeps the app canvas on the specified scheme colors', () => {
+    expect(background.light.default).toBe('#FFFFFF');
+    expect(background.dark.default).toBe('#141A21');
+  });
+});
+
 describe('palette.platform', () => {
   it.each(SCHEMES)('%s scheme maps exactly the six Collection platforms', (scheme) => {
     const keys = Object.keys(platform[scheme]).filter((key) => !key.endsWith('Channel'));

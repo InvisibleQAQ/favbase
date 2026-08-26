@@ -48,7 +48,7 @@ type ThemeConfig = {
 };
 
 /**
- * Catalog-card visual language (docs/19 §7.0.1). Warm paper ground, warm ink
+ * Catalog-card visual language (docs/19 §7.0.1). White canvas, warm ink
  * text, warm grey hairlines; coral `#FC7E5B` is a stamp (a block of color)
  * and never small text. Binding: coral hue, DM Sans Variable + Barlow,
  * fox logo, lowercase `favbase` (PRODUCT.md).

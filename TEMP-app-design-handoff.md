@@ -87,13 +87,13 @@
 
 ---
 
-## 5. Phase 5 — 记录设计系统（impeccable `document`）+ 两个待决
+## 5. Phase 5 — 记录设计系统（impeccable `document`）+ 一项已决、一项待决
 
 ```
 阶段：Phase 5 / 收口。两件事：
 A. 用 impeccable 的 document 命令（skill impeccable，reference/document.md）从**已建成**的 entrypoints/app/theme 与 components/collection 生成 DESIGN.md（根目录），记录目录卡片库世界：token 表（亮/暗）、圆角、阴影、字阶、珊瑚=印章规则、text.accent 规则、CollectionCard 契约、平台品牌色只在图标与数据图形。DESIGN.md 必须与 .trellis/spec/frontend/ui-design-system.md 一致，若发现不一致以代码为准，两边同改。
-B. 两个待决项给我两套对比截图再定：
-   1) 纸面 #F8F4EE 触发检测器 cream-palette 提示；候选 #F7F6F3（更中性）。做一张 /collections 亮色的 A/B 截图（改 theme-config 再 build，截完还原），我选。
+B. 画布色已决，Analytics 指标仍待决：
+   1) **已决（2026-08-26）**：app 画布按用户当前要求固定为亮色 `#FFFFFF`、暗色 `#141A21`；旧的 `#F8F4EE` 与候选 `#F7F6F3` 不再参与 A/B。
    2) Analytics 页是否把"Used tags / Tagged items"两个 0 的 hero 数字换成更有信息的维度（docs/19 §1 H8 与 Jordan 红旗）。只出方案，不改代码。
 不做：任何布局结构改动。
 ```
