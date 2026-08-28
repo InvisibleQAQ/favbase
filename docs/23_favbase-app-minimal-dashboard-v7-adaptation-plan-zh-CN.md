@@ -646,6 +646,52 @@ mini 栏一致且不显空；72px 只省 16px 内容宽度，不值得偏离参�
 
 ### Phase 3：重构共享 UI primitives
 
+**实施状态（2026-08-28）：已完成，待人工审阅。** 落地的 primitive 契约：
+`SectionTitleBar` = 路由唯一 `h1`（Barlow 700 / 28px）+ caption 堆叠在标题下
+（`body2` secondary）+ 右侧一个 medium contained 动作（36px），`mb: 3`；标题栏、
+pipeline 行、同步失败横幅、搜索框、chip 行统一以 24px 收尾；`SearchField` 由主题
+48px 输入目标决定高度并把 placeholder 作为 `aria-label`；`CardGrid` 间距改
+`CARD_GRID_SPACING = 3`（24px，断点表 `CARD_GRID_SIZE` 不变）；`CollectionCard`
+内容块 `p: 3` 对齐 `MuiCardContent`，新增 `CollectionCardRow`（链接之外行——标签
+行、B站 ActionBar——的唯一内边距 owner，替换 `TagRow` `px 1.5/pb 1` 与 B站 5 处
+`px 2/pb 1.5`）与 `CollectionCardSkeleton`（同内边距/同媒体槽的骨架，六平台骨架
+文件只传 `media/header/lines` 形态参数），disabled 卡片改 `data-disabled` + neutral
+底 + 媒体去色 + 标题 `text.secondary`（去掉整卡 `opacity .45`），焦点环内缩 2px 避免
+被 `overflow: hidden` 裁掉；`StateBox` 改 1px dashed `divider` + `subtitle1` 段落标题，
+`NoMatchesState` 与 `TaggedItemGrid` 空态共用且不再用 `text.disabled`；`ErrorState`
+图标 48px。`resolveCollectionPhase` 8 case、tag editor / link / footer 的 DOM 事件
+边界、hooks、路由、i18n key 均未改。验证：`pnpm compile`、`pnpm build` 通过；
+`pnpm test` 168 文件 / 1233 用例中 1232 通过，唯一失败是既有的
+`tests/lib-import-smoke.test.ts` Bilibili 5 秒并发超时（Phase 1 已记录，未触及
+`lib/**`，单独运行 16/16 通过）；新增 `section-title-bar.test.tsx`、
+`state-box.test.tsx`、`search-field.test.tsx`，`collection-card.test.tsx` 增加
+disabled / `CollectionCardRow` / 骨架槽位断言，原断言未删。
+
+**运行时证据（2026-08-28，`docs/ui-baseline/2026-08-28/phase3-primitives/`）：**
+按用户要求在**用户正在使用的 Chrome**（真实 cookie 与本地数据，`chrome-devtools`
+MCP：`reload_extension` → `new_page` → `resize_page`/`emulate` → `take_screenshot`
+/ `evaluate_script`）采集，只看 `/collections/bilibili` 与 `/collections/bookmarks`
+（其余平台页同一套 scaffold 模板）。**[DECISION]** 不再用独立空 profile 的 Chrome
+做 UI 验证——它没有数据，证明不了卡片/网格/pipeline；规则已写入 Trellis UI spec §15。
+
+| 证据 | 路由 | Viewport | Theme | 量测结论 |
+| --- | --- | ---: | --- | --- |
+| `live-bilibili-1440x900-light.png` | `#/collections/bilibili/117865102` | 1440x900 | light | 单 h1 28px；caption「默认收藏夹 · 4458 videos」在标题下；「Fetch now」36px；pipeline 四段；搜索 48px；配置提醒；Folders / 排序 chip 行；首张卡片 y=565 |
+| `live-bilibili-1440x900-light-cards.png` | 同上 | 1440x900 | light | 20 张卡片 5 行全部等高 299.8；卡宽 245、gap 24；内容 padding 24；标题 2 行 clamp；footer 行（CC Official / Transcribe）padding `0 24 16`、高 40；无水平滚动 |
+| `live-bilibili-1440x900-dark-cards.png` | 同上 | 1440x900 | dark | 同几何；dark 卡片 divider hairline、无阴影 |
+| `live-bookmarks-1440x900-dark.png` | `#/collections/bookmarks` | 1440x900 | dark | caption「778 bookmarks · Last synced …」；提取进度卡；Folders chips；24 张卡片 6 行等高 152 |
+| `live-bookmarks-1440x900-dark-hover.png` | 同上 | 1440x900 | dark | hover 卡片底 `#222B34`（neutral）vs 闲置 `#1C252E`；右上浮动标签编辑按钮 opacity 1、paper 底 |
+| `live-bookmarks-1440x900-light-cards.png` | 同上 | 1440x900 | light | light 卡片低强度 shadow；favicon+域名 header、标题、日期靠底 |
+| `live-bookmarks-1024x768-light.png` | 同上 | 1024x768 | light | 3 列、卡宽 206.7、gap 24；动作按钮 110x36 |
+| `live-bookmarks-390x844-light.png` | 同上 | 390x844 | light | 1 列、卡宽 358；有 caption 时动作按钮换到标题块下一行（y 147.6）；搜索 358 宽；无水平滚动 |
+
+**[UNKNOWN]** `CollectionCardSkeleton` 只在首屏 DB 查询期间出现，实机未截到；由
+`collection-card.test.tsx` 的槽位断言与源码复核保证同轨道。
+
+**已知未收敛（留 Phase 5）：** `sections/collections/collections-view.tsx` 的
+`CollectionsGridSkeleton` 仍自画 Card 骨架；github/youtube 配置门早退页面无 h1；
+chip 行头部图标颜色由各 view 指定（多为 `primary.main`，图标对白底 2.6:1）。
+
 **目标文件：**
 
 - `components/collection/section-title-bar.tsx`；

@@ -6,6 +6,7 @@ import InputAdornment from '@mui/material/InputAdornment';
 import { Iconify } from '../iconify';
 
 export interface SearchFieldProps {
+  /** Pre-translated placeholder; doubles as the field's accessible name. */
   placeholder: string;
   /** Controlled value — omit together with onChange for a disabled placeholder field. */
   value?: string;
@@ -15,7 +16,8 @@ export interface SearchFieldProps {
   sx?: SxProps<Theme>;
 }
 
-/** Full-width search input with the shared magnifier adornment. */
+/** Full-width search input (48px via the theme's medium input target) with
+ *  the shared magnifier adornment. */
 export function SearchField({ placeholder, value, onChange, disabled, sx }: SearchFieldProps) {
   return (
     <TextField
@@ -26,6 +28,7 @@ export function SearchField({ placeholder, value, onChange, disabled, sx }: Sear
       placeholder={placeholder}
       sx={[{ mb: 3 }, ...(Array.isArray(sx) ? sx : [sx])]}
       slotProps={{
+        htmlInput: { 'aria-label': placeholder },
         input: {
           startAdornment: (
             <InputAdornment position="start">

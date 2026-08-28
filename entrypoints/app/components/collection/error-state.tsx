@@ -18,16 +18,12 @@ export function ErrorState({ title, message, retryLabel, onRetry }: ErrorStatePr
   return (
     <StateBox
       icon={
-        <Iconify
-          icon="solar:danger-triangle-bold-duotone"
-          width={64}
-          sx={{ color: 'error.main', mb: 1 }}
-        />
+        <Iconify icon="solar:danger-triangle-bold-duotone" width={48} sx={{ color: 'error.main' }} />
       }
       title={title}
       description={message}
       action={
-        <Button variant="outlined" onClick={onRetry} sx={{ mt: 1 }}>
+        <Button variant="outlined" onClick={onRetry}>
           {retryLabel}
         </Button>
       }

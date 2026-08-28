@@ -10,7 +10,7 @@ YouTube 公开播放列表收藏页（`/collections/youtube`，扁平单集合�
 - `playlist-chips.tsx` — 播放列表 chip 行：共享 `CollapsibleChipRow` 薄 adapter（`mdi:youtube` icon + `youtube.playlistsTitle`/`allPlaylists`/`showMore(Less)Playlists` key，label「列表名 (count)」，key=playlistId，服务层按数量降序）。库空时由 view 隐藏整行
 - `youtube-card.tsx` — 视频卡片 = 共享 `CollectionCard` 装配：`media` 16/9 缩略图（lazy；无图/破图回退 `mdi:youtube` 占位，底 `background.neutral` 暗色安全）+ `overlay` 右下角 `CoverBadge` 时长（共享 `formatDuration`（`app/utils/`，h:mm:ss/m:ss），黑色 scrim 双模式恒定；`durationSeconds<=0` 不渲染——直播/缺数据）；`title` 2 行 clamp；`meta` 频道名（上传者）；`date` `formatDateTime(addedAt)`（外壳右格 noWrap）；`stats` play icon+`formatCompactNumber(viewCount)`；`tags`（共享 `TagRow`，外壳保证在链接之外；undefined 时整行不渲染）。`href = originalUrl` 真实锚点新标签打开（不再 `window.open`）。`useTranslation()` 订阅保证 locale 切换 re-render 格式化输出
 - `tagged-youtube-card.tsx` — `TaggedYoutubeCard`：TaggedItemGrid `renderCard` 的 YouTube 卡片 adapter。`toYoutubeVideoItem` 把平台无关 `TaggedItem` 映射回 `YoutubeVideoItem`（originalUrl 取 `item.originalUrl`；platformMeta 收窄委托 sync-service 导出的 `narrowYoutubeMeta`（SSOT，mapRow 与本 adapter 共用），本文件只装 envelope 字段 + spread）。**adapter 知识归 adapter**：`YoutubeVideoItem` 类型导入只在本文件与 view/card
-- `youtube-grid-skeleton.tsx` — 共享 `CardGridSkeleton` 外壳 + 16:9 媒体块 + 两行文字骨架（匹配卡片形态）
+- `youtube-grid-skeleton.tsx` — 共享 `CardGridSkeleton` 外壳 + 共享 `CollectionCardSkeleton`（`media="16/9"` + 两行文字，匹配卡片形态）
 
 ## 约定
 

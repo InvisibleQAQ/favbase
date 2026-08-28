@@ -5,18 +5,21 @@ import Grid from '@mui/material/Grid';
 import Pagination from '@mui/material/Pagination';
 
 /** 1 / 2 / 3 / 4 cards per row across breakpoints — the single source of truth. */
-const CARD_SIZE = { xs: 12, sm: 6, md: 4, lg: 3 };
+export const CARD_GRID_SIZE = { xs: 12, sm: 6, md: 4, lg: 3 } as const;
+
+/** 24px gutter — the same unit as the content gutter and the Dashboard grid. */
+export const CARD_GRID_SPACING = 3;
 
 export function CardGrid({ children }: { children: ReactNode }) {
   return (
-    <Grid container spacing={2.5}>
+    <Grid container spacing={CARD_GRID_SPACING}>
       {children}
     </Grid>
   );
 }
 
 export function CardGridItem({ children }: { children: ReactNode }) {
-  return <Grid size={CARD_SIZE}>{children}</Grid>;
+  return <Grid size={CARD_GRID_SIZE}>{children}</Grid>;
 }
 
 export interface CardGridPaginationProps {
@@ -41,7 +44,8 @@ export function CardGridPagination({ page, totalPages, onChange }: CardGridPagin
   );
 }
 
-/** Grid-of-8 loading placeholder; each platform supplies its own card skeleton. */
+/** Grid-of-8 loading placeholder on the real grid track; each platform
+ *  supplies its card shape (normally a `CollectionCardSkeleton`). */
 export function CardGridSkeleton({ card }: { card: ReactNode }) {
   return (
     <CardGrid>

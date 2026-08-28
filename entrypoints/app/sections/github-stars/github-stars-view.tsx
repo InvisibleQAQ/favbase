@@ -1,7 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 
 import Button from '@mui/material/Button';
-import Skeleton from '@mui/material/Skeleton';
 
 import { t, formatDateTime } from '@/lib/i18n';
 import { useTranslation } from '@/lib/i18n/use-translation';
@@ -13,6 +12,7 @@ import {
   SyncNowButton,
   PipelineProgressStrip,
   CardGridSkeleton,
+  CollectionCardSkeleton,
   CollectionPageScaffold,
 } from '../../components/collection';
 import {
@@ -88,8 +88,9 @@ function EmptyLibraryState({ syncing, onSync }: { syncing: boolean; onSync: () =
   );
 }
 
+/** Repo card shape: owner line + name + description. */
 function RepoGridSkeleton() {
-  return <CardGridSkeleton card={<Skeleton variant="rounded" height={148} />} />;
+  return <CardGridSkeleton card={<CollectionCardSkeleton header lines={3} />} />;
 }
 
 // ---------------------------------------------------------------------------

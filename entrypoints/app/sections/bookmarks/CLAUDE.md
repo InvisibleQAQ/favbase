@@ -12,7 +12,7 @@
 - `folder-chips.tsx` — 文件夹 chip 行：共享 `ChipRowShell`（folder icon + `bookmarks.foldersTitle`）+ `FilterChip`——「全部({{count}})」chip（选中态 = 无 folderId）+ 各文件夹（`maxWidth 200`，**无 per-chip 计数**，bilibili 风纯名称）。点击 = `onSelect(folderId|undefined)` 驱动 navigate
 - `bookmark-card.tsx` — 书签卡片 = 共享 `CollectionCard` 装配：`header` favicon（Avatar rounded 20px，MV3 本地 `_favicon` API `chrome.runtime.getURL('/_favicon/?pageUrl=…&size=32')`，无图回退 bookmark icon）+ domain caption；`title` 2 行 clamp；`date` `formatDateTime(dateAdded)`（外壳右格 noWrap）；`tags`（共享 `TagRow`，外壳保证在链接之外；undefined 时整行不渲染）。`BookmarkCardProps { bookmark, tags?, onEditTags? }`。`href = url` 真实锚点新标签打开（不再 `window.open`）。`useTranslation()` 订阅保证 locale 切换 re-render 格式化输出
 - `tagged-bookmark-card.tsx` — `TaggedBookmarkCard`：TaggedItemGrid `renderCard` 的书签 adapter。`toBookmarkItem` 把平台无关 `TaggedItem` 映射回 `BookmarkItem`（url 取 `item.originalUrl`；platformMeta 防御式取 domain/dateAdded，缺失给安全默认，镜像 `toGithubRepoItem`）。**adapter 知识归 adapter**：`BookmarkItem` 类型导入只在本文件与 card
-- `bookmark-grid-skeleton.tsx` — `BookmarkGridSkeleton`：共享 `CardGridSkeleton` 外壳（grid-of-8）+ rounded 96 高（匹配紧凑书签卡片），view 与 TaggedItemGrid（`skeleton` prop）共用
+- `bookmark-grid-skeleton.tsx` — `BookmarkGridSkeleton`：共享 `CardGridSkeleton` 外壳（grid-of-8）+ 共享 `CollectionCardSkeleton`（`header` 行 + 两行文字，匹配书签卡片形态），view 与 TaggedItemGrid（`skeleton` prop）共用
 
 ## 约定
 
