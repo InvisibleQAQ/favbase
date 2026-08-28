@@ -193,7 +193,7 @@ Favbase 是高频扫描、搜索、筛选和打开收藏的操作型工具，不
 | 已有 MUI v7 CSS-variable theme | `[TARGET_FACT] entrypoints/app/theme/**` |
 | 已有相同 LayoutSection/Header/Main 分层 | `[TARGET_FACT] entrypoints/app/layouts/core/**` |
 | Header 已是 64/72px，移动 Drawer 已是 288px | `[TARGET_FACT] entrypoints/app/layouts/core/css-vars.ts` |
-| 桌面导航当前 280/72px | `[TARGET_FACT] entrypoints/app/layouts/dashboard/css-vars.ts` |
+| 桌面导航计划前 280/72px（Phase 2 起 300/88px） | `[TARGET_FACT] entrypoints/app/layouts/dashboard/css-vars.ts` |
 | 当前视觉是冷灰 surface、珊瑚印章、scheme-aware Card elevation | `[TARGET_FACT] entrypoints/app/theme/CLAUDE.md` |
 | 共享 Collection scaffold 和 Card 已覆盖六平台 | `[TARGET_FACT] entrypoints/app/components/collection/**` |
 | Dashboard 已用 hairline summary band，而非 KPI 卡堆 | `[TARGET_FACT] entrypoints/app/sections/overview/overview-view.tsx` |
@@ -583,6 +583,20 @@ token 的单一 owner；页面只保留因 4px→8px 基础单位换算而必要
 
 ### Phase 2：重构 shell、Header 和 Navigation
 
+**实施状态（2026-08-28）：已完成，待人工审阅。** 已锁定的 shell 契约：桌面 nav
+300px pinned / 88px compact（`NAV_VERTICAL_WIDTH`）、nav 行 44px / 平台子行 40px /
+compact 方形目标 44px、content gutter 40px（lg+）/ 24px（sm–md）/ 16px（xs），Header
+容器在同一断点用同一 `--layout-dashboard-content-px`；布局变量改挂 `:root`，`html`
+`scroll-padding-top` 跟随 Header 高度；Header 滚动后 blur + `divider` hairline；
+侧栏 toggle / 移动菜单按钮补齐 Tooltip + `aria-label`（`header.sidebarToggleAria`
+/ `header.menuAria`，双语）；移动 Drawer 采用 Trellis spec §11 的 exit-focus 契约把
+焦点交还菜单按钮（原实现用 `blur()` 绕开，焦点恢复实际失效）；鱼骨线消费 `divider`
+token；active 行 hover 与静止 active 可区分。验证：`pnpm compile`、`pnpm test`
+（166 文件 / 1224 用例 + packages 7 用例）通过；新增 `dashboard/css-vars.test.ts`
+锁变量契约、`dashboard/layout.test.tsx` 锁 toggle aria/storage 与 Drawer 焦点归位；
+Chrome 实机 1440/1024/390 截图见本节末尾「运行时证据」。`global.css`、
+`main-section.tsx`、`nav-active.ts` 复核后无需改动。
+
 **目标文件：**
 
 - `layouts/core/css-vars.ts`、`layout-section.tsx`、`header-section.tsx`、
@@ -614,6 +628,21 @@ token 的单一 owner；页面只保留因 4px→8px 基础单位换算而必要
 - 1440/1024/390 无水平滚动、遮挡和焦点裁剪。
 
 **回滚点：** 先回滚 dashboard CSS vars，再回滚 nav/shell 样式；storage 与路由不动。
+
+**运行时证据（2026-08-28，`docs/ui-baseline/2026-08-28/phase2-shell/`）：** 独立
+profile 的 Chrome 149 经 CDP `Extensions.loadUnpacked` 装入 `pnpm build` 产物（Chrome
+137+ 已移除 `--load-extension`），空数据库，`measurements.json` 为脚本量测原始值。
+
+| 证据 | 路由 | Viewport | Theme | 量测结论 |
+| --- | --- | ---: | --- | --- |
+| `collections-bilibili-1440x900-dark-pinned.png` | `#/collections/bilibili` | 1440x900 | dark | nav 300；Header/content gutter 均 40；h1 x=340 与 toggle 图标同左缘；行 44/40；无水平滚动、无标签截断（zh/en） |
+| `collections-bilibili-1440x900-dark-compact.png` | 同上 | 1440x900 | dark | nav 88；四个 44x44 图标目标 + Tooltip |
+| `collections-bilibili-1024x768-light-pinned.png` | 同上 | 1024x768 | light | gutter 24；无水平滚动 |
+| `collections-bilibili-390x844-light.png` | 同上 | 390x844 | light | Header 64、gutter 16、三个控件零重叠；`scroll-padding-top` 64 |
+| `settings-390x844-light-drawer-zh.png` | `#/settings` | 390x844 | light | Drawer 288；点抽屉链接后 `document.activeElement` 回到「打开导航菜单」按钮 |
+
+**[DECISION]** 300/88 锁定：88px 下 44px 方形目标两侧各留 22px，视觉上与 Minimal
+mini 栏一致且不显空；72px 只省 16px 内容宽度，不值得偏离参考几何。
 
 ### Phase 3：重构共享 UI primitives
 

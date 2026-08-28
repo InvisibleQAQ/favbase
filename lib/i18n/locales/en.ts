@@ -378,6 +378,8 @@ const en: Record<LocaleKeys, string> = {
   'header.githubAria': 'View repository on GitHub',
   'header.languageAria': 'Switch interface language',
   'header.themeAria': 'Toggle dark mode',
+  'header.menuAria': 'Open navigation menu',
+  'header.sidebarToggleAria': 'Collapse or expand sidebar',
 
   // Global background-work reminder (dashboard header) — shown while any
   // platform's unfinished sync/extract/embed/tag/transcribe jobs; count-plural.

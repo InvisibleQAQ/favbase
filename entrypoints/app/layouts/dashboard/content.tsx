@@ -5,6 +5,13 @@ import Container from '@mui/material/Container';
 
 import { layoutClasses } from '../core/classes';
 
+/**
+ * Breakpoint from which the dashboard content (and the Header, which aligns
+ * with it) uses the 40px desktop gutter. Below it MUI Container's own gutters
+ * apply: 24px from `sm`, 16px at `xs`.
+ */
+export const DASHBOARD_CONTENT_QUERY: Breakpoint = 'lg';
+
 export type DashboardContentProps = ContainerProps & {
   layoutQuery?: Breakpoint;
   disablePadding?: boolean;
@@ -16,7 +23,7 @@ export function DashboardContent({
   className,
   disablePadding,
   maxWidth = 'lg',
-  layoutQuery = 'lg',
+  layoutQuery = DASHBOARD_CONTENT_QUERY,
   ...other
 }: DashboardContentProps) {
   return (

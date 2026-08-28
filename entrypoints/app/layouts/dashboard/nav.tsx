@@ -1,6 +1,6 @@
 import type { Theme, SxProps, Breakpoint } from '@mui/material/styles';
 
-import { useId, useState, useEffect } from 'react';
+import { useId, useRef, useState, useEffect } from 'react';
 import { varAlpha } from 'minimal-shared/utils';
 
 import Box from '@mui/material/Box';
@@ -11,7 +11,7 @@ import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 import ListItemButton from '@mui/material/ListItemButton';
-import Drawer, { drawerClasses } from '@mui/material/Drawer';
+import Drawer from '@mui/material/Drawer';
 
 import { useLocation, Link as RouterLink } from 'react-router-dom';
 
@@ -21,18 +21,40 @@ import { findActiveChildPath } from '../nav-active';
 import type { NavItem } from '../nav-config';
 
 // ---------------------------------------------------------------------------
-// Active state shared by every nav row: coral wash under ink text, weight up,
-// coral only on the icon glyph. Coral is never the text color (2.5:1 on paper).
+// Geometry comes from dashboardLayoutVars (dashboard/css-vars.ts), the single
+// owner of the shell contract. Row padding follows Minimal's vertical nav:
+// 12px leading, 12px icon gap, 8px trailing, 8px base radius.
 // ---------------------------------------------------------------------------
 
 const NAV_ICON_CLASS = 'favbase-nav-icon';
+const NAV_ROW_HEIGHT = 'var(--layout-nav-item-height)';
+const NAV_CHILD_ROW_HEIGHT = 'var(--layout-nav-child-item-height)';
+const NAV_COMPACT_SIZE = 'var(--layout-nav-compact-item-size)';
+const NAV_ROW_PL = 1.5;
+const NAV_ROW_GAP = 1.5;
+const NAV_ICON_SIZE = 24;
+// Fishbone spine sits under the parent icon's vertical midline:
+// row pl (12px) + icon (24px) / 2 = 24px = 3 units.
+const NAV_CHILD_INDENT = 3;
+const FISHBONE_RIB = 14; // px reach from spine to leaf
+// Single-line title: the longest zh/en label must truncate, never wrap or overflow.
+const NAV_TITLE_SX = {
+  flexGrow: 1,
+  minWidth: 0,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+} as const;
 
+// Active state shared by every nav row: coral wash under ink text, weight up,
+// coral only on the icon glyph. Coral is never the text color (2.5:1 on paper).
+// Hovering an active row deepens the wash so active/hover stay distinguishable.
 function navActiveSx(theme: Theme) {
   return {
     fontWeight: 'fontWeightSemiBold',
     color: theme.vars.palette.text.primary,
     bgcolor: theme.vars.palette.primary.lighter,
-    '&:hover': { bgcolor: theme.vars.palette.primary.lighter },
+    '&:hover': { bgcolor: varAlpha(theme.vars.palette.primary.mainChannel, 0.24) },
     [`& .${NAV_ICON_CLASS}`]: { color: theme.vars.palette.primary.main },
   } as const;
 }
@@ -55,12 +77,14 @@ export function NavDesktop({
     <Box
       sx={{
         pt: 2.5,
-        px: pinned ? 2.5 : 1,
+        // Compact: center one square target inside the compact width.
+        px: pinned ? 2 : `calc((var(--layout-nav-vertical-width) - ${NAV_COMPACT_SIZE}) / 2)`,
         top: 0,
         left: 0,
         height: 1,
         display: 'none',
         position: 'fixed',
+        overflow: 'hidden',
         flexDirection: 'column',
         bgcolor: 'background.default',
         zIndex: 'var(--layout-nav-zIndex)',
@@ -79,13 +103,26 @@ export function NavDesktop({
   );
 }
 
+/**
+ * Temporary Drawer for < layoutQuery. Closes itself when the pathname changes
+ * and hands focus back through `onExited` only after the exit transition —
+ * the MUI 7 + React 19 ordering contract shared with the Chat history drawer
+ * (`disableRestoreFocus` + blur the focused descendant in
+ * `onTransitionExited`, restore the trigger from the transition's `onExited`).
+ */
 export function NavMobile({
   sx,
   data,
   open,
   onClose,
-}: Omit<NavContentProps, 'pinned'> & { open: boolean; onClose: () => void }) {
+  onExited,
+}: Omit<NavContentProps, 'pinned'> & {
+  open: boolean;
+  onClose: () => void;
+  onExited?: () => void;
+}) {
   const { pathname } = useLocation();
+  const paperRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (open) onClose();
@@ -95,14 +132,30 @@ export function NavMobile({
     <Drawer
       open={open}
       onClose={onClose}
-      sx={{
-        [`& .${drawerClasses.paper}`]: {
-          pt: 2.5,
-          px: 2.5,
-          overflow: 'unset',
-          bgcolor: 'background.default',
-          width: 'var(--layout-nav-mobile-width)',
-          ...sx,
+      ModalProps={{
+        disableRestoreFocus: true,
+        onTransitionExited: () => {
+          // Runs before ModalManager hides the modal; release its focused descendant first.
+          const activeElement = document.activeElement;
+          if (activeElement instanceof HTMLElement && paperRef.current?.contains(activeElement)) {
+            activeElement.blur();
+          }
+        },
+      }}
+      slotProps={{
+        transition: { onExited },
+        paper: {
+          ref: paperRef,
+          sx: [
+            {
+              pt: 2.5,
+              px: 2,
+              overflow: 'unset',
+              bgcolor: 'background.default',
+              width: 'var(--layout-nav-mobile-width)',
+            },
+            ...(Array.isArray(sx) ? sx : [sx]),
+          ],
         },
       }}
     >
@@ -112,7 +165,8 @@ export function NavMobile({
 }
 
 // ---------------------------------------------------------------------------
-// Shared leaf button (top-level: Dashboard / Collections / Settings)
+// Shared leaf button (top-level: Dashboard / Collections / Settings). Compact
+// mode renders a square icon-only target with a right-hand Tooltip.
 // ---------------------------------------------------------------------------
 
 function NavLeafButton({
@@ -133,26 +187,33 @@ function NavLeafButton({
       to={item.path}
       sx={[
         (theme) => ({
-          pl: pinned ? 2 : 0,
-          py: 1,
-          gap: pinned ? 2 : 0,
-          pr: pinned ? 1.5 : 0,
-          borderRadius: 0.5,
+          borderRadius: 1,
           typography: 'body2',
           fontWeight: 'fontWeightMedium',
           color: theme.vars.palette.text.secondary,
-          minHeight: 44,
-          justifyContent: pinned ? 'flex-start' : 'center',
+          ...(pinned
+            ? {
+                pl: NAV_ROW_PL,
+                pr: 1,
+                py: 0.5,
+                gap: NAV_ROW_GAP,
+                minHeight: NAV_ROW_HEIGHT,
+              }
+            : {
+                p: 0,
+                flex: '0 0 auto',
+                width: NAV_COMPACT_SIZE,
+                height: NAV_COMPACT_SIZE,
+                justifyContent: 'center',
+              }),
           ...(isActive && navActiveSx(theme)),
         }),
       ]}
     >
-      <Box component="span" className={NAV_ICON_CLASS} sx={{ width: 24, height: 24, display: 'flex' }}>
-        {item.icon}
-      </Box>
+      <NavIconSlot>{item.icon}</NavIconSlot>
       {pinned && (
         <>
-          <Box component="span" sx={{ flexGrow: 1 }}>
+          <Box component="span" sx={NAV_TITLE_SX}>
             {t(item.title)}
           </Box>
           {item.info && item.info}
@@ -162,7 +223,7 @@ function NavLeafButton({
   );
 
   return (
-    <ListItem disableGutters disablePadding>
+    <ListItem disableGutters disablePadding sx={{ justifyContent: 'center' }}>
       {pinned ? (
         button
       ) : (
@@ -171,6 +232,25 @@ function NavLeafButton({
         </Tooltip>
       )}
     </ListItem>
+  );
+}
+
+function NavIconSlot({ children }: { children: React.ReactNode }) {
+  return (
+    <Box
+      component="span"
+      className={NAV_ICON_CLASS}
+      sx={{
+        width: NAV_ICON_SIZE,
+        height: NAV_ICON_SIZE,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0,
+      }}
+    >
+      {children}
+    </Box>
   );
 }
 
@@ -197,8 +277,6 @@ function ExpandChevron({ expanded }: { expanded: boolean }) {
 // dimmed and with a trailing outbound arrow: it is an action, not a page.
 // ---------------------------------------------------------------------------
 
-const FISHBONE_RIB = 14; // px reach from spine to leaf
-
 function NavChildLeaf({
   item,
   isActive,
@@ -214,30 +292,27 @@ function NavChildLeaf({
     <ListItem
       disableGutters
       disablePadding
-      sx={(theme) => {
-        const rail = varAlpha(theme.vars.palette.grey['500Channel'], 0.24);
-        return {
-          position: 'relative',
-          '&::before': {
-            content: '""',
-            position: 'absolute',
-            left: 0,
-            top: 0,
-            width: 0,
-            height: isLast ? '50%' : '100%',
-            borderLeft: `1px solid ${rail}`,
-          },
-          '&::after': {
-            content: '""',
-            position: 'absolute',
-            left: 0,
-            top: '50%',
-            width: FISHBONE_RIB,
-            height: 0,
-            borderTop: `1px solid ${rail}`,
-          },
-        };
-      }}
+      sx={(theme) => ({
+        position: 'relative',
+        '&::before': {
+          content: '""',
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          width: 0,
+          height: isLast ? '50%' : '100%',
+          borderLeft: `1px solid ${theme.vars.palette.divider}`,
+        },
+        '&::after': {
+          content: '""',
+          position: 'absolute',
+          left: 0,
+          top: '50%',
+          width: FISHBONE_RIB,
+          height: 0,
+          borderTop: `1px solid ${theme.vars.palette.divider}`,
+        },
+      })}
     >
       <ListItemButton
         disableGutters
@@ -256,10 +331,10 @@ function NavChildLeaf({
             return {
               ml: `${FISHBONE_RIB}px`,
               pl: 1,
-              py: 0.75,
+              py: 0.5,
               pr: 1,
-              borderRadius: 0.5,
-              minHeight: 36,
+              borderRadius: 1,
+              minHeight: NAV_CHILD_ROW_HEIGHT,
               gap: 1,
               alignItems: 'center',
               typography: 'body2',
@@ -286,10 +361,7 @@ function NavChildLeaf({
             {item.icon}
           </Box>
         )}
-        <Box
-          component="span"
-          sx={{ flexGrow: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-        >
+        <Box component="span" sx={NAV_TITLE_SX}>
           {t(item.title)}
         </Box>
         {item.external && (
@@ -305,7 +377,7 @@ function NavChildLeaf({
 }
 
 // ---------------------------------------------------------------------------
-// Collections branch: collapsible parent (pinned) or icon-only jump (unpinned)
+// Collections branch: collapsible parent (pinned) or icon-only jump (compact)
 // ---------------------------------------------------------------------------
 
 function CollectionsBranch({ item, pinned }: { item: NavItem; pinned: boolean }) {
@@ -330,7 +402,7 @@ function CollectionsBranch({ item, pinned }: { item: NavItem; pinned: boolean })
     if (pathname.startsWith(item.path)) setExpanded(true);
   }, [pathname, item.path]);
 
-  // Unpinned (72px): icon-only, click jumps to /collections (RouterLink), no tree.
+  // Compact: icon-only, click jumps to /collections (RouterLink), no tree.
   if (!pinned) {
     return <NavLeafButton item={item} isActive={isActive} pinned={false} />;
   }
@@ -342,11 +414,11 @@ function CollectionsBranch({ item, pinned }: { item: NavItem; pinned: boolean })
           (theme) => ({
             display: 'flex',
             alignItems: 'center',
-            borderRadius: 0.5,
+            borderRadius: 1,
             typography: 'body2',
             fontWeight: 'fontWeightMedium',
             color: theme.vars.palette.text.secondary,
-            minHeight: 44,
+            minHeight: NAV_ROW_HEIGHT,
             '&:hover': {
               bgcolor: theme.vars.palette.action.hover,
             },
@@ -359,23 +431,21 @@ function CollectionsBranch({ item, pinned }: { item: NavItem; pinned: boolean })
           component={RouterLink}
           to={item.path}
           sx={{
-            pl: 2,
-            py: 1,
-            gap: 2,
+            pl: NAV_ROW_PL,
+            py: 0.5,
+            gap: NAV_ROW_GAP,
             pr: 0.5,
             flex: '1 1 auto',
             minWidth: 0,
             alignSelf: 'stretch',
             color: 'inherit',
             fontWeight: 'inherit',
-            borderRadius: 0.5,
+            borderRadius: 1,
             '&:hover': { bgcolor: 'transparent' },
           }}
         >
-          <Box component="span" className={NAV_ICON_CLASS} sx={{ width: 24, height: 24, display: 'flex' }}>
-            {item.icon}
-          </Box>
-          <Box component="span" sx={{ flexGrow: 1 }}>
+          <NavIconSlot>{item.icon}</NavIconSlot>
+          <Box component="span" sx={NAV_TITLE_SX}>
             {t(item.title)}
           </Box>
         </ListItemButton>
@@ -385,7 +455,13 @@ function CollectionsBranch({ item, pinned }: { item: NavItem; pinned: boolean })
           aria-controls={expanded ? submenuId : undefined}
           aria-expanded={expanded}
           onClick={() => setExpanded((prev) => !prev)}
-          sx={{ width: 44, height: 44, flexShrink: 0, color: 'inherit', borderRadius: 0.5 }}
+          sx={{
+            width: NAV_ROW_HEIGHT,
+            height: NAV_ROW_HEIGHT,
+            flexShrink: 0,
+            color: 'inherit',
+            borderRadius: 1,
+          }}
         >
           <ExpandChevron expanded={expanded} />
         </IconButton>
@@ -397,10 +473,8 @@ function CollectionsBranch({ item, pinned }: { item: NavItem; pinned: boolean })
             display: 'flex',
             flexDirection: 'column',
             mt: 0.25,
-            // Fishbone spine sits under the parent icon's vertical midline:
-            // parent icon center = pl(16px) + icon(24px)/2 = 28px = ml 3.5.
             // The spine + ribs themselves are drawn per-leaf in NavChildLeaf.
-            ml: 3.5,
+            ml: NAV_CHILD_INDENT,
           }}
         >
           {children.map((child, idx, arr) => (
@@ -428,7 +502,8 @@ function NavContent({ data, sx, pinned = true }: NavContentProps) {
           display: 'flex',
           alignItems: 'center',
           gap: 1.5,
-          px: pinned ? 0.5 : 0,
+          // Logo center lines up with the row icon center (row pl 12 + 12).
+          pl: pinned ? 0.75 : 0,
           justifyContent: pinned ? 'flex-start' : 'center',
         }}
       >
@@ -453,7 +528,16 @@ function NavContent({ data, sx, pinned = true }: NavContentProps) {
       <Box
         component="nav"
         sx={[
-          { display: 'flex', flex: '1 1 auto', flexDirection: 'column' },
+          {
+            display: 'flex',
+            flex: '1 1 auto',
+            flexDirection: 'column',
+            // The sidebar is the only thing that scrolls inside the fixed rail.
+            minHeight: 0,
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            pb: 2,
+          },
           ...(Array.isArray(sx) ? sx : [sx]),
         ]}
       >

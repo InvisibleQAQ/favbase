@@ -1,0 +1,982 @@
+{
+  "1440-pinned-zh": {
+    "viewport": [
+      1440,
+      900
+    ],
+    "horizontalScroll": false,
+    "navVar": "300px",
+    "scrollPaddingTop": "72px",
+    "navRect": {
+      "x": 0,
+      "y": 0,
+      "w": 300,
+      "h": 900
+    },
+    "headerRect": {
+      "x": 300,
+      "y": 0,
+      "w": 1140,
+      "h": 72
+    },
+    "headerPaddingLeft": "40px",
+    "contentPaddingLeft": "40px",
+    "contentRect": {
+      "x": 300,
+      "y": 72,
+      "w": 1140,
+      "h": 828
+    },
+    "h1Rect": {
+      "x": 340,
+      "y": 84.1,
+      "w": 84.9,
+      "h": 22
+    },
+    "controls": [
+      {
+        "label": "收起或展开侧栏",
+        "x": 332,
+        "y": 18,
+        "w": 36,
+        "h": 36
+      },
+      {
+        "label": "切换界面语言",
+        "x": 1318,
+        "y": 19,
+        "w": 40,
+        "h": 34
+      },
+      {
+        "label": "在 GitHub 上查看仓库",
+        "x": 1364,
+        "y": 18,
+        "w": 36,
+        "h": 36
+      }
+    ],
+    "overlap": null,
+    "rows": [
+      {
+        "href": "#/collections",
+        "h": 44,
+        "w": 223,
+        "text": "收藏夹"
+      },
+      {
+        "href": "#/collections/bilibili",
+        "h": 40,
+        "w": 229,
+        "text": "B 站收藏夹"
+      },
+      {
+        "href": "#/collections/github",
+        "h": 40,
+        "w": 229,
+        "text": "GitHub Stars"
+      },
+      {
+        "href": "#/collections/bookmarks",
+        "h": 40,
+        "w": 229,
+        "text": "浏览器书签"
+      },
+      {
+        "href": "#/collections/x",
+        "h": 40,
+        "w": 229,
+        "text": "X 书签"
+      },
+      {
+        "href": "#/collections/zhihu",
+        "h": 40,
+        "w": 229,
+        "text": "知乎收藏"
+      },
+      {
+        "href": "#/collections/youtube",
+        "h": 40,
+        "w": 229,
+        "text": "YouTube 播放列表"
+      },
+      {
+        "href": "https://github.com/InvisibleQAQ/favbase/issues/new?title=%5BPlatform+Request%5D+%3Cplatform+name%3E&body=**Platform**%3A+%0A%0A**Favorites+%2F+bookmarks+page+URL**%3A+%0A%0A**What+would+you+like+collected**%3A+",
+        "h": 40,
+        "w": 229,
+        "text": "请求新平台"
+      },
+      {
+        "href": "#/",
+        "h": 44,
+        "w": 267,
+        "text": "Analytics"
+      },
+      {
+        "href": "#/chat",
+        "h": 44,
+        "w": 267,
+        "text": "对话"
+      },
+      {
+        "href": "#/settings",
+        "h": 44,
+        "w": 267,
+        "text": "设置"
+      }
+    ],
+    "clippedTitles": [],
+    "activeElement": "BODY"
+  },
+  "1440-pinned-en": {
+    "viewport": [
+      1440,
+      900
+    ],
+    "horizontalScroll": false,
+    "navVar": "300px",
+    "scrollPaddingTop": "72px",
+    "navRect": {
+      "x": 0,
+      "y": 0,
+      "w": 300,
+      "h": 900
+    },
+    "headerRect": {
+      "x": 300,
+      "y": 0,
+      "w": 1140,
+      "h": 72
+    },
+    "headerPaddingLeft": "40px",
+    "contentPaddingLeft": "40px",
+    "contentRect": {
+      "x": 300,
+      "y": 72,
+      "w": 1140,
+      "h": 828
+    },
+    "h1Rect": {
+      "x": 340,
+      "y": 84.1,
+      "w": 104.6,
+      "h": 22
+    },
+    "controls": [
+      {
+        "label": "Collapse or expand sidebar",
+        "x": 332,
+        "y": 18,
+        "w": 36,
+        "h": 36
+      },
+      {
+        "label": "Switch interface language",
+        "x": 1318,
+        "y": 19,
+        "w": 40,
+        "h": 34
+      },
+      {
+        "label": "View repository on GitHub",
+        "x": 1364,
+        "y": 18,
+        "w": 36,
+        "h": 36
+      }
+    ],
+    "overlap": null,
+    "rows": [
+      {
+        "href": "#/collections",
+        "h": 44,
+        "w": 223,
+        "text": "Collections"
+      },
+      {
+        "href": "#/collections/bilibili",
+        "h": 40,
+        "w": 229,
+        "text": "Bilibili Favorites"
+      },
+      {
+        "href": "#/collections/github",
+        "h": 40,
+        "w": 229,
+        "text": "GitHub Stars"
+      },
+      {
+        "href": "#/collections/bookmarks",
+        "h": 40,
+        "w": 229,
+        "text": "Browser Bookmarks"
+      },
+      {
+        "href": "#/collections/x",
+        "h": 40,
+        "w": 229,
+        "text": "X Bookmarks"
+      },
+      {
+        "href": "#/collections/zhihu",
+        "h": 40,
+        "w": 229,
+        "text": "Zhihu Favorites"
+      },
+      {
+        "href": "#/collections/youtube",
+        "h": 40,
+        "w": 229,
+        "text": "YouTube Playlists"
+      },
+      {
+        "href": "https://github.com/InvisibleQAQ/favbase/issues/new?title=%5BPlatform+Request%5D+%3Cplatform+name%3E&body=**Platform**%3A+%0A%0A**Favorites+%2F+bookmarks+page+URL**%3A+%0A%0A**What+would+you+like+collected**%3A+",
+        "h": 40,
+        "w": 229,
+        "text": "Request a platform"
+      },
+      {
+        "href": "#/",
+        "h": 44,
+        "w": 267,
+        "text": "Analytics"
+      },
+      {
+        "href": "#/chat",
+        "h": 44,
+        "w": 267,
+        "text": "Chat"
+      },
+      {
+        "href": "#/settings",
+        "h": 44,
+        "w": 267,
+        "text": "Settings"
+      }
+    ],
+    "clippedTitles": [],
+    "activeElement": "BODY"
+  },
+  "1440-compact-en": {
+    "viewport": [
+      1440,
+      900
+    ],
+    "horizontalScroll": false,
+    "navVar": "88px",
+    "scrollPaddingTop": "72px",
+    "navRect": {
+      "x": 0,
+      "y": 0,
+      "w": 88,
+      "h": 900
+    },
+    "headerRect": {
+      "x": 88,
+      "y": 0,
+      "w": 1352,
+      "h": 72
+    },
+    "headerPaddingLeft": "40px",
+    "contentPaddingLeft": "40px",
+    "contentRect": {
+      "x": 88,
+      "y": 72,
+      "w": 1352,
+      "h": 828
+    },
+    "h1Rect": {
+      "x": 128,
+      "y": 84.1,
+      "w": 104.6,
+      "h": 22
+    },
+    "controls": [
+      {
+        "label": "Collapse or expand sidebar",
+        "x": 120,
+        "y": 18,
+        "w": 36,
+        "h": 36
+      },
+      {
+        "label": "Switch interface language",
+        "x": 1318,
+        "y": 19,
+        "w": 40,
+        "h": 34
+      },
+      {
+        "label": "View repository on GitHub",
+        "x": 1364,
+        "y": 18,
+        "w": 36,
+        "h": 36
+      }
+    ],
+    "overlap": null,
+    "rows": [
+      {
+        "href": "#/collections",
+        "h": 44,
+        "w": 44,
+        "text": ""
+      },
+      {
+        "href": "#/",
+        "h": 44,
+        "w": 44,
+        "text": ""
+      },
+      {
+        "href": "#/chat",
+        "h": 44,
+        "w": 44,
+        "text": ""
+      },
+      {
+        "href": "#/settings",
+        "h": 44,
+        "w": 44,
+        "text": ""
+      }
+    ],
+    "clippedTitles": [],
+    "activeElement": "BODY"
+  },
+  "1024-pinned-en": {
+    "viewport": [
+      1024,
+      768
+    ],
+    "horizontalScroll": false,
+    "navVar": "300px",
+    "scrollPaddingTop": "72px",
+    "navRect": {
+      "x": 0,
+      "y": 0,
+      "w": 300,
+      "h": 768
+    },
+    "headerRect": {
+      "x": 300,
+      "y": 0,
+      "w": 724,
+      "h": 72
+    },
+    "headerPaddingLeft": "24px",
+    "contentPaddingLeft": "24px",
+    "contentRect": {
+      "x": 300,
+      "y": 72,
+      "w": 724,
+      "h": 696
+    },
+    "h1Rect": {
+      "x": 324,
+      "y": 84.1,
+      "w": 104.6,
+      "h": 22
+    },
+    "controls": [
+      {
+        "label": "Collapse or expand sidebar",
+        "x": 316,
+        "y": 18,
+        "w": 36,
+        "h": 36
+      },
+      {
+        "label": "Switch interface language",
+        "x": 918,
+        "y": 19,
+        "w": 40,
+        "h": 34
+      },
+      {
+        "label": "View repository on GitHub",
+        "x": 964,
+        "y": 18,
+        "w": 36,
+        "h": 36
+      }
+    ],
+    "overlap": null,
+    "rows": [
+      {
+        "href": "#/collections",
+        "h": 44,
+        "w": 223,
+        "text": "Collections"
+      },
+      {
+        "href": "#/collections/bilibili",
+        "h": 40,
+        "w": 229,
+        "text": "Bilibili Favorites"
+      },
+      {
+        "href": "#/collections/github",
+        "h": 40,
+        "w": 229,
+        "text": "GitHub Stars"
+      },
+      {
+        "href": "#/collections/bookmarks",
+        "h": 40,
+        "w": 229,
+        "text": "Browser Bookmarks"
+      },
+      {
+        "href": "#/collections/x",
+        "h": 40,
+        "w": 229,
+        "text": "X Bookmarks"
+      },
+      {
+        "href": "#/collections/zhihu",
+        "h": 40,
+        "w": 229,
+        "text": "Zhihu Favorites"
+      },
+      {
+        "href": "#/collections/youtube",
+        "h": 40,
+        "w": 229,
+        "text": "YouTube Playlists"
+      },
+      {
+        "href": "https://github.com/InvisibleQAQ/favbase/issues/new?title=%5BPlatform+Request%5D+%3Cplatform+name%3E&body=**Platform**%3A+%0A%0A**Favorites+%2F+bookmarks+page+URL**%3A+%0A%0A**What+would+you+like+collected**%3A+",
+        "h": 40,
+        "w": 229,
+        "text": "Request a platform"
+      },
+      {
+        "href": "#/",
+        "h": 44,
+        "w": 267,
+        "text": "Analytics"
+      },
+      {
+        "href": "#/chat",
+        "h": 44,
+        "w": 267,
+        "text": "Chat"
+      },
+      {
+        "href": "#/settings",
+        "h": 44,
+        "w": 267,
+        "text": "Settings"
+      }
+    ],
+    "clippedTitles": [],
+    "activeElement": "BODY"
+  },
+  "390-en": {
+    "viewport": [
+      390,
+      844
+    ],
+    "horizontalScroll": false,
+    "navVar": "300px",
+    "scrollPaddingTop": "64px",
+    "navRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0,
+      "h": 0
+    },
+    "headerRect": {
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 64
+    },
+    "headerPaddingLeft": "16px",
+    "contentPaddingLeft": "16px",
+    "contentRect": {
+      "x": 0,
+      "y": 64,
+      "w": 390,
+      "h": 780
+    },
+    "h1Rect": {
+      "x": 16,
+      "y": 76.1,
+      "w": 104.6,
+      "h": 22
+    },
+    "controls": [
+      {
+        "label": "Open navigation menu",
+        "x": 8,
+        "y": 14,
+        "w": 36,
+        "h": 36
+      },
+      {
+        "label": "Switch interface language",
+        "x": 298,
+        "y": 15,
+        "w": 40,
+        "h": 34
+      },
+      {
+        "label": "View repository on GitHub",
+        "x": 338,
+        "y": 14,
+        "w": 36,
+        "h": 36
+      }
+    ],
+    "overlap": null,
+    "rows": [
+      {
+        "href": "#/collections",
+        "h": 0,
+        "w": 0,
+        "text": "Collections"
+      },
+      {
+        "href": "#/collections/bilibili",
+        "h": 0,
+        "w": 0,
+        "text": "Bilibili Favorites"
+      },
+      {
+        "href": "#/collections/github",
+        "h": 0,
+        "w": 0,
+        "text": "GitHub Stars"
+      },
+      {
+        "href": "#/collections/bookmarks",
+        "h": 0,
+        "w": 0,
+        "text": "Browser Bookmarks"
+      },
+      {
+        "href": "#/collections/x",
+        "h": 0,
+        "w": 0,
+        "text": "X Bookmarks"
+      },
+      {
+        "href": "#/collections/zhihu",
+        "h": 0,
+        "w": 0,
+        "text": "Zhihu Favorites"
+      },
+      {
+        "href": "#/collections/youtube",
+        "h": 0,
+        "w": 0,
+        "text": "YouTube Playlists"
+      },
+      {
+        "href": "https://github.com/InvisibleQAQ/favbase/issues/new?title=%5BPlatform+Request%5D+%3Cplatform+name%3E&body=**Platform**%3A+%0A%0A**Favorites+%2F+bookmarks+page+URL**%3A+%0A%0A**What+would+you+like+collected**%3A+",
+        "h": 0,
+        "w": 0,
+        "text": "Request a platform"
+      },
+      {
+        "href": "#/",
+        "h": 0,
+        "w": 0,
+        "text": "Analytics"
+      },
+      {
+        "href": "#/chat",
+        "h": 0,
+        "w": 0,
+        "text": "Chat"
+      },
+      {
+        "href": "#/settings",
+        "h": 0,
+        "w": 0,
+        "text": "Settings"
+      }
+    ],
+    "clippedTitles": [],
+    "activeElement": "BODY"
+  },
+  "390-drawer-open": {
+    "viewport": [
+      390,
+      844
+    ],
+    "horizontalScroll": false,
+    "navVar": "300px",
+    "scrollPaddingTop": "64px",
+    "navRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0,
+      "h": 0
+    },
+    "headerRect": {
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 64
+    },
+    "headerPaddingLeft": "16px",
+    "contentPaddingLeft": "16px",
+    "contentRect": {
+      "x": 0,
+      "y": 64,
+      "w": 390,
+      "h": 780
+    },
+    "h1Rect": {
+      "x": 16,
+      "y": 76.1,
+      "w": 104.6,
+      "h": 22
+    },
+    "controls": [
+      {
+        "label": "Open navigation menu",
+        "x": 8,
+        "y": 14,
+        "w": 36,
+        "h": 36
+      },
+      {
+        "label": "Switch interface language",
+        "x": 298,
+        "y": 15,
+        "w": 40,
+        "h": 34
+      },
+      {
+        "label": "View repository on GitHub",
+        "x": 338,
+        "y": 14,
+        "w": 36,
+        "h": 36
+      }
+    ],
+    "overlap": null,
+    "rows": [
+      {
+        "href": "#/collections",
+        "h": 0,
+        "w": 0,
+        "text": "Collections"
+      },
+      {
+        "href": "#/collections/bilibili",
+        "h": 0,
+        "w": 0,
+        "text": "Bilibili Favorites"
+      },
+      {
+        "href": "#/collections/github",
+        "h": 0,
+        "w": 0,
+        "text": "GitHub Stars"
+      },
+      {
+        "href": "#/collections/bookmarks",
+        "h": 0,
+        "w": 0,
+        "text": "Browser Bookmarks"
+      },
+      {
+        "href": "#/collections/x",
+        "h": 0,
+        "w": 0,
+        "text": "X Bookmarks"
+      },
+      {
+        "href": "#/collections/zhihu",
+        "h": 0,
+        "w": 0,
+        "text": "Zhihu Favorites"
+      },
+      {
+        "href": "#/collections/youtube",
+        "h": 0,
+        "w": 0,
+        "text": "YouTube Playlists"
+      },
+      {
+        "href": "https://github.com/InvisibleQAQ/favbase/issues/new?title=%5BPlatform+Request%5D+%3Cplatform+name%3E&body=**Platform**%3A+%0A%0A**Favorites+%2F+bookmarks+page+URL**%3A+%0A%0A**What+would+you+like+collected**%3A+",
+        "h": 0,
+        "w": 0,
+        "text": "Request a platform"
+      },
+      {
+        "href": "#/",
+        "h": 0,
+        "w": 0,
+        "text": "Analytics"
+      },
+      {
+        "href": "#/chat",
+        "h": 0,
+        "w": 0,
+        "text": "Chat"
+      },
+      {
+        "href": "#/settings",
+        "h": 0,
+        "w": 0,
+        "text": "Settings"
+      }
+    ],
+    "clippedTitles": [],
+    "activeElement": "DIV"
+  },
+  "390-after-drawer-nav": {
+    "viewport": [
+      390,
+      844
+    ],
+    "horizontalScroll": false,
+    "navVar": "300px",
+    "scrollPaddingTop": "64px",
+    "navRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0,
+      "h": 0
+    },
+    "headerRect": {
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 64
+    },
+    "headerPaddingLeft": "16px",
+    "contentPaddingLeft": "16px",
+    "contentRect": {
+      "x": 0,
+      "y": 64,
+      "w": 390,
+      "h": 1373.3
+    },
+    "h1Rect": null,
+    "controls": [
+      {
+        "label": "Open navigation menu",
+        "x": 8,
+        "y": 14,
+        "w": 36,
+        "h": 36
+      },
+      {
+        "label": "Switch interface language",
+        "x": 298,
+        "y": 15,
+        "w": 40,
+        "h": 34
+      },
+      {
+        "label": "View repository on GitHub",
+        "x": 338,
+        "y": 14,
+        "w": 36,
+        "h": 36
+      }
+    ],
+    "overlap": null,
+    "rows": [
+      {
+        "href": "#/collections",
+        "h": 0,
+        "w": 0,
+        "text": "Collections"
+      },
+      {
+        "href": "#/collections/bilibili",
+        "h": 0,
+        "w": 0,
+        "text": "Bilibili Favorites"
+      },
+      {
+        "href": "#/collections/github",
+        "h": 0,
+        "w": 0,
+        "text": "GitHub Stars"
+      },
+      {
+        "href": "#/collections/bookmarks",
+        "h": 0,
+        "w": 0,
+        "text": "Browser Bookmarks"
+      },
+      {
+        "href": "#/collections/x",
+        "h": 0,
+        "w": 0,
+        "text": "X Bookmarks"
+      },
+      {
+        "href": "#/collections/zhihu",
+        "h": 0,
+        "w": 0,
+        "text": "Zhihu Favorites"
+      },
+      {
+        "href": "#/collections/youtube",
+        "h": 0,
+        "w": 0,
+        "text": "YouTube Playlists"
+      },
+      {
+        "href": "https://github.com/InvisibleQAQ/favbase/issues/new?title=%5BPlatform+Request%5D+%3Cplatform+name%3E&body=**Platform**%3A+%0A%0A**Favorites+%2F+bookmarks+page+URL**%3A+%0A%0A**What+would+you+like+collected**%3A+",
+        "h": 0,
+        "w": 0,
+        "text": "Request a platform"
+      },
+      {
+        "href": "#/",
+        "h": 0,
+        "w": 0,
+        "text": "Analytics"
+      },
+      {
+        "href": "#/chat",
+        "h": 0,
+        "w": 0,
+        "text": "Chat"
+      },
+      {
+        "href": "#/settings",
+        "h": 0,
+        "w": 0,
+        "text": "Settings"
+      }
+    ],
+    "clippedTitles": [],
+    "activeElement": "Open navigation menu"
+  },
+  "390-drawer-zh": {
+    "viewport": [
+      390,
+      844
+    ],
+    "horizontalScroll": false,
+    "navVar": "300px",
+    "scrollPaddingTop": "64px",
+    "navRect": {
+      "x": 0,
+      "y": 0,
+      "w": 0,
+      "h": 0
+    },
+    "headerRect": {
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 64
+    },
+    "headerPaddingLeft": "16px",
+    "contentPaddingLeft": "16px",
+    "contentRect": {
+      "x": 0,
+      "y": 64,
+      "w": 390,
+      "h": 1309.3
+    },
+    "h1Rect": null,
+    "controls": [
+      {
+        "label": "打开导航菜单",
+        "x": 8,
+        "y": 14,
+        "w": 36,
+        "h": 36
+      },
+      {
+        "label": "切换界面语言",
+        "x": 298,
+        "y": 15,
+        "w": 40,
+        "h": 34
+      },
+      {
+        "label": "在 GitHub 上查看仓库",
+        "x": 338,
+        "y": 14,
+        "w": 36,
+        "h": 36
+      }
+    ],
+    "overlap": null,
+    "rows": [
+      {
+        "href": "#/collections",
+        "h": 0,
+        "w": 0,
+        "text": "收藏夹"
+      },
+      {
+        "href": "#/collections/bilibili",
+        "h": 0,
+        "w": 0,
+        "text": "B 站收藏夹"
+      },
+      {
+        "href": "#/collections/github",
+        "h": 0,
+        "w": 0,
+        "text": "GitHub Stars"
+      },
+      {
+        "href": "#/collections/bookmarks",
+        "h": 0,
+        "w": 0,
+        "text": "浏览器书签"
+      },
+      {
+        "href": "#/collections/x",
+        "h": 0,
+        "w": 0,
+        "text": "X 书签"
+      },
+      {
+        "href": "#/collections/zhihu",
+        "h": 0,
+        "w": 0,
+        "text": "知乎收藏"
+      },
+      {
+        "href": "#/collections/youtube",
+        "h": 0,
+        "w": 0,
+        "text": "YouTube 播放列表"
+      },
+      {
+        "href": "https://github.com/InvisibleQAQ/favbase/issues/new?title=%5BPlatform+Request%5D+%3Cplatform+name%3E&body=**Platform**%3A+%0A%0A**Favorites+%2F+bookmarks+page+URL**%3A+%0A%0A**What+would+you+like+collected**%3A+",
+        "h": 0,
+        "w": 0,
+        "text": "请求新平台"
+      },
+      {
+        "href": "#/",
+        "h": 0,
+        "w": 0,
+        "text": "Analytics"
+      },
+      {
+        "href": "#/chat",
+        "h": 0,
+        "w": 0,
+        "text": "对话"
+      },
+      {
+        "href": "#/settings",
+        "h": 0,
+        "w": 0,
+        "text": "设置"
+      }
+    ],
+    "clippedTitles": [],
+    "activeElement": "DIV"
+  }
+}

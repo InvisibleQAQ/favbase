@@ -120,6 +120,26 @@ describe('Collections sidebar navigation', () => {
     expect(getComputedStyle(icon!).color).toBe(themeConfig.platform.light.bilibili);
   });
 
+  it('renders compact rows as icon-only links that keep an accessible name', () => {
+    act(() => {
+      root.render(
+        <ThemeProvider>
+          <MemoryRouter initialEntries={['/settings']}>
+            <NavDesktop data={COLLECTIONS_NAV} layoutQuery="lg" pinned={false} />
+          </MemoryRouter>
+        </ThemeProvider>,
+      );
+    });
+
+    const collectionsLink = container.querySelector('a[href="/collections"]');
+
+    expect(collectionsLink).not.toBeNull();
+    // Tooltip supplies aria-label from its title when the child has none.
+    expect(collectionsLink?.getAttribute('aria-label')).toBeTruthy();
+    expect(collectionsLink?.textContent).toBe('');
+    expect(container.querySelector('button[aria-expanded]')).toBeNull();
+  });
+
   it('keeps the active platform icon on the shared coral selection color', () => {
     const toggle = container.querySelector('button[aria-expanded="false"]');
 
