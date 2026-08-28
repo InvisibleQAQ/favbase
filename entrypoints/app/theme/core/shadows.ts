@@ -7,9 +7,9 @@ import { grey, common } from './palette';
 import type { ThemeColorScheme } from '../types';
 
 /**
- * MUI's 25-level elevation scale, recolored to the warm ink channel. Light
- * casts warm ink (grey 800) at low alpha; dark casts black at a higher alpha
- * because warm surfaces there sit close to the ground.
+ * MUI's 25-level elevation scale, recolored to the neutral ink channel.
+ * Light casts grey 800 at low alpha; dark casts black at a higher alpha
+ * because the dark surface step sits close to the page ground.
  */
 function createShadows(colorChannel: string, strength: number): Shadows {
   const color1 = varAlpha(colorChannel, 0.2 * strength);

@@ -35,7 +35,7 @@ export function BookmarkExtractionPanel({ extraction }: BookmarkExtractionPanelP
         mb: 2.5,
         p: 2,
         border: '1px solid',
-        borderRadius: 3,
+        borderRadius: 1,
         borderColor: varAlpha(theme.vars.palette.primary.mainChannel, 0.2),
         bgcolor: varAlpha(theme.vars.palette.primary.mainChannel, 0.06),
       })}
@@ -114,9 +114,9 @@ export function BookmarkExtractionPanel({ extraction }: BookmarkExtractionPanelP
           value={hasTotal ? progress : undefined}
           sx={(theme) => ({
             height: 6,
-            borderRadius: 1,
+            borderRadius: 0.5,
             bgcolor: varAlpha(theme.vars.palette.primary.mainChannel, 0.12),
-            [`& .${linearProgressClasses.bar}`]: { borderRadius: 1 },
+            [`& .${linearProgressClasses.bar}`]: { borderRadius: 0.5 },
           })}
         />
       )}

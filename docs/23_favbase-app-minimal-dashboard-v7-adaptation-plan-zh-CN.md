@@ -1,6 +1,6 @@
 # Favbase app.html 对齐 Minimal Dashboard v7.7.0 的前端 UI 重构计划
 
-> 文档状态：实施前计划（**仅限前端 UI** / UI-only）  
+> 文档状态：Phase 0 已完成，Phase 1 已实施（后续 Phase 仍按计划推进；**仅限前端 UI** / UI-only）
 > 目标入口：`entrypoints/app/index.html` 构建出的 `app.html`，以及其 React/MUI
 > 界面代码 `entrypoints/app/**`  
 > 参考项目：`minimal-vite-ts-main`，Minimal Dashboard v7.7.0  
@@ -37,13 +37,11 @@ Barlow、Hash Router、六平台 Collection、Chat、Settings、Pipeline、标�
 
 ### 1.2 标记盲区
 
-- **[UNKNOWN]** 用户提到的旧
-  `docs/23_favbase-app-minimal-dashboard-v7-adaptation-plan-zh-CN.md` 在本次审查
-  的工作树中不存在，因此本文件是按现有代码和文档重新建立的计划，不能声称已
-  覆盖未观察到的旧文内容。
-- **[UNKNOWN]** 本轮只完成源码级参考审计，尚未对 Minimal v7 与 Favbase 逐路由
-  采集同环境运行时截图。任何依赖视觉观感的数值，在实施 Phase 0 截图基线完成前
-  都只是候选，不得冒充已验证结果。
+- **[RESOLVED]** 本文件是当前唯一的 Minimal v7 适配计划；Phase 0 的 reference/target
+  运行时证据已经写入 `docs/reference-ui-audit.md`、`docs/target-ui-baseline.md`
+  与 `docs/ui-baseline/2026-08-26/`。
+- **[RESOLVED]** Phase 1 的 token、组件默认值和受基础圆角影响的局部值已通过源码
+  契约测试、compile 与 WXT build；后续页面视觉迁移仍需按各 Phase 的运行时验收执行。
 - **[UNKNOWN]** 390px 是移动验收视口，不代表 Chrome 桌面扩展页的最小可缩放
   宽度；它用于验证 reflow，不用于推断真实用户窗口分布。
 
@@ -59,10 +57,11 @@ Barlow、Hash Router、六平台 Collection、Chat、Settings、Pipeline、标�
 
 是真问题。当前 UI owner 已存在，但文档、实现和参考方向发生漂移：
 
-- **[TARGET_FACT]** 实际主题是珊瑚 + 暖灰、`shape.borderRadius = 4`、条目卡
-  12px、零阴影；见 `entrypoints/app/theme/**`。
-- **[TARGET_FACT]** `.trellis/spec/frontend/ui-design-system.md` 仍描述蓝色
-  Material Kit、`shape = 8`、16px 阴影卡片，与实际实现不一致。
+- **[TARGET_FACT]** Phase 1 后主题保留珊瑚品牌色，采用 Minimal 冷灰 ramp，
+  `shape.borderRadius = 8`；light Card 用低强度 card shadow，dark Card 用 divider
+  hairline；见 `entrypoints/app/theme/**`。
+- **[TARGET_FACT]** `.trellis/spec/frontend/ui-design-system.md` 已同步到当前实现，
+  不再描述蓝色 Material Kit 或过期的 16px Card/overlay 半径。
 - **[TARGET_FACT]** 页面中已有大量共享 owner，但仍存在页面密度、标题层级、
   状态呈现和局部 `sx` 不一致的问题；见
   `docs/19_app-design-critique-2026-08-20.md`。
@@ -195,7 +194,7 @@ Favbase 是高频扫描、搜索、筛选和打开收藏的操作型工具，不
 | 已有相同 LayoutSection/Header/Main 分层 | `[TARGET_FACT] entrypoints/app/layouts/core/**` |
 | Header 已是 64/72px，移动 Drawer 已是 288px | `[TARGET_FACT] entrypoints/app/layouts/core/css-vars.ts` |
 | 桌面导航当前 280/72px | `[TARGET_FACT] entrypoints/app/layouts/dashboard/css-vars.ts` |
-| 当前视觉是暖纸、暖墨、珊瑚印章、无阴影条目 | `[TARGET_FACT] entrypoints/app/theme/CLAUDE.md` |
+| 当前视觉是冷灰 surface、珊瑚印章、scheme-aware Card elevation | `[TARGET_FACT] entrypoints/app/theme/CLAUDE.md` |
 | 共享 Collection scaffold 和 Card 已覆盖六平台 | `[TARGET_FACT] entrypoints/app/components/collection/**` |
 | Dashboard 已用 hairline summary band，而非 KPI 卡堆 | `[TARGET_FACT] entrypoints/app/sections/overview/overview-view.tsx` |
 | light/dark 与 zh-CN/en 均为现有支持面 | `[TARGET_FACT] PRODUCT.md`、theme、i18n |
@@ -260,8 +259,8 @@ Favbase 是高频扫描、搜索、筛选和打开收藏的操作型工具，不
 
 **重构目标：**
 
-- 基础中性色向 Minimal v7 的清晰灰阶和 surface 层次靠拢，但最终值必须经过
-  Favbase light/dark 对比度检查；
+- 基础中性色已采用 Minimal v7 的清晰灰阶和 surface 层次，并经过 Favbase
+  light/dark 对比度检查；
 - `background.default` 是页面画布；`paper` 只给 overlay、Card 和真实工具；
 - `neutral` 只给 hover、输入辅助面和状态背景；
 - `divider` 是默认分区手段；
@@ -301,7 +300,7 @@ Minimal 的 64px 响应式 display 字号。**
 **[DECISION] 向 Minimal 的 8px 基础圆角靠拢，但操作型 UI 的 Card/面板不超过
 8px；pill 只用于 Chip、Switch、Badge 等天然胶囊控件。**
 
-- `theme.shape.borderRadius = 8` 候选；
+- `theme.shape.borderRadius = 8` 已锁定；
 - Button、Field、MenuItem、Card、Dialog、Popover 默认不超过 8px；
 - Collection media 保持稳定 aspect ratio，圆角继承共享 Card 规则；
 - 亮色 Card 可使用一套低强度、有垂直偏移的 `customShadows.card`，不同时画完整
@@ -521,6 +520,9 @@ Overlay：
 
 ### Phase 0：建立可复现视觉基线
 
+**实施状态（2026-08-26）：已完成。** Accepted reference/target screenshots 和复现
+元数据见 `docs/reference-ui-audit.md`、`docs/target-ui-baseline.md`。
+
 **目标：** 先知道当前 target 和 reference 实际长什么样，避免只看源码猜视觉。
 
 步骤：
@@ -538,6 +540,13 @@ Overlay：
 **回滚：** 无代码修改。
 
 ### Phase 1：重构 theme token 和 MUI defaults
+
+**实施状态（2026-08-27）：已完成。** `theme/` 现在是 primitive、semantic、component
+token 的单一 owner；页面只保留因 4px→8px 基础单位换算而必要的局部半径。验证结果：
+`pnpm compile`、`pnpm exec vitest run lib/chat entrypoints/app/sections/chat entrypoints/app/theme`
+和 `pnpm build` 通过；完整 `pnpm test` 在默认并发下有既有的 5 秒时序超时（本次复现
+为未修改的 `lib/database/db.test.ts`，此前一次复现为 Bilibili import-smoke），对应
+测试单独运行通过，未触及本次 theme 调用链。
 
 **目标文件：**
 
@@ -851,17 +860,18 @@ Overlay：
 - 没有新增领域术语，因此不修改 `CONTEXT.md`；
 - 没有不可逆架构决策，因此不新增 ADR；
 - 没有未解决的产品设计分支；
-- 唯一阻塞性未知是运行时视觉证据尚未采集，已放入 Phase 0，不影响本计划定稿，
-  但会阻止未经截图验证的全量实施。
+- Phase 0 运行时视觉证据已采集；Phase 1 的运行时细节仍需在后续 shell/page Phase
+  的代表性路线中复核，不能把本轮源码测试当作全量视觉验收。
 
 ## 15. 当前审查判断
 
 **品味评分：凑合。** 代码已有正确的 theme/layout/scaffold owner，说明基础没有坏；
 但实际 UI、目录文档和 Trellis UI spec 不一致，继续按页面打补丁会让系统失控。
 
-**致命问题：** 不是某个圆角或颜色，而是设计事实没有单一 owner。实现写着暖纸珊瑚
-目录卡片，Trellis spec 写着蓝色 Material Kit 阴影卡片，用户目标又是 Minimal v7。
-三套真相并存，任何 agent 都可能“正确地”做出错误结果。
+**致命问题（Phase 0 前）：** 不是某个圆角或颜色，而是设计事实没有单一 owner。实现
+写着一套暖纸珊瑚目录卡片，Trellis spec 写着蓝色 Material Kit 阴影卡片，用户目标又
+是 Minimal v7。Phase 1 已把 palette、shape、elevation、MUI defaults 和规范收敛到同一
+条 theme pipeline，后续只需按页面 Phase 逐步迁移。
 
 **改进方向：** 按本文 Phase 0-4 先建立证据、统一 token/spec、完成一个 Dashboard
 vertical slice；通过人工视觉与行为审查后，再扩展到 Collections、Settings 和 Chat。

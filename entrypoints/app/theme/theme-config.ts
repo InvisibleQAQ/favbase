@@ -26,9 +26,9 @@ type ThemeConfig = {
     >;
   };
   /**
-   * Scheme-split brand values. The brand hue is fixed; only the wash (`lighter`,
-   * used for hover/active tints) and the text-safe accent flip with the scheme.
-   * Everything else in `palette` is shared by light and dark.
+   * Scheme-owned semantic values. The brand hue is fixed; the wash and
+   * text-safe accent flip with the scheme, while text/background roles describe
+   * each ground explicitly. Shared primitive ramps stay under `palette`.
    */
   scheme: Record<
     'light' | 'dark',
@@ -37,6 +37,8 @@ type ThemeConfig = {
       primaryLighter: string;
       /** `text.accent` — the only shade of the brand hue allowed as text. */
       accentText: string;
+      text: Record<'primary' | 'secondary' | 'disabled', string>;
+      background: Record<'default' | 'paper' | 'neutral', string>;
     }
   >;
   /**
@@ -48,10 +50,10 @@ type ThemeConfig = {
 };
 
 /**
- * Catalog-card visual language (docs/19 §7.0.1). White canvas, warm ink
- * text, warm grey hairlines; coral `#FC7E5B` is a stamp (a block of color)
- * and never small text. Binding: coral hue, DM Sans Variable + Barlow,
- * fox logo, lowercase `favbase` (PRODUCT.md).
+ * Minimal's operational dashboard neutrals with Favbase's coral identity.
+ * Coral `#FC7E5B` is a stamp (a block of color) and never small text.
+ * Binding: coral hue, DM Sans Variable + Barlow, fox logo, lowercase
+ * `favbase` (PRODUCT.md).
  */
 export const themeConfig: ThemeConfig = {
   classesPrefix: 'favbase',
@@ -109,24 +111,35 @@ export const themeConfig: ThemeConfig = {
       darker: '#7A0C0C',
       contrastText: '#FFFFFF',
     },
-    // Warm grey ramp: paper at the top, ink at the bottom.
+    // Minimal v7 neutral ramp. Scheme surfaces below reference this ramp.
     grey: {
-      '50': '#FBF9F6',
-      '100': '#F5F1EA',
-      '200': '#ECE6DD',
-      '300': '#DCD4C8',
-      '400': '#BDB3A6',
-      '500': '#8F867B',
-      '600': '#6B635A',
-      '700': '#4A443E',
-      '800': '#2A2521',
-      '900': '#1A1715',
+      '50': '#FCFDFD',
+      '100': '#F9FAFB',
+      '200': '#F4F6F8',
+      '300': '#DFE3E8',
+      '400': '#C4CDD5',
+      '500': '#919EAB',
+      '600': '#637381',
+      '700': '#454F5B',
+      '800': '#1C252E',
+      '900': '#141A21',
     },
     common: { black: '#000000', white: '#FFFFFF' },
   },
   scheme: {
-    light: { primaryLighter: '#FEE9E1', accentText: '#7A2714' },
-    dark: { primaryLighter: '#3A2A24', accentText: '#FDA48A' },
+    light: {
+      primaryLighter: '#FEE9E1',
+      accentText: '#7A2714',
+      text: { primary: '#1C252E', secondary: '#637381', disabled: '#919EAB' },
+      background: { default: '#FFFFFF', paper: '#FFFFFF', neutral: '#F4F6F8' },
+    },
+    dark: {
+      primaryLighter: '#3A2A24',
+      accentText: '#FDA48A',
+      text: { primary: '#F4F6F8', secondary: '#C4CDD5', disabled: '#637381' },
+      // Slightly quieter than Minimal's neutral so every platform graphic keeps 3:1.
+      background: { default: '#141A21', paper: '#1C252E', neutral: '#222B34' },
+    },
   },
   // Brand hues re-inked for each ground. Values come from the dataviz palette
   // validator (adjacent-pairs mode, all six checks pass on both the ground and

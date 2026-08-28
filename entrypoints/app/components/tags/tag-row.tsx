@@ -50,7 +50,7 @@ export function TagRow({ tags, onEditTags }: TagRowProps) {
           right: theme.spacing(0.75),
           zIndex: 1,
           opacity: 0,
-          borderRadius: 1,
+          borderRadius: 0.5,
           bgcolor: theme.vars.palette.background.neutral,
           transition: theme.transitions.create('opacity', {
             duration: theme.transitions.duration.shortest,

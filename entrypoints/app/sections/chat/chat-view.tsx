@@ -207,7 +207,7 @@ export function ChatWorkspace({ agent }: ChatWorkspaceProps) {
           minHeight: 0,
           minWidth: 0,
           overflow: 'hidden',
-          borderRadius: 3,
+          borderRadius: 1,
           borderColor: theme.vars.palette.divider,
           boxShadow: 'none',
         })}
@@ -500,7 +500,7 @@ function ConversationRow({ conversation, active, onSelect, onDelete, t }: Conver
         alignItems: 'center',
         gap: 0.25,
         p: 0.25,
-        borderRadius: 1,
+        borderRadius: 0.5,
         transition: theme.transitions.create(['background-color']),
         // Selected row = coral wash under ink text (the nav active pattern);
         // coral is never the text color.
@@ -516,7 +516,7 @@ function ConversationRow({ conversation, active, onSelect, onDelete, t }: Conver
           flexGrow: 1,
           minWidth: 0,
           justifyContent: 'flex-start',
-          borderRadius: 1,
+          borderRadius: 0.5,
           px: 0.75,
           py: 0.625,
           textAlign: 'left',
@@ -630,7 +630,7 @@ function MessageBubble({ message, activityLabel: activity, pending }: MessageBub
               ? {
                   px: 2,
                   py: 1.25,
-                  borderRadius: 3,
+                  borderRadius: 1,
                   whiteSpace: 'pre-wrap',
                   bgcolor: varAlpha(theme.vars.palette.primary.mainChannel, 0.12),
                 }

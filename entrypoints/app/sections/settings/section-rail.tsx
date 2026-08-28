@@ -35,7 +35,7 @@ export function SectionRail<T extends string>({ value, onChange, items }: Sectio
       variant={isCompact ? 'fullWidth' : 'standard'}
       value={value}
       onChange={(_, v) => onChange(v as T)}
-      sx={(t) => segmentedTabsSx(t, { compact: isCompact, tabMinHeight: 44 })}
+      sx={(t) => segmentedTabsSx(t, { compact: isCompact, tabMinHeight: 48 })}
     >
       {items.map((item) => (
         <Tab

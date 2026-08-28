@@ -14,4 +14,4 @@ MUI v7 Dashboard，视觉语言为「目录卡片库」（`docs/19_app-design-cr
 
 ## 约定
 
-- Extension Page (app.html): MUI v7 + Emotion CSS-in-JS + `createHashRouter`。Chrome 扩展页面 URL 不支持路径路由，必须用 hash router。主题系统基于 `minimal-shared` 工具库（`varAlpha`/`createPaletteChannel`）+ `@iconify/react` 图标，值已从 material-kit-react 换成目录卡片库方向。新增页面：在 `pages/` 添加 lazy 组件 + `main.tsx` 路由配置 + `nav-config.tsx` 导航项
+- Extension Page (app.html): MUI v7 + Emotion CSS-in-JS + `createHashRouter`。Chrome 扩展页面 URL 不支持路径路由，必须用 hash router。主题系统基于 `minimal-shared` 工具库（`varAlpha`/`createPaletteChannel`）+ `@iconify/react` 图标，值已从 material-kit-react 换成目录卡片库方向；Phase 1 的 8px base shape、冷灰 scheme token、组件 defaults 和 Card/overlay elevation 均由 `theme/` 单一 owner 提供，页面仅消费 `theme.vars.*`，局部半径使用 0.5/0.75/1 单位。新增页面：在 `pages/` 添加 lazy 组件 + `main.tsx` 路由配置 + `nav-config.tsx` 导航项

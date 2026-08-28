@@ -77,7 +77,7 @@ const markdownComponents: Components = {
         my: 1,
         ml: 0,
         pl: 1.5,
-        borderLeft: `3px solid ${varAlpha(theme.vars.palette.grey['500Channel'], 0.32)}`,
+        borderLeft: `1px solid ${varAlpha(theme.vars.palette.grey['500Channel'], 0.32)}`,
         color: theme.vars.palette.text.secondary,
       })}
     >
@@ -105,7 +105,7 @@ const markdownComponents: Components = {
         sx={(theme) => ({
           px: 0.5,
           py: 0.125,
-          borderRadius: 1,
+          borderRadius: 0.5,
           fontFamily: 'monospace',
           fontSize: theme.typography.caption.fontSize,
           bgcolor: varAlpha(theme.vars.palette.grey['500Channel'], 0.12),
@@ -121,7 +121,7 @@ const markdownComponents: Components = {
       sx={(theme) => ({
         my: 1,
         p: 1.5,
-        borderRadius: 1,
+        borderRadius: 0.5,
         overflowX: 'auto',
         fontFamily: 'monospace',
         fontSize: theme.typography.caption.fontSize,

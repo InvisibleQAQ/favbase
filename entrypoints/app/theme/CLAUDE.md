@@ -1,28 +1,74 @@
 # app/theme
 
-MUI v7 主题系统（palette/typography/shadows/custom-shadows/components）。视觉语言 = 「目录卡片库」方向（`docs/19_app-design-critique-2026-08-20.md` §7.0.1，PRD `.trellis/tasks/08-20-app-catalog-card-visual-language-p0/prd.md` §3）：白色画布 + 暖墨字 + 暖灰细线，条目零阴影；珊瑚 `#FC7E5B` 只做色块（印章/选中/计数），从不做文字。绑定不动：珊瑚色相、DM Sans Variable + Barlow、狐狸 logo、小写 `favbase`（`PRODUCT.md`）。支持 light + dark 双 colorScheme。**token 名与组件 API 全部保留，只换值**——调用点仍写 `color="primary"` / `customShadows.card` / `variant="contained"`。
+This directory owns the single MUI v7 CSS-variable theme used by `app.html`
+and `welcome.html`. Pages consume semantic `theme.vars` tokens; they must not
+copy palette, typography, radius, or elevation values into local `sx`.
 
-## 模块结构
+## Owners
 
-- `theme-config.ts` — 调色板常量（primary/secondary/info/success/warning/error 五阶 + 暖灰 grey 50→900 + common）+ `scheme.{light,dark}`（按模式分裂的品牌值：`primaryLighter` 淡洗、`accentText` 文字安全阶）+ `platform.{light,dark}`（四个有色 logo 平台的身份色：bilibili/bookmarks/zhihu/youtube，类型 `BrandColoredPlatform = Exclude<CollectionPlatform, 'github' | 'x'>`——黑 logo 平台**不在表内**，在 `palette.ts` 映射为墨；色值由 dataviz 验证器算定，见下方「平台身份色」）+ 字体配置（classesPrefix: 'favbase'）+ `cssVariables.colorSchemeSelector: 'data-color-scheme'`。`primary.contrastText` 是深墨 `#1F1B17`（印章上的字 ≈6.7:1），不是白
-- `create-theme.ts` — 主题工厂，合并 colorSchemes.{light,dark} + components + typography + `shape.borderRadius = 4`（圆角一套：×1=4 给 chip/印章/输入/菜单项，×2=8 给 popover，×3=12 给条目/dialog/面板；不再有 16px Card）
-- `theme-provider.tsx` — ThemeVarsProvider + CssBaseline 包装。`defaultMode="system"` + `modeStorageKey=COLOR_MODE_STORAGE_KEY`（`'favbase-color-mode'`）。**必须与 `public/theme-init.js` 的 FOUC 脚本 key 一致**
-- `extend-theme-types.d.ts` — MUI 类型扩展（customShadows, fontSecondaryFamily, palette 扩展：`TypeTextExtend` 含 `accent`/`accentChannel`；`Palette.platform: PlatformPalette & PlatformPaletteChannel` 让 `theme.vars.palette.platform[platform]` 通过类型检查）
-- `core/palette.ts` — `createPaletteChannel` + `varAlpha`。`text`/`background`/`action` 分 `.light`/`.dark`：亮 paper `#FFFFFF` / default `#FFFFFF` / neutral `#F1ECE4`，暗 `#221E1B` / default `#141A21` / neutral `#2A2521`；text 亮 `#1F1B17` / `#6B635A` / disabled `#8F867B`，暗 `#F3EEE7` / `#A89F94` / `#7A7168`。**`text.accent`**：品牌色相里唯一允许做文字的阶（亮 `primary.darker` `#7A2714`，暗 `primary.light` `#FDA48A`）——链接、强调、outlined/text 按钮全走它，禁止 `primary.main` 做文字。`primary` 按 scheme 分两份（`primary` / `primaryDark`）只为让 `lighter` 在暗色变成 `#3A2A24` 墨洗。`divider = varAlpha(grey500, 0.24)` 是表面唯一的立体感。**`platform`** 六 key 表按 scheme 分两份（`PLATFORM_PALETTE_LIGHT` / `PLATFORM_PALETTE_DARK`，`satisfies Record<CollectionPlatform, string>`，平台 N+1 不补就编译失败）：有色四个取 `themeConfig.platform.<scheme>`，`github` / `x` = 该 scheme 的 `text.primary`；六个 key **显式写出、不用 spread**——`tests/platform-completeness-contract.test.ts` 用 `collectRegistryCoverage` 按 AST 读这两个 const 的属性名（spread 读不到），黑 logo 平台映射为墨也必须逐 key 声明。经 `createPaletteChannel` 并入 `palette.light/dark.platform`，MUI 为每个 key 生成 `--palette-platform-<id>` CSS 变量，随 `data-color-scheme` 自动切换。`palette.test.ts` 锁：画布精确值、六 key = `COLLECTION_PLATFORMS`、github/x = text.primary、四色 = themeConfig、四色对 `background.default` 与 `background.neutral` 均 ≥ 3:1（WCAG helper 在测试内）
-- `core/typography.ts` — 无响应式缩放。`h1` Barlow 700 28（页标题）、`h2` Barlow 700 24、`h3` Barlow 600 20（大数字，调用方传 `component="p"`）；`h4-h6` DM Sans 600 16/14/14；subtitle1/2 600 16/14；body1/2 16/14；caption 12；button 600 14 `textTransform: unset`。UI 只有 12/14/16 三档，层级靠字重与颜色；组件内禁止主题外 `fontSize` 字面量（用 `typography: 'caption'` 或 `theme.typography.caption.fontSize`）
-- `core/shadows.ts` — MUI 25 级阴影换到暖墨通道（亮 `grey['800Channel']`，暗 `common.blackChannel` 更高 alpha）
-- `core/custom-shadows.ts` — **`card: 'none'`**（条目用 1px divider 细线，禁止边+阴影同现的「幽灵卡」）；`dropdown`/`dialog` = `0 8px 24px -8px`（亮墨 0.18 / 暗黑 0.5），z1-z24 同通道按比例缩放；彩色阴影 token 保留名
-- `core/components.tsx` — 组件覆盖：`MuiCssBaseline`（`body` 全局 `tabular-nums`——所有会变的数字不跳动；8px 暖灰滚动条；`::selection` = `primary.lighter` 底 + `text.primary`；caret = `text.primary`；焦点环亮 `2px solid primary.darker` / 暗 `primary.main`，`theme.applyStyles('dark')` 分支，`outline-offset: 2`）；`MuiTypography.variantMapping` subtitle1/2 → `p`（卡片标题不是 heading，一页一个 h1）；`MuiButton.containedPrimary` 亮 `grey900` 底白字 / 暗 `grey100` 底 `grey900` 字（每屏唯一反色元素，**禁止珊瑚底白字**），`outlinedPrimary`/`textPrimary` 用 `text.accent` + hover `primary.lighter`；`MuiCard` 无阴影 + 1px divider + 圆角 ×3；`MuiChip.filledPrimary` 印章 hover 升 `primary.light`，outlined default 边 = divider；`MuiTooltip` 亮 `grey800` 底白字 / 暗 `grey200` 底 `grey900` 字（灰阶 scheme 不变量必须显式分支）；`MuiPopover` 圆角 ×2 + dropdown 阴影 + 1px divider；`MuiDialog` 圆角 ×3；`MuiMenuItem` 圆角 ×1；`MuiLink` 颜色 `text.accent`；`MuiOutlinedInput`/`MuiPaper outlined` 边 = divider
+- `theme-config.ts` — primitive colors/fonts plus scheme-owned `text` and
+  `background` values, platform identity colors, and the
+  `data-color-scheme` selector.
+- `core/palette.ts` — derives channels and assembles the MUI palette. The
+  custom `platform` palette has one explicit key per `COLLECTION_PLATFORMS`
+  entry; GitHub and X use scheme text ink.
+- `core/typography.ts` — DM Sans Variable UI text and Barlow display text;
+  fixed 28/24/20/16/14/12px scale with zero letter spacing.
+- `core/shadows.ts` and `core/custom-shadows.ts` — MUI elevation and custom
+  overlay tokens. Light cards use a low-strength card shadow; dark cards use a
+  divider hairline and `card: 'none'`. Only dropdowns/dialogs cast strong
+  floating shadows.
+- `core/components.tsx` — shared defaults for buttons, cards, inputs, tabs,
+  chips, papers, overlays, skeletons, tables, and `CssBaseline`.
+- `create-theme.ts` — combines both color schemes and sets the base radius to
+  8px.
+- `theme-provider.tsx` — `ThemeVarsProvider` + `CssBaseline`; keep
+  `defaultMode="system"` and `favbase-color-mode` synchronized with
+  `public/theme-init.js`.
 
-## 约定
+## Token contract
 
-- **暗色模式切换（app.html only）**：二态旋钮在 `layouts/dashboard/header-actions.tsx` 的 `ThemeToggleSwitch`，用 MUI `useColorScheme()` 读 `mode`/`systemMode`、`setMode()` 写显式 light/dark。**范围仅 app.html**；B站 Content Script 面板是独立 Shadow DOM + `--fb-*` token 体系，不受此主题影响
-- **FOUC 防闪**：MV3 `extension_pages` CSP 禁止内联脚本，故用外部经典脚本 `public/theme-init.js`（`index.html` `<head>` 同步引用）读 `localStorage['favbase-color-mode']` 首帧设 `data-color-scheme`。改 key/attribute/默认模式时三处同步：`public/theme-init.js`、theme-provider、theme-config
-- **颜色用法铁律**：文字只用 `text.primary/secondary/accent`（disabled 只给 disabled 控件，不给卡片日期）；`primary.main` 只做色块；语义色作文字用 `.dark`（亮）/ `.light`（暗）并 `applyStyles('dark')` 分支。硬编码十六进制只允许在 `theme-config.ts`、`icon-sets.ts`（多色 SVG）、`language-colors.ts`（GitHub linguist 数据色）；`hooks/use-jobs-badge.ts` 经 `themeConfig.palette.warning.main` 读取（浏览器 API 不在 React 树内）
-- **平台身份色（2026-08-21）**：六平台品牌色一律经 `theme.vars.palette.platform[platform]` 消费（CSS 变量随 scheme 切换，不写 `applyStyles('dark')` 分支），**只能**落在该平台的图标字形与它自己的数据图形（份额条）；禁止做文字、背景、选中态——选中永远是珊瑚印章（`primary.main` 底 + `primary.contrastText` 字形）压过身份色。组件零平台字面量分支（`if (platform === 'github')` 是 bug），github/x 的墨来自 token 表本身。Analytics 平台架与 Collections 侧栏平台叶子都消费同一 token；侧栏通过 `NavItem.platform` 从 `collectionPlatformRegistry` 传递语义 ID，active 时由共享 `navActiveSx` 覆盖为珊瑚。**改色值必须重跑 dataviz 验证器**（adjacent 模式，两套 surface 全过）并更新 `.trellis/tasks/08-20-analytics-platform-brand-colors/research/palette-validation.md`：
-  ```
-  node <dataviz>/scripts/validate_palette.js "#C2185B,#B8760A,#1A73E8,#C62828" --mode light --surface "#FFFFFF" --pairs adjacent
-  node <dataviz>/scripts/validate_palette.js "#E8497F,#BF8A10,#3B8BEA,#D94040" --mode dark  --surface "#141A21" --pairs adjacent
-  ```
-  已知限制：bilibili 粉 ↔ youtube 红在 `--pairs all` 下过不了正常视觉 ΔE 15 底线；平台架里两行不相邻且每行都有图标 + 标签 + 数字，故接受。若两色将来做相邻标记（堆叠条、仅图例图表），先跑 `--pairs all`
-- 方向契约以 HTML 注释写在 `entrypoints/app/index.html` `<body>` 首子节点（seed key `30995f23`），构建后 `grep 30995f23 .output/chrome-mv3/app.html` 必须命中
+The neutral ramp is the Minimal v7 cold-grey ramp (`grey.50` through
+`grey.900`); Favbase keeps the coral brand hue and platform identity tokens.
+Scheme surfaces are:
+
+| role | light | dark |
+| --- | --- | --- |
+| `background.default` | `#FFFFFF` | `#141A21` |
+| `background.paper` | `#FFFFFF` | `#1C252E` |
+| `background.neutral` | `#F4F6F8` | `#222B34` |
+| `text.primary` | `#1C252E` | `#F4F6F8` |
+| `text.secondary` | `#637381` | `#C4CDD5` |
+| `text.accent` | `#7A2714` | `#FDA48A` |
+
+Use `theme.vars.palette.text.*`, `background.*`, `divider`, `action.*`, and
+`varAlpha(channel, alpha)`. `primary.main` is a brand block/icon signal, not
+small text. Platform colors are restricted to platform glyphs and their own
+analytics graphics; selection and navigation use the coral semantic roles.
+
+## Component defaults
+
+- Buttons have minimum heights 30/36/48px for small/medium/large and no
+  elevation.
+- Cards use an 8px radius and scheme-specific hairline/shadow treatment;
+  `CardHeader` and `CardContent` use 24px spacing.
+- InputBase, Input, FilledInput, and OutlinedInput provide 48px medium and
+  40px small single-line targets. Multiline fields stay content-driven.
+- Tabs and Tab use a 48px minimum target. Chips retain their native pill
+  shape. Rounded Skeletons use the 8px base radius.
+- Popover, Dialog, and Tooltip stay at or below 8px and consume their own
+  dropdown/dialog elevation tokens. `CssBaseline` owns tabular numerals,
+  scrollbar, selection, caret, and focus-visible rules.
+
+When the base radius changes, page-local numeric `sx` values use `0.5` (4px)
+for embedded media/progress, `0.75` (6px) for compact rows/tooltips, and `1`
+(8px) for panels and surfaces. `50%` is reserved for circular/pill controls.
+
+## Safety boundaries
+
+- Keep both `colorSchemes.light` and `.dark`; test contrast and component
+  states in both.
+- Do not change the mode storage key, selector, ThemeProvider API, or MUI
+  component props while editing theme tokens.
+- Do not import this MUI theme into Shadow DOM content scripts; those use their
+  own `--fb-*` token system.

@@ -52,7 +52,7 @@ function Thumbnail({ cover }: { cover?: string }) {
       sx={{
         width: THUMB_W,
         height: THUMB_H,
-        borderRadius: 1,
+        borderRadius: 0.5,
         flexShrink: 0,
         overflow: 'hidden',
         bgcolor: 'background.neutral',
@@ -107,7 +107,7 @@ function BarRow({ children, role }: { children: ReactNode; role?: 'status' }) {
         px: 2,
         py: 1.25,
         mb: 2.5,
-        borderRadius: 3,
+        borderRadius: 1,
         border: '1px solid',
         borderColor: 'divider',
         bgcolor: 'background.paper',

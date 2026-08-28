@@ -78,31 +78,18 @@ export const grey = createPaletteChannel(themeConfig.palette.grey);
 
 export const text = {
   light: createPaletteChannel({
-    primary: '#1F1B17',
-    secondary: grey[600],
-    // Disabled controls only — never card dates or captions.
-    disabled: grey[500],
+    ...themeConfig.scheme.light.text,
     accent: themeConfig.scheme.light.accentText,
   }),
   dark: createPaletteChannel({
-    primary: '#F3EEE7',
-    secondary: '#A89F94',
-    disabled: '#7A7168',
+    ...themeConfig.scheme.dark.text,
     accent: themeConfig.scheme.dark.accentText,
   }),
 };
 
 export const background = {
-  light: createPaletteChannel({
-    paper: '#FFFFFF',
-    default: '#FFFFFF',
-    neutral: '#F1ECE4',
-  }),
-  dark: createPaletteChannel({
-    paper: '#221E1B',
-    default: '#141A21',
-    neutral: '#2A2521',
-  }),
+  light: createPaletteChannel(themeConfig.scheme.light.background),
+  dark: createPaletteChannel(themeConfig.scheme.dark.background),
 };
 
 // Six keys written out explicitly (no spread) so the platform completeness
@@ -138,6 +125,9 @@ export const baseAction = {
   disabled: varAlpha(grey['500Channel'], 0.8),
   disabledBackground: varAlpha(grey['500Channel'], 0.24),
   hoverOpacity: 0.08,
+  selectedOpacity: 0.08,
+  focusOpacity: 0.12,
+  activatedOpacity: 0.12,
   disabledOpacity: 0.48,
 };
 
@@ -154,7 +144,6 @@ export const basePalette = {
   error,
   common,
   grey,
-  // The hairline is the only elevation a surface declares.
   divider: varAlpha(grey['500Channel'], 0.24),
 };
 

@@ -26,9 +26,9 @@ export const baseTheme: ThemeOptions = {
   },
   components,
   typography,
-  // One radius unit: ×1 (4px) for stamps / chips / inputs, ×3 (12px) for
-  // entries and dialogs. Nothing in between.
-  shape: { borderRadius: 4 },
+  // One 8px unit. Theme-owned surfaces never multiply it; compact embedded
+  // elements use fractional units at their call site.
+  shape: { borderRadius: 8 },
   cssVariables: themeConfig.cssVariables,
 };
 

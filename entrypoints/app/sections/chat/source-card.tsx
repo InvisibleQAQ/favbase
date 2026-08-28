@@ -87,7 +87,7 @@ function SourceCardItem({ source, openLabel }: SourceCardItemProps) {
     gap: 1,
     px: 1.25,
     py: 0.875,
-    borderRadius: 1,
+    borderRadius: 0.5,
     border: `1px solid ${varAlpha(theme.vars.palette.grey['500Channel'], 0.16)}`,
     bgcolor: varAlpha(theme.vars.palette.grey['500Channel'], 0.04),
     color: theme.vars.palette.text.primary,

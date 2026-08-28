@@ -137,7 +137,7 @@ function NavLeafButton({
           py: 1,
           gap: pinned ? 2 : 0,
           pr: pinned ? 1.5 : 0,
-          borderRadius: 1,
+          borderRadius: 0.5,
           typography: 'body2',
           fontWeight: 'fontWeightMedium',
           color: theme.vars.palette.text.secondary,
@@ -258,7 +258,7 @@ function NavChildLeaf({
               pl: 1,
               py: 0.75,
               pr: 1,
-              borderRadius: 1,
+              borderRadius: 0.5,
               minHeight: 36,
               gap: 1,
               alignItems: 'center',
@@ -342,7 +342,7 @@ function CollectionsBranch({ item, pinned }: { item: NavItem; pinned: boolean })
           (theme) => ({
             display: 'flex',
             alignItems: 'center',
-            borderRadius: 1,
+            borderRadius: 0.5,
             typography: 'body2',
             fontWeight: 'fontWeightMedium',
             color: theme.vars.palette.text.secondary,
@@ -368,7 +368,7 @@ function CollectionsBranch({ item, pinned }: { item: NavItem; pinned: boolean })
             alignSelf: 'stretch',
             color: 'inherit',
             fontWeight: 'inherit',
-            borderRadius: 1,
+            borderRadius: 0.5,
             '&:hover': { bgcolor: 'transparent' },
           }}
         >
@@ -385,7 +385,7 @@ function CollectionsBranch({ item, pinned }: { item: NavItem; pinned: boolean })
           aria-controls={expanded ? submenuId : undefined}
           aria-expanded={expanded}
           onClick={() => setExpanded((prev) => !prev)}
-          sx={{ width: 44, height: 44, flexShrink: 0, color: 'inherit', borderRadius: 1 }}
+          sx={{ width: 44, height: 44, flexShrink: 0, color: 'inherit', borderRadius: 0.5 }}
         >
           <ExpandChevron expanded={expanded} />
         </IconButton>
@@ -439,7 +439,7 @@ function NavContent({ data, sx, pinned = true }: NavContentProps) {
           sx={{
             width: 36,
             height: 36,
-            borderRadius: 1,
+            borderRadius: 0.5,
             flexShrink: 0,
           }}
         />

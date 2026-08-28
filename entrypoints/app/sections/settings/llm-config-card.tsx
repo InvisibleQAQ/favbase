@@ -243,7 +243,7 @@ export function LlmConfigCard({ settings, saveLlm }: LlmConfigCardProps) {
               onClick={handleFetchModels}
               disabled={isFetchingModels || !draft.apiKey}
               startIcon={isFetchingModels ? <CircularProgress size={16} /> : undefined}
-              sx={{ height: 56 }}
+              size="large"
             >
               {isFetchingModels ? t('settings.fetchingModels') : t('settings.fetchModels')}
             </Button>

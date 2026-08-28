@@ -58,7 +58,7 @@ const ThemeSwitch = styled(Switch)(({ theme }) => ({
     boxShadow: 'none',
   },
   '& .MuiSwitch-track': {
-    borderRadius: 11,
+    borderRadius: '50%',
     backgroundColor: theme.vars.palette.grey[400],
     opacity: 1,
   },
@@ -140,7 +140,7 @@ export function HeaderActions() {
           aria-label={t('header.languageAria')}
           onClick={(e) => setAnchorEl(e.currentTarget)}
         >
-          <Iconify icon={activeFlag} width={FLAG_WIDTH} height={FLAG_HEIGHT} sx={{ borderRadius: 1 }} />
+          <Iconify icon={activeFlag} width={FLAG_WIDTH} height={FLAG_HEIGHT} sx={{ borderRadius: 0.5 }} />
         </IconButton>
       </Tooltip>
 
@@ -158,7 +158,7 @@ export function HeaderActions() {
             onClick={() => handleSelect(opt.value)}
           >
             <ListItemIcon sx={{ minWidth: 0, mr: 1.25 }}>
-              <Iconify icon={opt.flag} width={FLAG_WIDTH} height={FLAG_HEIGHT} sx={{ borderRadius: 1 }} />
+              <Iconify icon={opt.flag} width={FLAG_WIDTH} height={FLAG_HEIGHT} sx={{ borderRadius: 0.5 }} />
             </ListItemIcon>
             <ListItemText>{t(opt.labelKey)}</ListItemText>
             {locale === opt.value && (

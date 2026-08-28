@@ -33,7 +33,11 @@ export function createShadowColor(colorChannel: string): string {
  * menu, dialog — cast. `alpha` is the floating-layer strength, z-tiers scale
  * from it.
  */
-function createCustomShadows(colorChannel: string, alpha: number): CustomShadows {
+function createCustomShadows(
+  colorChannel: string,
+  alpha: number,
+  card: string,
+): CustomShadows {
   const tier = varAlpha(colorChannel, alpha * 0.75);
   const floating = varAlpha(colorChannel, alpha);
   return {
@@ -44,7 +48,7 @@ function createCustomShadows(colorChannel: string, alpha: number): CustomShadows
     z16: `0 16px 32px -8px ${tier}`,
     z20: `0 20px 40px -8px ${tier}`,
     z24: `0 24px 48px -12px ${tier}`,
-    card: 'none',
+    card,
     dropdown: `0 8px 24px -8px ${floating}`,
     dialog: `0 8px 24px -8px ${floating}`,
     primary: createShadowColor(primary.mainChannel),
@@ -57,6 +61,10 @@ function createCustomShadows(colorChannel: string, alpha: number): CustomShadows
 }
 
 export const customShadows: Partial<Record<ThemeColorScheme, CustomShadows>> = {
-  light: createCustomShadows(grey['800Channel'], 0.18),
-  dark: createCustomShadows(common.blackChannel, 0.5),
+  light: createCustomShadows(
+    grey['800Channel'],
+    0.18,
+    `0 1px 2px 0 ${varAlpha(grey['800Channel'], 0.08)}, 0 8px 24px -12px ${varAlpha(grey['800Channel'], 0.18)}`,
+  ),
+  dark: createCustomShadows(common.blackChannel, 0.5, 'none'),
 };

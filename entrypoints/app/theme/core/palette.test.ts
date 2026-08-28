@@ -28,7 +28,26 @@ function contrastRatio(foreground: string, background: string): number {
 describe('palette.background', () => {
   it('keeps the app canvas on the specified scheme colors', () => {
     expect(background.light.default).toBe('#FFFFFF');
+    expect(background.light.paper).toBe('#FFFFFF');
+    expect(background.light.neutral).toBe('#F4F6F8');
     expect(background.dark.default).toBe('#141A21');
+    expect(background.dark.paper).toBe('#1C252E');
+    expect(background.dark.neutral).toBe('#222B34');
+  });
+
+  it('keeps the Minimal neutral ramp as the static theme source', () => {
+    expect(themeConfig.palette.grey).toEqual({
+      '50': '#FCFDFD',
+      '100': '#F9FAFB',
+      '200': '#F4F6F8',
+      '300': '#DFE3E8',
+      '400': '#C4CDD5',
+      '500': '#919EAB',
+      '600': '#637381',
+      '700': '#454F5B',
+      '800': '#1C252E',
+      '900': '#141A21',
+    });
   });
 });
 

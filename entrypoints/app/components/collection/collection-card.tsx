@@ -82,7 +82,7 @@ export function CoverBadge({
         gap: 0.25,
         px: 0.75,
         py: 0.25,
-        borderRadius: 1,
+        borderRadius: 0.5,
         typography: 'caption',
         lineHeight: 1.4,
         // Scrim over imagery — scheme-independent by design (common.black is
@@ -115,7 +115,7 @@ function MediaSlot({ media }: { media: CollectionCardMedia }) {
         color: theme.vars.palette.text.disabled,
         bgcolor: theme.vars.palette.background.neutral,
         ...(square
-          ? { flex: `0 0 ${SIDE_THUMB}px`, width: SIDE_THUMB, height: SIDE_THUMB, borderRadius: 1 }
+          ? { flex: `0 0 ${SIDE_THUMB}px`, width: SIDE_THUMB, height: SIDE_THUMB, borderRadius: 0.5 }
           : { width: 1, aspectRatio: '16 / 9' }),
       })}
     >

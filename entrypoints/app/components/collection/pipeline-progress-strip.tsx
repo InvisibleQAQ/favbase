@@ -125,10 +125,10 @@ export function PipelineProgressStrip({ segments }: PipelineProgressStripProps) 
               color={segment.state === 'failed' ? 'error' : 'primary'}
               sx={{
                 height: 3,
-                borderRadius: 1,
+                borderRadius: 0.5,
                 bgcolor: 'action.hover',
                 [`& .${linearProgressClasses.bar}`]: {
-                  borderRadius: 1,
+                  borderRadius: 0.5,
                   opacity: segment.state === 'idle' ? 0.48 : 1,
                 },
               }}

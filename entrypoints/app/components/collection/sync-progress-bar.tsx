@@ -19,7 +19,7 @@ export function SyncProgressBar({ value, caption }: SyncProgressBarProps) {
       <LinearProgress
         variant={value == null ? 'indeterminate' : 'determinate'}
         value={value ?? undefined}
-        sx={{ mb: 0.5, borderRadius: 1 }}
+        sx={{ mb: 0.5, borderRadius: 0.5 }}
       />
       {caption != null && (
         <Typography variant="caption" sx={{ color: 'text.secondary' }}>

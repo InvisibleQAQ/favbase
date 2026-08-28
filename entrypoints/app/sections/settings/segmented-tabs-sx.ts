@@ -17,13 +17,13 @@ export function segmentedTabsSx(
 ): SxObject {
   return {
     p: 0.5,
-    borderRadius: 2,
+    borderRadius: 1,
     bgcolor: varAlpha(theme.vars.palette.grey['500Channel'], 0.08),
     '& .MuiTabs-indicator': { display: 'none' },
     '& .MuiTabs-flexContainer': { gap: 0.5 },
     '& .MuiTab-root': {
-      minHeight: opts.tabMinHeight ?? 40,
-      borderRadius: 1,
+      minHeight: opts.tabMinHeight ?? 48,
+      borderRadius: 0.5,
       border: '1px solid transparent',
       justifyContent: opts.compact ? 'center' : 'flex-start',
       fontWeight: theme.typography.fontWeightMedium,
