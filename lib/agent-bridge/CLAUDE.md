@@ -2,15 +2,15 @@
 
 This directory owns the transport-neutral wire contract, the adapter to Chat's
 read-only Knowledge Tools, and the Background SW connection lifecycle. The Node
-MCP package consumes only the protocol leaf; extension storage is exposed by
+CLI package (`packages/favbase-cli`) consumes only the protocol leaf; extension storage is exposed by
 `lib/storage/agent-bridge.ts`.
 
 ## Modules
 
 - `protocol.ts` — strict `favbase-agent-bridge` v1 envelope, all seven message
   payload schemas, shared error codes, and `DEFAULT_AGENT_BRIDGE_PORT` (`17836`).
-  This is a leaf bundled by `packages/favbase-mcp` and may depend only on Zod.
-- `tool-registry.ts` — derives MCP-compatible tool descriptors from `chatTools`
+  This is a leaf bundled by `packages/favbase-cli` and may depend only on Zod.
+- `tool-registry.ts` — derives agent-facing tool descriptors (JSON Schema 2020-12) from `chatTools`
   and validates every call with the owning Zod schema before execution. Tool
   names, descriptions, and schemas must never be copied here.
 - `client.ts` — `BridgeTransport` seam + production `WebSocketTransport` and the

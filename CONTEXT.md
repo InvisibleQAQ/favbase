@@ -80,7 +80,15 @@ _Avoid_: Enabled platforms, platform gate, click order
 
 **Agent Bridge**:
 A user-enabled, read-only connection between the running favbase extension and an external agent on the same machine; it exists only while the extension runs and is neither a platform nor a Collection Item holder.
-_Avoid_: MCP server (the external process), API, plugin sync, export
+_Avoid_: MCP server, API, plugin sync, export
+
+**Bridge Daemon**:
+The long-lived loopback process on the user's machine that the running extension connects to and that the favbase CLI queries; it holds no data and no credentials beyond the Bridge Token, starts on the first CLI call, and exits when idle.
+_Avoid_: MCP server, backend, service, database
+
+**favbase CLI**:
+The terminal program (`favbase`) an external agent runs to reach the Knowledge Tools through the Bridge Daemon; an Agent Skill teaches the agent how to use it and never carries data itself.
+_Avoid_: MCP client, API client, skill (the CLI is what the skill describes, not the skill)
 
 **Knowledge Tool**:
 One read-only retrieval action over Collection Items and their derived knowledge, defined once and shared by Chat and the Agent Bridge.
@@ -118,6 +126,8 @@ _Avoid_: API key, provider key, password
 - The **Agent Bridge** keeps Chat's table-level read-only boundary: it never writes any table, not even **Conversations**
 - The **Agent Bridge** serves live Collection Items only; an exported snapshot is never an Agent Bridge
 - An **Agent Bridge** connection is accepted only when both ends present the same **Bridge Token**; resetting the token ends every existing connection
+- The **favbase CLI** reaches the **Agent Bridge** only through the **Bridge Daemon** on loopback and presents the same **Bridge Token**; a request carrying a browser Origin is never a favbase CLI request
+- A Skill installed for an agent describes the **favbase CLI**; it never opens the **Agent Bridge** or reads Collection Items itself
 
 ## Example dialogue
 
@@ -139,4 +149,4 @@ _Avoid_: API key, provider key, password
 - External platforms do not expose a durable remote-total snapshot, so **Processing Coverage** must not be described as remote sync completeness.
 - "Selected platform" in onboarding previously sounded like an availability gate; it is now defined as an **Onboarding Platform Preference**, never a platform enablement setting.
 - "Stuck" previously mixed missing provider configuration with slow, failed, or paused work; only missing configuration with eligible pending work is a **Configuration Blocker**.
-- "MCP or Skill" was framed as a choice; resolved: the **Agent Bridge** is the data path (an MCP server is its external half), while a Skill only teaches an agent how to use the **Knowledge Tools** and never carries data.
+- "MCP or Skill" was framed as a choice; resolved (revised 2026-08-28, ADR 0003): the **Agent Bridge** is the data path and the **Bridge Daemon** is its external half; the **favbase CLI** is the agent-facing front, a Skill only teaches an agent how to use that CLI, and no MCP server is provided.

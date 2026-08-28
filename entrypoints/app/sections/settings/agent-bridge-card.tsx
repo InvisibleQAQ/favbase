@@ -34,7 +34,7 @@ import {
 import { Iconify } from '../../components/iconify';
 
 type DisplayState = AgentBridgeConnectionState | 'loading';
-type CopyTarget = 'token' | 'claude' | 'codex';
+type CopyTarget = 'token' | 'setup';
 type CopyFeedback = { target: CopyTarget; ok: boolean };
 
 const STATE_LABELS: Record<DisplayState, LocaleKeys> = {
@@ -62,12 +62,13 @@ export function generateAgentBridgeToken(): string {
   return encodeAgentBridgeToken(crypto.getRandomValues(new Uint8Array(32)));
 }
 
-export function buildClaudeCodeCommand(token: string, port: number): string {
-  return `claude mcp add favbase -e FAVBASE_TOKEN=${token} -e FAVBASE_BRIDGE_PORT=${port} -- npx -y favbase-mcp`;
-}
-
-export function buildCodexCommand(token: string, port: number): string {
-  return `codex mcp add favbase --env FAVBASE_TOKEN=${token} --env FAVBASE_BRIDGE_PORT=${port} -- npx -y favbase-mcp`;
+/**
+ * One-time pairing command for the favbase CLI (`packages/favbase-cli`): writes
+ * `~/.favbase/config.json` and installs the Agent Skill for Claude Code and
+ * Codex. The same command serves every agent, so there is a single copy button.
+ */
+export function buildSetupCommand(token: string, port: number): string {
+  return `npx -y favbase-cli setup --token ${token} --port ${port}`;
 }
 
 function stateColor(state: DisplayState): 'default' | 'warning' | 'info' | 'success' {
@@ -420,35 +421,20 @@ export function AgentBridgeCard() {
               <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
                 {t('settings.agentBridge.commandsHint')}
               </Typography>
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+              <Box>
                 <Button
                   variant="outlined"
                   disabled={!commandReady || saving}
                   startIcon={<Iconify icon="lucide:copy" width={20} />}
                   onClick={() => {
-                    void handleCopy(
-                      'claude',
-                      buildClaudeCodeCommand(config.token, config.port),
-                    );
+                    void handleCopy('setup', buildSetupCommand(config.token, config.port));
                   }}
                 >
-                  {copyFeedback?.target === 'claude' && copyFeedback.ok
+                  {copyFeedback?.target === 'setup' && copyFeedback.ok
                     ? t('settings.agentBridge.copied')
-                    : t('settings.agentBridge.copyClaude')}
+                    : t('settings.agentBridge.copySetup')}
                 </Button>
-                <Button
-                  variant="outlined"
-                  disabled={!commandReady || saving}
-                  startIcon={<Iconify icon="lucide:copy" width={20} />}
-                  onClick={() => {
-                    void handleCopy('codex', buildCodexCommand(config.token, config.port));
-                  }}
-                >
-                  {copyFeedback?.target === 'codex' && copyFeedback.ok
-                    ? t('settings.agentBridge.copied')
-                    : t('settings.agentBridge.copyCodex')}
-                </Button>
-              </Stack>
+              </Box>
             </Box>
           </Grid>
 

@@ -1,4 +1,5 @@
 import { randomUUID, timingSafeEqual } from 'node:crypto';
+import type { Server as HttpServer } from 'node:http';
 
 import {
   WebSocket,
@@ -17,7 +18,8 @@ import {
   type JsonValue,
 } from '../../lib/agent-bridge/protocol';
 
-const LOOPBACK_HOST = '127.0.0.1';
+export const LOOPBACK_HOST = '127.0.0.1';
+export const BRIDGE_PATH = '/bridge';
 const DEFAULT_HELLO_WAIT_MS = 35_000;
 const DEFAULT_CALL_TIMEOUT_MS = 60_000;
 const DEFAULT_HANDSHAKE_TIMEOUT_MS = 5_000;
@@ -34,6 +36,12 @@ export interface BridgeServerOptions {
   port: number;
   token: string;
   serverVersion: string;
+  /**
+   * Attach the `/bridge` WebSocket endpoint to an existing HTTP server instead
+   * of listening on `port`. The owner listens and closes that server; the
+   * bridge only handles upgrades on it.
+   */
+  server?: HttpServer;
   helloWaitMs?: number;
   callTimeoutMs?: number;
   handshakeTimeoutMs?: number;
@@ -78,6 +86,12 @@ interface AuthenticatedPeer {
   tools: AgentBridgeToolDescriptor[];
 }
 
+export interface BridgePeerSnapshot {
+  connected: boolean;
+  extensionId: string | null;
+  tools: readonly AgentBridgeToolDescriptor[];
+}
+
 interface PeerWaiter {
   onAbort?: () => void;
   reject(error: BridgeCallError): void;
@@ -100,14 +114,14 @@ function extensionIdFromOrigin(origin: string | undefined): string | null {
   return match?.[1] ?? null;
 }
 
-function tokensMatch(received: string, expected: string): boolean {
+export function tokensMatch(received: string, expected: string): boolean {
   const receivedBytes = Buffer.from(received);
   const expectedBytes = Buffer.from(expected);
   return receivedBytes.length === expectedBytes.length
     && timingSafeEqual(receivedBytes, expectedBytes);
 }
 
-function isPortInUseError(error: unknown): boolean {
+export function isPortInUseError(error: unknown): boolean {
   return error instanceof Error
     && 'code' in error
     && error.code === 'EADDRINUSE';
@@ -128,6 +142,7 @@ export class BridgeServer {
   private readonly helloWaitMs: number;
   private readonly logger: BridgeLogger;
   private readonly options: BridgeServerOptions;
+  private readonly peerReadyListeners = new Set<() => void>();
   private readonly peerWaiters = new Set<PeerWaiter>();
   private readonly pendingCalls = new Map<string, PendingCall>();
 
@@ -145,33 +160,74 @@ export class BridgeServer {
   }
 
   get listeningPort(): number | null {
-    const address = this.webSocketServer?.address();
+    const address = this.options.server?.address() ?? this.webSocketServer?.address();
     return address && typeof address === 'object' ? address.port : null;
   }
 
-  listTools(): readonly AgentBridgeToolDescriptor[] {
-    return this.peer?.tools ?? [];
+  /** Current peer state without waiting; for status reporting. */
+  peerSnapshot(): BridgePeerSnapshot {
+    const peer = this.peer;
+    if (!peer || peer.socket.readyState !== WebSocket.OPEN) {
+      return { connected: false, extensionId: null, tools: [] };
+    }
+    return { connected: true, extensionId: peer.extensionId, tools: peer.tools };
+  }
+
+  /**
+   * Tool table of the authenticated peer. Waits for hello with the same bounded
+   * deadline as calls: the extension only shows up on its next poll, so
+   * answering `[]` early would be the answer the caller keeps.
+   */
+  async listTools(signal?: AbortSignal): Promise<readonly AgentBridgeToolDescriptor[]> {
+    const peer = await this.waitForPeer(signal);
+    return peer.tools;
+  }
+
+  /** Fires after every authenticated hello (initial connect and reconnects). */
+  onPeerReady(listener: () => void): () => void {
+    this.peerReadyListeners.add(listener);
+    return () => {
+      this.peerReadyListeners.delete(listener);
+    };
   }
 
   async start(): Promise<void> {
     if (this.webSocketServer) return;
 
+    const verifyClient = (
+      { origin }: { origin: string },
+      accept: (accepted: boolean, code?: number, message?: string) => void,
+    ) => {
+      const accepted = extensionIdFromOrigin(origin) !== null;
+      accept(accepted, accepted ? undefined : 403, accepted ? undefined : 'Forbidden');
+    };
+    const onConnection = (socket: WebSocket, request: { headers: { origin?: string } }) => {
+      this.acceptConnection(socket, request.headers.origin);
+    };
+
+    if (this.options.server) {
+      const attached = new WebSocketServer({
+        server: this.options.server,
+        path: BRIDGE_PATH,
+        verifyClient,
+      });
+      attached.on('connection', onConnection);
+      // ws mirrors the HTTP server's 'error' events onto the WebSocketServer;
+      // the server owner already handles listen failures, so keep this from
+      // becoming an unhandled 'error' event that would crash the daemon.
+      attached.on('error', () => undefined);
+      this.webSocketServer = attached;
+      return;
+    }
+
     const server = new WebSocketServer({
       host: LOOPBACK_HOST,
-      path: '/bridge',
+      path: BRIDGE_PATH,
       port: this.options.port,
-      verifyClient: (
-        { origin }: { origin: string },
-        accept: (accepted: boolean, code?: number, message?: string) => void,
-      ) => {
-        const accepted = extensionIdFromOrigin(origin) !== null;
-        accept(accepted, accepted ? undefined : 403, accepted ? undefined : 'Forbidden');
-      },
+      verifyClient,
     });
     this.webSocketServer = server;
-    server.on('connection', (socket, request) => {
-      this.acceptConnection(socket, request.headers.origin);
-    });
+    server.on('connection', onConnection);
 
     try {
       await new Promise<void>((resolve, reject) => {
@@ -238,7 +294,7 @@ export class BridgeServer {
     this.stopHeartbeat();
     this.rejectPeerWaiters(new BridgeCallError(
       'extension-unavailable',
-      'favbase MCP bridge stopped before the extension connected',
+      'favbase daemon stopped before the extension connected',
     ));
     this.rejectPendingCalls(new BridgeCallError(
       'extension-disconnected',
@@ -270,7 +326,7 @@ export class BridgeServer {
     socket.on('message', data => this.handleMessage(candidate, data));
     socket.once('close', () => this.handleClose(candidate));
     socket.once('error', error => {
-      this.logger.error(`[favbase-mcp] WebSocket error: ${error.message}`);
+      this.logger.error(`[favbase] WebSocket error: ${error.message}`);
     });
   }
 
@@ -345,6 +401,7 @@ export class BridgeServer {
     });
     this.resolvePeerWaiters(peer);
     this.startHeartbeat(peer);
+    for (const listener of [...this.peerReadyListeners]) listener();
   }
 
   private handleToolResult(message: ToolResultMessage): void {
