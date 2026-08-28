@@ -725,6 +725,57 @@ chip 行头部图标颜色由各 view 指定（多为 `primary.main`，图标对
 
 ### Phase 4：先行 Vertical Slice - Dashboard `/`
 
+**实施状态（2026-08-28）：已完成，待人工审阅。** 起因：Phase 1 把字阶改为固定
+28/24/20/16/14 后，Dashboard 仍用 `h4 component="h1"` / `h6 component="h2"`，实机量得
+路由 h1 只有 16px、区块 h2 只有 14px（比 subtitle1 还小），与六平台页 `SectionTitleBar`
+的 28px h1 不同轨。落地：路由标题改用共享 `SectionTitleBar`（title + caption=subtitle，
+删除页面自画 `<header>`）；按 §7.4 区块标题 `h2`（Barlow 24）、summary 数字
+`h3 component="p"`（Barlow 20，是数字不是标题）、榜单标题 `h6 component="h3"`（14），
+大纲 `[1, 2, 2, 3, 2]` 由测试锁定；hairline 全部改读 `theme.vars.palette.divider`（删除
+页面私有 `grey500` 0.2/0.16 alpha）；圆角按主题分档（tile/tab 行 0.75、条 0.5）；删除主题
+已接管的 `textTransform`/`opacity`/`fontVariantNumeric` 覆写；loading 改 `role="status"`
++ 同几何骨架；空态图标统一 48px；份额条加 `data-slot="share-bar"` 便于断言。五段结构
+（title → SummaryBand → PlatformShelf | PlatformDetail → TopTags）、hook、路由、i18n key、
+registry 均未改；未加任何 KPI 浮卡、趋势或图表。
+
+实机复核发现并修掉两个几何缺陷：(1) 1024 视口 pinned 300px 侧栏下内容区只有 676px，
+`md` 起的 4/8 分栏把平台名截成「Bilibili F…」「Browser…」→ 分栏推迟到 `lg`（≥1200），
+以下 shelf 与 detail 上下堆叠（hairline 分隔），detail 内榜单双列提前到 `md`；(2) 390
+视口详情头部 48px tile + 标题 + 197px 按钮同行不折行，把 h2 挤成 81px 宽三行 → 头部行
+`flexWrap`（与 `SectionTitleBar` 同规则），按钮换到下一行。
+
+验证：`pnpm compile`、`pnpm build` 通过；`pnpm test` 169 文件 / 1238 用例中 1237 通过，
+唯一失败仍是既有的 `tests/lib-import-smoke.test.ts` Bilibili 5 秒并发超时（未触及
+`lib/**`，单独运行 16/16 通过）；`overview-view.test.tsx` 由 3 例扩到 6 例（10/10 含
+hook 测试），新增：标题经 `SectionTitleBar` + caption、loading `role=status` 时仍单 h1、
+heading 大纲无跳级、零份额无条 / 部分平台=0 时 tabpanel 空态、有数据无维度一句话、
+零标签 caption 与 Top tags 不渲染，原断言未删。`git diff --check` 干净；实机 console
+无 error/warn。Trellis UI spec §10 已按实际状态改写（原文「Summary 是 Card / 4-8 Grid
+Cards」与 2026-08-20 起的 hairline 实现不符）。
+
+**运行时证据（2026-08-28，`docs/ui-baseline/2026-08-28/phase4-dashboard/`）：** 在用户
+运行中的 Chrome（`chrome-devtools` MCP，真实数据 4,330 条 / 3 平台在用 / 0 标签）采集，
+`measurements.json` 为脚本量测原始值（六组 viewport × scheme）。
+
+| 证据 | Viewport | Theme | 量测结论 |
+| --- | ---: | --- | --- |
+| `live-dashboard-1440x900-dark.png` | 1440x900 | dark | h1 28px Barlow 700（x=340，与 Phase 2 同左缘）；标题块 60 高、到 band 24；band 116 高、上下边 `divider` 0.24；h2 24px Barlow；数字 20px Barlow；shelf 321 / detail 674 并排；tab 行 62 高 6px 圆角，选中底 `#3A2A24`；tile 36 6px，选中珊瑚底 + 墨字形；份额条 117/35/41 品牌色，榜单条 `grey500` 0.64；「View platform collection」197x36 `text.accent`；无水平滚动 |
+| `live-dashboard-1440x900-light.png` | 1440x900 | light | 同几何；选中底 `#FEE9E1`；tile 底 `#F4F6F8`、字形品牌色（github/x 为墨）；按钮 `#7A2714` |
+| `live-dashboard-1440x900-light-tab-focus.png` | 1440x900 | light | 脚本聚焦选中 tab 后按 ArrowDown：焦点到 GitHub tab，`:focus-visible` 2px `#7A2714` outline offset 2；aria-selected 未变（manual activation）；可见 MUI 默认键盘 focus ripple（pulsate），与 nav 项同为 ButtonBase 默认，未单独处理 |
+| `live-dashboard-1440x900-light-empty-platform.png` | 1440x900 | light | 按 Enter 选中 GitHub：tabpanel 切到 `dashboard-platform-panel-github`，h2「GitHub Stars」+「0 items」，`StateBox` 200 高 1px dashed `divider`「No content has been collected from this platform.」（部分平台=0 态） |
+| `live-dashboard-1024x768-light.png` / `-dark.png` | 1024x768 | light / dark | nav 300 pinned、gutter 24（x=324，宽 668）；band 三格 223 宽；shelf 全宽堆叠在 detail 之上，六个平台名零截断；无水平滚动 |
+| `live-dashboard-1024x768-dark-detail.png` | 1024x768 | dark | 滚到 detail：48 tile + h2 391x30 单行 + 按钮同行；榜单双列（x 350 / 704） |
+| `live-dashboard-390x844-light.png` / `-dark.png` | 390x844 | light / dark | Header 64、gutter 16（宽 358）；band 三格纵向堆叠 92/93/115；tab 行 358 宽零截断；无水平滚动 |
+| `live-dashboard-390x844-light-detail.png` | 390x844 | light | h2 294x30 单行，按钮换行到 x=16；榜单单列 |
+
+**[UNKNOWN]** total=0 库空态、有数据无维度、error/loading 态实机无法在用户真实数据库上
+复现，由 `overview-view.test.tsx` 断言覆盖。Chat/Settings 与其他路由未动。
+
+**观察（非本 Phase 范围）：** MUI `ButtonBase` 默认的键盘 focus ripple（pulsate）在
+tab 行上是一块灰色脉冲，与 CssBaseline 的 2px outline 叠在一起；nav 项同样有。若要关，
+应在 theme `MuiButtonBase.defaultProps.disableRipple` 统一决定（Phase 1 owner），不在
+页面里单点关。
+
 **目标文件：** `sections/overview/overview-view.tsx` 及其 tests/CLAUDE。
 
 步骤：
