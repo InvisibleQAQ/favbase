@@ -29,7 +29,7 @@ export function CollectionChips({
 
   return (
     <CollapsibleChipRow
-      icon={<Iconify icon="simple-icons:zhihu" width={20} sx={{ color: 'primary.main' }} />}
+      icon={<Iconify icon="simple-icons:zhihu" width={20} />}
       title={t('zhihu.collectionsTitle')}
       items={collections}
       getKey={(c) => c.collectionId}

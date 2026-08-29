@@ -1,6 +1,6 @@
 # Favbase app.html 对齐 Minimal Dashboard v7.7.0 的前端 UI 重构计划
 
-> 文档状态：Phase 0 已完成，Phase 1 已实施（后续 Phase 仍按计划推进；**仅限前端 UI** / UI-only）
+> 文档状态：Phase 0-4 已完成，Phase 5 已实施、待人工运行时审阅（后续 Phase 仍按计划推进；**仅限前端 UI** / UI-only）
 > 目标入口：`entrypoints/app/index.html` 构建出的 `app.html`，以及其 React/MUI
 > 界面代码 `entrypoints/app/**`  
 > 参考项目：`minimal-vite-ts-main`，Minimal Dashboard v7.7.0  
@@ -793,6 +793,33 @@ tab 行上是一块灰色脉冲，与 CssBaseline 的 2px outline 叠在一起�
 **回滚点：** 只回滚 overview composition；theme/shell 保持独立可审。
 
 ### Phase 5：Collections 聚合页和六平台页
+
+**实施状态（2026-08-29）：已完成源码与自动验证，待人工运行时审阅。** 仓库审计确认
+六平台已在 Phase 3 消费 `CollectionPageScaffold` 与 `CollectionCard`，因此本阶段没有
+重写六套页面，而是消除剩余局部 owner：`/collections` 的自画 Card 骨架改为共享
+`CardGridSkeleton + CollectionCardSkeleton(header, 3 lines)`；聚合空态改为 48px
+secondary glyph；`ChipRowShell` 新增唯一 `data-slot="icon"` 并统一以
+`text.secondary` 着色，删除聚合标签、平台标签和六平台原生筛选 header 的局部
+primary/error 色；Bilibili 登录/空夹/选夹状态改用 `StateBox` 结构化 props；六平台
+空/认证状态 glyph 统一为 48px secondary，双按钮 action 在窄屏允许换行；GitHub 与
+YouTube 配置门早退前补共享 `SectionTitleBar`，保证未配置路由仍恰有一个 h1。
+
+数据 hook、八分支 phase resolver、路由、筛选维度、标签、分页、sync、pipeline、
+configuration、retry、i18n key、卡片 link/tag/footer DOM 边界均未改。新增
+`collections-view.test.tsx`、`configuration-heading.test.tsx` 与
+`chip-row.test.tsx`，分别锁定聚合共享骨架/空态、配置门单 h1、chip icon 单 owner。
+
+验证：focused Vitest 6 文件 / 25 用例通过；`pnpm compile` 通过；`pnpm build`
+通过且 background bundle contract 为 12 modules / 937221 bytes；Impeccable 对 17 个
+改动 UI 文件检测为 0 finding；全量 `pnpm test` 为 171 文件 / 1242 用例通过，唯一
+失败仍是既有 `tests/lib-import-smoke.test.ts` Bilibili 5 秒并发超时，单独重跑该文件
+16/16 通过（2.75s）；`git diff --check` 干净。
+
+**[UNKNOWN] 运行时证据：** 当前 `chrome-devtools` 会话只有 `about:blank`，直接打开
+已记录扩展 URL 返回 `ERR_BLOCKED_BY_CLIENT`，且工具面没有 extension reload/list API，
+因此本阶段没有伪造 light/dark、1440/1024/390 截图或 console 结论。已构建待审产物为
+`C:\tmp\favbase-minimal-v7-phase2\.output\chrome-mv3`；用户在加载该 worktree 的
+Chrome 中 reload 后，仍需按本节验收矩阵做人工运行时批准。
 
 **目标文件：**
 

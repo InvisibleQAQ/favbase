@@ -20,11 +20,7 @@ export function FolderChips({ folders, totalCount, selectedId, onSelect }: Folde
   return (
     <CollapsibleChipRow
       icon={
-        <Iconify
-          icon="solar:folder-with-files-bold-duotone"
-          width={20}
-          sx={{ color: 'primary.main' }}
-        />
+        <Iconify icon="solar:folder-with-files-bold-duotone" width={20} />
       }
       title={t('bookmarks.foldersTitle')}
       allLabel={t('bookmarks.allFolders', { count: totalCount })}

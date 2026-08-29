@@ -24,7 +24,7 @@ export function AuthorChips({ authors, totalCount, selected, onSelect }: AuthorC
 
   return (
     <CollapsibleChipRow
-      icon={<Iconify icon="mdi:twitter" width={20} sx={{ color: 'primary.main' }} />}
+      icon={<Iconify icon="mdi:twitter" width={20} />}
       title={t('x.authorsTitle')}
       items={authors}
       getKey={(a) => a.authorHandle}

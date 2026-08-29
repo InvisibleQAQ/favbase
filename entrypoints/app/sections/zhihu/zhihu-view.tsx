@@ -69,11 +69,11 @@ function NotLoggedInState({ syncing, onSync }: { syncing: boolean; onSync: () =>
   const { t } = useTranslation();
   return (
     <StateBox
-      icon={<Iconify icon="simple-icons:zhihu" width={64} sx={{ color: 'text.secondary', mb: 1 }} />}
+      icon={<Iconify icon="simple-icons:zhihu" width={48} sx={{ color: 'text.secondary' }} />}
       title={t('zhihu.notLoggedInTitle')}
       description={t('zhihu.notLoggedInDesc')}
       action={
-        <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1, flexWrap: 'wrap' }}>
           <OpenZhihuButton />
           <SyncNowButton syncing={syncing} onSync={onSync} label={t('pipeline.fetchNow')} />
         </Box>
@@ -87,18 +87,16 @@ function EmptyLibraryState({ syncing, onSync }: { syncing: boolean; onSync: () =
   const { t } = useTranslation();
   return (
     <StateBox
-      icon={<Iconify icon="simple-icons:zhihu" width={64} sx={{ color: 'primary.main', mb: 1 }} />}
+      icon={<Iconify icon="simple-icons:zhihu" width={48} sx={{ color: 'text.secondary' }} />}
       title={t('zhihu.emptyTitle')}
       description={t('zhihu.emptyDesc')}
       action={
-        <Box sx={{ mt: 1 }}>
-          <SyncNowButton
-            syncing={syncing}
-            onSync={onSync}
-            label={t('pipeline.fetchNow')}
-            variant="contained"
-          />
-        </Box>
+        <SyncNowButton
+          syncing={syncing}
+          onSync={onSync}
+          label={t('pipeline.fetchNow')}
+          variant="contained"
+        />
       }
     />
   );

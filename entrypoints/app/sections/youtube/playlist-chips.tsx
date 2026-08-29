@@ -24,7 +24,7 @@ export function PlaylistChips({ playlists, totalCount, selected, onSelect }: Pla
 
   return (
     <CollapsibleChipRow
-      icon={<Iconify icon="mdi:youtube" width={20} sx={{ color: 'error.main' }} />}
+      icon={<Iconify icon="mdi:youtube" width={20} />}
       title={t('youtube.playlistsTitle')}
       items={playlists}
       getKey={(p) => p.playlistId}

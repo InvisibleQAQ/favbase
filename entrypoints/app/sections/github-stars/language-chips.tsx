@@ -35,7 +35,7 @@ export function LanguageChips({ languages, totalCount, selected, onSelect }: Lan
 
   return (
     <CollapsibleChipRow
-      icon={<Iconify icon="mdi:github" width={20} sx={{ color: 'primary.main' }} />}
+      icon={<Iconify icon="mdi:github" width={20} />}
       title={t('githubStars.languagesTitle')}
       allLabel={`${t('githubStars.allLanguages')} (${totalCount})`}
       items={languages}

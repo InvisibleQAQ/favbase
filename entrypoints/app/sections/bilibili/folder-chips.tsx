@@ -16,11 +16,7 @@ interface FolderChipsProps {
 export function FolderChips({ folders, selectedId, loading, onSelect }: FolderChipsProps) {
   const { t } = useTranslation();
   const icon = (
-    <Iconify
-      icon="solar:videocamera-record-bold-duotone"
-      width={20}
-      sx={{ color: 'primary.main' }}
-    />
+    <Iconify icon="solar:videocamera-record-bold-duotone" width={20} />
   );
 
   if (loading) {
@@ -36,7 +32,7 @@ export function FolderChips({ folders, selectedId, loading, onSelect }: FolderCh
   if (folders.length === 0) {
     return (
       <ChipRowShell icon={icon} title={t('collections.foldersTitle')}>
-        <Typography variant="caption" sx={{ color: 'text.disabled' }}>
+        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
           {t('collections.noFolders')}
         </Typography>
       </ChipRowShell>

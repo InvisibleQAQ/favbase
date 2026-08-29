@@ -3,7 +3,6 @@ import { useNavigate, useParams } from 'react-router-dom';
 
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import Typography from '@mui/material/Typography';
 
 import type { BiliFavOrder } from '@/lib/bilibili/types';
 import { isProcessableVideo } from '@/lib/bilibili/video-eligibility';
@@ -43,14 +42,14 @@ function NotLoggedIn({ onRetry }: { onRetry: () => void }) {
       icon={
         <Iconify
           icon="solar:shield-keyhole-bold-duotone"
-          width={64}
-          sx={{ color: 'warning.main', mb: 1 }}
+          width={48}
+          sx={{ color: 'text.secondary' }}
         />
       }
       title={t('collections.notLoggedInTitle')}
       description={t('collections.notLoggedInDesc')}
       action={
-        <Button variant="outlined" onClick={onRetry} sx={{ mt: 1 }}>
+        <Button variant="outlined" onClick={onRetry}>
           {t('common.retry')}
         </Button>
       }
@@ -61,26 +60,16 @@ function NotLoggedIn({ onRetry }: { onRetry: () => void }) {
 function EmptyFolderState() {
   const { t } = useTranslation();
   return (
-    <StateBox>
-      <Typography variant="h6" sx={{ color: 'text.secondary' }}>
-        {t('collections.emptyFolderTitle')}
-      </Typography>
-      <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-        {t('collections.emptyFolderDesc')}
-      </Typography>
-    </StateBox>
+    <StateBox
+      title={t('collections.emptyFolderTitle')}
+      description={t('collections.emptyFolderDesc')}
+    />
   );
 }
 
 function SelectFolderState() {
   const { t } = useTranslation();
-  return (
-    <StateBox minHeight={240}>
-      <Typography variant="body1" sx={{ color: 'text.secondary' }}>
-        {t('collections.selectFolder')}
-      </Typography>
-    </StateBox>
-  );
+  return <StateBox minHeight={240} description={t('collections.selectFolder')} />;
 }
 
 const SORT_OPTIONS = [

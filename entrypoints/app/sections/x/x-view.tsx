@@ -74,11 +74,11 @@ function NotLoggedInState({ syncing, onSync }: { syncing: boolean; onSync: () =>
   const { t } = useTranslation();
   return (
     <StateBox
-      icon={<Iconify icon="mdi:twitter" width={64} sx={{ color: 'text.secondary', mb: 1 }} />}
+      icon={<Iconify icon="mdi:twitter" width={48} sx={{ color: 'text.secondary' }} />}
       title={t('x.notLoggedInTitle')}
       description={t('x.notLoggedInDesc')}
       action={
-        <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1, flexWrap: 'wrap' }}>
           <OpenBookmarksButton />
           <SyncNowButton syncing={syncing} onSync={onSync} label={t('pipeline.fetchNow')} />
         </Box>
@@ -93,11 +93,11 @@ function EmptyLibraryState({ syncing, onSync }: { syncing: boolean; onSync: () =
   const { t } = useTranslation();
   return (
     <StateBox
-      icon={<Iconify icon="mdi:twitter" width={64} sx={{ color: 'primary.main', mb: 1 }} />}
+      icon={<Iconify icon="mdi:twitter" width={48} sx={{ color: 'text.secondary' }} />}
       title={t('x.emptyTitle')}
       description={t('x.emptyDesc')}
       action={
-        <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1, flexWrap: 'wrap' }}>
           <OpenBookmarksButton />
           <SyncNowButton syncing={syncing} onSync={onSync} label={t('pipeline.fetchNow')} />
         </Box>

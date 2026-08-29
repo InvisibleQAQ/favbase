@@ -6,7 +6,7 @@ import Chip from '@mui/material/Chip';
 import Typography from '@mui/material/Typography';
 
 export interface ChipRowShellProps {
-  /** Header icon, e.g. an <Iconify width={20}> — caller controls color. */
+  /** Header icon, e.g. an <Iconify width={20}>. The shell owns its quiet color. */
   icon: ReactNode;
   /** Pre-translated header title. */
   title: string;
@@ -23,7 +23,12 @@ export function ChipRowShell({ icon, title, headerExtra, children, sx }: ChipRow
   return (
     <Box sx={[{ mb: 3 }, ...(Array.isArray(sx) ? sx : [sx])]}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-        {icon}
+        <Box
+          data-slot="icon"
+          sx={{ display: 'flex', flexShrink: 0, color: 'text.secondary' }}
+        >
+          {icon}
+        </Box>
         <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
           {title}
         </Typography>

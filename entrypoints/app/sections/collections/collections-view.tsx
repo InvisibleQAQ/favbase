@@ -2,8 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import Card from '@mui/material/Card';
-import Skeleton from '@mui/material/Skeleton';
 
 import { useTranslation } from '@/lib/i18n/use-translation';
 import {
@@ -12,6 +10,7 @@ import {
   CardGridPagination,
   CardGridSkeleton,
   CollapsibleChipRow,
+  CollectionCardSkeleton,
   ErrorState,
   NoMatchesState,
   SearchField,
@@ -29,15 +28,7 @@ import { CollectionItemCard } from './collection-item-card';
 function CollectionsGridSkeleton() {
   return (
     <CardGridSkeleton
-      card={
-        <Card sx={{ height: 260, p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-          <Skeleton variant="rounded" height={132} />
-          <Skeleton variant="text" width="78%" />
-          <Skeleton variant="text" width="54%" />
-          <Box sx={{ flex: 1 }} />
-          <Skeleton variant="rounded" height={24} />
-        </Card>
-      }
+      card={<CollectionCardSkeleton header lines={3} />}
     />
   );
 }
@@ -48,8 +39,8 @@ function EmptyCollectionsState({ title, description }: { title: string; descript
       icon={
         <Iconify
           icon="solar:video-library-bold-duotone"
-          width={64}
-          sx={{ color: 'text.disabled' }}
+          width={48}
+          sx={{ color: 'text.secondary' }}
         />
       }
       title={title}
@@ -146,7 +137,7 @@ export function CollectionsView() {
 
       {usedTags.length > 0 && (
         <CollapsibleChipRow
-          icon={<Iconify icon="mdi:tag" width={18} sx={{ color: 'primary.main' }} />}
+          icon={<Iconify icon="mdi:tag" width={18} />}
           title={t('tags.sectionTitle')}
           items={usedTags}
           getKey={(tag) => tag.id}
