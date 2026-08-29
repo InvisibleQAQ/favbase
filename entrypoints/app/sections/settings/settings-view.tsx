@@ -1,10 +1,7 @@
 import { useCallback, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import Typography from '@mui/material/Typography';
 import Grid from '@mui/material/Grid';
-import Card from '@mui/material/Card';
-import CardContent from '@mui/material/CardContent';
 import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
 import Select from '@mui/material/Select';
@@ -31,6 +28,8 @@ import { ExportCard } from '../overview/export-card';
 import { WebdavSyncCard } from './webdav-sync-card';
 import { SettingsTabs, type SettingsTabItem } from './settings-tabs';
 import { SectionRail, type SectionRailItem } from './section-rail';
+import { SectionTitleBar } from '../../components/collection/section-title-bar';
+import { SettingsPanel } from './settings-panel';
 
 type SettingsTab = 'ai' | 'connections' | 'general' | 'storage';
 type AiSection = 'llm' | 'asr' | 'embedding';
@@ -48,9 +47,9 @@ function parseResumePlatform(value: string | null): CollectionPlatform | null {
 /** Every tab shares the same two-column shape: left rail + right content. */
 function RailLayout({ rail, children }: { rail: ReactNode; children: ReactNode }) {
   return (
-    <Grid container spacing={3}>
-      <Grid size={{ xs: 12, md: 3 }}>{rail}</Grid>
-      <Grid size={{ xs: 12, md: 9 }}>{children}</Grid>
+    <Grid container spacing={{ xs: 2.5, md: 3 }} alignItems="flex-start">
+      <Grid size={{ xs: 12, md: 3 }} sx={{ minWidth: 0 }}>{rail}</Grid>
+      <Grid size={{ xs: 12, md: 9 }} sx={{ minWidth: 0 }}>{children}</Grid>
     </Grid>
   );
 }
@@ -115,16 +114,28 @@ export function SettingsView() {
 
   return (
     <DashboardContent maxWidth="lg">
-      <Typography variant="h4" sx={{ mb: { xs: 3, md: 4 } }}>
-        {t('settings.title')}
-      </Typography>
+      <SectionTitleBar title={t('settings.title')} />
 
-      <Box sx={{ mb: { xs: 3, md: 4 } }}>
-        <SettingsTabs value={tab} onChange={(v) => setTab(v as SettingsTab)} tabs={tabs} />
+      <Box sx={{ mb: 3 }}>
+        <SettingsTabs
+          value={tab}
+          onChange={(v) => setTab(v as SettingsTab)}
+          tabs={tabs}
+          ariaLabel={t('settings.title')}
+        />
       </Box>
 
       {tab === 'ai' && (
-        <RailLayout rail={<SectionRail value={aiSection} onChange={setAiSection} items={aiNavItems} />}>
+        <RailLayout
+          rail={
+            <SectionRail
+              value={aiSection}
+              onChange={setAiSection}
+              items={aiNavItems}
+              ariaLabel={t('settings.tabAi')}
+            />
+          }
+        >
           {aiSection === 'llm' && <LlmConfigCard settings={s.settings} saveLlm={saveLlm} />}
           {aiSection === 'asr' && <AsrConfigCard settings={s.settings} saveAsr={s.saveAsr} />}
           {aiSection === 'embedding' && (
@@ -134,7 +145,16 @@ export function SettingsView() {
       )}
 
       {tab === 'connections' && (
-        <RailLayout rail={<SectionRail value={connSection} onChange={setConnSection} items={connNavItems} />}>
+        <RailLayout
+          rail={
+            <SectionRail
+              value={connSection}
+              onChange={setConnSection}
+              items={connNavItems}
+              ariaLabel={t('settings.tabConnections')}
+            />
+          }
+        >
           {connSection === 'github' && (
             <GithubConnectionCard settings={s.settings} saveGithub={s.saveGithub} />
           )}
@@ -147,14 +167,17 @@ export function SettingsView() {
 
       {tab === 'general' && (
         <RailLayout
-          rail={<SectionRail value="language" onChange={() => {}} items={generalNavItems} />}
+          rail={
+            <SectionRail
+              value="language"
+              onChange={() => {}}
+              items={generalNavItems}
+              ariaLabel={t('settings.tabGeneral')}
+            />
+          }
         >
-          <Card>
-            <CardContent>
-              <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 600 }}>
-                {t('settings.language')}
-              </Typography>
-              <FormControl size="small" sx={{ minWidth: 200 }}>
+          <SettingsPanel title={t('settings.language')}>
+            <FormControl sx={{ width: 1, maxWidth: 320 }}>
                 <InputLabel>{t('settings.language')}</InputLabel>
                 <Select
                   value={preference}
@@ -165,16 +188,20 @@ export function SettingsView() {
                   <MenuItem value="zh-CN">{t('settings.languageZhCN')}</MenuItem>
                   <MenuItem value="en">{t('settings.languageEn')}</MenuItem>
                 </Select>
-              </FormControl>
-            </CardContent>
-          </Card>
+            </FormControl>
+          </SettingsPanel>
         </RailLayout>
       )}
 
       {tab === 'storage' && (
         <RailLayout
           rail={
-            <SectionRail value={storageSection} onChange={setStorageSection} items={storageNavItems} />
+            <SectionRail
+              value={storageSection}
+              onChange={setStorageSection}
+              items={storageNavItems}
+              ariaLabel={t('settings.tabStorage')}
+            />
           }
         >
           {storageSection === 'export' && <ExportCard />}

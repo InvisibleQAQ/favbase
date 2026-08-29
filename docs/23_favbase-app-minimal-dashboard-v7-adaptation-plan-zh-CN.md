@@ -849,6 +849,40 @@ Chrome 中 reload 后，仍需按本节验收矩阵做人工运行时批准。
 
 ### Phase 6：Settings、Chat 和 overlay
 
+**实施状态（2026-08-29）：已完成源码与自动验证，待人工运行时审阅。** Settings
+路由标题改用共享 `SectionTitleBar`（唯一 h1）；顶层四 Tab 与二级 rail 在 `md` 以下由
+压缩标签的 `fullWidth` 改为无折行 `scrollable`，`md+` 仍保持 fullWidth / vertical；两列
+Grid 的 rail/content 都显式 `minWidth: 0`。新增 `SettingsPanel` 作为 active section 的唯一
+surface owner（单层 Card + 显式 h2 section title + theme-owned content padding），七个配置区、
+语言区及仅由 Settings 消费的 Export 均复用，删除八处重复 Card/Header/Content 装配；所有
+字段、draft、测试连接、保存 gating、deep link、resume、权限恢复与错误处理未改。
+
+Chat 保持单个 outlined Paper 工作区，标题升级为路由唯一 h1；桌面 Conversation rail
+统一为 264px，消息/error/composer 共用 760px 阅读轨道，user 气泡保持右侧窄幅，assistant
+保持无框宽幅；tool activity 改为独立 neutral live status，source row 改读 neutral/divider/
+action token。移动历史 Drawer 宽度收敛为 `min(288px, 100vw - 32px)`，390px 有 16px
+双侧安全区；既有 explicit close、Escape、focus trap、退出前 blur、退出后 trigger focus
+恢复和跨 `lg` 清理逻辑保留。assistant markdown / user plain-text 分叉由测试锁定；未闭合
+fenced code 与 link 的逐 token markdown 输入均不抛错，code/table 横滚与无 `rehype-raw`
+XSS 边界不变。
+
+Overlay defaults 继续由 theme 唯一拥有：Popover paper 增 viewport bounds，Menu list 统一
+4px padding；仅 temporary Drawer 使用 dropdown shadow（permanent shell nav 保持 flat）；
+Dialog 默认 fullWidth/sm、16px viewport gutter、bounded height、24px title/content/action
+节奏且 action 可换行；Tooltip 默认 arrow + 400ms enter delay。没有在 Settings/Chat 单点
+复制 radius/shadow。
+
+验证：focused Vitest 14 文件 / 89 用例通过；`pnpm compile` 通过；`pnpm build` 通过且
+background bundle contract 为 12 modules / 937221 bytes；Impeccable detector 对 7 个主要
+UI owner 为 0 finding；`git diff --check` 干净。全量 `pnpm test` 为 174 文件 / 1250
+用例中 173 文件 / 1249 用例通过，唯一失败是未触及的
+`lib/database/proxy-db.test.ts` 5 秒并发超时，单独复跑 3/3 通过（1.35s）。
+
+**[UNKNOWN] 运行时证据：** 当前工具面没有用户 Chrome 的 `chrome-devtools` 会话，故未
+伪造 light/dark、zh-CN/en、1440/1024/390 截图、focus trap 或 console 结论。待审 build
+为 `C:\tmp\favbase-minimal-v7-phase2\.output\chrome-mv3`；用户 reload 该 unpacked
+extension 后仍需按本节和 §10 完成人工批准。
+
 **目标文件：** `sections/settings/**`、`sections/chat/**` 及相关 UI tests/CLAUDE。
 
 步骤：

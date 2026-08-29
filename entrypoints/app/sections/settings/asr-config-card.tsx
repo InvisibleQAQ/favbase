@@ -1,7 +1,4 @@
 import { useState, useCallback } from 'react';
-import Card from '@mui/material/Card';
-import CardHeader from '@mui/material/CardHeader';
-import CardContent from '@mui/material/CardContent';
 import Grid from '@mui/material/Grid';
 import TextField from '@mui/material/TextField';
 import MenuItem from '@mui/material/MenuItem';
@@ -18,6 +15,7 @@ import { deriveAsrDraft, type AsrDraft } from '@/lib/hooks/useSettings';
 import { testAsrConnection } from '@/lib/ai';
 import { useConfigDraft } from './use-config-draft';
 import { SaveActions } from './save-actions';
+import { SettingsPanel } from './settings-panel';
 
 // `model` is deliberately not connection-relevant: the /models probe validates
 // the credential, not a model name — editing the model never invalidates a test.
@@ -54,12 +52,10 @@ export function AsrConfigCard({ settings, saveAsr }: AsrConfigCardProps) {
   const currentAsrDef = getAsrProviderDef(draft.provider);
 
   return (
-    <Card>
-      <CardHeader
+    <SettingsPanel
         title={t('settings.asrCard.title')}
-        subheader={t('settings.asrCard.description')}
-      />
-      <CardContent>
+        description={t('settings.asrCard.description')}
+      >
         <Grid container spacing={3}>
           <Grid size={{ xs: 12 }}>
             <TextField
@@ -161,7 +157,6 @@ export function AsrConfigCard({ settings, saveAsr }: AsrConfigCardProps) {
             </Grid>
           )}
         </Grid>
-      </CardContent>
-    </Card>
+      </SettingsPanel>
   );
 }

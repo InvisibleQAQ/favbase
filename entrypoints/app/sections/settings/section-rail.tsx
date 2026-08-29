@@ -17,6 +17,7 @@ interface SectionRailProps<T extends string> {
   value: T;
   onChange: (value: T) => void;
   items: SectionRailItem<T>[];
+  ariaLabel: string;
 }
 
 /**
@@ -25,17 +26,30 @@ interface SectionRailProps<T extends string> {
  * 通用 / 存储) so each gets the same left sidebar; feed it that tab's items.
  * Visual contract lives in `segmented-tabs-sx.ts`, shared with SettingsTabs.
  */
-export function SectionRail<T extends string>({ value, onChange, items }: SectionRailProps<T>) {
+export function SectionRail<T extends string>({
+  value,
+  onChange,
+  items,
+  ariaLabel,
+}: SectionRailProps<T>) {
   const theme = useTheme();
   const isCompact = useMediaQuery(theme.breakpoints.down('md'));
 
   return (
     <Tabs
       orientation={isCompact ? 'horizontal' : 'vertical'}
-      variant={isCompact ? 'fullWidth' : 'standard'}
+      variant={isCompact ? 'scrollable' : 'standard'}
       value={value}
       onChange={(_, v) => onChange(v as T)}
-      sx={(t) => segmentedTabsSx(t, { compact: isCompact, tabMinHeight: 48 })}
+      scrollButtons={false}
+      aria-label={ariaLabel}
+      sx={(t) => ({
+        ...segmentedTabsSx(t, { compact: isCompact, tabMinHeight: 48 }),
+        ...(isCompact && {
+          '& .MuiTabs-scroller': { scrollbarWidth: 'none' },
+          '& .MuiTabs-scroller::-webkit-scrollbar': { display: 'none' },
+        }),
+      })}
     >
       {items.map((item) => (
         <Tab
@@ -44,6 +58,7 @@ export function SectionRail<T extends string>({ value, onChange, items }: Sectio
           label={item.label}
           icon={<Iconify icon={item.icon} width={22} />}
           iconPosition="start"
+          sx={{ whiteSpace: 'nowrap', minWidth: isCompact ? 116 : undefined }}
         />
       ))}
     </Tabs>

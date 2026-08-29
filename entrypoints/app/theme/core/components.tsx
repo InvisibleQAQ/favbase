@@ -215,6 +215,7 @@ const MuiInputLabel: Components<Theme>['MuiInputLabel'] = {
 };
 
 const MuiTooltip: Components<Theme>['MuiTooltip'] = {
+  defaultProps: { arrow: true, enterDelay: 400 },
   styleOverrides: {
     // Grey is scheme-invariant, so the inversion has to be spelled out:
     // ink bubble on paper, paper bubble on ink.
@@ -241,15 +242,61 @@ const MuiPopover: Components<Theme>['MuiPopover'] = {
       boxShadow: theme.vars.customShadows.dropdown,
       borderRadius: Number(theme.shape.borderRadius),
       border: `1px solid ${theme.vars.palette.divider}`,
+      maxWidth: `calc(100vw - ${theme.spacing(4)})`,
+      maxHeight: `calc(100dvh - ${theme.spacing(4)})`,
+    }),
+  },
+};
+
+const MuiMenu: Components<Theme>['MuiMenu'] = {
+  styleOverrides: {
+    list: ({ theme }) => ({ padding: theme.spacing(0.5) }),
+  },
+};
+
+const MuiDrawer: Components<Theme>['MuiDrawer'] = {
+  styleOverrides: {
+    paper: ({ theme, ownerState }) => ({
+      backgroundImage: 'none',
+      ...(ownerState.variant === 'temporary' && {
+        boxShadow: theme.vars.customShadows.dropdown,
+      }),
     }),
   },
 };
 
 const MuiDialog: Components<Theme>['MuiDialog'] = {
+  defaultProps: { fullWidth: true, maxWidth: 'sm' },
   styleOverrides: {
     paper: ({ theme }) => ({
       boxShadow: theme.vars.customShadows.dialog,
       borderRadius: Number(theme.shape.borderRadius),
+      width: `calc(100% - ${theme.spacing(4)})`,
+      margin: theme.spacing(2),
+      maxHeight: `calc(100dvh - ${theme.spacing(4)})`,
+    }),
+  },
+};
+
+const MuiDialogTitle: Components<Theme>['MuiDialogTitle'] = {
+  styleOverrides: {
+    root: ({ theme }) => ({ padding: theme.spacing(3, 3, 1) }),
+  },
+};
+
+const MuiDialogContent: Components<Theme>['MuiDialogContent'] = {
+  styleOverrides: {
+    root: ({ theme }) => ({ padding: theme.spacing(2, 3) }),
+  },
+};
+
+const MuiDialogActions: Components<Theme>['MuiDialogActions'] = {
+  styleOverrides: {
+    root: ({ theme }) => ({
+      gap: theme.spacing(1),
+      flexWrap: 'wrap',
+      padding: theme.spacing(1, 3, 3),
+      '& > :not(style) ~ :not(style)': { marginLeft: 0 },
     }),
   },
 };
@@ -361,7 +408,12 @@ export const components = {
   MuiLink,
   MuiPaper,
   MuiButton,
+  MuiDrawer,
   MuiDialog,
+  MuiDialogTitle,
+  MuiDialogContent,
+  MuiDialogActions,
+  MuiMenu,
   MuiPopover,
   MuiTooltip,
   MuiBackdrop,

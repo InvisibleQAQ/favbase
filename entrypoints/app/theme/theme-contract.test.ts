@@ -71,6 +71,8 @@ describe('theme geometry and component defaults', () => {
   it('keeps control heights and surface radii in the theme owner', () => {
     expect(theme.components?.MuiButton?.defaultProps?.disableElevation).toBe(true);
     expect(theme.components?.MuiPaper?.defaultProps?.elevation).toBe(0);
+    expect(theme.components?.MuiDialog?.defaultProps).toMatchObject({ fullWidth: true, maxWidth: 'sm' });
+    expect(theme.components?.MuiTooltip?.defaultProps).toMatchObject({ arrow: true, enterDelay: 400 });
     expect(theme.components?.MuiTextField?.defaultProps?.variant).toBe('outlined');
     expect(theme.components?.MuiFilledInput?.defaultProps?.disableUnderline).toBe(true);
     expect(theme.components?.MuiCardHeader?.defaultProps?.slotProps?.title).toEqual({ variant: 'h6' });
@@ -99,6 +101,14 @@ describe('theme geometry and component defaults', () => {
     expect(resolveStyle('MuiCardContent', 'root').padding).toBe(theme.spacing(3));
     expect(resolveStyle('MuiPopover', 'paper').borderRadius).toBe(8);
     expect(resolveStyle('MuiDialog', 'paper').borderRadius).toBe(8);
+    expect(resolveStyle('MuiDialog', 'paper').width).toBe(`calc(100% - ${theme.spacing(4)})`);
+    expect(resolveStyle('MuiDialog', 'paper').maxHeight).toBe(
+      `calc(100dvh - ${theme.spacing(4)})`,
+    );
+    expect(resolveStyle('MuiDialogTitle', 'root').padding).toBe(theme.spacing(3, 3, 1));
+    expect(resolveStyle('MuiDialogContent', 'root').padding).toBe(theme.spacing(2, 3));
+    expect(resolveStyle('MuiDialogActions', 'root').padding).toBe(theme.spacing(1, 3, 3));
+    expect(resolveStyle('MuiMenu', 'list').padding).toBe(theme.spacing(0.5));
     expect(resolveStyle('MuiTooltip', 'tooltip').borderRadius).toBe(6);
     expect(resolveStyle('MuiSkeleton', 'rounded').borderRadius).toBe(8);
   });
@@ -112,6 +122,10 @@ describe('theme geometry and component defaults', () => {
     expect(darkStyles).toContain('1px solid');
     expect(resolveStyle('MuiPopover', 'paper').boxShadow).toContain('var(--customShadows-dropdown');
     expect(resolveStyle('MuiDialog', 'paper').boxShadow).toContain('var(--customShadows-dialog');
+    expect(resolveStyle('MuiDrawer', 'paper', { variant: 'temporary' }).boxShadow).toContain(
+      'var(--customShadows-dropdown',
+    );
+    expect(resolveStyle('MuiDrawer', 'paper', { variant: 'permanent' }).boxShadow).toBeUndefined();
     expect(customShadows.light?.card).not.toBe('none');
     expect(customShadows.dark?.card).toBe('none');
   });

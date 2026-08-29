@@ -2,9 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import Card from '@mui/material/Card';
-import CardContent from '@mui/material/CardContent';
-import CardHeader from '@mui/material/CardHeader';
 import Chip from '@mui/material/Chip';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Grid from '@mui/material/Grid';
@@ -32,6 +29,7 @@ import {
   type AgentBridgeConnectionState,
 } from '@/lib/storage';
 import { Iconify } from '../../components/iconify';
+import { SettingsPanel } from './settings-panel';
 
 type DisplayState = AgentBridgeConnectionState | 'loading';
 type CopyTarget = 'token' | 'claude' | 'codex';
@@ -242,12 +240,10 @@ export function AgentBridgeCard() {
     : t('settings.agentBridge.generateToken');
 
   return (
-    <Card>
-      <CardHeader
+    <SettingsPanel
         title={t('settings.agentBridge.title')}
-        subheader={t('settings.agentBridge.description')}
-      />
-      <CardContent>
+        description={t('settings.agentBridge.description')}
+      >
         <Grid container spacing={3}>
           <Grid size={{ xs: 12 }}>
             <FormControlLabel
@@ -470,7 +466,6 @@ export function AgentBridgeCard() {
             </Grid>
           )}
         </Grid>
-      </CardContent>
-    </Card>
+      </SettingsPanel>
   );
 }

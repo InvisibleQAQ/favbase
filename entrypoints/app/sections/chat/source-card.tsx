@@ -87,16 +87,16 @@ function SourceCardItem({ source, openLabel }: SourceCardItemProps) {
     gap: 1,
     px: 1.25,
     py: 0.875,
-    borderRadius: 0.5,
-    border: `1px solid ${varAlpha(theme.vars.palette.grey['500Channel'], 0.16)}`,
-    bgcolor: varAlpha(theme.vars.palette.grey['500Channel'], 0.04),
+    borderRadius: 0.75,
+    border: `1px solid ${theme.vars.palette.divider}`,
+    bgcolor: theme.vars.palette.background.neutral,
     color: theme.vars.palette.text.primary,
     textAlign: 'left' as const,
     transition: theme.transitions.create(['border-color', 'background-color', 'transform']),
     ...(canOpen && {
       '&:hover': {
-        borderColor: varAlpha(theme.vars.palette.primary.mainChannel, 0.4),
-        bgcolor: varAlpha(theme.vars.palette.primary.mainChannel, 0.05),
+        borderColor: varAlpha(theme.vars.palette.text.primaryChannel, 0.24),
+        bgcolor: theme.vars.palette.action.hover,
       },
       '&:active': { transform: 'translateY(1px)' },
       '&.Mui-focusVisible': {

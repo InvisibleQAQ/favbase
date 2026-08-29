@@ -1,8 +1,5 @@
 import { useCallback, useState } from 'react';
 import Box from '@mui/material/Box';
-import Card from '@mui/material/Card';
-import CardHeader from '@mui/material/CardHeader';
-import CardContent from '@mui/material/CardContent';
 import Grid from '@mui/material/Grid';
 import TextField from '@mui/material/TextField';
 import InputAdornment from '@mui/material/InputAdornment';
@@ -25,6 +22,7 @@ import {
 } from '@/lib/youtube/youtube-api';
 import { useConfigDraft } from './use-config-draft';
 import { SaveActions } from './save-actions';
+import { SettingsPanel } from './settings-panel';
 
 // `provider` is constant ('youtube'); apiKey + channel are the real
 // connection fields (both feed the channels.list probe).
@@ -83,12 +81,10 @@ export function YoutubeConnectionCard({ settings, saveYoutube }: YoutubeConnecti
   const { draft, setField } = d;
 
   return (
-    <Card>
-      <CardHeader
+    <SettingsPanel
         title={t('settings.youtube.title')}
-        subheader={t('settings.youtube.description')}
-      />
-      <CardContent>
+        description={t('settings.youtube.description')}
+      >
         <Grid container spacing={3}>
           <Grid size={{ xs: 12 }}>
             <TextField
@@ -205,7 +201,6 @@ export function YoutubeConnectionCard({ settings, saveYoutube }: YoutubeConnecti
             </Grid>
           )}
         </Grid>
-      </CardContent>
-    </Card>
+      </SettingsPanel>
   );
 }

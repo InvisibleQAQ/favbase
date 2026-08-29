@@ -15,7 +15,7 @@
   - `AnalyticsLoading` — `role="status" aria-busy` + 与真实布局同几何的骨架（hairline 三格 / 左列 h2 行 + 六行 36px tile / 右列 48px 头部 + 两列榜单）
   - 节奏：区块之间 `SECTION_GAP = 4`（32px：band → 两列、`Divider my`、库空态 `mt`），区块内部沿用共享 24px（`SectionTitleBar mb 3`、详情头部 `mb 3`、h2 `mb 2`）
 - `overview-view.test.tsx` / `use-collection-analytics.test.tsx` — 守护 loading `role=status` / 错误重试 / 标题经 `SectionTitleBar` + caption / 唯一 `h1` / 标题大纲 `[1, 2, 2, 3, 2]` 无跳级 / 六 Tab 与 `aria-controls` / 零份额无条、部分平台=0 时 tabpanel 空态 / 有数据无维度一句话 / 零标签 caption 与 Top tags 不渲染 / `1 / 6` 与 `66.7%` 摘要值 / 标签链接 / 选择稳定性
-- `export-card.tsx` — 数据导出工具仍由设置页「存储管理」消费，不属于 Dashboard
+- `export-card.tsx` — 数据导出工具仍由设置页「存储管理」消费，不属于 Dashboard；surface 复用 `sections/settings/SettingsPanel`，不自画第二套 Card/Header/Content
 
 ## 约定
 
