@@ -1,7 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 
 import Button from '@mui/material/Button';
-import Skeleton from '@mui/material/Skeleton';
 
 import { t, formatDateTime } from '@/lib/i18n';
 import { useTranslation } from '@/lib/i18n/use-translation';
@@ -13,7 +12,9 @@ import {
   SyncNowButton,
   PipelineProgressStrip,
   CardGridSkeleton,
+  CollectionCardSkeleton,
   CollectionPageScaffold,
+  SectionTitleBar,
 } from '../../components/collection';
 import {
   backgroundJobRuntime,
@@ -56,11 +57,11 @@ function NoTokenState({ onGoToSettings }: { onGoToSettings: () => void }) {
   const { t } = useTranslation();
   return (
     <StateBox
-      icon={<Iconify icon="mdi:github" width={64} sx={{ color: 'text.secondary', mb: 1 }} />}
+      icon={<Iconify icon="mdi:github" width={48} sx={{ color: 'text.secondary' }} />}
       title={t('githubStars.noTokenTitle')}
       description={t('githubStars.noTokenDesc')}
       action={
-        <Button variant="contained" onClick={onGoToSettings} sx={{ mt: 1 }}>
+        <Button variant="contained" onClick={onGoToSettings}>
           {t('githubStars.goToSettings')}
         </Button>
       }
@@ -73,7 +74,7 @@ function EmptyLibraryState({ syncing, onSync }: { syncing: boolean; onSync: () =
   const { t } = useTranslation();
   return (
     <StateBox
-      icon={<Iconify icon="mdi:star" width={64} sx={{ color: 'warning.main', mb: 1 }} />}
+      icon={<Iconify icon="mdi:star" width={48} sx={{ color: 'text.secondary' }} />}
       title={t('githubStars.emptyTitle')}
       description={t('githubStars.emptyDesc')}
       action={
@@ -88,8 +89,9 @@ function EmptyLibraryState({ syncing, onSync }: { syncing: boolean; onSync: () =
   );
 }
 
+/** Repo card shape: owner line + name + description. */
 function RepoGridSkeleton() {
-  return <CardGridSkeleton card={<Skeleton variant="rounded" height={148} />} />;
+  return <CardGridSkeleton card={<CollectionCardSkeleton header lines={3} />} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -136,6 +138,7 @@ export function GithubStarsView() {
   if (!gh.settingsLoading && !gh.hasToken) {
     return (
       <DashboardContent maxWidth="xl">
+        <SectionTitleBar title={t('githubStars.title')} />
         <NoTokenState onGoToSettings={() => navigate('/settings')} />
       </DashboardContent>
     );

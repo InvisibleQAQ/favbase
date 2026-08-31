@@ -37,6 +37,9 @@ vi.mock('@/lib/i18n/use-translation', () => ({
 vi.mock('../../layouts/dashboard', () => ({
   DashboardContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
+vi.mock('../../components/collection/section-title-bar', () => ({
+  SectionTitleBar: ({ title }: { title: ReactNode }) => <h1>{title}</h1>,
+}));
 vi.mock('./settings-tabs', () => ({
   SettingsTabs: ({
     onChange,
@@ -77,7 +80,7 @@ vi.mock('./section-rail', () => ({
 vi.mock('./llm-config-card', () => ({
   LlmConfigCard: (props: { saveLlm: (draft: unknown) => Promise<void> }) => {
     cardProps.llm = props;
-    return <div data-testid="llm-card" />;
+    return <div className="MuiCard-root" data-testid="llm-card" />;
   },
 }));
 vi.mock('./asr-config-card', () => ({
@@ -131,6 +134,20 @@ describe('SettingsView deep links', () => {
     expect(container.querySelector('[data-testid="rail-value"]')?.textContent).toBe('asr');
     expect(container.querySelector('[data-testid="asr-card"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="llm-card"]')).toBeNull();
+  });
+
+  it('uses the shared route title and keeps settings panels unnested', () => {
+    act(() => {
+      root.render(
+        <MemoryRouter initialEntries={['/settings']}>
+          <SettingsView />
+        </MemoryRouter>,
+      );
+    });
+
+    expect(container.querySelectorAll('h1')).toHaveLength(1);
+    expect(container.querySelector('h1')?.textContent).toBe('settings.title');
+    expect(container.querySelector('.MuiCard-root .MuiCard-root')).toBeNull();
   });
 
   it.each([

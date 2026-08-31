@@ -1,8 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import { browser } from 'wxt/browser';
-import Card from '@mui/material/Card';
-import CardHeader from '@mui/material/CardHeader';
-import CardContent from '@mui/material/CardContent';
 import Grid from '@mui/material/Grid';
 import TextField from '@mui/material/TextField';
 import InputAdornment from '@mui/material/InputAdornment';
@@ -36,6 +33,7 @@ import { sendBackgroundMessage } from '@/lib/background/client';
 import { Iconify } from '../../components/iconify';
 import { useHostPermission } from './use-host-permission';
 import { permissionErrorKey } from './permission-error';
+import { SettingsPanel } from './settings-panel';
 
 const EMPTY: WebdavConfig = { enabled: false, url: '', username: '', password: '' };
 
@@ -123,12 +121,11 @@ export function WebdavSyncCard() {
         : 'text.secondary';
 
   return (
-    <Card>
-      <CardHeader
+    <>
+      <SettingsPanel
         title={t('settings.sync.title')}
-        subheader={t('settings.sync.description')}
-      />
-      <CardContent>
+        description={t('settings.sync.description')}
+      >
         <Grid container spacing={3}>
           <Grid size={{ xs: 12 }}>
             <FormControlLabel
@@ -280,7 +277,7 @@ export function WebdavSyncCard() {
             </Grid>
           )}
         </Grid>
-      </CardContent>
+      </SettingsPanel>
 
       <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}>
         <DialogTitle>{t('settings.sync.clearRemoteConfirmTitle')}</DialogTitle>
@@ -296,6 +293,6 @@ export function WebdavSyncCard() {
       </Dialog>
 
       {dialog}
-    </Card>
+    </>
   );
 }

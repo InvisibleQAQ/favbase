@@ -1,0 +1,1280 @@
+{
+  "1024x768-dark": {
+    "viewport": {
+      "w": 1024,
+      "h": 768
+    },
+    "scheme": "dark",
+    "hScroll": false,
+    "nav": {
+      "x": 16,
+      "y": 80,
+      "w": 267,
+      "h": 688
+    },
+    "title": {
+      "x": 324,
+      "y": 80,
+      "w": 668,
+      "h": 60
+    },
+    "summaryBorder": "1px solid rgba(145, 158, 171, 0.24)",
+    "summaryCells": [
+      {
+        "x": 324,
+        "y": 165,
+        "w": 223,
+        "h": 114
+      },
+      {
+        "x": 547,
+        "y": 165,
+        "w": 223,
+        "h": 114
+      },
+      {
+        "x": 769,
+        "y": 165,
+        "w": 223,
+        "h": 114
+      }
+    ],
+    "shelf": {
+      "x": 324,
+      "y": 312,
+      "w": 668,
+      "h": 438
+    },
+    "panel": {
+      "x": 324,
+      "y": 815,
+      "w": 668,
+      "h": 442
+    },
+    "stacked": true,
+    "names": [
+      {
+        "text": "Bilibili Favorites",
+        "truncated": false
+      },
+      {
+        "text": "GitHub Stars",
+        "truncated": false
+      },
+      {
+        "text": "Browser Bookmarks",
+        "truncated": false
+      },
+      {
+        "text": "X Bookmarks",
+        "truncated": false
+      },
+      {
+        "text": "Zhihu Favorites",
+        "truncated": false
+      },
+      {
+        "text": "YouTube Playlists",
+        "truncated": false
+      }
+    ],
+    "tabs": [
+      {
+        "x": 324,
+        "y": 358,
+        "w": 668,
+        "h": 62,
+        "bg": "rgb(58, 42, 36)",
+        "sel": "true"
+      },
+      {
+        "x": 324,
+        "y": 424,
+        "w": 668,
+        "h": 62,
+        "bg": "rgba(0, 0, 0, 0)",
+        "sel": "false"
+      },
+      {
+        "x": 324,
+        "y": 490,
+        "w": 668,
+        "h": 62,
+        "bg": "rgba(0, 0, 0, 0)",
+        "sel": "false"
+      },
+      {
+        "x": 324,
+        "y": 556,
+        "w": 668,
+        "h": 62,
+        "bg": "rgba(0, 0, 0, 0)",
+        "sel": "false"
+      },
+      {
+        "x": 324,
+        "y": 622,
+        "w": 668,
+        "h": 62,
+        "bg": "rgba(0, 0, 0, 0)",
+        "sel": "false"
+      },
+      {
+        "x": 324,
+        "y": 688,
+        "w": 668,
+        "h": 62,
+        "bg": "rgba(0, 0, 0, 0)",
+        "sel": "false"
+      }
+    ],
+    "detailH2": {
+      "x": 388,
+      "y": 815,
+      "w": 391,
+      "h": 30
+    },
+    "button": {
+      "x": 795,
+      "y": 823,
+      "w": 197,
+      "h": 36
+    },
+    "rankings": [
+      {
+        "text": "Uploaders",
+        "x": 350,
+        "y": 891,
+        "w": 69,
+        "h": 22
+      },
+      {
+        "text": "Favorite folders",
+        "x": 704,
+        "y": 891,
+        "w": 105,
+        "h": 22
+      }
+    ],
+    "docHeight": 1321
+  },
+  "1024x768-light": {
+    "viewport": {
+      "w": 1024,
+      "h": 768
+    },
+    "scheme": "light",
+    "hScroll": false,
+    "nav": {
+      "x": 16,
+      "y": 80,
+      "w": 267,
+      "h": 688
+    },
+    "title": {
+      "x": 324,
+      "y": 80,
+      "w": 668,
+      "h": 60
+    },
+    "h1": {
+      "x": 324,
+      "y": 80,
+      "w": 668,
+      "h": 34
+    },
+    "summaryCells": [
+      {
+        "x": 324,
+        "y": 165,
+        "w": 223,
+        "h": 114
+      },
+      {
+        "x": 547,
+        "y": 165,
+        "w": 223,
+        "h": 114
+      },
+      {
+        "x": 769,
+        "y": 165,
+        "w": 223,
+        "h": 114
+      }
+    ],
+    "shelf": {
+      "x": 324,
+      "y": 312,
+      "w": 668,
+      "h": 438
+    },
+    "panel": {
+      "x": 324,
+      "y": 815,
+      "w": 668,
+      "h": 442
+    },
+    "stacked": true,
+    "tabs": [
+      {
+        "x": 324,
+        "y": 358,
+        "w": 668,
+        "h": 62
+      },
+      {
+        "x": 324,
+        "y": 424,
+        "w": 668,
+        "h": 62
+      },
+      {
+        "x": 324,
+        "y": 490,
+        "w": 668,
+        "h": 62
+      },
+      {
+        "x": 324,
+        "y": 556,
+        "w": 668,
+        "h": 62
+      },
+      {
+        "x": 324,
+        "y": 622,
+        "w": 668,
+        "h": 62
+      },
+      {
+        "x": 324,
+        "y": 688,
+        "w": 668,
+        "h": 62
+      }
+    ],
+    "names": [
+      {
+        "text": "Bilibili Favorites",
+        "truncated": false
+      },
+      {
+        "text": "GitHub Stars",
+        "truncated": false
+      },
+      {
+        "text": "Browser Bookmarks",
+        "truncated": false
+      },
+      {
+        "text": "X Bookmarks",
+        "truncated": false
+      },
+      {
+        "text": "Zhihu Favorites",
+        "truncated": false
+      },
+      {
+        "text": "YouTube Playlists",
+        "truncated": false
+      }
+    ],
+    "button": {
+      "x": 795,
+      "y": 823,
+      "w": 197,
+      "h": 36
+    },
+    "rankings": [
+      {
+        "text": "Uploaders",
+        "x": 350,
+        "y": 891,
+        "w": 69,
+        "h": 22
+      },
+      {
+        "text": "Favorite folders",
+        "x": 704,
+        "y": 891,
+        "w": 105,
+        "h": 22
+      }
+    ],
+    "heads": [
+      {
+        "tag": "H1",
+        "size": "28px",
+        "h": 34
+      },
+      {
+        "tag": "H2",
+        "size": "24px",
+        "h": 30
+      },
+      {
+        "tag": "H2",
+        "size": "24px",
+        "h": 30
+      },
+      {
+        "tag": "H3",
+        "size": "14px",
+        "h": 22
+      },
+      {
+        "tag": "H3",
+        "size": "14px",
+        "h": 22
+      }
+    ],
+    "docHeight": 1321
+  },
+  "1440x900-dark": {
+    "viewport": {
+      "w": 1440,
+      "h": 900
+    },
+    "scheme": "dark",
+    "scrollY": 0,
+    "hScroll": false,
+    "title": {
+      "x": 340,
+      "y": 80,
+      "w": 1060,
+      "h": 60
+    },
+    "summary": {
+      "x": 340,
+      "y": 164,
+      "w": 1060,
+      "h": 116,
+      "border": "1px solid rgba(145, 158, 171, 0.24)"
+    },
+    "titleToSummaryGap": 24,
+    "shelf": {
+      "x": 340,
+      "y": 312,
+      "w": 321,
+      "h": 438
+    },
+    "panel": {
+      "x": 726,
+      "y": 312,
+      "w": 674,
+      "h": 442
+    },
+    "sideBySide": true,
+    "heads": [
+      {
+        "tag": "H1",
+        "text": "Collection Analytics",
+        "size": "28px",
+        "family": "Barlow",
+        "weight": "700",
+        "x": 340,
+        "y": 80,
+        "w": 1060,
+        "h": 34
+      },
+      {
+        "tag": "H2",
+        "text": "Platform composition",
+        "size": "24px",
+        "family": "Barlow",
+        "weight": "700",
+        "x": 340,
+        "y": 312,
+        "w": 321,
+        "h": 30
+      },
+      {
+        "tag": "H2",
+        "text": "Bilibili Favorites",
+        "size": "24px",
+        "family": "Barlow",
+        "weight": "700",
+        "x": 790,
+        "y": 312,
+        "w": 397,
+        "h": 30
+      },
+      {
+        "tag": "H3",
+        "text": "Uploaders",
+        "size": "14px",
+        "family": "\"DM Sans Variable\"",
+        "weight": "600",
+        "x": 752,
+        "y": 388,
+        "w": 69,
+        "h": 22
+      },
+      {
+        "tag": "H3",
+        "text": "Favorite folders",
+        "size": "14px",
+        "family": "\"DM Sans Variable\"",
+        "weight": "600",
+        "x": 1109,
+        "y": 388,
+        "w": 105,
+        "h": 22
+      }
+    ],
+    "figs": [
+      {
+        "text": "Collection items",
+        "size": "14px",
+        "family": "\"DM Sans Variable\""
+      },
+      {
+        "text": "4,330",
+        "size": "20px",
+        "family": "Barlow"
+      },
+      {
+        "text": "Platforms in use",
+        "size": "14px",
+        "family": "\"DM Sans Variable\""
+      },
+      {
+        "text": "3 / 6",
+        "size": "20px",
+        "family": "Barlow"
+      },
+      {
+        "text": "Tag coverage",
+        "size": "14px",
+        "family": "\"DM Sans Variable\""
+      },
+      {
+        "text": "0%",
+        "size": "20px",
+        "family": "Barlow"
+      }
+    ],
+    "tabs": [
+      {
+        "x": 340,
+        "y": 358,
+        "w": 321,
+        "h": 62,
+        "radius": "6px",
+        "bg": "rgb(58, 42, 36)",
+        "sel": "true"
+      },
+      {
+        "x": 340,
+        "y": 424,
+        "w": 321,
+        "h": 62,
+        "radius": "6px",
+        "bg": "rgba(0, 0, 0, 0)",
+        "sel": "false"
+      },
+      {
+        "x": 340,
+        "y": 490,
+        "w": 321,
+        "h": 62,
+        "radius": "6px",
+        "bg": "rgba(0, 0, 0, 0)",
+        "sel": "false"
+      },
+      {
+        "x": 340,
+        "y": 556,
+        "w": 321,
+        "h": 62,
+        "radius": "6px",
+        "bg": "rgba(0, 0, 0, 0)",
+        "sel": "false"
+      },
+      {
+        "x": 340,
+        "y": 622,
+        "w": 321,
+        "h": 62,
+        "radius": "6px",
+        "bg": "rgba(0, 0, 0, 0)",
+        "sel": "false"
+      },
+      {
+        "x": 340,
+        "y": 688,
+        "w": 321,
+        "h": 62,
+        "radius": "6px",
+        "bg": "rgba(0, 0, 0, 0)",
+        "sel": "false"
+      }
+    ],
+    "tiles": [
+      {
+        "x": 352,
+        "y": 371,
+        "w": 36,
+        "h": 36,
+        "radius": "6px",
+        "bg": "rgb(252, 126, 91)",
+        "color": "rgb(31, 27, 23)"
+      },
+      {
+        "x": 352,
+        "y": 437,
+        "w": 36,
+        "h": 36,
+        "radius": "6px",
+        "bg": "rgb(34, 43, 52)",
+        "color": "rgb(244, 246, 248)"
+      },
+      {
+        "x": 352,
+        "y": 503,
+        "w": 36,
+        "h": 36,
+        "radius": "6px",
+        "bg": "rgb(34, 43, 52)",
+        "color": "rgb(191, 138, 16)"
+      },
+      {
+        "x": 352,
+        "y": 569,
+        "w": 36,
+        "h": 36,
+        "radius": "6px",
+        "bg": "rgb(34, 43, 52)",
+        "color": "rgb(244, 246, 248)"
+      },
+      {
+        "x": 352,
+        "y": 635,
+        "w": 36,
+        "h": 36,
+        "radius": "6px",
+        "bg": "rgb(34, 43, 52)",
+        "color": "rgb(59, 139, 234)"
+      },
+      {
+        "x": 352,
+        "y": 701,
+        "w": 36,
+        "h": 36,
+        "radius": "6px",
+        "bg": "rgb(34, 43, 52)",
+        "color": "rgb(217, 64, 64)"
+      }
+    ],
+    "bars": [
+      {
+        "w": 117,
+        "bg": "rgb(232, 73, 127)"
+      },
+      {
+        "w": 35,
+        "bg": "rgb(191, 138, 16)"
+      },
+      {
+        "w": 41,
+        "bg": "rgb(59, 139, 234)"
+      }
+    ],
+    "rankBars": [
+      {
+        "w": 317,
+        "bg": "rgba(145, 158, 171, 0.64)"
+      },
+      {
+        "w": 230,
+        "bg": "rgba(145, 158, 171, 0.64)"
+      },
+      {
+        "w": 219,
+        "bg": "rgba(145, 158, 171, 0.64)"
+      }
+    ],
+    "names": [
+      {
+        "text": "Bilibili Favorites",
+        "truncated": false
+      },
+      {
+        "text": "GitHub Stars",
+        "truncated": false
+      },
+      {
+        "text": "Browser Bookmarks",
+        "truncated": false
+      },
+      {
+        "text": "X Bookmarks",
+        "truncated": false
+      },
+      {
+        "text": "Zhihu Favorites",
+        "truncated": false
+      },
+      {
+        "text": "YouTube Playlists",
+        "truncated": false
+      }
+    ],
+    "detailTile": {
+      "x": 726,
+      "y": 314,
+      "w": 48,
+      "h": 48
+    },
+    "detailH2": {
+      "x": 790,
+      "y": 312,
+      "w": 397,
+      "h": 30
+    },
+    "button": {
+      "x": 1203,
+      "y": 320,
+      "w": 197,
+      "h": 36,
+      "color": "rgb(253, 164, 138)",
+      "border": "rgba(253, 164, 138, 0.48)"
+    },
+    "landmarks": [
+      "NAV[]",
+      "HEADER[]",
+      "MAIN[]",
+      "SECTION[summary]",
+      "SECTION[dashboard-platform-composition]"
+    ],
+    "docHeight": 900
+  },
+  "1440x900-light": {
+    "viewport": {
+      "w": 1440,
+      "h": 900
+    },
+    "scheme": "light",
+    "scrollY": 0,
+    "hScroll": false,
+    "title": {
+      "x": 340,
+      "y": 80,
+      "w": 1060,
+      "h": 60
+    },
+    "summary": {
+      "x": 340,
+      "y": 164,
+      "w": 1060,
+      "h": 116,
+      "border": "1px solid rgba(145, 158, 171, 0.24)"
+    },
+    "titleToSummaryGap": 24,
+    "shelf": {
+      "x": 340,
+      "y": 312,
+      "w": 321,
+      "h": 438
+    },
+    "panel": {
+      "x": 726,
+      "y": 312,
+      "w": 674,
+      "h": 442
+    },
+    "sideBySide": true,
+    "heads": [
+      {
+        "tag": "H1",
+        "text": "Collection Analytics",
+        "size": "28px",
+        "family": "Barlow",
+        "weight": "700",
+        "color": "rgb(28, 37, 46)",
+        "x": 340,
+        "y": 80,
+        "w": 1060,
+        "h": 34
+      },
+      {
+        "tag": "H2",
+        "text": "Platform composition",
+        "size": "24px",
+        "family": "Barlow",
+        "weight": "700",
+        "color": "rgb(28, 37, 46)",
+        "x": 340,
+        "y": 312,
+        "w": 321,
+        "h": 30
+      },
+      {
+        "tag": "H2",
+        "text": "Bilibili Favorites",
+        "size": "24px",
+        "family": "Barlow",
+        "weight": "700",
+        "color": "rgb(28, 37, 46)",
+        "x": 790,
+        "y": 312,
+        "w": 397,
+        "h": 30
+      },
+      {
+        "tag": "H3",
+        "text": "Uploaders",
+        "size": "14px",
+        "family": "\"DM Sans Variable\"",
+        "weight": "600",
+        "color": "rgb(28, 37, 46)",
+        "x": 752,
+        "y": 388,
+        "w": 69,
+        "h": 22
+      },
+      {
+        "tag": "H3",
+        "text": "Favorite folders",
+        "size": "14px",
+        "family": "\"DM Sans Variable\"",
+        "weight": "600",
+        "color": "rgb(28, 37, 46)",
+        "x": 1109,
+        "y": 388,
+        "w": 105,
+        "h": 22
+      }
+    ],
+    "figs": [
+      {
+        "text": "Collection items",
+        "size": "14px",
+        "family": "\"DM Sans Variable\"",
+        "color": "rgb(99, 115, 129)"
+      },
+      {
+        "text": "4,330",
+        "size": "20px",
+        "family": "Barlow",
+        "color": "rgb(28, 37, 46)"
+      },
+      {
+        "text": "Platforms in use",
+        "size": "14px",
+        "family": "\"DM Sans Variable\"",
+        "color": "rgb(99, 115, 129)"
+      },
+      {
+        "text": "3 / 6",
+        "size": "20px",
+        "family": "Barlow",
+        "color": "rgb(28, 37, 46)"
+      },
+      {
+        "text": "Tag coverage",
+        "size": "14px",
+        "family": "\"DM Sans Variable\"",
+        "color": "rgb(99, 115, 129)"
+      },
+      {
+        "text": "0%",
+        "size": "20px",
+        "family": "Barlow",
+        "color": "rgb(28, 37, 46)"
+      }
+    ],
+    "tabs": [
+      {
+        "x": 340,
+        "y": 358,
+        "w": 321,
+        "h": 62,
+        "radius": "6px",
+        "bg": "rgb(254, 233, 225)",
+        "sel": "true"
+      },
+      {
+        "x": 340,
+        "y": 424,
+        "w": 321,
+        "h": 62,
+        "radius": "6px",
+        "bg": "rgba(0, 0, 0, 0)",
+        "sel": "false"
+      },
+      {
+        "x": 340,
+        "y": 490,
+        "w": 321,
+        "h": 62,
+        "radius": "6px",
+        "bg": "rgba(0, 0, 0, 0)",
+        "sel": "false"
+      },
+      {
+        "x": 340,
+        "y": 556,
+        "w": 321,
+        "h": 62,
+        "radius": "6px",
+        "bg": "rgba(0, 0, 0, 0)",
+        "sel": "false"
+      },
+      {
+        "x": 340,
+        "y": 622,
+        "w": 321,
+        "h": 62,
+        "radius": "6px",
+        "bg": "rgba(0, 0, 0, 0)",
+        "sel": "false"
+      },
+      {
+        "x": 340,
+        "y": 688,
+        "w": 321,
+        "h": 62,
+        "radius": "6px",
+        "bg": "rgba(0, 0, 0, 0)",
+        "sel": "false"
+      }
+    ],
+    "tiles": [
+      {
+        "x": 352,
+        "y": 371,
+        "w": 36,
+        "h": 36,
+        "radius": "6px",
+        "bg": "rgb(252, 126, 91)",
+        "color": "rgb(31, 27, 23)"
+      },
+      {
+        "x": 352,
+        "y": 437,
+        "w": 36,
+        "h": 36,
+        "radius": "6px",
+        "bg": "rgb(244, 246, 248)",
+        "color": "rgb(28, 37, 46)"
+      },
+      {
+        "x": 352,
+        "y": 503,
+        "w": 36,
+        "h": 36,
+        "radius": "6px",
+        "bg": "rgb(244, 246, 248)",
+        "color": "rgb(184, 118, 10)"
+      },
+      {
+        "x": 352,
+        "y": 569,
+        "w": 36,
+        "h": 36,
+        "radius": "6px",
+        "bg": "rgb(244, 246, 248)",
+        "color": "rgb(28, 37, 46)"
+      },
+      {
+        "x": 352,
+        "y": 635,
+        "w": 36,
+        "h": 36,
+        "radius": "6px",
+        "bg": "rgb(244, 246, 248)",
+        "color": "rgb(26, 115, 232)"
+      },
+      {
+        "x": 352,
+        "y": 701,
+        "w": 36,
+        "h": 36,
+        "radius": "6px",
+        "bg": "rgb(244, 246, 248)",
+        "color": "rgb(198, 40, 40)"
+      }
+    ],
+    "bars": [
+      {
+        "w": 117,
+        "bg": "rgb(194, 24, 91)"
+      },
+      {
+        "w": 35,
+        "bg": "rgb(184, 118, 10)"
+      },
+      {
+        "w": 41,
+        "bg": "rgb(26, 115, 232)"
+      }
+    ],
+    "rankBars": [
+      {
+        "w": 317,
+        "bg": "rgba(145, 158, 171, 0.64)"
+      },
+      {
+        "w": 230,
+        "bg": "rgba(145, 158, 171, 0.64)"
+      },
+      {
+        "w": 219,
+        "bg": "rgba(145, 158, 171, 0.64)"
+      }
+    ],
+    "names": [
+      {
+        "text": "Bilibili Favorites",
+        "truncated": false
+      },
+      {
+        "text": "GitHub Stars",
+        "truncated": false
+      },
+      {
+        "text": "Browser Bookmarks",
+        "truncated": false
+      },
+      {
+        "text": "X Bookmarks",
+        "truncated": false
+      },
+      {
+        "text": "Zhihu Favorites",
+        "truncated": false
+      },
+      {
+        "text": "YouTube Playlists",
+        "truncated": false
+      }
+    ],
+    "detailTile": {
+      "x": 726,
+      "y": 314,
+      "w": 48,
+      "h": 48
+    },
+    "detailH2": {
+      "x": 790,
+      "y": 312,
+      "w": 397,
+      "h": 30
+    },
+    "button": {
+      "x": 1203,
+      "y": 320,
+      "w": 197,
+      "h": 36,
+      "color": "rgb(122, 39, 20)",
+      "border": "rgba(122, 39, 20, 0.48)"
+    },
+    "landmarks": [
+      "NAV[]",
+      "HEADER[]",
+      "MAIN[]",
+      "SECTION[summary]",
+      "SECTION[dashboard-platform-composition]"
+    ],
+    "docHeight": 900
+  },
+  "390x844-dark": {
+    "viewport": {
+      "w": 390,
+      "h": 844
+    },
+    "scheme": "dark",
+    "hScroll": false,
+    "header": {
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 64
+    },
+    "title": {
+      "x": 16,
+      "y": 72,
+      "w": 358,
+      "h": 82
+    },
+    "summaryBorder": "1px solid rgba(145, 158, 171, 0.24)",
+    "summaryCells": [
+      {
+        "x": 16,
+        "y": 179,
+        "w": 358,
+        "h": 92
+      },
+      {
+        "x": 16,
+        "y": 271,
+        "w": 358,
+        "h": 93
+      },
+      {
+        "x": 16,
+        "y": 364,
+        "w": 358,
+        "h": 115
+      }
+    ],
+    "tabs": [
+      {
+        "x": 16,
+        "y": 558,
+        "w": 358,
+        "h": 62,
+        "bg": "rgb(58, 42, 36)",
+        "sel": "true"
+      },
+      {
+        "x": 16,
+        "y": 624,
+        "w": 358,
+        "h": 62,
+        "bg": "rgba(0, 0, 0, 0)",
+        "sel": "false"
+      },
+      {
+        "x": 16,
+        "y": 690,
+        "w": 358,
+        "h": 62,
+        "bg": "rgba(0, 0, 0, 0)",
+        "sel": "false"
+      },
+      {
+        "x": 16,
+        "y": 756,
+        "w": 358,
+        "h": 62,
+        "bg": "rgba(0, 0, 0, 0)",
+        "sel": "false"
+      },
+      {
+        "x": 16,
+        "y": 822,
+        "w": 358,
+        "h": 62,
+        "bg": "rgba(0, 0, 0, 0)",
+        "sel": "false"
+      },
+      {
+        "x": 16,
+        "y": 888,
+        "w": 358,
+        "h": 62,
+        "bg": "rgba(0, 0, 0, 0)",
+        "sel": "false"
+      }
+    ],
+    "tiles": [
+      {
+        "bg": "rgb(252, 126, 91)",
+        "color": "rgb(31, 27, 23)"
+      },
+      {
+        "bg": "rgb(34, 43, 52)",
+        "color": "rgb(244, 246, 248)"
+      },
+      {
+        "bg": "rgb(34, 43, 52)",
+        "color": "rgb(191, 138, 16)"
+      },
+      {
+        "bg": "rgb(34, 43, 52)",
+        "color": "rgb(244, 246, 248)"
+      },
+      {
+        "bg": "rgb(34, 43, 52)",
+        "color": "rgb(59, 139, 234)"
+      },
+      {
+        "bg": "rgb(34, 43, 52)",
+        "color": "rgb(217, 64, 64)"
+      }
+    ],
+    "bars": [
+      {
+        "w": 140,
+        "bg": "rgb(232, 73, 127)"
+      },
+      {
+        "w": 41,
+        "bg": "rgb(191, 138, 16)"
+      },
+      {
+        "w": 49,
+        "bg": "rgb(59, 139, 234)"
+      }
+    ],
+    "detailH2": {
+      "x": 80,
+      "y": 1015,
+      "w": 294,
+      "h": 30
+    },
+    "button": {
+      "x": 16,
+      "y": 1083,
+      "w": 197,
+      "h": 36
+    },
+    "docHeight": 1669
+  },
+  "390x844-light": {
+    "viewport": {
+      "w": 390,
+      "h": 844
+    },
+    "scheme": "light",
+    "hScroll": false,
+    "header": {
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 64
+    },
+    "navVisible": false,
+    "title": {
+      "x": 16,
+      "y": 72,
+      "w": 358,
+      "h": 82
+    },
+    "h1": {
+      "x": 16,
+      "y": 72,
+      "w": 358,
+      "h": 34,
+      "size": "28px"
+    },
+    "summaryCells": [
+      {
+        "x": 16,
+        "y": 179,
+        "w": 358,
+        "h": 92
+      },
+      {
+        "x": 16,
+        "y": 271,
+        "w": 358,
+        "h": 93
+      },
+      {
+        "x": 16,
+        "y": 364,
+        "w": 358,
+        "h": 115
+      }
+    ],
+    "shelf": {
+      "x": 16,
+      "y": 512,
+      "w": 358,
+      "h": 438
+    },
+    "panel": {
+      "x": 16,
+      "y": 1015,
+      "w": 358,
+      "h": 598
+    },
+    "tabs": [
+      {
+        "x": 16,
+        "y": 558,
+        "w": 358,
+        "h": 62
+      },
+      {
+        "x": 16,
+        "y": 624,
+        "w": 358,
+        "h": 62
+      },
+      {
+        "x": 16,
+        "y": 690,
+        "w": 358,
+        "h": 62
+      },
+      {
+        "x": 16,
+        "y": 756,
+        "w": 358,
+        "h": 62
+      },
+      {
+        "x": 16,
+        "y": 822,
+        "w": 358,
+        "h": 62
+      },
+      {
+        "x": 16,
+        "y": 888,
+        "w": 358,
+        "h": 62
+      }
+    ],
+    "names": [
+      {
+        "text": "Bilibili Favorites",
+        "truncated": false
+      },
+      {
+        "text": "GitHub Stars",
+        "truncated": false
+      },
+      {
+        "text": "Browser Bookmarks",
+        "truncated": false
+      },
+      {
+        "text": "X Bookmarks",
+        "truncated": false
+      },
+      {
+        "text": "Zhihu Favorites",
+        "truncated": false
+      },
+      {
+        "text": "YouTube Playlists",
+        "truncated": false
+      }
+    ],
+    "detailHeader": {
+      "x": 16,
+      "y": 1015,
+      "w": 358,
+      "h": 112
+    },
+    "button": {
+      "x": 177,
+      "y": 1053,
+      "w": 197,
+      "h": 36
+    },
+    "rankings": [
+      {
+        "text": "Uploaders",
+        "x": 42,
+        "y": 1151,
+        "w": 69,
+        "h": 22
+      },
+      {
+        "text": "Favorite folders",
+        "x": 42,
+        "y": 1541,
+        "w": 105,
+        "h": 22
+      }
+    ],
+    "docHeight": 1677
+  }
+}

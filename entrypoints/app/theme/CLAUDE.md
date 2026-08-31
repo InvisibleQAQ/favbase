@@ -56,9 +56,13 @@ analytics graphics; selection and navigation use the coral semantic roles.
   40px small single-line targets. Multiline fields stay content-driven.
 - Tabs and Tab use a 48px minimum target. Chips retain their native pill
   shape. Rounded Skeletons use the 8px base radius.
-- Popover, Dialog, and Tooltip stay at or below 8px and consume their own
-  dropdown/dialog elevation tokens. `CssBaseline` owns tabular numerals,
-  scrollbar, selection, caret, and focus-visible rules.
+- Popover/Menu/temporary Drawer/Dialog/Tooltip stay at or below 8px and consume
+  dropdown/dialog elevation tokens. Popover papers are viewport-bounded; Menu
+  lists use 4px padding; only temporary Drawers cast (permanent shell nav must
+  remain flat); Dialog defaults are full-width `sm` with 16px viewport gutters,
+  bounded height, 24px section padding, wrapped actions; Tooltip defaults to an
+  arrow with a 400ms enter delay. `CssBaseline` owns tabular numerals, scrollbar,
+  selection, caret, and focus-visible rules.
 
 When the base radius changes, page-local numeric `sx` values use `0.5` (4px)
 for embedded media/progress, `0.75` (6px) for compact rows/tooltips, and `1`

@@ -116,7 +116,11 @@ export function BackgroundJobsIndicator() {
           : <CircularProgress size={12} color="inherit" />}
         label={reminder}
         sx={{
-          maxWidth: { xs: 160, sm: 320 },
+          // 390px budget: menu button + theme switch + flag + GitHub leave
+          // ~140px; the chip yields first and truncates instead of overlapping.
+          maxWidth: { xs: 136, sm: 320 },
+          minWidth: 0,
+          flexShrink: 1,
           '& .MuiChip-label': {
             overflow: 'hidden',
             textOverflow: 'ellipsis',

@@ -60,7 +60,7 @@ WXT 入口点及运行时角色总览，详细结构见对应目录 `CLAUDE.md`�
 - `entrypoints/app/theme/CLAUDE.md` — MUI v7 主题系统（palette/typography/shadows/components）
 - `entrypoints/app/layouts/CLAUDE.md` — 仪表盘布局系统 + 侧边栏 Pin/Unpin
 - `entrypoints/app/components/iconify/CLAUDE.md` — Iconify 离线图标系统
-- `entrypoints/app/components/collection/CLAUDE.md` — 平台 section 共享展示哑组件（StateBox/标题栏/搜索框/卡片网格+分页/chip 行外壳/**`CollectionCard` 六平台条目外壳**）+ `CollectionPageScaffold` 页面编排
+- `entrypoints/app/components/collection/CLAUDE.md` — 平台 section 共享展示哑组件（StateBox/标题栏 h1/搜索框/卡片网格 24px gap+分页/chip 行外壳/**`CollectionCard` 六平台条目外壳** + `CollectionCardRow` 链接外行内边距 owner + `CollectionCardSkeleton` 同轨道骨架）+ `CollectionPageScaffold` 页面编排
 - `entrypoints/app/components/configuration-blocker/CLAUDE.md` — Collection provider 配置阻塞提醒（resolver + coverage + Settings 深链）
 - `entrypoints/app/components/library-gate/CLAUDE.md` — 知识库闸门智能组件（自带 i18n + `useLibraryGate` 订阅；⏸暂停/▶继续构建知识库按钮，scaffold pipeline 行尾常驻）
 - `entrypoints/app/components/tags/CLAUDE.md` — 平台无关标签 UI 子系统（hooks + popover + 筛选 chips + render-prop 网格）

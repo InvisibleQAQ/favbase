@@ -120,7 +120,7 @@ export function ChatWorkspace({ agent }: ChatWorkspaceProps) {
         direction="row"
         alignItems="center"
         spacing={1.25}
-        sx={{ minHeight: 40, mb: 1.5, flexShrink: 0 }}
+        sx={{ minHeight: 40, mb: 2, flexShrink: 0 }}
       >
         <Box
           component="img"
@@ -128,7 +128,7 @@ export function ChatWorkspace({ agent }: ChatWorkspaceProps) {
           alt=""
           sx={{ width: 28, height: 28, flexShrink: 0 }}
         />
-        <Typography id="chat-page-title" variant="h4" sx={{ flexGrow: 1 }}>
+        <Typography id="chat-page-title" variant="h1" sx={{ flexGrow: 1, minWidth: 0 }}>
           {t('chat.title')}
         </Typography>
         <Tooltip title={t('chat.openHistory')}>
@@ -172,7 +172,7 @@ export function ChatWorkspace({ agent }: ChatWorkspaceProps) {
             ref: historyDrawerRef,
             sx: {
               left: { xs: 0, md: 'var(--layout-nav-vertical-width)' },
-              width: 'min(320px, 92vw)',
+              width: 'min(288px, calc(100vw - 32px))',
               p: 0,
             },
           },
@@ -200,17 +200,14 @@ export function ChatWorkspace({ agent }: ChatWorkspaceProps) {
         component="section"
         aria-labelledby="chat-page-title"
         variant="outlined"
-        sx={(theme) => ({
+        sx={{
           display: 'grid',
-          gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: '248px minmax(0, 1fr)' },
+          gridTemplateColumns: { xs: 'minmax(0, 1fr)', lg: '264px minmax(0, 1fr)' },
           flex: '1 1 auto',
           minHeight: 0,
           minWidth: 0,
           overflow: 'hidden',
-          borderRadius: 1,
-          borderColor: theme.vars.palette.divider,
-          boxShadow: 'none',
-        })}
+        }}
       >
         <Box
           sx={(theme) => ({
@@ -218,7 +215,7 @@ export function ChatWorkspace({ agent }: ChatWorkspaceProps) {
             minHeight: 0,
             minWidth: 0,
             borderRight: `1px solid ${theme.vars.palette.divider}`,
-            bgcolor: varAlpha(theme.vars.palette.grey['500Channel'], 0.04),
+            bgcolor: theme.vars.palette.background.neutral,
           })}
         >
           <ConversationRail
@@ -268,7 +265,7 @@ export function ChatWorkspace({ agent }: ChatWorkspaceProps) {
               >
                 <Stack
                   spacing={{ xs: 2.5, md: 3 }}
-                  sx={{ width: 1, maxWidth: 880, minHeight: '100%', mx: 'auto' }}
+                  sx={{ width: 1, maxWidth: 760, minHeight: '100%', mx: 'auto' }}
                 >
                   {showEmptyState ? (
                     <Stack
@@ -307,7 +304,7 @@ export function ChatWorkspace({ agent }: ChatWorkspaceProps) {
 
               {status === 'error' && (
                 <Box sx={{ flexShrink: 0, px: { xs: 2, sm: 3, lg: 4 }, pt: 1.5 }}>
-                  <Alert severity="error" sx={{ maxWidth: 880, mx: 'auto' }}>
+                  <Alert severity="error" sx={{ maxWidth: 760, mx: 'auto' }}>
                     {errorKind === 'network' ? t('chat.errorNetwork') : t('chat.errorGeneric')}
                   </Alert>
                 </Box>
@@ -327,7 +324,7 @@ export function ChatWorkspace({ agent }: ChatWorkspaceProps) {
                   py: { xs: 1.5, md: 2 },
                 })}
               >
-                <Box sx={{ width: 1, maxWidth: 880, mx: 'auto' }}>
+                <Box sx={{ width: 1, maxWidth: 760, mx: 'auto' }}>
                   <TextField
                     fullWidth
                     multiline
@@ -594,13 +591,14 @@ function MessageBubble({ message, activityLabel: activity, pending }: MessageBub
     <Box
       component="article"
       aria-label={t(isUser ? 'chat.userMessage' : 'chat.assistantMessage')}
+      data-role={isUser ? 'user' : 'assistant'}
       sx={{ display: 'flex', minWidth: 0, justifyContent: isUser ? 'flex-end' : 'flex-start' }}
     >
       <Box
         sx={{
           display: 'flex',
           width: isUser ? 'auto' : 1,
-          maxWidth: isUser ? { xs: '92%', sm: '76%' } : '100%',
+          maxWidth: isUser ? { xs: '88%', sm: '72%' } : '100%',
           minWidth: 0,
           flexDirection: 'column',
         }}
@@ -610,8 +608,18 @@ function MessageBubble({ message, activityLabel: activity, pending }: MessageBub
             direction="row"
             alignItems="center"
             spacing={0.75}
+            role="status"
             aria-live="polite"
-            sx={{ mb: 0.75 }}
+            data-slot="tool-activity"
+            sx={(theme) => ({
+              alignSelf: 'flex-start',
+              minHeight: 30,
+              mb: 1,
+              px: 1,
+              py: 0.375,
+              borderRadius: 0.75,
+              bgcolor: theme.vars.palette.background.neutral,
+            })}
           >
             {pending && <CircularProgress size={12} color="inherit" />}
             <Typography

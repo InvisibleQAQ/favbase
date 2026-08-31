@@ -9,9 +9,9 @@ import CircularProgress from '@mui/material/CircularProgress';
 import { Iconify } from '../iconify';
 
 export interface SectionTitleBarProps {
-  /** h5 title (rendered as the page's h1) — pass a <Skeleton> while loading. */
+  /** Route title — the page's single h1. Pass a <Skeleton> while loading. */
   title: ReactNode;
-  /** Caption next to the title (count / last-synced); omit to hide. */
+  /** Secondary line under the title (count / last-synced); omit to hide. */
   caption?: ReactNode;
   syncing?: boolean;
   /** Omit the sync trio (onSync/syncLabel/syncingLabel) to render no sync button
@@ -32,8 +32,9 @@ export interface SectionTitleBarProps {
 }
 
 /**
- * Title row shared by platform sections: title + caption + spacer + optional
- * sync button. The title keeps its h5 look but is the page's single h1.
+ * Route heading shared by every collection page: h1 with its caption stacked
+ * beneath, and the page's one contained action on the right. Reads first
+ * (title → status → control) before any content row.
  */
 export function SectionTitleBar({
   title,
@@ -49,7 +50,6 @@ export function SectionTitleBar({
   const syncButton = onSync ? (
     <Button
       variant="contained"
-      size="small"
       startIcon={
         syncing ? (
           <CircularProgress size={16} color="inherit" />
@@ -65,29 +65,41 @@ export function SectionTitleBar({
   ) : null;
 
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 2, flexWrap: 'wrap' }}>
-      <Typography variant="h5" component="h1" sx={{ flexShrink: 0 }} noWrap>
-        {title}
-      </Typography>
-
-      {caption != null && (
-        <Typography variant="caption" sx={{ color: 'text.secondary', flexShrink: 0 }}>
-          {caption}
+    <Box
+      data-section="title"
+      sx={{
+        display: 'flex',
+        alignItems: 'flex-start',
+        justifyContent: 'space-between',
+        gap: 2,
+        flexWrap: 'wrap',
+        mb: 3,
+      }}
+    >
+      <Box sx={{ flex: '1 1 auto', minWidth: 0 }}>
+        <Typography variant="h1" sx={{ wordBreak: 'break-word' }}>
+          {title}
         </Typography>
-      )}
 
-      <Box sx={{ flex: 1 }} />
+        {caption != null && (
+          <Typography data-slot="caption" variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
+            {caption}
+          </Typography>
+        )}
+      </Box>
 
       {syncButton != null &&
         (syncDisabled && syncDisabledTooltip ? (
           // MUI Tooltip needs a focusable wrapper around a disabled Button.
           <Tooltip title={syncDisabledTooltip}>
-            <Box component="span" sx={{ display: 'inline-flex' }}>
+            <Box component="span" sx={{ display: 'inline-flex', flexShrink: 0 }}>
               {syncButton}
             </Box>
           </Tooltip>
         ) : (
-          syncButton
+          <Box component="span" sx={{ display: 'inline-flex', flexShrink: 0 }}>
+            {syncButton}
+          </Box>
         ))}
     </Box>
   );

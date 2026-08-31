@@ -58,4 +58,12 @@ describe('ChatMarkdown', () => {
     expect(html).not.toContain('<img src=x onerror');
     expect(html).toContain('&lt;script&gt;');
   });
+
+  it.each([
+    '```ts\nconst streaming = true;',
+    '[streaming link](https://example.com',
+  ])('tolerates incomplete streaming markdown: %s', (markdown) => {
+    expect(() => render(markdown)).not.toThrow();
+    expect(render(markdown)).toContain('streaming');
+  });
 });

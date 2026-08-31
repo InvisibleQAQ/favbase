@@ -1,22 +1,7 @@
-import Box from '@mui/material/Box';
-import Card from '@mui/material/Card';
-import Skeleton from '@mui/material/Skeleton';
+import { CardGridSkeleton, CollectionCardSkeleton } from '../../components/collection';
 
-import { CardGridSkeleton } from '../../components/collection';
-
-/** Loading placeholder shared by the folder grid and the tag-filtered grid. */
+/** Loading placeholder shared by the folder grid and the tag-filtered grid:
+ *  the video card's shape (16:9 cover + title + uploader line). */
 export function VideoGridSkeleton() {
-  return (
-    <CardGridSkeleton
-      card={
-        <Card sx={{ overflow: 'hidden' }}>
-          <Skeleton variant="rectangular" height={130} />
-          <Box sx={{ p: 1.5 }}>
-            <Skeleton variant="text" width="80%" />
-            <Skeleton variant="text" width="50%" />
-          </Box>
-        </Card>
-      }
-    />
-  );
+  return <CardGridSkeleton card={<CollectionCardSkeleton media="16/9" lines={2} />} />;
 }

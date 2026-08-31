@@ -13,6 +13,7 @@ import {
   SyncNowButton,
   PipelineProgressStrip,
   CollectionPageScaffold,
+  SectionTitleBar,
 } from '../../components/collection';
 import { backgroundJobRuntime, fetchedCountProgress } from '../../hooks/pipeline-segments';
 import { useCollectionPipeline } from '../../hooks/use-collection-pipeline';
@@ -50,11 +51,11 @@ function NotConnectedState({ onGoToSettings }: { onGoToSettings: () => void }) {
   const { t } = useTranslation();
   return (
     <StateBox
-      icon={<Iconify icon="mdi:youtube" width={64} sx={{ color: 'text.secondary', mb: 1 }} />}
+      icon={<Iconify icon="mdi:youtube" width={48} sx={{ color: 'text.secondary' }} />}
       title={t('youtube.notConnectedTitle')}
       description={t('youtube.notConnectedDesc')}
       action={
-        <Button variant="contained" onClick={onGoToSettings} sx={{ mt: 1 }}>
+        <Button variant="contained" onClick={onGoToSettings}>
           {t('youtube.goToSettings')}
         </Button>
       }
@@ -75,11 +76,11 @@ function AuthFailedState({
   const { t } = useTranslation();
   return (
     <StateBox
-      icon={<Iconify icon="mdi:youtube" width={64} sx={{ color: 'text.secondary', mb: 1 }} />}
+      icon={<Iconify icon="mdi:youtube" width={48} sx={{ color: 'text.secondary' }} />}
       title={t('youtube.authFailedTitle')}
       description={t('youtube.authFailedDesc')}
       action={
-        <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1, flexWrap: 'wrap' }}>
           <Button variant="contained" onClick={onGoToSettings}>
             {t('youtube.goToSettings')}
           </Button>
@@ -95,18 +96,16 @@ function EmptyLibraryState({ syncing, onSync }: { syncing: boolean; onSync: () =
   const { t } = useTranslation();
   return (
     <StateBox
-      icon={<Iconify icon="mdi:youtube" width={64} sx={{ color: 'error.main', mb: 1 }} />}
+      icon={<Iconify icon="mdi:youtube" width={48} sx={{ color: 'text.secondary' }} />}
       title={t('youtube.emptyTitle')}
       description={t('youtube.emptyDesc')}
       action={
-        <Box sx={{ mt: 1 }}>
-          <SyncNowButton
-            syncing={syncing}
-            onSync={onSync}
-            label={t('pipeline.fetchNow')}
-            variant="contained"
-          />
-        </Box>
+        <SyncNowButton
+          syncing={syncing}
+          onSync={onSync}
+          label={t('pipeline.fetchNow')}
+          variant="contained"
+        />
       }
     />
   );
@@ -135,6 +134,7 @@ export function YoutubeView() {
   if (!yt.settingsLoading && !yt.hasConfig) {
     return (
       <DashboardContent maxWidth="xl">
+        <SectionTitleBar title={t('youtube.title')} />
         <NotConnectedState onGoToSettings={() => navigate('/settings')} />
       </DashboardContent>
     );

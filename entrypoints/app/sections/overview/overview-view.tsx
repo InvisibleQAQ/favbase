@@ -22,7 +22,7 @@ import type { LocaleKeys } from '@/lib/i18n/locales/zh-CN';
 import { useTranslation } from '@/lib/i18n/use-translation';
 
 import { collectionPlatformRegistry } from '../../collection-platform-registry';
-import { ErrorState, StateBox } from '../../components/collection';
+import { ErrorState, SectionTitleBar, StateBox } from '../../components/collection';
 import { Iconify } from '../../components/iconify';
 import type { IconifyName } from '../../components/iconify/register-icons';
 import { DashboardContent } from '../../layouts/dashboard';
@@ -62,8 +62,15 @@ const DIMENSION_ICONS: Record<CollectionAnalyticsDimensionKind, IconifyName> = {
 
 const registryById = new Map(collectionPlatformRegistry.map((platform) => [platform.id, platform]));
 
+/**
+ * Vertical rhythm between the page's hairline-separated sections (32px).
+ * Inside a section the shared 24px rhythm applies.
+ */
+const SECTION_GAP = 4;
+
+/** Every hairline on this page is the theme divider — no page-local alphas. */
 function hairline(theme: Theme): string {
-  return `1px solid ${varAlpha(theme.vars.palette.grey['500Channel'], 0.2)}`;
+  return `1px solid ${theme.vars.palette.divider}`;
 }
 
 function formatNumber(value: number, locale: string): string {
@@ -104,7 +111,7 @@ function PlatformTile({
           width: size,
           height: size,
           flexShrink: 0,
-          borderRadius: 0.5,
+          borderRadius: 0.75,
           display: 'inline-flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -119,25 +126,33 @@ function PlatformTile({
   );
 }
 
+/** Same geometry as the loaded page: band → shelf (6 rows) | detail (header + two rankings). */
 function AnalyticsLoading({ label }: { label: string }) {
   return (
-    <Box aria-busy="true" aria-label={label} sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)' }, gap: 3 }}>
+    <Box role="status" aria-busy="true" aria-label={label}>
+      <Box
+        sx={(theme) => ({
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)' },
+          borderTop: hairline(theme),
+          borderBottom: hairline(theme),
+        })}
+      >
         {[0, 1, 2].map((key) => (
-          <Box key={key}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Skeleton variant="circular" width={18} height={18} />
-              <Skeleton variant="text" width={96} />
-            </Box>
-            <Skeleton variant="text" width={120} height={32} />
+          <Box key={key} sx={{ py: 2.5, px: { xs: 0, sm: 3 }, '&:first-of-type': { pl: 0 } }}>
+            <Skeleton variant="text" width={120} sx={{ mb: 0.5 }} />
+            <Skeleton variant="text" width={96} height={26} />
           </Box>
         ))}
       </Box>
-      <Grid container spacing={4}>
-        <Grid size={{ xs: 12, md: 4 }}>
-          <Skeleton variant="text" width={160} height={28} sx={{ mb: 1.5 }} />
+      <Grid container spacing={{ xs: SECTION_GAP, lg: 0 }} sx={{ mt: SECTION_GAP }}>
+        <Grid size={{ xs: 12, lg: 4 }} sx={{ pr: { lg: SECTION_GAP } }}>
+          <Skeleton variant="text" width={180} height={30} sx={{ mb: 2 }} />
           {[0, 1, 2, 3, 4, 5].map((key) => (
-            <Box key={key} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 1 }}>
+            <Box
+              key={key}
+              sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 1.5, py: 1, minHeight: 56 }}
+            >
               <Skeleton variant="rounded" width={36} height={36} />
               <Box sx={{ flex: 1 }}>
                 <Skeleton variant="text" width="60%" />
@@ -146,17 +161,17 @@ function AnalyticsLoading({ label }: { label: string }) {
             </Box>
           ))}
         </Grid>
-        <Grid size={{ xs: 12, md: 8 }}>
+        <Grid size={{ xs: 12, lg: 8 }} sx={{ pl: { lg: SECTION_GAP } }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
-            <Skeleton variant="rounded" width={40} height={40} />
+            <Skeleton variant="rounded" width={48} height={48} />
             <Box sx={{ flex: 1 }}>
-              <Skeleton variant="text" width={180} height={28} />
+              <Skeleton variant="text" width={200} height={30} />
               <Skeleton variant="text" width={100} />
             </Box>
           </Box>
-          <Grid container spacing={{ xs: 3, lg: 5 }}>
+          <Grid container spacing={{ xs: 3, md: 5 }}>
             {[0, 1].map((column) => (
-              <Grid key={column} size={{ xs: 12, lg: 6 }}>
+              <Grid key={column} size={{ xs: 12, md: 6 }}>
                 <Skeleton variant="text" width={140} sx={{ mb: 1 }} />
                 {[0, 1, 2, 3, 4].map((key) => (
                   <Skeleton key={key} variant="text" height={36} />
@@ -208,6 +223,7 @@ function SummaryBand({ snapshot, locale }: { snapshot: CollectionAnalyticsSnapsh
   return (
     <Box
       component="section"
+      data-section="summary"
       sx={(theme) => ({
         display: 'grid',
         gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)' },
@@ -222,14 +238,8 @@ function SummaryBand({ snapshot, locale }: { snapshot: CollectionAnalyticsSnapsh
             py: 2.5,
             px: { xs: 0, sm: 3 },
             ...(index > 0 && {
-              borderTop: {
-                xs: `1px solid ${varAlpha(theme.vars.palette.grey['500Channel'], 0.16)}`,
-                sm: 'none',
-              },
-              borderLeft: {
-                xs: 'none',
-                sm: `1px solid ${varAlpha(theme.vars.palette.grey['500Channel'], 0.16)}`,
-              },
+              borderTop: { xs: hairline(theme), sm: 'none' },
+              borderLeft: { xs: 'none', sm: hairline(theme) },
             }),
             '&:first-of-type': { pl: 0 },
           })}
@@ -240,7 +250,8 @@ function SummaryBand({ snapshot, locale }: { snapshot: CollectionAnalyticsSnapsh
               {metric.label}
             </Typography>
           </Box>
-          <Typography variant="h3" component="p" sx={{ fontVariantNumeric: 'tabular-nums' }}>
+          {/* Metric figure: Barlow h3 (20px) — a figure, never a heading. */}
+          <Typography variant="h3" component="p">
             {metric.value}
           </Typography>
           {metric.caption && (
@@ -297,13 +308,14 @@ function PlatformShelfLabel({
       >
         {title}
       </Typography>
-      <Typography component="span" variant="subtitle1" sx={{ color: 'text.primary', fontVariantNumeric: 'tabular-nums' }}>
+      <Typography component="span" variant="subtitle1" sx={{ color: 'text.primary' }}>
         {formatNumber(platform.itemCount, locale)}
       </Typography>
       <Box component="span" sx={{ display: 'flex', alignItems: 'center', minWidth: 0, minHeight: 4 }}>
         {platform.share > 0 && (
           <Box
             component="span"
+            data-slot="share-bar"
             aria-hidden="true"
             sx={{
               display: 'block',
@@ -320,7 +332,8 @@ function PlatformShelfLabel({
       <Typography
         component="span"
         variant="caption"
-        sx={{ color: 'text.secondary', minWidth: 44, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}
+        data-slot="share-label"
+        sx={{ color: 'text.primary', minWidth: 44, textAlign: 'right' }}
       >
         {formatShare(platform.share, locale)}
       </Typography>
@@ -344,7 +357,7 @@ function PlatformShelf({
 
   return (
     <Box component="section" aria-labelledby="dashboard-platform-composition">
-      <Typography id="dashboard-platform-composition" variant="h6" component="h2" sx={{ mb: 1.5 }}>
+      <Typography id="dashboard-platform-composition" variant="h2" sx={{ mb: 2 }}>
         {t('dashboard.platformComposition')}
       </Typography>
       <Tabs
@@ -371,14 +384,12 @@ function PlatformShelf({
                 minHeight: 56,
                 alignItems: 'stretch',
                 textAlign: 'left',
-                opacity: 1,
                 px: 1.5,
                 py: 1,
-                borderRadius: 0.5,
-                textTransform: 'none',
-                color: 'text.primary',
+                borderRadius: 0.75,
                 '&:hover': { bgcolor: 'action.hover' },
-                '&.Mui-selected': { bgcolor: 'primary.lighter', color: 'text.primary' },
+                // Selection = coral wash on the row (the tile flips to the coral stamp).
+                '&.Mui-selected': { bgcolor: 'primary.lighter' },
               }}
             />
           );
@@ -403,7 +414,8 @@ function DimensionRanking({
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
         <Iconify icon={DIMENSION_ICONS[dimension.kind]} width={18} sx={{ color: 'text.secondary' }} />
-        <Typography variant="subtitle2" component="h3">
+        {/* Compact heading inside the detail panel: h3 in the outline, h6 (14px) in weight. */}
+        <Typography variant="h6" component="h3">
           {t(DIMENSION_LABELS[dimension.kind])}
         </Typography>
       </Box>
@@ -414,7 +426,7 @@ function DimensionRanking({
               <Typography variant="body2" noWrap title={entry.label} sx={{ minWidth: 0 }}>
                 {entry.label}
               </Typography>
-              <Typography variant="subtitle2" component="span" sx={{ flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
+              <Typography variant="subtitle2" component="span" sx={{ flexShrink: 0 }}>
                 {formatNumber(entry.itemCount, locale)}
               </Typography>
             </Box>
@@ -427,6 +439,7 @@ function DimensionRanking({
                   borderRadius: 0.5,
                   mt: 0.5,
                   width: `${(entry.itemCount / max) * 100}%`,
+                  // Secondary ink: rankings never wear the platform color.
                   bgcolor: varAlpha(theme.vars.palette.grey['500Channel'], 0.64),
                 })}
               />
@@ -449,13 +462,15 @@ function PlatformDetail({ platform, locale }: { platform: CollectionAnalyticsPla
       id={`dashboard-platform-panel-${platform.platform}`}
       aria-labelledby={`dashboard-platform-tab-${platform.platform}`}
     >
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
-        <PlatformTile platform={platform.platform} icon={config.icon} size={40} iconSize={24} />
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography variant="h6" component="h2" sx={{ overflowWrap: 'anywhere' }}>
+      {/* Same wrap rule as SectionTitleBar: on narrow widths the action drops
+          under the title instead of squeezing the h2 into a few characters. */}
+      <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 2, mb: 3 }}>
+        <PlatformTile platform={platform.platform} icon={config.icon} size={48} iconSize={28} />
+        <Box sx={{ flex: '1 1 auto', minWidth: 0 }}>
+          <Typography variant="h2" sx={{ overflowWrap: 'anywhere' }}>
             {t(config.title)}
           </Typography>
-          <Typography variant="body2" sx={{ color: 'text.secondary', fontVariantNumeric: 'tabular-nums' }}>
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
             {t('dashboard.itemCount', {
               count: platform.itemCount,
               value: formatNumber(platform.itemCount, locale),
@@ -478,9 +493,9 @@ function PlatformDetail({ platform, locale }: { platform: CollectionAnalyticsPla
           {t('dashboard.noDimensionData')}
         </Typography>
       ) : (
-        <Grid container spacing={{ xs: 3, lg: 5 }}>
+        <Grid container spacing={{ xs: 3, md: 5 }}>
           {populatedDimensions.map((dimension) => (
-            <Grid key={dimension.kind} size={{ xs: 12, lg: 6 }}>
+            <Grid key={dimension.kind} size={{ xs: 12, md: 6 }}>
               <DimensionRanking dimension={dimension} locale={locale} />
             </Grid>
           ))}
@@ -497,11 +512,11 @@ function TopTags({ tags, locale }: { tags: CollectionAnalyticsSnapshot['topTags'
 
   return (
     <>
-      <Divider sx={{ my: 4 }} />
+      <Divider sx={{ my: SECTION_GAP }} />
       <Box component="section" aria-labelledby="dashboard-top-tags">
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-          <Iconify icon="mdi:tag" width={18} sx={{ color: 'text.secondary' }} />
-          <Typography id="dashboard-top-tags" variant="h6" component="h2">
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+          <Iconify icon="mdi:tag" width={20} sx={{ color: 'text.secondary' }} />
+          <Typography id="dashboard-top-tags" variant="h2">
             {t('dashboard.topTags')}
           </Typography>
         </Box>
@@ -516,11 +531,7 @@ function TopTags({ tags, locale }: { tags: CollectionAnalyticsSnapshot['topTags'
               label={
                 <Box component="span" sx={{ display: 'inline-flex', gap: 0.75, alignItems: 'baseline' }}>
                   {tag.name}
-                  <Typography
-                    component="span"
-                    variant="caption"
-                    sx={{ color: 'text.secondary', fontVariantNumeric: 'tabular-nums' }}
-                  >
+                  <Typography component="span" variant="caption" sx={{ color: 'text.secondary' }}>
                     {formatNumber(tag.itemCount, locale)}
                   </Typography>
                 </Box>
@@ -546,14 +557,8 @@ export function CollectionAnalyticsContent({
 
   return (
     <DashboardContent maxWidth="xl">
-      <Box component="header" sx={{ mb: 3 }}>
-        <Typography variant="h4" component="h1" sx={{ mb: 0.5 }}>
-          {t('dashboard.title')}
-        </Typography>
-        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-          {t('dashboard.subtitle')}
-        </Typography>
-      </Box>
+      {/* Route title reads first (h1 → subtitle), the same block every collection page uses. */}
+      <SectionTitleBar title={t('dashboard.title')} caption={t('dashboard.subtitle')} />
 
       {error ? (
         <ErrorState
@@ -569,10 +574,12 @@ export function CollectionAnalyticsContent({
           <SummaryBand snapshot={snapshot} locale={locale} />
 
           {snapshot.totalItems === 0 && (
-            <Box sx={{ mt: 4 }}>
+            <Box sx={{ mt: SECTION_GAP }}>
               <StateBox
                 minHeight={220}
-                icon={<Iconify icon="solar:database-bold-duotone" width={56} sx={{ color: 'text.secondary' }} />}
+                icon={
+                  <Iconify icon="solar:database-bold-duotone" width={48} sx={{ color: 'text.secondary' }} />
+                }
                 title={t('dashboard.emptyTitle')}
                 description={t('dashboard.emptyDesc')}
                 action={
@@ -584,8 +591,11 @@ export function CollectionAnalyticsContent({
             </Box>
           )}
 
-          <Grid container spacing={{ xs: 4, md: 0 }} sx={{ pt: 4 }}>
-            <Grid size={{ xs: 12, md: 4 }} sx={{ pr: { md: 4 } }}>
+          {/* Shelf | detail sit side by side only from `lg` (≥1200px viewport): below
+              that a pinned 300px nav leaves too little width for a 4/12 shelf to show
+              platform names and counts untruncated, so they stack with a hairline between. */}
+          <Grid container spacing={{ xs: SECTION_GAP, lg: 0 }} sx={{ mt: SECTION_GAP }}>
+            <Grid size={{ xs: 12, lg: 4 }} sx={{ pr: { lg: SECTION_GAP } }}>
               <PlatformShelf
                 platforms={snapshot.platforms}
                 selectedPlatform={selectedPlatform}
@@ -594,12 +604,12 @@ export function CollectionAnalyticsContent({
               />
             </Grid>
             <Grid
-              size={{ xs: 12, md: 8 }}
+              size={{ xs: 12, lg: 8 }}
               sx={(theme) => ({
-                pt: { xs: 4, md: 0 },
-                pl: { md: 4 },
-                borderTop: { xs: hairline(theme), md: 'none' },
-                borderLeft: { xs: 'none', md: hairline(theme) },
+                pt: { xs: SECTION_GAP, lg: 0 },
+                pl: { lg: SECTION_GAP },
+                borderTop: { xs: hairline(theme), lg: 'none' },
+                borderLeft: { xs: 'none', lg: hairline(theme) },
               })}
             >
               {selected && <PlatformDetail platform={selected} locale={locale} />}

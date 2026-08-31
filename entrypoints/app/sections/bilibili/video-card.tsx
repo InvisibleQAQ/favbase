@@ -10,7 +10,7 @@ import { useTranslation } from '@/lib/i18n/use-translation';
 import type { LocaleKeys } from '@/lib/i18n/locales/zh-CN';
 import type { TranscribeErrorCode } from '@/lib/transcription/types';
 import { Iconify } from '../../components/iconify';
-import { CollectionCard, CoverBadge } from '../../components/collection';
+import { CollectionCard, CollectionCardRow, CoverBadge } from '../../components/collection';
 import { TagRow } from '../../components/tags';
 import { formatDuration } from '../../utils/format-duration';
 import type { BiliFavVideo } from '@/lib/bilibili/types';
@@ -139,8 +139,8 @@ function ActionBar({
   // Transcribing → progress display
   if (transcribing) {
     return (
-      <Box sx={{ px: 2, pb: 1.5 }}>
-        <LinearProgress variant="determinate" value={progress} sx={{ mb: 0.5 }} />
+      <CollectionCardRow sx={{ flexDirection: 'column', alignItems: 'stretch', gap: 0.5 }}>
+        <LinearProgress variant="determinate" value={progress} />
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Typography variant="caption" sx={{ color: 'text.secondary' }} noWrap>
             {translateStage(stage, stageParams)} {progress}%
@@ -151,19 +151,18 @@ function ActionBar({
             </IconButton>
           </Tooltip>
         </Box>
-      </Box>
+      </CollectionCardRow>
     );
   }
 
   // Error → error message + retry
   if (error) {
     return (
-      <Box sx={{ px: 2, pb: 1.5 }}>
+      <CollectionCardRow sx={{ flexDirection: 'column', alignItems: 'stretch', gap: 0.5 }}>
         <Typography
           variant="caption"
           sx={(theme) => ({
             display: 'block',
-            mb: 0.5,
             color: theme.vars.palette.error.dark,
             ...theme.applyStyles('dark', { color: theme.vars.palette.error.light }),
           })}
@@ -177,17 +176,18 @@ function ActionBar({
             {t('transcribe.rateLimit', { seconds: retryCountdown })}
           </Typography>
         ) : (
-          <Chip
-            label={t('transcribe.retry')}
-            icon={<Iconify icon="solar:restart-bold" width={14} />}
-            size="small"
-            variant="outlined"
-            onClick={onTranscribe}
-            disabled={disabled}
-            sx={{ height: 24 }}
-          />
+          <Box>
+            <Chip
+              label={t('transcribe.retry')}
+              icon={<Iconify icon="solar:restart-bold" width={14} />}
+              size="small"
+              variant="outlined"
+              onClick={onTranscribe}
+              disabled={disabled}
+            />
+          </Box>
         )}
-      </Box>
+      </CollectionCardRow>
     );
   }
 
@@ -195,13 +195,12 @@ function ActionBar({
   if (contentStatus === 'has_official' || contentStatus === 'has_asr') {
     const label = contentStatus === 'has_official' ? t('card.sourceCC') : t('card.sourceASR');
     return (
-      <Box sx={{ px: 2, pb: 1.5, display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+      <CollectionCardRow sx={{ gap: 0.5 }}>
         <Chip
           label={label}
           icon={<Iconify icon="solar:subtitles-bold-duotone" width={14} />}
           size="small"
           variant="outlined"
-          sx={{ height: 24 }}
         />
         {indexed && (
           <Chip
@@ -209,21 +208,24 @@ function ActionBar({
             icon={<Iconify icon="solar:database-bold-duotone" width={14} />}
             size="small"
             variant="outlined"
-            sx={{ height: 24 }}
           />
         )}
-      </Box>
+      </CollectionCardRow>
     );
   }
 
-  // Checking cache → reserve the row so the grid does not jump
+  // Checking cache → reserve one chip row so the grid does not jump
   if (contentStatus === 'checking' || contentStatus === 'unknown') {
-    return <Box sx={{ px: 2, pb: 1.5, height: 24 }} />;
+    return (
+      <CollectionCardRow>
+        <Box sx={{ height: 24 }} />
+      </CollectionCardRow>
+    );
   }
 
   // No content → transcribe button
   return (
-    <Box sx={{ px: 2, pb: 1.5 }}>
+    <CollectionCardRow>
       <Chip
         label={t('card.transcribe')}
         icon={<Iconify icon="solar:subtitles-bold-duotone" width={14} />}
@@ -231,8 +233,7 @@ function ActionBar({
         variant="outlined"
         onClick={onTranscribe}
         disabled={disabled}
-        sx={{ height: 24 }}
       />
-    </Box>
+    </CollectionCardRow>
   );
 }

@@ -1,7 +1,4 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import Card from '@mui/material/Card';
-import CardHeader from '@mui/material/CardHeader';
-import CardContent from '@mui/material/CardContent';
 import Grid from '@mui/material/Grid';
 import TextField from '@mui/material/TextField';
 import MenuItem from '@mui/material/MenuItem';
@@ -28,6 +25,7 @@ import { useHostPermission } from './use-host-permission';
 import { permissionErrorKey } from './permission-error';
 import { useConfigDraft } from './use-config-draft';
 import { SaveActions } from './save-actions';
+import { SettingsPanel } from './settings-panel';
 
 const LLM_CONNECTION_KEYS = [
   'provider',
@@ -121,12 +119,10 @@ export function LlmConfigCard({ settings, saveLlm }: LlmConfigCardProps) {
 
   return (
     <>
-    <Card>
-      <CardHeader
+    <SettingsPanel
         title={t('settings.llmCard.title')}
-        subheader={t('settings.llmCard.description')}
-      />
-      <CardContent>
+        description={t('settings.llmCard.description')}
+      >
         <Grid container spacing={3}>
           {/* Provider */}
           <Grid size={{ xs: 12 }}>
@@ -243,7 +239,6 @@ export function LlmConfigCard({ settings, saveLlm }: LlmConfigCardProps) {
               onClick={handleFetchModels}
               disabled={isFetchingModels || !draft.apiKey}
               startIcon={isFetchingModels ? <CircularProgress size={16} /> : undefined}
-              size="large"
             >
               {isFetchingModels ? t('settings.fetchingModels') : t('settings.fetchModels')}
             </Button>
@@ -354,7 +349,7 @@ export function LlmConfigCard({ settings, saveLlm }: LlmConfigCardProps) {
                 <ToggleButton value="quality" sx={{ px: 3 }}>
                   <Box sx={{ textAlign: 'left' }}>
                     <Typography variant="subtitle2">{t('settings.modeQuality')}</Typography>
-                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                    <Typography variant="caption">
                       {t('settings.modeQualityDesc')}
                     </Typography>
                   </Box>
@@ -362,7 +357,7 @@ export function LlmConfigCard({ settings, saveLlm }: LlmConfigCardProps) {
                 <ToggleButton value="efficiency" sx={{ px: 3 }}>
                   <Box sx={{ textAlign: 'left' }}>
                     <Typography variant="subtitle2">{t('settings.modeEfficiency')}</Typography>
-                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                    <Typography variant="caption">
                       {t('settings.modeEfficiencyDesc')}
                     </Typography>
                   </Box>
@@ -371,8 +366,7 @@ export function LlmConfigCard({ settings, saveLlm }: LlmConfigCardProps) {
             </Box>
           </Grid>
         </Grid>
-      </CardContent>
-    </Card>
+    </SettingsPanel>
     {dialog}
     </>
   );

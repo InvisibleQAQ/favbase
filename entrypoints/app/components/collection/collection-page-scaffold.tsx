@@ -327,7 +327,7 @@ export function CollectionPageScaffold<T>({
       {pipeline != null ? (
         <Box
           data-section="pipeline"
-          sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}
+          sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3 }}
         >
           <Box sx={{ flex: 1, minWidth: 0 }}>{pipeline}</Box>
           <LibraryGateButton platform={platform} />
@@ -344,7 +344,7 @@ export function CollectionPageScaffold<T>({
         <Typography
           variant="body2"
           sx={(theme) => ({
-            mb: 2,
+            mb: 3,
             color: theme.vars.palette.error.dark,
             ...theme.applyStyles('dark', { color: theme.vars.palette.error.light }),
           })}

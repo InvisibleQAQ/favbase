@@ -7,6 +7,7 @@ import { cardClasses } from '@mui/material/Card';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import type { TagRef } from '@/lib/tagging';
 import { Iconify } from '../iconify';
+import { CollectionCardRow } from '../collection';
 
 export interface TagRowProps {
   tags: TagRef[];
@@ -14,7 +15,8 @@ export interface TagRowProps {
 }
 
 /**
- * Compact tag chip row for cards: small outlined chips + trailing edit entry.
+ * Compact tag chip row for cards: small outlined chips + trailing edit entry,
+ * laid out by the card's own `CollectionCardRow` so its inset is the card's.
  * Render it OUTSIDE any CardActionArea so chips / the edit button don't
  * trigger the card's navigation click.
  *
@@ -34,9 +36,9 @@ export function TagRow({ tags, onEditTags }: TagRowProps) {
         size="small"
         aria-label={t('tags.editTooltip')}
         onClick={(e) => onEditTags(e.currentTarget)}
-        sx={{ p: 0.25 }}
+        sx={{ p: 0.5 }}
       >
-        <Iconify icon="mdi:tag" width={14} sx={{ color: 'text.secondary' }} />
+        <Iconify icon="mdi:tag" width={16} sx={{ color: 'text.secondary' }} />
       </IconButton>
     </Tooltip>
   ) : null;
@@ -44,14 +46,17 @@ export function TagRow({ tags, onEditTags }: TagRowProps) {
   if (tags.length === 0) {
     return (
       <Box
+        data-slot="tag-edit-float"
         sx={(theme) => ({
           position: 'absolute',
-          top: theme.spacing(0.75),
-          right: theme.spacing(0.75),
+          top: theme.spacing(1),
+          right: theme.spacing(1),
           zIndex: 1,
           opacity: 0,
-          borderRadius: 0.5,
-          bgcolor: theme.vars.palette.background.neutral,
+          borderRadius: 0.75,
+          // Paper, not neutral: the hovered card is already the neutral wash.
+          bgcolor: theme.vars.palette.background.paper,
+          boxShadow: theme.vars.customShadows.z1,
           transition: theme.transitions.create('opacity', {
             duration: theme.transitions.duration.shortest,
           }),
@@ -64,26 +69,11 @@ export function TagRow({ tags, onEditTags }: TagRowProps) {
   }
 
   return (
-    <Box
-      sx={{
-        px: 1.5,
-        pb: 1,
-        display: 'flex',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: 0.5,
-      }}
-    >
+    <CollectionCardRow sx={{ gap: 0.5 }}>
       {tags.map((tag) => (
-        <Chip
-          key={tag.id}
-          label={tag.name}
-          size="small"
-          variant="outlined"
-          sx={{ height: 20, typography: 'caption' }}
-        />
+        <Chip key={tag.id} label={tag.name} size="small" variant="outlined" />
       ))}
       {editButton}
-    </Box>
+    </CollectionCardRow>
   );
 }

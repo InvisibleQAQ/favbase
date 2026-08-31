@@ -67,7 +67,7 @@ export function EmbeddingStatsPanel({
               <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                 {stat.label}
               </Typography>
-              <Typography variant="h6">{stat.value}</Typography>
+              <Typography variant="h6" component="p">{stat.value}</Typography>
             </Box>
           </Grid>
         ))}

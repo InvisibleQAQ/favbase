@@ -32,7 +32,7 @@ vi.mock('./use-chat-agent', () => ({
 
 vi.mock('./source-card', () => ({ SourceCards: () => null }));
 vi.mock('./chat-markdown', () => ({
-  ChatMarkdown: ({ children }: { children: string }) => <>{children}</>,
+  ChatMarkdown: ({ children }: { children: string }) => <span data-markdown>{children}</span>,
 }));
 
 import { ThemeProvider } from '../../theme/theme-provider';
@@ -130,6 +130,34 @@ describe('ChatWorkspace', () => {
     expect(messageLog?.contains(composer)).toBe(false);
     expect(messageLog?.querySelector('[aria-label="chat.userMessage"]')).not.toBeNull();
     expect(messageLog?.querySelector('[aria-label="chat.assistantMessage"]')).not.toBeNull();
+    expect(container.querySelectorAll('h1')).toHaveLength(1);
+    expect(container.querySelector('h1')?.textContent).toBe('chat.title');
+    expect(messageLog?.querySelector('[data-role="user"]')).not.toBeNull();
+    expect(messageLog?.querySelector('[data-role="assistant"]')).not.toBeNull();
+    expect(messageLog?.querySelector('[data-role="assistant"] [data-markdown]')).not.toBeNull();
+    expect(messageLog?.querySelector('[data-role="user"] [data-markdown]')).toBeNull();
+  });
+
+  it('shows tool activity as a distinct live status during streaming', () => {
+    act(() => {
+      root.render(
+        <ThemeProvider>
+          <ChatWorkspace
+            agent={{
+              ...agent,
+              isStreaming: true,
+              streamingText: '',
+              toolActivity: { kind: 'search', phase: 'input-available' },
+            }}
+          />
+        </ThemeProvider>,
+      );
+    });
+
+    const activity = container.querySelector('[data-slot="tool-activity"]');
+    expect(activity?.getAttribute('role')).toBe('status');
+    expect(activity?.getAttribute('aria-live')).toBe('polite');
+    expect(activity?.textContent).toContain('chat.toolSearching');
   });
 
   it('renders a distinct loading state before the workspace is interactive', () => {
@@ -197,6 +225,38 @@ describe('ChatWorkspace', () => {
       ariaHiddenWhenTriggerRefocused: [null],
       ariaHiddenAfterClose: null,
     });
+    expect(document.activeElement).toBe(openButton);
+  });
+
+  it('closes mobile history with Escape and restores the trigger', async () => {
+    vi.useFakeTimers();
+    mediaState.isLgUp = false;
+
+    act(() => {
+      root.render(
+        <ThemeProvider>
+          <ChatWorkspace agent={agent} />
+        </ThemeProvider>,
+      );
+    });
+
+    const openButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="chat.openHistory"]',
+    );
+    await act(async () => {
+      openButton?.click();
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(document.body.querySelector('button[aria-label="chat.closeHistory"]')).not.toBeNull();
+
+    await act(async () => {
+      document.body
+        .querySelector('.MuiDrawer-root')
+        ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+
+    expect(document.body.querySelector('button[aria-label="chat.closeHistory"]')).toBeNull();
     expect(document.activeElement).toBe(openButton);
   });
 

@@ -56,7 +56,7 @@ function Thumbnail({ cover }: { cover?: string }) {
         flexShrink: 0,
         overflow: 'hidden',
         bgcolor: 'background.neutral',
-        color: 'text.disabled',
+        color: 'text.secondary',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',

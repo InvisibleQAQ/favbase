@@ -1,3 +1,4 @@
+import type { ContainerProps } from '@mui/material/Container';
 import type { Theme, SxProps, CSSObject, Breakpoint } from '@mui/material/styles';
 
 import { useScrollOffsetTop } from 'minimal-shared/hooks';
@@ -20,11 +21,22 @@ export type HeaderSectionProps = {
     topArea?: React.ReactNode;
     centerArea?: React.ReactNode;
   };
+  /** Container overrides (e.g. the dashboard aligns its gutter with content). */
+  slotProps?: {
+    container?: ContainerProps;
+  };
 };
 
+/**
+ * Sticky, transparent at rest. Once the page has scrolled (`isOffset`) the
+ * `::before` layer fades in: 8px blur over an 80% ground wash plus a divider
+ * hairline, so the Header separates from content without a decorative glass
+ * effect. `disableElevation` drops the floating shadow entirely.
+ */
 export function HeaderSection({
   sx,
   slots,
+  slotProps,
   disableOffset,
   disableElevation,
   layoutQuery = 'md',
@@ -50,7 +62,7 @@ export function HeaderSection({
     >
       {slots?.topArea}
 
-      <HeaderContainer layoutQuery={layoutQuery} maxWidth={false}>
+      <HeaderContainer layoutQuery={layoutQuery} maxWidth={false} {...slotProps?.container}>
         {slots?.leftArea}
         <HeaderCenterArea>{slots?.centerArea}</HeaderCenterArea>
         {slots?.rightArea}
@@ -88,6 +100,7 @@ const HeaderRoot = styled(AppBar, {
     backdropFilter: 'blur(var(--layout-header-blur))',
     WebkitBackdropFilter: 'blur(var(--layout-header-blur))',
     backgroundColor: varAlpha(theme.vars.palette.background.defaultChannel, 0.8),
+    boxShadow: `inset 0 -1px 0 ${theme.vars.palette.divider}`,
     ...(isOffset && { opacity: 1, visibility: 'visible' }),
   };
 
@@ -126,5 +139,6 @@ const HeaderContainer = styled(Container, {
 const HeaderCenterArea = styled('div')(() => ({
   display: 'flex',
   flex: '1 1 auto',
+  minWidth: 0,
   justifyContent: 'center',
 }));

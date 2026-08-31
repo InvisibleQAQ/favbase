@@ -1,6 +1,6 @@
 # Favbase app.html 对齐 Minimal Dashboard v7.7.0 的前端 UI 重构计划
 
-> 文档状态：Phase 0 已完成，Phase 1 已实施（后续 Phase 仍按计划推进；**仅限前端 UI** / UI-only）
+> 文档状态：Phase 0-4 已完成，Phase 5 已实施、待人工运行时审阅（后续 Phase 仍按计划推进；**仅限前端 UI** / UI-only）
 > 目标入口：`entrypoints/app/index.html` 构建出的 `app.html`，以及其 React/MUI
 > 界面代码 `entrypoints/app/**`  
 > 参考项目：`minimal-vite-ts-main`，Minimal Dashboard v7.7.0  
@@ -193,7 +193,7 @@ Favbase 是高频扫描、搜索、筛选和打开收藏的操作型工具，不
 | 已有 MUI v7 CSS-variable theme | `[TARGET_FACT] entrypoints/app/theme/**` |
 | 已有相同 LayoutSection/Header/Main 分层 | `[TARGET_FACT] entrypoints/app/layouts/core/**` |
 | Header 已是 64/72px，移动 Drawer 已是 288px | `[TARGET_FACT] entrypoints/app/layouts/core/css-vars.ts` |
-| 桌面导航当前 280/72px | `[TARGET_FACT] entrypoints/app/layouts/dashboard/css-vars.ts` |
+| 桌面导航计划前 280/72px（Phase 2 起 300/88px） | `[TARGET_FACT] entrypoints/app/layouts/dashboard/css-vars.ts` |
 | 当前视觉是冷灰 surface、珊瑚印章、scheme-aware Card elevation | `[TARGET_FACT] entrypoints/app/theme/CLAUDE.md` |
 | 共享 Collection scaffold 和 Card 已覆盖六平台 | `[TARGET_FACT] entrypoints/app/components/collection/**` |
 | Dashboard 已用 hairline summary band，而非 KPI 卡堆 | `[TARGET_FACT] entrypoints/app/sections/overview/overview-view.tsx` |
@@ -583,6 +583,20 @@ token 的单一 owner；页面只保留因 4px→8px 基础单位换算而必要
 
 ### Phase 2：重构 shell、Header 和 Navigation
 
+**实施状态（2026-08-28）：已完成，待人工审阅。** 已锁定的 shell 契约：桌面 nav
+300px pinned / 88px compact（`NAV_VERTICAL_WIDTH`）、nav 行 44px / 平台子行 40px /
+compact 方形目标 44px、content gutter 40px（lg+）/ 24px（sm–md）/ 16px（xs），Header
+容器在同一断点用同一 `--layout-dashboard-content-px`；布局变量改挂 `:root`，`html`
+`scroll-padding-top` 跟随 Header 高度；Header 滚动后 blur + `divider` hairline；
+侧栏 toggle / 移动菜单按钮补齐 Tooltip + `aria-label`（`header.sidebarToggleAria`
+/ `header.menuAria`，双语）；移动 Drawer 采用 Trellis spec §11 的 exit-focus 契约把
+焦点交还菜单按钮（原实现用 `blur()` 绕开，焦点恢复实际失效）；鱼骨线消费 `divider`
+token；active 行 hover 与静止 active 可区分。验证：`pnpm compile`、`pnpm test`
+（166 文件 / 1224 用例 + packages 7 用例）通过；新增 `dashboard/css-vars.test.ts`
+锁变量契约、`dashboard/layout.test.tsx` 锁 toggle aria/storage 与 Drawer 焦点归位；
+Chrome 实机 1440/1024/390 截图见本节末尾「运行时证据」。`global.css`、
+`main-section.tsx`、`nav-active.ts` 复核后无需改动。
+
 **目标文件：**
 
 - `layouts/core/css-vars.ts`、`layout-section.tsx`、`header-section.tsx`、
@@ -615,7 +629,68 @@ token 的单一 owner；页面只保留因 4px→8px 基础单位换算而必要
 
 **回滚点：** 先回滚 dashboard CSS vars，再回滚 nav/shell 样式；storage 与路由不动。
 
+**运行时证据（2026-08-28，`docs/ui-baseline/2026-08-28/phase2-shell/`）：** 独立
+profile 的 Chrome 149 经 CDP `Extensions.loadUnpacked` 装入 `pnpm build` 产物（Chrome
+137+ 已移除 `--load-extension`），空数据库，`measurements.json` 为脚本量测原始值。
+
+| 证据 | 路由 | Viewport | Theme | 量测结论 |
+| --- | --- | ---: | --- | --- |
+| `collections-bilibili-1440x900-dark-pinned.png` | `#/collections/bilibili` | 1440x900 | dark | nav 300；Header/content gutter 均 40；h1 x=340 与 toggle 图标同左缘；行 44/40；无水平滚动、无标签截断（zh/en） |
+| `collections-bilibili-1440x900-dark-compact.png` | 同上 | 1440x900 | dark | nav 88；四个 44x44 图标目标 + Tooltip |
+| `collections-bilibili-1024x768-light-pinned.png` | 同上 | 1024x768 | light | gutter 24；无水平滚动 |
+| `collections-bilibili-390x844-light.png` | 同上 | 390x844 | light | Header 64、gutter 16、三个控件零重叠；`scroll-padding-top` 64 |
+| `settings-390x844-light-drawer-zh.png` | `#/settings` | 390x844 | light | Drawer 288；点抽屉链接后 `document.activeElement` 回到「打开导航菜单」按钮 |
+
+**[DECISION]** 300/88 锁定：88px 下 44px 方形目标两侧各留 22px，视觉上与 Minimal
+mini 栏一致且不显空；72px 只省 16px 内容宽度，不值得偏离参考几何。
+
 ### Phase 3：重构共享 UI primitives
+
+**实施状态（2026-08-28）：已完成，待人工审阅。** 落地的 primitive 契约：
+`SectionTitleBar` = 路由唯一 `h1`（Barlow 700 / 28px）+ caption 堆叠在标题下
+（`body2` secondary）+ 右侧一个 medium contained 动作（36px），`mb: 3`；标题栏、
+pipeline 行、同步失败横幅、搜索框、chip 行统一以 24px 收尾；`SearchField` 由主题
+48px 输入目标决定高度并把 placeholder 作为 `aria-label`；`CardGrid` 间距改
+`CARD_GRID_SPACING = 3`（24px，断点表 `CARD_GRID_SIZE` 不变）；`CollectionCard`
+内容块 `p: 3` 对齐 `MuiCardContent`，新增 `CollectionCardRow`（链接之外行——标签
+行、B站 ActionBar——的唯一内边距 owner，替换 `TagRow` `px 1.5/pb 1` 与 B站 5 处
+`px 2/pb 1.5`）与 `CollectionCardSkeleton`（同内边距/同媒体槽的骨架，六平台骨架
+文件只传 `media/header/lines` 形态参数），disabled 卡片改 `data-disabled` + neutral
+底 + 媒体去色 + 标题 `text.secondary`（去掉整卡 `opacity .45`），焦点环内缩 2px 避免
+被 `overflow: hidden` 裁掉；`StateBox` 改 1px dashed `divider` + `subtitle1` 段落标题，
+`NoMatchesState` 与 `TaggedItemGrid` 空态共用且不再用 `text.disabled`；`ErrorState`
+图标 48px。`resolveCollectionPhase` 8 case、tag editor / link / footer 的 DOM 事件
+边界、hooks、路由、i18n key 均未改。验证：`pnpm compile`、`pnpm build` 通过；
+`pnpm test` 168 文件 / 1233 用例中 1232 通过，唯一失败是既有的
+`tests/lib-import-smoke.test.ts` Bilibili 5 秒并发超时（Phase 1 已记录，未触及
+`lib/**`，单独运行 16/16 通过）；新增 `section-title-bar.test.tsx`、
+`state-box.test.tsx`、`search-field.test.tsx`，`collection-card.test.tsx` 增加
+disabled / `CollectionCardRow` / 骨架槽位断言，原断言未删。
+
+**运行时证据（2026-08-28，`docs/ui-baseline/2026-08-28/phase3-primitives/`）：**
+按用户要求在**用户正在使用的 Chrome**（真实 cookie 与本地数据，`chrome-devtools`
+MCP：`reload_extension` → `new_page` → `resize_page`/`emulate` → `take_screenshot`
+/ `evaluate_script`）采集，只看 `/collections/bilibili` 与 `/collections/bookmarks`
+（其余平台页同一套 scaffold 模板）。**[DECISION]** 不再用独立空 profile 的 Chrome
+做 UI 验证——它没有数据，证明不了卡片/网格/pipeline；规则已写入 Trellis UI spec §15。
+
+| 证据 | 路由 | Viewport | Theme | 量测结论 |
+| --- | --- | ---: | --- | --- |
+| `live-bilibili-1440x900-light.png` | `#/collections/bilibili/117865102` | 1440x900 | light | 单 h1 28px；caption「默认收藏夹 · 4458 videos」在标题下；「Fetch now」36px；pipeline 四段；搜索 48px；配置提醒；Folders / 排序 chip 行；首张卡片 y=565 |
+| `live-bilibili-1440x900-light-cards.png` | 同上 | 1440x900 | light | 20 张卡片 5 行全部等高 299.8；卡宽 245、gap 24；内容 padding 24；标题 2 行 clamp；footer 行（CC Official / Transcribe）padding `0 24 16`、高 40；无水平滚动 |
+| `live-bilibili-1440x900-dark-cards.png` | 同上 | 1440x900 | dark | 同几何；dark 卡片 divider hairline、无阴影 |
+| `live-bookmarks-1440x900-dark.png` | `#/collections/bookmarks` | 1440x900 | dark | caption「778 bookmarks · Last synced …」；提取进度卡；Folders chips；24 张卡片 6 行等高 152 |
+| `live-bookmarks-1440x900-dark-hover.png` | 同上 | 1440x900 | dark | hover 卡片底 `#222B34`（neutral）vs 闲置 `#1C252E`；右上浮动标签编辑按钮 opacity 1、paper 底 |
+| `live-bookmarks-1440x900-light-cards.png` | 同上 | 1440x900 | light | light 卡片低强度 shadow；favicon+域名 header、标题、日期靠底 |
+| `live-bookmarks-1024x768-light.png` | 同上 | 1024x768 | light | 3 列、卡宽 206.7、gap 24；动作按钮 110x36 |
+| `live-bookmarks-390x844-light.png` | 同上 | 390x844 | light | 1 列、卡宽 358；有 caption 时动作按钮换到标题块下一行（y 147.6）；搜索 358 宽；无水平滚动 |
+
+**[UNKNOWN]** `CollectionCardSkeleton` 只在首屏 DB 查询期间出现，实机未截到；由
+`collection-card.test.tsx` 的槽位断言与源码复核保证同轨道。
+
+**已知未收敛（留 Phase 5）：** `sections/collections/collections-view.tsx` 的
+`CollectionsGridSkeleton` 仍自画 Card 骨架；github/youtube 配置门早退页面无 h1；
+chip 行头部图标颜色由各 view 指定（多为 `primary.main`，图标对白底 2.6:1）。
 
 **目标文件：**
 
@@ -650,6 +725,57 @@ token 的单一 owner；页面只保留因 4px→8px 基础单位换算而必要
 
 ### Phase 4：先行 Vertical Slice - Dashboard `/`
 
+**实施状态（2026-08-28）：已完成，待人工审阅。** 起因：Phase 1 把字阶改为固定
+28/24/20/16/14 后，Dashboard 仍用 `h4 component="h1"` / `h6 component="h2"`，实机量得
+路由 h1 只有 16px、区块 h2 只有 14px（比 subtitle1 还小），与六平台页 `SectionTitleBar`
+的 28px h1 不同轨。落地：路由标题改用共享 `SectionTitleBar`（title + caption=subtitle，
+删除页面自画 `<header>`）；按 §7.4 区块标题 `h2`（Barlow 24）、summary 数字
+`h3 component="p"`（Barlow 20，是数字不是标题）、榜单标题 `h6 component="h3"`（14），
+大纲 `[1, 2, 2, 3, 2]` 由测试锁定；hairline 全部改读 `theme.vars.palette.divider`（删除
+页面私有 `grey500` 0.2/0.16 alpha）；圆角按主题分档（tile/tab 行 0.75、条 0.5）；删除主题
+已接管的 `textTransform`/`opacity`/`fontVariantNumeric` 覆写；loading 改 `role="status"`
++ 同几何骨架；空态图标统一 48px；份额条加 `data-slot="share-bar"` 便于断言。五段结构
+（title → SummaryBand → PlatformShelf | PlatformDetail → TopTags）、hook、路由、i18n key、
+registry 均未改；未加任何 KPI 浮卡、趋势或图表。
+
+实机复核发现并修掉两个几何缺陷：(1) 1024 视口 pinned 300px 侧栏下内容区只有 676px，
+`md` 起的 4/8 分栏把平台名截成「Bilibili F…」「Browser…」→ 分栏推迟到 `lg`（≥1200），
+以下 shelf 与 detail 上下堆叠（hairline 分隔），detail 内榜单双列提前到 `md`；(2) 390
+视口详情头部 48px tile + 标题 + 197px 按钮同行不折行，把 h2 挤成 81px 宽三行 → 头部行
+`flexWrap`（与 `SectionTitleBar` 同规则），按钮换到下一行。
+
+验证：`pnpm compile`、`pnpm build` 通过；`pnpm test` 169 文件 / 1238 用例中 1237 通过，
+唯一失败仍是既有的 `tests/lib-import-smoke.test.ts` Bilibili 5 秒并发超时（未触及
+`lib/**`，单独运行 16/16 通过）；`overview-view.test.tsx` 由 3 例扩到 6 例（10/10 含
+hook 测试），新增：标题经 `SectionTitleBar` + caption、loading `role=status` 时仍单 h1、
+heading 大纲无跳级、零份额无条 / 部分平台=0 时 tabpanel 空态、有数据无维度一句话、
+零标签 caption 与 Top tags 不渲染，原断言未删。`git diff --check` 干净；实机 console
+无 error/warn。Trellis UI spec §10 已按实际状态改写（原文「Summary 是 Card / 4-8 Grid
+Cards」与 2026-08-20 起的 hairline 实现不符）。
+
+**运行时证据（2026-08-28，`docs/ui-baseline/2026-08-28/phase4-dashboard/`）：** 在用户
+运行中的 Chrome（`chrome-devtools` MCP，真实数据 4,330 条 / 3 平台在用 / 0 标签）采集，
+`measurements.json` 为脚本量测原始值（六组 viewport × scheme）。
+
+| 证据 | Viewport | Theme | 量测结论 |
+| --- | ---: | --- | --- |
+| `live-dashboard-1440x900-dark.png` | 1440x900 | dark | h1 28px Barlow 700（x=340，与 Phase 2 同左缘）；标题块 60 高、到 band 24；band 116 高、上下边 `divider` 0.24；h2 24px Barlow；数字 20px Barlow；shelf 321 / detail 674 并排；tab 行 62 高 6px 圆角，选中底 `#3A2A24`；tile 36 6px，选中珊瑚底 + 墨字形；份额条 117/35/41 品牌色，榜单条 `grey500` 0.64；「View platform collection」197x36 `text.accent`；无水平滚动 |
+| `live-dashboard-1440x900-light.png` | 1440x900 | light | 同几何；选中底 `#FEE9E1`；tile 底 `#F4F6F8`、字形品牌色（github/x 为墨）；按钮 `#7A2714` |
+| `live-dashboard-1440x900-light-tab-focus.png` | 1440x900 | light | 脚本聚焦选中 tab 后按 ArrowDown：焦点到 GitHub tab，`:focus-visible` 2px `#7A2714` outline offset 2；aria-selected 未变（manual activation）；可见 MUI 默认键盘 focus ripple（pulsate），与 nav 项同为 ButtonBase 默认，未单独处理 |
+| `live-dashboard-1440x900-light-empty-platform.png` | 1440x900 | light | 按 Enter 选中 GitHub：tabpanel 切到 `dashboard-platform-panel-github`，h2「GitHub Stars」+「0 items」，`StateBox` 200 高 1px dashed `divider`「No content has been collected from this platform.」（部分平台=0 态） |
+| `live-dashboard-1024x768-light.png` / `-dark.png` | 1024x768 | light / dark | nav 300 pinned、gutter 24（x=324，宽 668）；band 三格 223 宽；shelf 全宽堆叠在 detail 之上，六个平台名零截断；无水平滚动 |
+| `live-dashboard-1024x768-dark-detail.png` | 1024x768 | dark | 滚到 detail：48 tile + h2 391x30 单行 + 按钮同行；榜单双列（x 350 / 704） |
+| `live-dashboard-390x844-light.png` / `-dark.png` | 390x844 | light / dark | Header 64、gutter 16（宽 358）；band 三格纵向堆叠 92/93/115；tab 行 358 宽零截断；无水平滚动 |
+| `live-dashboard-390x844-light-detail.png` | 390x844 | light | h2 294x30 单行，按钮换行到 x=16；榜单单列 |
+
+**[UNKNOWN]** total=0 库空态、有数据无维度、error/loading 态实机无法在用户真实数据库上
+复现，由 `overview-view.test.tsx` 断言覆盖。Chat/Settings 与其他路由未动。
+
+**观察（非本 Phase 范围）：** MUI `ButtonBase` 默认的键盘 focus ripple（pulsate）在
+tab 行上是一块灰色脉冲，与 CssBaseline 的 2px outline 叠在一起；nav 项同样有。若要关，
+应在 theme `MuiButtonBase.defaultProps.disableRipple` 统一决定（Phase 1 owner），不在
+页面里单点关。
+
 **目标文件：** `sections/overview/overview-view.tsx` 及其 tests/CLAUDE。
 
 步骤：
@@ -667,6 +793,33 @@ token 的单一 owner；页面只保留因 4px→8px 基础单位换算而必要
 **回滚点：** 只回滚 overview composition；theme/shell 保持独立可审。
 
 ### Phase 5：Collections 聚合页和六平台页
+
+**实施状态（2026-08-29）：已完成源码与自动验证，待人工运行时审阅。** 仓库审计确认
+六平台已在 Phase 3 消费 `CollectionPageScaffold` 与 `CollectionCard`，因此本阶段没有
+重写六套页面，而是消除剩余局部 owner：`/collections` 的自画 Card 骨架改为共享
+`CardGridSkeleton + CollectionCardSkeleton(header, 3 lines)`；聚合空态改为 48px
+secondary glyph；`ChipRowShell` 新增唯一 `data-slot="icon"` 并统一以
+`text.secondary` 着色，删除聚合标签、平台标签和六平台原生筛选 header 的局部
+primary/error 色；Bilibili 登录/空夹/选夹状态改用 `StateBox` 结构化 props；六平台
+空/认证状态 glyph 统一为 48px secondary，双按钮 action 在窄屏允许换行；GitHub 与
+YouTube 配置门早退前补共享 `SectionTitleBar`，保证未配置路由仍恰有一个 h1。
+
+数据 hook、八分支 phase resolver、路由、筛选维度、标签、分页、sync、pipeline、
+configuration、retry、i18n key、卡片 link/tag/footer DOM 边界均未改。新增
+`collections-view.test.tsx`、`configuration-heading.test.tsx` 与
+`chip-row.test.tsx`，分别锁定聚合共享骨架/空态、配置门单 h1、chip icon 单 owner。
+
+验证：focused Vitest 6 文件 / 25 用例通过；`pnpm compile` 通过；`pnpm build`
+通过且 background bundle contract 为 12 modules / 937221 bytes；Impeccable 对 17 个
+改动 UI 文件检测为 0 finding；全量 `pnpm test` 为 171 文件 / 1242 用例通过，唯一
+失败仍是既有 `tests/lib-import-smoke.test.ts` Bilibili 5 秒并发超时，单独重跑该文件
+16/16 通过（2.75s）；`git diff --check` 干净。
+
+**[UNKNOWN] 运行时证据：** 当前 `chrome-devtools` 会话只有 `about:blank`，直接打开
+已记录扩展 URL 返回 `ERR_BLOCKED_BY_CLIENT`，且工具面没有 extension reload/list API，
+因此本阶段没有伪造 light/dark、1440/1024/390 截图或 console 结论。已构建待审产物为
+`C:\tmp\favbase-minimal-v7-phase2\.output\chrome-mv3`；用户在加载该 worktree 的
+Chrome 中 reload 后，仍需按本节验收矩阵做人工运行时批准。
 
 **目标文件：**
 
@@ -695,6 +848,40 @@ token 的单一 owner；页面只保留因 4px→8px 基础单位换算而必要
 **回滚点：** 聚合页和每个平台各自独立回滚；共享 primitive 另行回滚。
 
 ### Phase 6：Settings、Chat 和 overlay
+
+**实施状态（2026-08-29）：已完成源码与自动验证，待人工运行时审阅。** Settings
+路由标题改用共享 `SectionTitleBar`（唯一 h1）；顶层四 Tab 与二级 rail 在 `md` 以下由
+压缩标签的 `fullWidth` 改为无折行 `scrollable`，`md+` 仍保持 fullWidth / vertical；两列
+Grid 的 rail/content 都显式 `minWidth: 0`。新增 `SettingsPanel` 作为 active section 的唯一
+surface owner（单层 Card + 显式 h2 section title + theme-owned content padding），七个配置区、
+语言区及仅由 Settings 消费的 Export 均复用，删除八处重复 Card/Header/Content 装配；所有
+字段、draft、测试连接、保存 gating、deep link、resume、权限恢复与错误处理未改。
+
+Chat 保持单个 outlined Paper 工作区，标题升级为路由唯一 h1；桌面 Conversation rail
+统一为 264px，消息/error/composer 共用 760px 阅读轨道，user 气泡保持右侧窄幅，assistant
+保持无框宽幅；tool activity 改为独立 neutral live status，source row 改读 neutral/divider/
+action token。移动历史 Drawer 宽度收敛为 `min(288px, 100vw - 32px)`，390px 有 16px
+双侧安全区；既有 explicit close、Escape、focus trap、退出前 blur、退出后 trigger focus
+恢复和跨 `lg` 清理逻辑保留。assistant markdown / user plain-text 分叉由测试锁定；未闭合
+fenced code 与 link 的逐 token markdown 输入均不抛错，code/table 横滚与无 `rehype-raw`
+XSS 边界不变。
+
+Overlay defaults 继续由 theme 唯一拥有：Popover paper 增 viewport bounds，Menu list 统一
+4px padding；仅 temporary Drawer 使用 dropdown shadow（permanent shell nav 保持 flat）；
+Dialog 默认 fullWidth/sm、16px viewport gutter、bounded height、24px title/content/action
+节奏且 action 可换行；Tooltip 默认 arrow + 400ms enter delay。没有在 Settings/Chat 单点
+复制 radius/shadow。
+
+验证：focused Vitest 14 文件 / 89 用例通过；`pnpm compile` 通过；`pnpm build` 通过且
+background bundle contract 为 12 modules / 937221 bytes；Impeccable detector 对 7 个主要
+UI owner 为 0 finding；`git diff --check` 干净。全量 `pnpm test` 为 174 文件 / 1250
+用例中 173 文件 / 1249 用例通过，唯一失败是未触及的
+`lib/database/proxy-db.test.ts` 5 秒并发超时，单独复跑 3/3 通过（1.35s）。
+
+**[UNKNOWN] 运行时证据：** 当前工具面没有用户 Chrome 的 `chrome-devtools` 会话，故未
+伪造 light/dark、zh-CN/en、1440/1024/390 截图、focus trap 或 console 结论。待审 build
+为 `C:\tmp\favbase-minimal-v7-phase2\.output\chrome-mv3`；用户 reload 该 unpacked
+extension 后仍需按本节和 §10 完成人工批准。
 
 **目标文件：** `sections/settings/**`、`sections/chat/**` 及相关 UI tests/CLAUDE。
 

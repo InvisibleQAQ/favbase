@@ -29,8 +29,8 @@ function EmptyState() {
       icon={
         <Iconify
           icon="solar:bookmark-bold-duotone"
-          width={64}
-          sx={{ color: 'text.secondary', mb: 1 }}
+          width={48}
+          sx={{ color: 'text.secondary' }}
         />
       }
       title={t('bookmarks.emptyTitle')}

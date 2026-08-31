@@ -369,6 +369,8 @@ const zhCN = {
   'header.githubAria': '在 GitHub 上查看仓库',
   'header.languageAria': '切换界面语言',
   'header.themeAria': '切换深色模式',
+  'header.menuAria': '打开导航菜单',
+  'header.sidebarToggleAria': '收起或展开侧栏',
 
   // Global background-work reminder (dashboard header) — shown while any
   // platform's unfinished sync/extract/embed/tag/transcribe jobs; count-plural.

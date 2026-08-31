@@ -1,7 +1,4 @@
 import { useState } from 'react';
-import Card from '@mui/material/Card';
-import CardHeader from '@mui/material/CardHeader';
-import CardContent from '@mui/material/CardContent';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import ToggleButton from '@mui/material/ToggleButton';
 import FormControlLabel from '@mui/material/FormControlLabel';
@@ -22,6 +19,7 @@ import { toExportCsvZip } from '../../../../lib/export/serialize-csv';
 import { triggerDownload, buildExportFilename } from '../../../../lib/export/download';
 import { queryObsidianNotes } from '../../../../lib/export/obsidian/query';
 import { toObsidianZip } from '../../../../lib/export/obsidian/serialize';
+import { SettingsPanel } from '../settings/settings-panel';
 
 type BackupFormat = 'json' | 'csv';
 
@@ -93,9 +91,7 @@ export function ExportCard() {
     ) : null;
 
   return (
-    <Card>
-      <CardHeader title={t('export.title')} subheader={t('export.subtitle')} />
-      <CardContent>
+    <SettingsPanel title={t('export.title')} description={t('export.subtitle')}>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Typography variant="subtitle2">{t('export.backupHeading')}</Typography>
           <Typography variant="caption" color="text.secondary">
@@ -166,7 +162,6 @@ export function ExportCard() {
             {busy === 'vault' ? t('export.exporting') : t('export.obsidianBtn')}
           </Button>
         </Box>
-      </CardContent>
-    </Card>
+    </SettingsPanel>
   );
 }

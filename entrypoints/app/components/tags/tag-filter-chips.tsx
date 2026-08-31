@@ -23,7 +23,7 @@ export function TagFilterChips({ tags, selectedIds, onToggle, onClear }: TagFilt
 
   return (
     <CollapsibleChipRow
-      icon={<Iconify icon="mdi:tag" width={18} sx={{ color: 'primary.main' }} />}
+      icon={<Iconify icon="mdi:tag" width={18} />}
       title={t('tags.sectionTitle')}
       items={tags}
       getKey={(tag) => tag.id}

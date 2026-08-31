@@ -30,6 +30,12 @@ const COLLECTIONS_NAV: NavItem[] = [
         platform: 'bilibili',
         icon: <span data-testid="platform-icon" />,
       },
+      {
+        title: 'nav.requestPlatform',
+        path: 'https://example.com/request-platform',
+        external: true,
+        icon: <span />,
+      },
     ],
   },
 ];
@@ -118,6 +124,39 @@ describe('Collections sidebar navigation', () => {
 
     expect(icon).not.toBeNull();
     expect(getComputedStyle(icon!).color).toBe(themeConfig.platform.light.bilibili);
+  });
+
+  it('renders the Platform Request action as readable secondary text, not disabled text', () => {
+    const toggle = container.querySelector('button[aria-expanded="false"]');
+
+    expect(toggle).not.toBeNull();
+    click(toggle!);
+
+    const requestLink = container.querySelector('a[href="https://example.com/request-platform"]');
+
+    expect(requestLink).not.toBeNull();
+    expect(requestLink?.getAttribute('target')).toBe('_blank');
+    expect(getComputedStyle(requestLink!).color).toBe(themeConfig.scheme.light.text.secondary);
+  });
+
+  it('renders compact rows as icon-only links that keep an accessible name', () => {
+    act(() => {
+      root.render(
+        <ThemeProvider>
+          <MemoryRouter initialEntries={['/settings']}>
+            <NavDesktop data={COLLECTIONS_NAV} layoutQuery="lg" pinned={false} />
+          </MemoryRouter>
+        </ThemeProvider>,
+      );
+    });
+
+    const collectionsLink = container.querySelector('a[href="/collections"]');
+
+    expect(collectionsLink).not.toBeNull();
+    // Tooltip supplies aria-label from its title when the child has none.
+    expect(collectionsLink?.getAttribute('aria-label')).toBeTruthy();
+    expect(collectionsLink?.textContent).toBe('');
+    expect(container.querySelector('button[aria-expanded]')).toBeNull();
   });
 
   it('keeps the active platform icon on the shared coral selection color', () => {

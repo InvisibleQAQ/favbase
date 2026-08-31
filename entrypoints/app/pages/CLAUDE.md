@@ -4,7 +4,7 @@
 
 ## 模块结构
 
-- `dashboard.tsx` → `sections/overview/overview-view.tsx`（统计卡片 + 活动列表 + 进度条）
+- `dashboard.tsx` → `sections/overview/overview-view.tsx`（只读 Collection Analytics：`SectionTitleBar` h1 + hairline SummaryBand + 平台构成/详情主从视图 + 热门标签；无任务进度、无 KPI 卡片）
 - `settings.tsx` → `sections/settings/settings-view.tsx`（设置：顶部分段 Tab — AI 配置/账号连接/通用设置/存储管理）
 - `collections.tsx` → `sections/collections/collections-view.tsx`（六平台条目全局排序、平台筛选、搜索、分页）
 - `bilibili.tsx` → `sections/bilibili/bilibili-view.tsx`（B站收藏夹 sidebar+grid 单页布局）

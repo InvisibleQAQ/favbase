@@ -7,7 +7,8 @@
 - `use-collections.ts` — 只读页面状态：300ms 搜索防抖、平台/搜索/标签切换回第 1 页、cancelled guard、分页查询、手动/AI 标签变更刷新；先读取 Used Tags，再验证 Hash Router `tag` 参数
 - `collection-tag-filter.ts` — 纯 URL 契约：只接受一个当前已使用的 UUID；替换/清除只修改 `tag`，保留其他查询参数
 - `collection-item-card.tsx` — `Record<CollectionPlatform, Tagged*Card>` 的穷尽 renderer registry，直接复用六个平台卡片 adapter
-- `collections-view.tsx` — 组合共享 collection 哑组件与动态 `(platform, platformItemId)` `TagEditPopover`；不复用单平台 `CollectionPageScaffold`
+- `collections-view.tsx` — 组合共享 collection 哑组件与动态 `(platform, platformItemId)` `TagEditPopover`；不复用带同步/pipeline 的单平台 `CollectionPageScaffold`。mixed grid 加载态用 `CardGridSkeleton + CollectionCardSkeleton(header, 3 lines)`，不得自画 Card；空态用 48px secondary glyph + `StateBox`
+- `collections-view.test.tsx` — route 单 h1、grid-of-8 共享骨架与聚合空态几何回归
 
 ## 约定
 
@@ -16,3 +17,4 @@
 - mixed grid 的 tag editor 必须同时记录 platform 与 platformItemId，避免跨平台 id 碰撞
 - 聚合页标签筛选固定单选；Used Tags 读取必须限定 `COLLECTION_PLATFORMS`；非法、重复、未知平台、未知或失效 `tag` 用 replace 清理并回退未筛选查询，浏览器前进/后退由 `useSearchParams` 恢复
 - 新平台接入 = `lib/collections/platforms.ts` 判别符 + app 元数据 + 本目录 card adapter；不得复制原平台卡片
+- 平台/tag chip header icon 只提供 glyph/尺寸，颜色继承共享 `ChipRowShell` 的 `text.secondary`

@@ -8,7 +8,7 @@ import { Iconify } from '../iconify';
 import { ChipRowShell, FilterChip } from './chip-row';
 
 export interface CollapsibleChipRowProps<T> {
-  /** Header icon, e.g. an <Iconify width={20}> — caller controls color. */
+  /** Header icon, e.g. an <Iconify width={20}>. `ChipRowShell` owns its color. */
   icon: ReactNode;
   /** Pre-translated header title. */
   title: string;

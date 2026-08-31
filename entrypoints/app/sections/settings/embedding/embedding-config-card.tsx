@@ -1,7 +1,4 @@
 import { useCallback, useState } from 'react';
-import Card from '@mui/material/Card';
-import CardHeader from '@mui/material/CardHeader';
-import CardContent from '@mui/material/CardContent';
 import Grid from '@mui/material/Grid';
 import TextField from '@mui/material/TextField';
 import MenuItem from '@mui/material/MenuItem';
@@ -24,6 +21,7 @@ import { SaveActions } from '../save-actions';
 import { useEmbeddingStats } from './use-embedding-stats';
 import { useEmbeddingRebuild } from './use-embedding-rebuild';
 import { EmbeddingStatsPanel } from './embedding-stats-panel';
+import { SettingsPanel } from '../settings-panel';
 
 // Every field affects what the probe embeds (dimensions changes the reported
 // truncation), so the whole draft is connection-relevant.
@@ -98,12 +96,10 @@ export function EmbeddingConfigCard({ settings, saveEmbedding }: EmbeddingConfig
 
   return (
     <>
-    <Card>
-      <CardHeader
+    <SettingsPanel
         title={t('settings.embeddingCard.title')}
-        subheader={t('settings.embeddingCard.description')}
-      />
-      <CardContent>
+        description={t('settings.embeddingCard.description')}
+      >
         <Grid container spacing={3}>
           {/* Provider */}
           <Grid size={{ xs: 12 }}>
@@ -265,8 +261,7 @@ export function EmbeddingConfigCard({ settings, saveEmbedding }: EmbeddingConfig
             />
           </Grid>
         </Grid>
-      </CardContent>
-    </Card>
+      </SettingsPanel>
     {dialog}
     </>
   );

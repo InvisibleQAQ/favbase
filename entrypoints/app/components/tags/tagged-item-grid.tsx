@@ -1,12 +1,10 @@
 import { useEffect, useState, type ReactNode } from 'react';
 
-import Typography from '@mui/material/Typography';
-
 import { initDbProxy } from '@/lib/database';
 import { onDomainEvent } from '@/lib/events';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { getItemsByTags, type TaggedItem } from '@/lib/tagging';
-import { StateBox, CardGrid, CardGridItem } from '../collection';
+import { NoMatchesState, CardGrid, CardGridItem } from '../collection';
 import { TagEditPopover, useTagEditState } from './tag-edit-popover';
 
 export interface TaggedItemGridProps {
@@ -101,15 +99,8 @@ export function TaggedItemGrid({
 
   if (items === null) return <>{skeleton}</>;
 
-  if (items.length === 0) {
-    return (
-      <StateBox minHeight={240}>
-        <Typography variant="body1" sx={{ color: 'text.disabled' }}>
-          {t('tags.noMatches')}
-        </Typography>
-      </StateBox>
-    );
-  }
+  // Same box, same density as the search/facet no-match state.
+  if (items.length === 0) return <NoMatchesState message={t('tags.noMatches')} />;
 
   const editingTags = editing
     ? (items.find((item) => item.platformItemId === editing.platformItemId)?.tags ?? [])

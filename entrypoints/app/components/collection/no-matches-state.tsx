@@ -1,5 +1,3 @@
-import Typography from '@mui/material/Typography';
-
 import { StateBox } from './state-box';
 
 export interface NoMatchesStateProps {
@@ -7,13 +5,8 @@ export interface NoMatchesStateProps {
   message: string;
 }
 
-/** Filters (search/facet) matched nothing — dashed box with a single line. */
+/** Filters (search / facet / tag) matched nothing — dashed box, one readable
+ *  line. Secondary ink, never the disabled shade: it is information. */
 export function NoMatchesState({ message }: NoMatchesStateProps) {
-  return (
-    <StateBox>
-      <Typography variant="body1" sx={{ color: 'text.disabled' }}>
-        {message}
-      </Typography>
-    </StateBox>
-  );
+  return <StateBox description={message} />;
 }
