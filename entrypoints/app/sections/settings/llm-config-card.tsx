@@ -349,7 +349,7 @@ export function LlmConfigCard({ settings, saveLlm }: LlmConfigCardProps) {
                 <ToggleButton value="quality" sx={{ px: 3 }}>
                   <Box sx={{ textAlign: 'left' }}>
                     <Typography variant="subtitle2">{t('settings.modeQuality')}</Typography>
-                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                    <Typography variant="caption">
                       {t('settings.modeQualityDesc')}
                     </Typography>
                   </Box>
@@ -357,7 +357,7 @@ export function LlmConfigCard({ settings, saveLlm }: LlmConfigCardProps) {
                 <ToggleButton value="efficiency" sx={{ px: 3 }}>
                   <Box sx={{ textAlign: 'left' }}>
                     <Typography variant="subtitle2">{t('settings.modeEfficiency')}</Typography>
-                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                    <Typography variant="caption">
                       {t('settings.modeEfficiencyDesc')}
                     </Typography>
                   </Box>

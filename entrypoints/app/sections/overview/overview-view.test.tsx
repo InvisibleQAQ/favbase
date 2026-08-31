@@ -6,6 +6,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CollectionAnalyticsSnapshot } from '@/lib/collections';
+import { themeConfig } from '../../theme/theme-config';
 import { ThemeProvider } from '../../theme/theme-provider';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -249,6 +250,9 @@ describe('CollectionAnalyticsContent', () => {
     expect(container.textContent).not.toContain('Top tags');
     // Zero share → no share bar at all (no 1px fake bars).
     expect(container.querySelectorAll('[data-slot="share-bar"]')).toHaveLength(0);
+    const shareLabels = Array.from(container.querySelectorAll('[data-slot="share-label"]'));
+    expect(shareLabels).toHaveLength(6);
+    expect(shareLabels.every((label) => getComputedStyle(label).color === themeConfig.scheme.light.text.primary)).toBe(true);
     // The selected empty platform explains itself inside the tabpanel.
     expect(container.querySelector('[role="tabpanel"]')?.textContent).toContain(
       'No items on this platform.',

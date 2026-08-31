@@ -332,7 +332,8 @@ function PlatformShelfLabel({
       <Typography
         component="span"
         variant="caption"
-        sx={{ color: 'text.secondary', minWidth: 44, textAlign: 'right' }}
+        data-slot="share-label"
+        sx={{ color: 'text.primary', minWidth: 44, textAlign: 'right' }}
       >
         {formatShare(platform.share, locale)}
       </Typography>

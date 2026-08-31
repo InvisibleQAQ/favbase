@@ -274,7 +274,7 @@ function ExpandChevron({ expanded }: { expanded: boolean }) {
 // a horizontal rib per leaf. The last leaf's spine stops at the rib midpoint to
 // form an L-corner instead of a hanging tail. Primary highlight when active.
 // An `external` item (Platform Request) renders <a target="_blank"> instead,
-// dimmed and with a trailing outbound arrow: it is an action, not a page.
+// with a trailing outbound arrow: it is an action, not a page or a disabled row.
 // ---------------------------------------------------------------------------
 
 function NavChildLeaf({
@@ -321,9 +321,7 @@ function NavChildLeaf({
           : { component: RouterLink, to: item.path })}
         sx={[
           (theme) => {
-            const itemColor = item.external
-              ? theme.vars.palette.text.disabled
-              : theme.vars.palette.text.secondary;
+            const itemColor = theme.vars.palette.text.secondary;
             const iconColor = item.platform
               ? theme.vars.palette.platform[item.platform]
               : itemColor;
@@ -368,7 +366,7 @@ function NavChildLeaf({
           <Iconify
             icon="eva:diagonal-arrow-right-up-fill"
             width={14}
-            sx={{ flexShrink: 0, color: 'text.disabled' }}
+            sx={{ flexShrink: 0, color: 'text.secondary' }}
           />
         )}
       </ListItemButton>
