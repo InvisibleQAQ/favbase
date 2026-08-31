@@ -1,0 +1,2689 @@
+{
+  "generatedAt": "2026-08-31T09:54:21.108Z",
+  "branch": "feat/minimal-v7-phase2-shell",
+  "browserMode": "existing-user-profile",
+  "targetId": "9DFC32F108AB8BE5150AC725A7E10787",
+  "extensionId": "cafjfghcnlamnagidbkppjfcjbaleihb",
+  "extensionPath": "C:\\tmp\\favbase-minimal-v7-phase2\\.output\\chrome-mv3",
+  "originalPageState": {
+    "url": "chrome-extension://cafjfghcnlamnagidbkppjfcjbaleihb/app.html",
+    "colorModePresent": true,
+    "colorMode": "light",
+    "storage": {
+      "sidebarPinned": true
+    },
+    "storageKeys": {
+      "locale": false,
+      "sidebarPinned": true
+    }
+  },
+  "sourceVerification": [
+    {
+      "pathname": "/app.html",
+      "ok": true,
+      "size": 3229,
+      "sha256": "4e2f0b0f23a0c80eb7b9fc2fa895ca36a735c11e6f54340a9b9b9b53488c507b",
+      "localPath": "C:\\tmp\\favbase-minimal-v7-phase2\\.output\\chrome-mv3\\app.html",
+      "localSize": 3229,
+      "localSha256": "4e2f0b0f23a0c80eb7b9fc2fa895ca36a735c11e6f54340a9b9b9b53488c507b",
+      "matches": true
+    },
+    {
+      "pathname": "/theme-init.js",
+      "ok": true,
+      "size": 812,
+      "sha256": "51455a58d56e777dd62b28261be298419813543cc1c4baf2370211b343637bb7",
+      "localPath": "C:\\tmp\\favbase-minimal-v7-phase2\\.output\\chrome-mv3\\theme-init.js",
+      "localSize": 812,
+      "localSha256": "51455a58d56e777dd62b28261be298419813543cc1c4baf2370211b343637bb7",
+      "matches": true
+    },
+    {
+      "pathname": "/chunks/app-C4eVvq1P.js",
+      "ok": true,
+      "size": 225726,
+      "sha256": "dac328a78ca0a4fa2c965b95b40b6fab737bb54863d8063d381d6775e906ad26",
+      "localPath": "C:\\tmp\\favbase-minimal-v7-phase2\\.output\\chrome-mv3\\chunks\\app-C4eVvq1P.js",
+      "localSize": 225726,
+      "localSha256": "dac328a78ca0a4fa2c965b95b40b6fab737bb54863d8063d381d6775e906ad26",
+      "matches": true
+    },
+    {
+      "pathname": "/chunks/_virtual_wxt-plugins-B7MQV29x.js",
+      "ok": true,
+      "size": 847,
+      "sha256": "850ba537b9d7b3fe49daeab86d3e94f50fcc2e34ba39b5825aa17a1af9fbe9b8",
+      "localPath": "C:\\tmp\\favbase-minimal-v7-phase2\\.output\\chrome-mv3\\chunks\\_virtual_wxt-plugins-B7MQV29x.js",
+      "localSize": 847,
+      "localSha256": "850ba537b9d7b3fe49daeab86d3e94f50fcc2e34ba39b5825aa17a1af9fbe9b8",
+      "matches": true
+    },
+    {
+      "pathname": "/chunks/_virtual_wxt-html-plugins-C4Vdpvia.js",
+      "ok": true,
+      "size": 741,
+      "sha256": "1b9e767cf467a6985e80a6da42a0c07f096e2d1e7304e4bbb0b3308eafe9f483",
+      "localPath": "C:\\tmp\\favbase-minimal-v7-phase2\\.output\\chrome-mv3\\chunks\\_virtual_wxt-html-plugins-C4Vdpvia.js",
+      "localSize": 741,
+      "localSha256": "1b9e767cf467a6985e80a6da42a0c07f096e2d1e7304e4bbb0b3308eafe9f483",
+      "matches": true
+    },
+    {
+      "pathname": "/chunks/schemas-Cbl8qPFP.js",
+      "ok": true,
+      "size": 77540,
+      "sha256": "88e2ce99176bef815877e4bb5116acddc5a8446e2b6efd034f728ed466d9a8d4",
+      "localPath": "C:\\tmp\\favbase-minimal-v7-phase2\\.output\\chrome-mv3\\chunks\\schemas-Cbl8qPFP.js",
+      "localSize": 77540,
+      "localSha256": "88e2ce99176bef815877e4bb5116acddc5a8446e2b6efd034f728ed466d9a8d4",
+      "matches": true
+    },
+    {
+      "pathname": "/chunks/protocol-DSTv_Hq1.js",
+      "ok": true,
+      "size": 91529,
+      "sha256": "16cd56bb34eae05ea485ec9800a58eb92b56ea39bcbd1ecb7f8bccbb95bfe47f",
+      "localPath": "C:\\tmp\\favbase-minimal-v7-phase2\\.output\\chrome-mv3\\chunks\\protocol-DSTv_Hq1.js",
+      "localSize": 91529,
+      "localSha256": "16cd56bb34eae05ea485ec9800a58eb92b56ea39bcbd1ecb7f8bccbb95bfe47f",
+      "matches": true
+    },
+    {
+      "pathname": "/chunks/browser-DxOR7jdj.js",
+      "ok": true,
+      "size": 96,
+      "sha256": "b772399426ec90e2d467af1334fd05f6aaf84981375492c51e75ba0561c6f62b",
+      "localPath": "C:\\tmp\\favbase-minimal-v7-phase2\\.output\\chrome-mv3\\chunks\\browser-DxOR7jdj.js",
+      "localSize": 96,
+      "localSha256": "b772399426ec90e2d467af1334fd05f6aaf84981375492c51e75ba0561c6f62b",
+      "matches": true
+    },
+    {
+      "pathname": "/chunks/storage-YK6IdYON.js",
+      "ok": true,
+      "size": 21060,
+      "sha256": "49b79d7e1b326a071775dfe23e18593615cc9f9167966f75878756e36c694d5c",
+      "localPath": "C:\\tmp\\favbase-minimal-v7-phase2\\.output\\chrome-mv3\\chunks\\storage-YK6IdYON.js",
+      "localSize": 21060,
+      "localSha256": "49b79d7e1b326a071775dfe23e18593615cc9f9167966f75878756e36c694d5c",
+      "matches": true
+    },
+    {
+      "pathname": "/chunks/react-eTSOQnv9.js",
+      "ok": true,
+      "size": 7536,
+      "sha256": "a1af31787a7a186006725b441278a9fb1b53f00b6952c88bcc15ce00b0c09c1b",
+      "localPath": "C:\\tmp\\favbase-minimal-v7-phase2\\.output\\chrome-mv3\\chunks\\react-eTSOQnv9.js",
+      "localSize": 7536,
+      "localSha256": "a1af31787a7a186006725b441278a9fb1b53f00b6952c88bcc15ce00b0c09c1b",
+      "matches": true
+    },
+    {
+      "pathname": "/chunks/jsx-runtime-D3TYiXE_.js",
+      "ok": true,
+      "size": 182160,
+      "sha256": "c166b5c4a8184f4f3395f3960fe41f3639857bad9350bceb0d815178cb66fa26",
+      "localPath": "C:\\tmp\\favbase-minimal-v7-phase2\\.output\\chrome-mv3\\chunks\\jsx-runtime-D3TYiXE_.js",
+      "localSize": 182160,
+      "localSha256": "c166b5c4a8184f4f3395f3960fe41f3639857bad9350bceb0d815178cb66fa26",
+      "matches": true
+    },
+    {
+      "pathname": "/chunks/Container-Dyj3AK8S.js",
+      "ok": true,
+      "size": 347333,
+      "sha256": "4315ce0c87e16c522f8ac351c89fd2d62d40a74fc7f48a21a4603044c16f37ba",
+      "localPath": "C:\\tmp\\favbase-minimal-v7-phase2\\.output\\chrome-mv3\\chunks\\Container-Dyj3AK8S.js",
+      "localSize": 347333,
+      "localSha256": "4315ce0c87e16c522f8ac351c89fd2d62d40a74fc7f48a21a4603044c16f37ba",
+      "matches": true
+    },
+    {
+      "pathname": "/chunks/db-CVsWLhOw.js",
+      "ok": true,
+      "size": 625208,
+      "sha256": "ae96ae5983cc3dd7d57d9fb1e7668506c8fe2aca9b2f882cf01fc949642c0e90",
+      "localPath": "C:\\tmp\\favbase-minimal-v7-phase2\\.output\\chrome-mv3\\chunks\\db-CVsWLhOw.js",
+      "localSize": 625208,
+      "localSha256": "ae96ae5983cc3dd7d57d9fb1e7668506c8fe2aca9b2f882cf01fc949642c0e90",
+      "matches": true
+    },
+    {
+      "pathname": "/chunks/background-jobs-store-DIscaiaO.js",
+      "ok": true,
+      "size": 3995,
+      "sha256": "2b2dfcd281bb1fe9d83d71308f3245741d6c6edae9e8b2048050963368e3e33e",
+      "localPath": "C:\\tmp\\favbase-minimal-v7-phase2\\.output\\chrome-mv3\\chunks\\background-jobs-store-DIscaiaO.js",
+      "localSize": 3995,
+      "localSha256": "2b2dfcd281bb1fe9d83d71308f3245741d6c6edae9e8b2048050963368e3e33e",
+      "matches": true
+    },
+    {
+      "pathname": "/chunks/x-auth-wZHmO_xY.js",
+      "ok": true,
+      "size": 563600,
+      "sha256": "39080cb93b30c658ddfc2c39dc56b47789323b137548e1292ed217c5b3e73fcd",
+      "localPath": "C:\\tmp\\favbase-minimal-v7-phase2\\.output\\chrome-mv3\\chunks\\x-auth-wZHmO_xY.js",
+      "localSize": 563600,
+      "localSha256": "39080cb93b30c658ddfc2c39dc56b47789323b137548e1292ed217c5b3e73fcd",
+      "matches": true
+    },
+    {
+      "pathname": "/chunks/collection-queries-Bx6VH2_I.js",
+      "ok": true,
+      "size": 650,
+      "sha256": "9bf6d8cf59193b804710539c717cd6702bf549319baff1aebac38b75024bc6db",
+      "localPath": "C:\\tmp\\favbase-minimal-v7-phase2\\.output\\chrome-mv3\\chunks\\collection-queries-Bx6VH2_I.js",
+      "localSize": 650,
+      "localSha256": "9bf6d8cf59193b804710539c717cd6702bf549319baff1aebac38b75024bc6db",
+      "matches": true
+    },
+    {
+      "pathname": "/chunks/char-split-DJKWcUfW.js",
+      "ok": true,
+      "size": 475,
+      "sha256": "85e8e99ad359f81caef59b58888421bf35e1b77386cfce28431ea4bdb4d9379d",
+      "localPath": "C:\\tmp\\favbase-minimal-v7-phase2\\.output\\chrome-mv3\\chunks\\char-split-DJKWcUfW.js",
+      "localSize": 475,
+      "localSha256": "85e8e99ad359f81caef59b58888421bf35e1b77386cfce28431ea4bdb4d9379d",
+      "matches": true
+    },
+    {
+      "pathname": "/chunks/config-DeKhHAPR.js",
+      "ok": true,
+      "size": 621,
+      "sha256": "b87600ed7ec4a78c83cae44627c362481db9176671f7da1ceae4a9c4d01e01c0",
+      "localPath": "C:\\tmp\\favbase-minimal-v7-phase2\\.output\\chrome-mv3\\chunks\\config-DeKhHAPR.js",
+      "localSize": 621,
+      "localSha256": "b87600ed7ec4a78c83cae44627c362481db9176671f7da1ceae4a9c4d01e01c0",
+      "matches": true
+    },
+    {
+      "pathname": "/chunks/github-api-DZI7hVsT.js",
+      "ok": true,
+      "size": 2296,
+      "sha256": "cf56ff106b4fab9dab89428f188cf9ab3effd032d1831526f26fab20a9136626",
+      "localPath": "C:\\tmp\\favbase-minimal-v7-phase2\\.output\\chrome-mv3\\chunks\\github-api-DZI7hVsT.js",
+      "localSize": 2296,
+      "localSha256": "cf56ff106b4fab9dab89428f188cf9ab3effd032d1831526f26fab20a9136626",
+      "matches": true
+    },
+    {
+      "pathname": "/chunks/backoff-DRvKHazu.js",
+      "ok": true,
+      "size": 183,
+      "sha256": "d955b8d0f196a66cab8a8e604294e101f4f347c79b27675b1dd05d8bb978ab29",
+      "localPath": "C:\\tmp\\favbase-minimal-v7-phase2\\.output\\chrome-mv3\\chunks\\backoff-DRvKHazu.js",
+      "localSize": 183,
+      "localSha256": "d955b8d0f196a66cab8a8e604294e101f4f347c79b27675b1dd05d8bb978ab29",
+      "matches": true
+    },
+    {
+      "pathname": "/chunks/ingest-Df0F9jo3.js",
+      "ok": true,
+      "size": 4261,
+      "sha256": "703773a3d651cd075e9b8c3137d2efcd5ddfa1ccec5f358821f9180620d300e6",
+      "localPath": "C:\\tmp\\favbase-minimal-v7-phase2\\.output\\chrome-mv3\\chunks\\ingest-Df0F9jo3.js",
+      "localSize": 4261,
+      "localSha256": "703773a3d651cd075e9b8c3137d2efcd5ddfa1ccec5f358821f9180620d300e6",
+      "matches": true
+    },
+    {
+      "pathname": "/chunks/tag-queries-1ZlYYh6-.js",
+      "ok": true,
+      "size": 515,
+      "sha256": "4a9643929f2a0f6e4914f35ba504fbbe84b7502955287155c2e2a2f0456aaa06",
+      "localPath": "C:\\tmp\\favbase-minimal-v7-phase2\\.output\\chrome-mv3\\chunks\\tag-queries-1ZlYYh6-.js",
+      "localSize": 515,
+      "localSha256": "4a9643929f2a0f6e4914f35ba504fbbe84b7502955287155c2e2a2f0456aaa06",
+      "matches": true
+    },
+    {
+      "pathname": "/chunks/youtube-api-DF-wU0NG.js",
+      "ok": true,
+      "size": 4298,
+      "sha256": "d77c2d0cf9d5b95a2225bfbee8d8782ae36454d1c78370595fc40ed6617662d5",
+      "localPath": "C:\\tmp\\favbase-minimal-v7-phase2\\.output\\chrome-mv3\\chunks\\youtube-api-DF-wU0NG.js",
+      "localSize": 4298,
+      "localSha256": "d77c2d0cf9d5b95a2225bfbee8d8782ae36454d1c78370595fc40ed6617662d5",
+      "matches": true
+    },
+    {
+      "pathname": "/assets/Container-BPLbKC6b.css",
+      "ok": true,
+      "size": 6802,
+      "sha256": "68c5bf26555e30cccb883c6be03a7f04fe3eb2830ae6fd2d927b510427fa817f",
+      "localPath": "C:\\tmp\\favbase-minimal-v7-phase2\\.output\\chrome-mv3\\assets\\Container-BPLbKC6b.css",
+      "localSize": 6802,
+      "localSha256": "68c5bf26555e30cccb883c6be03a7f04fe3eb2830ae6fd2d927b510427fa817f",
+      "matches": true
+    },
+    {
+      "pathname": "/chunks/dashboard-wYnlmDkb.js",
+      "ok": true,
+      "size": 12242,
+      "sha256": "1bde99bb8817eb868883c462edf53e140f073229ffbc26fa0ecebb93ac19d8a4",
+      "localPath": "C:\\tmp\\favbase-minimal-v7-phase2\\.output\\chrome-mv3\\chunks\\dashboard-wYnlmDkb.js",
+      "localSize": 12242,
+      "localSha256": "1bde99bb8817eb868883c462edf53e140f073229ffbc26fa0ecebb93ac19d8a4",
+      "matches": true
+    },
+    {
+      "pathname": "/chunks/collection-JsRR90tD.js",
+      "ok": true,
+      "size": 33573,
+      "sha256": "038271dfbf7549b113432f911c5c45d761ab79640edb1e277823b8f06f55d56a",
+      "localPath": "C:\\tmp\\favbase-minimal-v7-phase2\\.output\\chrome-mv3\\chunks\\collection-JsRR90tD.js",
+      "localSize": 33573,
+      "localSha256": "038271dfbf7549b113432f911c5c45d761ab79640edb1e277823b8f06f55d56a",
+      "matches": true
+    },
+    {
+      "pathname": "/chunks/Card-plu_QeWZ.js",
+      "ok": true,
+      "size": 3403,
+      "sha256": "39148ca60c25219061e2f8e2009337958033c4e5b896417e78215997ab16b8a9",
+      "localPath": "C:\\tmp\\favbase-minimal-v7-phase2\\.output\\chrome-mv3\\chunks\\Card-plu_QeWZ.js",
+      "localSize": 3403,
+      "localSha256": "39148ca60c25219061e2f8e2009337958033c4e5b896417e78215997ab16b8a9",
+      "matches": true
+    },
+    {
+      "pathname": "/chunks/Button-CmeSbUyR.js",
+      "ok": true,
+      "size": 9535,
+      "sha256": "bffcb72744f0d32e91b7c2ca75a3e4d8f2380ec4322a9f48d0b7eb9973665dc8",
+      "localPath": "C:\\tmp\\favbase-minimal-v7-phase2\\.output\\chrome-mv3\\chunks\\Button-CmeSbUyR.js",
+      "localSize": 9535,
+      "localSha256": "bffcb72744f0d32e91b7c2ca75a3e4d8f2380ec4322a9f48d0b7eb9973665dc8",
+      "matches": true
+    },
+    {
+      "pathname": "/chunks/TextField-DxQIXph3.js",
+      "ok": true,
+      "size": 42158,
+      "sha256": "b67ed1af734936c957c43a9def52c7a4a8c85a27581357488985748d10242de2",
+      "localPath": "C:\\tmp\\favbase-minimal-v7-phase2\\.output\\chrome-mv3\\chunks\\TextField-DxQIXph3.js",
+      "localSize": 42158,
+      "localSha256": "b67ed1af734936c957c43a9def52c7a4a8c85a27581357488985748d10242de2",
+      "matches": true
+    },
+    {
+      "pathname": "/chunks/Grid-DovupLPz.js",
+      "ok": true,
+      "size": 4940,
+      "sha256": "6a3b4afa4ec6b2c8b496d1f2ac185056e93b72384201a7775428721a29cfb4c3",
+      "localPath": "C:\\tmp\\favbase-minimal-v7-phase2\\.output\\chrome-mv3\\chunks\\Grid-DovupLPz.js",
+      "localSize": 4940,
+      "localSha256": "6a3b4afa4ec6b2c8b496d1f2ac185056e93b72384201a7775428721a29cfb4c3",
+      "matches": true
+    },
+    {
+      "pathname": "/chunks/collections-DX2kH3KW.js",
+      "ok": true,
+      "size": 6095,
+      "sha256": "53d50d2b9fddedc28913a4ad036e771fef6f4c223734d11000892b09e3e0fc49",
+      "localPath": "C:\\tmp\\favbase-minimal-v7-phase2\\.output\\chrome-mv3\\chunks\\collections-DX2kH3KW.js",
+      "localSize": 6095,
+      "localSha256": "53d50d2b9fddedc28913a4ad036e771fef6f4c223734d11000892b09e3e0fc49",
+      "matches": true
+    },
+    {
+      "pathname": "/chunks/Tabs-BLrxn7Yd.js",
+      "ok": true,
+      "size": 19296,
+      "sha256": "5841133d27347d5e9b0de2575fe01008fdfcc40ee27ddec73e6327a8732092c6",
+      "localPath": "C:\\tmp\\favbase-minimal-v7-phase2\\.output\\chrome-mv3\\chunks\\Tabs-BLrxn7Yd.js",
+      "localSize": 19296,
+      "localSha256": "5841133d27347d5e9b0de2575fe01008fdfcc40ee27ddec73e6327a8732092c6",
+      "matches": true
+    }
+  ],
+  "matrix": {
+    "1440-light-en-dashboard": {
+      "route": "#/",
+      "theme": "light",
+      "viewport": [
+        1440,
+        900
+      ],
+      "visualViewport": {
+        "width": 1440,
+        "height": 900,
+        "scale": 1
+      },
+      "horizontalScroll": false,
+      "documentWidth": [
+        1440,
+        1440
+      ],
+      "h1Count": 1,
+      "headings": [
+        {
+          "level": 6,
+          "text": "favbase"
+        },
+        {
+          "level": 1,
+          "text": "Collection Analytics"
+        }
+      ],
+      "headingSkips": [],
+      "targetIssues": [],
+      "contrastIssues": [],
+      "brokenImages": [],
+      "clippedText": [],
+      "fonts": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      },
+      "layoutShifts": [],
+      "cumulativeLayoutShift": 0,
+      "activeElement": "favbaseCollectionsAnalyticsChatSettingsCollection AnalyticsCurrent composition a",
+      "activeFullyVisible": true,
+      "activeObscuredByHeader": true,
+      "expectedRuntimeEvents": [],
+      "runtimeEvents": []
+    },
+    "1440-light-en-collections": {
+      "route": "#/collections",
+      "theme": "light",
+      "viewport": [
+        1440,
+        900
+      ],
+      "visualViewport": {
+        "width": 1440,
+        "height": 900,
+        "scale": 1
+      },
+      "horizontalScroll": false,
+      "documentWidth": [
+        1440,
+        1440
+      ],
+      "h1Count": 1,
+      "headings": [
+        {
+          "level": 6,
+          "text": "favbase"
+        },
+        {
+          "level": 1,
+          "text": "All Collections"
+        }
+      ],
+      "headingSkips": [],
+      "targetIssues": [],
+      "contrastIssues": [],
+      "brokenImages": [],
+      "clippedText": [],
+      "fonts": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      },
+      "layoutShifts": [],
+      "cumulativeLayoutShift": 0,
+      "activeElement": "favbaseCollectionsBilibili FavoritesGitHub StarsBrowser BookmarksX BookmarksZhih",
+      "activeFullyVisible": true,
+      "activeObscuredByHeader": true,
+      "expectedRuntimeEvents": [],
+      "runtimeEvents": []
+    },
+    "1440-light-en-collections-tag": {
+      "route": "#/collections",
+      "theme": "light",
+      "viewport": [
+        1440,
+        900
+      ],
+      "visualViewport": {
+        "width": 1440,
+        "height": 900,
+        "scale": 1
+      },
+      "horizontalScroll": false,
+      "documentWidth": [
+        1440,
+        1440
+      ],
+      "h1Count": 1,
+      "headings": [
+        {
+          "level": 6,
+          "text": "favbase"
+        },
+        {
+          "level": 1,
+          "text": "All Collections"
+        }
+      ],
+      "headingSkips": [],
+      "targetIssues": [],
+      "contrastIssues": [],
+      "brokenImages": [],
+      "clippedText": [],
+      "fonts": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      },
+      "layoutShifts": [],
+      "cumulativeLayoutShift": 0,
+      "activeElement": "favbaseCollectionsBilibili FavoritesGitHub StarsBrowser BookmarksX BookmarksZhih",
+      "activeFullyVisible": true,
+      "activeObscuredByHeader": true,
+      "expectedRuntimeEvents": [],
+      "runtimeEvents": []
+    },
+    "1440-light-en-bilibili": {
+      "route": "#/collections/bilibili",
+      "theme": "light",
+      "viewport": [
+        1440,
+        900
+      ],
+      "visualViewport": {
+        "width": 1432,
+        "height": 900,
+        "scale": 1
+      },
+      "horizontalScroll": false,
+      "documentWidth": [
+        1432,
+        1432
+      ],
+      "h1Count": 1,
+      "headings": [
+        {
+          "level": 6,
+          "text": "favbase"
+        },
+        {
+          "level": 1,
+          "text": "Bilibili Favorites"
+        }
+      ],
+      "headingSkips": [],
+      "targetIssues": [],
+      "contrastIssues": [],
+      "brokenImages": [],
+      "clippedText": [],
+      "fonts": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      },
+      "layoutShifts": [],
+      "cumulativeLayoutShift": 0,
+      "activeElement": "favbaseCollectionsBilibili FavoritesGitHub StarsBrowser BookmarksX BookmarksZhih",
+      "activeFullyVisible": false,
+      "activeObscuredByHeader": true,
+      "expectedRuntimeEvents": [],
+      "runtimeEvents": []
+    },
+    "1440-light-en-bilibili-deep-link": {
+      "route": "#/collections/bilibili/phase7-missing",
+      "theme": "light",
+      "viewport": [
+        1440,
+        900
+      ],
+      "visualViewport": {
+        "width": 1432,
+        "height": 900,
+        "scale": 1
+      },
+      "horizontalScroll": false,
+      "documentWidth": [
+        1432,
+        1432
+      ],
+      "h1Count": 1,
+      "headings": [
+        {
+          "level": 6,
+          "text": "favbase"
+        },
+        {
+          "level": 1,
+          "text": "Bilibili Favorites"
+        }
+      ],
+      "headingSkips": [],
+      "targetIssues": [],
+      "contrastIssues": [],
+      "brokenImages": [],
+      "clippedText": [],
+      "fonts": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      },
+      "layoutShifts": [],
+      "cumulativeLayoutShift": 0,
+      "activeElement": "favbaseCollectionsBilibili FavoritesGitHub StarsBrowser BookmarksX BookmarksZhih",
+      "activeFullyVisible": false,
+      "activeObscuredByHeader": true,
+      "expectedRuntimeEvents": [],
+      "runtimeEvents": []
+    },
+    "1440-light-en-github": {
+      "route": "#/collections/github",
+      "theme": "light",
+      "viewport": [
+        1440,
+        900
+      ],
+      "visualViewport": {
+        "width": 1440,
+        "height": 900,
+        "scale": 1
+      },
+      "horizontalScroll": false,
+      "documentWidth": [
+        1440,
+        1440
+      ],
+      "h1Count": 1,
+      "headings": [
+        {
+          "level": 6,
+          "text": "favbase"
+        },
+        {
+          "level": 1,
+          "text": "GitHub Stars"
+        }
+      ],
+      "headingSkips": [],
+      "targetIssues": [],
+      "contrastIssues": [],
+      "brokenImages": [],
+      "clippedText": [],
+      "fonts": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      },
+      "layoutShifts": [],
+      "cumulativeLayoutShift": 0,
+      "activeElement": "favbaseCollectionsBilibili FavoritesGitHub StarsBrowser BookmarksX BookmarksZhih",
+      "activeFullyVisible": true,
+      "activeObscuredByHeader": true,
+      "expectedRuntimeEvents": [],
+      "runtimeEvents": []
+    },
+    "1440-light-en-bookmarks": {
+      "route": "#/collections/bookmarks",
+      "theme": "light",
+      "viewport": [
+        1440,
+        900
+      ],
+      "visualViewport": {
+        "width": 1440,
+        "height": 900,
+        "scale": 1
+      },
+      "horizontalScroll": false,
+      "documentWidth": [
+        1440,
+        1440
+      ],
+      "h1Count": 1,
+      "headings": [
+        {
+          "level": 6,
+          "text": "favbase"
+        },
+        {
+          "level": 1,
+          "text": "Browser Bookmarks"
+        }
+      ],
+      "headingSkips": [],
+      "targetIssues": [],
+      "contrastIssues": [
+        {
+          "text": "1 background task unfinished; don't close this page",
+          "ratio": 1.9,
+          "threshold": 4.5,
+          "fontSize": 13,
+          "fontWeight": 400
+        }
+      ],
+      "brokenImages": [],
+      "clippedText": [],
+      "fonts": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      },
+      "layoutShifts": [],
+      "cumulativeLayoutShift": 0,
+      "activeElement": "favbaseCollectionsBilibili FavoritesGitHub StarsBrowser BookmarksX BookmarksZhih",
+      "activeFullyVisible": true,
+      "activeObscuredByHeader": true,
+      "expectedRuntimeEvents": [],
+      "runtimeEvents": []
+    },
+    "1440-light-en-bookmarks-deep-link": {
+      "route": "#/collections/bookmarks/phase7-missing",
+      "theme": "light",
+      "viewport": [
+        1440,
+        900
+      ],
+      "visualViewport": {
+        "width": 1440,
+        "height": 900,
+        "scale": 1
+      },
+      "horizontalScroll": false,
+      "documentWidth": [
+        1440,
+        1440
+      ],
+      "h1Count": 1,
+      "headings": [
+        {
+          "level": 6,
+          "text": "favbase"
+        },
+        {
+          "level": 1,
+          "text": "Browser Bookmarks"
+        }
+      ],
+      "headingSkips": [],
+      "targetIssues": [],
+      "contrastIssues": [
+        {
+          "text": "1 background task unfinished; don't close this page",
+          "ratio": 1.9,
+          "threshold": 4.5,
+          "fontSize": 13,
+          "fontWeight": 400
+        }
+      ],
+      "brokenImages": [],
+      "clippedText": [],
+      "fonts": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      },
+      "layoutShifts": [],
+      "cumulativeLayoutShift": 0,
+      "activeElement": "favbaseCollectionsBilibili FavoritesGitHub StarsBrowser BookmarksX BookmarksZhih",
+      "activeFullyVisible": true,
+      "activeObscuredByHeader": true,
+      "expectedRuntimeEvents": [],
+      "runtimeEvents": []
+    },
+    "1440-light-en-x": {
+      "route": "#/collections/x",
+      "theme": "light",
+      "viewport": [
+        1440,
+        900
+      ],
+      "visualViewport": {
+        "width": 1440,
+        "height": 900,
+        "scale": 1
+      },
+      "horizontalScroll": false,
+      "documentWidth": [
+        1440,
+        1440
+      ],
+      "h1Count": 1,
+      "headings": [
+        {
+          "level": 6,
+          "text": "favbase"
+        },
+        {
+          "level": 1,
+          "text": "X Bookmarks"
+        }
+      ],
+      "headingSkips": [],
+      "targetIssues": [],
+      "contrastIssues": [],
+      "brokenImages": [],
+      "clippedText": [],
+      "fonts": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      },
+      "layoutShifts": [],
+      "cumulativeLayoutShift": 0,
+      "activeElement": "favbaseCollectionsBilibili FavoritesGitHub StarsBrowser BookmarksX BookmarksZhih",
+      "activeFullyVisible": true,
+      "activeObscuredByHeader": true,
+      "expectedRuntimeEvents": [],
+      "runtimeEvents": []
+    },
+    "1440-light-en-zhihu": {
+      "route": "#/collections/zhihu",
+      "theme": "light",
+      "viewport": [
+        1440,
+        900
+      ],
+      "visualViewport": {
+        "width": 1440,
+        "height": 900,
+        "scale": 1
+      },
+      "horizontalScroll": false,
+      "documentWidth": [
+        1440,
+        1440
+      ],
+      "h1Count": 1,
+      "headings": [
+        {
+          "level": 6,
+          "text": "favbase"
+        },
+        {
+          "level": 1,
+          "text": "Zhihu Favorites"
+        }
+      ],
+      "headingSkips": [],
+      "targetIssues": [],
+      "contrastIssues": [],
+      "brokenImages": [],
+      "clippedText": [],
+      "fonts": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      },
+      "layoutShifts": [],
+      "cumulativeLayoutShift": 0,
+      "activeElement": "favbaseCollectionsBilibili FavoritesGitHub StarsBrowser BookmarksX BookmarksZhih",
+      "activeFullyVisible": true,
+      "activeObscuredByHeader": true,
+      "expectedRuntimeEvents": [],
+      "runtimeEvents": []
+    },
+    "1440-light-en-youtube": {
+      "route": "#/collections/youtube",
+      "theme": "light",
+      "viewport": [
+        1440,
+        900
+      ],
+      "visualViewport": {
+        "width": 1440,
+        "height": 900,
+        "scale": 1
+      },
+      "horizontalScroll": false,
+      "documentWidth": [
+        1440,
+        1440
+      ],
+      "h1Count": 1,
+      "headings": [
+        {
+          "level": 6,
+          "text": "favbase"
+        },
+        {
+          "level": 1,
+          "text": "YouTube Playlists"
+        }
+      ],
+      "headingSkips": [],
+      "targetIssues": [],
+      "contrastIssues": [],
+      "brokenImages": [],
+      "clippedText": [],
+      "fonts": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      },
+      "layoutShifts": [],
+      "cumulativeLayoutShift": 0,
+      "activeElement": "favbaseCollectionsBilibili FavoritesGitHub StarsBrowser BookmarksX BookmarksZhih",
+      "activeFullyVisible": true,
+      "activeObscuredByHeader": true,
+      "expectedRuntimeEvents": [],
+      "runtimeEvents": []
+    },
+    "1440-light-en-chat": {
+      "route": "#/chat",
+      "theme": "light",
+      "viewport": [
+        1440,
+        900
+      ],
+      "visualViewport": {
+        "width": 1440,
+        "height": 900,
+        "scale": 1
+      },
+      "horizontalScroll": false,
+      "documentWidth": [
+        1440,
+        1440
+      ],
+      "h1Count": 1,
+      "headings": [
+        {
+          "level": 6,
+          "text": "favbase"
+        },
+        {
+          "level": 1,
+          "text": "Knowledge Base Chat"
+        }
+      ],
+      "headingSkips": [],
+      "targetIssues": [],
+      "contrastIssues": [],
+      "brokenImages": [],
+      "clippedText": [],
+      "fonts": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      },
+      "layoutShifts": [],
+      "cumulativeLayoutShift": 0,
+      "activeElement": "favbaseCollectionsAnalyticsChatSettingsKnowledge Base ChatConversation historyNe",
+      "activeFullyVisible": true,
+      "activeObscuredByHeader": true,
+      "expectedRuntimeEvents": [],
+      "runtimeEvents": []
+    },
+    "1440-light-en-settings": {
+      "route": "#/settings",
+      "theme": "light",
+      "viewport": [
+        1440,
+        900
+      ],
+      "visualViewport": {
+        "width": 1432,
+        "height": 900,
+        "scale": 1
+      },
+      "horizontalScroll": false,
+      "documentWidth": [
+        1432,
+        1432
+      ],
+      "h1Count": 1,
+      "headings": [
+        {
+          "level": 6,
+          "text": "favbase"
+        },
+        {
+          "level": 1,
+          "text": "Settings"
+        },
+        {
+          "level": 2,
+          "text": "LLM Service"
+        }
+      ],
+      "headingSkips": [],
+      "targetIssues": [],
+      "contrastIssues": [],
+      "brokenImages": [],
+      "clippedText": [],
+      "fonts": {
+        "status": "loaded",
+        "dmSans": true,
+        "barlow": true
+      },
+      "layoutShifts": [],
+      "cumulativeLayoutShift": 0,
+      "activeElement": "favbaseCollectionsAnalyticsChatSettingsSettingsAI ConfigConnectionsGeneralStorag",
+      "activeFullyVisible": false,
+      "activeObscuredByHeader": true,
+      "expectedRuntimeEvents": [],
+      "runtimeEvents": []
+    },
+    "1440-light-en-settings-deep-link": {
+      "route": "#/settings?section=embedding&resume=github",
+      "theme": "light",
+      "viewport": [
+        1440,
+        900
+      ],
+      "visualViewport": {
+        "width": 1432,
+        "height": 900,
+        "scale": 1
+      },
+      "horizontalScroll": false,
+      "documentWidth": [
+        1432,
+        1432
+      ],
+      "h1Count": 1,
+      "headings": [
+        {
+          "level": 6,
+          "text": "favbase"
+        },
+        {
+          "level": 1,
+          "text": "Settings"
+        },
+        {
+          "level": 2,
+          "text": "Semantic Search"
+        }
+      ],
+      "headingSkips": [],
+      "targetIssues": [],
+      "contrastIssues": [],
+      "brokenImages": [],
+      "clippedText": [],
+      "fonts": {
+        "status": "loaded",
+        "dmSans": true,
+        "barlow": true
+      },
+      "layoutShifts": [],
+      "cumulativeLayoutShift": 0,
+      "activeElement": "favbaseCollectionsAnalyticsChatSettingsSettingsAI ConfigConnectionsGeneralStorag",
+      "activeFullyVisible": false,
+      "activeObscuredByHeader": true,
+      "expectedRuntimeEvents": [],
+      "runtimeEvents": []
+    },
+    "1024-dark-zh-dashboard": {
+      "route": "#/",
+      "theme": "dark",
+      "viewport": [
+        1024,
+        768
+      ],
+      "visualViewport": {
+        "width": 1016,
+        "height": 768,
+        "scale": 1
+      },
+      "horizontalScroll": false,
+      "documentWidth": [
+        1016,
+        1016
+      ],
+      "h1Count": 1,
+      "headings": [
+        {
+          "level": 6,
+          "text": "favbase"
+        },
+        {
+          "level": 1,
+          "text": "收藏数据"
+        }
+      ],
+      "headingSkips": [],
+      "targetIssues": [],
+      "contrastIssues": [],
+      "brokenImages": [],
+      "clippedText": [],
+      "fonts": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      },
+      "layoutShifts": [],
+      "cumulativeLayoutShift": 0,
+      "activeElement": "favbase收藏夹Analytics对话设置收藏数据当前本地收藏库的构成与标签分布",
+      "activeFullyVisible": false,
+      "activeObscuredByHeader": true,
+      "expectedRuntimeEvents": [],
+      "runtimeEvents": []
+    },
+    "1024-dark-zh-collections": {
+      "route": "#/collections",
+      "theme": "dark",
+      "viewport": [
+        1024,
+        768
+      ],
+      "visualViewport": {
+        "width": 1016,
+        "height": 768,
+        "scale": 1
+      },
+      "horizontalScroll": false,
+      "documentWidth": [
+        1016,
+        1016
+      ],
+      "h1Count": 1,
+      "headings": [
+        {
+          "level": 6,
+          "text": "favbase"
+        },
+        {
+          "level": 1,
+          "text": "全部收藏"
+        }
+      ],
+      "headingSkips": [],
+      "targetIssues": [],
+      "contrastIssues": [],
+      "brokenImages": [],
+      "clippedText": [],
+      "fonts": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      },
+      "layoutShifts": [],
+      "cumulativeLayoutShift": 0,
+      "activeElement": "favbase收藏夹B 站收藏夹GitHub Stars浏览器书签X 书签知乎收藏YouTube 播放列表请求新平台Analytics对话设置全部收藏0 个条目",
+      "activeFullyVisible": false,
+      "activeObscuredByHeader": true,
+      "expectedRuntimeEvents": [],
+      "runtimeEvents": []
+    },
+    "1024-dark-zh-bilibili": {
+      "route": "#/collections/bilibili",
+      "theme": "dark",
+      "viewport": [
+        1024,
+        768
+      ],
+      "visualViewport": {
+        "width": 1016,
+        "height": 768,
+        "scale": 1
+      },
+      "horizontalScroll": false,
+      "documentWidth": [
+        1016,
+        1016
+      ],
+      "h1Count": 1,
+      "headings": [
+        {
+          "level": 6,
+          "text": "favbase"
+        },
+        {
+          "level": 1,
+          "text": "BiliBili 收藏夹"
+        }
+      ],
+      "headingSkips": [],
+      "targetIssues": [],
+      "contrastIssues": [],
+      "brokenImages": [],
+      "clippedText": [],
+      "fonts": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      },
+      "layoutShifts": [],
+      "cumulativeLayoutShift": 0,
+      "activeElement": "favbase收藏夹B 站收藏夹GitHub Stars浏览器书签X 书签知乎收藏YouTube 播放列表请求新平台Analytics对话设置BiliBili ",
+      "activeFullyVisible": false,
+      "activeObscuredByHeader": true,
+      "expectedRuntimeEvents": [],
+      "runtimeEvents": []
+    },
+    "1024-dark-zh-chat": {
+      "route": "#/chat",
+      "theme": "dark",
+      "viewport": [
+        1024,
+        768
+      ],
+      "visualViewport": {
+        "width": 1024,
+        "height": 768,
+        "scale": 1
+      },
+      "horizontalScroll": false,
+      "documentWidth": [
+        1024,
+        1024
+      ],
+      "h1Count": 1,
+      "headings": [
+        {
+          "level": 6,
+          "text": "favbase"
+        },
+        {
+          "level": 1,
+          "text": "知识库对话"
+        }
+      ],
+      "headingSkips": [],
+      "targetIssues": [],
+      "contrastIssues": [],
+      "brokenImages": [],
+      "clippedText": [],
+      "fonts": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      },
+      "layoutShifts": [],
+      "cumulativeLayoutShift": 0,
+      "activeElement": "favbase收藏夹Analytics对话设置知识库对话对话历史新对话还没有对话记录尚未配置大语言模型，请先在「设置 → AI 配置」中填写并测试连接。",
+      "activeFullyVisible": true,
+      "activeObscuredByHeader": true,
+      "expectedRuntimeEvents": [],
+      "runtimeEvents": []
+    },
+    "1024-dark-zh-settings": {
+      "route": "#/settings",
+      "theme": "dark",
+      "viewport": [
+        1024,
+        768
+      ],
+      "visualViewport": {
+        "width": 1016,
+        "height": 768,
+        "scale": 1
+      },
+      "horizontalScroll": false,
+      "documentWidth": [
+        1016,
+        1016
+      ],
+      "h1Count": 1,
+      "headings": [
+        {
+          "level": 6,
+          "text": "favbase"
+        },
+        {
+          "level": 1,
+          "text": "设置"
+        },
+        {
+          "level": 2,
+          "text": "LLM 服务配置"
+        }
+      ],
+      "headingSkips": [],
+      "targetIssues": [],
+      "contrastIssues": [],
+      "brokenImages": [],
+      "clippedText": [],
+      "fonts": {
+        "status": "loaded",
+        "dmSans": true,
+        "barlow": true
+      },
+      "layoutShifts": [],
+      "cumulativeLayoutShift": 0,
+      "activeElement": "favbase收藏夹Analytics对话设置设置AI 配置账号连接通用设置存储管理LLM 服务ASR 转录语义搜索LLM 服务配置配置大语言模型服务以实现视频",
+      "activeFullyVisible": false,
+      "activeObscuredByHeader": true,
+      "expectedRuntimeEvents": [],
+      "runtimeEvents": []
+    },
+    "390-light-zh-dashboard": {
+      "route": "#/",
+      "theme": "light",
+      "viewport": [
+        390,
+        844
+      ],
+      "visualViewport": {
+        "width": 390,
+        "height": 844,
+        "scale": 1
+      },
+      "horizontalScroll": false,
+      "documentWidth": [
+        390,
+        390
+      ],
+      "h1Count": 1,
+      "headings": [
+        {
+          "level": 1,
+          "text": "收藏数据"
+        }
+      ],
+      "headingSkips": [],
+      "targetIssues": [],
+      "contrastIssues": [],
+      "brokenImages": [],
+      "clippedText": [],
+      "fonts": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      },
+      "layoutShifts": [],
+      "cumulativeLayoutShift": 0,
+      "activeElement": "favbase收藏夹Analytics对话设置 收藏数据当前本地收藏库的构成与标签分布",
+      "activeFullyVisible": false,
+      "activeObscuredByHeader": true,
+      "expectedRuntimeEvents": [],
+      "runtimeEvents": []
+    },
+    "390-light-zh-collections": {
+      "route": "#/collections",
+      "theme": "light",
+      "viewport": [
+        390,
+        844
+      ],
+      "visualViewport": {
+        "width": 390,
+        "height": 844,
+        "scale": 1
+      },
+      "horizontalScroll": false,
+      "documentWidth": [
+        390,
+        390
+      ],
+      "h1Count": 1,
+      "headings": [
+        {
+          "level": 1,
+          "text": "全部收藏"
+        }
+      ],
+      "headingSkips": [],
+      "targetIssues": [],
+      "contrastIssues": [],
+      "brokenImages": [],
+      "clippedText": [],
+      "fonts": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      },
+      "layoutShifts": [],
+      "cumulativeLayoutShift": 0,
+      "activeElement": "favbase收藏夹B 站收藏夹GitHub Stars浏览器书签X 书签知乎收藏YouTube 播放列表请求新平台Analytics对话设置 全部收藏0 个条",
+      "activeFullyVisible": false,
+      "activeObscuredByHeader": true,
+      "expectedRuntimeEvents": [],
+      "runtimeEvents": []
+    },
+    "390-light-zh-collections-tag": {
+      "route": "#/collections?tag=00000000-0000-0000-0000-000000000000",
+      "theme": "light",
+      "viewport": [
+        390,
+        844
+      ],
+      "visualViewport": {
+        "width": 390,
+        "height": 844,
+        "scale": 1
+      },
+      "horizontalScroll": false,
+      "documentWidth": [
+        390,
+        390
+      ],
+      "h1Count": 1,
+      "headings": [
+        {
+          "level": 1,
+          "text": "全部收藏"
+        }
+      ],
+      "headingSkips": [],
+      "targetIssues": [],
+      "contrastIssues": [],
+      "brokenImages": [],
+      "clippedText": [],
+      "fonts": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      },
+      "layoutShifts": [],
+      "cumulativeLayoutShift": 0,
+      "activeElement": "favbase收藏夹B 站收藏夹GitHub Stars浏览器书签X 书签知乎收藏YouTube 播放列表请求新平台Analytics对话设置 全部收藏0 个条",
+      "activeFullyVisible": false,
+      "activeObscuredByHeader": true,
+      "expectedRuntimeEvents": [],
+      "runtimeEvents": []
+    },
+    "390-light-zh-bilibili": {
+      "route": "#/collections/bilibili",
+      "theme": "light",
+      "viewport": [
+        390,
+        844
+      ],
+      "visualViewport": {
+        "width": 390,
+        "height": 844,
+        "scale": 1
+      },
+      "horizontalScroll": false,
+      "documentWidth": [
+        390,
+        390
+      ],
+      "h1Count": 1,
+      "headings": [
+        {
+          "level": 1,
+          "text": "BiliBili 收藏夹"
+        }
+      ],
+      "headingSkips": [],
+      "targetIssues": [],
+      "contrastIssues": [],
+      "brokenImages": [],
+      "clippedText": [],
+      "fonts": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      },
+      "layoutShifts": [],
+      "cumulativeLayoutShift": 0,
+      "activeElement": "favbase收藏夹B 站收藏夹GitHub Stars浏览器书签X 书签知乎收藏YouTube 播放列表请求新平台Analytics对话设置 BiliBili",
+      "activeFullyVisible": false,
+      "activeObscuredByHeader": true,
+      "expectedRuntimeEvents": [],
+      "runtimeEvents": []
+    },
+    "390-light-zh-bilibili-deep-link": {
+      "route": "#/collections/bilibili/phase7-missing",
+      "theme": "light",
+      "viewport": [
+        390,
+        844
+      ],
+      "visualViewport": {
+        "width": 390,
+        "height": 844,
+        "scale": 1
+      },
+      "horizontalScroll": false,
+      "documentWidth": [
+        390,
+        390
+      ],
+      "h1Count": 1,
+      "headings": [
+        {
+          "level": 1,
+          "text": "BiliBili 收藏夹"
+        }
+      ],
+      "headingSkips": [],
+      "targetIssues": [],
+      "contrastIssues": [],
+      "brokenImages": [],
+      "clippedText": [],
+      "fonts": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      },
+      "layoutShifts": [],
+      "cumulativeLayoutShift": 0,
+      "activeElement": "favbase收藏夹B 站收藏夹GitHub Stars浏览器书签X 书签知乎收藏YouTube 播放列表请求新平台Analytics对话设置 BiliBili",
+      "activeFullyVisible": false,
+      "activeObscuredByHeader": true,
+      "expectedRuntimeEvents": [],
+      "runtimeEvents": []
+    },
+    "390-light-zh-github": {
+      "route": "#/collections/github",
+      "theme": "light",
+      "viewport": [
+        390,
+        844
+      ],
+      "visualViewport": {
+        "width": 390,
+        "height": 844,
+        "scale": 1
+      },
+      "horizontalScroll": false,
+      "documentWidth": [
+        390,
+        390
+      ],
+      "h1Count": 1,
+      "headings": [
+        {
+          "level": 1,
+          "text": "GitHub Stars"
+        }
+      ],
+      "headingSkips": [],
+      "targetIssues": [],
+      "contrastIssues": [],
+      "brokenImages": [],
+      "clippedText": [],
+      "fonts": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      },
+      "layoutShifts": [],
+      "cumulativeLayoutShift": 0,
+      "activeElement": "favbase收藏夹B 站收藏夹GitHub Stars浏览器书签X 书签知乎收藏YouTube 播放列表请求新平台Analytics对话设置 GitHub S",
+      "activeFullyVisible": true,
+      "activeObscuredByHeader": true,
+      "expectedRuntimeEvents": [],
+      "runtimeEvents": []
+    },
+    "390-light-zh-bookmarks": {
+      "route": "#/collections/bookmarks",
+      "theme": "light",
+      "viewport": [
+        390,
+        844
+      ],
+      "visualViewport": {
+        "width": 390,
+        "height": 844,
+        "scale": 1
+      },
+      "horizontalScroll": false,
+      "documentWidth": [
+        390,
+        390
+      ],
+      "h1Count": 1,
+      "headings": [
+        {
+          "level": 1,
+          "text": "浏览器书签"
+        }
+      ],
+      "headingSkips": [],
+      "targetIssues": [],
+      "contrastIssues": [
+        {
+          "text": "1 项后台任务未完成，请勿关闭本页",
+          "ratio": 1.9,
+          "threshold": 4.5,
+          "fontSize": 13,
+          "fontWeight": 400
+        }
+      ],
+      "brokenImages": [],
+      "clippedText": [],
+      "fonts": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      },
+      "layoutShifts": [],
+      "cumulativeLayoutShift": 0,
+      "activeElement": "favbase收藏夹B 站收藏夹GitHub Stars浏览器书签X 书签知乎收藏YouTube 播放列表请求新平台Analytics对话设置 1 项后台任务未",
+      "activeFullyVisible": false,
+      "activeObscuredByHeader": true,
+      "expectedRuntimeEvents": [],
+      "runtimeEvents": []
+    },
+    "390-light-zh-bookmarks-deep-link": {
+      "route": "#/collections/bookmarks/phase7-missing",
+      "theme": "light",
+      "viewport": [
+        390,
+        844
+      ],
+      "visualViewport": {
+        "width": 390,
+        "height": 844,
+        "scale": 1
+      },
+      "horizontalScroll": false,
+      "documentWidth": [
+        390,
+        390
+      ],
+      "h1Count": 1,
+      "headings": [
+        {
+          "level": 1,
+          "text": "浏览器书签"
+        }
+      ],
+      "headingSkips": [],
+      "targetIssues": [],
+      "contrastIssues": [
+        {
+          "text": "1 项后台任务未完成，请勿关闭本页",
+          "ratio": 1.9,
+          "threshold": 4.5,
+          "fontSize": 13,
+          "fontWeight": 400
+        }
+      ],
+      "brokenImages": [],
+      "clippedText": [],
+      "fonts": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      },
+      "layoutShifts": [],
+      "cumulativeLayoutShift": 0,
+      "activeElement": "favbase收藏夹B 站收藏夹GitHub Stars浏览器书签X 书签知乎收藏YouTube 播放列表请求新平台Analytics对话设置 1 项后台任务未",
+      "activeFullyVisible": false,
+      "activeObscuredByHeader": true,
+      "expectedRuntimeEvents": [],
+      "runtimeEvents": []
+    },
+    "390-light-zh-x": {
+      "route": "#/collections/x",
+      "theme": "light",
+      "viewport": [
+        390,
+        844
+      ],
+      "visualViewport": {
+        "width": 390,
+        "height": 844,
+        "scale": 1
+      },
+      "horizontalScroll": false,
+      "documentWidth": [
+        390,
+        390
+      ],
+      "h1Count": 1,
+      "headings": [
+        {
+          "level": 1,
+          "text": "X 书签"
+        }
+      ],
+      "headingSkips": [],
+      "targetIssues": [],
+      "contrastIssues": [],
+      "brokenImages": [],
+      "clippedText": [],
+      "fonts": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      },
+      "layoutShifts": [],
+      "cumulativeLayoutShift": 0,
+      "activeElement": "favbase收藏夹B 站收藏夹GitHub Stars浏览器书签X 书签知乎收藏YouTube 播放列表请求新平台Analytics对话设置 X 书签立即获取",
+      "activeFullyVisible": false,
+      "activeObscuredByHeader": true,
+      "expectedRuntimeEvents": [],
+      "runtimeEvents": []
+    },
+    "390-light-zh-zhihu": {
+      "route": "#/collections/zhihu",
+      "theme": "light",
+      "viewport": [
+        390,
+        844
+      ],
+      "visualViewport": {
+        "width": 390,
+        "height": 844,
+        "scale": 1
+      },
+      "horizontalScroll": false,
+      "documentWidth": [
+        390,
+        390
+      ],
+      "h1Count": 1,
+      "headings": [
+        {
+          "level": 1,
+          "text": "知乎收藏"
+        }
+      ],
+      "headingSkips": [],
+      "targetIssues": [],
+      "contrastIssues": [],
+      "brokenImages": [],
+      "clippedText": [],
+      "fonts": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      },
+      "layoutShifts": [],
+      "cumulativeLayoutShift": 0,
+      "activeElement": "favbase收藏夹B 站收藏夹GitHub Stars浏览器书签X 书签知乎收藏YouTube 播放列表请求新平台Analytics对话设置 知乎收藏立即获取",
+      "activeFullyVisible": false,
+      "activeObscuredByHeader": true,
+      "expectedRuntimeEvents": [],
+      "runtimeEvents": []
+    },
+    "390-light-zh-youtube": {
+      "route": "#/collections/youtube",
+      "theme": "light",
+      "viewport": [
+        390,
+        844
+      ],
+      "visualViewport": {
+        "width": 390,
+        "height": 844,
+        "scale": 1
+      },
+      "horizontalScroll": false,
+      "documentWidth": [
+        390,
+        390
+      ],
+      "h1Count": 1,
+      "headings": [
+        {
+          "level": 1,
+          "text": "YouTube 播放列表"
+        }
+      ],
+      "headingSkips": [],
+      "targetIssues": [],
+      "contrastIssues": [],
+      "brokenImages": [],
+      "clippedText": [],
+      "fonts": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      },
+      "layoutShifts": [],
+      "cumulativeLayoutShift": 0,
+      "activeElement": "favbase收藏夹B 站收藏夹GitHub Stars浏览器书签X 书签知乎收藏YouTube 播放列表请求新平台Analytics对话设置 YouTube ",
+      "activeFullyVisible": true,
+      "activeObscuredByHeader": true,
+      "expectedRuntimeEvents": [],
+      "runtimeEvents": []
+    },
+    "390-light-zh-chat": {
+      "route": "#/chat",
+      "theme": "light",
+      "viewport": [
+        390,
+        844
+      ],
+      "visualViewport": {
+        "width": 390,
+        "height": 844,
+        "scale": 1
+      },
+      "horizontalScroll": false,
+      "documentWidth": [
+        390,
+        390
+      ],
+      "h1Count": 1,
+      "headings": [
+        {
+          "level": 1,
+          "text": "知识库对话"
+        }
+      ],
+      "headingSkips": [],
+      "targetIssues": [],
+      "contrastIssues": [],
+      "brokenImages": [],
+      "clippedText": [],
+      "fonts": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      },
+      "layoutShifts": [],
+      "cumulativeLayoutShift": 0,
+      "activeElement": "favbase收藏夹Analytics对话设置 知识库对话对话历史新对话还没有对话记录尚未配置大语言模型，请先在「设置 → AI 配置」中填写并测试连接。",
+      "activeFullyVisible": true,
+      "activeObscuredByHeader": true,
+      "expectedRuntimeEvents": [],
+      "runtimeEvents": []
+    },
+    "390-light-zh-settings": {
+      "route": "#/settings",
+      "theme": "light",
+      "viewport": [
+        390,
+        844
+      ],
+      "visualViewport": {
+        "width": 390,
+        "height": 844,
+        "scale": 1
+      },
+      "horizontalScroll": false,
+      "documentWidth": [
+        390,
+        390
+      ],
+      "h1Count": 1,
+      "headings": [
+        {
+          "level": 1,
+          "text": "设置"
+        },
+        {
+          "level": 2,
+          "text": "LLM 服务配置"
+        }
+      ],
+      "headingSkips": [],
+      "targetIssues": [],
+      "contrastIssues": [],
+      "brokenImages": [],
+      "clippedText": [],
+      "fonts": {
+        "status": "loaded",
+        "dmSans": true,
+        "barlow": true
+      },
+      "layoutShifts": [],
+      "cumulativeLayoutShift": 0,
+      "activeElement": "favbase收藏夹Analytics对话设置 设置AI 配置账号连接通用设置存储管理LLM 服务ASR 转录语义搜索LLM 服务配置配置大语言模型服务以实现视",
+      "activeFullyVisible": false,
+      "activeObscuredByHeader": true,
+      "expectedRuntimeEvents": [],
+      "runtimeEvents": []
+    },
+    "390-light-zh-settings-deep-link": {
+      "route": "#/settings?section=embedding&resume=github",
+      "theme": "light",
+      "viewport": [
+        390,
+        844
+      ],
+      "visualViewport": {
+        "width": 390,
+        "height": 844,
+        "scale": 1
+      },
+      "horizontalScroll": false,
+      "documentWidth": [
+        390,
+        390
+      ],
+      "h1Count": 1,
+      "headings": [
+        {
+          "level": 1,
+          "text": "设置"
+        },
+        {
+          "level": 2,
+          "text": "Embedding 语义搜索"
+        }
+      ],
+      "headingSkips": [],
+      "targetIssues": [],
+      "contrastIssues": [],
+      "brokenImages": [],
+      "clippedText": [],
+      "fonts": {
+        "status": "loaded",
+        "dmSans": true,
+        "barlow": true
+      },
+      "layoutShifts": [],
+      "cumulativeLayoutShift": 0,
+      "activeElement": "favbase收藏夹Analytics对话设置 设置AI 配置账号连接通用设置存储管理LLM 服务ASR 转录语义搜索Embedding 语义搜索配置 Embe",
+      "activeFullyVisible": false,
+      "activeObscuredByHeader": true,
+      "expectedRuntimeEvents": [],
+      "runtimeEvents": []
+    },
+    "1440-dark-en-dashboard": {
+      "route": "#/",
+      "theme": "dark",
+      "viewport": [
+        1440,
+        900
+      ],
+      "visualViewport": {
+        "width": 1440,
+        "height": 900,
+        "scale": 1
+      },
+      "horizontalScroll": false,
+      "documentWidth": [
+        1440,
+        1440
+      ],
+      "h1Count": 1,
+      "headings": [
+        {
+          "level": 6,
+          "text": "favbase"
+        },
+        {
+          "level": 1,
+          "text": "Collection Analytics"
+        }
+      ],
+      "headingSkips": [],
+      "targetIssues": [],
+      "contrastIssues": [],
+      "brokenImages": [],
+      "clippedText": [],
+      "fonts": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      },
+      "layoutShifts": [],
+      "cumulativeLayoutShift": 0,
+      "activeElement": "favbaseCollectionsAnalyticsChatSettingsCollection AnalyticsCurrent composition a",
+      "activeFullyVisible": true,
+      "activeObscuredByHeader": true,
+      "expectedRuntimeEvents": [],
+      "runtimeEvents": []
+    },
+    "1440-dark-en-collections": {
+      "route": "#/collections",
+      "theme": "dark",
+      "viewport": [
+        1440,
+        900
+      ],
+      "visualViewport": {
+        "width": 1440,
+        "height": 900,
+        "scale": 1
+      },
+      "horizontalScroll": false,
+      "documentWidth": [
+        1440,
+        1440
+      ],
+      "h1Count": 1,
+      "headings": [
+        {
+          "level": 6,
+          "text": "favbase"
+        },
+        {
+          "level": 1,
+          "text": "All Collections"
+        }
+      ],
+      "headingSkips": [],
+      "targetIssues": [],
+      "contrastIssues": [],
+      "brokenImages": [],
+      "clippedText": [],
+      "fonts": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      },
+      "layoutShifts": [],
+      "cumulativeLayoutShift": 0,
+      "activeElement": "favbaseCollectionsBilibili FavoritesGitHub StarsBrowser BookmarksX BookmarksZhih",
+      "activeFullyVisible": true,
+      "activeObscuredByHeader": true,
+      "expectedRuntimeEvents": [],
+      "runtimeEvents": []
+    },
+    "1440-dark-en-chat": {
+      "route": "#/chat",
+      "theme": "dark",
+      "viewport": [
+        1440,
+        900
+      ],
+      "visualViewport": {
+        "width": 1440,
+        "height": 900,
+        "scale": 1
+      },
+      "horizontalScroll": false,
+      "documentWidth": [
+        1440,
+        1440
+      ],
+      "h1Count": 1,
+      "headings": [
+        {
+          "level": 6,
+          "text": "favbase"
+        },
+        {
+          "level": 1,
+          "text": "Knowledge Base Chat"
+        }
+      ],
+      "headingSkips": [],
+      "targetIssues": [],
+      "contrastIssues": [],
+      "brokenImages": [],
+      "clippedText": [],
+      "fonts": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      },
+      "layoutShifts": [],
+      "cumulativeLayoutShift": 0,
+      "activeElement": "favbaseCollectionsAnalyticsChatSettingsKnowledge Base ChatConversation historyNe",
+      "activeFullyVisible": true,
+      "activeObscuredByHeader": true,
+      "expectedRuntimeEvents": [],
+      "runtimeEvents": []
+    },
+    "1440-dark-en-settings": {
+      "route": "#/settings",
+      "theme": "dark",
+      "viewport": [
+        1440,
+        900
+      ],
+      "visualViewport": {
+        "width": 1432,
+        "height": 900,
+        "scale": 1
+      },
+      "horizontalScroll": false,
+      "documentWidth": [
+        1432,
+        1432
+      ],
+      "h1Count": 1,
+      "headings": [
+        {
+          "level": 6,
+          "text": "favbase"
+        },
+        {
+          "level": 1,
+          "text": "Settings"
+        },
+        {
+          "level": 2,
+          "text": "LLM Service"
+        }
+      ],
+      "headingSkips": [],
+      "targetIssues": [],
+      "contrastIssues": [],
+      "brokenImages": [],
+      "clippedText": [],
+      "fonts": {
+        "status": "loaded",
+        "dmSans": true,
+        "barlow": true
+      },
+      "layoutShifts": [],
+      "cumulativeLayoutShift": 0,
+      "activeElement": "favbaseCollectionsAnalyticsChatSettingsSettingsAI ConfigConnectionsGeneralStorag",
+      "activeFullyVisible": false,
+      "activeObscuredByHeader": true,
+      "expectedRuntimeEvents": [],
+      "runtimeEvents": []
+    },
+    "390-dark-en-dashboard": {
+      "route": "#/",
+      "theme": "dark",
+      "viewport": [
+        390,
+        844
+      ],
+      "visualViewport": {
+        "width": 390,
+        "height": 844,
+        "scale": 1
+      },
+      "horizontalScroll": false,
+      "documentWidth": [
+        390,
+        390
+      ],
+      "h1Count": 1,
+      "headings": [
+        {
+          "level": 1,
+          "text": "Collection Analytics"
+        }
+      ],
+      "headingSkips": [],
+      "targetIssues": [],
+      "contrastIssues": [],
+      "brokenImages": [],
+      "clippedText": [],
+      "fonts": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      },
+      "layoutShifts": [],
+      "cumulativeLayoutShift": 0,
+      "activeElement": "favbaseCollectionsAnalyticsChatSettings Collection AnalyticsCurrent composition ",
+      "activeFullyVisible": false,
+      "activeObscuredByHeader": true,
+      "expectedRuntimeEvents": [],
+      "runtimeEvents": []
+    },
+    "390-dark-en-collections": {
+      "route": "#/collections",
+      "theme": "dark",
+      "viewport": [
+        390,
+        844
+      ],
+      "visualViewport": {
+        "width": 390,
+        "height": 844,
+        "scale": 1
+      },
+      "horizontalScroll": false,
+      "documentWidth": [
+        390,
+        390
+      ],
+      "h1Count": 1,
+      "headings": [
+        {
+          "level": 1,
+          "text": "All Collections"
+        }
+      ],
+      "headingSkips": [],
+      "targetIssues": [],
+      "contrastIssues": [],
+      "brokenImages": [],
+      "clippedText": [],
+      "fonts": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      },
+      "layoutShifts": [],
+      "cumulativeLayoutShift": 0,
+      "activeElement": "favbaseCollectionsBilibili FavoritesGitHub StarsBrowser BookmarksX BookmarksZhih",
+      "activeFullyVisible": false,
+      "activeObscuredByHeader": true,
+      "expectedRuntimeEvents": [],
+      "runtimeEvents": []
+    },
+    "390-dark-en-chat": {
+      "route": "#/chat",
+      "theme": "dark",
+      "viewport": [
+        390,
+        844
+      ],
+      "visualViewport": {
+        "width": 390,
+        "height": 844,
+        "scale": 1
+      },
+      "horizontalScroll": false,
+      "documentWidth": [
+        390,
+        390
+      ],
+      "h1Count": 1,
+      "headings": [
+        {
+          "level": 1,
+          "text": "Knowledge Base Chat"
+        }
+      ],
+      "headingSkips": [],
+      "targetIssues": [],
+      "contrastIssues": [],
+      "brokenImages": [],
+      "clippedText": [],
+      "fonts": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      },
+      "layoutShifts": [],
+      "cumulativeLayoutShift": 0,
+      "activeElement": "favbaseCollectionsAnalyticsChatSettings Knowledge Base ChatConversation historyN",
+      "activeFullyVisible": true,
+      "activeObscuredByHeader": true,
+      "expectedRuntimeEvents": [],
+      "runtimeEvents": []
+    },
+    "390-dark-en-settings": {
+      "route": "#/settings",
+      "theme": "dark",
+      "viewport": [
+        390,
+        844
+      ],
+      "visualViewport": {
+        "width": 390,
+        "height": 844,
+        "scale": 1
+      },
+      "horizontalScroll": false,
+      "documentWidth": [
+        390,
+        390
+      ],
+      "h1Count": 1,
+      "headings": [
+        {
+          "level": 1,
+          "text": "Settings"
+        },
+        {
+          "level": 2,
+          "text": "LLM Service"
+        }
+      ],
+      "headingSkips": [],
+      "targetIssues": [],
+      "contrastIssues": [],
+      "brokenImages": [],
+      "clippedText": [],
+      "fonts": {
+        "status": "loaded",
+        "dmSans": true,
+        "barlow": true
+      },
+      "layoutShifts": [],
+      "cumulativeLayoutShift": 0,
+      "activeElement": "favbaseCollectionsAnalyticsChatSettings SettingsAI ConfigConnectionsGeneralStora",
+      "activeFullyVisible": false,
+      "activeObscuredByHeader": true,
+      "expectedRuntimeEvents": [],
+      "runtimeEvents": []
+    }
+  },
+  "interactions": {
+    "history": {
+      "hash": "#/",
+      "h1": "Collection Analytics"
+    },
+    "sidebar": {
+      "before": "300px",
+      "compact": {
+        "width": "88px",
+        "stored": false
+      },
+      "restored": {
+        "width": "300px",
+        "stored": true
+      }
+    },
+    "languageMenuOpen": {
+      "open": true,
+      "rect": {
+        "left": 1221.75,
+        "top": 53.5625,
+        "right": 1349.09765625,
+        "bottom": 98.5625
+      }
+    },
+    "languageMenuClosed": {
+      "open": true,
+      "active": null,
+      "activeTag": "LI",
+      "activeText": "English",
+      "restored": false
+    },
+    "appDrawerOpen": {
+      "count": 1,
+      "width": 288,
+      "right": 0,
+      "active": "DIV"
+    },
+    "appDrawerClosed": {
+      "visiblePapers": 1,
+      "rootHidden": "true",
+      "active": null
+    },
+    "chatDrawerOpen": {
+      "count": 1,
+      "widths": [
+        288
+      ]
+    },
+    "chatDrawerClosed": {
+      "visiblePapers": 1,
+      "rootHidden": "true",
+      "active": null
+    },
+    "reducedMotion": {
+      "transitions": 0,
+      "scheme": "dark",
+      "reduced": true
+    },
+    "pageScale200": {
+      "route": "#/settings",
+      "theme": "light",
+      "viewport": [
+        640,
+        768
+      ],
+      "visualViewport": {
+        "width": 316,
+        "height": 384,
+        "scale": 2
+      },
+      "horizontalScroll": false,
+      "documentWidth": [
+        632,
+        632
+      ],
+      "h1Count": 1,
+      "headings": [
+        {
+          "level": 1,
+          "text": "Settings"
+        },
+        {
+          "level": 2,
+          "text": "LLM Service"
+        }
+      ],
+      "headingSkips": [],
+      "targetIssues": [],
+      "contrastIssues": [],
+      "brokenImages": [],
+      "clippedText": [],
+      "fonts": {
+        "status": "loaded",
+        "dmSans": true,
+        "barlow": true
+      },
+      "layoutShifts": [],
+      "cumulativeLayoutShift": 0,
+      "activeElement": "favbaseCollectionsAnalyticsChatSettings SettingsAI ConfigConnectionsGeneralStora",
+      "activeFullyVisible": false,
+      "activeObscuredByHeader": true
+    }
+  },
+  "runtimeEvents": [],
+  "expectedRuntimeEvents": [],
+  "failures": [
+    {
+      "message": "1440-light-en-dashboard: fonts not loaded",
+      "details": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      }
+    },
+    {
+      "message": "1440-light-en-collections: fonts not loaded",
+      "details": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      }
+    },
+    {
+      "message": "1440-light-en-collections-tag: fonts not loaded",
+      "details": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      }
+    },
+    {
+      "message": "1440-light-en-bilibili: fonts not loaded",
+      "details": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      }
+    },
+    {
+      "message": "1440-light-en-bilibili-deep-link: fonts not loaded",
+      "details": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      }
+    },
+    {
+      "message": "1440-light-en-github: fonts not loaded",
+      "details": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      }
+    },
+    {
+      "message": "1440-light-en-bookmarks: fonts not loaded",
+      "details": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      }
+    },
+    {
+      "message": "1440-light-en-bookmarks: text contrast failure",
+      "details": [
+        {
+          "text": "1 background task unfinished; don't close this page",
+          "ratio": 1.9,
+          "threshold": 4.5,
+          "fontSize": 13,
+          "fontWeight": 400
+        }
+      ]
+    },
+    {
+      "message": "1440-light-en-bookmarks-deep-link: fonts not loaded",
+      "details": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      }
+    },
+    {
+      "message": "1440-light-en-bookmarks-deep-link: text contrast failure",
+      "details": [
+        {
+          "text": "1 background task unfinished; don't close this page",
+          "ratio": 1.9,
+          "threshold": 4.5,
+          "fontSize": 13,
+          "fontWeight": 400
+        }
+      ]
+    },
+    {
+      "message": "1440-light-en-x: fonts not loaded",
+      "details": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      }
+    },
+    {
+      "message": "1440-light-en-zhihu: fonts not loaded",
+      "details": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      }
+    },
+    {
+      "message": "1440-light-en-youtube: fonts not loaded",
+      "details": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      }
+    },
+    {
+      "message": "1440-light-en-chat: fonts not loaded",
+      "details": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      }
+    },
+    {
+      "message": "Language Menu did not close and restore focus",
+      "details": {
+        "open": true,
+        "active": null,
+        "activeTag": "LI",
+        "activeText": "English",
+        "restored": false
+      }
+    },
+    {
+      "message": "1024-dark-zh-dashboard: fonts not loaded",
+      "details": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      }
+    },
+    {
+      "message": "1024-dark-zh-collections: fonts not loaded",
+      "details": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      }
+    },
+    {
+      "message": "1024-dark-zh-bilibili: fonts not loaded",
+      "details": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      }
+    },
+    {
+      "message": "1024-dark-zh-chat: fonts not loaded",
+      "details": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      }
+    },
+    {
+      "message": "390-light-zh-dashboard: fonts not loaded",
+      "details": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      }
+    },
+    {
+      "message": "390-light-zh-collections: fonts not loaded",
+      "details": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      }
+    },
+    {
+      "message": "390-light-zh-collections-tag: route drift",
+      "details": {
+        "expectedRoute": "#/collections",
+        "actual": "#/collections?tag=00000000-0000-0000-0000-000000000000"
+      }
+    },
+    {
+      "message": "390-light-zh-collections-tag: fonts not loaded",
+      "details": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      }
+    },
+    {
+      "message": "390-light-zh-bilibili: fonts not loaded",
+      "details": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      }
+    },
+    {
+      "message": "390-light-zh-bilibili-deep-link: fonts not loaded",
+      "details": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      }
+    },
+    {
+      "message": "390-light-zh-github: fonts not loaded",
+      "details": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      }
+    },
+    {
+      "message": "390-light-zh-bookmarks: fonts not loaded",
+      "details": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      }
+    },
+    {
+      "message": "390-light-zh-bookmarks: text contrast failure",
+      "details": [
+        {
+          "text": "1 项后台任务未完成，请勿关闭本页",
+          "ratio": 1.9,
+          "threshold": 4.5,
+          "fontSize": 13,
+          "fontWeight": 400
+        }
+      ]
+    },
+    {
+      "message": "390-light-zh-bookmarks-deep-link: fonts not loaded",
+      "details": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      }
+    },
+    {
+      "message": "390-light-zh-bookmarks-deep-link: text contrast failure",
+      "details": [
+        {
+          "text": "1 项后台任务未完成，请勿关闭本页",
+          "ratio": 1.9,
+          "threshold": 4.5,
+          "fontSize": 13,
+          "fontWeight": 400
+        }
+      ]
+    },
+    {
+      "message": "390-light-zh-x: fonts not loaded",
+      "details": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      }
+    },
+    {
+      "message": "390-light-zh-zhihu: fonts not loaded",
+      "details": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      }
+    },
+    {
+      "message": "390-light-zh-youtube: fonts not loaded",
+      "details": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      }
+    },
+    {
+      "message": "390-light-zh-chat: fonts not loaded",
+      "details": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      }
+    },
+    {
+      "message": "App Drawer did not close cleanly and restore focus",
+      "details": {
+        "visiblePapers": 1,
+        "rootHidden": "true",
+        "active": null
+      }
+    },
+    {
+      "message": "Chat Drawer did not close cleanly and restore focus",
+      "details": {
+        "visiblePapers": 1,
+        "rootHidden": "true",
+        "active": null
+      }
+    },
+    {
+      "message": "1440-dark-en-dashboard: fonts not loaded",
+      "details": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      }
+    },
+    {
+      "message": "1440-dark-en-collections: fonts not loaded",
+      "details": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      }
+    },
+    {
+      "message": "1440-dark-en-chat: fonts not loaded",
+      "details": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      }
+    },
+    {
+      "message": "390-dark-en-dashboard: fonts not loaded",
+      "details": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      }
+    },
+    {
+      "message": "390-dark-en-collections: fonts not loaded",
+      "details": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      }
+    },
+    {
+      "message": "390-dark-en-chat: fonts not loaded",
+      "details": {
+        "status": "loading",
+        "dmSans": true,
+        "barlow": false
+      }
+    }
+  ],
+  "notes": [
+    "Screenshots are compared by product structure and behavior, not as pixel goldens.",
+    "The matrix runs against the user's existing Chrome page, cookies, extension storage, and live PGlite collection data.",
+    "The script restores the original URL, theme, locale, sidebar preference, and emulation overrides before detaching.",
+    "Exact desktop browser zoom is [UNKNOWN]: CDP pageScaleFactor is pinch-equivalent. 390px CSS viewport reflow is the normative narrow-layout evidence."
+  ],
+  "liveDataSummary": {
+    "platformTabs": []
+  },
+  "restoredOriginalPageState": true
+}
