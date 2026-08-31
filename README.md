@@ -81,6 +81,22 @@ pnpm build
 
 After installation, open favbase, select a source, and run its first sync. Configure GitHub or YouTube credentials before using either source. Semantic retrieval requires an embedding provider; Chat and AI-generated tags require an LLM provider.
 
+## Use with Claude Code, Codex and other agents
+
+favbase ships an [Agent Skill](https://agentskills.io) plus a small CLI so a coding agent on the same machine can search your library. Nothing leaves the machine: the CLI talks to a loopback daemon, and the daemon talks to the running extension.
+
+1. In favbase open **Settings > Connections > Agent Bridge**, switch it on and copy the setup command.
+2. Run it once in a terminal (requires Node.js 20+):
+
+   ```bash
+   npx -y favbase-cli setup --token <Bridge Token> --port 17836
+   ```
+
+   This writes `~/.favbase/config.json` and installs the `favbase` skill for Claude Code (`~/.claude/skills/favbase/`) and Codex (`~/.agents/skills/favbase/`). Any agent that reads `SKILL.md` can also install it with `npx skills add InvisibleQAQ/favbase`.
+3. `npx -y favbase-cli doctor` confirms the daemon and the extension are connected. Chrome must be running for queries to work.
+
+Agents then run `favbase search "<query>"`, `favbase tags` and `favbase get <item-id>`; every command is read-only and prints JSON. See [`skills/favbase/SKILL.md`](./skills/favbase/SKILL.md) and [`packages/favbase-cli/CLAUDE.md`](./packages/favbase-cli/CLAUDE.md).
+
 ## Development
 
 favbase is built with WXT, React, TypeScript, PGlite/pgvector, and Vitest.

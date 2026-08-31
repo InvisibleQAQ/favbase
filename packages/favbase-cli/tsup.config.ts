@@ -15,7 +15,12 @@ export default defineConfig({
   banner: {
     js: '#!/usr/bin/env node',
   },
+  // The repository SKILL.md is the single source; it ships inside the CLI so
+  // `favbase setup` / `install-skill` never depend on the repo being present.
+  loader: {
+    '.md': 'text',
+  },
   define: {
-    __FAVBASE_MCP_VERSION__: JSON.stringify(packageVersion),
+    __FAVBASE_CLI_VERSION__: JSON.stringify(packageVersion),
   },
 });

@@ -1,5 +1,7 @@
 # Agent Bridge 用「扩展出站 WebSocket → agent 拉起的本地 MCP 进程」，不用 Native Messaging，也不用磁盘快照
 
+> 2026-08-28 部分被 ADR 0003 取代：数据路径（扩展出站 WS、SW 内复用 `chatTools`、Node 零工具知识）仍有效；「agent 以 stdio 拉起 `favbase-mcp`」与「一个进程对应一个 agent 会话」改为 favbase CLI 自启的常驻 Bridge Daemon。
+
 外部 agent（Claude Code / Codex 等）需要检索 favbase 的本地知识库，但 MV3 扩展不能监听端口，PGlite 数据在 Offscreen 的 IndexedDB 里外部进程打不开。我们决定：agent 以 stdio 拉起 `favbase-mcp`（Node），该进程在 `127.0.0.1:<port>` 起 WebSocket 监听；扩展 Background SW 在用户启用 Agent Bridge 后经 `chrome.alarms` 周期试连、连上后以心跳保活 SW（Chrome 116+ 机制）；工具调用经 WS 转入扩展，在 SW 内执行与 Chat 完全相同的 `chatTools`（`lib/chat/tools.ts`），Node 侧不含任何工具知识与凭据。
 
 ## Considered Options

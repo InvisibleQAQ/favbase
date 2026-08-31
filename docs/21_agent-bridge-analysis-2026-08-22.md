@@ -1,6 +1,7 @@
 # Agent Bridge：让 Claude Code / Codex 等外部 agent 检索 favbase 数据 —— 分析、决策、设计与路线（2026-08-22）
 
-> 状态：**Phase 0 Spike、Phase 1 协议 + 工具注册、Phase 2 Node MCP 包、Phase 3 扩展 SW 侧与 Phase 4 设置 UI 已于 2026-08-24 完成；Phase 5+ 未开工**。Phase 4 Trellis 任务 `08-24-agent-bridge-settings-ui`。
+> **2026-08-28 修订（`docs/adr/0003`）**：MCP 前端已被「favbase CLI + 常驻 Bridge Daemon + Agent Skill」取代，见第 11 节；第 1 节结论、Q5/Q9/Q10 与 §6.6 安装流程以第 11 节为准，其余（数据路径、协议、SW 侧、设置 UI）仍有效。
+> 状态：**Phase 0 Spike、Phase 1 协议 + 工具注册、Phase 2 Node 包、Phase 3 扩展 SW 侧与 Phase 4 设置 UI 已于 2026-08-24 完成；Phase 5 Skill 于 2026-08-28 随 Skill-first 落地；Phase 6 E2E/发布未做**。
 > 已决（用户逐题确认）：Q1–Q10，见第 4 节。
 > 术语已入 `CONTEXT.md`（Agent Bridge / Knowledge Tool / Bridge Token）；架构决策见 `docs/adr/0002-agent-bridge-extension-outbound-websocket.md`。
 > 事实来源：本仓库源码逐条核对（file:line）、Chrome 官方文档、GitHub 参考项目源码与 issue（`gh api` + deepwiki）。未核实的点一律标 `[UNKNOWN]`。
@@ -246,6 +247,21 @@ Envelope：`{ channel: 'favbase-agent-bridge', protocolVersion: 1, id: string, t
 | Claude Code 对超大 tool result 的截断 | `[UNKNOWN]` | Phase 6 用长正文实测 |
 | 默认端口值 | **已解决**：`17836` | 扩展共享协议与 Node bundle 同源于 `protocol.ts` 常量 |
 | 主工作区 `main` 同时有别的会话在改（CLAUDE.md 中-6） | 已知 | 本任务只在 worktree 改，合并时 rebase |
+
+## 11. 2026-08-28 修订：Skill-first（MCP 前端下线）
+
+用户决定「全面放弃 MCP，做 Skills」。桥不变，前端换掉：
+
+| 原结论 | 修订 |
+|---|---|
+| §1「做 MCP，Skill 作为薄附件」 | 做 **CLI + daemon**，SKILL.md 教 agent 调 CLI；不提供 MCP server |
+| Q5 多 agent 并发留 v2 的 B' daemon | **v1 必做**。CLI 每次调用是新进程，扩展 30 s 轮询出站，没有常驻 daemon 每次都要等一个周期再断线 |
+| Q9 「带脚本的 Skill = 绕过 MCP 的第二条数据路径，否决」 | 原则不变（数据路径唯一，CLI 不碰 DB 只打 daemon），但 Skill 现在描述的就是那条路径的前端 |
+| Q10 不实现 `tools/list_changed` | 无对象了；`/status?wait=1` 沿用 `listTools` 有界等待 |
+| §6.6 `claude mcp add` / `codex mcp add` 两条命令 | 一条 `npx -y favbase-cli setup --token <token> --port <port>`：写 `~/.favbase/config.json` 并装 `~/.claude/skills/favbase/`、`~/.agents/skills/favbase/`；之后 `favbase doctor` 验证 |
+| A1「Skill 碰不到数据」 | 仍成立，正因如此才必须有 daemon |
+
+实现：`packages/favbase-cli`（取代 `packages/favbase-mcp`，删 `@modelcontextprotocol/sdk`），`skills/favbase/SKILL.md`，设置卡单按钮，`tests/agent-bridge-cli-aliases.test.ts`；细节见 ADR 0003 与 `packages/favbase-cli/CLAUDE.md`。剩余风险表中「Claude Code 对超大 tool result 的截断」改为「agent 对超大 stdout 的截断」，「`npx skills add` 命令最终形态」已解决为 `npx skills add InvisibleQAQ/favbase`（vercel-labs/skills）。
 
 ## 10. 参考
 

@@ -1,16 +1,16 @@
 {
-  "name": "favbase-mcp",
+  "name": "favbase-cli",
   "version": "0.1.0",
-  "description": "Local MCP bridge for the favbase browser extension",
+  "description": "Local CLI and daemon that let AI agents (Claude Code, Codex) search the favbase browser extension through an Agent Skill",
   "license": "GPL-3.0-only",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/InvisibleQAQ/favbase.git",
-    "directory": "packages/favbase-mcp"
+    "directory": "packages/favbase-cli"
   },
   "type": "module",
   "bin": {
-    "favbase-mcp": "dist/cli.js"
+    "favbase": "dist/cli.js"
   },
   "files": [
     "dist"
@@ -25,7 +25,6 @@
     "node": ">=20"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.29.0",
     "ws": "8.18.3",
     "zod": "4.4.3"
   },

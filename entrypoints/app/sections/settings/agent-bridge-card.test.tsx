@@ -79,8 +79,7 @@ vi.mock('../../components/iconify', () => ({
 
 import {
   AgentBridgeCard,
-  buildClaudeCodeCommand,
-  buildCodexCommand,
+  buildSetupCommand,
   encodeAgentBridgeToken,
   parseAgentBridgePort,
 } from './agent-bridge-card';
@@ -114,12 +113,9 @@ describe('AgentBridgeCard helpers', () => {
     expect(token).not.toContain('=');
   });
 
-  it('builds the verified Claude Code and Codex command shapes', () => {
-    expect(buildClaudeCodeCommand('bridge_token', 17_836)).toBe(
-      'claude mcp add favbase -e FAVBASE_TOKEN=bridge_token -e FAVBASE_BRIDGE_PORT=17836 -- npx -y favbase-mcp',
-    );
-    expect(buildCodexCommand('bridge_token', 17_836)).toBe(
-      'codex mcp add favbase --env FAVBASE_TOKEN=bridge_token --env FAVBASE_BRIDGE_PORT=17836 -- npx -y favbase-mcp',
+  it('builds the single favbase CLI setup command for every agent', () => {
+    expect(buildSetupCommand('bridge_token', 17_836)).toBe(
+      'npx -y favbase-cli setup --token bridge_token --port 17836',
     );
   });
 });
@@ -202,17 +198,12 @@ describe('AgentBridgeCard', () => {
     expect(container.textContent).toContain('settings.agentBridge.portInvalid');
   });
 
-  it('copies commands with the persisted token and current port', async () => {
+  it('copies the setup command with the persisted token and current port', async () => {
     await render({ ...DEFAULT_CONFIG, token: 'existing-token', tokenCreatedAt: 1 });
 
-    await act(async () => findButton(container, 'settings.agentBridge.copyClaude').click());
+    await act(async () => findButton(container, 'settings.agentBridge.copySetup').click());
     expect(mocks.writeText).toHaveBeenLastCalledWith(
-      buildClaudeCodeCommand('existing-token', 17_836),
-    );
-
-    await act(async () => findButton(container, 'settings.agentBridge.copyCodex').click());
-    expect(mocks.writeText).toHaveBeenLastCalledWith(
-      buildCodexCommand('existing-token', 17_836),
+      buildSetupCommand('existing-token', 17_836),
     );
     expect(container.textContent).toContain('settings.agentBridge.copySuccess');
   });
@@ -239,7 +230,7 @@ describe('AgentBridgeCard', () => {
     mocks.writeText.mockRejectedValueOnce(new Error('permission denied'));
     await render({ ...DEFAULT_CONFIG, token: 'existing-token', tokenCreatedAt: 1 });
 
-    await act(async () => findButton(container, 'settings.agentBridge.copyClaude').click());
+    await act(async () => findButton(container, 'settings.agentBridge.copySetup').click());
 
     expect(container.textContent).toContain('settings.agentBridge.copyFailed');
   });
