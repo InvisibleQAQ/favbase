@@ -9,6 +9,13 @@ function source(relativePath: string): string {
   return readFileSync(path.join(ROOT, relativePath), 'utf8');
 }
 
+/** Source with block and line comments removed (so prose may name `import()`). */
+function code(relativePath: string): string {
+  return source(relativePath)
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
+}
+
 describe('Agent Bridge background bundle contract', () => {
   it('builds the Background Service Worker as an ES module', () => {
     const background = source('entrypoints/background.ts');
@@ -45,12 +52,27 @@ describe('Agent Bridge background bundle contract', () => {
     expect(proxy).not.toContain("from './db'");
   });
 
-  it('loads the tag query leaf without the tagging or database barrels', () => {
+  it('reaches the tag query leaf statically, without the tagging or database barrels', () => {
     const tools = source('lib/chat/tools.ts');
     const tagQueries = source('lib/tagging/tag-queries.ts');
 
-    expect(tools).toContain("import('@/lib/tagging/tag-queries')");
+    expect(tools).toContain("import { getAllUsedTags } from '@/lib/tagging/tag-queries'");
     expect(tagQueries).not.toMatch(/^import\s+.*from ['"]@\/lib\/tagging['"];?$/m);
     expect(tagQueries).not.toMatch(/^import\s+.*from ['"]@\/lib\/database['"];?$/m);
   });
+
+  // A Service Worker may not call dynamic `import()` — the HTML specification
+  // disallows it on `ServiceWorkerGlobalScope`, and Chrome rejects the call.
+  // Vite wraps every dynamic import in `__vitePreload`, whose
+  // `vite:preloadError` reporter turns that rejection into a misleading
+  // `window is not defined` / `document is not defined`. Both Chat modules are
+  // reachable from the Background Agent Bridge tool registry, so their imports
+  // must stay static. `scripts/check-background-bundle.mjs` enforces the same
+  // invariant on the built artifact (where the real module graph is known).
+  it.each(['lib/chat/tools.ts', 'lib/chat/retrieval.ts', 'lib/agent-bridge/tool-registry.ts'])(
+    '%s uses no dynamic import (Service Workers forbid it)',
+    (file) => {
+      expect(code(file)).not.toMatch(/\bimport\s*\(/);
+    },
+  );
 });

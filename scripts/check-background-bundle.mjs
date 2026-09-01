@@ -10,6 +10,20 @@ const PGLITE_MARKERS = [
   'DatabaseRpcHandler',
 ];
 const DANGLING_INITIALIZER_MARKERS = ['init_locales'];
+/**
+ * A dynamic `import(`, capturing the specifier when it is a string literal in
+ * any of the three quote forms the bundler emits (single, double, backtick).
+ * The capture is optional on purpose: a computed specifier (`import(url)`,
+ * `import(__variableDynamicImportRuntime0(x))`) is still a dynamic import the
+ * Service Worker cannot run, and is precisely the case the graph walker cannot
+ * follow — see `findDynamicImports`.
+ *
+ * Built fresh per call: a shared `/g` regex carries `lastIndex` across
+ * `matchAll`/`exec` callers and would silently skip matches.
+ */
+function dynamicImportPattern() {
+  return /\bimport\s*\(\s*(?:[`'"]([^`'"]+)[`'"]\s*\))?/g;
+}
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const outputDir = path.join(root, '.output', 'chrome-mv3');
@@ -49,9 +63,21 @@ if (danglingInitializers.length > 0) {
   );
 }
 
+const dynamicImports = findDynamicImports(modules);
+if (dynamicImports.length > 0) {
+  throw new Error(
+    `Background module graph uses dynamic import(): ${dynamicImports.join(', ')}. ` +
+      'Dynamic import() is disallowed on ServiceWorkerGlobalScope by the HTML specification, ' +
+      "so Chrome rejects the import at runtime; Vite's __vitePreload wrapper then swallows that " +
+      'rejection in its `vite:preloadError` reporter and the tool fails with the misleading ' +
+      '`window is not defined` (or `document is not defined`). Hoist the import to a static ' +
+      'top-level import in the module reached from the Service Worker.',
+  );
+}
+
 console.log(
   `[bundle-contract] background graph ${modules.size} modules / ${size} bytes; ` +
-    'PGlite runtime and dangling initializers absent',
+    'PGlite runtime, dangling initializers and dynamic import() absent',
 );
 
 async function readModuleGraph(entryPath) {
@@ -78,16 +104,36 @@ async function readModuleGraph(entryPath) {
   return modules;
 }
 
+/**
+ * Every dynamic `import()` reachable from the Service Worker entry, as
+ * `specifier (module)` strings. A Service Worker may only use static imports
+ * (HTML spec forbids `import()` on `ServiceWorkerGlobalScope`), and the
+ * failure surfaces only in the bundled artifact — source-level checks cannot
+ * see which module WXT/Vite ends up placing in the Background graph.
+ */
+function findDynamicImports(modules) {
+  const found = [];
+  for (const [modulePath, source] of modules) {
+    for (const match of source.matchAll(dynamicImportPattern())) {
+      const specifier = match[1] ?? '<computed specifier>';
+      found.push(`${specifier} (${path.relative(outputDir, modulePath)})`);
+    }
+  }
+  return found;
+}
+
 function localModuleSpecifiers(source) {
   const specifiers = new Set();
   const patterns = [
     /\b(?:import|export)\s*(?:[^"'();]*?\bfrom\s*)?["']([^"']+)["']/g,
-    /\bimport\s*\(\s*["']([^"']+)["']\s*\)/g,
+    dynamicImportPattern(),
   ];
 
   for (const pattern of patterns) {
     for (const match of source.matchAll(pattern)) {
-      if (match[1].startsWith('.')) specifiers.add(match[1]);
+      // `match[1]` is undefined for a computed dynamic-import specifier: it is
+      // unresolvable here, and `findDynamicImports` rejects it separately.
+      if (match[1]?.startsWith('.')) specifiers.add(match[1]);
     }
   }
 

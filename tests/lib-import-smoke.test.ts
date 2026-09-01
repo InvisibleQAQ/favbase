@@ -3,8 +3,10 @@
  *
  * Loading a lib-layer module must not require runtime capabilities the module
  * never asked for. The concrete leak this guards: `@/lib/embedding` (barrel)
- * value-re-exports `./config` → `@/lib/storage` → `settings.ts`, whose
- * module-level `storage.defineItem` touches `chrome.runtime` at load time.
+ * value-re-exports `./config` → `@/lib/storage` (barrel), whose `ui-state` /
+ * `agent-bridge` items call `storage.defineItem` at module load, touching
+ * `chrome.runtime`. (`settings.ts` defines its item lazily for exactly this
+ * reason, so leaf imports of it stay clean.)
  * Under vitest (happy-dom, no `chrome` global) that surfaces as asynchronous
  * unhandled rejections — not a synchronous throw — so a plain `import()`
  * "succeeding" proves nothing. This test captures `unhandledRejection` around
@@ -12,8 +14,11 @@
  *
  * Rules this contract replaces (previously held by comments + defensive
  * `vi.mock('@/lib/storage')` in pure decoder tests):
- *   - Agent Bridge protocol and tool registry load without Chrome; Chat's
- *     `listTags` loads the tagging facade only when the tool executes.
+ *   - Agent Bridge protocol and tool registry load without Chrome. The
+ *     registry reaches Chat's tools — and through them `@/lib/tagging/
+ *     tag-queries` and `@/lib/embedding/config` — via STATIC imports, because
+ *     a Service Worker may not call dynamic `import()`; those leaves therefore
+ *     have to be storage-free at load time rather than merely lazy.
  *   - lib-layer platform sync-services import `@/lib/embedding/<leaf>`, never
  *     the `@/lib/embedding` barrel, and never `@/lib/storage`/`@/lib/tagging`.
  *   - the shared ingest pipeline, database entry, chunkers and the platform
