@@ -4,6 +4,7 @@ import { COLOR_MODE_STORAGE_KEY } from './theme-provider';
 import { createTheme } from './create-theme';
 import { themeConfig } from './theme-config';
 import { customShadows } from './core/custom-shadows';
+import { INPUT_PADDING, INPUT_TYPOGRAPHY } from './core/components/text-field';
 
 const theme = createTheme();
 
@@ -23,13 +24,45 @@ function contrastRatio(foreground: string, background: string): number {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
-type StyleOverride = Record<string, unknown> | ((params: { theme: typeof theme; ownerState: object }) => Record<string, unknown>);
+/** `alpha` of `hex` composited over the opaque `base` (soft-variant wash). */
+function blend(hex: string, alpha: number, base: string): string {
+  const channel = (color: string, offset: number) => parseInt(color.slice(offset, offset + 2), 16);
+  return `#${[1, 3, 5]
+    .map((offset) => {
+      const mixed = Math.round(alpha * channel(hex, offset) + (1 - alpha) * channel(base, offset));
+      return mixed.toString(16).padStart(2, '0').toUpperCase();
+    })
+    .join('')}`;
+}
 
-function resolveStyle(component: string, slot: string, ownerState: object = {}): Record<string, unknown> {
-  const override = (theme.components as Record<string, { styleOverrides?: Record<string, StyleOverride> }>)[component]
+type OwnerState = Record<string, unknown>;
+type StyleFn = (params: { theme: typeof theme; ownerState: OwnerState } & OwnerState) => Record<string, unknown>;
+type StyleValue = Record<string, unknown> | StyleFn;
+type Variant = { props: OwnerState | ((props: OwnerState) => boolean); style: StyleValue };
+
+function callStyle(style: StyleValue, ownerState: OwnerState): Record<string, unknown> {
+  return typeof style === 'function' ? style({ theme, ownerState, ...ownerState }) : style;
+}
+
+function variantMatches(variant: Variant, ownerState: OwnerState): boolean {
+  if (typeof variant.props === 'function') return variant.props(ownerState);
+  return Object.entries(variant.props).every(([key, value]) => ownerState[key] === value);
+}
+
+/**
+ * Resolves a slot the way MUI does: the base style object, then every
+ * `variants` entry whose `props` match `ownerState`, later entries winning.
+ * Minimal writes nearly every override as a variant, so a plain lookup would
+ * read `undefined` for radius, height or shadow.
+ */
+function resolveStyle(component: string, slot: string, ownerState: OwnerState = {}): Record<string, unknown> {
+  const override = (theme.components as Record<string, { styleOverrides?: Record<string, StyleValue> }>)[component]
     ?.styleOverrides?.[slot];
-  if (typeof override === 'function') return override({ theme, ownerState });
-  return override ?? {};
+  if (!override) return {};
+  const { variants, ...base } = callStyle(override, ownerState) as { variants?: Variant[] } & Record<string, unknown>;
+  return (variants ?? [])
+    .filter((variant) => variantMatches(variant, ownerState))
+    .reduce((acc, variant) => ({ ...acc, ...callStyle(variant.style, ownerState) }), base);
 }
 
 describe('theme token contract', () => {
@@ -44,15 +77,42 @@ describe('theme token contract', () => {
     expect(theme.vars.palette.background.default).toMatch(/^var\(--palette-background-default/);
   });
 
+  it('exposes the Minimal shared hairlines and opacity tokens in both schemes', () => {
+    expect(theme.colorSchemes.light?.palette.shared.inputOutlined).toMatch(/^rgba\(/);
+    expect(theme.colorSchemes.dark?.palette.shared.paperOutlined).toMatch(/^rgba\(/);
+    expect(theme.vars.palette.shared.buttonOutlined).toMatch(/^var\(--palette-shared-buttonOutlined/);
+    expect(theme.vars.opacity.soft.bg).toMatch(/^var\(--opacity-soft-bg/);
+    expect(theme.colorSchemes.light?.opacity.soft.bg).toBe(0.16);
+  });
+
   it.each(['light', 'dark'] as const)('%s text and action colors meet WCAG contrast', (scheme) => {
     const colors = themeConfig.scheme[scheme];
-    const containedForeground = scheme === 'light' ? '#FFFFFF' : themeConfig.palette.grey['900'];
-    const containedBackground = scheme === 'light' ? themeConfig.palette.grey['900'] : themeConfig.palette.grey['100'];
+    // The default button is Minimal's `contained` + `inherit`: filledStyles
+    // inverts the scheme, so it is `text.primary` under `background.paper`.
+    const containedBackground = colors.text.primary;
+    const containedForeground = colors.background.paper;
 
     expect(contrastRatio(colors.text.primary, colors.background.default)).toBeGreaterThanOrEqual(4.5);
     expect(contrastRatio(colors.text.secondary, colors.background.default)).toBeGreaterThanOrEqual(4.5);
     expect(contrastRatio(colors.accentText, colors.background.default)).toBeGreaterThanOrEqual(4.5);
     expect(contrastRatio(containedForeground, containedBackground)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  // docs/25 C-3: a soft primary chip is `text.accent` on a 16% coral wash.
+  // `primary.dark` would read 3.99:1 in light; the accent shade clears 4.5.
+  it.each(['light', 'dark'] as const)('%s soft primary text meets WCAG contrast on the 16% wash', (scheme) => {
+    const colors = themeConfig.scheme[scheme];
+    const wash = blend(themeConfig.palette.primary.main, 0.16, colors.background.paper);
+    expect(contrastRatio(colors.accentText, wash)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('routes soft primary through text.accent and keeps the other soft colors on their dark shade', () => {
+    const primary = theme.mixins.softStyles(theme, 'primary');
+    expect(primary.color).toBe(theme.vars.palette.text.accent);
+    expect(primary.backgroundColor).toContain('--palette-primary-mainChannel');
+    const info = theme.mixins.softStyles(theme, 'info');
+    expect(info.color).toBe(theme.vars.palette.info.dark);
+    expect(theme.mixins.paperStyles(theme, { dropdown: true }).borderRadius).toBe('10px');
   });
 });
 
@@ -68,66 +128,121 @@ describe('theme geometry and component defaults', () => {
     expect(theme.typography.overline.letterSpacing).toBe(0);
   });
 
-  it('keeps control heights and surface radii in the theme owner', () => {
-    expect(theme.components?.MuiButton?.defaultProps?.disableElevation).toBe(true);
+  it('keeps component defaults in the theme owner', () => {
+    expect(theme.components?.MuiButton?.defaultProps).toMatchObject({ color: 'inherit', disableElevation: true });
+    expect(theme.components?.MuiChip?.defaultProps?.variant).toBe('soft');
     expect(theme.components?.MuiPaper?.defaultProps?.elevation).toBe(0);
     expect(theme.components?.MuiDialog?.defaultProps).toMatchObject({ fullWidth: true, maxWidth: 'sm' });
     expect(theme.components?.MuiTooltip?.defaultProps).toMatchObject({ arrow: true, enterDelay: 400 });
     expect(theme.components?.MuiTextField?.defaultProps?.variant).toBe('outlined');
     expect(theme.components?.MuiFilledInput?.defaultProps?.disableUnderline).toBe(true);
     expect(theme.components?.MuiCardHeader?.defaultProps?.slotProps?.title).toEqual({ variant: 'h6' });
-    expect(theme.components?.MuiCardHeader?.defaultProps?.slotProps?.subheader).toEqual({ variant: 'body2' });
+    expect(theme.components?.MuiCardHeader?.defaultProps?.slotProps?.subheader).toEqual({
+      variant: 'body2',
+      sx: { mt: 0.5 },
+    });
     expect(theme.components?.MuiTypography?.defaultProps?.variantMapping?.subtitle1).toBe('p');
     expect(theme.components?.MuiTypography?.defaultProps?.variantMapping?.subtitle2).toBe('p');
-    expect(resolveStyle('MuiButton', 'sizeSmall').minHeight).toBe(30);
-    expect(resolveStyle('MuiButton', 'sizeMedium').minHeight).toBe(36);
-    expect(resolveStyle('MuiButton', 'sizeLarge').minHeight).toBe(48);
-    expect(resolveStyle('MuiInputBase', 'root', { multiline: false, size: 'medium' }).minHeight).toBe(48);
-    expect(resolveStyle('MuiInputBase', 'root', { multiline: false, size: 'small' }).minHeight).toBe(40);
-    expect(resolveStyle('MuiInputBase', 'root', { multiline: true, size: 'medium' }).minHeight).toBeUndefined();
-    expect(resolveStyle('MuiInput', 'root', { multiline: false, size: 'medium' }).minHeight).toBe(48);
-    expect(resolveStyle('MuiInput', 'root', { multiline: false, size: 'small' }).minHeight).toBe(40);
-    expect(resolveStyle('MuiInput', 'root', { multiline: true, size: 'medium' }).minHeight).toBeUndefined();
-    expect(resolveStyle('MuiFilledInput', 'root', { multiline: false, size: 'medium' }).minHeight).toBe(48);
-    expect(resolveStyle('MuiFilledInput', 'root', { multiline: false, size: 'small' }).minHeight).toBe(40);
-    expect(resolveStyle('MuiFilledInput', 'root', { multiline: true, size: 'medium' }).minHeight).toBeUndefined();
-    expect(resolveStyle('MuiOutlinedInput', 'root', { multiline: false, size: 'medium' }).minHeight).toBe(48);
-    expect(resolveStyle('MuiOutlinedInput', 'root', { multiline: false, size: 'small' }).minHeight).toBe(40);
-    expect(resolveStyle('MuiOutlinedInput', 'root', { multiline: true, size: 'medium' }).minHeight).toBeUndefined();
-    expect(resolveStyle('MuiTabs', 'root').minHeight).toBe(48);
-    expect(resolveStyle('MuiTab', 'root').minHeight).toBe(48);
-
-    expect(resolveStyle('MuiCard', 'root').borderRadius).toBe(8);
-    expect(resolveStyle('MuiCardContent', 'root').padding).toBe(theme.spacing(3));
-    expect(resolveStyle('MuiPopover', 'paper').borderRadius).toBe(8);
-    expect(resolveStyle('MuiDialog', 'paper').borderRadius).toBe(8);
-    expect(resolveStyle('MuiDialog', 'paper').width).toBe(`calc(100% - ${theme.spacing(4)})`);
-    expect(resolveStyle('MuiDialog', 'paper').maxHeight).toBe(
-      `calc(100dvh - ${theme.spacing(4)})`,
-    );
-    expect(resolveStyle('MuiDialogTitle', 'root').padding).toBe(theme.spacing(3, 3, 1));
-    expect(resolveStyle('MuiDialogContent', 'root').padding).toBe(theme.spacing(2, 3));
-    expect(resolveStyle('MuiDialogActions', 'root').padding).toBe(theme.spacing(1, 3, 3));
-    expect(resolveStyle('MuiMenu', 'list').padding).toBe(theme.spacing(0.5));
-    expect(resolveStyle('MuiTooltip', 'tooltip').borderRadius).toBe(6);
-    expect(resolveStyle('MuiSkeleton', 'rounded').borderRadius).toBe(8);
+    expect(theme.components?.MuiSkeleton?.defaultProps).toMatchObject({ animation: 'wave', variant: 'rounded' });
+    expect(theme.components?.MuiStack?.defaultProps?.useFlexGap).toBe(true);
   });
 
-  it('keeps card elevation scheme-aware and overlays floating', () => {
+  it('keeps button heights 30/36/48/56 as size variants', () => {
+    expect(resolveStyle('MuiButton', 'root', { size: 'small' }).minHeight).toBe(30);
+    expect(resolveStyle('MuiButton', 'root', { size: 'medium' }).minHeight).toBe(36);
+    expect(resolveStyle('MuiButton', 'root', { size: 'large' }).minHeight).toBe(48);
+    expect(resolveStyle('MuiButton', 'root', { size: 'xLarge' }).minHeight).toBe(56);
+  });
+
+  it('inks outlined/text primary buttons with text.accent and inverts the inherit contained button', () => {
+    expect(resolveStyle('MuiButton', 'root', { variant: 'outlined', color: 'primary' }).color).toBe(
+      theme.vars.palette.text.accent,
+    );
+    expect(resolveStyle('MuiButton', 'root', { variant: 'text', color: 'primary' }).color).toBe(
+      theme.vars.palette.text.accent,
+    );
+    const contained = resolveStyle('MuiButton', 'root', { variant: 'contained', color: 'inherit' });
+    expect(contained.color).toBe(theme.vars.palette.common.white);
+    expect(contained.backgroundColor).toBe(theme.vars.palette.grey[800]);
+  });
+
+  // docs/25 D11: single-line height = 24px line box + INPUT_PADDING; the theme
+  // sets no `minHeight`. Outlined medium 56 / small 40, base 32 / 28.
+  it('derives input heights from INPUT_PADDING (outlined 56/40)', () => {
+    const line = INPUT_TYPOGRAPHY.lineHeight;
+    const height = (pad: { paddingTop: number; paddingBottom: number }) => line + pad.paddingTop + pad.paddingBottom;
+    expect(height(INPUT_PADDING.outlined.medium)).toBe(56);
+    expect(height(INPUT_PADDING.outlined.small)).toBe(40);
+
+    expect(resolveStyle('MuiInputBase', 'root').lineHeight).toBe(`${line}px`);
+    expect(resolveStyle('MuiInputBase', 'input', { size: 'medium' })).toMatchObject({
+      height: `${line}px`,
+      ...INPUT_PADDING.base.medium,
+    });
+    expect(resolveStyle('MuiOutlinedInput', 'input', { size: 'medium' })).toMatchObject(INPUT_PADDING.outlined.medium);
+    expect(resolveStyle('MuiOutlinedInput', 'input', { size: 'small' })).toMatchObject(INPUT_PADDING.outlined.small);
+    expect(resolveStyle('MuiOutlinedInput', 'input', { multiline: true }).padding).toBe(0);
+    expect(resolveStyle('MuiOutlinedInput', 'root', { multiline: true })).toMatchObject(INPUT_PADDING.outlined.medium);
+    expect(resolveStyle('MuiOutlinedInput', 'root', { multiline: false }).paddingTop).toBeUndefined();
+    expect(resolveStyle('MuiFilledInput', 'input', { size: 'small' })).toMatchObject(INPUT_PADDING.filled.small);
+    expect(resolveStyle('MuiInputLabel', 'root', { shrink: false, variant: 'outlined', size: 'medium' }).transform).toBe(
+      `translate(14px, ${INPUT_PADDING.outlined.medium.paddingTop}px) scale(1)`,
+    );
+  });
+
+  it('keeps surface radii graded from the 8px base (card/dialog 16, dropdown 10, tooltip 6)', () => {
+    // Minimal card ×2 behind a CSS-var hook; dropdown ×1.25; skeleton rounded ×2.
+    expect(resolveStyle('MuiCard', 'root').borderRadius).toContain('16px');
+    expect(resolveStyle('MuiCardContent', 'root').padding).toBe(theme.spacing(3));
+    expect(resolveStyle('MuiPopover', 'paper').borderRadius).toBe('10px');
+    expect(resolveStyle('MuiDialog', 'paper', { fullScreen: false }).borderRadius).toBe(16);
+    expect(resolveStyle('MuiDialog', 'paper', { fullScreen: false }).width).toBe(`calc(100% - ${theme.spacing(4)})`);
+    expect(resolveStyle('MuiDialog', 'paper', { fullScreen: false }).maxHeight).toBe(
+      `calc(100dvh - ${theme.spacing(4)})`,
+    );
+    expect(resolveStyle('MuiDialog', 'paper', { fullScreen: true }).borderRadius).toBeUndefined();
+    expect(resolveStyle('MuiDialogTitle', 'root').padding).toBe(theme.spacing(3));
+    expect(resolveStyle('MuiDialogContent', 'root').padding).toBe(theme.spacing(0, 3));
+    expect(resolveStyle('MuiDialogActions', 'root')).toMatchObject({ padding: theme.spacing(3), flexWrap: 'wrap' });
+    // docs/25 C-4: Menu inherits the Popover paper (4px inset); its list adds none.
+    expect(theme.components?.MuiMenu).toBeUndefined();
+    expect(resolveStyle('MuiPopover', 'paper').padding).toBe(theme.spacing(0.5));
+    expect(resolveStyle('MuiPopover', 'paper')['& .MuiList-root']).toEqual({ paddingTop: 0, paddingBottom: 0 });
+    expect(resolveStyle('MuiMenuItem', 'root').borderRadius).toBe(6);
+    expect(resolveStyle('MuiTooltip', 'tooltip').borderRadius).toBe(6);
+    expect(resolveStyle('MuiSkeleton', 'rounded').borderRadius).toBe(16);
+    expect(resolveStyle('MuiChip', 'root', { size: 'small' }).borderRadius).toBe('8px');
+    expect(resolveStyle('MuiChip', 'root', { size: 'medium' }).borderRadius).toBe('10px');
+  });
+
+  it('casts real shadows in both schemes and keeps overlays floating', () => {
     const card = resolveStyle('MuiCard', 'root');
-    const darkStyles = JSON.stringify(card);
     expect(card.boxShadow).toContain('var(--customShadows-card');
     expect(card.border).toBeUndefined();
-    expect(darkStyles).toContain('none');
-    expect(darkStyles).toContain('1px solid');
+    expect(JSON.stringify(card)).not.toContain('none');
     expect(resolveStyle('MuiPopover', 'paper').boxShadow).toContain('var(--customShadows-dropdown');
-    expect(resolveStyle('MuiDialog', 'paper').boxShadow).toContain('var(--customShadows-dialog');
-    expect(resolveStyle('MuiDrawer', 'paper', { variant: 'temporary' }).boxShadow).toContain(
-      'var(--customShadows-dropdown',
-    );
-    expect(resolveStyle('MuiDrawer', 'paper', { variant: 'permanent' }).boxShadow).toBeUndefined();
+    expect(resolveStyle('MuiDialog', 'paper', { fullScreen: false }).boxShadow).toContain('var(--customShadows-dialog');
+    // Temporary drawers cast a directional Minimal shadow; permanent shell nav stays flat.
+    expect(resolveStyle('MuiDrawer', 'paper', { variant: 'temporary', anchor: 'left' }).boxShadow).toContain('80px -8px');
+    expect(resolveStyle('MuiDrawer', 'paper', { variant: 'permanent', anchor: 'left' }).boxShadow).toBeUndefined();
     expect(customShadows.light?.card).not.toBe('none');
-    expect(customShadows.dark?.card).toBe('none');
+    expect(customShadows.dark?.card).not.toBe('none');
+    // Dark casts the black channel; light casts grey 500.
+    expect(customShadows.dark?.card).toContain('rgba(0 0 0');
+    expect(customShadows.light?.card).toContain('rgba(145 158 171');
+  });
+
+  it('registers the Minimal mixins on the theme', () => {
+    expect(typeof theme.mixins.softStyles).toBe('function');
+    expect(typeof theme.mixins.filledStyles).toBe('function');
+    expect(typeof theme.mixins.menuItemStyles).toBe('function');
+    expect(typeof theme.mixins.paperStyles).toBe('function');
+    expect(typeof theme.mixins.maxLine).toBe('function');
+    expect(typeof theme.mixins.bgBlur).toBe('function');
+    expect(typeof theme.mixins.bgGradient).toBe('function');
+    expect(theme.mixins.hideScrollX).toMatchObject({ overflowX: 'auto' });
+    expect(theme.mixins.hideScrollY).toMatchObject({ overflowY: 'auto' });
+    expect(theme.mixins.maxLine({ line: 2 })).toMatchObject({ WebkitLineClamp: 2 });
   });
 });
 

@@ -1,7 +1,7 @@
 # docs/25 — app.html 全面向 Minimal v7.7.0 看齐：分步改造手册
 
 日期：2026-09-01
-状态：**计划（未开工）**。本文是可执行手册，不是设计随笔；每个 Step 都能独立开工、独立验证、独立回滚。
+状态：**Step 0–1 已落地（2026-09-01，各自待用户 commit），Step 2+ 未开工**。本文是可执行手册，不是设计随笔；每个 Step 都能独立开工、独立验证、独立回滚。
 上位文档：`docs/23_favbase-app-minimal-dashboard-v7-adaptation-plan-zh-CN.md`（第一轮"保留自有世界"路线，本文第二轮**推翻**其 §6/§11 的大部分结论，见 §3）。
 需求与决策来源：`.trellis/tasks/09-01-refactor-app-ui-adopt-minimal-v7-7-0-full-visual-language-while-keeping-favbase-brand-docs-23-round-2/prd.md`（R1–R14，Open Questions 1–6 已全部关闭）。
 事实来源：同目录 `research/favbase-app-ui-current-state.md`（Favbase 现状，433 行）、`research/minimal-v7-ui-catalog.md`（Minimal 目录，299 行）。本文只引用、不复制这两份文件的内容；行号以 2026-09-01 工作树为准。
@@ -263,6 +263,8 @@ pnpm build
 
 ### Step 1 — theme/core 换血
 
+> **2026-09-01 已落地**（未 commit，用户自行提交）。实际与手册的偏差记录在本节末"执行记录"。
+
 **目标**：把 `entrypoints/app/theme/core/` 换成 Minimal 的 palette/shadows/custom-shadows/mixins/components 全套，保留 Favbase 品牌 token 与 a11y 覆盖；所有主题契约测试改到新锁值。
 
 **前置依赖**：Step 0。
@@ -312,10 +314,19 @@ pnpm build
 **回滚点**：`refactor(theme): port Minimal v7.7.0 core palette/shadows/mixins/components`。
 
 **完成判据**
-- [ ] `theme/core/components.tsx` 不存在，`theme/core/components/` 下每文件只覆盖一个 MUI 组件
-- [ ] `grep -rn "'none'" entrypoints/app/theme/core/custom-shadows.ts` 零结果
-- [ ] 四步验证全绿，§2.4 表中 theme 相关行全部改完并注明理由
-- [ ] `theme/CLAUDE.md` 重写：owner 表（palette/shadows/mixins/components 各文件）、Favbase override 清单（css-baseline / button primary 字色 / typography variantMapping / error / platform / text.accent）
+- [x] `theme/core/components.tsx` 不存在，`theme/core/components/` 下每文件只覆盖一个 MUI 组件族（41 个 `.tsx` + `index.ts`；`css-baseline.tsx`/`typography.tsx` 为 Favbase 独有）
+- [x] `grep -rn "'none'" entrypoints/app/theme/core/custom-shadows.ts` 零结果
+- [x] 四步验证全绿（`pnpm vitest run entrypoints/app/theme` 2 文件 28 用例；`pnpm vitest run entrypoints/app entrypoints/welcome` 70 文件 389 用例**零改动**通过；`pnpm compile`；`pnpm test` 176 文件 1275 用例 + CLI 10 文件 55 用例；`pnpm build` + bundle contract 绿），§2.4 表中 theme 相关行全部改完并注明理由（见执行记录的断言清单）
+- [x] `theme/CLAUDE.md` 重写：owner 表、Favbase override 清单、token 表、组件默认值、测试说明
+- [ ] 五路由 light/dark 截图目测——**待用户加载 `.output/chrome-mv3`**（对照对象是 Minimal 官方 demo：Card 16 圆角、dark 有阴影、chip soft、按钮默认灰墨）
+
+**执行记录（2026-09-01）**
+- **`[UNKNOWN]` 消解**：C-2 youtube dark `#D94040` 在 `#28323D` 上 = **2.95:1**，不达 3:1 → dark `background.neutral` 保持 `#222B34`（D12 的 neutral 半句作废，文字部分照做）；C-3 `primary.dark` 在 16% coral 底上 light ≈ **3.99:1**，不达 4.5 → `softStyles(theme,'primary')` 文字改 `text.accent`（light `primary.darker` ≈ 8.5 / dark `primary.light` ≈ 6.2，scheme-aware，Step 2 派生后自动跟随预设），其余颜色仍 `dark`/暗色 `light`；C-4 Minimal 无 `MuiMenu` 覆盖，Menu paper 继承 `MuiPopover.paper` 的 `paperStyles(dropdown)`（padding 4px、list 上下 padding 0）。
+- **不能照搬的三处**：`text-field.tsx` 去掉 `@mui/x-date-pickers` 的 picker context（Favbase 无 MUI X）；`timeline.tsx` 依赖 `@mui/lab` 主题增强，跳过（手册组件清单里的 `timeline.tsx` 作废）；`mixins/border.ts` 按手册跳过。`extend-theme-types` 沿用现有 `.d.ts`，未另建 `.ts`。
+- **手册测试清单之外的必改断言**（铁律 2 补记）：Button 尺寸 30/36/48 与 Input 高度改为 variants 解析（Minimal 全写在 `root.variants`，旧 `resolveStyle` 直读 slot 会得 `undefined`，测试新增 variants-aware resolver）；Tabs/Tab `minHeight 48` 断言删除（MUI 默认即 48，主题不再覆盖）；CardHeader subheader `toEqual` 加 `sx: { mt: 0.5 }`；DialogTitle/Content/Actions padding 改 Minimal `spacing(3)` / `spacing(0,3)` / `spacing(3)`；Dialog paper 断言需传 `{ fullScreen: false }`；Drawer 断言需传 `anchor: 'left'`；Menu list padding 改为 Popover paper padding + list 0；新增 `shared`/`opacity` var、soft primary 对比度、mixins 注册、Skeleton/Stack 默认断言。
+- **Favbase 功能性覆盖保留**（非视觉语言，源码标 `favbase override:`）：Dialog `fullWidth/maxWidth='sm'` + paper 视口边界（两个 Dialog 调用点都依赖默认）+ actions `flexWrap`；Tooltip `arrow/enterDelay` 且不套 Minimal 的 `-4px` popper offset；Link/outlined primary/text primary 字色 `text.accent`；CssBaseline 全文件；Typography `variantMapping`；dark `primary.lighter` `#3A2A24`（第 6 条五个消费者未动）。**删除**：contained primary 墨色特判（grep 确认 app 内零 `<Button color="primary">`）、Popover 1px divider 边与冗余 max 尺寸（MUI 默认已 `calc(100% - 32px)`）、Favbase 自定 Tooltip 亮底反色。
+- **默认值变化的下游影响（本 Step 不改消费者，交给 Step 8/9）**：Chip 默认 `soft`（app 内仅 `agent-bridge-card.tsx` 状态 chip 用默认 variant）；LinearProgress/CircularProgress 默认 `color="inherit"`（原 primary 珊瑚）；Tabs 默认 `scrollable`/`textColor inherit`（settings/overview 三处都显式传 variant，结构测试通过）；Stack `useFlexGap`；Skeleton 默认 `rounded` 16（消费者基本显式传 variant）；Backdrop grey800@0.48。
+- **体积**（`pnpm build`，对比 Step 0）：主题 + `collection-platform-registry` 共用 chunk `collection-platform-registry-*.js` 62,658 B（gz 16,395）；`app-*.js` 221,580（−2.4 KB）；`Container-*.js` 348,434（−10.2 KB，gz 117,602）；`settings` 106,055；chunks 总计 62 文件 3,951,111 B（**+47.9 KB / +1.2%**，即全套 35 个组件覆盖 + mixins 的净成本）。
 
 ---
 
@@ -787,7 +798,7 @@ grep -rn "MUI v7\|Chrome 116\|segmented\|header-actions" CLAUDE.md entrypoints .
 | Step | 状态 | commit | app chunk 体积（gz） | 备注 |
 |------|------|--------|----------------------|------|
 | 0 | 已落地 2026-09-01，待用户 commit + 五路由目测 | （用户提交） | app 69,832 B；Container（共享 MUI）119,158 B；jsx-runtime 56,424 B | `@mui/material@9.4.0`；Button/Chip 组合 styleOverrides key 迁 `root.variants`（v9 删除）；codemod 弃用改手工；详见 Step 0 执行记录 |
-| 1 | 未开始 | | | |
+| 1 | 已落地 2026-09-01，待用户 commit + 五路由 light/dark 目测 | （用户提交） | app 69,266 B；Container 117,602 B；theme+registry 共用 chunk 16,395 B；jsx-runtime 56,544 B | C-2 回退 `#222B34`、C-3 soft primary → `text.accent`、C-4 Menu 继承 Popover paper；timeline（@mui/lab）未移植；详见 Step 1 执行记录 |
 | 2 | 未开始 | | | |
 | 3 | 未开始 | | | |
 | 4 | 未开始 | | | |
@@ -828,9 +839,9 @@ grep -rn "MUI v7\|Chrome 116\|segmented\|header-actions" CLAUDE.md entrypoints .
 | # | 问题 | 消解 Step | 消解方式 |
 |---|------|-----------|----------|
 | C-1 | MUI 9 是否仍接受 `Typography color=`（8 处） | 0 | **已消解（2026-09-01）**：`pnpm compile` 判据本身失效——v9 `Typography` 的 `color` 类型是 `string & {}`，`color="text.secondary"` 编译通过，但源码只对 palette key（`primary`… → `palette[color].main`）和 `textPrimary/textSecondary/textDisabled` 生效，点号形式**不产生任何样式**（静默视觉回归）。8 处全部改为 `sx={{ color: 'text.secondary' }}`；规则已写入根 `CLAUDE.md` 与 `ui-design-system.md` §3 |
-| C-2 | 六平台色在 dark neutral `#28323D` 上是否全部 ≥ 3:1 | 1 | `palette.test.ts:77` 重跑；失败则回退 `#222B34` |
-| C-3 | soft primary Chip 文字 `primary.dark` 在 16% coral 底上是否 ≥ 4.5 | 1 | 新增契约测试；失败改 `primary.darker` |
-| C-4 | Menu list padding 移植后实际值（Favbase 现锁 `spacing(0.5)`，Minimal popover list padding 0） | 1 | 读移植后 theme 输出改断言 |
+| C-2 | 六平台色在 dark neutral `#28323D` 上是否全部 ≥ 3:1 | 1 | **已消解（2026-09-01）**：否——youtube dark `#D94040` 对 `#28323D` = 2.95:1。回退 `#222B34`（D12 仅文字部分生效），`palette.test.ts` 注释锁定原因 |
+| C-3 | soft primary Chip 文字 `primary.dark` 在 16% coral 底上是否 ≥ 4.5 | 1 | **已消解（2026-09-01）**：否——light ≈ 3.99:1。改为 `text.accent`（非 `primary.darker` 常量，因 Step 2 后要跟预设派生）：light 8.5 / dark 6.2；`theme-contract.test.ts` 用混色底 `it.each` 两 scheme 锁 ≥ 4.5 |
+| C-4 | Menu list padding 移植后实际值（Favbase 现锁 `spacing(0.5)`，Minimal popover list padding 0） | 1 | **已消解（2026-09-01）**：Minimal 无 `MuiMenu` 覆盖；Menu paper 继承 `MuiPopover.paper` = `paperStyles(dropdown)` padding `spacing(0.5)`，`& .MuiList-root` 上下 padding 0。断言改为 `theme.components.MuiMenu` 为 undefined + Popover paper 两值 |
 | C-5 | 六预设的 `text.accent` 派生阶（darker/light）是否全部过 WCAG 4.5 | 2 | `it.each` 结果；失败改用 `dark`/`lighter` 阶 |
 | C-6 | EmptyContent 默认文案复用的现有 i18n key 名 | 3 | grep `zh-CN.ts` |
 | C-7 | Step 6 heading outline 实际序列（Export 卡是否仍在 `/`） | 6 | 以 DOM 为准 |

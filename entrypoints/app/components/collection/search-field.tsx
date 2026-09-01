@@ -16,8 +16,8 @@ export interface SearchFieldProps {
   sx?: SxProps<Theme>;
 }
 
-/** Full-width search input (48px via the theme's medium input target) with
- *  the shared magnifier adornment. */
+/** Full-width search input (56px via the theme's medium outlined input target)
+ *  with the shared magnifier adornment. */
 export function SearchField({ placeholder, value, onChange, disabled, sx }: SearchFieldProps) {
   return (
     <TextField

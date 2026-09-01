@@ -1,5 +1,7 @@
 import type {
+  Theme,
   Shadows,
+  Components,
   ColorSystemOptions,
   CssVarsThemeOptions,
   SupportedColorScheme,
@@ -14,13 +16,19 @@ export type ThemeCssVariables = Pick<
   'colorSchemeSelector' | 'disableCssColorScheme' | 'cssVarPrefix' | 'shouldSkipGeneratingVar'
 >;
 
-type ColorSchemeOptionsExtended = ColorSystemOptions & {
-  shadows?: Shadows;
-  customShadows?: CustomShadows;
+export type ColorSchemeOptionsExtended = ColorSystemOptions & {
+  shadows?: Partial<Shadows>;
+  customShadows?: Partial<CustomShadows>;
 };
 
+export type SchemesRecord<T> = Partial<Record<ThemeColorScheme, T>>;
+
 export type ThemeOptions = Omit<MuiThemeOptions, 'components'> &
-  Pick<CssVarsThemeOptions, 'defaultColorScheme' | 'components'> & {
-    colorSchemes?: Partial<Record<ThemeColorScheme, ColorSchemeOptionsExtended>>;
+  Pick<CssVarsThemeOptions, 'defaultColorScheme'> & {
+    colorSchemes?: SchemesRecord<ColorSchemeOptionsExtended>;
     cssVariables?: ThemeCssVariables;
+    components?: Components<Theme>;
   };
+
+/** Recursively optional `T`; used to type `PaletteOptions` for the extended palette. */
+export type DeepPartial<T> = T extends object ? { [P in keyof T]?: DeepPartial<T[P]> } : T;

@@ -32,7 +32,15 @@ describe('palette.background', () => {
     expect(background.light.neutral).toBe('#F4F6F8');
     expect(background.dark.default).toBe('#141A21');
     expect(background.dark.paper).toBe('#1C252E');
+    // docs/25 C-2: Minimal's `#28323D` drops youtube dark to 2.95:1, so the
+    // neutral keeps the value the platform validator was run against.
     expect(background.dark.neutral).toBe('#222B34');
+  });
+
+  it('takes the Minimal dark ink (white / grey 500 / grey 600)', () => {
+    expect(text.dark.primary).toBe('#FFFFFF');
+    expect(text.dark.secondary).toBe(themeConfig.palette.grey['500']);
+    expect(text.dark.disabled).toBe(themeConfig.palette.grey['600']);
   });
 
   it('keeps the Minimal neutral ramp as the static theme source', () => {

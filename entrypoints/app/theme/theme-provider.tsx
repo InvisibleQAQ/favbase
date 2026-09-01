@@ -1,3 +1,5 @@
+import { useMemo } from 'react';
+
 import CssBaseline from '@mui/material/CssBaseline';
 import { ThemeProvider as ThemeVarsProvider } from '@mui/material/styles';
 
@@ -9,7 +11,9 @@ import type {} from './extend-theme-types';
 export const COLOR_MODE_STORAGE_KEY = 'favbase-color-mode';
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const theme = createTheme();
+  // Built once per provider; docs/25 Step 2 adds the settings state as the
+  // dependency that rebuilds it.
+  const theme = useMemo(() => createTheme(), []);
 
   return (
     <ThemeVarsProvider

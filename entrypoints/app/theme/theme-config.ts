@@ -136,8 +136,11 @@ export const themeConfig: ThemeConfig = {
     dark: {
       primaryLighter: '#3A2A24',
       accentText: '#FDA48A',
-      text: { primary: '#F4F6F8', secondary: '#C4CDD5', disabled: '#637381' },
-      // Slightly quieter than Minimal's neutral so every platform graphic keeps 3:1.
+      // Minimal dark ink: white / grey 500 / grey 600 (docs/25 D12).
+      text: { primary: '#FFFFFF', secondary: '#919EAB', disabled: '#637381' },
+      // Quieter than Minimal's `#28323D`: youtube dark `#D94040` reads 2.95:1 on
+      // that tile (docs/25 C-2), so the neutral stays where every platform
+      // graphic holds 3:1. `palette.test.ts` locks the ratio.
       background: { default: '#141A21', paper: '#1C252E', neutral: '#222B34' },
     },
   },
