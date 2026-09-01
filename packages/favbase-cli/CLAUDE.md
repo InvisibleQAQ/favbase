@@ -33,9 +33,10 @@ provides no MCP server.
   `rpcCall`, `fetchStatus`, `stopDaemon` (shutdown route, pid kill only for a
   process that identified itself as favbase over `/health`).
 - `bridge-server.ts` owns `/bridge` Origin + Bridge Token hello authentication,
-  descriptor state, heartbeat, pending calls, bounded hello wait, peer activity
-  and disconnect callbacks, cleanup; it can listen itself (unit tests) or attach
-  to the daemon's server.
+  descriptor state, heartbeat, pending calls, the 75-second bounded hello wait
+  (covering the extension alarm's 60-second effective period on Chrome 116–119),
+  peer activity and disconnect callbacks, cleanup; it can listen itself (unit
+  tests) or attach to the daemon's server.
 - `skill-install.ts` writes SKILL.md to `~/.claude/skills/favbase/` and
   `~/.agents/skills/favbase/` (Codex user scope), or an explicit `--dir`.
 

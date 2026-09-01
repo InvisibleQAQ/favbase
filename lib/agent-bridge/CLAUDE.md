@@ -23,8 +23,10 @@ CLI package (`packages/favbase-cli`) consumes only the protocol leaf; extension 
 - `client.ts` — `BridgeTransport` seam + production `WebSocketTransport` and the
   connection state machine. Open sends hello; token-matched welcome authenticates;
   ping/call dispatch return pong/result. DB acquisition is injected and lazy.
-- `scheduler.ts` — Background-only 30-second alarm, config watch, startup
-  compensation, and `connectNow()`. Disable clears the alarm and closes the client.
+- `scheduler.ts` — Background-only `0.5`-minute alarm (30 seconds on Chrome 120+;
+  Chrome 116–119 clamp it to 60 seconds), config watch, startup compensation, and
+  `connectNow()`. Disable clears the alarm and closes the client. The daemon's
+  hello wait must cover the older browser's 60-second effective period.
   Alarm/startup/config-watch connect with trigger `'schedule'`; `connectNow()` is
   the only `'user'` caller, because its two entry points are human actions.
 

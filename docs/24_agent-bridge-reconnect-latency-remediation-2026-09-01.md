@@ -1,6 +1,6 @@
 # Agent Bridge 重连延迟整改方案（2026-09-01）
 
-状态：Step 0 已执行（2026-09-01，结论见 §9：§2 成立，可按方案执行）；**Step 1 已落地（2026-09-01，见 §6 Step 1 的「实施记录」）**；**Step 2 已落地（2026-09-01，见 §6 Step 2 的「实施记录」）**；Step 3-6 待实施
+状态：Step 0 已执行（2026-09-01，结论见 §9：§2 成立，可按方案执行）；**Step 1 已落地（2026-09-01，见 §6 Step 1 的「实施记录」）**；**Step 2 已落地（2026-09-01，见 §6 Step 2 的「实施记录」）**；**Step 3 已落地（2026-09-01，见 §6 Step 3 的「实施记录」）**；Step 4-6 待实施
 范围：`lib/agent-bridge/`、`lib/storage/agent-bridge.ts`、`packages/favbase-cli/`、`skills/favbase/SKILL.md`、`entrypoints/app/sections/settings/agent-bridge-card.tsx`
 前置：ADR 0002（扩展出站 WebSocket）、ADR 0003（Skill-first CLI + Daemon）、`docs/21_agent-bridge-analysis-2026-08-22.md`
 
@@ -16,7 +16,7 @@
 |---|---|
 | daemon 自灭 → 扩展退避涨到 5 分钟 | **不成立**。连不上端口不写 `nextRetryAt`，30 秒 alarm 照常重试 |
 | 最坏等待接近 5 分钟 | **只有 token 不匹配时成立**，且此时是永久 5 分钟，不是「涨到」 |
-| SKILL.md 承诺首次调用最坏 ~35 秒 | **在 Chrome 120+ 勉强成立，116–119 上不成立** |
+| SKILL.md 承诺首次调用最坏 ~35 秒（修复前） | **在 Chrome 120+ 勉强成立，116–119 上不成立** |
 | 只能靠开关重开绕过 | **成立，且这是 bug**：设置页「立即重连」按钮在退避窗口内是空操作 |
 
 真正要修的是四个缺陷（D1–D4），不是退避曲线。方案分三阶段：A 止血（必做，低风险）、B 常连（把「最坏等待」变成「常态零等待」）、C 迁 Offscreen（结构正解，可选）。
@@ -34,14 +34,14 @@
 | 退避门禁：`if (status.nextRetryAt !== null && status.nextRetryAt > now()) return;` | `client.ts:184`（`openConnection` 内） |
 | 连接失败（ECONNREFUSED）走 `handleTransportError` → `disconnect(..., 'connection-error')`，**只写 `lastError`，不写 `nextRetryAt`** | `client.ts` `handleRemoteClose` / `handleTransportError` / `disconnect` |
 | `authFailureCount` 只被两件事清零：收到合法 welcome、`close()`（disabled / config-changed） | `client.ts:162-163`、`client.ts:286-287` |
-| 轮询 alarm 周期 `AGENT_BRIDGE_POLL_MINUTES = 0.5` | `lib/agent-bridge/scheduler.ts:9` |
+| 轮询 alarm 周期 `AGENT_BRIDGE_POLL_MINUTES = 0.5` | `lib/agent-bridge/scheduler.ts:14` |
 | `connectNow()` → `enqueueRefresh(false)` → `refresh(false)` → `client.tryConnect()`，**不 close、不清退避** | `scheduler.ts` |
 | 状态字段定义（`authFailureCount` / `nextRetryAt` 注释已写明「reset only by a valid welcome」） | `lib/storage/agent-bridge.ts:25-27` |
 | 存储键 `local:agent-bridge` / `local:agent-bridge-status` | `lib/storage/keys.ts:25-26` |
 | daemon idle 默认 120 分钟，`FAVBASE_DAEMON_IDLE_MINUTES` 可配，`0` 关闭 | `packages/favbase-cli/daemon.ts` `DaemonOptions.idleMinutes` / `touch()` |
 | CLI HTTP 鉴权成功后的 `onActivity()` 与已认证 peer 的 `onPeerActivity` / `onPeerDisconnected` 都驱动 daemon idle 计时 | `packages/favbase-cli/rpc-server.ts:147`、`packages/favbase-cli/bridge-server.ts`、`packages/favbase-cli/daemon.ts` |
 | WS 心跳 `DEFAULT_HEARTBEAT_MS = 20_000`（daemon 发 ping，扩展回 pong） | `packages/favbase-cli/bridge-server.ts:26` |
-| daemon 等扩展 peer 的上限 `DEFAULT_HELLO_WAIT_MS = 35_000` | `packages/favbase-cli/bridge-server.ts:23` |
+| daemon 等扩展 peer 的上限 `DEFAULT_HELLO_WAIT_MS = 75_000` | `packages/favbase-cli/bridge-server.ts:25` |
 | SKILL.md 的「~35 s」和 `EXTENSION_HINT` 的「within 30 seconds」是两个独立硬编码文案 | `skills/favbase/SKILL.md:68`、`packages/favbase-cli/cli-main.ts:38-39` |
 
 外部平台事实：
@@ -79,10 +79,10 @@
 三个数字各写各的，互相不知道对方存在：
 
 - 扩展 alarm 周期 30 秒（旧 Chrome 上实际 60 秒）
-- daemon 等 peer 上限 35 秒
+- daemon 等 peer 上限 75 秒（修复前为 35 秒）
 - 文案里写死的「30 秒 / ~35 秒」两处
 
-在 Chrome 116–119 上，alarm 实际 60 秒 > hello wait 35 秒 ⇒ **冷启动第一次 `favbase search` 必然超时退出码 2**，而文案还在说 35 秒内会好。
+在 Chrome 116–119 上，alarm 实际 60 秒 > 修复前 hello wait 35 秒 ⇒ **冷启动第一次 `favbase search` 必然超时退出码 2**，而文案还在说 35 秒内会好。Step 3 将默认等待调整为 75 秒覆盖这一上界。
 
 ### D4 — 退避状态没有衰减，也不可观测（中）
 
@@ -256,6 +256,13 @@ Bad case / Tests / Wrong-vs-Correct）、根 `CLAUDE.md` 的 docs/24 条目。
 
 **替代方案（不推荐）**：把 alarm 周期改成 1 分钟以消除版本差异。这会让 Chrome 120+ 的用户白等一倍时间，为了旧版本惩罚新版本，方向反了。
 
+#### 实施记录（2026-09-01）
+
+- 保留 `AGENT_BRIDGE_POLL_MINUTES = 0.5`；在 Chrome 116–119 上该值实际按 60 秒执行。
+- 将 `packages/favbase-cli/bridge-server.ts` 的 `DEFAULT_HELLO_WAIT_MS` 从 `35_000` 提升为 `75_000`（60 秒周期 + 15 秒握手余量）。
+- 两处常量旁增加跨包依赖注释；未把 alarm 常量移入 `protocol.ts`，未改变 wire contract。
+- `bridge-server.test.ts` 的 hello-wait 用例继续注入短等待值，避免测试真实等待 75 秒。
+
 ---
 
 ### Step 4 — 可观测性与文案诚实化（修 D4）
@@ -368,8 +375,8 @@ Step 2 做完之后，「有扩展连着的 daemon 不自灭」已经成立，`F
 
 | 阶段 | 观测 |
 |---|---|
-| bad-token 窗口，连跑 3 次 `search` | 每次**恰好阻塞 35 秒**后 `exit 2 / extension-unavailable`（= `DEFAULT_HELLO_WAIT_MS`），窗口共 106 秒 |
-| 恢复正确 token 并重启 daemon，立刻跑第 1 次 | **仍然 35 秒 exit 2** —— daemon 健康、token 已正确，扩展依然连不上 |
+| bad-token 窗口，连跑 3 次 `search`（Step 3 修复前） | 每次**恰好阻塞 35 秒**后 `exit 2 / extension-unavailable`（= 修复前 `DEFAULT_HELLO_WAIT_MS`），窗口共 106 秒 |
+| 恢复正确 token 并重启 daemon，立刻跑第 1 次（Step 3 修复前） | **仍然 35 秒 exit 2** —— daemon 健康、token 已正确，扩展依然连不上 |
 | 第 2 次（恢复后 t+36 s） | 7 秒 exit 0，`count: 8` |
 | **恢复正确 token 后的实际等待** | **43 秒** |
 
@@ -377,7 +384,7 @@ Step 2 做完之后，「有扩展连着的 daemon 不自灭」已经成立，`F
 
 **§2 成立。** 本方案可以按原计划执行，「token 不匹配」应列为 Step 4 文案的头号提示。
 
-佐证唯一性：全量 grep `lib/agent-bridge/` + `packages/favbase-cli/`，**`AUTH_BACKOFF_MAX_MS = 5 * 60_000`（`client.ts:25`）是整个系统里唯一的 5 分钟量级常量**；CLI 侧最长的两个是 `REQUEST_TIMEOUT_MS = 120_000` 与 `DEFAULT_HELLO_WAIT_MS = 35_000`。不存在第二个能产生 5 分钟的源头。
+佐证唯一性：全量 grep `lib/agent-bridge/` + `packages/favbase-cli/`，**`AUTH_BACKOFF_MAX_MS = 5 * 60_000`（`client.ts:25`）是整个系统里唯一的 5 分钟量级常量**；CLI 侧最长的两个是 `REQUEST_TIMEOUT_MS = 120_000` 与当前 `DEFAULT_HELLO_WAIT_MS = 75_000`（实验时仍为修复前的 35 秒）。不存在第二个能产生 5 分钟的源头。
 
 ### 9.5 §1 代码事实复核
 

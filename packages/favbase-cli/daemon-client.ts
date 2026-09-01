@@ -18,7 +18,7 @@ const HEALTH_TIMEOUT_MS = 2_000;
 const SPAWN_WAIT_MS = 10_000;
 const SPAWN_POLL_MS = 100;
 const STOP_WAIT_MS = 5_000;
-/** Must exceed the daemon's hello wait (35s) plus one tool call deadline (60s). */
+/** Covers either the daemon's hello wait (75s) or one tool call deadline (60s). */
 const REQUEST_TIMEOUT_MS = 120_000;
 
 export type DaemonErrorCode =

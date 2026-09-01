@@ -165,8 +165,8 @@ Envelope：`{ channel: 'favbase-agent-bridge', protocolVersion: 1, id: string, t
 |---|---|
 | 开关关闭 | 无 alarm、无连接、无轮询；设置页显示"未启用" |
 | 开关开启、server 未启动 | 每 30s 试连，连接被拒即刻返回；status `disconnected` |
-| server 启动、扩展 30s 内连上 | `hello/welcome` 握手 → `connected`；server 端 `tools/list` 可用 |
-| agent 在扩展连上之前调用工具 | server 有界等待 ≤35s（覆盖一个轮询周期），超时返回 MCP tool error（`isError: true`）："favbase 扩展未连接：确认 Chrome 已开、favbase 已安装、设置 → Connections → Agent Bridge 已启用且端口/token 一致" |
+| server 启动、扩展在下一个 alarm 周期内连上 | `hello/welcome` 握手 → `connected`；server 端 `tools/list` 可用 |
+| agent 在扩展连上之前调用工具 | server 有界等待 ≤75s（覆盖 Chrome 116–119 上被夹到 60s 的轮询周期），超时返回 MCP tool error（`isError: true`）：“favbase 扩展未连接：确认 Chrome 已开、favbase 已安装、设置 → Connections → Agent Bridge 已启用且端口/token 一致” |
 | 工具执行中 SW 被终止 | 30s 空闲由 ping 覆盖、5min 单事件上限不会触发；server 侧调用超时（默认 60s，`searchKnowledgeBase` 含 embedding 调用需留余量）→ tool error；扩展重启后重连 |
 | token 不匹配 | server `reject('bad-token')` 并关闭；扩展 status `lastError='bad-token'`，指数退避到 5min 再试（镜像 mcp-chrome 冷却） |
 | Origin 非本扩展 | server 拒绝 upgrade（HTTP 403） |

@@ -24,7 +24,7 @@
 
 - Node 包再无 `tools/list` 时序问题这一类 bug（MCP 客户端连接时一次性拉工具表的语义消失）；`bridge-server.ts` 的 `listTools` 有界等待与 `onPeerReady` 仍保留给 `/status?wait=1`。
 - 多 agent 并发（原 Q5 v2）随 daemon 免费获得；daemon 重启时扩展在下一个 alarm 周期内重连。
-- 首次调用最坏仍等一个轮询周期（~30 s）+ hello；CLI 侧请求超时 120 s 覆盖 35 s hello 等待 + 60 s 工具期限。
+- 首次调用最坏仍等一个轮询周期（Chrome 120+ 约 30 s，Chrome 116–119 约 60 s）+ hello；CLI 侧请求超时 120 s 分别覆盖 75 s hello 等待或 60 s 工具期限。
 - agent 侧失去 MCP 的 schema 校验，CLI 的 argv 解析、JSON stdout、stderr 错误与退出码成为品质线，由包内测试锁定。
 - CONTEXT.md 的 **Agent Bridge** 定义不变，新增 **Bridge Daemon** 与 **favbase CLI**；「MCP 还是 Skill」歧义的解决改为：桥不变、前端是 CLI + Skill。
 - docs/21 的 Q5 / Q9 / Q10 与 §6.6 安装流程被本 ADR 取代；ADR 0002 中「agent 以 stdio 拉起 `favbase-mcp`」「一个进程对应一个 agent 会话」两句不再成立，其余仍有效。

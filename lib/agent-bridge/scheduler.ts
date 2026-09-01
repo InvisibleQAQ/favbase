@@ -9,6 +9,8 @@ import type {
 } from './client';
 
 export const AGENT_BRIDGE_ALARM = 'agent-bridge-poll';
+// Chrome 116-119 clamps 0.5 minutes to a 60-second alarm; the daemon's
+// hello wait must cover that effective period plus handshake margin.
 export const AGENT_BRIDGE_POLL_MINUTES = 0.5;
 
 export interface AgentBridgeSchedulerClient {

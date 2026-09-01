@@ -20,7 +20,9 @@ import {
 
 export const LOOPBACK_HOST = '127.0.0.1';
 export const BRIDGE_PATH = '/bridge';
-const DEFAULT_HELLO_WAIT_MS = 35_000;
+// Must cover the extension alarm's 60-second effective period on Chrome
+// 116-119 (AGENT_BRIDGE_POLL_MINUTES is clamped there) plus 15s margin.
+const DEFAULT_HELLO_WAIT_MS = 75_000;
 const DEFAULT_CALL_TIMEOUT_MS = 60_000;
 const DEFAULT_HANDSHAKE_TIMEOUT_MS = 5_000;
 const DEFAULT_HEARTBEAT_MS = 20_000;
