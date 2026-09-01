@@ -30,6 +30,10 @@ const TOOL: AgentBridgeToolDescriptor = {
 class FakePeer implements RpcPeer {
   connected = false;
   calls: Array<{ name: string; args: JsonObject }> = [];
+  listCalls = 0;
+  rejectedHelloCount = 0;
+  lastRejectedHelloAt: number | null = null;
+  lastRejectedHelloReason: BridgePeerSnapshot['lastRejectedHelloReason'] = null;
   nextResult: JsonValue | BridgeCallError = { count: 0 };
 
   async callTool(name: string, args: JsonObject): Promise<JsonValue> {
@@ -39,14 +43,20 @@ class FakePeer implements RpcPeer {
   }
 
   async listTools(): Promise<readonly AgentBridgeToolDescriptor[]> {
+    this.listCalls += 1;
     if (!this.connected) throw new BridgeCallError('extension-unavailable', 'no hello');
     return [TOOL];
   }
 
   peerSnapshot(): BridgePeerSnapshot {
+    const diagnostics = {
+      rejectedHelloCount: this.rejectedHelloCount,
+      lastRejectedHelloAt: this.lastRejectedHelloAt,
+      lastRejectedHelloReason: this.lastRejectedHelloReason,
+    };
     return this.connected
-      ? { connected: true, extensionId: 'ext', tools: [TOOL] }
-      : { connected: false, extensionId: null, tools: [] };
+      ? { connected: true, extensionId: 'ext', tools: [TOOL], ...diagnostics }
+      : { connected: false, extensionId: null, tools: [], ...diagnostics };
   }
 }
 
@@ -162,6 +172,27 @@ describe('createRpcHandler', () => {
       body: { extension: { connected: true, extensionId: 'ext', tools: [TOOL] } },
     });
     expect(onActivity).toHaveBeenCalledTimes(2);
+  });
+
+  it('returns known token-mismatch evidence without waiting for another hello', async () => {
+    const peer = new FakePeer();
+    peer.rejectedHelloCount = 3;
+    peer.lastRejectedHelloAt = 123;
+    peer.lastRejectedHelloReason = 'bad-token';
+    const { port } = await startServer(peer);
+
+    await expect(call(port, 'GET', '/status?wait=1', { token: TOKEN })).resolves.toMatchObject({
+      status: 200,
+      body: {
+        extension: {
+          connected: false,
+          rejectedHelloCount: 3,
+          lastRejectedHelloAt: 123,
+          lastRejectedHelloReason: 'bad-token',
+        },
+      },
+    });
+    expect(peer.listCalls).toBe(0);
   });
 
   it('forwards /rpc calls and maps bridge errors into the JSON body', async () => {

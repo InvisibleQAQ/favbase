@@ -44,6 +44,9 @@ CLI package (`packages/favbase-cli`) consumes only the protocol leaf; extension 
   five minutes, and reset by a valid welcome, deliberate reconfiguration, or an
   explicit user connect-now. An in-memory-only counter is invalid because MV3
   suspension would erase it.
+- Every bad-token failure also persists `lastAuthFailureAt`. A valid welcome
+  clears the consecutive count/deadline but preserves that incident timestamp;
+  otherwise successful recovery would erase the only extension-side evidence.
 - `tryConnect(trigger)` has exactly two triggers and no parallel `forceConnect()`.
   `'user'` skips the `nextRetryAt` gate and clears `authFailureCount`/`nextRetryAt`
   in the same write that sets `connecting`, so a later failure restarts at the
@@ -68,7 +71,7 @@ CLI package (`packages/favbase-cli`) consumes only the protocol leaf; extension 
   validated rejection, and DB context forwarding.
 - `client.test.ts` — fake transport hello/welcome/call/ping/close, stable error
   mapping, malformed frames, persistent backoff, user-triggered backoff pierce and
-  base-delay restart, and reconfiguration race.
+  base-delay restart, retained authentication-failure history, and reconfiguration race.
 - `scheduler.test.ts` — enable/disable, alarm/startup/connect-now routing,
   `'schedule'` vs `'user'` trigger assignment, and disabled means zero Agent Bridge
   alarms.

@@ -310,7 +310,9 @@ describe('favbase CLI process integration', () => {
 
   it('rejects a fake extension with the wrong Bridge Token', async () => {
     const port = await freePort();
-    await startDaemonProcess(port, await tempHome());
+    const home = await tempHome();
+    const daemon = await startDaemonProcess(port, home);
+    const daemonResult = collect(daemon);
     const extension = await connectExtension(port);
 
     await expect(helloAsExtension(extension, 'wrong-token')).resolves.toMatchObject({
@@ -318,6 +320,40 @@ describe('favbase CLI process integration', () => {
       payload: { reason: 'bad-token' },
     });
     await once(extension, 'close');
+
+    const doctor = await runCli(['doctor'], cliEnv(port, home));
+    expect(doctor.code).toBe(2);
+    const doctorOutput = JSON.parse(doctor.stdout) as {
+      ok: boolean;
+      extension: {
+        connected: boolean;
+        rejectedHelloCount: number;
+        lastRejectedHelloAt: number | null;
+        lastRejectedHelloReason: string | null;
+      };
+      troubleshooting: string[];
+    };
+    expect(doctorOutput).toMatchObject({
+      ok: false,
+      extension: {
+        connected: false,
+        rejectedHelloCount: 1,
+        lastRejectedHelloAt: expect.any(Number),
+        lastRejectedHelloReason: 'bad-token',
+      },
+    });
+    expect(doctorOutput.troubleshooting[0]).toContain('Bridge Token');
+    expect(doctorOutput.troubleshooting).toHaveLength(5);
+    expect(doctor.stderr).toContain('about 30 seconds on Chrome 120+');
+    expect(doctor.stderr).toContain('about 60 seconds on Chrome 116-119');
+    expect(doctor.stdout).not.toContain('wrong-token');
+
+    await shutdownDaemon(port);
+    const stopped = await daemonResult;
+    expect(stopped.stderr).toMatch(
+      /\[\d{4}-\d{2}-\d{2}T[^\]]+Z\] \[favbase\] Agent Bridge hello rejected \(bad-token\)/,
+    );
+    expect(stopped.stderr).not.toContain('wrong-token');
   });
 
   it('rejects WebSocket upgrades outside the bridge path and from non-extension origins', async () => {
@@ -349,6 +385,7 @@ describe('favbase CLI process integration', () => {
     const second = await runCli(['daemon', 'run'], cliEnv(port, home));
     expect(second.code).toBe(1);
     expect(second.stderr).toContain(`port ${port} is already in use`);
+    expect(second.stderr).toMatch(/^\[\d{4}-\d{2}-\d{2}T[^\]]+Z\] favbase: port /);
   });
 
   it('refuses to run data commands without a token and prints the setup hint', async () => {

@@ -29,6 +29,10 @@ const DEFAULT_HEARTBEAT_MS = 20_000;
 
 type HelloMessage = Extract<AgentBridgeMessage, { type: 'hello' }>;
 type ToolResultMessage = Extract<AgentBridgeMessage, { type: 'tools.result' }>;
+export type BridgeHelloRejectReason = Extract<
+  AgentBridgeMessage,
+  { type: 'reject' }
+>['payload']['reason'];
 
 export interface BridgeLogger {
   error(message: string): void;
@@ -96,6 +100,9 @@ export interface BridgePeerSnapshot {
   connected: boolean;
   extensionId: string | null;
   tools: readonly AgentBridgeToolDescriptor[];
+  rejectedHelloCount: number;
+  lastRejectedHelloAt: number | null;
+  lastRejectedHelloReason: BridgeHelloRejectReason | null;
 }
 
 interface PeerWaiter {
@@ -153,7 +160,10 @@ export class BridgeServer {
   private readonly pendingCalls = new Map<string, PendingCall>();
 
   private heartbeatTimer?: NodeJS.Timeout;
+  private lastRejectedHelloAt: number | null = null;
+  private lastRejectedHelloReason: BridgeHelloRejectReason | null = null;
   private peer?: AuthenticatedPeer;
+  private rejectedHelloCount = 0;
   private webSocketServer?: WebSocketServer;
 
   constructor(options: BridgeServerOptions) {
@@ -172,11 +182,16 @@ export class BridgeServer {
 
   /** Current peer state without waiting; for status reporting. */
   peerSnapshot(): BridgePeerSnapshot {
+    const diagnostics = {
+      rejectedHelloCount: this.rejectedHelloCount,
+      lastRejectedHelloAt: this.lastRejectedHelloAt,
+      lastRejectedHelloReason: this.lastRejectedHelloReason,
+    };
     const peer = this.peer;
     if (!peer || peer.socket.readyState !== WebSocket.OPEN) {
-      return { connected: false, extensionId: null, tools: [] };
+      return { connected: false, extensionId: null, tools: [], ...diagnostics };
     }
-    return { connected: true, extensionId: peer.extensionId, tools: peer.tools };
+    return { connected: true, extensionId: peer.extensionId, tools: peer.tools, ...diagnostics };
   }
 
   /**
@@ -538,8 +553,18 @@ export class BridgeServer {
   private reject(
     socket: WebSocket,
     id: string,
-    reason: 'bad-token' | 'bad-origin' | 'version',
+    reason: BridgeHelloRejectReason,
   ): void {
+    this.rejectedHelloCount += 1;
+    this.lastRejectedHelloAt = Date.now();
+    this.lastRejectedHelloReason = reason;
+    this.logger.error(
+      `[favbase] Agent Bridge hello rejected (${reason}); rejected hello count: ${this.rejectedHelloCount}`,
+    );
+    this.rejectPeerWaiters(new BridgeCallError(
+      'extension-unavailable',
+      `favbase extension hello rejected: ${reason}`,
+    ));
     this.send(socket, { id, type: 'reject', payload: { reason } });
     socket.close(1008, reason);
   }

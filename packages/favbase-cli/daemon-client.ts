@@ -3,15 +3,18 @@ import { closeSync, openSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { request } from 'node:http';
 
-import type { JsonObject } from '../../lib/agent-bridge/protocol';
+import {
+  decodeAgentBridgeToolDescriptor,
+  type JsonObject,
+} from '../../lib/agent-bridge/protocol';
 import { LOOPBACK_HOST } from './bridge-server';
 import { daemonLogPath, favbaseHome, type ConfigEnv, type ResolvedConfig } from './config';
 import {
   DAEMON_NAME,
   RPC_ROUTES,
+  type StatusResponse,
   type HealthResponse,
   type RpcResponse,
-  type StatusResponse,
 } from './rpc-server';
 
 const HEALTH_TIMEOUT_MS = 2_000;
@@ -100,6 +103,17 @@ function isHealth(value: unknown): value is HealthResponse {
     && (value as HealthResponse).name === DAEMON_NAME
     && typeof (value as HealthResponse).version === 'string'
     && typeof (value as HealthResponse).pid === 'number';
+}
+
+function isStatusDaemon(value: unknown): value is StatusResponse['daemon'] {
+  if (!isHealth(value)) return false;
+  const daemon = value as HealthResponse & Record<string, unknown>;
+  return Number.isInteger(daemon.port)
+    && Number(daemon.port) >= 0
+    && Number(daemon.port) <= 65_535
+    && Number.isFinite(daemon.startedAt)
+    && Number.isFinite(daemon.idleMinutes)
+    && Number(daemon.idleMinutes) >= 0;
 }
 
 function foreignPort(port: number): DaemonError {
@@ -212,12 +226,48 @@ export async function rpcCall(
   return result.body;
 }
 
-function isStatus(value: unknown): value is StatusResponse {
-  return !!value
-    && typeof value === 'object'
-    && (value as StatusResponse).ok === true
-    && isHealth((value as StatusResponse).daemon)
-    && typeof (value as StatusResponse).extension === 'object';
+function normalizeStatus(value: unknown): StatusResponse | null {
+  if (!value || typeof value !== 'object') return null;
+  const candidate = value as Record<string, unknown>;
+  if (candidate.ok !== true || !isStatusDaemon(candidate.daemon)) return null;
+  if (!candidate.extension || typeof candidate.extension !== 'object') return null;
+
+  const extension = candidate.extension as Record<string, unknown>;
+  if (typeof extension.connected !== 'boolean'
+    || !(typeof extension.extensionId === 'string' || extension.extensionId === null)
+    || !Array.isArray(extension.tools)) {
+    return null;
+  }
+  const tools = [];
+  for (const input of extension.tools) {
+    const tool = decodeAgentBridgeToolDescriptor(input);
+    if (!tool) return null;
+    tools.push(tool);
+  }
+
+  const lastReason = extension.lastRejectedHelloReason;
+  const validReason = lastReason === 'bad-token'
+    || lastReason === 'bad-origin'
+    || lastReason === 'version';
+  return {
+    ok: true,
+    daemon: candidate.daemon,
+    extension: {
+      connected: extension.connected,
+      extensionId: extension.extensionId,
+      tools,
+      rejectedHelloCount: Number.isSafeInteger(extension.rejectedHelloCount)
+        && Number(extension.rejectedHelloCount) >= 0
+        ? Number(extension.rejectedHelloCount)
+        : 0,
+      lastRejectedHelloAt: Number.isSafeInteger(extension.lastRejectedHelloAt)
+        && Number(extension.lastRejectedHelloAt) >= 0
+        && Number(extension.lastRejectedHelloAt) <= 8_640_000_000_000_000
+        ? Number(extension.lastRejectedHelloAt)
+        : null,
+      lastRejectedHelloReason: validReason ? lastReason : null,
+    },
+  };
 }
 
 export async function fetchStatus(config: ResolvedConfig, wait: boolean): Promise<StatusResponse> {
@@ -227,10 +277,11 @@ export async function fetchStatus(config: ResolvedConfig, wait: boolean): Promis
     timeoutMs: REQUEST_TIMEOUT_MS,
   });
   if (result.status === 401) throw unauthorized(config.port);
-  if (result.status !== 200 || !isStatus(result.body)) {
+  const status = normalizeStatus(result.body);
+  if (result.status !== 200 || !status) {
     throw new DaemonError('protocol', `unexpected daemon response (HTTP ${result.status})`);
   }
-  return result.body;
+  return status;
 }
 
 /**

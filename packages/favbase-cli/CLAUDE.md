@@ -13,7 +13,10 @@ provides no MCP server.
 - `cli-main.ts` owns dispatch, usage text, exit codes (0 ok, 1 usage/config,
   2 daemon or extension unreachable, 3 Knowledge Tool error) and every command:
   alias commands, `tools`, `call`, `doctor`, `daemon run|start|stop|restart`,
-  `setup`, `install-skill`. Data results go to stdout as JSON only.
+  `setup`, `install-skill`. `doctor` adds structured troubleshooting checks and
+  the canonical Chrome 120+ 30-second / Chrome 116-119 60-second cold-start
+  wording. Foreground daemon logs receive one ISO-8601 prefix here. Data results
+  go to stdout as JSON only.
 - `args.ts` is the argv parser (`--flag value`, `--flag=value`, boolean set,
   `--`); `commands.ts` is the alias table (`search`/`tags`/`get` → Knowledge
   Tool + argument names) and the only place tool names appear.
@@ -27,16 +30,21 @@ provides no MCP server.
   after peer disconnect it starts a fresh idle window.
 - `rpc-server.ts` is the HTTP surface: `/health` (no auth, `{name,version,pid}`),
   `/status[?wait=1]`, `/rpc`, `/shutdown`. Bearer token is compared timing-safe;
-  any request with an `Origin` header is 403 before authentication.
+  any request with an `Origin` header is 403 before authentication. A known
+  bad-token rejection makes waited status return immediately; an unchanged
+  pairing cannot recover by waiting another hello deadline.
 - `daemon-client.ts` is the CLI side: health probe, detached auto-spawn
   (`node cli.js daemon run`, stdio to `~/.favbase/daemon.log`), bounded wait,
   `rpcCall`, `fetchStatus`, `stopDaemon` (shutdown route, pid kill only for a
-  process that identified itself as favbase over `/health`).
+  process that identified itself as favbase over `/health`). Status decoding
+  validates the peer shape and supplies null/zero diagnostics for older daemons.
 - `bridge-server.ts` owns `/bridge` Origin + Bridge Token hello authentication,
   descriptor state, heartbeat, pending calls, the 75-second bounded hello wait
   (covering the extension alarm's 60-second effective period on Chrome 116–119),
-  peer activity and disconnect callbacks, cleanup; it can listen itself (unit
-  tests) or attach to the daemon's server.
+  peer activity and disconnect callbacks, cleanup, and daemon-lifetime rejected
+  hello evidence (`count`/last reason/time). A rejection wakes peer waiters and
+  logs reason/count only, never either token. It can listen itself (unit tests)
+  or attach to the daemon's server.
 - `skill-install.ts` writes SKILL.md to `~/.claude/skills/favbase/` and
   `~/.agents/skills/favbase/` (Codex user scope), or an explicit `--dir`.
 
@@ -48,6 +56,8 @@ provides no MCP server.
   checks that table against `describeTools()`.
 - stdout carries JSON results only; every diagnostic goes to stderr and never
   includes the Bridge Token.
+- `/status` may add diagnostics, but it never returns received/expected token
+  material. A later valid hello does not erase the last rejection evidence.
 - Listen only on `127.0.0.1`. A peer is usable only after its hello token and
   extension ID match the WebSocket Origin; a CLI request is served only with the
   matching Bearer token and no `Origin` header.
@@ -60,5 +70,5 @@ provides no MCP server.
 - `pnpm compile` - package type-check.
 - `pnpm build` - produce `dist/cli.js`.
 - `pnpm test` - build, then run unit tests (args/commands/config/rpc-server/
-  daemon/cli-main/bridge-server) and the process integration suite (real CLI
+  daemon-client/daemon/cli-main/bridge-server, including doctor diagnostics) and the process integration suite (real CLI
   child processes, foreground and auto-spawned daemons, `ws` fake extension).

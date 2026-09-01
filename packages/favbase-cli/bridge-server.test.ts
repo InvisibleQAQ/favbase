@@ -34,7 +34,10 @@ afterEach(async () => {
 
 async function startServer(
   helloWaitMs: number,
-  overrides: Pick<BridgeServerOptions, 'heartbeatMs' | 'onPeerActivity' | 'onPeerDisconnected'> = {},
+  overrides: Pick<
+    BridgeServerOptions,
+    'heartbeatMs' | 'logger' | 'onPeerActivity' | 'onPeerDisconnected'
+  > = {},
 ): Promise<BridgeServer> {
   const server = new BridgeServer({
     port: 0,
@@ -168,5 +171,52 @@ describe('BridgeServer bounded waits', () => {
     socket.terminate();
     await closed;
     expect(disconnected).toHaveBeenCalledTimes(1);
+  });
+
+  it('retains rejected hello evidence without logging either token', async () => {
+    const logError = vi.fn();
+    const server = await startServer(5_000, { logger: { error: logError } });
+    const waitingForPeer = expect(server.listTools()).rejects.toMatchObject({
+      code: 'extension-unavailable',
+      message: 'favbase extension hello rejected: bad-token',
+    });
+    const rejected = new WebSocket(`ws://127.0.0.1:${server.listeningPort}/bridge`, {
+      origin: `chrome-extension://${EXTENSION_ID}`,
+    });
+    sockets.push(rejected);
+    await once(rejected, 'open');
+    const reply = once(rejected, 'message');
+    send(rejected, {
+      id: 'rejected-hello',
+      type: 'hello',
+      payload: {
+        token: 'wrong-token',
+        extensionId: EXTENSION_ID,
+        extensionVersion: '0.0.5',
+        tools: [TOOL],
+      },
+    });
+    await reply;
+    await once(rejected, 'close');
+    await waitingForPeer;
+
+    expect(server.peerSnapshot()).toMatchObject({
+      connected: false,
+      rejectedHelloCount: 1,
+      lastRejectedHelloAt: expect.any(Number),
+      lastRejectedHelloReason: 'bad-token',
+    });
+    expect(logError).toHaveBeenCalledWith(expect.stringContaining('bad-token'));
+    expect(logError.mock.calls.join(' ')).not.toContain('wrong-token');
+    expect(logError.mock.calls.join(' ')).not.toContain(TOKEN);
+    expect(JSON.stringify(server.peerSnapshot())).not.toContain('wrong-token');
+    expect(JSON.stringify(server.peerSnapshot())).not.toContain(TOKEN);
+
+    await helloFromFakeExtension(server);
+    expect(server.peerSnapshot()).toMatchObject({
+      connected: true,
+      rejectedHelloCount: 1,
+      lastRejectedHelloReason: 'bad-token',
+    });
   });
 });

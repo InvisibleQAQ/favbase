@@ -92,6 +92,7 @@ describe('Agent Bridge client', () => {
       lastError: null,
       authFailureCount: 0,
       nextRetryAt: null,
+      lastAuthFailureAt: null,
     };
     now = 1_000;
     transports = [];
@@ -156,6 +157,7 @@ describe('Agent Bridge client', () => {
       lastError: null,
       authFailureCount: 0,
       nextRetryAt: null,
+      lastAuthFailureAt: null,
     });
 
     await transport.message(wire('ping', {}, 'ping-1'));
@@ -236,6 +238,7 @@ describe('Agent Bridge client', () => {
       lastError: 'bad-token',
       authFailureCount: 1,
       nextRetryAt: 31_000,
+      lastAuthFailureAt: 1_000,
     });
 
     client = createClient();
@@ -250,6 +253,28 @@ describe('Agent Bridge client', () => {
     expect(status).toMatchObject({
       authFailureCount: 2,
       nextRetryAt: 91_000,
+      lastAuthFailureAt: 31_000,
+    });
+  });
+
+  it('retains the last authentication failure timestamp after a valid welcome', async () => {
+    status.lastAuthFailureAt = 500;
+    status.authFailureCount = 2;
+    status.nextRetryAt = 900;
+    const client = createClient();
+
+    await client.tryConnect();
+    await transports[0].open();
+    await transports[0].message(wire('welcome', {
+      token: 'bridge-token',
+      serverVersion: '0.0.5',
+    }));
+
+    expect(status).toMatchObject({
+      state: 'connected',
+      authFailureCount: 0,
+      nextRetryAt: null,
+      lastAuthFailureAt: 500,
     });
   });
 
@@ -280,6 +305,7 @@ describe('Agent Bridge client', () => {
       lastError: 'bad-token',
       authFailureCount: 1,
       nextRetryAt: 35_000,
+      lastAuthFailureAt: 5_000,
     });
   });
 

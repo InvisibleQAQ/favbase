@@ -14,8 +14,10 @@ vi.mock('wxt/utils/storage', () => ({
 import { DEFAULT_AGENT_BRIDGE_PORT } from '@/lib/agent-bridge/protocol';
 import { STORAGE_KEYS } from './keys';
 import {
+  agentBridgeStatusStorage,
   DEFAULT_AGENT_BRIDGE_CONFIG,
   DEFAULT_AGENT_BRIDGE_STATUS,
+  getAgentBridgeStatus,
 } from './agent-bridge';
 
 describe('Agent Bridge storage contract', () => {
@@ -34,6 +36,22 @@ describe('Agent Bridge storage contract', () => {
       lastError: null,
       authFailureCount: 0,
       nextRetryAt: null,
+      lastAuthFailureAt: null,
+    });
+  });
+
+  it('fills the incident timestamp for status records written by older versions', async () => {
+    vi.mocked(agentBridgeStatusStorage.getValue).mockResolvedValue({
+      state: 'disconnected',
+      lastConnectedAt: null,
+      lastError: null,
+      authFailureCount: 0,
+      nextRetryAt: null,
+    } as unknown as typeof DEFAULT_AGENT_BRIDGE_STATUS);
+
+    await expect(getAgentBridgeStatus()).resolves.toMatchObject({
+      state: 'disconnected',
+      lastAuthFailureAt: null,
     });
   });
 });

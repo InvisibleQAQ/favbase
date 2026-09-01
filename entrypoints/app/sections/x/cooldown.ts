@@ -1,3 +1,5 @@
+import { formatClock } from '@/lib/format';
+
 /**
  * X-specific sync cooldown (pure, testable). After a successful X sync the
  * button is locked for `COOLDOWN_MS`; the window is derived from the last
@@ -23,8 +25,5 @@ export function remainingCooldown(lastSyncedAt: number | null, now: number): num
 
 /** Format a remaining-ms duration as `mm:ss` for the countdown label. */
 export function formatCountdown(remainingMs: number): string {
-  const totalSec = Math.ceil(remainingMs / 1000);
-  const mm = Math.floor(totalSec / 60);
-  const ss = totalSec % 60;
-  return `${mm}:${String(ss).padStart(2, '0')}`;
+  return formatClock(Math.ceil(Math.max(0, remainingMs) / 1_000));
 }

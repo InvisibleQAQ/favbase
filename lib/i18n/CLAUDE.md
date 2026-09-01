@@ -8,7 +8,7 @@ Collection provider 阻塞统一使用 `configurationBlocker.*`。ASR 只在视�
 
 WebDAV Settings 拒绝使用结构化 `invalid-settings` / `incompatible-version`，对应 `settings.sync.err.*` 双语键；文案必须明确本地 Settings 未被覆盖或需要升级，raw validation detail 只作 debug，不进入翻译键。
 
-Agent Bridge 设置页使用 `settings.agentBridge.*`；连接状态只消费 `AgentBridgeStatus` 的稳定 state/error code，未知或 runtime 原始错误统一映射为可恢复的本地连接提示，不把 raw transport message 暴露给用户。Bridge Token 固定称为 `Bridge Token`，不得写成 API key/provider key。
+Agent Bridge 设置页使用 `settings.agentBridge.*`；连接状态只消费 `AgentBridgeStatus` 的稳定 state/error code，未知或 runtime 原始错误统一映射为可恢复的本地连接提示，不把 raw transport message 暴露给用户。`retryIn` 的 `{{time}}` 是 UI 格式化后的 `mm:ss`，`lastAuthFailure` 是成功恢复后仍保留的历史痕迹；bad-token 文案必须给出 setup 修复动作。Bridge Token 固定称为 `Bridge Token`，不得写成 API key/provider key；轮询文案必须同时说明 Chrome 120+ 约 30 秒与 116–119 约 60 秒，不得笼统承诺 30 秒。
 
 ## 平台命名
 

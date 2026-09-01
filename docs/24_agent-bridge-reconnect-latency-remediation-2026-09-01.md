@@ -1,6 +1,6 @@
 # Agent Bridge 重连延迟整改方案（2026-09-01）
 
-状态：Step 0 已执行（2026-09-01，结论见 §9：§2 成立，可按方案执行）；**Step 1 已落地（2026-09-01，见 §6 Step 1 的「实施记录」）**；**Step 2 已落地（2026-09-01，见 §6 Step 2 的「实施记录」）**；**Step 3 已落地（2026-09-01，见 §6 Step 3 的「实施记录」）**；Step 4-6 待实施
+状态：Step 0 已执行（2026-09-01，结论见 §9：§2 成立，可按方案执行）；**Step 1 已落地（2026-09-01，见 §6 Step 1 的「实施记录」）**；**Step 2 已落地（2026-09-01，见 §6 Step 2 的「实施记录」）**；**Step 3 已落地（2026-09-01，见 §6 Step 3 的「实施记录」）**；**Step 4 已落地（2026-09-01，见 §6 Step 4 的「实施记录」）**；Step 5-6 待实施
 范围：`lib/agent-bridge/`、`lib/storage/agent-bridge.ts`、`packages/favbase-cli/`、`skills/favbase/SKILL.md`、`entrypoints/app/sections/settings/agent-bridge-card.tsx`
 前置：ADR 0002（扩展出站 WebSocket）、ADR 0003（Skill-first CLI + Daemon）、`docs/21_agent-bridge-analysis-2026-08-22.md`
 
@@ -270,11 +270,12 @@ Bad case / Tests / Wrong-vs-Correct）、根 `CLAUDE.md` 的 docs/24 条目。
 **文件**：`packages/favbase-cli/rpc-server.ts`（或经由 `/status` 透传）、`cli-main.ts`、`skills/favbase/SKILL.md`、`entrypoints/app/sections/settings/agent-bridge-card.tsx`
 
 1. **`doctor` 要能看到扩展侧状态**。当前 `/status` 的 `extension` 字段来自 `peerSnapshot()`，是 daemon 视角，扩展没连上时一片空白。两个选择：
-   - 轻量（**推荐**）：不动协议。`doctor` 在 `extension.connected === false` 时，明确列出**待排查清单**：token 是否一致（可直接对比 `config.token` 与用户从设置页复制的值）、Agent Bridge 开关是否打开、Chrome 是否在运行、`daemon.log` 路径。
+   - 轻量（原推荐，已被 §9.6 F2 的实验证据取代）：不动协议。`doctor` 在 `extension.connected === false` 时，明确列出**待排查清单**：token 是否一致（可直接对比 `config.token` 与用户从设置页复制的值）、Agent Bridge 开关是否打开、Chrome 是否在运行、`daemon.log` 路径。
    - 重量：给 wire protocol 加一个 `status` 消息，让扩展把 `lastError`/`authFailureCount`/`nextRetryAt` 报给 daemon。**这会改 v1 envelope 的消息集合**，要动 `protocol.ts` + `protocol.test.ts` 的完备性断言，且只在扩展已经连上时才有数据 —— 恰好在最需要它的时候（没连上）没用。**否决**。
+   - 实施方案（§9.6 F2）：`BridgeServer` 在比较 hello token 的位置记录拒绝计数、最后 reason/时间，`peerSnapshot()` → `/status` 透出；不改 v1 envelope，而且恰好在扩展无法认证时有 ground truth。
 2. **设置页显示退避状态**。`agent-bridge-card.tsx` 已经订阅 status，增加：`nextRetryAt` 非 null 时显示「下次自动重试：mm:ss 后」，`lastError === 'bad-token'` 时显示「Token 与本机 CLI 不一致」并给出 `favbase setup --token ...` 的复制按钮。这是把 §2 那个事故变成用户自己能看懂的东西。
 3. **文案分档**。`skills/favbase/SKILL.md:68` 的「~35 s」和 `cli-main.ts:38-39` 的「within 30 seconds」都改成同一套说法：
-   - 扩展已连接：< 100 ms
+   - 扩展已连接：不等待 alarm，直接走本机 RPC（没有基准证据，不承诺 `<100 ms`）
    - 冷启动（Chrome 刚开 / daemon 刚拉起）：最坏一个 alarm 周期，Chrome 120+ 约 30 秒，更早版本约 60 秒
    - 超过这个时间仍失败：不是等待问题，跑 `favbase doctor`
 4. 两处文案不要各写各的。`EXTENSION_HINT` 是 CLI 的单一事实源，SKILL.md 引用同样措辞。
@@ -282,6 +283,33 @@ Bad case / Tests / Wrong-vs-Correct）、根 `CLAUDE.md` 的 docs/24 条目。
 **测试**：`cli-main.test.ts` 断言 `doctor` 失败时的排查清单包含 token 与开关两项；i18n 硬编码守卫（`tests/i18n-no-hardcoded.test.ts`）对新增中文文案会自动拦截，记得走 `lib/i18n/locales/{zh-CN,en}.ts`。
 
 **文档同步**：`entrypoints/app/sections/settings/CLAUDE.md`、`packages/favbase-cli/CLAUDE.md`。
+
+#### 实施记录（2026-09-01 已落地）
+
+- 按 §9.6 的新证据修正原 Step 4-1：`BridgeServer` 成为 daemon 侧认证拒绝事实的唯一 owner，
+  `peerSnapshot()` 增加 daemon 生命周期内的 `rejectedHelloCount` / `lastRejectedHelloReason` /
+  `lastRejectedHelloAt`。拒绝会立即唤醒正在等 hello 的 `/rpc` / `/status?wait=1`；已知 bad-token
+  的 waited status 不再白等 75 秒。合法 hello 不清这组事故痕迹；daemon 重启自然清零。
+- `reject()` 只记录 reason + count，不记录收到或预期的 token；`cli-main.ts` 的 foreground daemon
+  logger 在单一边界为所有 daemon 行加 ISO-8601 时间戳。`daemon-client.fetchStatus()` 严格检查新增
+  shape，并为旧 daemon 缺失字段补 `0/null`，保持向后兼容。
+- `favbase doctor` 的 JSON 新增 `troubleshooting` 清单：已知 bad-token 时把拒绝事实置顶；否则列
+  Bridge Token、Agent Bridge 开关、Chrome、端口和 `daemon.log` 的明确检查项。stdout 仍只写 JSON，
+  stderr 写诊断，退出码保持 `2`。
+- 扩展侧 `AgentBridgeStatus` 增加 `lastAuthFailureAt`。`applyAuthBackoff()` 与 `nextRetryAt` 共用同一个
+  `now()` 快照写入；合法 welcome 只清连续计数/期限，不清事故时间。typed get/watch 会给旧存量记录
+  补 `null`，没有 storage migration 或 userspace 破坏。
+- 设置页把绝对时间改为每秒更新、卸载时清 timer 的 `mm:ss` 自动重试倒计时；恢复后仍以次要信息
+  显示最近认证失败时间。当前 bad-token 使用本地化 Alert，并复用 `buildSetupCommand()` 与同一个
+  clipboard handler 提供修复按钮，没有第二套命令逻辑。
+- CLI 导出唯一 `EXTENSION_LATENCY_HINT`；Skill 契约测试锁定同样措辞：已连接不等 alarm、Chrome
+  120+ 冷启动约 30 秒、116–119 约 60 秒、超过则运行 `favbase doctor`。删除 `~35 s` 与
+  `within 30 seconds` 两个不诚实承诺，也没有引入无测量依据的 `<100 ms` SLA。
+- 未改 `protocol.ts`、v1 消息集合、Knowledge Tool、退出码、daemon idle 默认值或 Offscreen 所有权。
+- 验证：`pnpm compile` 通过；最终全量 `pnpm test` 为根 176 files / 1265 tests、CLI 10 files /
+  55 tests 全绿；`pnpm build` 通过，Background contract 为 11 modules / 938,486 bytes，未发现
+  PGlite runtime、dangling initializer 或 dynamic `import()`。首次全量出现 Bilibili 测试的并发
+  5 秒抖动（175/176 files），单文件 5/5 与第二次全量均通过，未修改无关模块。
 
 ---
 

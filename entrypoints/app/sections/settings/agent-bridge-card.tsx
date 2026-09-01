@@ -15,6 +15,7 @@ import Typography from '@mui/material/Typography';
 import { varAlpha } from 'minimal-shared/utils';
 
 import { sendBackgroundMessage } from '@/lib/background/client';
+import { formatClock } from '@/lib/format';
 import { formatDateTime, type LocaleKeys } from '@/lib/i18n';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import {
@@ -69,6 +70,11 @@ export function buildSetupCommand(token: string, port: number): string {
   return `npx -y favbase-cli setup --token ${token} --port ${port}`;
 }
 
+export function formatRetryCountdown(retryAt: number, now: number): string {
+  const remainingSeconds = Math.ceil(Math.max(0, retryAt - now) / 1_000);
+  return formatClock(remainingSeconds).padStart(5, '0');
+}
+
 function stateColor(state: DisplayState): 'default' | 'warning' | 'info' | 'success' {
   switch (state) {
     case 'disconnected':
@@ -111,6 +117,7 @@ export function AgentBridgeCard() {
   const [showToken, setShowToken] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [copyFeedback, setCopyFeedback] = useState<CopyFeedback | null>(null);
+  const [clockNow, setClockNow] = useState(() => Date.now());
   const configRef = useRef(config);
   const portDirtyRef = useRef(false);
 
@@ -159,6 +166,20 @@ export function AgentBridgeCard() {
       unwatchStatus();
     };
   }, [applyConfig, t]);
+
+  useEffect(() => {
+    const retryAt = status.nextRetryAt;
+    const initialNow = Date.now();
+    setClockNow(initialNow);
+    if (!config.enabled || retryAt === null || retryAt <= initialNow) return;
+
+    const interval = setInterval(() => {
+      const nextNow = Date.now();
+      setClockNow(nextNow);
+      if (nextNow >= retryAt) clearInterval(interval);
+    }, 1_000);
+    return () => clearInterval(interval);
+  }, [config.enabled, status.nextRetryAt]);
 
   const persistConfig = useCallback(async (next: AgentBridgeConfig) => {
     const previous = configRef.current;
@@ -235,6 +256,12 @@ export function AgentBridgeCard() {
   const statusError = config.enabled && status.lastError
     ? t(statusErrorKey(status.lastError))
     : null;
+  const badToken = config.enabled && status.lastError === 'bad-token';
+  const retryCountdown = config.enabled
+    && status.nextRetryAt !== null
+    && status.nextRetryAt > clockNow
+      ? formatRetryCountdown(status.nextRetryAt, clockNow)
+      : null;
   const controlsDisabled = !ready || saving;
   const tokenActionLabel = config.token
     ? t('settings.agentBridge.resetToken')
@@ -395,19 +422,48 @@ export function AgentBridgeCard() {
                     ? t('settings.agentBridge.neverConnected')
                     : formatDateTime(status.lastConnectedAt)}
                 </Typography>
-                {statusError && (
+                {config.enabled && status.lastAuthFailureAt !== null && (
+                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                    {t('settings.agentBridge.lastAuthFailure')}:{' '}
+                    {formatDateTime(status.lastAuthFailureAt)}
+                  </Typography>
+                )}
+                {retryCountdown && (
+                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                    {t('settings.agentBridge.retryIn', { time: retryCountdown })}
+                  </Typography>
+                )}
+                {statusError && !badToken && (
                   <Typography variant="caption" sx={{ color: 'error.main' }}>
                     {statusError}
-                    {status.nextRetryAt !== null && status.nextRetryAt > Date.now()
-                      ? ` ${t('settings.agentBridge.retryAt', {
-                          time: formatDateTime(status.nextRetryAt),
-                        })}`
-                      : ''}
                   </Typography>
                 )}
               </Stack>
             </Box>
           </Grid>
+
+          {badToken && (
+            <Grid size={{ xs: 12 }}>
+              <Alert severity="error">
+                <Stack spacing={1.5} alignItems="flex-start">
+                  <Typography variant="body2">{statusError}</Typography>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    disabled={!commandReady || saving}
+                    startIcon={<Iconify icon="lucide:copy" width={18} />}
+                    onClick={() => {
+                      void handleCopy('setup', buildSetupCommand(config.token, config.port));
+                    }}
+                  >
+                    {copyFeedback?.target === 'setup' && copyFeedback.ok
+                      ? t('settings.agentBridge.copied')
+                      : t('settings.agentBridge.copySetupToFix')}
+                  </Button>
+                </Stack>
+              </Alert>
+            </Grid>
+          )}
 
           <Grid size={{ xs: 12 }}>
             <Box component="section" aria-labelledby="agent-bridge-command-title">

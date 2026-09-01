@@ -327,12 +327,14 @@ export class AgentBridgeClient {
       AUTH_BACKOFF_BASE_MS * 2 ** (authFailureCount - 1),
       AUTH_BACKOFF_MAX_MS,
     );
+    const failedAt = this.options.now();
     await this.options.setStatus({
       ...status,
       state: 'disconnected',
       lastError: error,
       authFailureCount,
-      nextRetryAt: this.options.now() + delay,
+      nextRetryAt: failedAt + delay,
+      lastAuthFailureAt: failedAt,
     });
     this.dropConnection(connection);
   }

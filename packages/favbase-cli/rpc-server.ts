@@ -166,7 +166,10 @@ export function createRpcHandler(
     if (url.pathname === RPC_ROUTES.status) {
       if (method !== 'GET') throw new HttpError(405, 'method-not-allowed', 'Use GET');
       authenticate(request);
-      if (url.searchParams.get('wait') === '1') {
+      const snapshot = options.peer.peerSnapshot();
+      const knownTokenMismatch = !snapshot.connected
+        && snapshot.lastRejectedHelloReason === 'bad-token';
+      if (url.searchParams.get('wait') === '1' && !knownTokenMismatch) {
         try {
           await options.peer.listTools(abortSignalFor(response));
         } catch (error) {

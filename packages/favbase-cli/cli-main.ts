@@ -1,10 +1,15 @@
 import { DEFAULT_AGENT_BRIDGE_PORT, type JsonObject } from '../../lib/agent-bridge/protocol';
 import { parseArgv, requireValue, UsageError, type ParsedArgv } from './args';
-import { BridgePortInUseError, type BridgeLogger } from './bridge-server';
+import {
+  BridgePortInUseError,
+  type BridgeLogger,
+  type BridgePeerSnapshot,
+} from './bridge-server';
 import { aliasUsageLine, buildAliasArgs, findAlias, TOOL_ALIASES, USAGE_COLUMN } from './commands';
 import {
   ConfigError,
   configPath,
+  daemonLogPath,
   parsePort,
   parseToken,
   readConfigFile,
@@ -35,8 +40,10 @@ export const EXIT_UNAVAILABLE = 2;
 export const EXIT_TOOL = 3;
 
 const DEFAULT_IDLE_MINUTES = 120;
+export const EXTENSION_LATENCY_HINT =
+  'An already connected bridge has no alarm wait and uses local RPC. After Chrome or the daemon starts, reconnection can take one alarm period: about 30 seconds on Chrome 120+ or about 60 seconds on Chrome 116-119. If it takes longer, run favbase doctor.';
 const EXTENSION_HINT =
-  'open Chrome with favbase installed and enable Settings > Connections > Agent Bridge with the same port and token; the extension reconnects within 30 seconds';
+  `confirm Chrome is running, Agent Bridge is enabled, and the port and Bridge Token match. ${EXTENSION_LATENCY_HINT}`;
 
 export interface CliIo {
   env: ConfigEnv;
@@ -86,6 +93,31 @@ Exit codes: ${EXIT_OK} ok, ${EXIT_USAGE} usage or config, ${EXIT_UNAVAILABLE} da
 
 function printJson(io: CliIo, value: unknown): void {
   io.stdout(`${JSON.stringify(value, null, 2)}\n`);
+}
+
+export function formatDaemonLogLine(message: string, at = Date.now()): string {
+  return `[${new Date(at).toISOString()}] ${message}`;
+}
+
+function extensionTroubleshooting(
+  config: ResolvedConfig,
+  env: ConfigEnv,
+  extension: BridgePeerSnapshot,
+): string[] {
+  const tokenCheck = extension.lastRejectedHelloReason === 'bad-token'
+    ? `The last extension hello was rejected because its Bridge Token did not match this daemon${
+      extension.lastRejectedHelloAt === null
+        ? ''
+        : ` at ${new Date(extension.lastRejectedHelloAt).toISOString()}`
+    } (rejected hellos this daemon run: ${extension.rejectedHelloCount}).`
+    : 'Confirm the Bridge Token matches the token copied from Settings > Connections > Agent Bridge.';
+  return [
+    tokenCheck,
+    'Confirm Agent Bridge is enabled in Settings > Connections.',
+    'Confirm Chrome is running with favbase installed.',
+    `Confirm the extension Bridge port is ${config.port}.`,
+    `Inspect the daemon log at ${daemonLogPath(env)}.`,
+  ];
 }
 
 function idleMinutes(env: ConfigEnv): number {
@@ -168,6 +200,9 @@ async function runDoctor(io: CliIo): Promise<number> {
   }
   const { spawned } = await ensureDaemon(config, daemonOptions(io));
   const status = await fetchStatus(config, true);
+  const troubleshooting = status.extension.connected
+    ? []
+    : extensionTroubleshooting(config, io.env, status.extension);
   printJson(io, {
     ok: status.extension.connected,
     config: {
@@ -178,15 +213,19 @@ async function runDoctor(io: CliIo): Promise<number> {
     },
     daemon: { ...status.daemon, spawned },
     extension: status.extension,
+    troubleshooting,
   });
   if (status.extension.connected) return EXIT_OK;
-  io.stderr(`favbase: extension-unavailable: ${EXTENSION_HINT}\n`);
+  io.stderr(
+    `favbase: extension-unavailable: ${troubleshooting.join(' ')} ${EXTENSION_LATENCY_HINT}\n`,
+  );
   return EXIT_UNAVAILABLE;
 }
 
 async function runDaemonForeground(io: CliIo): Promise<number> {
   const config = await resolveConfig(io.env);
-  const logger: BridgeLogger = { error: (message) => io.stderr(`${message}\n`) };
+  const log = (message: string) => io.stderr(`${formatDaemonLogLine(message)}\n`);
+  const logger: BridgeLogger = { error: log };
   const daemon = new Daemon({
     port: config.port,
     token: config.token,
@@ -205,7 +244,7 @@ async function runDaemonForeground(io: CliIo): Promise<number> {
     }
     throw error;
   }
-  io.stderr(`[favbase] daemon ${io.version} listening on 127.0.0.1:${config.port} (pid ${process.pid})\n`);
+  log(`[favbase] daemon ${io.version} listening on 127.0.0.1:${config.port} (pid ${process.pid})`);
   io.onSignal?.(() => void daemon.close());
   await daemon.whenClosed();
   return EXIT_OK;
@@ -302,27 +341,34 @@ async function dispatch(io: CliIo, parsed: ParsedArgv): Promise<number> {
 
 /** Runs one CLI invocation and returns the process exit code. Never throws. */
 export async function main(argv: readonly string[], io: CliIo): Promise<number> {
+  const reportError = (message: string): void => {
+    const daemonRun = argv[0] === 'daemon' && (argv[1] === undefined || argv[1] === 'run');
+    const output = daemonRun
+      ? message.split('\n').map(line => formatDaemonLogLine(line)).join('\n')
+      : message;
+    io.stderr(`${output}\n`);
+  };
   try {
     return await dispatch(io, parseArgv(argv));
   } catch (error) {
     if (error instanceof UsageError) {
-      io.stderr(`favbase: ${error.message}\nRun favbase --help for usage.\n`);
+      reportError(`favbase: ${error.message}\nRun favbase --help for usage.`);
       return EXIT_USAGE;
     }
     if (error instanceof ConfigError) {
-      io.stderr(`favbase: ${error.message}\n`);
+      reportError(`favbase: ${error.message}`);
       return EXIT_USAGE;
     }
     if (error instanceof CliExit) {
-      io.stderr(`favbase: ${error.message}\n`);
+      reportError(`favbase: ${error.message}`);
       return error.code;
     }
     if (error instanceof DaemonError) {
-      io.stderr(`favbase: ${error.code}: ${error.message}\n`);
+      reportError(`favbase: ${error.code}: ${error.message}`);
       return EXIT_UNAVAILABLE;
     }
     const message = error instanceof Error ? error.message : String(error);
-    io.stderr(`favbase: ${message}\n`);
+    reportError(`favbase: ${message}`);
     return EXIT_UNAVAILABLE;
   }
 }

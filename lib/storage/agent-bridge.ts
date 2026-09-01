@@ -25,6 +25,8 @@ export interface AgentBridgeStatus {
   authFailureCount: number;
   /** Epoch ms before which the client must not retry authentication. */
   nextRetryAt: number | null;
+  /** Last bad-token failure, retained after a later successful welcome. */
+  lastAuthFailureAt: number | null;
 }
 
 export const DEFAULT_AGENT_BRIDGE_CONFIG: Readonly<AgentBridgeConfig> = Object.freeze({
@@ -40,6 +42,7 @@ export const DEFAULT_AGENT_BRIDGE_STATUS: Readonly<AgentBridgeStatus> = Object.f
   lastError: null,
   authFailureCount: 0,
   nextRetryAt: null,
+  lastAuthFailureAt: null,
 });
 
 export const agentBridgeConfigStorage = storage.defineItem<AgentBridgeConfig>(
@@ -67,7 +70,7 @@ export function watchAgentBridgeConfig(
 }
 
 export function getAgentBridgeStatus(): Promise<AgentBridgeStatus> {
-  return agentBridgeStatusStorage.getValue();
+  return agentBridgeStatusStorage.getValue().then(normalizeAgentBridgeStatus);
 }
 
 export function setAgentBridgeStatus(status: AgentBridgeStatus): Promise<void> {
@@ -77,5 +80,15 @@ export function setAgentBridgeStatus(status: AgentBridgeStatus): Promise<void> {
 export function watchAgentBridgeStatus(
   callback: (status: AgentBridgeStatus) => void,
 ): () => void {
-  return agentBridgeStatusStorage.watch((status) => callback(status));
+  return agentBridgeStatusStorage.watch((status) => callback(normalizeAgentBridgeStatus(status)));
+}
+
+function normalizeAgentBridgeStatus(status: AgentBridgeStatus): AgentBridgeStatus {
+  return {
+    ...DEFAULT_AGENT_BRIDGE_STATUS,
+    ...status,
+    lastAuthFailureAt: Number.isFinite(status.lastAuthFailureAt)
+      ? status.lastAuthFailureAt
+      : null,
+  };
 }
