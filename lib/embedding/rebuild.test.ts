@@ -15,7 +15,9 @@ import { rebuildPendingEmbeddings, type IndexingDeps } from './indexing';
 // barrel eagerly touches `@wxt-dev/storage` (chrome.runtime) at load. All
 // rebuild tests inject explicit IndexingDeps, so a static stub is enough.
 // Mirrors indexing.test.ts.
-vi.mock('@/lib/storage', () => ({
+// `config.ts` reads settings through the storage LEAF (the barrel would also
+// evaluate ui-state/agent-bridge items at load), so mock the leaf.
+vi.mock('@/lib/storage/settings', () => ({
   settingsStorage: {
     getValue: () => Promise.resolve({}),
     setValue: () => Promise.resolve(),

@@ -6,7 +6,9 @@ import { resolveEmbeddingConfig } from './config';
 // config.ts value-imports `settingsStorage`, whose barrel eagerly touches
 // `@wxt-dev/storage` (chrome.runtime) at load. Stub it out — the resolver under
 // test is pure and never reads storage. Mirrors lib/i18n/index.test.ts.
-vi.mock('@/lib/storage', () => ({
+// `config.ts` reads settings through the storage LEAF (the barrel would also
+// evaluate ui-state/agent-bridge items at load), so mock the leaf.
+vi.mock('@/lib/storage/settings', () => ({
   settingsStorage: {
     getValue: () => Promise.resolve({}),
     setValue: () => Promise.resolve(),

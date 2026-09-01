@@ -12,7 +12,14 @@ CLI package (`packages/favbase-cli`) consumes only the protocol leaf; extension 
   This is a leaf bundled by `packages/favbase-cli` and may depend only on Zod.
 - `tool-registry.ts` — derives agent-facing tool descriptors (JSON Schema 2020-12) from `chatTools`
   and validates every call with the owning Zod schema before execution. Tool
-  names, descriptions, and schemas must never be copied here.
+  names, descriptions, and schemas must never be copied here. Everything this
+  module reaches loads in the Background Service Worker, where the HTML spec
+  forbids dynamic `import()` — so `chatTools` and its `tag-queries` /
+  `embedding/config` dependencies must be statically imported. Deferring them
+  used to make `listTags` and `searchKnowledgeBase` fail with a misleading
+  `window is not defined` (Vite's `__vitePreload` masking Chrome's rejection);
+  guarded by `tests/agent-bridge-background-bundle-contract.test.ts` and
+  `scripts/check-background-bundle.mjs`.
 - `client.ts` — `BridgeTransport` seam + production `WebSocketTransport` and the
   connection state machine. Open sends hello; token-matched welcome authenticates;
   ping/call dispatch return pong/result. DB acquisition is injected and lazy.

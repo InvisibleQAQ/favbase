@@ -4,6 +4,10 @@ import { eq } from 'drizzle-orm';
 import type { FavbaseDb } from '@/lib/database';
 import * as schema from '@/lib/database/schema';
 import { COLLECTION_PLATFORMS } from '@/lib/collections/platforms';
+// Static on purpose: these tools also run inside the Background Service
+// Worker (Agent Bridge), and a Service Worker cannot use dynamic `import()`
+// (disallowed on ServiceWorkerGlobalScope by the HTML specification).
+import { getAllUsedTags } from '@/lib/tagging/tag-queries';
 import { hybridRetrieve } from './retrieval';
 
 const { itemContents } = schema;
@@ -113,7 +117,6 @@ const listTags = tool({
   ),
   execute: async ({ platform }, { experimental_context }) => {
     const db = contextDb(experimental_context);
-    const { getAllUsedTags } = await import('@/lib/tagging/tag-queries');
     const tags = await getAllUsedTags(platform, db);
     return {
       count: tags.length,

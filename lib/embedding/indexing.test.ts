@@ -17,7 +17,9 @@ import type { ChunkInput } from './types';
 // out with a mutable state so the defaultDeps test can feed real settings;
 // all other tests inject explicit IndexingDeps. Mirrors config.test.ts.
 const mockSettings = vi.hoisted(() => ({ value: {} as Record<string, unknown> }));
-vi.mock('@/lib/storage', () => ({
+// `config.ts` reads settings through the storage LEAF (the barrel would also
+// evaluate ui-state/agent-bridge items at load), so mock the leaf.
+vi.mock('@/lib/storage/settings', () => ({
   settingsStorage: {
     getValue: () => Promise.resolve(mockSettings.value),
     setValue: () => Promise.resolve(),

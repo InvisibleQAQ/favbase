@@ -3,6 +3,11 @@ import type { FavbaseDb } from '@/lib/database';
 import * as schema from '@/lib/database/schema';
 import { escapeLike } from '@/lib/database/sql-utils';
 import { createEmbeddingModel, embedText } from '@/lib/ai';
+// Static on purpose: this path also runs inside the Background Service Worker
+// (Agent Bridge `searchKnowledgeBase`), and a Service Worker cannot use
+// dynamic `import()` (disallowed on ServiceWorkerGlobalScope by the HTML
+// specification).
+import { getEmbeddingSettings } from '@/lib/embedding/config';
 import { semanticSearchChunks } from '@/lib/embedding/vector-store';
 import { EmbeddingDimensionError } from '@/lib/embedding/errors';
 import { reciprocalRankFusion } from './rrf';
@@ -28,9 +33,6 @@ const DEFAULT_TOP_K = 8;
  * `createEmbeddingModel` + `embedText`); no new client is introduced.
  */
 const defaultEmbedQuery: RetrievalDeps['embedQuery'] = async (query) => {
-  // Lazy import: keeps `@/lib/storage` (WXT eager getItem) out of the module
-  // graph so consumers injecting `embedQuery` (tests) never load it.
-  const { getEmbeddingSettings } = await import('@/lib/embedding/config');
   const config = await getEmbeddingSettings();
   if (!config.enabled) return null;
   const model = createEmbeddingModel({

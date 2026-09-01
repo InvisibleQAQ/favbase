@@ -11,8 +11,9 @@ import { upsertChunkEmbeddings } from '@/lib/embedding/vector-store';
 import { hybridRetrieve } from './retrieval';
 import type { RetrievalDeps } from './types';
 
-// Every test injects `embedQuery`, so the default embedder (which lazy-imports
-// `@/lib/embedding/config` → WXT storage) never loads. No storage mock needed.
+// Every test injects `embedQuery`, so the default embedder never runs. Its
+// `@/lib/embedding/config` import is static (a Service Worker cannot
+// dynamic-import) but storage-free at load time, so no mock is needed.
 
 const INITIAL_DIM = 1536;
 

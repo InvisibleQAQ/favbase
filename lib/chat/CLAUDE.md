@@ -16,9 +16,15 @@ chat 检索面（`retrieval.ts` / `tools.ts` / `agent.ts`）对知识库表**只
 - `types.ts` — 检索共享契约：`FusedHit`/`RrfOptions`、`RetrievalItem`（`{ id, title, url, platform }`——来源卡片直接开 `url`，无 item 级内部详情路由，故不带 platform-native id）、`RetrievalHit`（`{ chunkId, chunkText, score, item }`）、`HybridRetrieveOptions`（`topK`/`minScore`/`platform`/`tagId`）、`RetrievalDeps`（注入 `embedQuery`，测试免网络）。
 - `rrf.ts` — `reciprocalRankFusion(lists: string[][], opts?: { k?, topK? }): FusedHit[]` 纯函数（零 IO，可单测）。`score = Σ 1/(k+rank)`，**只用排名不用原始分**（融合 cosine 与 word_similarity 两种不同量纲的健壮之道），k 默认 60；列表内同 id 只计首次；`score DESC` + `id ASC` 确定序；`topK` 截断。
 - `retrieval.ts` — `hybridRetrieve(db, query, opts?, deps?): Promise<RetrievalHit[]>`。两臂并行：
-  - **语义臂** = `embedQuery(query)`（默认 `getEmbeddingSettings`→`createEmbeddingModel`→`embedText`，与索引期同模型保证维度一致；`@/lib/embedding/config` **懒加载** 避免把 WXT storage 拖进模块图）→ `semanticSearchChunks`。未配置 embedding（`embedQuery` 返回 `null`）或**维度漂移**（`EmbeddingDimensionError`）时静默降级为仅关键词臂，绝不抛。
+  - **语义臂** = `embedQuery(query)`（默认 `getEmbeddingSettings`→`createEmbeddingModel`→`embedText`，与索引期同模型保证维度一致；`@/lib/embedding/config` 必须 **静态 import**——Service Worker 不允许动态 `import()`（HTML 规范禁止 `ServiceWorkerGlobalScope` 用 `import()`），Agent Bridge 在 SW 里执行这条路径；storage 侧的代价由 `lib/storage/settings.ts` 的懒 `defineItem` + 走 `@/lib/storage/settings` leaf 抵消）→ `semanticSearchChunks`。未配置 embedding（`embedQuery` 返回 `null`）或**维度漂移**（`EmbeddingDimensionError`）时静默降级为仅关键词臂，绝不抛。
   - **关键词臂** = `item_chunks.chunk_text` 上 `ILIKE '%'||escapeLike(q)||'%' ESCAPE '\'`（GIN `gin_trgm_ops` 加速的精确子串召回）+ `ORDER BY word_similarity(q, chunk_text) DESC`（排名）。
   - RRF 融合两臂 chunkId 排名 → topK → 回连 `items`（`platform`/`tagId` 过滤在 SQL 里，且在 RRF 截断**之前**，严格过滤不会被全局 topK 饿死）。空白 query / 无候选 → `[]`。
+
+## Service Worker 禁止动态 import（2026-08-31）
+
+`lib/chat` 的模块被 Background Agent Bridge 的 Knowledge Tool registry 静态加载。**Service Worker 里不能出现动态 `import()`**：HTML 规范禁止 `ServiceWorkerGlobalScope` 使用 `import()`，Chrome 直接 reject；Vite 的 `__vitePreload` 包装层又会在 `vite:preloadError` 上报里把这条 rejection 变成误导性的 `window is not defined` / `document is not defined`。历史上 `listTags`（`@/lib/tagging/tag-queries`）与 `searchKnowledgeBase`（`@/lib/embedding/config`）就是因此在外部 agent 侧全线失败，只有无动态 import 的 `getItemContent` 能用。
+
+两道守卫：源码层 `tests/agent-bridge-background-bundle-contract.test.ts`（`lib/chat/tools.ts` / `lib/chat/retrieval.ts` / `lib/agent-bridge/tool-registry.ts` 不得含 `import(`），产物层 `scripts/check-background-bundle.mjs`（SW 可达模块图零动态 `import()`）。
 
 ## 关键词臂的 PGlite 约束结论（已代码验证，见 research/retrieval-design.md）
 
@@ -31,7 +37,7 @@ chat 检索面（`retrieval.ts` / `tools.ts` / `agent.ts`）对知识库表**只
 - `tools.ts` — AI SDK v6 `tool()` 定义，纯对象 registry `chatTools = { searchKnowledgeBase, getItemContent, listTags }`（**key 即模型看到的 tool 名**，prompt/描述用同名交叉引用）。DB handle 经 `streamText` 的 `experimental_context` 注入，tool `execute(input, { experimental_context })` 里 `contextDb(...)` 取 `db`（缺则抛，`ChatToolContext` 契约共享给 `agent.ts`）。**全部只读**（SELECT）。`tools.ts` / `retrieval.ts` 的 schema value import 必须走 `@/lib/database/schema` leaf；Background Agent Bridge 会静态加载工具 registry，若走 database barrel 会把 PGlite 打进 `background.js`。inputSchema 遵循 course 规则：`.describe()` 放 `z.object(...)` 链尾、`platform` 用 `z.enum(COLLECTION_PLATFORMS)`、字段 snake_case、返回把关键字段拍平到顶层。
   - `searchKnowledgeBase`：包 `hybridRetrieve`。字段 `query`(必填) / `platform`?(enum) / `tag_id`? / `top_k`?(默认 8)。返回 `{ count, results: [{ item_id, title, url, platform, chunk_text, score }] }`。描述强制"回答收藏内容问题前必须先调用"。
   - `getItemContent`：字段 `item_id`(来自 search 结果)。`db.select(itemContents.plainText).where(eq(itemContents.itemId, id))`，返回 `{ found, item_id, content }`。
-  - `listTags`：包 `getAllUsedTags(platform?)`。字段 `platform`?(enum)。返回 `{ count, tags: [{ id, name, count }] }`；`tagging/tag-queries` leaf 在 `execute` 内延迟导入，保证 `chatTools`/Agent Bridge registry 不加载 tagging 写路径或 database barrel。
+  - `listTags`：包 `getAllUsedTags(platform?)`。字段 `platform`?(enum)。返回 `{ count, tags: [{ id, name, count }] }`；`tagging/tag-queries` leaf 走**静态 import**（同上：SW 禁动态 `import()`），leaf 本身不 import tagging/database barrel，故 `chatTools`/Agent Bridge registry 仍不加载 tagging 写路径或 PGlite。
 - `prompts.ts` — 契约式（非人设）system prompt。稳定前缀 `CHAT_SYSTEM_PROMPT`（7 条硬规则：须先检索/基于结果作答并标注来源/无结果如实说/不足则追问/只读边界/不臆造/Markdown 输出，原生 tool-calling **不叠加** "Thought:" 文本模板）+ 动态后缀 `buildContextSuffix({ now })`（注入当天 ISO 日期，模型不知"今天"）。prompt 是模型指令非 UI 文案，含中文合规（i18n 守卫只扫 `entrypoints/**`）。
 - `agent.ts` — `createChatStream({ model, messages: ModelMessage[], db, now, abortSignal? })` 包 `streamText({ model, system: prefix+suffix, messages, tools: chatTools, stopWhen: stepCountIs(8), temperature: 0.3, experimental_context: { db }, abortSignal })`。**必须显式 `stopWhen: stepCountIs(8)`**（v6 默认 `stepCountIs(1)` 单步陷阱）。返回 `StreamTextResult` 供 hook 消费 `fullStream`。
 

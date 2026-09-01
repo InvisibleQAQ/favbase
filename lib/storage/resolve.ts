@@ -1,11 +1,14 @@
 /**
  * Pure settings resolvers — `UserSettings` → concrete per-domain config.
  *
- * Deliberately free of `wxt/utils/storage`: `settings.ts` calls
- * `storage.defineItem` at module load (which touches chrome.runtime), so
- * domain configs that only need the pure math import from here and keep their
- * tests free of storage stubs. `settings.ts` re-exports everything below, so
- * `@/lib/storage` stays the public import surface.
+ * Deliberately free of `wxt/utils/storage`: `settings.ts` pulls that dependency
+ * into the module graph, so domain configs that only need the pure math import
+ * from here and keep their tests free of storage stubs. (`settings.ts` defines
+ * its item LAZILY, so importing it no longer touches chrome.runtime at load —
+ * but importing it still costs the WXT storage dependency, and the barrel
+ * `@/lib/storage` additionally evaluates the eager `ui-state` / `agent-bridge`
+ * items.) `settings.ts` re-exports everything below, so `@/lib/storage` stays
+ * the public import surface.
  */
 
 import type { LLMProviderId } from '../providers';

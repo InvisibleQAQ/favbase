@@ -1,7 +1,11 @@
 import type { EmbeddingProviderId } from '@/lib/providers';
 import { EMBEDDING_PROVIDER_IDS, getEmbeddingProviderDef } from '@/lib/providers';
-import type { UserSettings } from '@/lib/storage';
-import { settingsStorage } from '@/lib/storage';
+// Storage leaf, not the `@/lib/storage` barrel: the barrel also evaluates the
+// `ui-state` / `agent-bridge` items, and this module is statically reachable
+// from the Background Agent Bridge tool registry (a Service Worker may not use
+// dynamic `import()`), so its load-time footprint has to stay minimal.
+import type { UserSettings } from '@/lib/storage/settings';
+import { settingsStorage } from '@/lib/storage/settings';
 
 export interface ResolvedEmbeddingConfig {
   providerId: EmbeddingProviderId;
