@@ -118,9 +118,8 @@ export function ChatWorkspace({ agent }: ChatWorkspaceProps) {
     >
       <Stack
         direction="row"
-        alignItems="center"
         spacing={1.25}
-        sx={{ minHeight: 40, mb: 2, flexShrink: 0 }}
+        sx={{ alignItems: 'center', minHeight: 40, mb: 2, flexShrink: 0 }}
       >
         <Box
           component="img"
@@ -233,12 +232,10 @@ export function ChatWorkspace({ agent }: ChatWorkspaceProps) {
           {loading ? (
             <Stack
               spacing={1.5}
-              alignItems="center"
-              justifyContent="center"
-              sx={{ flex: '1 1 auto', minHeight: 0 }}
+              sx={{ alignItems: 'center', justifyContent: 'center', flex: '1 1 auto', minHeight: 0 }}
             >
               <CircularProgress size={24} />
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                 {t('chat.loading')}
               </Typography>
             </Stack>
@@ -270,9 +267,9 @@ export function ChatWorkspace({ agent }: ChatWorkspaceProps) {
                   {showEmptyState ? (
                     <Stack
                       spacing={1.5}
-                      alignItems="center"
-                      justifyContent="center"
                       sx={(theme) => ({
+                        alignItems: 'center',
+                        justifyContent: 'center',
                         flex: '1 1 auto',
                         color: theme.vars.palette.text.secondary,
                         textAlign: 'center',
@@ -411,7 +408,7 @@ function ConversationRail({
       sx={{ display: 'flex', width: 1, height: 1, minHeight: 0, flexDirection: 'column' }}
     >
       <Box sx={{ flexShrink: 0, p: 1.5, pb: 1 }}>
-        <Stack direction="row" alignItems="center" spacing={1}>
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
           <Typography variant="subtitle2" sx={{ flexGrow: 1 }}>
             {t('chat.conversationHistory')}
           </Typography>
@@ -606,12 +603,12 @@ function MessageBubble({ message, activityLabel: activity, pending }: MessageBub
         {activity && (
           <Stack
             direction="row"
-            alignItems="center"
             spacing={0.75}
             role="status"
             aria-live="polite"
             data-slot="tool-activity"
             sx={(theme) => ({
+              alignItems: 'center',
               alignSelf: 'flex-start',
               minHeight: 30,
               mb: 1,

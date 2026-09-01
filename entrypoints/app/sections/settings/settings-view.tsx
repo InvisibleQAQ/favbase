@@ -47,7 +47,7 @@ function parseResumePlatform(value: string | null): CollectionPlatform | null {
 /** Every tab shares the same two-column shape: left rail + right content. */
 function RailLayout({ rail, children }: { rail: ReactNode; children: ReactNode }) {
   return (
-    <Grid container spacing={{ xs: 2.5, md: 3 }} alignItems="flex-start">
+    <Grid container spacing={{ xs: 2.5, md: 3 }} sx={{ alignItems: 'flex-start' }}>
       <Grid size={{ xs: 12, md: 3 }} sx={{ minWidth: 0 }}>{rail}</Grid>
       <Grid size={{ xs: 12, md: 9 }} sx={{ minWidth: 0 }}>{children}</Grid>
     </Grid>

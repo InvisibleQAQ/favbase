@@ -6,7 +6,7 @@ Turn your social media Favorites into a searchable knowledge base just with a lo
 
 - **框架**: WXT 0.20.26 (Vite) + React 19 + TypeScript 5.9
 - **架构**: Chrome MV3 (Service Worker + Content Script + Shadow DOM UI + Extension Page)
-- **UI 框架**: MUI v7 (Extension Page) + 原生 CSS + `--fb-*` design tokens (Content Script Shadow DOM)；Chat 回答用 `react-markdown` + `remark-gfm` 渲染（无 rehype-raw，XSS 安全）
+- **UI 框架**: MUI v9（`@mui/material` 9.4，Extension Page；system props 已全部走 `sx`，v9 的 `Typography color="text.secondary"` 点号形式类型通过但不产生样式，禁用）+ 原生 CSS + `--fb-*` design tokens (Content Script Shadow DOM)；Chat 回答用 `react-markdown` + `remark-gfm` 渲染（无 rehype-raw，XSS 安全）
 - **动画**: `motion` 12（framer-motion 现名），**仅 welcome.html 用**（单独 code-split 进 welcome chunk）。app.html / Content Script 保持纯 MUI + CSS，不要因为装了这个包就往其他入口加动画依赖
 - **AI SDK**: Vercel AI SDK v6（`ai` + `@ai-sdk/openai` + `@ai-sdk/anthropic` + `@ai-sdk/google` + `@ai-sdk/openai-compatible`）
 - **存储**: WXT `storage.defineItem`（设置/缓存） + PGlite 0.5 + Drizzle ORM 0.45 + pgvector（知识库）
@@ -16,7 +16,7 @@ Turn your social media Favorites into a searchable knowledge base just with a lo
 ## Chrome 发布
 
 - 根 `package.json` 的 `version` 是扩展版本的单一事实源；每次提交 Chrome Web Store 前必须递增，且不能全为零。
-- Manifest 最低版本为 Chrome 116：Agent Bridge 依赖该版本起 WebSocket 流量可延长 MV3 Service Worker 生命周期。
+- Manifest 最低版本为 Chrome 117：MUI v9 最低支持 Chrome 117（docs/25 D2，2026-09-01）；同时覆盖 Agent Bridge 的 116 下限（自 116 起 WebSocket 流量可延长 MV3 Service Worker 生命周期）。
 - 依次运行 `pnpm compile`、`pnpm test`、`pnpm zip`；上传 `.output/*-chrome.zip`，无需手工生成 CRX。
 
 ## 当前状态
@@ -30,7 +30,7 @@ WXT 入口点及运行时角色总览，详细结构见对应目录 `CLAUDE.md`�
 - `entrypoints/background.ts` — Background Service Worker（→ `lib/background/`）
 - `entrypoints/bilibili-inject.content.ts` — B站视频页 Main World 脚本（`world:'MAIN'` → `lib/bilibili/inject/`）
 - `entrypoints/bilibili-video.content/` — B站视频页 Content Script（Shadow DOM React UI，Isolated World）
-- `entrypoints/app/` — Extension Page 主界面（`app.html`，MUI v7 Dashboard）
+- `entrypoints/app/` — Extension Page 主界面（`app.html`，MUI v9 Dashboard）
 - `entrypoints/welcome/` — 首装引导页（`welcome.html`，滚动叙事 + 平台多选 → app.html；由 background `onInstalled` 弹出）
 - `entrypoints/popup/` — Popup 跳板：打开/聚焦 app.html 标签页
 
@@ -42,6 +42,9 @@ WXT 入口点及运行时角色总览，详细结构见对应目录 `CLAUDE.md`�
 - `docs/20_multi-platform-architecture-deepening-audit-2026-08-21.md` — 多平台架构深化审计（2026-08-22 修正版：9 条发现逐条源码复核 + 无 mock import 冒烟实证；修订后主线是中-5→高-4/中-8 收回 Bilibili 平台事实、高-1 用 import-smoke contract 取代注释规则；offscreen 不加载任何平台 sync。**高-1 已落地 2026-08-22**（`tests/lib-import-smoke.test.ts` + zhihu/youtube/bilibili 改 leaf + 六处防御性 storage mock 删除）；**中-5 已全部落地 2026-08-22**：`persistContent`/`startProcessingDirectly` 删除，`startProcessing` seam 改必填（coordinator 构造器 `(startProcessing, trackRun?)`），`lib/bilibili` 零 `@/lib/embedding`/`@/lib/tagging` value import，`transcribe-utils` 进 import-smoke 清单；`auto-transcribe-adapter.test.ts` 的 storage mock 是功能性的，保留。**中-6 已落地 2026-08-22**：`useCollectionLibrary` 加唯一受控 seam `controlledFilter?: string | null`（render 期回页 1，`setFilter` no-op），`use-bookmarks.ts` 改薄 adapter（路由 folderId 受控注入 + 挂载 `sync()` 留 adapter）；`autoSyncOnMount`/metaLoading 延后经复核不需要（phase 阶梯 `syncingEmpty` 已锁 skeleton）。**高-2（嵌套路由登记）已落地 2026-08-22**：`COLLECTION_PAGE_CHILD_ROUTES` 穷举表 + `main.tsx` 零平台路由行；**高-3（修订为中）已落地 2026-08-22**：daily auto-sync registry 搬至 app 根 `entrypoints/app/collection-platform-auto-sync.ts`，`jobPlatform` 派生，六 adapter 导出 `<p>AutoSyncPolicy`，`hooks/` 零 `sections/` import；**高-4 已落地 2026-08-22**：失效视频规则收回 `lib/bilibili/video-eligibility.ts`（常量 + 内存判定 + SQL predicate + parity test），共享 policy 按穷举 registry `lib/collections/platform-eligibility.ts` 注入、零平台字面量；**中-7（修订为低）已落地 2026-08-22**：实际重复点是 6 处（github/x/zhihu/youtube/bookmarks + bilibili 两页）而非 4 处，`useCollectionPipeline`（`entrypoints/app/hooks/use-collection-pipeline.ts`）+ `collectionPipelineStages`/`fetchedCountProgress` 收编 stages 数组、`pipeline.*` 标签翻译与 coverage refresh key，view 只注入 Fetch runtime 与 content 段；中-8 的 `narrow*Meta` 待做）
 - `docs/21_agent-bridge-analysis-2026-08-22.md` — Agent Bridge 分析/决策/设计/路线（Phase 0–4 已完成）；**2026-08-28 起外部面改为 Skill-first（`docs/adr/0003`）**：检索仍在 SW 内复用 `chatTools`、传输仍是扩展出站 WS（ADR 0002），但 Node 侧是 `favbase` CLI + 自启 daemon 而非 MCP；docs/21 的 Q5/Q9/Q10 与 §6.6 已被 ADR 0003 取代；术语 Agent Bridge / Knowledge Tool / Bridge Token / Bridge Daemon / favbase CLI 在 `CONTEXT.md`
 - `docs/24_agent-bridge-reconnect-latency-remediation-2026-09-01.md` — Agent Bridge 重连延迟整改方案。Step 0 已用 bad-token 黑盒实验定因；Step 1-4 已于 2026-09-01 落地：显式 connect-now 穿透自动退避、已认证 peer 阻止 daemon idle 自灭、75 秒 hello wait 覆盖旧 Chrome 的 60 秒 alarm、daemon/扩展双视角保留认证失败痕迹并由 doctor/设置页诚实呈现。v1 wire protocol 未改，Step 5 默认常连策略与 Step 6 Offscreen 迁移仍待评估。
+- `docs/22_ai-ui-reference-adaptation-best-practices.md` — AI 借用参考 UI 模板的方法论（冻结产品契约 → 采证 → 提炼设计语言 → 适配矩阵 → 目标规范 → 垂直切片 → 分层迁移）；docs/23 与 docs/25 按此流程产出
+- `docs/23_favbase-app-minimal-dashboard-v7-adaptation-plan-zh-CN.md` — app.html 向 Minimal v7 借鉴的第一轮方案（2026-08-26，"保留自有世界、只借结构"路线，自述 Phase 0-4 已完成、Phase 5 已实施待审阅，`docs/ui-baseline/2026-08-31/phase7-validation/` 是其运行时验证截图；其 §6 适配矩阵与 §11 拒绝清单已被 docs/25 §3 推翻，仅存历史）
+- `docs/25_app-ui-minimal-alignment-manual-2026-09-01.md` — app.html **全面向 Minimal v7.7.0 看齐**的分步改造手册（**Step 0 已于 2026-09-01 落地，Step 1+ 未开工**）：Step 0 MUI 9 + Chrome 117 → Step 1 theme/core 换血 → Step 2 六色预设 + 设置状态 → Step 3 共享原语 → Step 4 nav-section/header/设置抽屉 → Step 5 sonner → Step 6 Dashboard KPI + 原生 SVG 图表 → Step 7 Settings → Step 8 六平台页 → Step 9 Chat shell → Step 10 收口；每步八段（目标/依赖/文件/改法/测试重写/验证/回滚/判据），决策来源逐条标"用户决定 / PRD 默认"，`[UNKNOWN]` 与 PRD 勘误集中在附录 C/D。执行任一 Step 前先读该文对应节
 - `.trellis/` — Trellis 开发工作流配置
 - `tests/platform-completeness-contract.test.ts` — 单一聚合失败的跨层平台接入契约；以 TypeScript AST 对账 app/welcome/build/test 各层 Adapter（含 `COLLECTION_PAGE_CHILD_ROUTES` 子路由表须为显式数组字面量，且 `main.tsx` 不得出现 `collections/<platform>` 字面量），避免加载 DB 或页面 runtime；daily auto-sync registry（`entrypoints/app/collection-platform-auto-sync.ts`）须每平台显式 `runSync` 且不得手写 `jobPlatform`；`entrypoints/app/hooks/` 非测试模块不得 import `sections/`；downstream eligibility registry（`lib/collections/platform-eligibility.ts`）六平台显式键（`null` 合法），且 `lib/collections/collection-processing-policy.ts` 不得含平台字面量/`platformMeta`/`->>`
 - `tests/lib-import-smoke.test.ts` — lib 层 import-smoke 契约（docs/20 高-1 + 中-5）：Agent Bridge 协议/registry、六个平台 sync-service（由 `COLLECTION_PLATFORMS` 派生、自动发现 `lib/<platform>/*-sync-service.ts`）+ `embedding/chunker`/`char-split`、`collections/platforms`、`ingest/ingest`、`database`、`bilibili/transcribe-utils`（转录 seam）在无 `chrome` 全局、零 `vi.mock` 下 `import()` 零未处理 rejection；取代注释与散落的防御性 storage mock
@@ -50,7 +53,7 @@ WXT 入口点及运行时角色总览，详细结构见对应目录 `CLAUDE.md`�
 ## 参考项目
 
 - `C:\Users\18368\Desktop\00_myCode\24_cyberSquirrel\02_Bilitato` — Bilitato 开源项目，B站视频 AI 助手，是视频转录功能的主要参考实现
-- `C:\Users\18368\Desktop\00_myCode\24_cyberSquirrel\06_material-kit-react` — Material Kit React，MUI v7 Dashboard 模板，app.html 布局骨架与主题机制参考（视觉 token 值已按 `docs/19` 换成目录卡片库方向，不再沿用其配色）
+- `C:\Users\18368\Desktop\00_myCode\24_cyberSquirrel\06_material-kit-react` — Material Kit React，MUI Dashboard 模板，app.html 布局骨架与主题机制参考（视觉 token 值已按 `docs/19` 换成目录卡片库方向，不再沿用其配色）
 
 ## 目录文档索引
 
@@ -58,7 +61,7 @@ WXT 入口点及运行时角色总览，详细结构见对应目录 `CLAUDE.md`�
 
 ### Extension Page（app.html）
 - `entrypoints/app/CLAUDE.md` — 主界面入口、Hash Router、路由结构
-- `entrypoints/app/theme/CLAUDE.md` — MUI v7 主题系统（palette/typography/shadows/components）
+- `entrypoints/app/theme/CLAUDE.md` — MUI v9 主题系统（palette/typography/shadows/components）
 - `entrypoints/app/layouts/CLAUDE.md` — 仪表盘布局系统 + 侧边栏 Pin/Unpin
 - `entrypoints/app/components/iconify/CLAUDE.md` — Iconify 离线图标系统
 - `entrypoints/app/components/collection/CLAUDE.md` — 平台 section 共享展示哑组件（StateBox/标题栏 h1/搜索框/卡片网格 24px gap+分页/chip 行外壳/**`CollectionCard` 六平台条目外壳** + `CollectionCardRow` 链接外行内边距 owner + `CollectionCardSkeleton` 同轨道骨架）+ `CollectionPageScaffold` 页面编排

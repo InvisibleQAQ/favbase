@@ -321,7 +321,7 @@ OpenAI 协议兼容客户端。支持批量 embedding。无 API Key 时标记 `'
 | 冲突策略 | Last-Write-Wins + tombstone + 远端锁文件 | 规则简单可预测，适合多设备离线后重连 |
 | 向量语义 | 派生缓存 | 模型参数一致才复用，不一致则重建 |
 | 凭据边界 | B站 Cookie / API Key 本地独占 | 降低远端泄露面，符合 local-first 叙事 |
-| 目标浏览器 | Chrome / Edge 116+ | offscreen API 是 Chromium 特有 |
+| 目标浏览器 | Chrome / Edge 117+ | offscreen API 是 Chromium 特有；117 是 MUI v9 的浏览器下限（Agent Bridge 只需 116） |
 | 问答方式 | 检索 + 片段展示 | 聚焦检索价值，无 LLM 依赖 |
 | 国际化 | 静态 JSON 翻译文件 + `navigator.language` 检测 | 两种语言无需运行时翻译服务，随扩展打包零延迟 |
 

@@ -19,9 +19,9 @@ export function BackgroundJobsBar({ captions }: BackgroundJobsBarProps) {
   return (
     <Stack spacing={0.5} sx={{ mb: 2 }}>
       {captions.map((caption) => (
-        <Stack key={caption} direction="row" spacing={1} alignItems="center">
+        <Stack key={caption} direction="row" spacing={1} sx={{ alignItems: 'center' }}>
           <CircularProgress size={12} />
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
             {caption}
           </Typography>
         </Stack>

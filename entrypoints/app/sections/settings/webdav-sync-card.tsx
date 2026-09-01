@@ -140,7 +140,7 @@ export function WebdavSyncCard() {
                   <Typography variant="body2" sx={{ fontWeight: 600 }}>
                     {t('settings.sync.enableLabel')}
                   </Typography>
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                     {t('settings.sync.enableHint')}
                   </Typography>
                 </Box>
@@ -197,13 +197,13 @@ export function WebdavSyncCard() {
           </Grid>
 
           <Grid size={{ xs: 12 }}>
-            <Typography variant="caption" color="text.secondary">
+            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
               {t('settings.sync.noteHttps')}
             </Typography>
           </Grid>
 
           <Grid size={{ xs: 12 }}>
-            <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap>
+            <Stack direction="row" spacing={1.5} useFlexGap sx={{ flexWrap: 'wrap' }}>
               <Button
                 variant="contained"
                 onClick={() => void handleSyncNow()}
@@ -245,14 +245,14 @@ export function WebdavSyncCard() {
                     {stateLabel}
                   </Box>
                 </Typography>
-                <Typography variant="caption" color="text.secondary">
+                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                   {t('settings.sync.lastSync')}:{' '}
                   {status && status.lastSyncTime > 0
                     ? formatDateTime(status.lastSyncTime)
                     : t('settings.sync.neverSynced')}
                 </Typography>
                 {status?.syncVersion && (
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                     {t('settings.sync.remoteVersion')}: {status.syncVersion.slice(0, 8)}
                   </Typography>
                 )}

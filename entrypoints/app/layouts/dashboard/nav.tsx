@@ -106,7 +106,7 @@ export function NavDesktop({
 /**
  * Temporary Drawer for < layoutQuery. Closes itself when the pathname changes
  * and hands focus back through `onExited` only after the exit transition —
- * the MUI 7 + React 19 ordering contract shared with the Chat history drawer
+ * the MUI 9 + React 19 ordering contract shared with the Chat history drawer
  * (`disableRestoreFocus` + blur the focused descendant in
  * `onTransitionExited`, restore the trigger from the transition's `onExited`).
  */

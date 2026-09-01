@@ -54,37 +54,55 @@ const MuiBackdrop: Components<Theme>['MuiBackdrop'] = {
 const MuiButton: Components<Theme>['MuiButton'] = {
   defaultProps: { disableElevation: true },
   styleOverrides: {
-    // The one inverted element per screen: ink on paper, paper on ink.
-    // Coral never sits under white text (2.5:1).
-    containedPrimary: ({ theme }) => ({
-      color: theme.vars.palette.common.white,
-      backgroundColor: theme.vars.palette.grey[900],
-      '&:hover': { backgroundColor: theme.vars.palette.grey[800] },
-      ...theme.applyStyles('dark', {
-        color: theme.vars.palette.grey[900],
-        backgroundColor: theme.vars.palette.grey[100],
-        '&:hover': { backgroundColor: theme.vars.palette.grey[200] },
-      }),
-    }),
-    containedInherit: ({ theme }) => ({
-      color: theme.vars.palette.common.white,
-      backgroundColor: theme.vars.palette.grey[800],
-      '&:hover': {
-        color: theme.vars.palette.common.white,
-        backgroundColor: theme.vars.palette.grey[800],
-      },
-    }),
-    outlinedPrimary: ({ theme }) => ({
-      color: theme.vars.palette.text.accent,
-      borderColor: varAlpha(theme.vars.palette.text.accentChannel, 0.48),
-      '&:hover': {
-        borderColor: theme.vars.palette.text.accent,
-        backgroundColor: theme.vars.palette.primary.lighter,
-      },
-    }),
-    textPrimary: ({ theme }) => ({
-      color: theme.vars.palette.text.accent,
-      '&:hover': { backgroundColor: theme.vars.palette.primary.lighter },
+    // MUI 9 dropped the composed `containedPrimary`-style override keys; the
+    // same variant+color pairs live in `root.variants` (upgrade-to-v9 guide).
+    root: ({ theme }) => ({
+      variants: [
+        {
+          // The one inverted element per screen: ink on paper, paper on ink.
+          // Coral never sits under white text (2.5:1).
+          props: { variant: 'contained', color: 'primary' },
+          style: {
+            color: theme.vars.palette.common.white,
+            backgroundColor: theme.vars.palette.grey[900],
+            '&:hover': { backgroundColor: theme.vars.palette.grey[800] },
+            ...theme.applyStyles('dark', {
+              color: theme.vars.palette.grey[900],
+              backgroundColor: theme.vars.palette.grey[100],
+              '&:hover': { backgroundColor: theme.vars.palette.grey[200] },
+            }),
+          },
+        },
+        {
+          props: { variant: 'contained', color: 'inherit' },
+          style: {
+            color: theme.vars.palette.common.white,
+            backgroundColor: theme.vars.palette.grey[800],
+            '&:hover': {
+              color: theme.vars.palette.common.white,
+              backgroundColor: theme.vars.palette.grey[800],
+            },
+          },
+        },
+        {
+          props: { variant: 'outlined', color: 'primary' },
+          style: {
+            color: theme.vars.palette.text.accent,
+            borderColor: varAlpha(theme.vars.palette.text.accentChannel, 0.48),
+            '&:hover': {
+              borderColor: theme.vars.palette.text.accent,
+              backgroundColor: theme.vars.palette.primary.lighter,
+            },
+          },
+        },
+        {
+          props: { variant: 'text', color: 'primary' },
+          style: {
+            color: theme.vars.palette.text.accent,
+            '&:hover': { backgroundColor: theme.vars.palette.primary.lighter },
+          },
+        },
+      ],
     }),
     sizeSmall: { minHeight: 30 },
     sizeMedium: { minHeight: 36 },
@@ -310,11 +328,15 @@ const MuiLinearProgress: Components<Theme>['MuiLinearProgress'] = {
 const MuiChip: Components<Theme>['MuiChip'] = {
   styleOverrides: {
     // The stamp: coral block, ink text (contrastText). Hover lifts to the
-    // lighter coral rather than darkening under ink.
-    filledPrimary: ({ theme }) => ({
-      '&.MuiChip-clickable:hover': {
-        backgroundColor: theme.vars.palette.primary.light,
-      },
+    // lighter coral rather than darkening under ink. (`filledPrimary` is no
+    // longer an override key in MUI 9 → root variant.)
+    root: ({ theme }) => ({
+      variants: [
+        {
+          props: { variant: 'filled', color: 'primary', clickable: true },
+          style: { '&:hover': { backgroundColor: theme.vars.palette.primary.light } },
+        },
+      ],
     }),
     outlined: ({ theme }) => ({
       // Default-color filter chips share the hairline; semantic-color

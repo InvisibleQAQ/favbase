@@ -357,7 +357,7 @@ export function BilibiliShowcase() {
         borderBottom: `1px solid ${theme.vars.palette.divider}`,
       })}
     >
-      <Grid container spacing={{ xs: 5, md: 6 }} alignItems="center">
+      <Grid container spacing={{ xs: 5, md: 6 }} sx={{ alignItems: 'center' }}>
         <Grid size={{ xs: 12, md: 7 }}>
           <FadeIn delay={0.06} duration={0.8} y={32}>
             <Box

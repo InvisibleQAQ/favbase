@@ -102,7 +102,7 @@ export function Hero() {
       <Aurora />
 
       <Container maxWidth="lg" sx={{ position: 'relative', zIndex: 1 }}>
-        <Grid container spacing={{ xs: 7, md: 4 }} alignItems="center">
+        <Grid container spacing={{ xs: 7, md: 4 }} sx={{ alignItems: 'center' }}>
           <Grid size={{ xs: 12, md: 7 }}>
             <FadeIn y={-14} duration={0.6}>
               <Eyebrow>{t('welcome.hero.eyebrow')}</Eyebrow>

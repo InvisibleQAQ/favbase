@@ -255,7 +255,7 @@ export function ChatShowcase() {
 
   return (
     <WelcomeSection id="welcome-chat" sx={{ scrollMarginTop: 80 }}>
-      <Grid container spacing={{ xs: 5, md: 6 }} alignItems="center">
+      <Grid container spacing={{ xs: 5, md: 6 }} sx={{ alignItems: 'center' }}>
         <Grid size={{ xs: 12, md: 5 }}>
           <FadeIn y={-12}>
             <Eyebrow icon="solar:magic-stick-3-bold-duotone">

@@ -1,6 +1,6 @@
 # app/theme
 
-This directory owns the single MUI v7 CSS-variable theme used by `app.html`
+This directory owns the single MUI v9 CSS-variable theme used by `app.html`
 and `welcome.html`. Pages consume semantic `theme.vars` tokens; they must not
 copy palette, typography, radius, or elevation values into local `sx`.
 
@@ -19,7 +19,10 @@ copy palette, typography, radius, or elevation values into local `sx`.
   divider hairline and `card: 'none'`. Only dropdowns/dialogs cast strong
   floating shadows.
 - `core/components.tsx` — shared defaults for buttons, cards, inputs, tabs,
-  chips, papers, overlays, skeletons, tables, and `CssBaseline`.
+  chips, papers, overlays, skeletons, tables, and `CssBaseline`. Variant+color
+  pairs (ink contained-primary button, coral filled-primary chip, `text.accent`
+  outlined/text buttons) live in `root.variants` with `props: { variant, color }`;
+  MUI 9 removed the composed `containedPrimary` / `filledPrimary` override keys.
 - `create-theme.ts` — combines both color schemes and sets the base radius to
   8px.
 - `theme-provider.tsx` — `ThemeVarsProvider` + `CssBaseline`; keep

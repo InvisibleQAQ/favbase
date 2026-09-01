@@ -94,7 +94,7 @@ export function ExportCard() {
     <SettingsPanel title={t('export.title')} description={t('export.subtitle')}>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Typography variant="subtitle2">{t('export.backupHeading')}</Typography>
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
             {t('export.backupHint')}
           </Typography>
 
@@ -140,7 +140,7 @@ export function ExportCard() {
           <Divider />
 
           <Typography variant="subtitle2">{t('export.obsidianHeading')}</Typography>
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
             {t('export.obsidianHint')}
           </Typography>
 

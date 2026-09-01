@@ -406,7 +406,7 @@ export function AgentBridgeCard() {
               })}
             >
               <Stack spacing={1}>
-                <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" useFlexGap>
+                <Stack direction="row" spacing={1.5} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
                   <Typography variant="subtitle2">
                     {t('settings.agentBridge.statusLabel')}
                   </Typography>
@@ -445,7 +445,7 @@ export function AgentBridgeCard() {
           {badToken && (
             <Grid size={{ xs: 12 }}>
               <Alert severity="error">
-                <Stack spacing={1.5} alignItems="flex-start">
+                <Stack spacing={1.5} sx={{ alignItems: 'flex-start' }}>
                   <Typography variant="body2">{statusError}</Typography>
                   <Button
                     size="small"

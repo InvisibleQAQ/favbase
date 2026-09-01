@@ -59,7 +59,9 @@ export default defineConfig({
   manifest: {
     name: 'favbase',
     description: 'Turn your social media bookmarks into a searchable knowledge base',
-    minimum_chrome_version: '116',
+    // 117: MUI v9's minimum supported Chrome (app.html). Also satisfies the
+    // Agent Bridge floor (116+: WebSocket traffic extends the MV3 SW lifetime).
+    minimum_chrome_version: '117',
     permissions: [
       'storage',
       'unlimitedStorage',

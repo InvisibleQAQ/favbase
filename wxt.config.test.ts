@@ -10,9 +10,9 @@ describe('Chrome host permissions', () => {
     expect(manifest).not.toHaveProperty('optional_host_permissions');
   });
 
-  it('requires Chrome 116 for WebSocket-kept service workers', () => {
+  it('requires Chrome 117 (MUI v9 floor, covers the 116 WebSocket-kept SW floor)', () => {
     const manifest = (config as { manifest?: Record<string, unknown> }).manifest;
 
-    expect(manifest?.minimum_chrome_version).toBe('116');
+    expect(manifest?.minimum_chrome_version).toBe('117');
   });
 });
