@@ -3,13 +3,16 @@ import {
   watchAgentBridgeConfig,
   type AgentBridgeConfig,
 } from '@/lib/storage/agent-bridge';
-import type { AgentBridgeCloseReason } from './client';
+import type {
+  AgentBridgeCloseReason,
+  AgentBridgeConnectTrigger,
+} from './client';
 
 export const AGENT_BRIDGE_ALARM = 'agent-bridge-poll';
 export const AGENT_BRIDGE_POLL_MINUTES = 0.5;
 
 export interface AgentBridgeSchedulerClient {
-  tryConnect(): Promise<void>;
+  tryConnect(trigger?: AgentBridgeConnectTrigger): Promise<void>;
   close(reason: AgentBridgeCloseReason): Promise<void>;
 }
 
@@ -43,14 +46,20 @@ export function initAgentBridgeScheduler(
 ): AgentBridgeScheduler {
   let queue = Promise.resolve();
 
-  const enqueueRefresh = (reconfigure: boolean): Promise<void> => {
+  const enqueueRefresh = (
+    reconfigure: boolean,
+    trigger: AgentBridgeConnectTrigger,
+  ): Promise<void> => {
     queue = queue
-      .then(() => refresh(reconfigure))
+      .then(() => refresh(reconfigure, trigger))
       .catch((error) => console.error('[agent-bridge] scheduler refresh failed', error));
     return queue;
   };
 
-  const refresh = async (reconfigure: boolean): Promise<void> => {
+  const refresh = async (
+    reconfigure: boolean,
+    trigger: AgentBridgeConnectTrigger,
+  ): Promise<void> => {
     const config = await dependencies.getConfig();
     if (!config.enabled) {
       await client.close('disabled');
@@ -62,21 +71,21 @@ export function initAgentBridgeScheduler(
     await dependencies.alarms.create(AGENT_BRIDGE_ALARM, {
       periodInMinutes: AGENT_BRIDGE_POLL_MINUTES,
     });
-    await client.tryConnect();
+    await client.tryConnect(trigger);
   };
 
   dependencies.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === AGENT_BRIDGE_ALARM) {
-      void client.tryConnect().catch((error) =>
+      void client.tryConnect('schedule').catch((error) =>
         console.error('[agent-bridge] alarm connection failed', error),
       );
     }
   });
-  dependencies.startup.addListener(() => void enqueueRefresh(false));
-  dependencies.watchConfig(() => void enqueueRefresh(true));
-  void enqueueRefresh(false);
+  dependencies.startup.addListener(() => void enqueueRefresh(false, 'schedule'));
+  dependencies.watchConfig(() => void enqueueRefresh(true, 'schedule'));
+  void enqueueRefresh(false, 'schedule');
 
   return {
-    connectNow: () => enqueueRefresh(false),
+    connectNow: () => enqueueRefresh(false, 'user'),
   };
 }

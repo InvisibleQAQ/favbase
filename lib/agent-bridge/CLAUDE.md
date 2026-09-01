@@ -25,6 +25,8 @@ CLI package (`packages/favbase-cli`) consumes only the protocol leaf; extension 
   ping/call dispatch return pong/result. DB acquisition is injected and lazy.
 - `scheduler.ts` — Background-only 30-second alarm, config watch, startup
   compensation, and `connectNow()`. Disable clears the alarm and closes the client.
+  Alarm/startup/config-watch connect with trigger `'schedule'`; `connectNow()` is
+  the only `'user'` caller, because its two entry points are human actions.
 
 ## Contracts
 
@@ -37,15 +39,24 @@ CLI package (`packages/favbase-cli`) consumes only the protocol leaf; extension 
 - The Node package imports `protocol.ts` through the reviewed relative path and
   must never import `tool-registry.ts`; Knowledge Tool facts stay extension-owned.
 - Authentication backoff is persisted in `local:agent-bridge-status`, capped at
-  five minutes, and reset only by a valid welcome or deliberate reconfiguration.
-  An in-memory-only counter is invalid because MV3 suspension would erase it.
+  five minutes, and reset by a valid welcome, deliberate reconfiguration, or an
+  explicit user connect-now. An in-memory-only counter is invalid because MV3
+  suspension would erase it.
+- `tryConnect(trigger)` has exactly two triggers and no parallel `forceConnect()`.
+  `'user'` skips the `nextRetryAt` gate and clears `authFailureCount`/`nextRetryAt`
+  in the same write that sets `connecting`, so a later failure restarts at the
+  30-second base instead of continuing the exponent. Backoff exists to protect the
+  daemon from automatic retries; a human action is new information and must pierce
+  it — otherwise toggling the feature off and on is the user's only escape.
 - Port/token changes close the old transport before reconnecting. Connection
   identity guards prevent late callbacks from changing replacement state.
 - Explicit close waits for an in-flight connect attempt to settle before writing
   the final disabled/disconnected status; a delayed storage write cannot restore
   stale `connecting` state after the socket is gone.
-- `AGENT_BRIDGE_CONNECT_NOW` only asks the scheduler to reuse `tryConnect()`;
+- `AGENT_BRIDGE_CONNECT_NOW` only asks the scheduler to reuse `tryConnect('user')`;
   extension pages never open the WebSocket themselves.
+- Remote close and transport error both route through `disconnect()`, so every
+  path that abandons a connection also closes its transport.
 
 ## Tests
 
@@ -54,6 +65,8 @@ CLI package (`packages/favbase-cli`) consumes only the protocol leaf; extension 
 - `tool-registry.test.ts` — exact three-tool surface, JSON Schema Draft 2020-12,
   validated rejection, and DB context forwarding.
 - `client.test.ts` — fake transport hello/welcome/call/ping/close, stable error
-  mapping, malformed frames, persistent backoff, and reconfiguration race.
-- `scheduler.test.ts` — enable/disable, alarm/startup/connect-now routing, and
-  disabled means zero Agent Bridge alarms.
+  mapping, malformed frames, persistent backoff, user-triggered backoff pierce and
+  base-delay restart, and reconfiguration race.
+- `scheduler.test.ts` — enable/disable, alarm/startup/connect-now routing,
+  `'schedule'` vs `'user'` trigger assignment, and disabled means zero Agent Bridge
+  alarms.

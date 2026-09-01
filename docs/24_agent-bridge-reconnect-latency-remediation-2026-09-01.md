@@ -1,6 +1,6 @@
 # Agent Bridge 重连延迟整改方案（2026-09-01）
 
-状态：Step 0 已执行（2026-09-01，结论见 §9：§2 成立，可按方案执行）；Step 1-6 待实施
+状态：Step 0 已执行（2026-09-01，结论见 §9：§2 成立，可按方案执行）；**Step 1 已落地（2026-09-01，见 §6 Step 1 的「实施记录」）**；Step 2-6 待实施
 范围：`lib/agent-bridge/`、`lib/storage/agent-bridge.ts`、`packages/favbase-cli/`、`skills/favbase/SKILL.md`、`entrypoints/app/sections/settings/agent-bridge-card.tsx`
 前置：ADR 0002（扩展出站 WebSocket）、ADR 0003（Skill-first CLI + Daemon）、`docs/21_agent-bridge-analysis-2026-08-22.md`
 
@@ -179,6 +179,36 @@ A + B 做完，用户感知的「等待」在 99% 的场景下消失；剩下 1%
 - `scheduler.connectNow()` 以 `'user'` 调用 client；alarm 路径仍是 `'schedule'`。
 
 **文档同步**：`lib/agent-bridge/CLAUDE.md` 的 Contracts 段，把「reset only by a valid welcome or deliberate reconfiguration」改成包含「用户显式 connect-now」。
+
+#### 实施记录（2026-09-01 已落地）
+
+按上述四条实施，无偏离。落点：
+
+- `client.ts` 导出 `AgentBridgeConnectTrigger = 'schedule' | 'user'`（默认 `'schedule'`），
+  `tryConnect(trigger)` → `openConnection(generation, trigger)`。
+- 门禁改为 `if (!explicit && status.nextRetryAt !== null && ...) return;`；归零与
+  `state: 'connecting'` **合并成同一次 `setStatus`**（`...(explicit ? { authFailureCount: 0, nextRetryAt: null } : {})`），
+  一次 storage 往返即满足「归零在 connecting 之前」的要求。
+- `scheduler.ts` 的 `enqueueRefresh` / `refresh` 透传 trigger；`connectNow()` 是唯一 `'user'`，
+  alarm / startup / config-watch / 初始 refresh 全部 `'schedule'`。
+- 顺手落实 §8 第三条：`handleRemoteClose` 并入 `disconnect(connection, 'connection-closed')`，
+  消除「远端关闭时不 close transport」的不对称（socket 已死时 `close()` 是 no-op，行为等价）。
+
+**未做（按原文「无证据不动手」）**：§9.7 的 `createTransport` 同步抛出吞错路径、§8 的
+`connect-timeout` 兜底。另记一条 doc 未提及的已知窗口：`tryConnect()` 在 `this.connectAttempt`
+非 null 时 await 那个 in-flight attempt，因此恰好撞上 alarm 起跑瞬间的 `'user'` 意图会被降级成
+`'schedule'`；窗口是两次 storage 读（~ms 级），加锁会把状态机复杂化，判定为过度设计，不修。
+
+**测试**：`client.test.ts` 新增「explicit user reconnect pierces the backoff and restarts at the
+base delay」（退避窗口内 `'schedule'` 不建连 / `'user'` 建连 / 计数归零 / 再失败回 30 秒基数），
+并在原有 remote-close 用例补 `transport.closed` 对称性断言；`scheduler.test.ts` 新增
+「marks only connect-now as an explicit user trigger」。`pnpm compile` 通过，
+`pnpm test` 1259 passed —— 余下 2 个失败是 `lib/database/{db,proxy-db}.test.ts` 在全量并发下的
+5 秒超时抖动，**stash 掉本次改动后基线同样失败**，与 Step 1 无关。
+
+**文档已同步**：`lib/agent-bridge/CLAUDE.md`（Modules/Contracts/Tests 三段）、
+`.trellis/spec/frontend/agent-bridge.md`（Bridge Client 场景的签名 / 契约 / 错误矩阵 /
+Bad case / Tests / Wrong-vs-Correct）、根 `CLAUDE.md` 的 docs/24 条目。
 
 ---
 

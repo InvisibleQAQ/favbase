@@ -6,6 +6,7 @@ vi.mock('@/lib/storage/agent-bridge', () => ({
 }));
 
 import type { AgentBridgeConfig } from '@/lib/storage/agent-bridge';
+import type { AgentBridgeConnectTrigger } from './client';
 import {
   AGENT_BRIDGE_ALARM,
   AGENT_BRIDGE_POLL_MINUTES,
@@ -30,7 +31,7 @@ describe('Agent Bridge scheduler', () => {
     };
     alarms = new Map();
     client = {
-      tryConnect: vi.fn(async () => {}),
+      tryConnect: vi.fn(async (_trigger?: AgentBridgeConnectTrigger) => {}),
       close: vi.fn(async () => {}),
     };
   });
@@ -94,5 +95,27 @@ describe('Agent Bridge scheduler', () => {
 
     await scheduler.connectNow();
     expect(client.tryConnect).toHaveBeenCalledTimes(4);
+  });
+
+  it('marks only connect-now as an explicit user trigger', async () => {
+    config = { ...config, enabled: true, token: 'token' };
+    const scheduler = init();
+    await vi.waitFor(() => expect(client.tryConnect).toHaveBeenCalledOnce());
+    expect(client.tryConnect).toHaveBeenLastCalledWith('schedule');
+
+    alarmListener?.({ name: AGENT_BRIDGE_ALARM });
+    await vi.waitFor(() => expect(client.tryConnect).toHaveBeenCalledTimes(2));
+    expect(client.tryConnect).toHaveBeenLastCalledWith('schedule');
+
+    startupListener?.();
+    await vi.waitFor(() => expect(client.tryConnect).toHaveBeenCalledTimes(3));
+    expect(client.tryConnect).toHaveBeenLastCalledWith('schedule');
+
+    configListener?.();
+    await vi.waitFor(() => expect(client.tryConnect).toHaveBeenCalledTimes(4));
+    expect(client.tryConnect).toHaveBeenLastCalledWith('schedule');
+
+    await scheduler.connectNow();
+    expect(client.tryConnect).toHaveBeenLastCalledWith('user');
   });
 });

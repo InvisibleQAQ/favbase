@@ -182,6 +182,7 @@ describe('Agent Bridge client', () => {
 
     await transport.remoteClose();
     expect(status).toMatchObject({ state: 'disconnected', lastError: 'connection-closed' });
+    expect(transport.closed).toBe(true);
   });
 
   it('maps tool and DB failures to stable wire errors', async () => {
@@ -249,6 +250,36 @@ describe('Agent Bridge client', () => {
     expect(status).toMatchObject({
       authFailureCount: 2,
       nextRetryAt: 91_000,
+    });
+  });
+
+  it('lets an explicit user reconnect pierce the backoff and restart it at the base delay', async () => {
+    let client = createClient();
+    await client.tryConnect();
+    await transports[0].open();
+    await transports[0].message(wire('reject', { reason: 'bad-token' }));
+    expect(status).toMatchObject({ authFailureCount: 1, nextRetryAt: 31_000 });
+
+    client = createClient();
+    now = 5_000;
+    await client.tryConnect('schedule');
+    expect(transports).toHaveLength(1);
+
+    client = createClient();
+    await client.tryConnect('user');
+    expect(transports).toHaveLength(2);
+    expect(status).toMatchObject({
+      state: 'connecting',
+      authFailureCount: 0,
+      nextRetryAt: null,
+    });
+
+    await transports[1].open();
+    await transports[1].message(wire('reject', { reason: 'bad-token' }));
+    expect(status).toMatchObject({
+      lastError: 'bad-token',
+      authFailureCount: 1,
+      nextRetryAt: 35_000,
     });
   });
 

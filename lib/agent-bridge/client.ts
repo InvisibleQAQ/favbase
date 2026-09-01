@@ -109,6 +109,13 @@ interface ActiveConnection {
 
 export type AgentBridgeCloseReason = 'disabled' | 'config-changed';
 
+/**
+ * Why a connect attempt is being made. `user` is an explicit human action
+ * (settings button, opening app.html) and carries new information, so it
+ * pierces the bad-token backoff and resets it to the 30-second base.
+ */
+export type AgentBridgeConnectTrigger = 'schedule' | 'user';
+
 export class AgentBridgeClient {
   private readonly options: Required<AgentBridgeClientOptions>;
   private connection: ActiveConnection | null = null;
@@ -133,10 +140,10 @@ export class AgentBridgeClient {
     };
   }
 
-  async tryConnect(): Promise<void> {
+  async tryConnect(trigger: AgentBridgeConnectTrigger = 'schedule'): Promise<void> {
     if (this.connection || this.connectAttempt) return this.connectAttempt ?? undefined;
     const generation = this.generation;
-    this.connectAttempt = this.openConnection(generation);
+    this.connectAttempt = this.openConnection(generation, trigger);
     try {
       await this.connectAttempt;
     } finally {
@@ -164,7 +171,10 @@ export class AgentBridgeClient {
     });
   }
 
-  private async openConnection(generation: number): Promise<void> {
+  private async openConnection(
+    generation: number,
+    trigger: AgentBridgeConnectTrigger,
+  ): Promise<void> {
     const config = await this.options.getConfig();
     if (generation !== this.generation || this.connection) return;
     if (!config.enabled) {
@@ -181,9 +191,15 @@ export class AgentBridgeClient {
 
     const status = await this.options.getStatus();
     if (generation !== this.generation || this.connection) return;
-    if (status.nextRetryAt !== null && status.nextRetryAt > this.options.now()) return;
+    const explicit = trigger === 'user';
+    if (!explicit && status.nextRetryAt !== null && status.nextRetryAt > this.options.now()) return;
 
-    await this.options.setStatus({ ...status, state: 'connecting', lastError: null });
+    await this.options.setStatus({
+      ...status,
+      state: 'connecting',
+      lastError: null,
+      ...(explicit ? { authFailureCount: 0, nextRetryAt: null } : {}),
+    });
     if (generation !== this.generation || this.connection) return;
 
     const connection = {
@@ -377,9 +393,7 @@ export class AgentBridgeClient {
   }
 
   private async handleRemoteClose(connection: ActiveConnection): Promise<void> {
-    if (!this.isCurrent(connection)) return;
-    this.connection = null;
-    await this.patchStatus({ state: 'disconnected', lastError: 'connection-closed' });
+    await this.disconnect(connection, 'connection-closed');
   }
 
   private async handleTransportError(connection: ActiveConnection): Promise<void> {
