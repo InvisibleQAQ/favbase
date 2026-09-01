@@ -1,6 +1,6 @@
 # Agent Bridge 重连延迟整改方案（2026-09-01）
 
-状态：Step 0 已执行（2026-09-01，结论见 §9：§2 成立，可按方案执行）；**Step 1 已落地（2026-09-01，见 §6 Step 1 的「实施记录」）**；Step 2-6 待实施
+状态：Step 0 已执行（2026-09-01，结论见 §9：§2 成立，可按方案执行）；**Step 1 已落地（2026-09-01，见 §6 Step 1 的「实施记录」）**；**Step 2 已落地（2026-09-01，见 §6 Step 2 的「实施记录」）**；Step 3-6 待实施
 范围：`lib/agent-bridge/`、`lib/storage/agent-bridge.ts`、`packages/favbase-cli/`、`skills/favbase/SKILL.md`、`entrypoints/app/sections/settings/agent-bridge-card.tsx`
 前置：ADR 0002（扩展出站 WebSocket）、ADR 0003（Skill-first CLI + Daemon）、`docs/21_agent-bridge-analysis-2026-08-22.md`
 
@@ -39,7 +39,7 @@
 | 状态字段定义（`authFailureCount` / `nextRetryAt` 注释已写明「reset only by a valid welcome」） | `lib/storage/agent-bridge.ts:25-27` |
 | 存储键 `local:agent-bridge` / `local:agent-bridge-status` | `lib/storage/keys.ts:25-26` |
 | daemon idle 默认 120 分钟，`FAVBASE_DAEMON_IDLE_MINUTES` 可配，`0` 关闭 | `packages/favbase-cli/daemon.ts` `DaemonOptions.idleMinutes` / `touch()` |
-| `onActivity()` 唯一调用点在 CLI HTTP 鉴权成功后 | `packages/favbase-cli/rpc-server.ts:147` |
+| CLI HTTP 鉴权成功后的 `onActivity()` 与已认证 peer 的 `onPeerActivity` / `onPeerDisconnected` 都驱动 daemon idle 计时 | `packages/favbase-cli/rpc-server.ts:147`、`packages/favbase-cli/bridge-server.ts`、`packages/favbase-cli/daemon.ts` |
 | WS 心跳 `DEFAULT_HEARTBEAT_MS = 20_000`（daemon 发 ping，扩展回 pong） | `packages/favbase-cli/bridge-server.ts:26` |
 | daemon 等扩展 peer 的上限 `DEFAULT_HELLO_WAIT_MS = 35_000` | `packages/favbase-cli/bridge-server.ts:23` |
 | SKILL.md 的「~35 s」和 `EXTENSION_HINT` 的「within 30 seconds」是两个独立硬编码文案 | `skills/favbase/SKILL.md:68`、`packages/favbase-cli/cli-main.ts:38-39` |
@@ -229,6 +229,16 @@ Bad case / Tests / Wrong-vs-Correct）、根 `CLAUDE.md` 的 docs/24 条目。
 - 无 peer 且无 CLI 请求，行为与现在一致（回归）。
 
 **文档同步**：`packages/favbase-cli/CLAUDE.md` 的 `daemon.ts` 条目，把 idle 语义从「没有 CLI 请求」改成准确描述。
+
+#### 实施记录（2026-09-01 已落地）
+
+- `BridgeServer` 增加 `onPeerActivity` / `onPeerDisconnected` 回调：合法 hello、已认证的
+  `pong`/`tools.result` 入站帧触发活动回调；daemon 发出的 `ping` 不触发；当前 peer 断开触发
+  断开回调。
+- `Daemon.touch()` 在存在已认证 peer 时清除并保持无 idle timer；断开后重新启动完整 idle
+  窗口。无 peer 时的原有 CLI 请求驱动计时和 `idleMinutes: 0` 语义保留。
+- 测试覆盖 authenticated peer 超时不退出、断开后退出、无 peer 回归，以及入站活动/出站 ping
+  回调边界。
 
 ---
 

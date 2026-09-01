@@ -9,7 +9,7 @@ import {
   type AgentBridgeMessageInput,
   type AgentBridgeToolDescriptor,
 } from '../../lib/agent-bridge/protocol';
-import { BridgeServer } from './bridge-server';
+import { BridgeServer, type BridgeServerOptions } from './bridge-server';
 
 const EXTENSION_ID = 'abcdefghijklmnopabcdefghijklmnop';
 const TOKEN = 'test-token';
@@ -27,16 +27,21 @@ const servers: BridgeServer[] = [];
 const sockets: WebSocket[] = [];
 
 afterEach(async () => {
+  vi.useRealTimers();
   for (const socket of sockets.splice(0)) socket.terminate();
   await Promise.all(servers.splice(0).map(server => server.close()));
 });
 
-async function startServer(helloWaitMs: number): Promise<BridgeServer> {
+async function startServer(
+  helloWaitMs: number,
+  overrides: Pick<BridgeServerOptions, 'heartbeatMs' | 'onPeerActivity' | 'onPeerDisconnected'> = {},
+): Promise<BridgeServer> {
   const server = new BridgeServer({
     port: 0,
     token: TOKEN,
     serverVersion: 'test',
     helloWaitMs,
+    ...overrides,
   });
   servers.push(server);
   await server.start();
@@ -62,6 +67,12 @@ async function helloFromFakeExtension(server: BridgeServer): Promise<WebSocket> 
   socket.send(JSON.stringify(encodeAgentBridgeMessage(hello)));
   await once(socket, 'message'); // welcome
   return socket;
+}
+
+function send(socket: WebSocket, input: AgentBridgeMessageInput): void {
+  const message = encodeAgentBridgeMessage(input);
+  if (!message) throw new Error('invalid test message');
+  socket.send(JSON.stringify(message));
 }
 
 describe('BridgeServer bounded waits', () => {
@@ -128,5 +139,34 @@ describe('BridgeServer bounded waits', () => {
     unsubscribe();
     await helloFromFakeExtension(server);
     expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports peer-originated activity and disconnects, but not daemon pings', async () => {
+    const activity = vi.fn();
+    const disconnected = vi.fn();
+    const server = await startServer(5_000, {
+      heartbeatMs: 10,
+      onPeerActivity: activity,
+      onPeerDisconnected: disconnected,
+    });
+    const socket = await helloFromFakeExtension(server);
+
+    expect(activity).toHaveBeenCalledTimes(1);
+    await new Promise(resolve => setTimeout(resolve, 35));
+    expect(activity).toHaveBeenCalledTimes(1);
+
+    send(socket, { id: 'pong-1', type: 'pong', payload: {} });
+    send(socket, {
+      id: 'result-1',
+      type: 'tools.result',
+      payload: { callId: 'missing', ok: true, result: {} },
+    });
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(activity).toHaveBeenCalledTimes(3);
+
+    const closed = once(socket, 'close');
+    socket.terminate();
+    await closed;
+    expect(disconnected).toHaveBeenCalledTimes(1);
   });
 });

@@ -47,6 +47,10 @@ export interface BridgeServerOptions {
   handshakeTimeoutMs?: number;
   heartbeatMs?: number;
   logger?: BridgeLogger;
+  /** Called for an authenticated hello or accepted peer-originated frame. */
+  onPeerActivity?: () => void;
+  /** Called when the current authenticated peer disconnects. */
+  onPeerDisconnected?: () => void;
 }
 
 export type BridgeCallErrorCode =
@@ -342,11 +346,12 @@ export class BridgeServer {
       return;
     }
 
-    if (message.type === 'tools.result') {
-      this.handleToolResult(message);
+    if (message.type !== 'tools.result' && message.type !== 'pong') {
+      candidate.socket.close(1002, 'unexpected-message');
       return;
     }
-    if (message.type !== 'pong') candidate.socket.close(1002, 'unexpected-message');
+    this.options.onPeerActivity?.();
+    if (message.type === 'tools.result') this.handleToolResult(message);
   }
 
   private authenticate(
@@ -391,6 +396,7 @@ export class BridgeServer {
       tools: message.payload.tools,
     };
     this.peer = peer;
+    this.options.onPeerActivity?.();
     this.send(candidate.socket, {
       id: message.id,
       type: 'welcome',
@@ -427,6 +433,7 @@ export class BridgeServer {
       'extension-disconnected',
       'favbase extension disconnected before the Knowledge Tool completed',
     ));
+    this.options.onPeerDisconnected?.();
   }
 
   private waitForPeer(signal?: AbortSignal): Promise<AuthenticatedPeer> {

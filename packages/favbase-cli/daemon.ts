@@ -13,7 +13,7 @@ export interface DaemonOptions {
   port: number;
   token: string;
   version: string;
-  /** Minutes without a CLI request before the daemon exits; `0` disables. */
+  /** Minutes without a CLI request or authenticated extension peer before the daemon exits; `0` disables. */
   idleMinutes: number;
   logger: BridgeLogger;
   helloWaitMs?: number;
@@ -24,7 +24,7 @@ export interface DaemonOptions {
  * One loopback HTTP server carrying both halves of the Agent Bridge: the
  * extension's `/bridge` WebSocket (owned by `BridgeServer`) and the CLI's JSON
  * routes (owned by `createRpcHandler`). Lives until `close()`, a `/shutdown`
- * request, or the idle deadline.
+ * request, or the idle deadline when no authenticated extension peer exists.
  */
 export class Daemon {
   private readonly bridge: BridgeServer;
@@ -50,6 +50,8 @@ export class Daemon {
       logger: options.logger,
       helloWaitMs: options.helloWaitMs,
       callTimeoutMs: options.callTimeoutMs,
+      onPeerActivity: () => this.touch(),
+      onPeerDisconnected: () => this.touch(),
     });
     this.server.on('request', createRpcHandler({
       token: options.token,
@@ -108,6 +110,11 @@ export class Daemon {
 
   private touch(): void {
     if (this.closed || this.options.idleMinutes <= 0) return;
+    if (this.bridge.peerSnapshot().connected) {
+      if (this.idleTimer) clearTimeout(this.idleTimer);
+      this.idleTimer = undefined;
+      return;
+    }
     if (this.idleTimer) clearTimeout(this.idleTimer);
     this.idleTimer = setTimeout(() => {
       this.options.logger.error(

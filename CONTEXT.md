@@ -83,7 +83,7 @@ A user-enabled, read-only connection between the running favbase extension and a
 _Avoid_: MCP server, API, plugin sync, export
 
 **Bridge Daemon**:
-The long-lived loopback process on the user's machine that the running extension connects to and that the favbase CLI queries; it holds no data and no credentials beyond the Bridge Token, starts on the first CLI call, and exits when idle.
+The long-lived loopback process on the user's machine that the running extension connects to and that the favbase CLI queries; it holds no data and no credentials beyond the Bridge Token, starts on the first CLI call, and exits only when no authenticated extension peer is connected and CLI requests have been idle.
 _Avoid_: MCP server, backend, service, database
 
 **favbase CLI**:
@@ -126,6 +126,7 @@ _Avoid_: API key, provider key, password
 - The **Agent Bridge** keeps Chat's table-level read-only boundary: it never writes any table, not even **Conversations**
 - The **Agent Bridge** serves live Collection Items only; an exported snapshot is never an Agent Bridge
 - An **Agent Bridge** connection is accepted only when both ends present the same **Bridge Token**; resetting the token ends every existing connection
+- A **Bridge Daemon** remains alive while an authenticated **Agent Bridge** peer is connected; its idle deadline starts only after that peer disconnects
 - The **favbase CLI** reaches the **Agent Bridge** only through the **Bridge Daemon** on loopback and presents the same **Bridge Token**; a request carrying a browser Origin is never a favbase CLI request
 - A Skill installed for an agent describes the **favbase CLI**; it never opens the **Agent Bridge** or reads Collection Items itself
 

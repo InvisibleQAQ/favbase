@@ -2,7 +2,7 @@ import { once } from 'node:events';
 import { request } from 'node:http';
 
 import { WebSocket, type RawData } from 'ws';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   decodeAgentBridgeMessage,
@@ -30,6 +30,7 @@ const daemons: Daemon[] = [];
 const sockets: WebSocket[] = [];
 
 afterEach(async () => {
+  vi.useRealTimers();
   for (const socket of sockets.splice(0)) socket.terminate();
   await Promise.all(daemons.splice(0).map(daemon => daemon.close()));
 });
@@ -142,6 +143,36 @@ describe('Daemon', () => {
     await expect(http(port, 'POST', '/rpc', { tool: TOOL.name, args: { query: 'x' } })).resolves.toMatchObject({
       body: { ok: false, code: 'extension-unavailable' },
     });
+  });
+
+  it('does not exit while an authenticated extension peer is connected', async () => {
+    vi.useFakeTimers();
+    const { port } = await startDaemon({ idleMinutes: 0.001 });
+    const extension = await connectExtension(port);
+    await hello(extension);
+
+    await vi.advanceTimersByTimeAsync(500);
+    await expect(http(port, 'GET', '/health')).resolves.toMatchObject({
+      status: 200,
+      body: { name: 'favbase-cli' },
+    });
+  });
+
+  it('starts the idle deadline after the authenticated peer disconnects', async () => {
+    vi.useFakeTimers();
+    const { daemon, port } = await startDaemon({ idleMinutes: 0.001 });
+    const extension = await connectExtension(port);
+    await hello(extension);
+
+    const closed = daemon.whenClosed();
+    const socketClosed = once(extension, 'close');
+    extension.terminate();
+    await new Promise<void>(resolve => process.nextTick(resolve));
+    await socketClosed;
+    await vi.advanceTimersByTimeAsync(100);
+    vi.useRealTimers();
+
+    await expect(closed).resolves.toBeUndefined();
   });
 
   it('exits after the idle deadline and on /shutdown', async () => {

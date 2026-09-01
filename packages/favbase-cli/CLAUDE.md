@@ -22,7 +22,9 @@ provides no MCP server.
   `DEFAULT_AGENT_BRIDGE_PORT`.
 - `daemon.ts` builds one `http.Server`, attaches `BridgeServer` to it for
   `/bridge`, mounts `createRpcHandler`, and owns listen/EADDRINUSE, idle exit
-  (`FAVBASE_DAEMON_IDLE_MINUTES`, default 120, 0 disables) and shutdown.
+  (`FAVBASE_DAEMON_IDLE_MINUTES`, default 120, 0 disables) and shutdown. The
+  idle timer is suppressed while an authenticated extension peer is connected;
+  after peer disconnect it starts a fresh idle window.
 - `rpc-server.ts` is the HTTP surface: `/health` (no auth, `{name,version,pid}`),
   `/status[?wait=1]`, `/rpc`, `/shutdown`. Bearer token is compared timing-safe;
   any request with an `Origin` header is 403 before authentication.
@@ -31,8 +33,9 @@ provides no MCP server.
   `rpcCall`, `fetchStatus`, `stopDaemon` (shutdown route, pid kill only for a
   process that identified itself as favbase over `/health`).
 - `bridge-server.ts` owns `/bridge` Origin + Bridge Token hello authentication,
-  descriptor state, heartbeat, pending calls, bounded hello wait, cleanup; it
-  can listen itself (unit tests) or attach to the daemon's server.
+  descriptor state, heartbeat, pending calls, bounded hello wait, peer activity
+  and disconnect callbacks, cleanup; it can listen itself (unit tests) or attach
+  to the daemon's server.
 - `skill-install.ts` writes SKILL.md to `~/.claude/skills/favbase/` and
   `~/.agents/skills/favbase/` (Codex user scope), or an explicit `--dir`.
 
