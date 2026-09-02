@@ -1,9 +1,12 @@
 import type { Breakpoint } from '@mui/material/styles';
 import type { ContainerProps } from '@mui/material/Container';
 
+import { use } from 'react';
+
 import Container from '@mui/material/Container';
 
 import { layoutClasses } from '../core/classes';
+import { SettingsContext } from '../../components/settings/context/settings-context';
 
 /**
  * Breakpoint from which the dashboard content (and the Header, which aligns
@@ -26,10 +29,19 @@ export function DashboardContent({
   layoutQuery = DASHBOARD_CONTENT_QUERY,
   ...other
 }: DashboardContentProps) {
+  // `compactLayout` narrows the content column to `lg`; off, the page keeps the
+  // cap it asked for. Minimal maps off to `maxWidth: false`, but every Favbase
+  // page passes an explicit cap (mostly `xl`), so Minimal's mapping would both
+  // override that decision and — as a default parameter value — never run.
+  // Read optionally: welcome.html and bare component tests render without a
+  // SettingsProvider (docs/25 Step 2).
+  const settings = use(SettingsContext);
+  const compact = settings?.state.compactLayout ?? false;
+
   return (
     <Container
       className={[layoutClasses.content, className].filter(Boolean).join(' ')}
-      maxWidth={maxWidth}
+      maxWidth={compact ? 'lg' : maxWidth}
       sx={[
         (theme) => ({
           display: 'flex',

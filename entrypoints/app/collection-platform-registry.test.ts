@@ -2,15 +2,23 @@ import { describe, expect, it } from 'vitest';
 
 import { COLLECTION_PLATFORMS } from '@/lib/collections';
 import { collectionPlatformRegistry } from './collection-platform-registry';
-import { createNavData } from './layouts/nav-config';
+import { createNavData, type NavGroup } from './layouts/nav-config';
+
+/** The Collections branch, wherever its group sits (docs/25 D16 grouping). */
+function collectionsItem(groups: NavGroup[]) {
+  return groups.flatMap((group) => group.items).find((item) => item.path === '/collections');
+}
 
 describe('collection platform registry', () => {
-  it('places Collections before Analytics in the top-level navigation', () => {
-    expect(createNavData().map((item) => item.path)).toEqual([
-      '/collections',
-      '/',
-      '/chat',
-      '/settings',
+  it('groups the nav as Collections then General, Collections branch first', () => {
+    expect(
+      createNavData().map((group) => ({
+        subheader: group.subheader,
+        paths: group.items.map((item) => item.path),
+      })),
+    ).toEqual([
+      { subheader: 'nav.groupCollections', paths: ['/collections'] },
+      { subheader: 'nav.groupGeneral', paths: ['/', '/chat', '/settings'] },
     ]);
   });
 
@@ -24,8 +32,7 @@ describe('collection platform registry', () => {
   });
 
   it('drives the Collections navigation children without a second platform list', () => {
-    const navData = createNavData();
-    const collectionsNav = navData.find((item) => item.path === '/collections');
+    const collectionsNav = collectionsItem(createNavData());
     const platformLeaves = collectionsNav?.children?.filter((child) => !child.external);
 
     expect(platformLeaves?.map(({ title, path, platform }) => ({ title, path, platform }))).toEqual(
@@ -34,9 +41,7 @@ describe('collection platform registry', () => {
   });
 
   it('places onboarding preferences first in canonical platform order', () => {
-    const collectionsNav = createNavData(['x', 'bilibili', 'github']).find(
-      (item) => item.path === '/collections',
-    );
+    const collectionsNav = collectionsItem(createNavData(['x', 'bilibili', 'github']));
     const platformPaths = collectionsNav?.children
       ?.filter((child) => !child.external)
       .map((child) => child.path);
@@ -52,8 +57,7 @@ describe('collection platform registry', () => {
   });
 
   it('keeps Platform Request as the single trailing external action link', () => {
-    const navData = createNavData();
-    const collectionsNav = navData.find((item) => item.path === '/collections');
+    const collectionsNav = collectionsItem(createNavData());
     const externals = collectionsNav?.children?.filter((child) => child.external) ?? [];
 
     expect(externals).toHaveLength(1);

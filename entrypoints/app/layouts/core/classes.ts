@@ -6,4 +6,8 @@ export const layoutClasses = {
   header: createClasses('layout__header'),
   content: createClasses('layout__main__content'),
   sidebarContainer: createClasses('layout__sidebar__container'),
+  nav: {
+    root: createClasses('layout__nav__root'),
+    vertical: createClasses('layout__nav__vertical'),
+  },
 };

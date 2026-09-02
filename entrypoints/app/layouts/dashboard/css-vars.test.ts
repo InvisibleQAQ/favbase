@@ -4,9 +4,11 @@ import { createTheme } from '../../theme/create-theme';
 import { layoutSectionVars } from '../core/css-vars';
 import { dashboardLayoutVars } from './css-vars';
 
-// Shell geometry contract (docs/23 §7.6). `sections/chat` and every
+// Shell geometry contract. `sections/chat`, `NavToggleButton` and every
 // DashboardContent consumer read these names; a rename or drift here is a
-// layout regression, not a style tweak.
+// layout regression, not a style tweak. Nav row heights are no longer here —
+// they moved to `components/nav-section/css-vars.test.ts` with the ported nav
+// (docs/25 Step 4).
 const theme = createTheme();
 
 describe('layout shell CSS variables', () => {
@@ -19,12 +21,12 @@ describe('layout shell CSS variables', () => {
     });
   });
 
-  it('switches the desktop sidebar between 300px pinned and 88px compact', () => {
+  it('switches the desktop sidebar between 300px vertical and 88px mini', () => {
     expect(dashboardLayoutVars(theme, true)['--layout-nav-vertical-width']).toBe('300px');
     expect(dashboardLayoutVars(theme, false)['--layout-nav-vertical-width']).toBe('88px');
   });
 
-  it('locks content gutters, nav row heights and the 120ms layout transition', () => {
+  it('locks content gutters and the 120ms layout transition', () => {
     // 1 / 8 / 5 spacing units = 8 / 64 / 40px on the 8px base.
     expect(theme.spacing(1)).toContain('8px');
     expect(dashboardLayoutVars(theme)).toMatchObject({
@@ -32,9 +34,8 @@ describe('layout shell CSS variables', () => {
       '--layout-dashboard-content-pb': theme.spacing(8),
       '--layout-dashboard-content-px': theme.spacing(5),
       '--layout-transition-duration': '120ms',
-      '--layout-nav-item-height': '44px',
-      '--layout-nav-child-item-height': '40px',
-      '--layout-nav-compact-item-size': '44px',
     });
+    // Owned by the nav now; the shell must not resurrect them.
+    expect(dashboardLayoutVars(theme)).not.toHaveProperty('--layout-nav-item-height');
   });
 });

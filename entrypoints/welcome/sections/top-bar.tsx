@@ -4,8 +4,8 @@ import Typography from '@mui/material/Typography';
 import { varAlpha } from 'minimal-shared/utils';
 
 import { useTranslation } from '@/lib/i18n/use-translation';
-// Theme switch + language menu + repo link, verbatim from the dashboard header.
-import { HeaderActions } from '@/entrypoints/app/layouts/dashboard/header-actions';
+// Theme pill + language popover + repo link (docs/25 Step 4 moved the pill here).
+import { TopBarActions } from './top-bar-actions';
 
 export const TOP_BAR_HEIGHT = 64;
 
@@ -58,7 +58,7 @@ export function TopBar() {
 
         <Box sx={{ flex: 1 }} />
 
-        <HeaderActions />
+        <TopBarActions />
       </Container>
     </Box>
   );

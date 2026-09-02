@@ -8,8 +8,8 @@ vi.mock('@/lib/i18n/use-translation', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-vi.mock('@/entrypoints/app/layouts/dashboard/header-actions', () => ({
-  HeaderActions: () => null,
+vi.mock('./top-bar-actions', () => ({
+  TopBarActions: () => null,
 }));
 
 import { ThemeProvider } from '@/entrypoints/app/theme/theme-provider';

@@ -336,6 +336,13 @@ const zhCN = {
   'nav.requestPlatform': '请求新平台',
   'nav.chat': '对话',
   'nav.settings': '设置',
+  // Sidebar group subheaders (docs/25 D16) + the shell's nav controls.
+  'nav.groupCollections': '收藏',
+  'nav.groupGeneral': '通用',
+  'nav.externalCaption': '外部链接',
+  'nav.expandAria': '展开侧栏',
+  'nav.collapseAria': '收起侧栏',
+  'nav.toggleSubmenuAria': '展开或收起{{title}}子菜单',
 
   'chat.title': '知识库对话',
   'chat.composerPlaceholder': '向你的知识库提问…',
@@ -371,7 +378,30 @@ const zhCN = {
   'header.languageAria': '切换界面语言',
   'header.themeAria': '切换深色模式',
   'header.menuAria': '打开导航菜单',
-  'header.sidebarToggleAria': '收起或展开侧栏',
+  'header.settingsAria': '外观设置',
+
+  // Appearance drawer (docs/25 Step 4). Named 外观 rather than 设置 because the
+  // Settings *page* owns AI / accounts / storage; this drawer is theme-only.
+  'settingsDrawer.title': '外观',
+  'settingsDrawer.mode': '模式',
+  'settingsDrawer.modeLight': '浅色',
+  'settingsDrawer.modeDark': '深色',
+  'settingsDrawer.modeSystem': '跟随系统',
+  'settingsDrawer.contrast': '对比度',
+  'settingsDrawer.contrastHint': '加深页面底色，让卡片边界更清晰',
+  'settingsDrawer.compact': '紧凑',
+  'settingsDrawer.compactHint': '把内容收窄为居中窄列（1200px）',
+  'settingsDrawer.presets': '主色',
+  // Preset swatch names (accessible labels): six hues, two of them blue, so
+  // they need real names rather than an index.
+  'settingsDrawer.presetDefault': '珊瑚',
+  'settingsDrawer.preset1': '天蓝',
+  'settingsDrawer.preset2': '紫罗兰',
+  'settingsDrawer.preset3': '宝蓝',
+  'settingsDrawer.preset4': '琥珀',
+  'settingsDrawer.preset5': '朱红',
+  'settingsDrawer.reset': '全部重置',
+  'settingsDrawer.close': '关闭',
 
   // Global background-work reminder (dashboard header) — shown while any
   // platform's unfinished sync/extract/embed/tag/transcribe jobs; count-plural.

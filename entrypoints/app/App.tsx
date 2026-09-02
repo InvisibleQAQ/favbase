@@ -6,6 +6,7 @@ import { Outlet } from 'react-router-dom';
 import { sendBackgroundMessage } from '@/lib/background/client';
 import { AUTO_SYNC_PLATFORMS } from './collection-platform-auto-sync';
 import { useDailyAutoSync } from './hooks/use-daily-auto-sync';
+import { SettingsDrawer } from './components/settings';
 import { ThemeProvider } from './theme/theme-provider';
 
 export default function App() {
@@ -27,6 +28,9 @@ export default function App() {
   return (
     <ThemeProvider>
       <Outlet />
+      {/* Appearance drawer: mounted once at the router root so it survives
+          route changes; its open state is context memory (docs/25 Step 4). */}
+      <SettingsDrawer />
     </ThemeProvider>
   );
 }

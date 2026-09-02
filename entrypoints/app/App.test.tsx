@@ -32,6 +32,13 @@ vi.mock('./theme/theme-provider', () => ({
   ThemeProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 
+// The appearance drawer needs the SettingsProvider main.tsx mounts; this file
+// tests the router root's own wiring, so it stands in for it (and doubles as
+// the assertion that the drawer is mounted here at all — docs/25 Step 4).
+vi.mock('./components/settings', () => ({
+  SettingsDrawer: () => <div data-testid="settings-drawer" />,
+}));
+
 import App from './App';
 
 describe('App Agent Bridge startup', () => {
@@ -61,6 +68,7 @@ describe('App Agent Bridge startup', () => {
       type: 'AGENT_BRIDGE_CONNECT_NOW',
     });
     expect(container.querySelector('[data-testid="outlet"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="settings-drawer"]')).not.toBeNull();
   });
 
   it('keeps the app mounted when the immediate request fails', async () => {

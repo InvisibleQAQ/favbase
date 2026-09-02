@@ -10,6 +10,7 @@ import { loadNavigationData } from './load-navigation';
 
 function platformPaths(navData: Awaited<ReturnType<typeof loadNavigationData>>) {
   return navData
+    .flatMap((group) => group.items)
     .find((item) => item.path === '/collections')
     ?.children?.filter((child) => !child.external)
     .map((child) => child.path);

@@ -13,14 +13,16 @@ import { useTranslation } from '@/lib/i18n/use-translation';
 
 import { Iconify } from '../../components/iconify';
 
-import { NavMobile, NavDesktop } from './nav';
-import { HeaderActions } from './header-actions';
+import { NavMobile } from './nav-mobile';
+import { NavVertical } from './nav-vertical';
+import { useTranslatedNav } from './use-translated-nav';
 import { useJobsBadge } from '../../hooks/use-jobs-badge';
 import { BackgroundJobsIndicator } from './background-jobs-indicator';
+import { GithubButton, LanguagePopover, SettingsButton } from '../components';
 import { layoutClasses } from '../core/classes';
 import { dashboardLayoutVars } from './css-vars';
 import { DASHBOARD_CONTENT_QUERY } from './content';
-import type { NavItem } from '../nav-config';
+import type { NavGroup } from '../nav-config';
 import { MainSection } from '../core/main-section';
 import { HeaderSection } from '../core/header-section';
 import { LayoutSection } from '../core/layout-section';
@@ -31,7 +33,7 @@ type LayoutBaseProps = Pick<LayoutSectionProps, 'sx' | 'children' | 'cssVars'>;
 
 export type DashboardLayoutProps = LayoutBaseProps & {
   layoutQuery?: Breakpoint;
-  navigation: NavItem[];
+  navigation: NavGroup[];
 };
 
 export function DashboardLayout({
@@ -48,6 +50,9 @@ export function DashboardLayout({
   const [pinned, setPinned] = useState(true);
   // Mobile Drawer restores focus here after its exit transition (see NavMobile).
   const menuButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Locale keys → display strings once, for both rails and the mobile drawer.
+  const navData = useTranslatedNav(navigation);
 
   // Toolbar badge = running-job count; always mounted like the indicator chip.
   useJobsBadge();
@@ -87,6 +92,9 @@ export function DashboardLayout({
       }}
       slots={{
         leftArea: (
+          // Desktop has no header-side nav control: the rail owns its own
+          // collapse button (NavToggleButton), so only the mobile hamburger
+          // lives here.
           <Box sx={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
             {!isDesktop && (
               <Tooltip title={t('header.menuAria')}>
@@ -97,18 +105,6 @@ export function DashboardLayout({
                   sx={{ mr: 1, ml: -1 }}
                 >
                   <Iconify icon="custom:menu-duotone" />
-                </IconButton>
-              </Tooltip>
-            )}
-            {isDesktop && (
-              <Tooltip title={t('header.sidebarToggleAria')}>
-                <IconButton
-                  aria-label={t('header.sidebarToggleAria')}
-                  aria-expanded={pinned}
-                  onClick={togglePinned}
-                  sx={{ mr: 1, ml: -1 }}
-                >
-                  <Iconify icon="solar:siderbar-bold-duotone" />
                 </IconButton>
               </Tooltip>
             )}
@@ -124,7 +120,9 @@ export function DashboardLayout({
             }}
           >
             <BackgroundJobsIndicator />
-            <HeaderActions />
+            <LanguagePopover />
+            <SettingsButton />
+            <GithubButton />
           </Box>
         ),
       }}
@@ -137,9 +135,14 @@ export function DashboardLayout({
       headerSection={renderHeader()}
       sidebarSection={
         <>
-          <NavDesktop data={navigation} layoutQuery={layoutQuery} pinned={pinned} />
+          <NavVertical
+            data={navData}
+            isNavMini={!pinned}
+            layoutQuery={layoutQuery}
+            onToggleNav={togglePinned}
+          />
           <NavMobile
-            data={navigation}
+            data={navData}
             open={mobileOpen}
             onClose={() => setMobileOpen(false)}
             onExited={() => menuButtonRef.current?.focus()}

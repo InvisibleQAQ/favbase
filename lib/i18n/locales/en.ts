@@ -345,6 +345,13 @@ const en: Record<LocaleKeys, string> = {
   'nav.requestPlatform': 'Request a platform',
   'nav.chat': 'Chat',
   'nav.settings': 'Settings',
+  // Sidebar group subheaders (docs/25 D16) + the shell's nav controls.
+  'nav.groupCollections': 'Collections',
+  'nav.groupGeneral': 'General',
+  'nav.externalCaption': 'external',
+  'nav.expandAria': 'Expand sidebar',
+  'nav.collapseAria': 'Collapse sidebar',
+  'nav.toggleSubmenuAria': 'Toggle {{title}} submenu',
 
   'chat.title': 'Knowledge Base Chat',
   'chat.composerPlaceholder': 'Ask your knowledge base…',
@@ -380,7 +387,30 @@ const en: Record<LocaleKeys, string> = {
   'header.languageAria': 'Switch interface language',
   'header.themeAria': 'Toggle dark mode',
   'header.menuAria': 'Open navigation menu',
-  'header.sidebarToggleAria': 'Collapse or expand sidebar',
+  'header.settingsAria': 'Appearance settings',
+
+  // Appearance drawer (docs/25 Step 4). Called Appearance, not Settings: the
+  // Settings *page* owns AI / accounts / storage; this drawer is theme-only.
+  'settingsDrawer.title': 'Appearance',
+  'settingsDrawer.mode': 'Mode',
+  'settingsDrawer.modeLight': 'Light',
+  'settingsDrawer.modeDark': 'Dark',
+  'settingsDrawer.modeSystem': 'System',
+  'settingsDrawer.contrast': 'Contrast',
+  'settingsDrawer.contrastHint': 'Deepens the page ground so card edges read more clearly',
+  'settingsDrawer.compact': 'Compact',
+  'settingsDrawer.compactHint': 'Narrows content to a centered 1200px column',
+  'settingsDrawer.presets': 'Presets',
+  // Preset swatch names (accessible labels): six hues, two of them blue, so
+  // they need real names rather than an index.
+  'settingsDrawer.presetDefault': 'Coral',
+  'settingsDrawer.preset1': 'Azure',
+  'settingsDrawer.preset2': 'Violet',
+  'settingsDrawer.preset3': 'Cobalt',
+  'settingsDrawer.preset4': 'Amber',
+  'settingsDrawer.preset5': 'Vermilion',
+  'settingsDrawer.reset': 'Reset all',
+  'settingsDrawer.close': 'Close',
 
   // Global background-work reminder (dashboard header) — shown while any
   // platform's unfinished sync/extract/embed/tag/transcribe jobs; count-plural.
