@@ -9,6 +9,9 @@ export default defineConfig({
   },
   test: {
     environment: 'happy-dom',
+    // happy-dom has no ResizeObserver; Scrollbar (simplebar) and CustomPopover
+    // both construct one on mount. See tests/setup/app-dom.ts.
+    setupFiles: [path.resolve(__dirname, 'tests/setup/app-dom.ts')],
     exclude: [...configDefaults.exclude, 'packages/**'],
   },
 });

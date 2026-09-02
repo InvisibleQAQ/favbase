@@ -2,12 +2,20 @@
 
 import { act, type ReactElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ThemeProvider } from '../../theme/theme-provider';
 import { SectionTitleBar } from './section-title-bar';
 
 const themed = (node: ReactElement) => <ThemeProvider>{node}</ThemeProvider>;
+
+// The breadcrumb branch renders router links, so it needs a router around it.
+const routed = (node: ReactElement) => (
+  <ThemeProvider>
+    <MemoryRouter>{node}</MemoryRouter>
+  </ThemeProvider>
+);
 
 describe('SectionTitleBar anatomy', () => {
   let container: HTMLDivElement;
@@ -117,5 +125,37 @@ describe('SectionTitleBar anatomy', () => {
     expect(button?.hasAttribute('disabled')).toBe(true);
     // MUI Tooltip attaches its accessible name to the focusable span wrapper.
     expect(button?.parentElement?.getAttribute('aria-label')).toBe('Paused by the library gate');
+  });
+
+  it('renders ancestry as a nav whose last crumb is the current page, keeping the caption', () => {
+    act(() => {
+      root.render(
+        routed(
+          <SectionTitleBar
+            title="GitHub Stars"
+            caption="128 · synced"
+            links={[{ name: 'Collections', href: '/collections' }, { name: 'GitHub Stars' }]}
+            onSync={() => {}}
+            syncLabel="Fetch now"
+            syncingLabel="Fetching…"
+          />,
+        ),
+      );
+    });
+
+    // Still one h1, still the same handles the pages assert on.
+    expect(container.querySelectorAll('h1')).toHaveLength(1);
+    expect(container.querySelector('[data-section="title"]')).not.toBeNull();
+    expect(container.querySelector('[data-slot="caption"]')?.textContent).toBe('128 · synced');
+
+    const nav = container.querySelector('nav');
+    expect(nav).not.toBeNull();
+    expect(nav?.querySelector('[aria-current="page"]')?.textContent).toBe('GitHub Stars');
+    expect(nav?.querySelector('a')?.getAttribute('href')).toBe('/collections');
+
+    // The action stays out of the trail.
+    const button = container.querySelector('button');
+    expect(button?.textContent).toBe('Fetch now');
+    expect(button?.closest('nav')).toBeNull();
   });
 });

@@ -442,6 +442,25 @@ pnpm compile && pnpm test && pnpm build
 - [ ] 五个新图标离线注册，`pnpm build` 产物无 iconify 网络请求（DevTools Network 过滤 `api.iconify`）
 - [ ] §2.5 记录本步后 app chunk 体积
 
+**执行记录（2026-09-01，在 Step 2 之前执行）**
+
+顺序：Step 3 的前置只有 Step 1，与 Step 2 无依赖（§0.3 里两者是并列兄弟）。已核实六原语零 import Minimal settings context、零引用 `primaryColorPresets`，`theme/core/mixins` 与 `opacity` 在 Step 1 已就位。执行顺序 0 → 1 → 3 → 2 → 4。
+
+**移植缺陷修复（重要）**：Minimal 的 `CustomPopover` 靠 `slotProps.paper.ref` 拿 paper 节点算箭头位置。**MUI v9 不再把这个 ref 转发到 DOM**（实测恒为 null），照抄的后果是箭头永不渲染且无任何报错。改为：箭头始终挂载为 paper 的首个子元素，经自身 `parentElement` 反查 paper，两个盒子测量齐之前 styled 早退成 `display: none`。`Arrow` 的 rect 类型因此可空。测试有一条 `display !== 'none'` 断言钉住它。
+
+对 Minimal / 本文的其它偏离（各有理由，详见 `entrypoints/app/components/*/CLAUDE.md`）：
+
+1. 不引 `es-toolkit`，`Label` 不做 `upperFirst`——文案出自 `t()`，大小写归 locale。
+2. `EmptyContent` 无默认插图、无默认 title（C-6），新增 `icon` 插图槽承接 `StateBox` 的 48px 字形；文案落 `text.secondary`、title 是 `subtitle1` 的 `<p>`。
+3. `BreadcrumbsHeading` 用 `h1` 标签 + `typography.h1`（Minimal 是 `h6` + `h4`）；另加一个 `children` 槽放 `SectionTitleBar` 的状态 caption。
+4. simplebar 的 CSS 放 `components/scrollbar/styles.css` 由组件自己 import，**不进 `global.css`**——否则铁律 6 的边界只挡代码不挡样式。守卫是 `tests/ui-vendor-boundaries.test.ts`（Step 5 把 `sonner` 加进同一张表）。
+5. `BackLink` 的 hover 选 `& svg`（本仓库 iconify 不导出类名常量）；不移植 `splash-screen`。
+6. 新建 `entrypoints/app/theme/create-classes.ts`（`classesPrefix: 'favbase'` Step 1 已有）。`layouts/core/classes.ts` 原有同名局部函数一并删除改 import——共享 helper 落地后再留副本就是 DRY 违规。
+
+**判据偏差**：`grep -l simplebar .output/chrome-mv3/chunks/*.js` 是**空集**——`Scrollbar` 目前无消费者，整个模块被 tree-shake。判据形式上通过，但真正的体积代价要等 Step 4 接入后才量得到。产物里的 `api.iconify` 字符串来自 `@iconify/react` 库自身（基线即有），新增的 5 个图标全部走 `addCollection` 离线注册；「Network 无 iconify 请求」是运行时判据，仍待目测。
+
+四步验证全绿：`pnpm compile` / `pnpm test`（1307 + 55）/ `pnpm build` / `scripts/check-background-bundle.mjs`。`state-box.test.tsx` 3 例与 `section-title-bar.test.tsx` 原 3 例零改动通过。
+
 ---
 
 ### Step 4 — Shell：nav-section + header + settings drawer
@@ -817,7 +836,7 @@ grep -rn "MUI v7\|Chrome 116\|segmented\|header-actions" CLAUDE.md entrypoints .
 | 0 | 已落地 2026-09-01，待用户 commit + 五路由目测 | （用户提交） | app 69,832 B；Container（共享 MUI）119,158 B；jsx-runtime 56,424 B | `@mui/material@9.4.0`；Button/Chip 组合 styleOverrides key 迁 `root.variants`（v9 删除）；codemod 弃用改手工；详见 Step 0 执行记录 |
 | 1 | 已落地 2026-09-01，待用户 commit + 五路由 light/dark 目测 | （用户提交） | app 69,266 B；Container 117,602 B；theme+registry 共用 chunk 16,395 B；jsx-runtime 56,544 B | C-2 回退 `#222B34`、C-3 soft primary → `text.accent`、C-4 Menu 继承 Popover paper；timeline（@mui/lab）未移植；详见 Step 1 执行记录 |
 | 2 | 已落地 2026-09-01（worktree 分支 `feat/docs25-step2-color-presets`），待用户 commit + 预设/高对比目测 | （用户提交） | app 69,717 B；Container 118,269 B；theme+registry 共用 chunk 17,057 B | C-5 全过线无回退；D14 墨/白派生表；无 `update-components.ts`、无 `version` 字段、Provider 挂 main.tsx、ThemeProvider 可选读 context、删 dark `lighter` 再着墨；详见 Step 2 执行记录 |
-| 3 | 未开始 | | | |
+| 3 | 已落地 2026-09-01（与 Step 2 并列开发，前置只有 Step 1；2026-09-02 rebase 到 Step 2 之上），待用户 commit + 目测 | （用户提交） | app 69,294 B；Container（共享 MUI）118,157 B；jsx-runtime 56,424 B | 六原语 + `theme/create-classes.ts` + `tests/setup/app-dom.ts`；C-6 消解（EmptyContent 不设默认 title）；**修 Minimal 移植缺陷**：MUI v9 不转发 `slotProps.paper.ref`，CustomPopover 箭头改为经自身 `parentElement` 反查 paper；simplebar 因暂无消费者被 tree-shake，未进任何 chunk（体积代价待 Step 4 接入后再记）；详见 Step 3 执行记录 |
 | 4 | 未开始 | | | |
 | 5 | 未开始 | | | |
 | 6 | 未开始 | | | |
@@ -860,7 +879,7 @@ grep -rn "MUI v7\|Chrome 116\|segmented\|header-actions" CLAUDE.md entrypoints .
 | C-3 | soft primary Chip 文字 `primary.dark` 在 16% coral 底上是否 ≥ 4.5 | 1 | **已消解（2026-09-01）**：否——light ≈ 3.99:1。改为 `text.accent`（非 `primary.darker` 常量，因 Step 2 后要跟预设派生）：light 8.5 / dark 6.2；`theme-contract.test.ts` 用混色底 `it.each` 两 scheme 锁 ≥ 4.5 |
 | C-4 | Menu list padding 移植后实际值（Favbase 现锁 `spacing(0.5)`，Minimal popover list padding 0） | 1 | **已消解（2026-09-01）**：Minimal 无 `MuiMenu` 覆盖；Menu paper 继承 `MuiPopover.paper` = `paperStyles(dropdown)` padding `spacing(0.5)`，`& .MuiList-root` 上下 padding 0。断言改为 `theme.components.MuiMenu` 为 undefined + Popover paper 两值 |
 | C-5 | 六预设的 `text.accent` 派生阶（darker/light）是否全部过 WCAG 4.5 | 2 | **已消解（2026-09-01）**：是——light `darker` 对白底 ≥ 8.74、对 high-contrast 底 ≥ 8.07；dark `light` 对 `#141A21` ≥ 6.44；对 16% soft 洗底 ≥ 5.15（最低均为 preset2/preset4）。无预设需要回退阶；`theme-contract.test.ts` 四组 `it.each(PRESETS)` 锁定 |
-| C-6 | EmptyContent 默认文案复用的现有 i18n key 名 | 3 | grep `zh-CN.ts` |
+| C-6 | EmptyContent 默认文案复用的现有 i18n key 名 | 3 | **已消解（2026-09-01）**：没有可复用的 key——`zh-CN.ts` 只有平台专用的 `dashboard.platformEmpty`，无通用空态文案。结论是 `EmptyContent` **不设默认 title**（也不设默认插图），既不新增 key 也不硬编码英文；`StateBox` 契约里 title 本就可选，且 `NoMatchesState` 依赖「盒子里只有调用方那一句」（`state-box.test.tsx` 断言 `textContent` 精确相等） |
 | C-7 | Step 6 heading outline 实际序列（Export 卡是否仍在 `/`） | 6 | 以 DOM 为准 |
 
 ## 附录 D — 勘误

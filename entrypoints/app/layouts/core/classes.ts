@@ -1,8 +1,4 @@
-import { themeConfig } from '../../theme/theme-config';
-
-function createClasses(className: string): string {
-  return `${themeConfig.classesPrefix}__${className}`;
-}
+import { createClasses } from '../../theme/create-classes';
 
 export const layoutClasses = {
   root: createClasses('layout__root'),

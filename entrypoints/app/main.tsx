@@ -2,12 +2,9 @@ import { StrictMode, Suspense, lazy } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createHashRouter, RouterProvider, Outlet } from 'react-router-dom';
 
-import Box from '@mui/material/Box';
-import LinearProgress, { linearProgressClasses } from '@mui/material/LinearProgress';
-import { varAlpha } from 'minimal-shared/utils';
-
 import { initDbProxy } from '@/lib/database';
 import { DEFAULT_THEME_SETTINGS, getThemeSettings } from '@/lib/storage';
+import { LoadingScreen } from './components/loading-screen';
 import App from './App';
 import { collectionPlatformRoutes } from './collection-platform-pages';
 import { SettingsProvider } from './components/settings';
@@ -24,28 +21,6 @@ const DashboardPage = lazy(() => import('./pages/dashboard'));
 const CollectionsPage = lazy(() => import('./pages/collections'));
 const ChatPage = lazy(() => import('./pages/chat'));
 const SettingsPage = lazy(() => import('./pages/settings'));
-
-function LoadingFallback() {
-  return (
-    <Box
-      sx={{
-        display: 'flex',
-        flex: '1 1 auto',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
-      <LinearProgress
-        sx={{
-          width: 1,
-          maxWidth: 320,
-          bgcolor: (theme) => varAlpha(theme.vars.palette.text.primaryChannel, 0.16),
-          [`& .${linearProgressClasses.bar}`]: { bgcolor: 'text.primary' },
-        }}
-      />
-    </Box>
-  );
-}
 
 async function bootstrap() {
   // Both reads gate the first render: navigation because the shell is immutable
@@ -66,7 +41,7 @@ async function bootstrap() {
         {
           element: (
             <DashboardLayout navigation={navigation}>
-              <Suspense fallback={<LoadingFallback />}>
+              <Suspense fallback={<LoadingScreen />}>
                 <Outlet />
               </Suspense>
             </DashboardLayout>

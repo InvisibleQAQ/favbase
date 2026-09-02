@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react';
 
-import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
+import { EmptyContent } from '../empty-content';
 
 export interface StateBoxProps {
   /** Leading visual, e.g. an <Iconify width={48}> — caller controls color. */
@@ -19,9 +18,10 @@ export interface StateBoxProps {
 }
 
 /**
- * Dashed empty / error / no-match state shared by every page. One density for
- * all of them: hairline dashed divider, centered column, 16px gaps. The copy
- * says what happened; the action says how to recover.
+ * Dashed empty / error / no-match state shared by every page. A thin adapter
+ * over `EmptyContent filled` — this component owns the page-level box (min
+ * height, vertical padding, the `data-state-box` handle callers assert on),
+ * `EmptyContent` owns the tinted dashed shell and the copy treatment.
  */
 export function StateBox({
   icon,
@@ -31,31 +31,22 @@ export function StateBox({
   minHeight = 320,
   children,
 }: StateBoxProps) {
-  return (
-    <Box
-      data-state-box
-      sx={(theme) => ({
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        textAlign: 'center',
-        minHeight,
-        gap: 2,
-        borderRadius: 1,
-        border: `1px dashed ${theme.vars.palette.divider}`,
-        p: 4,
-      })}
-    >
-      {icon}
-      {title != null && <Typography variant="subtitle1">{title}</Typography>}
-      {description != null && (
-        <Typography variant="body2" sx={{ color: 'text.secondary', maxWidth: 400 }}>
-          {description}
-        </Typography>
-      )}
+  const trailing = action != null || children != null ? (
+    <>
       {action}
       {children}
-    </Box>
+    </>
+  ) : undefined;
+
+  return (
+    <EmptyContent
+      filled
+      data-state-box
+      icon={icon}
+      title={title}
+      description={description}
+      action={trailing}
+      sx={{ minHeight, py: 4 }}
+    />
   );
 }

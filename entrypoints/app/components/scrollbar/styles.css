@@ -1,0 +1,10 @@
+@import 'simplebar-react/dist/simplebar.min.css';
+
+/* Theme the drawn bar with our own tokens. cssVarPrefix is '' (theme-config),
+   so the variable name is the bare palette path. */
+.simplebar-scrollbar:before {
+  background-color: var(--palette-text-disabled);
+}
+.simplebar-scrollbar.simplebar-visible:before {
+  opacity: 0.48;
+}

@@ -7,10 +7,14 @@ import Typography from '@mui/material/Typography';
 import CircularProgress from '@mui/material/CircularProgress';
 
 import { Iconify } from '../iconify';
+import { CustomBreadcrumbs, type BreadcrumbsLinkProps } from '../custom-breadcrumbs';
 
 export interface SectionTitleBarProps {
   /** Route title — the page's single h1. Pass a <Skeleton> while loading. */
   title: ReactNode;
+  /** Ancestry above the title. Omit on top-level routes to keep the plain
+   *  heading; when given, the trail renders and the last crumb is the page. */
+  links?: BreadcrumbsLinkProps[];
   /** Secondary line under the title (count / last-synced); omit to hide. */
   caption?: ReactNode;
   syncing?: boolean;
@@ -35,9 +39,13 @@ export interface SectionTitleBarProps {
  * Route heading shared by every collection page: h1 with its caption stacked
  * beneath, and the page's one contained action on the right. Reads first
  * (title → status → control) before any content row.
+ *
+ * With `links` it delegates to `CustomBreadcrumbs`; without them it keeps the
+ * plain stacked heading, which is what every page uses today.
  */
 export function SectionTitleBar({
   title,
+  links,
   caption,
   syncing = false,
   onSync,
@@ -64,6 +72,43 @@ export function SectionTitleBar({
     </Button>
   ) : null;
 
+  const action =
+    syncButton != null ? (
+      syncDisabled && syncDisabledTooltip ? (
+        // MUI Tooltip needs a focusable wrapper around a disabled Button.
+        <Tooltip title={syncDisabledTooltip}>
+          <Box component="span" sx={{ display: 'inline-flex', flexShrink: 0 }}>
+            {syncButton}
+          </Box>
+        </Tooltip>
+      ) : (
+        <Box component="span" sx={{ display: 'inline-flex', flexShrink: 0 }}>
+          {syncButton}
+        </Box>
+      )
+    ) : null;
+
+  const captionNode =
+    caption != null ? (
+      <Typography data-slot="caption" variant="body2" sx={{ color: 'text.secondary' }}>
+        {caption}
+      </Typography>
+    ) : null;
+
+  if (links?.length) {
+    return (
+      <CustomBreadcrumbs
+        data-section="title"
+        heading={title}
+        links={links}
+        action={action}
+        sx={{ mb: 3 }}
+      >
+        {captionNode}
+      </CustomBreadcrumbs>
+    );
+  }
+
   return (
     <Box
       data-section="title"
@@ -88,19 +133,7 @@ export function SectionTitleBar({
         )}
       </Box>
 
-      {syncButton != null &&
-        (syncDisabled && syncDisabledTooltip ? (
-          // MUI Tooltip needs a focusable wrapper around a disabled Button.
-          <Tooltip title={syncDisabledTooltip}>
-            <Box component="span" sx={{ display: 'inline-flex', flexShrink: 0 }}>
-              {syncButton}
-            </Box>
-          </Tooltip>
-        ) : (
-          <Box component="span" sx={{ display: 'inline-flex', flexShrink: 0 }}>
-            {syncButton}
-          </Box>
-        ))}
+      {action}
     </Box>
   );
 }
