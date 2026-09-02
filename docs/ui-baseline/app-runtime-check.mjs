@@ -643,14 +643,29 @@ for (let attempt = 0; attempt < 30; attempt += 1) {
 report.interactions.history = await evaluate(`({ hash: location.hash, h1: document.querySelector('h1')?.textContent?.trim() })`);
 check(report.interactions.history.hash === '#/', 'Hash-router history did not return to dashboard', report.interactions.history);
 
+// docs/25 Step 4 moved the rail control out of the header: `NavToggleButton` is a
+// fixed-position sibling of the rail, so `header button[aria-expanded]` matches
+// nothing now. Row disclosures live inside `nav`, hence both exclusions. The
+// count assertion is the point — the old `?.click()` degraded to a silent no-op
+// and the width checks below would have blamed the layout for a dead selector.
+const NAV_TOGGLE_SELECTOR = 'button[aria-expanded]:not(header button):not(nav button)';
+
+async function clickNavToggle() {
+  const matches = await evaluate(`document.querySelectorAll(${JSON.stringify(NAV_TOGGLE_SELECTOR)}).length`);
+  if (matches !== 1) {
+    throw new Error(`Expected exactly one rail toggle for ${NAV_TOGGLE_SELECTOR}, found ${matches}`);
+  }
+  await evaluate(`document.querySelector(${JSON.stringify(NAV_TOGGLE_SELECTOR)}).click()`);
+}
+
 const sidebarBefore = await evaluate(`getComputedStyle(document.documentElement).getPropertyValue('--layout-nav-vertical-width').trim()`);
-await evaluate(`document.querySelector('header button[aria-expanded]')?.click()`);
+await clickNavToggle();
 await sleep(500);
 const sidebarCompact = await evaluate(`(async () => ({
   width: getComputedStyle(document.documentElement).getPropertyValue('--layout-nav-vertical-width').trim(),
   stored: (await chrome.storage.local.get('sidebarPinned')).sidebarPinned,
 }))()`);
-await evaluate(`document.querySelector('header button[aria-expanded]')?.click()`);
+await clickNavToggle();
 await sleep(500);
 const sidebarRestored = await evaluate(`(async () => ({
   width: getComputedStyle(document.documentElement).getPropertyValue('--layout-nav-vertical-width').trim(),
@@ -809,18 +824,50 @@ await runGroup({
 await viewport(390, 844, true);
 await configure({ theme: 'light', locale: 'en', reducedMotion: true });
 await goto('/', { reload: true });
+// docs/25 Step 4 deleted the header theme pill (`header-actions.tsx`); Mode now
+// lives in the appearance drawer as three `OptionButton` tiles over the same
+// `theme/mode-transition.ts` seam, so the contract is unchanged but the path to
+// it is: settings button -> drawer -> "Dark". Labels are read in English
+// because this block runs under `locale: 'en'`, matching the language-button
+// lookup above. Every step throws on a miss rather than degrading to a no-op.
 report.interactions.reducedMotion = await evaluate(`(async () => {
+  const settle = () => new Promise((resolveWait) => setTimeout(resolveWait, 300));
+
+  const settingsButton = [...document.querySelectorAll('header button')]
+    .find((button) => button.getAttribute('aria-label')?.toLowerCase().includes('appearance'));
+  if (!settingsButton) throw new Error('Appearance settings button not found in header');
+  settingsButton.click();
+  await settle();
+
+  const dialog = document.querySelector('[role="dialog"]');
+  if (!dialog) throw new Error('Appearance drawer did not open');
+
   let transitions = 0;
   const original = document.startViewTransition?.bind(document);
   if (original) document.startViewTransition = (...args) => { transitions += 1; return original(...args); };
-  const input = document.querySelector('header input[type="checkbox"]');
-  input?.click();
-  await new Promise((resolveWait) => setTimeout(resolveWait, 300));
-  return {
+
+  const darkTiles = [...dialog.querySelectorAll('button[aria-pressed]')]
+    .filter((tile) => tile.textContent?.trim() === 'Dark');
+  if (darkTiles.length !== 1) throw new Error(\`Expected one Dark mode tile, found \${darkTiles.length}\`);
+  darkTiles[0].click();
+  await settle();
+
+  const result = {
     transitions,
     scheme: document.documentElement.getAttribute('data-color-scheme'),
     reduced: matchMedia('(prefers-reduced-motion: reduce)').matches,
+    drawerOpen: !!document.querySelector('[role="dialog"]'),
   };
+
+  // Leave the shell as we found it: the drawer is in-memory state, but a page
+  // left with a modal open would poison every later audit in this run.
+  const closeButton = [...(document.querySelector('[role="dialog"]')?.querySelectorAll('button') ?? [])]
+    .find((button) => button.getAttribute('aria-label')?.toLowerCase() === 'close');
+  closeButton?.click();
+  await settle();
+
+  if (original) document.startViewTransition = original;
+  return result;
 })()`);
 check(
   report.interactions.reducedMotion.reduced &&
