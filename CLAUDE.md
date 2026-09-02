@@ -50,6 +50,7 @@ WXT 入口点及运行时角色总览，详细结构见对应目录 `CLAUDE.md`�
 - `tests/lib-import-smoke.test.ts` — lib 层 import-smoke 契约（docs/20 高-1 + 中-5）：Agent Bridge 协议/registry、六个平台 sync-service（由 `COLLECTION_PLATFORMS` 派生、自动发现 `lib/<platform>/*-sync-service.ts`）+ `embedding/chunker`/`char-split`、`collections/platforms`、`ingest/ingest`、`database`、`bilibili/transcribe-utils`（转录 seam）在无 `chrome` 全局、零 `vi.mock` 下 `import()` 零未处理 rejection；取代注释与散落的防御性 storage mock
 - `tests/ui-vendor-boundaries.test.ts` — 重量级 UI 依赖的归属守卫（docs/25 跨 Step 铁律 6）：`simplebar-react` 只允许 `entrypoints/app/components/scrollbar/**` import（含其 CSS），`entrypoints/**` 与 `lib/**` 其余位置一律禁止；同时反向断言 owner 目录确实用了它，避免规则空转。Step 5 把 `sonner`（owner `components/snackbar/**`）加进同一张 `VENDOR_RULES` 表
 - `tests/setup/app-dom.ts` — vitest `setupFiles`（`vitest.config.ts` 注册）：happy-dom 缺失的 `ResizeObserver` stub，仅为 `components/scrollbar/`（simplebar）与 `components/custom-popover/`（箭头测量）
+- `vitest.config.ts` — 主仓库 vitest：`exclude` 必须同时排 `packages/**`（各自 `pnpm -r test`）与 `.claude/**`（git worktree 所在地；漏了它，worktree 的测试文件会被叠加收进主仓库这一跑，文件数翻倍并加剧超时抖动）
 - `wxt.config.ts` — built-in platform host permissions 由 `PLATFORM_HOST_PERMISSIONS` keyed map 声明，`PLATFORM_HOST_PERMISSION_LIST` 负责 manifest spread；Bookmark `<all_urls>` 仍是显式平台 Adapter
 
 ## 参考项目

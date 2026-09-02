@@ -12,6 +12,9 @@ export default defineConfig({
     // happy-dom has no ResizeObserver; Scrollbar (simplebar) and CustomPopover
     // both construct one on mount. See tests/setup/app-dom.ts.
     setupFiles: [path.resolve(__dirname, 'tests/setup/app-dom.ts')],
-    exclude: [...configDefaults.exclude, 'packages/**'],
+    // `packages/**` run under their own vitest (`pnpm -r test`). `.claude/**`
+    // holds git worktrees: without this, a worktree's test files are collected
+    // on top of this tree's own, tripling the file count and starving each run.
+    exclude: [...configDefaults.exclude, 'packages/**', '.claude/**'],
   },
 });
