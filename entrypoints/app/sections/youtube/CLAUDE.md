@@ -17,6 +17,6 @@ YouTube 公开播放列表收藏页（`/collections/youtube`，扁平单集合�
 - 页面顺序由共享 scaffold 固定为标题/系统状态 → 搜索 → 配置提醒 → 播放列表主分类 → 标签 → 列表；本目录只提供 adapter。
 - 排序固定 addedAt 降序（`platformMeta->>'addedAt'` ISO 字典序，服务层固定，MVP 无排序控件）；chips 筛选走 item_sources（跨列表视频在每个所属列表 chip 下都可见）；platformMeta 形状见 `lib/youtube/CLAUDE.md`
 - 四种空/异常态：未配置（SectionTitleBar + NotConnectedState 整页短路，引导设置）/ 密钥无效（AuthFailedState，content phase）/ 库空（EmptyLibraryState 引导同步）/ 同步失败（ErrorState+retry）；状态 glyph 统一 48px secondary，双动作组允许窄屏换行，虚线框为共享 `StateBox`
-- 路由/导航：`main.tsx` 路由 `collections/youtube`（**无 `:id` 详情路由**——扁平单集合）+ `nav-config.tsx` Collections children 叶子（`nav.youtubePlaylists`）；兄弟叶 active 互斥判定见 `layouts/nav-active.ts`（最长前缀匹配）
+- 路由/导航：`main.tsx` 路由 `collections/youtube`（**无 `:id` 详情路由**——扁平单集合）+ `nav-config.tsx` Collections children 叶子（`nav.youtubePlaylists`）；叶 active 判定见 `components/nav-section/nav-active.ts`（`isNavItemActive` 段边界匹配，平台叶 `deepMatch: true`）
 - AI 后处理由 `youtube-sync-adapter.ts` 把 `newItemIds` 交给 `startCollectionProcessingJobs`（手动/自动两触发同源），共享 `youtube-playlists:embed|tag` 串行 lanes；Fetch worker 接收同一个 cooperative checkpoint。
 - i18n：平台特有文案 key 在 `youtube.*`（zh/en 齐全，`youtube.count` 带 `.one` 复数变体，`youtube.noMatches` 保留平台名词）；通用文案（retry/loadFailed）走共享 `common.*`，获取按钮走 `pipeline.fetchNow`（`common.syncNow` 已删）；限流文案复用 `settings.youtube.rateLimited`（恒无 resetAt 变体）；错误类映射在 view 边界；无硬编码 CJK

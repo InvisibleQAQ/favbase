@@ -24,7 +24,8 @@ typography, radius, or elevation values into local `sx`.
 | `core/mixins/` | `softStyles` / `filledStyles` / `menuItemStyles` / `paperStyles` (`background.ts`, `text.ts`, `global-styles-components.ts`), `maxLine` / `textGradient`, `bgBlur` / `bgGradient`, `hideScrollX/Y`, `scrollbarStyles`. `border.ts` (`borderGradient`) is not ported |
 | `core/components/` | One file per MUI component family (`index.ts` spreads them). Minimal's MUI X and `@mui/lab` timeline entries are not ported. Every override is written as `root.variants` with `props: (ownerState) => boolean`; the contract test resolves them the same way MUI does |
 | `create-theme.ts` | `baseTheme` assembles `colorSchemes.{light,dark}` = palette + shadows + customShadows + opacity, plus `mixins`, `components`, `typography`, `shape.borderRadius: 8`; `createTheme({ settingsState?, themeOverrides? })` runs `applySettingsToTheme` only when a settings state is given |
-| `create-classes.ts` | `createClasses(name)` -> `favbase__<name>`: stable, prefixed slot class names for shared primitives, so a parent's `sx` can target a slot without depending on emotion's hashes. Sole owner of the `classesPrefix` join; used by `components/label/`, `components/scrollbar/` and `layouts/core/classes.ts` |
+| `create-classes.ts` | `createClasses(name)` -> `favbase__<name>`: stable, prefixed slot class names for shared primitives, so a parent's `sx` can target a slot without depending on emotion's hashes. Sole owner of the `classesPrefix` join; used by `components/label/`, `components/scrollbar/`, `components/nav-section/styles/classes.ts` and `layouts/core/classes.ts` |
+| `mode-transition.ts` | `setModeWithReveal(setMode, next, origin)` + `revealOriginFrom(el)`: the View Transitions circular reveal for a light/dark swap (`flushSync` inside `startViewTransition` so the "after" snapshot is the new scheme; instant fallback when the API is missing or reduced-motion is on; a skipped transition's `ready` rejection is swallowed). Companion `::view-transition-*(root)` rules live in `app/global.css`. Moved out of the deleted `layouts/dashboard/header-actions.tsx` in docs/25 Step 4; consumers are the appearance drawer's Mode options and welcome's top-bar switch |
 | `theme-provider.tsx` | Reads `SettingsContext` **optionally** (`use(SettingsContext)` on the leaf `components/settings/context/settings-context.ts`, not the barrel) and `useMemo`s `createTheme({ settingsState })` on it — app.html gets the persisted preset/contrast, welcome.html and bare test renders get coral defaults. `ThemeVarsProvider` + `CssBaseline`; keep `defaultMode="system"` and `favbase-color-mode` synchronized with `public/theme-init.js` (mode is not a settings-state field) |
 | `extend-theme-types.d.ts` | Module augmentation for palette / mixins / opacity / customShadows and the component `variant` / `color` / `size` extensions (Button `soft`/`xLarge`/`black`/`white`, Chip `soft`, Pagination `soft`, Fab, Badge, Avatar, Slider, Rating, Tabs `custom`) |
 
@@ -64,7 +65,7 @@ deepened to `0.16` on hover or for chip-like fills. `primary.lighter` is not a
 background in app code — it is an opaque stage that would turn into a pale
 block on the dark ground and would not follow the preset; the only remaining
 consumer is Minimal's own `core/components/avatar.tsx` surplus badge. Consumers:
-`layouts/dashboard/nav.tsx` (`navActiveSx`), `sections/overview/overview-view.tsx`
+`components/nav-section/styles/css-vars.ts` (nav row active/hover), `sections/overview/overview-view.tsx`
 (platform tab), `sections/chat/chat-view.tsx` (conversation row),
 `sections/bilibili/bilibili-view.tsx` (`SortControl`).
 

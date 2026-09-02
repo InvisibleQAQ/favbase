@@ -17,6 +17,6 @@
 - 页面顺序由共享 scaffold 固定为标题/系统状态 → 搜索 → 配置提醒 → 收藏夹主分类 → 标签 → 列表；本目录只提供 adapter。
 - 排序固定 publishedAt 降序（= 内容 updated/created 时间，web v4 items 无收藏时间）；platformMeta 形状见 `lib/zhihu/CLAUDE.md`
 - 三种空态：未登录（48px secondary glyph + 可换行居中动作组）/ 库空（48px secondary glyph + 立即同步主按钮）/ 同步失败（ErrorState+retry）；虚线框为共享 `StateBox`
-- 路由/导航：`main.tsx` 路由 `collections/zhihu` + `nav-config.tsx` Collections children 叶子（`nav.zhihuFavorites`）；active 判定走 `layouts/nav-active.ts` 最长前缀匹配
+- 路由/导航：`main.tsx` 路由 `collections/zhihu` + `nav-config.tsx` Collections children 叶子（`nav.zhihuFavorites`）；叶 active 判定见 `components/nav-section/nav-active.ts`（`isNavItemActive` 段边界匹配，平台叶 `deepMatch: true`）
 - AI 后处理由 `zhihu-sync-adapter.ts` 把 `newItemIds` 交给 `startCollectionProcessingJobs`（手动/自动两触发同源），共享 `zhihu-favorites:embed|tag` 串行 lanes；Fetch worker 接收同一个 cooperative checkpoint。
 - i18n：平台特有文案 key 在 `zhihu.*`（zh/en 齐全，`zhihu.count` 带 `.one` 复数变体，`zhihu.noMatches` 保留平台名词）；通用文案（retry/loadFailed）走共享 `common.*`，获取按钮走 `pipeline.fetchNow`（`common.syncNow` 已删）；错误类映射在 view 边界；无硬编码 CJK

@@ -20,6 +20,6 @@ X (Twitter) 书签收藏页（`/collections/x`，扁平单集合无详情路由�
 - 三种空态：未登录（NotLoggedInState）/ 库空（EmptyLibraryState）——两者均为 48px secondary glyph + 可换行居中动作组：「打开 X 书签页」主按钮（deep-link `x.com/i/bookmarks`，引导登录让扩展捕获会话）+ 「立即同步」次按钮 / 同步失败（ErrorState+retry）；虚线框为共享 `StateBox`
 - 冷却（X 专属，其他平台无）：成功同步后 5 分钟硬禁用同步按钮 + mm:ss 倒计时 label，判定源 = DB `sources.lastFetchedAt`（跨刷新持久）+ 本会话 seed（即时锁）。逻辑封在 `use-x-bookmarks.ts` + `cooldown.ts`，经 scaffold `syncDisabled`/`syncDisabledLabel` 可选 props 下传到 `SectionTitleBar`——**不改共享 `useCollectionLibrary`**，其他平台不传 = 现状不变
 - 本次新增数：`xLastSyncStorage`（`local:x-last-sync`，`{syncedAt, inserted}`）持久「本次新增 N」跨刷新，共享 Sync Adapter 成功后写入（手动/自动同源），hook 经 watch 订阅；view caption 追加 `x.newThisSync` 段（legacy 库 storage 空则省略）
-- 路由/导航：`main.tsx` 路由 `collections/x`（**无 `:id` 详情路由**——扁平单集合）+ `nav-config.tsx` Collections children 叶子（`nav.xBookmarks`）；兄弟叶 active 互斥判定见 `layouts/nav-active.ts`（最长前缀匹配）
+- 路由/导航：`main.tsx` 路由 `collections/x`（**无 `:id` 详情路由**——扁平单集合）+ `nav-config.tsx` Collections children 叶子（`nav.xBookmarks`）；叶 active 判定见 `components/nav-section/nav-active.ts`（`isNavItemActive` 段边界匹配，平台叶 `deepMatch: true`）
 - AI 后处理由 `x-sync-adapter.ts` 把 `newItemIds` 交给 `startCollectionProcessingJobs`（手动/自动两触发同源），共享 `x-bookmarks:embed|tag` 串行 lanes；领域 platform `'x'` 与 job namespace `'x-bookmarks'` 继续分离。
 - i18n：平台特有文案 key 在 `x.*`（zh/en 齐全，`x.noMatches` 保留平台名词；`x.newThisSync` 带 `.one` 复数变体、`x.cooldown` 承接 `{{time}}`）；通用文案（retry/loadFailed）走共享 `common.*`，获取按钮走 `pipeline.fetchNow`（`common.syncNow` 已删）；错误类映射在 view 边界（lib 层只抛结构化错误）；无硬编码 CJK（`tests/i18n-no-hardcoded.test.ts` 守卫）

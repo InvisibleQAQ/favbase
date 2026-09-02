@@ -41,7 +41,9 @@ CTA 落地规则在 `landing.ts`（纯函数 + `landing.test.ts`）：
 
 ### sections/
 
-- `top-bar.tsx` — 固定顶栏：图标 + wordmark + tagline，右侧**直接复用 dashboard 的 `HeaderActions`**（主题开关 / 语言菜单 / 仓库链接，零复制）。无跳过按钮；导出 `TOP_BAR_HEIGHT` 供 Hero 留白
+- `top-bar.tsx` — 固定顶栏：图标 + wordmark + tagline，右侧挂 `top-bar-actions.tsx`。无跳过按钮；导出 `TOP_BAR_HEIGHT` 供 Hero 留白
+- `top-bar-actions.tsx` — 顶栏右侧三控件（docs/25 Step 4 起）：`太阳 | iOS 开关 | 月亮` 主题药丸（本文件自有，`custom:sun-color`/`custom:moon-color` 多色离线图标 + `useColorScheme()`，mounted 前回退读 `<html data-color-scheme>`，切换走 `@/entrypoints/app/theme/mode-transition` 的圆形揭示）+ **共享**的 `LanguagePopover` 与 `GithubButton`（按叶文件 import `@/entrypoints/app/layouts/components/{language-popover,github-button}`，**不走 barrel**——barrel 带 `settings-button` → settings context → storage，welcome 不该被拖进去）。
+  之前这里直接复用 dashboard 的 `HeaderActions`；app.html 在 Step 4 把主题控制搬进了外观抽屉（需要 welcome 刻意不挂的 `SettingsProvider`），于是药丸落户在本文件——控件形态、`header.themeAria` 与 `favbase-color-mode` 键都没变
 - `hero.tsx` — 100vh 首屏：aurora 双色斑（motion 慢漂）+ 文案 stagger + `OrbitCore` + 滚动提示。两个 CTA 是纯 `href="#welcome-picker"` / `"#welcome-flow"` 锚点（本页无 router，交给 CSS 平滑滚动）。标题是全页**唯一的 h1**：外层 `Box component="h1"`，两行各自 `FadeIn component="span"`（reveal mask）包 `Headline component="span"`——渐变留在每行，挂到 h1 上会横跨两行改变观感，且 background-clip:text 在 transformed 子元素上有渲染 glitch
 - `capability-marquee.tsx` — 双行反向 pill 跑马灯，**由页面滚动驱动**（`useScroll` + `useTransform`）而非 CSS 无限循环：读者停下它就停，不跟正文抢注意力。行内容三倍复制保证两端不露白，两侧 `maskImage` 渐隐。`useReducedMotion()` 为真时不绑 `style={{x}}`，pill 行静止
 - `how-it-works.tsx` — 三步 sticky 叠卡。`useScroll` 测整栈进度，每张卡 `1 - (total-1-index) * 0.04` 目标缩放做景深；卡内右侧 `StepGlyph`（rows / grid / bubble 三种抽象装饰）。sticky 在 `md+` 生效，窄屏退化为普通堆叠；reduce-motion 时不绑 `style={{scale}}`，卡片全尺寸堆叠
