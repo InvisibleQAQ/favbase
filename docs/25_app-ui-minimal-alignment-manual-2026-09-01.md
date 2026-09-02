@@ -1,7 +1,7 @@
 # docs/25 — app.html 全面向 Minimal v7.7.0 看齐：分步改造手册
 
 日期：2026-09-01
-状态：**Step 0–2 已落地（2026-09-01，各自待用户 commit；Step 2 在 worktree 分支 `feat/docs25-step2-color-presets`），Step 3+ 未开工**。本文是可执行手册，不是设计随笔；每个 Step 都能独立开工、独立验证、独立回滚。
+状态：**Step 0–4 已落地（Step 0–2 于 2026-09-01，Step 3 于 2026-09-02 rebase 合入，Step 4 于 2026-09-02 在 main 工作树实施、待用户 commit），Step 5+ 未开工**。本文是可执行手册，不是设计随笔；每个 Step 都能独立开工、独立验证、独立回滚。
 上位文档：`docs/23_favbase-app-minimal-dashboard-v7-adaptation-plan-zh-CN.md`（第一轮"保留自有世界"路线，本文第二轮**推翻**其 §6/§11 的大部分结论，见 §3）。
 需求与决策来源：`.trellis/tasks/09-01-refactor-app-ui-adopt-minimal-v7-7-0-full-visual-language-while-keeping-favbase-brand-docs-23-round-2/prd.md`（R1–R14，Open Questions 1–6 已全部关闭）。
 事实来源：同目录 `research/favbase-app-ui-current-state.md`（Favbase 现状，433 行）、`research/minimal-v7-ui-catalog.md`（Minimal 目录，299 行）。本文只引用、不复制这两份文件的内容；行号以 2026-09-01 工作树为准。
@@ -522,10 +522,66 @@ pnpm compile && pnpm test && pnpm build
 **回滚点**：`refactor(app-shell): port Minimal nav-section, header actions and settings drawer`。这一步 diff 最大，建议在功能分支完成后 squash 成一个 commit。
 
 **完成判据**
-- [ ] `layouts/dashboard/header-actions.tsx` 不存在；`grep -rn "header-actions" entrypoints/app` 零结果
-- [ ] `grep -rn "layout-nav-item-height\|layout-nav-child-item-height\|layout-nav-compact-item-size" entrypoints/app` 零结果
-- [ ] 新 i18n key 双语齐全，`tests/i18n-no-hardcoded.test.ts` 绿
-- [ ] `layouts/CLAUDE.md` 重写为 vertical/mini/mobile 三形态 + toggle + header 右侧四控件 + 抽屉；`:43` 拒绝行删除
+- [x] `layouts/dashboard/header-actions.tsx` 不存在，代码零 import（主题药丸迁至 `welcome/sections/top-bar-actions.tsx`，见执行记录第 1 条）。**判据措辞需修正**：`grep -rn "header-actions" entrypoints/app` 不是零，剩 4 处是刻意保留的来源说明——`layouts/components/language-popover.tsx` 与 `theme/mode-transition.ts` 的注释、`layouts/CLAUDE.md` 与 `theme/CLAUDE.md` 各一行
+- [x] 三个旧 nav 行高变量在实现里零出现（剩两处：`layouts/CLAUDE.md` 说明它们已迁走、`dashboard/css-vars.test.ts` 反向断言它们不复活）
+- [x] 新 i18n key 双语齐全，`tests/i18n-no-hardcoded.test.ts` 绿
+- [x] `layouts/CLAUDE.md` 重写为 vertical/mini/mobile 三形态 + toggle + header 右侧四控件 + 抽屉；`:43` 拒绝行删除
+
+---
+
+**执行记录（2026-09-02）**
+
+前置 Step 2 与 Step 3 均已在 main，直接在 main 工作树实施（未开 worktree）；按 D19 不主动 commit。
+
+**用户决定（2026-09-02）**：子项连接线换 Minimal 的 bullet + 竖脊（12px SVG mask L 角 + `NavCollapse` 2px 竖脊收在末项 bullet 前），Favbase 自研鱼骨线（1px divider 直角肋）删除。手册 §2.3/§3 两处都没点到这条线，是本步唯一需要用户裁决的取舍。颜色**没有**照抄 Minimal 写死的 `#EDEFF2`/`#282F37`，改用 `palette.divider`（grey-500 @ 20%，与两者相差不到一个色阶）——见下方 trellis-check 第 2 条。
+
+**手册未覆盖或与实现冲突处，逐条处置**
+
+1. **`header-actions.tsx` 是 welcome 的依赖**：`welcome/sections/top-bar.tsx` 直接复用它（其测试还 mock 了这个路径）。手册 §0.2「不动 welcome」与本步判据「删除 `header-actions.tsx`」互相冲突。处置：主题药丸迁到新建 `welcome/sections/top-bar-actions.tsx`（welcome 自己拥有），`LanguagePopover`/`GithubButton` 成为 `layouts/components/` 的共享叶（welcome **按叶 import**，不走 barrel——barrel 带 `settings-button` → settings context → storage），View Transition 逻辑提到 `theme/mode-transition.ts` 供抽屉与 welcome 共用。welcome 的控件形态、`header.themeAria`、`favbase-color-mode` 一律未变（铁律 1）。
+2. **`compactLayout` 语义**（第 9 点）：手册写 `maxWidth = compact ? 'lg' : false`。实测六个页面**全都显式传 `maxWidth`**（多为 `xl`，settings 是 `lg`），所以这个默认参数值永不生效，而 `false` 又会推翻页面自己的决定。改为 `compact ? 'lg' : 调用方的 cap`，`DashboardContent` 经 leaf `SettingsContext` 可选读取（无 provider = off，welcome 与裸组件测试不受影响）。`DEFAULT_THEME_SETTINGS.compactLayout` 保持 `false`，默认视觉零变化。
+3. **激活态**：第 4 点要求 sub 级用 `text.primary` + `action.selected`，但同节测试重写第 7 条要求「激活行 color 解析为 `text.accent`」——两条互斥。取可观测的那条：root 与 sub 统一 `text.accent` 文字 + 8% 品牌洗底（hover 16%），与 Step 2 起的选中洗底一致，也少一处特殊情况。
+4. **nav 变量名**：手册写 vertical root 为 `--nav-item-height`；实现沿用 Minimal 原名 `--nav-item-root-height`（mini 同名不同值），避免同一语义两个名字。44/36/56 锁在新 `components/nav-section/css-vars.test.ts`。
+5. **`nav-active.ts` 归属**（第 10 点要求原位保留）：移植后每行自己判定 active，`components/` 反向 import `layouts/` 是依赖倒置。函数移到 `components/nav-section/nav-active.ts`，并从 `findActiveChildPath`（兄弟集合 + 最长者胜）改为 `isNavItemActive(pathname, path, deepMatch)`——叶路径互不为前缀后，最长者胜没有消费者；`layouts/nav-active.ts` 与其 7 例测试删除，等价重写为 8 例。平台叶显式 `deepMatch: true` 保住 `/collections/bilibili/:mediaId` 的高亮。
+6. **目录形状**：保留 Minimal 的 `vertical/` + `mini/` 子目录（各自 `nav-list`/`nav-item`），而不是手册列的扁平 `components/{nav-list,nav-item}`——两形态行几何差异太大，合并只能靠条件分支。`nav-ul`/`nav-li` 合在 `nav-elements.tsx`、`large-block`/`small-block` 合在 `drawer/styles.tsx`（都照 Minimal 原样）；`SmallBlock` 未移植（无嵌套选项组）。
+7. **subheader 不可点**：Minimal 的分组标签是带 `onClick` 的 `div`（无键盘路径）。Favbase 两组分别 1 项与 3 项，折叠没有产品价值，只保留 overline 外观。
+8. **mini flyout 键盘**：hover 之外补 `ArrowRight` 打开并移焦首个子链接、`Escape` 关闭并归还焦点；Popover 关掉 auto/enforce/restore focus——Minimal 是纯 hover 且指针经过就抢焦点。
+9. **`NavToggleButton` 定位**：rail 保留 `overflow: hidden`（88→300 展开时不闪出整行内容），所以按钮是 rail 的**兄弟**、用 `position: fixed` + `left: var(--layout-nav-vertical-width)` + 同一 easing 跟随（手册第 6 点同款），不是 Minimal 那样的子节点。
+10. **抽屉**：Mode 是 Light/Dark/System **三选**（Minimal 的二态开关无法表达 `system`，而它正是 `defaultMode`）；Presets 用 Minimal 的 sidebar 字形色板而非手册措辞里的「圆点」——顺带让颜色演示它真正要染的东西，六色各有 i18n 名（两个蓝，序号不可读）；标题叫「外观 / Appearance」而非「设置」（设置页已占这个词）；`useSettingsReset()` 把「mode ≠ system」折进 `canReset`，抽屉 Reset 与 header dot 共用一个答案。
+11. **图标**：新增 5 个离线图标 `solar:sun-bold-duotone`/`solar:moon-bold-duotone`/`solar:monitor-bold-duotone`/`mdi:contrast-circle`/`mdi:arrow-collapse-horizontal`（Mode 用单色 duotone：`OptionButton` 选中要把字形染 `primary.main`，多色 `custom:*` 不吃 `currentColor`）。`custom:sun-color`/`custom:moon-color` 保留给 welcome 药丸。
+12. **手册测试清单漏了两处**，已一并改：`collection-platform-registry.test.ts`（5 例改读 `NavGroup[]`，首例改为断言两组顺序与组内路径）、`load-navigation.test.ts`（`platformPaths` 改 flatMap）。另外 `App.test.tsx` 因为 App 现在挂 `SettingsDrawer`，要 mock 掉（否则 storage 进图产生未处理 rejection），顺手加了「抽屉挂在 router root」的断言。
+13. **Step 3 遗留的 `Label` `inverted` 对比度复核仍悬空**：本步没有引入任何 `Label` 消费者（抽屉 Mode 用 `OptionButton`，不是 Minimal 的 System 药丸），顺延到首个真实消费者（Step 6/8 最可能）。
+
+**i18n**：新增 `nav.groupCollections/groupGeneral/externalCaption/expandAria/collapseAria/toggleSubmenuAria`、`header.settingsAria`、`settingsDrawer.title/mode/modeLight/modeDark/modeSystem/contrast/contrastHint/compact/compactHint/presets/presetDefault/preset1..preset5/reset/close`（双语）；删除 `header.sidebarToggleAria`（被 `nav.collapseAria`/`expandAria` 取代）。`nav.toggleSubmenuAria` 用 `{{title}}` 插值，由 `use-translated-nav.ts` 合成 disclosure 的可读名。
+
+**四步验证全绿**：`tsc --noEmit` 零错；`vitest run` 190 文件 / 1374 例（本步新增 26 例——nav-active 8、nav-section css-vars 3、nav-vertical 8、settings-drawer 5、language-popover 2；删除旧 `nav.test.tsx` 7 例与旧 `nav-active.test.ts` 7 例）；`pnpm build` 成功 + `scripts/check-background-bundle.mjs` 绿（background 11 模块 / 939,265 B）；`grep -l simplebar .output/chrome-mv3/chunks/*.js` **只命中 app chunk**（Step 3 的空集判据在本步兑现，代价见 §8 体积列）。
+
+**判据核对**：`header-actions.tsx` 与 `nav.tsx` 已删、代码零 import ✓（两条 grep 判据的字面「零结果」不成立，剩下的是注释/文档里的来源说明与测试的反向断言，逐处列在完成判据下）；新 key 双语齐全、`tests/i18n-no-hardcoded.test.ts` 绿 ✓；`layouts/CLAUDE.md` 已按 vertical/mini/mobile + toggle + 四控件 + 抽屉重写，原 `:43` 拒绝行删除 ✓。
+
+**trellis-check（2026-09-02，事后补跑）**：Step 4 的实现没走 Trellis 流程（未建 task、未跑 `trellis-before-dev`），补跑 `trellis-check` 后发现并修掉 3 处：
+
+1. **spec §8 Shell 整节失真**（`.trellis/spec/frontend/ui-design-system.md`）。三个 `--layout-nav-*item*` 变量、"platform leaves 40px / compact 44x44 + Tooltip"、"Fishbone connectors use `palette.divider`"、"longest-prefix platform child selection"、Preserve 里的"theme and language controls"全部与代码不符；**其中激活态代码块（`primary.lighter` 底 + 0.24 hover）早在 Step 2 就已经漂移**，上一轮漏改。已整节重写：shell 变量与 nav 变量分表、三形态、Header 四控件顺序 + toggle 不在 Header、单一激活态（accent + 8%/16%）、连接线、D15。§7 清单同步补上这两份 spec。
+2. **连接线颜色违反 §15**（"Raw neutral hex in component"）。移植时照抄了 Minimal 的 `bulletColor = {#EDEFF2, #282F37}`。改为单个 `--nav-bullet-color: palette.divider`：色差不到一个色阶，却回到设计系统给连接线保留的语义角色，并且跟随 scheme 与高对比度选项（写死的两个中性色不会）；`applyStyles('dark')` 分支与 `bulletColor` 导出一并删除，`css-vars.test.ts` 加断言钉住。
+3. **§12 temporary Drawer 退出焦点契约**在外观抽屉上没有实现（触发器在 Header、抽屉挂 router root，没有共享 ref）。没有硬套那五步，而是给 §12 加了 scope 说明并**把结果写成断言**：`settings-drawer.test.tsx` 现在断言关闭后焦点回触发器、容器无 `aria-hidden` 残留——实测 MUI 默认 restore-focus 在这条路径上成立。
+
+同时按 §15 给抽屉 option tile 的「hairline + 抬升阴影」记了一条限定例外（Minimal 原样），按 i18n spec §2 给 `nav.*`/`header.*` 与 `settingsDrawer.*` 补了 key 命名行。`git diff --check` 干净。§16 第 8 项「Impeccable detector」本会话无此 skill/脚本可用，未跑。
+
+**待目测（未做，留给用户）**：8 张截图（light/dark × vertical/mini × 桌面/移动）存 `docs/ui-baseline/2026-09-xx/step4/`；mini flyout、抽屉六色、Mode 的 View Transition、Tab 顺序（nav → toggle → header 四控件 → 抽屉内闭环）。
+
+**第二轮复核（2026-09-02，另一会话）**：四步验证独立重跑一遍——`tsc --noEmit` 零错、`vitest run` 190 文件 / 1374 例（唯一失败是 `lib/database/proxy-db.test.ts` 5s 超时，单独重跑 3/3 通过，属满载下的 CPU 争用抖动，非回归）、`wxt build` 成功、`check-background-bundle.mjs` 绿（11 模块 / 939,265 B）；i18n 双语各 658 key 无缺口，`i18n-no-hardcoded` / `ui-vendor-boundaries` / `platform-completeness-contract` 三个守卫绿。**上一轮的调用点同步漏了 8 处，本轮补齐**：
+
+1. **六处活文档仍指向已删除模块**（首轮只改了 §7 清单里列到的目录）。`sections/{bookmarks,github-stars,x,youtube,zhihu}/CLAUDE.md` 的「路由/导航」行都还写着 `layouts/nav-active.ts`（最长前缀匹配）——文件和语义都随本步删除了；`theme/CLAUDE.md` 的 brand wash 消费者清单还挂着 `layouts/dashboard/nav.tsx` (`navActiveSx`)。改为 `components/nav-section/nav-active.ts`（`isNavItemActive` 段边界匹配，平台叶 `deepMatch: true`）与 `components/nav-section/styles/css-vars.ts`。`docs/19`/`docs/23`/`docs/target-ui-baseline.md`/`.impeccable/critique/*` 里的同类引用是有日期的历史快照，按 §0.2 不动。
+2. **`docs/ui-baseline/app-runtime-check.mjs` 被本步打断，两处死选择器**——本步的文件清单从没提到这个脚本，而它正是「待目测」要用的工具，等于验证手段和被验证对象一起漂了：
+   - `header button[aria-expanded]`（rail 收展）：toggle 已移出 header，header 里现在没有任何带 `aria-expanded` 的控件（`LanguagePopover`/`SettingsButton`/`GithubButton` 都不带）。原写法是 `?.click()`，静默空转后由下游的 300px→88px 断言背锅。改为 `button[aria-expanded]:not(header button):not(nav button)`（行 disclosure 在 `<nav>` 内，故两个排除项），抽成 `clickNavToggle()` 并**断言恰好命中一个**——死选择器不允许再退化成 no-op。
+   - `header input[type="checkbox"]`（reduced-motion 下切主题不得触发 View Transition）：这是被删掉的 header 主题药丸的 Switch。改走抽屉同一条 `theme/mode-transition.ts` seam：找 header 里 `aria-label` 含 appearance 的按钮 → `role="dialog"` → 文案为 `Dark` 的 `button[aria-pressed]` 磁贴，每一步 miss 即 throw，收尾点 Close 还原页面状态（否则残留 modal 会污染后续 audit）。注入的页面侧 JS 已单独抽出 `node --check` 通过。
+
+**trellis-check（2026-09-02，第二轮，事后补跑）**：本轮同样未建 Trellis task、未跑 `trellis-before-dev`（用户询问后补跑 check）。除上面两条外另修 2 处、报告 1 处：
+
+3. **验证工具的漂移没有测试兜底**（Spec Sync）。`app-runtime-check.mjs` 的死选择器之所以能活到现在，是因为它只在人工运行时才暴露。`layouts/dashboard/layout.test.tsx` 新增一例，把脚本依赖的那条契约钉进快测：**`header` 与 `nav` 之外恰好存在一个 `aria-expanded` 控件，且其 `aria-label` 是 `nav.collapseAria`**。happy-dom 不支持带后代组合子的 `:not()`，所以单测用 JS 过滤表达同一条件而非复用选择器串（两处都写了注释要求同步）。fixture 加了一组带 children 的导航，确保 `nav` 那个排除项真的被行使——否则断言会因为「压根没有 disclosure」而假通过。`renderShell(root, navigation?)` 加可选第二参，其余三例零改动。
+4. **`ui-design-system.md` §16 三处失真**。(a) 整节只讲 `chrome-devtools` MCP 的运行时路径，而该 server 不在当前 agent 环境里——顺带说明浏览器自动化 skill 也替代不了它（Chrome 禁止扩展给另一个扩展的 `chrome-extension://` 页面注入脚本）；改为「两种 transport，只有 `app-runtime-check.mjs` 可用」，并记下它需要 `--remote-debugging-port`、陈旧 `DevToolsActivePort` 会挂握手、矩阵缺 vertical/mini 维度（`configure()` 收 `pinned` 但 `runGroup()` 不转发）。(b) 补一段「运行时验证工具属于 shell 契约的一部分」，把本次两处死选择器作为反面案例写进去。(c) hand-off 第 2 条把 `C:	mpavbase-minimal-v7-phase2` 说成「当前 worktree」，本步在 main 上做，改为「改动所在的工作树」。§16 中 2026-08-29 的那段复核数字是有日期的记录，不改。
+
+**报告未修**：`.trellis/spec/frontend/index.md` 的 Guidelines Index 列了 14 份指南，实际只存在 `i18n-conventions.md` / `ui-design-system.md` 两份，其余 12 份（含被 docs/25 铁律 5 引为规范来源的 `directory-structure.md`、铁律 8 引用的 `quality-guidelines.md`）文件不存在却标着 Active。规则本身在 docs/25 里有内联复述，不影响本步；但补写还是把索引改诚实，是 spec 架构层面的决定，不在 Step 4 收口范围内，留给用户裁决。
+
+**仍待目测**：8 张截图与键盘顺序仍未做。本轮无法代跑——`DevToolsActivePort` 停留在 2026-09-01，对该 WS 端点握手超时，`/json` 也空，即当前 Chrome 未以 `--remote-debugging-port` 启动；且脚本现有矩阵只有 theme × viewport × locale，**没有 vertical/mini 这一维**，要覆盖手册要求的 8 张还需给 `runGroup` 接上已存在但未被调用的 `configure({ pinned })` 参数，并补 mini flyout 与抽屉两张交互截图。
 
 ---
 
@@ -821,7 +877,7 @@ grep -rn "MUI v7\|Chrome 116\|segmented\|header-actions" CLAUDE.md entrypoints .
 | 1 | `theme/CLAUDE.md`（重写） |
 | 2 | `theme/CLAUDE.md`、`lib/storage/CLAUDE.md`、`components/settings/CLAUDE.md`（新） |
 | 3 | 六个新 `components/*/CLAUDE.md`、`components/collection/CLAUDE.md`、`components/iconify/CLAUDE.md`（图标清单） |
-| 4 | `layouts/CLAUDE.md`（重写）、`components/nav-section/CLAUDE.md`、`components/settings/CLAUDE.md`、`entrypoints/app/CLAUDE.md`（App.tsx 挂载） |
+| 4 | `layouts/CLAUDE.md`（重写）、`components/nav-section/CLAUDE.md`、`components/settings/CLAUDE.md`、`entrypoints/app/CLAUDE.md`（App.tsx 挂载）、`theme/CLAUDE.md`（`mode-transition.ts`）、`components/iconify/CLAUDE.md`（5 图标）、`welcome/CLAUDE.md`（顶栏控件）、**`.trellis/spec/frontend/{ui-design-system,i18n-conventions}.md`**（§8 shell 全节重写 + §12 scope + §15 例外 + 两条 key 命名行；原清单把 spec 全推到 Step 10，但 §8 逐条都已失真，见 trellis-check）、**`sections/{bookmarks,github-stars,x,youtube,zhihu}/CLAUDE.md`**（路由/导航行的 active 判定来源）、**`docs/ui-baseline/app-runtime-check.mjs`**（shell DOM 变了，验证脚本的选择器必须同步——首轮遗漏，见第二轮复核）、`.trellis/spec/frontend/ui-design-system.md` §16（运行时验证 transport 与「验证工具属 shell 契约」，见第二轮 trellis-check） |
 | 5 | `components/snackbar/CLAUDE.md`、`sections/settings/CLAUDE.md`、`sections/overview/CLAUDE.md`、`entrypoints/app/CLAUDE.md` |
 | 6 | `sections/overview/CLAUDE.md`、`components/chart/CLAUDE.md`、`ui-design-system.md` §10 |
 | 7 | `sections/settings/CLAUDE.md` |
@@ -837,7 +893,7 @@ grep -rn "MUI v7\|Chrome 116\|segmented\|header-actions" CLAUDE.md entrypoints .
 | 1 | 已落地 2026-09-01，已合入 main（待五路由 light/dark 目测） | `c17625c` | app 69,266 B；Container 117,602 B；theme+registry 共用 chunk 16,395 B；jsx-runtime 56,544 B | C-2 回退 `#222B34`、C-3 soft primary → `text.accent`、C-4 Menu 继承 Popover paper；timeline（@mui/lab）未移植；详见 Step 1 执行记录 |
 | 2 | 已落地 2026-09-01，已合入 main（待预设/高对比目测） | `21323ec` | app 69,717 B；Container 118,269 B；theme+registry 共用 chunk 17,057 B | C-5 全过线无回退；D14 墨/白派生表；无 `update-components.ts`、无 `version` 字段、Provider 挂 main.tsx、ThemeProvider 可选读 context、删 dark `lighter` 再着墨；详见 Step 2 执行记录 |
 | 3 | 已落地 2026-09-01（与 Step 2 并列开发，前置只有 Step 1），2026-09-02 rebase 到 Step 2 之上后合入 main（待目测） | `6830293` | app 69,645 B；Container（共享 MUI）118,133 B；jsx-runtime 56,424 B（rebase 到 Step 2 之上后重测；并列分支上单独测得 app 69,294 / Container 118,157） | 六原语 + `theme/create-classes.ts` + `tests/setup/app-dom.ts`；C-6 消解（EmptyContent 不设默认 title）；**修 Minimal 移植缺陷**：MUI v9 不转发 `slotProps.paper.ref`，CustomPopover 箭头改为经自身 `parentElement` 反查 paper；simplebar 因暂无消费者被 tree-shake，未进任何 chunk（体积代价待 Step 4 接入后再记）；详见 Step 3 执行记录 |
-| 4 | 未开始 | | | |
+| 4 | 已落地 2026-09-02（待 8 张截图与键盘目测） | 待用户 commit | app 81,516 B；Container（共享 MUI）122,177 B；jsx-runtime 56,544 B | nav-section（vertical+mini+flyout）+ 四控件 + 外观抽屉 + `theme/mode-transition.ts`；simplebar 首次进产物（只在 app chunk）；鱼骨线换 Minimal bullet（用户决定）；`compactLayout` 语义、`nav-active` 归属、激活态两级同色三处偏离手册；第二轮复核补齐 8 处漏掉的调用点同步（六处 CLAUDE.md + `app-runtime-check.mjs` 两处死选择器），详见 Step 4 执行记录 |
 | 5 | 未开始 | | | |
 | 6 | 未开始 | | | |
 | 7 | 未开始 | | | |
