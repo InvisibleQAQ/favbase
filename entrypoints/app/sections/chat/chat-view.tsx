@@ -496,10 +496,10 @@ function ConversationRow({ conversation, active, onSelect, onDelete, t }: Conver
         p: 0.25,
         borderRadius: 0.5,
         transition: theme.transitions.create(['background-color']),
-        // Selected row = coral wash under ink text (the nav active pattern);
-        // coral is never the text color.
+        // Selected row = 8% brand wash under ink text (the nav active pattern);
+        // the brand color is never the text color.
         ...(active
-          ? { bgcolor: theme.vars.palette.primary.lighter }
+          ? { bgcolor: varAlpha(theme.vars.palette.primary.mainChannel, 0.08) }
           : { '&:hover': { bgcolor: varAlpha(theme.vars.palette.grey['500Channel'], 0.08) } }),
       })}
     >

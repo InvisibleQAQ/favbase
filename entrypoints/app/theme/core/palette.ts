@@ -12,11 +12,12 @@ import type { CollectionPlatform } from '@/lib/collections/platforms';
 import { opacity } from './opacity';
 import { themeConfig } from '../theme-config';
 
-import type { SchemesRecord } from '../types';
+import type { SchemesRecord, ThemeColorScheme } from '../types';
 
 /**
- * Minimal `core/palette.ts` skeleton with the Favbase brand tokens:
- * coral `primary` (dark scheme re-inks only `lighter`), `text.accent`, the
+ * Minimal `core/palette.ts` skeleton with the Favbase brand tokens: coral
+ * `primary` (one ramp for both schemes; presets swap it in
+ * `../with-settings/update-core.ts`), the derived `text.accent`, the
  * six-platform `platform` palette, and scheme text/background values owned by
  * `theme-config.ts`. Type extensions land in `../extend-theme-types.d.ts`.
  */
@@ -42,9 +43,9 @@ export type TypeTextExtend = {
   disabledChannel: string;
   /**
    * favbase override: the one shade of the brand hue allowed as text (links,
-   * emphasis, outlined / text buttons, soft-primary labels). Scheme-aware:
-   * light `primary.darker`, dark `primary.light`. Never use `primary.main` as
-   * a text color.
+   * emphasis, outlined / text buttons, soft-primary labels). Derived from the
+   * active primary preset by `accentTextFor`: light `primary.darker`, dark
+   * `primary.light`. Never use `primary.main` as a text color.
    */
   accent: string;
   accentChannel: string;
@@ -89,11 +90,6 @@ export type PlatformPaletteChannel = Record<`${CollectionPlatform}Channel`, stri
 
 // ➤ Core palette (primary, secondary, info, success, warning, error, common, grey)
 export const primary = createPaletteChannel(themeConfig.palette.primary);
-/** favbase override: dark scheme keeps the brand hue; only the `lighter` wash is re-inked. */
-export const primaryDark = createPaletteChannel({
-  ...themeConfig.palette.primary,
-  lighter: themeConfig.scheme.dark.primaryLighter,
-});
 export const secondary = createPaletteChannel(themeConfig.palette.secondary);
 export const info = createPaletteChannel(themeConfig.palette.info);
 export const success = createPaletteChannel(themeConfig.palette.success);
@@ -103,15 +99,30 @@ export const common = createPaletteChannel(themeConfig.palette.common);
 export const grey = createPaletteChannel(themeConfig.palette.grey);
 
 // ➤ Text, background, action
+/**
+ * favbase override: the brand shade that may be used as text for a given
+ * primary ramp. `darker` on the light ground, `light` on the dark ground —
+ * every preset clears WCAG 4.5:1 on both grounds and on the 16% soft wash
+ * (docs/25 C-5; `theme-contract.test.ts` locks all six).
+ */
+export function accentTextFor(
+  primaryColor: PaletteColorNoChannels,
+  scheme: ThemeColorScheme,
+): string {
+  return scheme === 'light' ? primaryColor.darker : primaryColor.light;
+}
+
+/** Scheme text roles from `theme-config.ts` plus the accent derived from `primaryColor`. */
+export function createTextPalette(scheme: ThemeColorScheme, primaryColor: PaletteColorNoChannels) {
+  return createPaletteChannel({
+    ...themeConfig.scheme[scheme].text,
+    accent: accentTextFor(primaryColor, scheme),
+  });
+}
+
 export const text = {
-  light: createPaletteChannel({
-    ...themeConfig.scheme.light.text,
-    accent: themeConfig.scheme.light.accentText,
-  }),
-  dark: createPaletteChannel({
-    ...themeConfig.scheme.dark.text,
-    accent: themeConfig.scheme.dark.accentText,
-  }),
+  light: createTextPalette('light', themeConfig.palette.primary),
+  dark: createTextPalette('dark', themeConfig.palette.primary),
 };
 
 export const background = {
@@ -195,7 +206,7 @@ export const palette: SchemesRecord<ColorSystemOptions['palette']> = {
   },
   dark: {
     ...basePalette,
-    primary: primaryDark,
+    primary,
     text: text.dark,
     background: background.dark,
     action: action('dark'),

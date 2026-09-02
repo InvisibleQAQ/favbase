@@ -43,6 +43,14 @@ describe('palette.background', () => {
     expect(text.dark.disabled).toBe(themeConfig.palette.grey['600']);
   });
 
+  // docs/25 Step 2: the accent is not a scheme constant any more; it is the
+  // brand ramp's `darker` on the light ground and `light` on the dark ground.
+  it('derives text.accent from the coral ramp (light darker / dark light)', () => {
+    expect(text.light.accent).toBe(themeConfig.palette.primary.darker);
+    expect(text.dark.accent).toBe(themeConfig.palette.primary.light);
+    expect(text.light.accentChannel).toMatch(/^\d+ \d+ \d+$/);
+  });
+
   it('keeps the Minimal neutral ramp as the static theme source', () => {
     expect(themeConfig.palette.grey).toEqual({
       '50': '#FCFDFD',

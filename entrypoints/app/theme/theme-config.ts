@@ -26,17 +26,16 @@ type ThemeConfig = {
     >;
   };
   /**
-   * Scheme-owned semantic values. The brand hue is fixed; the wash and
-   * text-safe accent flip with the scheme, while text/background roles describe
-   * each ground explicitly. Shared primitive ramps stay under `palette`.
+   * Scheme-owned semantic values: text and background roles describe each
+   * ground explicitly. The scheme owns no brand shades — the selection wash is
+   * `varAlpha(primary.mainChannel, 0.08 / 0.16)` at the call site and the
+   * text-safe `text.accent` is derived from the active primary preset in
+   * `core/palette.ts` (`accentTextFor`). Shared primitive ramps stay under
+   * `palette`.
    */
   scheme: Record<
     'light' | 'dark',
     {
-      /** `primary.lighter` — hover / active wash behind ink text. */
-      primaryLighter: string;
-      /** `text.accent` — the only shade of the brand hue allowed as text. */
-      accentText: string;
       text: Record<'primary' | 'secondary' | 'disabled', string>;
       background: Record<'default' | 'paper' | 'neutral', string>;
     }
@@ -128,14 +127,10 @@ export const themeConfig: ThemeConfig = {
   },
   scheme: {
     light: {
-      primaryLighter: '#FEE9E1',
-      accentText: '#7A2714',
       text: { primary: '#1C252E', secondary: '#637381', disabled: '#919EAB' },
       background: { default: '#FFFFFF', paper: '#FFFFFF', neutral: '#F4F6F8' },
     },
     dark: {
-      primaryLighter: '#3A2A24',
-      accentText: '#FDA48A',
       // Minimal dark ink: white / grey 500 / grey 600 (docs/25 D12).
       text: { primary: '#FFFFFF', secondary: '#919EAB', disabled: '#637381' },
       // Quieter than Minimal's `#28323D`: youtube dark `#D94040` reads 2.95:1 on

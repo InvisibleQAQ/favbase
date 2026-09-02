@@ -1,12 +1,32 @@
 import { describe, expect, it } from 'vitest';
 
+import type { ThemeContrast, ThemeColorPreset } from '@/lib/storage';
+
 import { COLOR_MODE_STORAGE_KEY } from './theme-provider';
 import { createTheme } from './create-theme';
 import { themeConfig } from './theme-config';
 import { customShadows } from './core/custom-shadows';
+import { primaryColorPresets } from './with-settings/color-presets';
 import { INPUT_PADDING, INPUT_TYPOGRAPHY } from './core/components/text-field';
 
 const theme = createTheme();
+
+const SCHEMES = ['light', 'dark'] as const;
+// Type-only import from `@/lib/storage` keeps this test storage-free; the
+// preset list is read from the theme owner (its `Record<ThemeColorPreset, …>`
+// key set is locked to the persisted enum by the compiler).
+const PRESETS = Object.keys(primaryColorPresets) as ThemeColorPreset[];
+
+/** The theme app.html builds for a persisted preset / contrast pair. */
+function themeFor(primaryColor: ThemeColorPreset, contrast: ThemeContrast = 'default') {
+  return createTheme({ settingsState: { primaryColor, contrast, compactLayout: false } });
+}
+
+function paletteOf(built: ReturnType<typeof createTheme>, scheme: (typeof SCHEMES)[number]) {
+  const palette = built.colorSchemes[scheme]?.palette;
+  if (!palette) throw new Error(`missing ${scheme} scheme`);
+  return palette;
+}
 
 /** WCAG 2.x relative luminance for the static theme hex values. */
 function relativeLuminance(hex: string): number {
@@ -85,7 +105,7 @@ describe('theme token contract', () => {
     expect(theme.colorSchemes.light?.opacity.soft.bg).toBe(0.16);
   });
 
-  it.each(['light', 'dark'] as const)('%s text and action colors meet WCAG contrast', (scheme) => {
+  it.each(SCHEMES)('%s text and action colors meet WCAG contrast', (scheme) => {
     const colors = themeConfig.scheme[scheme];
     // The default button is Minimal's `contained` + `inherit`: filledStyles
     // inverts the scheme, so it is `text.primary` under `background.paper`.
@@ -94,16 +114,63 @@ describe('theme token contract', () => {
 
     expect(contrastRatio(colors.text.primary, colors.background.default)).toBeGreaterThanOrEqual(4.5);
     expect(contrastRatio(colors.text.secondary, colors.background.default)).toBeGreaterThanOrEqual(4.5);
-    expect(contrastRatio(colors.accentText, colors.background.default)).toBeGreaterThanOrEqual(4.5);
     expect(contrastRatio(containedForeground, containedBackground)).toBeGreaterThanOrEqual(4.5);
   });
 
-  // docs/25 C-3: a soft primary chip is `text.accent` on a 16% coral wash.
-  // `primary.dark` would read 3.99:1 in light; the accent shade clears 4.5.
-  it.each(['light', 'dark'] as const)('%s soft primary text meets WCAG contrast on the 16% wash', (scheme) => {
-    const colors = themeConfig.scheme[scheme];
-    const wash = blend(themeConfig.palette.primary.main, 0.16, colors.background.paper);
-    expect(contrastRatio(colors.accentText, wash)).toBeGreaterThanOrEqual(4.5);
+  // docs/25 Step 2: the high-contrast option swaps the light ground for grey 200.
+  // `text.secondary` reads 4.508:1 there — the tightest pair in the theme.
+  it('keeps body text readable on the high-contrast light ground', () => {
+    const palette = paletteOf(themeFor('default', 'high'), 'light');
+    expect(palette.background.default).toBe(themeConfig.palette.grey['200']);
+    expect(contrastRatio(palette.text.primary, palette.background.default)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(palette.text.secondary, palette.background.default)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  // docs/25 C-5: `text.accent` is derived per preset (light `darker` / dark
+  // `light`) and has to clear 4.5 on the ground of both schemes and on the
+  // high-contrast ground, for every preset the drawer can select.
+  it.each(PRESETS)('%s text.accent meets WCAG contrast on both grounds', (preset) => {
+    for (const scheme of SCHEMES) {
+      const palette = paletteOf(themeFor(preset), scheme);
+      expect(
+        contrastRatio(palette.text.accent, palette.background.default),
+        `${preset} ${scheme} accent on default`,
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+    const highContrast = paletteOf(themeFor(preset, 'high'), 'light');
+    expect(
+      contrastRatio(highContrast.text.accent, highContrast.background.default),
+      `${preset} accent on the high-contrast ground`,
+    ).toBeGreaterThanOrEqual(4.5);
+  });
+
+  // docs/25 D14: `contrastText` is picked per preset (ink or white), never
+  // copied from Minimal, so the brand stamp stays readable on every hue.
+  it.each(PRESETS)('%s primary.contrastText meets WCAG contrast on primary.main', (preset) => {
+    for (const scheme of SCHEMES) {
+      const { primary } = paletteOf(themeFor(preset), scheme);
+      expect(contrastRatio(primary.contrastText, primary.main), `${preset} ${scheme}`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  // docs/25 C-3 / C-5: a soft primary chip is `text.accent` on a 16% wash of
+  // the preset's `main` over paper. Coral `primary.dark` would read 3.99:1 in
+  // light; the derived accent clears 4.5 for all six presets.
+  it.each(PRESETS)('%s soft primary text meets WCAG contrast on the 16% wash', (preset) => {
+    for (const scheme of SCHEMES) {
+      const palette = paletteOf(themeFor(preset), scheme);
+      const wash = blend(palette.primary.main, 0.16, palette.background.paper);
+      expect(contrastRatio(palette.text.accent, wash), `${preset} ${scheme}`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it('derives text.accent from the coral ramp and shares that ramp across both schemes', () => {
+    expect(theme.colorSchemes.light?.palette.text.accent).toBe(themeConfig.palette.primary.darker);
+    expect(theme.colorSchemes.dark?.palette.text.accent).toBe(themeConfig.palette.primary.light);
+    // The dark scheme no longer re-inks `primary.lighter` (docs/25 Step 2):
+    // app code washes with `varAlpha(primary.mainChannel, …)` instead.
+    expect(theme.colorSchemes.dark?.palette.primary.lighter).toBe(themeConfig.palette.primary.lighter);
+    expect(theme.colorSchemes.dark?.palette.primary).toEqual(theme.colorSchemes.light?.palette.primary);
   });
 
   it('routes soft primary through text.accent and keeps the other soft colors on their dark shade', () => {

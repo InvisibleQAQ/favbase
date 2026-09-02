@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import { varAlpha } from 'minimal-shared/utils';
 
 import type { BiliFavOrder } from '@/lib/bilibili/types';
 import { isProcessableVideo } from '@/lib/bilibili/video-eligibility';
@@ -104,12 +105,15 @@ function SortControl({
               px: 1,
               color: active ? theme.vars.palette.text.primary : theme.vars.palette.text.secondary,
               fontWeight: active ? 600 : 400,
-              bgcolor: active ? theme.vars.palette.primary.lighter : 'transparent',
+              // Selected = 8% brand wash, deepened to 16% on hover (nav active pattern).
+              bgcolor: active ? varAlpha(theme.vars.palette.primary.mainChannel, 0.08) : 'transparent',
               '& .MuiButton-startIcon': {
                 color: active ? theme.vars.palette.primary.main : 'inherit',
               },
               '&:hover': {
-                bgcolor: active ? theme.vars.palette.primary.lighter : theme.vars.palette.action.hover,
+                bgcolor: active
+                  ? varAlpha(theme.vars.palette.primary.mainChannel, 0.16)
+                  : theme.vars.palette.action.hover,
                 color: theme.vars.palette.text.primary,
               },
             })}

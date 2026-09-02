@@ -7,8 +7,10 @@ import LinearProgress, { linearProgressClasses } from '@mui/material/LinearProgr
 import { varAlpha } from 'minimal-shared/utils';
 
 import { initDbProxy } from '@/lib/database';
+import { DEFAULT_THEME_SETTINGS, getThemeSettings } from '@/lib/storage';
 import App from './App';
 import { collectionPlatformRoutes } from './collection-platform-pages';
+import { SettingsProvider } from './components/settings';
 import { loadNavigationData } from './load-navigation';
 import { DashboardLayout } from './layouts/dashboard';
 
@@ -46,7 +48,17 @@ function LoadingFallback() {
 }
 
 async function bootstrap() {
-  const navigation = await loadNavigationData();
+  // Both reads gate the first render: navigation because the shell is immutable
+  // afterwards, theme settings so the first frame already wears the saved
+  // preset instead of flashing coral. A storage failure keeps the app usable
+  // on the defaults.
+  const [navigation, themeSettings] = await Promise.all([
+    loadNavigationData(),
+    getThemeSettings().catch((error: unknown) => {
+      console.error('[app] failed to load theme settings', error);
+      return DEFAULT_THEME_SETTINGS;
+    }),
+  ]);
   const router = createHashRouter([
     {
       Component: App,
@@ -74,9 +86,14 @@ async function bootstrap() {
     },
   ]);
 
+  // SettingsProvider sits outside the router (and therefore outside App's
+  // ThemeProvider): App is a router `Component` with no props channel for the
+  // pre-read initial state.
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
-      <RouterProvider router={router} />
+      <SettingsProvider initialState={themeSettings}>
+        <RouterProvider router={router} />
+      </SettingsProvider>
     </StrictMode>,
   );
 }

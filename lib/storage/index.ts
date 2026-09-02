@@ -31,6 +31,21 @@ export {
 } from './ui-state';
 
 export {
+  type ThemeColorPreset,
+  type ThemeContrast,
+  type ThemeSettings,
+  THEME_COLOR_PRESETS,
+  THEME_CONTRASTS,
+  DEFAULT_THEME_SETTINGS,
+  canonicalizeThemeSettings,
+  themeSettingsStorage,
+  getThemeSettings,
+  setThemeSettings,
+  watchThemeSettings,
+  isSameThemeSettings,
+} from './theme-settings';
+
+export {
   type AgentBridgeConfig,
   type AgentBridgeConnectionState,
   type AgentBridgeStatus,

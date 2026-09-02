@@ -2,6 +2,8 @@ import type { Theme } from '@mui/material/styles';
 
 import { createTheme as createMuiTheme } from '@mui/material/styles';
 
+import type { ThemeSettings } from '@/lib/storage';
+
 import { mixins } from './core/mixins';
 import { opacity } from './core/opacity';
 import { shadows } from './core/shadows';
@@ -10,6 +12,7 @@ import { themeConfig } from './theme-config';
 import { components } from './core/components';
 import { typography } from './core/typography';
 import { customShadows } from './core/custom-shadows';
+import { applySettingsToTheme } from './with-settings';
 
 import type { ThemeOptions } from './types';
 
@@ -39,9 +42,13 @@ export const baseTheme: ThemeOptions = {
 };
 
 type CreateThemeProps = {
+  /** Persisted drawer state (preset / contrast). Omitted = coral defaults. */
+  settingsState?: ThemeSettings;
   themeOverrides?: ThemeOptions;
 };
 
-export function createTheme({ themeOverrides = {} }: CreateThemeProps = {}): Theme {
-  return createMuiTheme(baseTheme, themeOverrides);
+export function createTheme({ settingsState, themeOverrides = {} }: CreateThemeProps = {}): Theme {
+  const updatedCore = settingsState ? applySettingsToTheme(baseTheme, settingsState) : baseTheme;
+
+  return createMuiTheme(updatedCore, themeOverrides);
 }

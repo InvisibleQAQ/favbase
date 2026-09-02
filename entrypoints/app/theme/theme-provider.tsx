@@ -1,9 +1,10 @@
-import { useMemo } from 'react';
+import { use, useMemo } from 'react';
 
 import CssBaseline from '@mui/material/CssBaseline';
 import { ThemeProvider as ThemeVarsProvider } from '@mui/material/styles';
 
 import { createTheme } from './create-theme';
+import { SettingsContext } from '../components/settings/context/settings-context';
 
 import type {} from './extend-theme-types';
 
@@ -11,9 +12,13 @@ import type {} from './extend-theme-types';
 export const COLOR_MODE_STORAGE_KEY = 'favbase-color-mode';
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  // Built once per provider; docs/25 Step 2 adds the settings state as the
-  // dependency that rebuilds it.
-  const theme = useMemo(() => createTheme(), []);
+  // Optional settings: app.html mounts `SettingsProvider` in main.tsx, so the
+  // preset / contrast state rebuilds the theme; welcome.html and bare test
+  // renders have no provider and get the coral defaults. Read the leaf context
+  // rather than `useSettingsContext()` so the absence is not an error.
+  const settings = use(SettingsContext);
+  const settingsState = settings?.state;
+  const theme = useMemo(() => createTheme({ settingsState }), [settingsState]);
 
   return (
     <ThemeVarsProvider

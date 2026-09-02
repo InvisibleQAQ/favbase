@@ -46,15 +46,17 @@ const NAV_TITLE_SX = {
   whiteSpace: 'nowrap',
 } as const;
 
-// Active state shared by every nav row: coral wash under ink text, weight up,
-// coral only on the icon glyph. Coral is never the text color (2.5:1 on paper).
-// Hovering an active row deepens the wash so active/hover stay distinguishable.
+// Active state shared by every nav row: an 8% brand wash under ink text, weight
+// up, brand color only on the icon glyph. `primary.main` is never the text
+// color (2.5:1 on paper). Hovering an active row deepens the wash to 16% so
+// active/hover stay distinguishable. Alpha over `mainChannel` (not an opaque
+// palette stage) follows the color preset and stays dark-safe.
 function navActiveSx(theme: Theme) {
   return {
     fontWeight: 'fontWeightSemiBold',
     color: theme.vars.palette.text.primary,
-    bgcolor: theme.vars.palette.primary.lighter,
-    '&:hover': { bgcolor: varAlpha(theme.vars.palette.primary.mainChannel, 0.24) },
+    bgcolor: varAlpha(theme.vars.palette.primary.mainChannel, 0.08),
+    '&:hover': { bgcolor: varAlpha(theme.vars.palette.primary.mainChannel, 0.16) },
     [`& .${NAV_ICON_CLASS}`]: { color: theme.vars.palette.primary.main },
   } as const;
 }

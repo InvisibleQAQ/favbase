@@ -388,8 +388,10 @@ function PlatformShelf({
                 py: 1,
                 borderRadius: 0.75,
                 '&:hover': { bgcolor: 'action.hover' },
-                // Selection = coral wash on the row (the tile flips to the coral stamp).
-                '&.Mui-selected': { bgcolor: 'primary.lighter' },
+                // Selection = 8% brand wash on the row (the tile flips to the brand stamp).
+                '&.Mui-selected': {
+                  bgcolor: (theme) => varAlpha(theme.vars.palette.primary.mainChannel, 0.08),
+                },
               }}
             />
           );

@@ -21,9 +21,11 @@ const MuiCssBaseline: Components<Theme>['MuiCssBaseline'] = {
       backgroundColor: varAlpha(theme.vars.palette.grey['500Channel'], 0.48),
     },
     '*::-webkit-scrollbar-corner': { backgroundColor: 'transparent' },
+    // 16% brand wash instead of an opaque palette stage: preset-safe and
+    // dark-safe (`text.primary` on it reads 13.4:1 light / 13.6:1 dark for coral).
     '::selection': {
       color: theme.vars.palette.text.primary,
-      backgroundColor: theme.vars.palette.primary.lighter,
+      backgroundColor: varAlpha(theme.vars.palette.primary.mainChannel, 0.16),
     },
     'input, textarea': { caretColor: theme.vars.palette.text.primary },
     'a:focus-visible, button:focus-visible, [tabindex]:focus-visible': {

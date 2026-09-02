@@ -1,7 +1,7 @@
 # docs/25 — app.html 全面向 Minimal v7.7.0 看齐：分步改造手册
 
 日期：2026-09-01
-状态：**Step 0–1 已落地（2026-09-01，各自待用户 commit），Step 2+ 未开工**。本文是可执行手册，不是设计随笔；每个 Step 都能独立开工、独立验证、独立回滚。
+状态：**Step 0–2 已落地（2026-09-01，各自待用户 commit；Step 2 在 worktree 分支 `feat/docs25-step2-color-presets`），Step 3+ 未开工**。本文是可执行手册，不是设计随笔；每个 Step 都能独立开工、独立验证、独立回滚。
 上位文档：`docs/23_favbase-app-minimal-dashboard-v7-adaptation-plan-zh-CN.md`（第一轮"保留自有世界"路线，本文第二轮**推翻**其 §6/§11 的大部分结论，见 §3）。
 需求与决策来源：`.trellis/tasks/09-01-refactor-app-ui-adopt-minimal-v7-7-0-full-visual-language-while-keeping-favbase-brand-docs-23-round-2/prd.md`（R1–R14，Open Questions 1–6 已全部关闭）。
 事实来源：同目录 `research/favbase-app-ui-current-state.md`（Favbase 现状，433 行）、`research/minimal-v7-ui-catalog.md`（Minimal 目录，299 行）。本文只引用、不复制这两份文件的内容；行号以 2026-09-01 工作树为准。
@@ -332,6 +332,8 @@ pnpm build
 
 ### Step 2 — color presets + 设置状态数据层
 
+> **2026-09-01 已落地**（worktree 分支 `feat/docs25-step2-color-presets`，未 commit，用户自行提交）。实际与手册的偏差记录在本节末"执行记录"。
+
 **目标**：六色主色预设（coral 默认 + Minimal 五色）、`contrast`、`compactLayout` 三个设置项的**数据层与主题应用**落地，抽屉 UI 留到 Step 4。
 
 **前置依赖**：Step 1。
@@ -372,9 +374,24 @@ pnpm compile && pnpm test && pnpm build
 **回滚点**：`feat(theme): add Minimal color presets and persisted theme settings state`。
 
 **完成判据**
-- [ ] `grep -rn "primary.lighter" entrypoints/app --include=*.tsx | grep -v test` 零结果（theme 目录除外）
-- [ ] 六个预设 × 两 scheme 的 WCAG 断言全绿
-- [ ] `lib/storage/CLAUDE.md` 增加 `local:themeSettings` 行；`theme/CLAUDE.md` 增加 with-settings 段；`components/settings/CLAUDE.md` 新建
+- [x] `grep -rn "primary.lighter" entrypoints/app --include=*.tsx | grep -v test` 零结果（theme 目录除外——唯一剩余是 `theme/core/components/avatar.tsx`，Minimal 原样的 `dark` 字 + `lighter` 底）
+- [x] 六个预设 × 两 scheme 的 WCAG 断言全绿（`theme-contract.test.ts` 四组 `it.each(PRESETS)`：accent 对两 scheme 底 + high-contrast 底、`contrastText` 对 `main`、accent 对 16% soft 洗底；另锁 high-contrast 底上的 `text.primary/secondary`）
+- [x] `lib/storage/CLAUDE.md` 增加 `local:themeSettings` 行；`theme/CLAUDE.md` 增加 with-settings 段；`components/settings/CLAUDE.md` 新建
+- [x] 四步验证全绿：`pnpm vitest run entrypoints/app/theme entrypoints/app/components/settings lib/storage` 10 文件 99 用例；`pnpm vitest run entrypoints/app entrypoints/welcome` 73 文件 432 用例（既有结构测试**零改动**通过）；`pnpm compile`；`pnpm test` 180 文件 1329 用例 + CLI 10 文件 55 用例；`pnpm build` + bundle contract 绿
+- [ ] 肉眼验证——**待用户加载 worktree 的 `.output/chrome-mv3`**：DevTools 改 `local:themeSettings` 为 `{ primaryColor: 'preset2', contrast: 'default', compactLayout: false }`，主色 / `text.accent` / 导航激活洗底同步变紫，dark 无浅色底块；再试 `contrast: 'high'`（light 底变 grey 200、Card 阴影降为 z1）
+
+**执行记录（2026-09-01）**
+- **`[UNKNOWN]` 消解**：C-5 六预设的派生阶**全部过线**，不需要回退到 `dark`/`lighter`：`darker` 对白底最低 8.74（preset4）、对 high-contrast 底 `#F4F6F8` 最低 8.07；`light` 对 `#141A21` 最低 6.44（preset2）；对 16% soft 洗底最低 5.15（preset2 dark）。D14 派生结果：default 6.74 墨 `#1F1B17`、preset1 4.93 墨（Minimal 白只有 3.47）、preset2 6.34 白、preset3 5.03 白、preset4 8.87 墨、preset5 4.66 墨（Minimal 白只有 3.67）。high-contrast 底上 `text.secondary` = **4.508**，全主题最紧的一对，已锁进测试。
+- **对本节"PRD 默认"的推翻（理由见任务 PRD Grill 段）**：
+  1. **不建 `update-components.ts`**（第 3 点允许省略）：Favbase 自有 `MuiCssBaseline` 函数覆盖，`createMuiTheme` 对两个 `styleOverrides` **函数**是覆盖不是合并，照搬会抹掉 tabular-nums/selection/focus ring。high contrast 的卡片阴影改为 token 级：`applySettingsToTheme` 把两 scheme 的 `customShadows.card` 置为该 scheme 的 `z1`（`card.tsx` 的 `var(--card-shadow, customShadows.card)` 没有其他 setter，等价）。
+  2. **值本体不带 `version` 字段**（第 4/5 点）：WXT `defineItem` 原生 `version` + `migrations` 可事后追加（未版本化 = 隐式 v1），且 lib 层 `canonicalizeThemeSettings` 逐字段回退（zod `.catch()`，永不 throw），比 Minimal 的"版本不符整体重置"更好。类型与 storage item 在**新文件** `lib/storage/theme-settings.ts`（`ui-state.ts` 旁），六个预设 id `THEME_COLOR_PRESETS` 也在这里作单源，`color-presets.ts` 以 `Record<ThemeColorPreset, …>` 承接。
+  3. **`SettingsProvider` 挂在 `main.tsx` 包 `RouterProvider`**（第 7 点写 `App.tsx`）：`App` 是 router `Component`，没有 props 通道；仍在 `ThemeProvider` 外层，`App.tsx`/`App.test.tsx` 零改动。
+  4. **`theme-provider.tsx` 用 `use(SettingsContext)` 可选读取**（第 8 点写抛错版 `useSettingsContext()`）：welcome.html 复用 `ThemeProvider`（R3a）且 20 个测试裸渲染它；无 provider → coral 默认。leaf import `components/settings/context/settings-context.ts`（只 import react），不走 barrel，避免把 storage 拖进 welcome/测试。抛错版留给 Step 4 抽屉。
+  5. **`update-core.ts` 对 `default` 预设不分支**（第 2 点写 `primaryColor !== 'default'` 才替换）：default = coral，走同一路径，`update-core.test.ts` 用"default 预设 = base"锁等价。
+- **手册之外的必改（铁律 2 补记）**：删除 dark scheme 的 `primary.lighter` 再着墨特判（`primaryDark` / `themeConfig.scheme.dark.primaryLighter = #3A2A24`）——Step 1 记录写明它只因"五个消费者未动"而保留，本步五处改 `varAlpha(primary.mainChannel, 0.08)`（选中）/ `0.16`（选中态 hover）后特判失去理由，两 scheme 共用同一 `primary` 五阶，预设亦然。同步：`themeConfig.scheme.*.accentText` 常量删除，`text.accent` 由 `core/palette.ts` 的 `accentTextFor`/`createTextPalette` 派生（light `darker` / dark `light`），`update-core.ts` 复用同一函数；`css-baseline.tsx` 的 `::selection` 底从 `primary.lighter` 改 `varAlpha(primary.mainChannel, 0.16)`（否则蓝色预设 dark 模式下选中文本是白字压浅蓝块）。副作用：welcome `sections/chat-showcase.tsx:150` 在 dark 用 `primary.lighter` 作**文字**色，此前 `#3A2A24` 在深底上不可读，现恢复可读（未改 welcome 源码）。`theme-contract.test.ts` 新增断言锁"dark `primary.lighter` = coral `lighter`、两 scheme `primary` 相等"。
+- **§Step 1 第 6 点的"五个消费者"**：`layouts/dashboard/nav.tsx`（选中 0.08 / hover 0.24→0.16）、`sections/overview/overview-view.tsx`（0.08）、`sections/chat/chat-view.tsx`（0.08）、`sections/bilibili/bilibili-view.tsx`（两处：选中 0.08 / 选中 hover 0.16）。
+- **体积**（`pnpm build`，对比 Step 1）：`app-*.js` 222,475 B（gz 69,717，+895）；`Container-*.js` 348,347 B（gz 118,269，−87）；theme + registry 共用 chunk 63,920 B（gz 17,057，+1,262 = `getContrastRatio` + 六预设 + update-core）；chunks 合计 62 文件 3,953,290 B（**+2,179 B**）。
+- **并行 worktree 提示**：Step 3 在 `docs25-step3-shared-primitives` worktree 同期进行，两边都改 `entrypoints/app/main.tsx`（本步改 bootstrap 与渲染树，Step 3 改 `LoadingFallback`）与本文状态行，合并时有两处小冲突。
 
 ---
 
@@ -799,7 +816,7 @@ grep -rn "MUI v7\|Chrome 116\|segmented\|header-actions" CLAUDE.md entrypoints .
 |------|------|--------|----------------------|------|
 | 0 | 已落地 2026-09-01，待用户 commit + 五路由目测 | （用户提交） | app 69,832 B；Container（共享 MUI）119,158 B；jsx-runtime 56,424 B | `@mui/material@9.4.0`；Button/Chip 组合 styleOverrides key 迁 `root.variants`（v9 删除）；codemod 弃用改手工；详见 Step 0 执行记录 |
 | 1 | 已落地 2026-09-01，待用户 commit + 五路由 light/dark 目测 | （用户提交） | app 69,266 B；Container 117,602 B；theme+registry 共用 chunk 16,395 B；jsx-runtime 56,544 B | C-2 回退 `#222B34`、C-3 soft primary → `text.accent`、C-4 Menu 继承 Popover paper；timeline（@mui/lab）未移植；详见 Step 1 执行记录 |
-| 2 | 未开始 | | | |
+| 2 | 已落地 2026-09-01（worktree 分支 `feat/docs25-step2-color-presets`），待用户 commit + 预设/高对比目测 | （用户提交） | app 69,717 B；Container 118,269 B；theme+registry 共用 chunk 17,057 B | C-5 全过线无回退；D14 墨/白派生表；无 `update-components.ts`、无 `version` 字段、Provider 挂 main.tsx、ThemeProvider 可选读 context、删 dark `lighter` 再着墨；详见 Step 2 执行记录 |
 | 3 | 未开始 | | | |
 | 4 | 未开始 | | | |
 | 5 | 未开始 | | | |
@@ -842,7 +859,7 @@ grep -rn "MUI v7\|Chrome 116\|segmented\|header-actions" CLAUDE.md entrypoints .
 | C-2 | 六平台色在 dark neutral `#28323D` 上是否全部 ≥ 3:1 | 1 | **已消解（2026-09-01）**：否——youtube dark `#D94040` 对 `#28323D` = 2.95:1。回退 `#222B34`（D12 仅文字部分生效），`palette.test.ts` 注释锁定原因 |
 | C-3 | soft primary Chip 文字 `primary.dark` 在 16% coral 底上是否 ≥ 4.5 | 1 | **已消解（2026-09-01）**：否——light ≈ 3.99:1。改为 `text.accent`（非 `primary.darker` 常量，因 Step 2 后要跟预设派生）：light 8.5 / dark 6.2；`theme-contract.test.ts` 用混色底 `it.each` 两 scheme 锁 ≥ 4.5 |
 | C-4 | Menu list padding 移植后实际值（Favbase 现锁 `spacing(0.5)`，Minimal popover list padding 0） | 1 | **已消解（2026-09-01）**：Minimal 无 `MuiMenu` 覆盖；Menu paper 继承 `MuiPopover.paper` = `paperStyles(dropdown)` padding `spacing(0.5)`，`& .MuiList-root` 上下 padding 0。断言改为 `theme.components.MuiMenu` 为 undefined + Popover paper 两值 |
-| C-5 | 六预设的 `text.accent` 派生阶（darker/light）是否全部过 WCAG 4.5 | 2 | `it.each` 结果；失败改用 `dark`/`lighter` 阶 |
+| C-5 | 六预设的 `text.accent` 派生阶（darker/light）是否全部过 WCAG 4.5 | 2 | **已消解（2026-09-01）**：是——light `darker` 对白底 ≥ 8.74、对 high-contrast 底 ≥ 8.07；dark `light` 对 `#141A21` ≥ 6.44；对 16% soft 洗底 ≥ 5.15（最低均为 preset2/preset4）。无预设需要回退阶；`theme-contract.test.ts` 四组 `it.each(PRESETS)` 锁定 |
 | C-6 | EmptyContent 默认文案复用的现有 i18n key 名 | 3 | grep `zh-CN.ts` |
 | C-7 | Step 6 heading outline 实际序列（Export 卡是否仍在 `/`） | 6 | 以 DOM 为准 |
 

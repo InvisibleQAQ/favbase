@@ -32,6 +32,10 @@ export const STORAGE_KEYS = {
   // Written by the app.html gate facade (entrypoints/app/hooks/library-gate.ts),
   // read by it on load + watch. See that file's header for the semantics.
   libraryGate: 'local:library-gate',
+  // app.html theme settings drawer state ({ primaryColor, contrast,
+  // compactLayout }). Light/dark mode is NOT here — MUI owns it under the
+  // `favbase-color-mode` localStorage key. See theme-settings.ts.
+  themeSettings: 'local:themeSettings',
 } as const;
 
 export const STORAGE_PREFIXES = {
