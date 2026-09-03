@@ -1,11 +1,8 @@
 import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
-import useMediaQuery from '@mui/material/useMediaQuery';
-import { useTheme } from '@mui/material/styles';
 
 import { Iconify } from '../../components/iconify';
 import type { IconifyName } from '../../components/iconify';
-import { segmentedTabsSx } from './segmented-tabs-sx';
 
 export interface SettingsTabItem {
   value: string;
@@ -20,32 +17,30 @@ interface SettingsTabsProps {
   ariaLabel: string;
 }
 
+/**
+ * Settings top-level tabs — Minimal's underline form, straight off the theme
+ * defaults (`scrollable`, `textColor`/`indicatorColor: 'inherit'`, 40px list
+ * gap). No local variant switch: one track at every width, horizontally
+ * scrollable when four localized labels outgrow it.
+ */
 export function SettingsTabs({ value, onChange, tabs, ariaLabel }: SettingsTabsProps) {
-  const theme = useTheme();
-  const isCompact = useMediaQuery(theme.breakpoints.down('md'));
-
   return (
     <Tabs
       value={value}
       onChange={(_, v) => onChange(v)}
-      variant={isCompact ? 'scrollable' : 'fullWidth'}
-      scrollButtons={false}
       aria-label={ariaLabel}
-      sx={(theme) => ({
-        minHeight: 48,
-        ...segmentedTabsSx(theme, { compact: true }),
-        '& .MuiTabs-scroller': { scrollbarWidth: 'none' },
-        '& .MuiTabs-scroller::-webkit-scrollbar': { display: 'none' },
-      })}
+      sx={{ mb: { xs: 3, md: 5 } }}
     >
       {tabs.map((tab) => (
         <Tab
           key={tab.value}
           value={tab.value}
           label={tab.label}
-          icon={<Iconify icon={tab.icon} width={20} />}
+          icon={<Iconify icon={tab.icon} width={24} />}
           iconPosition="start"
-          sx={{ whiteSpace: 'nowrap', minWidth: { xs: 112, md: 0 } }}
+          // Long en labels ("Account connections") must overflow into a scroll,
+          // never wrap onto a second line.
+          sx={{ whiteSpace: 'nowrap' }}
         />
       ))}
     </Tabs>

@@ -60,6 +60,12 @@ describe('Settings responsive navigation', () => {
     expect(tabs).toHaveLength(2);
     expect(tabs.every((tab) => tab.querySelector('.MuiTabs-scroller.MuiTabs-scrollableX'))).toBe(true);
     expect(container.querySelector('[role="tablist"]')?.getAttribute('aria-label')).toBe('Settings');
-    expect(container.querySelectorAll('[role="tab"]')).toHaveLength(7);
+
+    // Width is kept by `nowrap`, not by a fixed minWidth: docs/25 Step 7 dropped
+    // the segmented skin's 112/116px floors, so the track scrolls rather than
+    // letting a localized label wrap onto a second line.
+    const tabButtons = [...container.querySelectorAll('[role="tab"]')];
+    expect(tabButtons).toHaveLength(7);
+    expect(tabButtons.every((tab) => getComputedStyle(tab).whiteSpace === 'nowrap')).toBe(true);
   });
 });

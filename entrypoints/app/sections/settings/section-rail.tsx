@@ -5,7 +5,6 @@ import { useTheme } from '@mui/material/styles';
 
 import { Iconify } from '../../components/iconify';
 import type { IconifyName } from '../../components/iconify';
-import { segmentedTabsSx } from './segmented-tabs-sx';
 
 export interface SectionRailItem<T extends string = string> {
   value: T;
@@ -22,9 +21,12 @@ interface SectionRailProps<T extends string> {
 
 /**
  * Generic secondary-nav rail inside a settings tab: `md+` vertical rail,
- * horizontal fullWidth on narrow screens. Shared by every tab (AI / 账号连接 /
- * 通用 / 存储) so each gets the same left sidebar; feed it that tab's items.
- * Visual contract lives in `segmented-tabs-sx.ts`, shared with SettingsTabs.
+ * horizontal on narrow screens. Shared by every tab (AI / 账号连接 / 通用 /
+ * 存储) so each gets the same left sidebar; feed it that tab's items.
+ *
+ * Visuals are the theme's Tabs defaults (Minimal underline indicator in
+ * `currentColor`, selected label at `text.primary` semibold) — this component
+ * owns orientation and row alignment, nothing else.
  */
 export function SectionRail<T extends string>({
   value,
@@ -38,27 +40,21 @@ export function SectionRail<T extends string>({
   return (
     <Tabs
       orientation={isCompact ? 'horizontal' : 'vertical'}
-      variant={isCompact ? 'scrollable' : 'standard'}
       value={value}
       onChange={(_, v) => onChange(v as T)}
-      scrollButtons={false}
       aria-label={ariaLabel}
-      sx={(t) => ({
-        ...segmentedTabsSx(t, { compact: isCompact, tabMinHeight: 48 }),
-        ...(isCompact && {
-          '& .MuiTabs-scroller': { scrollbarWidth: 'none' },
-          '& .MuiTabs-scroller::-webkit-scrollbar': { display: 'none' },
-        }),
-      })}
     >
       {items.map((item) => (
         <Tab
           key={item.value}
           value={item.value}
           label={item.label}
-          icon={<Iconify icon={item.icon} width={22} />}
+          icon={<Iconify icon={item.icon} width={24} />}
           iconPosition="start"
-          sx={{ whiteSpace: 'nowrap', minWidth: isCompact ? 116 : undefined }}
+          // Stacked rows need one icon column: MUI centers a Tab's row, which
+          // reads as ragged once every row carries an icon. Horizontal keeps
+          // MUI's centering.
+          sx={{ whiteSpace: 'nowrap', justifyContent: isCompact ? 'center' : 'flex-start' }}
         />
       ))}
     </Tabs>

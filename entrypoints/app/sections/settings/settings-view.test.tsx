@@ -15,6 +15,9 @@ const cardProps = vi.hoisted(() => ({
   llm: null as null | { saveLlm: (draft: unknown) => Promise<void> },
   embedding: null as null | { saveEmbedding: (draft: unknown) => Promise<void> },
 }));
+const titleBarProps = vi.hoisted(() => ({
+  links: null as null | Array<{ name?: string; href?: string }>,
+}));
 
 vi.mock('@/lib/hooks/useSettings', () => ({
   useSettings: () => ({
@@ -38,7 +41,16 @@ vi.mock('../../layouts/dashboard', () => ({
   DashboardContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 vi.mock('../../components/collection/section-title-bar', () => ({
-  SectionTitleBar: ({ title }: { title: ReactNode }) => <h1>{title}</h1>,
+  SectionTitleBar: ({
+    title,
+    links,
+  }: {
+    title: ReactNode;
+    links?: Array<{ name?: string; href?: string }>;
+  }) => {
+    titleBarProps.links = links ?? null;
+    return <h1>{title}</h1>;
+  },
 }));
 vi.mock('./settings-tabs', () => ({
   SettingsTabs: ({
@@ -112,6 +124,7 @@ describe('SettingsView deep links', () => {
     resumeCollectionProcessing.mockReset();
     cardProps.llm = null;
     cardProps.embedding = null;
+    titleBarProps.links = null;
     container = document.createElement('div');
     document.body.append(container);
     root = createRoot(container);
@@ -148,6 +161,25 @@ describe('SettingsView deep links', () => {
     expect(container.querySelectorAll('h1')).toHaveLength(1);
     expect(container.querySelector('h1')?.textContent).toBe('settings.title');
     expect(container.querySelector('.MuiCard-root .MuiCard-root')).toBeNull();
+  });
+
+  it('hands the shared title bar a Home -> Settings trail', () => {
+    act(() => {
+      root.render(
+        <MemoryRouter initialEntries={['/settings']}>
+          <SettingsView />
+        </MemoryRouter>,
+      );
+    });
+
+    // The rendered `nav` and its `aria-current="page"` crumb are locked by
+    // custom-breadcrumbs.test.tsx and section-title-bar.test.tsx; the only
+    // thing SettingsView owns is the trail data. The home href is the
+    // router-relative '/' -- RouterLink adds the '#' for the hash router.
+    expect(titleBarProps.links).toEqual([
+      { name: 'breadcrumbs.home', href: '/' },
+      { name: 'settings.title' },
+    ]);
   });
 
   it.each([

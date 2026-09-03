@@ -6,7 +6,6 @@ import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
-import Box from '@mui/material/Box';
 
 import { DashboardContent } from '../../layouts/dashboard';
 import { isCollectionPlatform, type CollectionPlatform } from '@/lib/collections/platforms';
@@ -114,16 +113,17 @@ export function SettingsView() {
 
   return (
     <DashboardContent maxWidth="lg">
-      <SectionTitleBar title={t('settings.title')} />
+      <SectionTitleBar
+        title={t('settings.title')}
+        links={[{ name: t('breadcrumbs.home'), href: '/' }, { name: t('settings.title') }]}
+      />
 
-      <Box sx={{ mb: 3 }}>
-        <SettingsTabs
-          value={tab}
-          onChange={(v) => setTab(v as SettingsTab)}
-          tabs={tabs}
-          ariaLabel={t('settings.title')}
-        />
-      </Box>
+      <SettingsTabs
+        value={tab}
+        onChange={(v) => setTab(v as SettingsTab)}
+        tabs={tabs}
+        ariaLabel={t('settings.title')}
+      />
 
       {tab === 'ai' && (
         <RailLayout

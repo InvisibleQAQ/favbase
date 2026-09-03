@@ -1,7 +1,7 @@
 # docs/25 — app.html 全面向 Minimal v7.7.0 看齐：分步改造手册
 
 日期：2026-09-01
-状态：**Step 0–6 已落地（Step 0–2 于 2026-09-01，Step 3 于 2026-09-02 rebase 合入，Step 4–5 于 2026-09-02 在 main 工作树实施并已 commit，Step 6 于 2026-09-03 在 main 工作树实施并已 commit），Step 7+ 未开工**。本文是可执行手册，不是设计随笔；每个 Step 都能独立开工、独立验证、独立回滚。
+状态：**Step 0–7 已落地（Step 0–2 于 2026-09-01，Step 3 于 2026-09-02 rebase 合入，Step 4–5 于 2026-09-02 在 main 工作树实施并已 commit，Step 6–7 于 2026-09-03 在 main 工作树实施），Step 8+ 未开工**。本文是可执行手册，不是设计随笔；每个 Step 都能独立开工、独立验证、独立回滚。
 上位文档：`docs/23_favbase-app-minimal-dashboard-v7-adaptation-plan-zh-CN.md`（第一轮"保留自有世界"路线，本文第二轮**推翻**其 §6/§11 的大部分结论，见 §3）。
 需求与决策来源：`.trellis/tasks/09-01-refactor-app-ui-adopt-minimal-v7-7-0-full-visual-language-while-keeping-favbase-brand-docs-23-round-2/prd.md`（R1–R14，Open Questions 1–6 已全部关闭）。
 事实来源：同目录 `research/favbase-app-ui-current-state.md`（Favbase 现状，433 行）、`research/minimal-v7-ui-catalog.md`（Minimal 目录，299 行）。本文只引用、不复制这两份文件的内容；行号以 2026-09-01 工作树为准。
@@ -762,13 +762,16 @@ pnpm compile && pnpm test && pnpm build
 5. **`new Map(collectionPlatformRegistry.map(...))` 复制到了三处**（chat 来源卡 + 本步两个新文件）。registry owner 新增 `collectionPlatformById: ReadonlyMap`，三处全部改读它；`source-card.test.tsx` 的 registry fake 同步只造那张 map。DRY 红线，不是风格问题。
 6. **`buildKpis` 的 `t: typeof translate` 与 `locale: string`**——前者靠 `import type { t as translate }` 把值当类型使，仓库自己的写法是 `UseTranslationReturn['t']`；后者更要紧：`useTranslation()` 同时给 `locale`（已解析）与 `preference`（可能是 `'auto'`），传错一个字符就是渲染期 `Intl.NumberFormat('auto')` 抛 `RangeError`。`analytics-format.ts` 与 `buildKpis` 的 locale 参数收紧为 `SupportedLocale`（纯类型导入，运行时零成本）。
 
-**判定不是问题**（复核后驳回）：`DonutChart` 的 share 之和 > 1 —— `share = itemCount / totalItems` 且 `totalItems` 是**全部** platform 行的和（含未注册平台），六个之和恒 ≤ 1，逐段 clamp 已是防御性余量，不加全局归一化；主题默认 `variant: 'scrollable'` 不会给竖向 Tabs 塞两个 40px 滚动按钮（v9 的 `showScrollButtons` 还要求 `scrollButtonsActive`，无溢出即不渲染）；`StateBox` 的 `minHeight` 220/200 覆写沿用旧页面同值，不是本步新增；spec §15 六类禁用模式（嵌套 Card、平台 if、裸 hex、`rgba()`、`theme.palette.*`、Tab/Button 内块级后代、图形独自承载信息）逐条无命中。
+
+**判定不是问题**（Step 6 复核后驳回）：`DonutChart` 的 share 之和 > 1 —— `share = itemCount / totalItems` 且 `totalItems` 是**全部** platform 行的和（含未注册平台），六个之和恒 ≤ 1，逐段 clamp 已是防御性余量，不加全局归一化；主题默认 `variant: 'scrollable'` 不会给竖向 Tabs 塞两个 40px 滚动按钮（v9 的 `showScrollButtons` 还要求 `scrollButtonsActive`，无溢出即不渲染）；`StateBox` 的 `minHeight` 220/200 覆写沿用旧页面同值，不是本步新增；spec §15 六类禁用模式（嵌套 Card、平台 if、裸 hex、`rgba()`、`theme.palette.*`、Tab/Button 内块级后代、图形独自承载信息）逐条无命中。
 
 **仍待目测**：空库（新 profile）四张卡 `0 / 0 / 6 / 0 / —`；有数据时环图弧色与图例圆点逐平台一致；dark 模式四张渐变卡不发灰、`<color>.darker` 文字可读；六个色彩预设下第一张卡（primary）与其余三张语义色卡并排不打架；`lg`/`md`/`sm` 三档下构成卡图例不截断。本轮无法代跑（当前 Chrome 未以 `--remote-debugging-port` 启动，同 Step 4/5）。
 
 ---
 
 ### Step 7 — Settings 页
+
+> **2026-09-03 已落地**（未 commit，用户自行提交）。实际与手册的偏差记录在本节末"执行记录"。
 
 **目标**：设置页 Tabs 改 Minimal 下划线默认形态，左侧 section rail 改 Minimal 垂直 Tabs 默认，删除 `segmented-tabs-sx.ts`，标题改面包屑。
 
@@ -782,15 +785,15 @@ pnpm compile && pnpm test && pnpm build
 - 文档：`sections/settings/CLAUDE.md`
 
 **具体改什么**
-1. `settings-tabs.tsx`：去掉 `segmentedTabsSx`，用 theme 默认（Minimal `tabs.tsx`：下划线 indicator、`textColor inherit`、min-height 48）；每个 Tab 加 `icon` 24px + `iconPosition="start"`（照 `$MIN/sections/account/view/account-view.tsx` 的 `NAV_ITEMS` 形态）；`sx={{ mb: { xs: 3, md: 5 } }}`。
-2. `section-rail.tsx`：`Tabs orientation="vertical"` 去 segmented sx；选中项字色 `text.primary`、指示条 `primary.main`（Minimal 默认）。
-3. `settings-view.tsx`：`SectionTitleBar links={[{ name: t('breadcrumbs.home'), href: '#/' }, { name: t('settings.title') }]}`。
-4. `segmented-tabs-sx.ts` 删除；`grep -rn "segmented" entrypoints/app` 必须零结果（已核实无测试引用 `segmented`）。
+1. `settings-tabs.tsx`：去掉 `segmentedTabsSx`，用 theme 默认（Minimal `tabs.tsx`：下划线 indicator、`textColor inherit`、min-height 48）；每个 Tab 的 `icon` 从 20px 提到 24px（`iconPosition="start"` 现有代码已有），照 `$MIN/sections/account/account-layout.tsx` 的 `NAV_ITEMS` 形态（**勘误**：v7.7.0 没有 `sections/account/view/account-view.tsx`，account 的 Tabs 在 `account-layout.tsx`）；`sx={{ mb: { xs: 3, md: 5 } }}`。「用 theme 默认」落到源码 = 同时删掉本地 `variant`（`useMediaQuery` 的 fullWidth 分支）、`scrollButtons={false}` 与两条隐藏滚动条的 sx（MUI 的 scrollable scroller 自带负 margin 隐藏），`Tab` 上只留 `whiteSpace: 'nowrap'`。
+2. `section-rail.tsx`：`Tabs orientation="vertical"` 去 segmented sx；选中项字色 `text.primary`（`textColor === 'inherit'` variant 使 `.Mui-selected { color: inherit }`）、指示条 **`currentColor` 墨色**（**勘误**：不是 `primary.main`——`theme/core/components/tabs.tsx:148` 的 `defaultProps.indicatorColor = 'inherit'`，对应 variant 是 `backgroundColor: 'currentColor'`；括号里的「Minimal 默认」是对的，记错的是值）。窄屏仍走 `horizontal`（见执行记录第 2 条）。
+3. `settings-view.tsx`：`SectionTitleBar links={[{ name: t('breadcrumbs.home'), href: '/' }, { name: t('settings.title') }]}`（**勘误**：`href` 是路由相对的 `'/'`，不是 `'#/'`——crumb 走 `RouterLink`，hash router 的 `#` 由它自己补；手写 `'#/'` 会被当成路径段，点了跳不回首页）。顶部 Tabs 的包裹 `<Box sx={{ mb: 3 }}>` 一并删除，下外边距归 `SettingsTabs` 自己（第 1 点）。
+4. `segmented-tabs-sx.ts` 删除；无测试引用 `segmented`（已核实）。**判据措辞需修正**：`grep -rn "segmented" entrypoints/app` 不是零结果——`theme/core/components/tabs.tsx:8` 与 `theme/CLAUDE.md:109` 各有一行描述 `indicatorColor="custom"` 药丸形态，那是 Step 1 移植进来的 theme 能力（本步之后**零消费者**，作为可选形态保留），与设置页无关。要零结果的是 `grep -rn "segmentedTabsSx" entrypoints`。
 
 **测试重写**
 - `settings-navigation.test.tsx`（scrollable tracks）：不改。
 - `settings-panel.test.tsx`：不改。
-- `settings-view.test.tsx`（深链）：不改；新增一例断言面包屑 `nav` 存在且末项 `aria-current="page"` 为设置标题。
+- `settings-view.test.tsx`（深链）：既有 9 例不改；新增一例断言 **SettingsView 传给 `SectionTitleBar` 的 `links` 数组**（两项 / 首项 `href: '/'` / 末项无 href）。**勘误**：原计划的「断言面包屑 `nav` 与 `aria-current`」在这个文件里做不到——它第 40-42 行把 `SectionTitleBar` mock 成 `<h1>{title}</h1>`，断言 `nav` 等于断言 mock（铁律 2 禁止的空转）。渲染后的 `nav` + `aria-current="page"` 已被 `components/custom-breadcrumbs/custom-breadcrumbs.test.tsx:47` 与 `components/collection/section-title-bar.test.tsx:130` 各锁一次，无需第三处。
 
 **验证命令**
 ```
@@ -802,8 +805,41 @@ pnpm compile && pnpm test && pnpm build
 **回滚点**：`refactor(settings): adopt Minimal underline tabs and breadcrumbs`。
 
 **完成判据**
-- [ ] `segmented-tabs-sx.ts` 不存在
-- [ ] `sections/settings/CLAUDE.md` 删除 segmented 描述，补面包屑
+- [x] `segmented-tabs-sx.ts` 不存在（`git rm`）。`grep -rn "segmented" entrypoints/app` 剩 2 处，都是 `theme/` 里描述 `indicatorColor="custom"` 药丸形态的注释（Step 1 移植进来的 theme 能力，与设置页无关）
+- [x] `sections/settings/CLAUDE.md` 删除 segmented 描述，补面包屑（另同步 `entrypoints/app/CLAUDE.md` 的 v9 死 CSS 例子、`components/custom-breadcrumbs/CLAUDE.md` 与 `components/collection/CLAUDE.md` 的「首个 `links` 消费者」、spec §11 与 i18n §2，见执行记录）
+- [x] 四步验证全绿：`vitest run entrypoints/app/sections/settings` 8 文件 49 例（6 个文件零改动，`settings-view.test.tsx` +1 例、`settings-navigation.test.tsx` +1 行断言，见执行记录第 10 条）；`pnpm compile`；`pnpm test` 1396 例；`pnpm build` + bundle contract 绿
+
+---
+
+#### Step 7 执行记录（2026-09-03，main 工作树）
+
+**做了什么**：`settings-tabs.tsx` 与 `section-rail.tsx` 去掉全部本地视觉覆盖，改吃 `theme/core/components/tabs.tsx` 的默认下划线形态；`segmented-tabs-sx.ts` 删除（`git rm`）；`settings-view.tsx` 传 `links` 走面包屑并删掉 Tabs 的包裹 `Box`；新增双语 `breadcrumbs.home`（`首页` / `Home`）；`settings-view.test.tsx` 加 1 例锁 trail 数据。
+
+**一处向用户请示、由用户拍板（2026-09-03）**：
+
+1. **面包屑首项文案新建 `breadcrumbs.home` = `首页` / `Home`**，不复用 `nav.dashboard`（两 locale 都是 `Analytics`）。复用会让路径读成「Analytics / 设置」，暗示设置是 Analytics 的下级，而 hash 路由是平的；代价是同一目的地在侧栏叫 Analytics、在面包屑叫首页，已知并接受。Step 8 六个平台页复用该 key。
+
+**其余偏离手册（都是手册未覆盖或与源码/实测冲突，逐条判定）**：
+
+2. **rail 保留 `useMediaQuery` 的 horizontal/vertical 两形态**。手册第 2 点只写 `orientation="vertical"`，但同节「测试重写」又要求 `settings-navigation.test.tsx` 不改——那个测试（mock `useMediaQuery → true`）锁的正是 compact 下两条轨道都是 `.MuiTabs-scroller.MuiTabs-scrollableX`；改成恒 vertical 得到 `scrollableY`，该测试立刻红。两条要求只有「保留响应式、只去 segmented sx」时同时成立。
+3. **竖排时 `Tab` 保留 `justifyContent: 'flex-start'`**。MUI `Tab` 默认 `justifyContent: center`，Minimal 自己的竖排先例（`$MIN/sections/_examples/mui/tabs-view/view.tsx:193`）是纯文字、看不出问题；我们每行都带 24px 图标，居中会按各自宽度错开，排成参差的图标列。横排仍用 MUI 的居中。Minimal 那处还给竖排 Tabs 加了 `width: 200` + `borderRight: divider`——**不抄**：我们的 rail 是 Grid 的 `md: 3` 列、与右侧卡片隔着 24px gap，那条竖线会变成悬在空处的孤立分隔线。
+4. **rail 图标 22 → 24**，与顶部 Tab 同档。手册只给了顶部 Tab 的 24px，没提 rail；留着 22 等于凭空多一档尺寸，两级导航同处一屏时更显脏。
+5. **`minWidth` 112/116 全删**。它们原是顶住 fullWidth 25% 等分压缩的（旧 `SettingsTabs` `md+` 是 fullWidth），fullWidth 一走压缩源就没了；`whiteSpace: 'nowrap'` 已经让 min-content = 整个标签宽，theme 的 `MuiTab.root.minWidth: 48` 兜底。
+6. **`settings-view.test.tsx` 的新增例断言 `links` 数据而非渲染出的 `nav`**（同上文勘误）。mock 顺手接收 `links` prop 存进 hoisted holder，`beforeEach` 复位。
+7. **spec `ui-design-system.md` §11 Settings 同 commit 改写**。手册 §7 的文档清单里 Step 7 只写了 `sections/settings/CLAUDE.md`，但 §11 那两条 bullet（`SettingsTabs` full-width at `md+`、labels「retain a minimum width」）在本步后直接为假，末尾「Tests assert …」也要补 trail 一句并写明「mock 掉标题栏的页面测试断言 `links` 数据，不断言 mock 的 DOM」。与 Step 4/5/6 同一处理：规范正文失真必须同 commit 收，不推到 Step 10。
+8. **`entrypoints/app/CLAUDE.md` 的 v9 死 CSS 例子改写**。它把 `segmented-tabs-sx.ts:23` 当作「至今仍在、留给 Step 7 收」的活例（Step 6 trellis-check 第 2 条留下的），文件既然删了，那行必须改成「已零命中」，否则下一个人会去找一个不存在的文件。
+9. **`components/custom-breadcrumbs/CLAUDE.md` 与 `components/collection/CLAUDE.md` 补「首个 `links` 消费者是设置页」**，并把 `href` 写路由相对路径这条约定落在原语目录（Step 8 六个平台页会照抄，这个坑只该踩一次）。
+10. **`settings-navigation.test.tsx` 加一行 `whiteSpace: nowrap` 断言**（手册写「不改」）。该测试的名字就是「so long labels keep their width」，而本步把这个保证从 `minWidth: 112/116` 换成了 nowrap——原来的锁没了，新的锁没人加，测试名与它实际断言的东西就脱钩了（铁律 2 的实质）。`getComputedStyle(tab).whiteSpace` 在 happy-dom 下能读到 emotion 注入的值，仓库已有先例（`label.test.tsx:120`、`nav-vertical.test.tsx:174`）。其余 6 个文件真正零改动。
+
+**测试**：`settings-view.test.tsx` +1 例（`links` 两项 / 首项 `href: '/'` / 末项无 href，并注明渲染层契约锁在另两个文件）。其余 7 个 settings 测试文件零改动通过——`settings-navigation.test.tsx`（compact 两条 `scrollableX` 轨道 + tablist aria-label + 7 个 `role="tab"`）与 `settings-panel.test.tsx` 都按手册不动。零 `it.skip`、零放宽。
+
+**验证**：`npx vitest run entrypoints/app/sections/settings` 8 文件 49 例全绿；`pnpm compile`（`tsc --noEmit` + `pnpm -r compile`）零错；`pnpm test` 1396 例全绿（较 Step 6 的 1395 恰好 +1，就是新增那例，无 flake 重跑）；`pnpm -r test` 10 文件 55 例；`pnpm build` 成功且 `scripts/check-background-bundle.mjs` 绿（背景图 11 模块 / 939,265 B 不变）。
+
+**体积**：app **91,599 B**（+156）、Container（共享 MUI）**122,390 B**（+224）、jsx-runtime **56,544 B**（+120，与 Step 4 同值——jsx-runtime 在 56,424/56,544 之间跳，是 rollup 挪共享模块的结果，不是本步新增依赖）；设置路由 chunk `settings-*.js` **29,876 B**。删掉一个 43 行的 sx 工厂却略微变大，是因为面包屑（`CustomBreadcrumbs` + `BreadcrumbsLink` + MUI `Breadcrumbs`）第一次真正进产物——Step 3 移植时它没有消费者，被 tree-shake 掉了。
+
+**判定不是问题**（Step 7 复核后驳回）：默认 `scrollButtons: 'auto'` 不会污染键盘 Tab 序——MUI 9 的 `TabScrollButton.js:110-112` 显式给根节点 `role: null, tabIndex: null`，滚动箭头不可聚焦（本文 §6 全局验证矩阵的 a11y 行不变，键盘用户仍用方向键在 tablist 内移动）；Dashboard 图例那组竖向 Tabs（`analytics-platform-composition.tsx:68`，Step 6）**故意**藏掉指示条并自带 4px 行距，与本步的 rail 形态不同但用途也不同（它选的是详情面板的平台，不是二级导航），两者是否要统一留给 Step 10 的一致性复核；`SettingsPanel`/`SaveActions`/五张配置卡/深链/resume 一行未动，保存模型契约零影响。
+
+**仍待目测**：顶部四个 Tab 的下划线指示条与 40px 间距（`lg` 视口不溢出 / `sm` 可横滑且出现滚动箭头）；竖排 rail 的右缘指示条与左对齐图标列；light/dark 各一遍（指示条是 `currentColor`，两模式分别是深墨与浅墨）；六个色彩预设下 Tabs 无珊瑚色残留（指示条本就不吃 primary）；面包屑「首页」可点回 `/`、末项灰且不可点。本轮无法代跑（当前 Chrome 未以 `--remote-debugging-port` 启动，同 Step 4/5/6）。
 
 ---
 
@@ -965,7 +1001,7 @@ grep -rn "MUI v7\|Chrome 116\|segmented\|header-actions" CLAUDE.md entrypoints .
 | 4 | `layouts/CLAUDE.md`（重写）、`components/nav-section/CLAUDE.md`、`components/settings/CLAUDE.md`、`entrypoints/app/CLAUDE.md`（App.tsx 挂载）、`theme/CLAUDE.md`（`mode-transition.ts`）、`components/iconify/CLAUDE.md`（5 图标）、`welcome/CLAUDE.md`（顶栏控件）、**`.trellis/spec/frontend/{ui-design-system,i18n-conventions}.md`**（§8 shell 全节重写 + §12 scope + §15 例外 + 两条 key 命名行；原清单把 spec 全推到 Step 10，但 §8 逐条都已失真，见 trellis-check）、**`sections/{bookmarks,github-stars,x,youtube,zhihu}/CLAUDE.md`**（路由/导航行的 active 判定来源）、**`docs/ui-baseline/app-runtime-check.mjs`**（shell DOM 变了，验证脚本的选择器必须同步——首轮遗漏，见第二轮复核）、`.trellis/spec/frontend/ui-design-system.md` §16（运行时验证 transport 与「验证工具属 shell 契约」，见第二轮 trellis-check） |
 | 5 | `components/snackbar/CLAUDE.md`、`sections/settings/CLAUDE.md`、`sections/overview/CLAUDE.md`、`entrypoints/app/CLAUDE.md`、根 `CLAUDE.md`、**`.trellis/spec/frontend/{ui-design-system,i18n-conventions}.md`**（§11 新增「One-shot Action Results」——toast 与内联状态按**存续期**而非严重度划分、一件事只报一次、region 与关闭按钮都要译名；i18n §2 补 `snackbar.*` 命名行与「具体文案优先」规则。原清单把 spec 全推到 Step 10，但这是本步**新引入**的 UI 契约，不写进去下一步就会有人再加内联 Alert，见 trellis-check） |
 | 6 | `sections/overview/CLAUDE.md`、`components/chart/CLAUDE.md`、`ui-design-system.md` §10（全节改写）+ §2 owner 行 + §15 两条禁令行 + §16（对比度审计现在把 opacity 折进前景，见 trellis-check 第 3 条）、**`docs/ui-baseline/app-runtime-check.mjs`**（dashboard 实况探针的 `[data-section="summary"]` 变成死选择器，同 Step 4 的教训）、根 `CLAUDE.md`、**`entrypoints/app/pages/CLAUDE.md`**（dashboard 行还写着「hairline SummaryBand + 无 KPI 卡片」，是当前有效文档里唯一的漂移）、**`entrypoints/app/CLAUDE.md`**（`collectionPlatformById` + v9 slot 类名陷阱）、`components/iconify/icon-sets.ts` 的「summary-band glyphs」注释；`i18n-conventions.md` 不需改（无新命名族，只增删一个 `dashboard.*` 键） |
-| 7 | `sections/settings/CLAUDE.md` |
+| 7 | `sections/settings/CLAUDE.md`、**`.trellis/spec/frontend/{ui-design-system,i18n-conventions}.md`**（§11 Settings 两条 bullet 失真 + 测试断言行；i18n §2 新增 `breadcrumbs.*` 命名族）、**`entrypoints/app/CLAUDE.md`**（v9 死 CSS 的活例子随文件删除而失效）、**`components/custom-breadcrumbs/CLAUDE.md`** 与 **`components/collection/CLAUDE.md`**（首个 `links` 消费者 + `href` 写路由相对路径）——首轮清单只列了第一项，见 Step 7 执行记录第 7-9 条 |
 | 8 | `components/collection/CLAUDE.md`、`hooks/CLAUDE.md`、六个 `sections/<platform>/CLAUDE.md` |
 | 9 | `sections/chat/CLAUDE.md` |
 | 10 | `index.html` 契约注释、`ui-design-system.md` 全量、`directory-structure.md`、`docs/23` 注记、根 `CLAUDE.md` 索引状态 |
@@ -981,7 +1017,7 @@ grep -rn "MUI v7\|Chrome 116\|segmented\|header-actions" CLAUDE.md entrypoints .
 | 4 | 已落地 2026-09-02（待 8 张截图与键盘目测） | `c6a9476` | app 81,516 B；Container（共享 MUI）122,177 B；jsx-runtime 56,544 B | nav-section（vertical+mini+flyout）+ 四控件 + 外观抽屉 + `theme/mode-transition.ts`；simplebar 首次进产物（只在 app chunk）；鱼骨线换 Minimal bullet（用户决定）；`compactLayout` 语义、`nav-active` 归属、激活态两级同色三处偏离手册；第二轮复核补齐 8 处漏掉的调用点同步（六处 CLAUDE.md + `app-runtime-check.mjs` 两处死选择器），详见 Step 4 执行记录 |
 | 5 | 已落地 2026-09-02（待五处 toast 目测） | `a584cd1` | app 91,871 B（+10,355）；Container（共享 MUI）122,743 B（+566）；jsx-runtime 56,694 B（+150）——trellis-check 补完 `closeButtonAriaLabel` 后重测 | sonner 2.0.8 实测 +10.1 KB gz，高于手册估的 ~7 KB（它把自己的 CSS 字符串也打进 JS）；三处偏离手册（`handleSave` 不返回 boolean、守卫并入 `ui-vendor-boundaries`、失败文案具体优先）；详见 Step 5 执行记录 |
 | 6 | 已落地 2026-09-03，已 commit（待六项目测） | `6737714` | app 91,443 B（−428）；Container（共享 MUI）122,166 B（−577）；jsx-runtime 56,424 B（−270）——trellis-check 六处修完后重测（较首测 +10 B，`tabsClasses` 常量与共享 registry map 的净差） | 零依赖 SVG 环图 + 四张 KPI 卡；构成卡改上下堆叠（用户决定）；六个子组件而非四个；Card 标题取 `h2 + variant h4`（对齐 `SettingsPanel`）；`data-segment` 取代 `data-platform`；C-7 消解（Export 卡不在 `/`，大纲仍 `[1,2,2,3,2]`）；`app-runtime-check.mjs` 探针同步改读 `kpi-value` 且新增断言；KPI caption 去掉 `opacity`（WCAG）；详见 Step 6 执行记录 |
-| 7 | 未开始 | | | |
+| 7 | 已落地 2026-09-03（未 commit，用户自行提交；待五项目测） | | app 91,599 B（+156）；Container（共享 MUI）122,390 B（+224）；jsx-runtime 56,544 B；settings 路由 chunk 29,876 B | 两级导航改吃 theme 默认下划线 Tabs，`segmented-tabs-sx.ts` 删除；新增 `breadcrumbs.home`（用户决定，Step 8 复用）；**手册两处勘误**——crumb `href` 是 `'/'` 不是 `'#/'`、指示条是 `currentColor` 不是 `primary.main`；rail 保留响应式两形态 + 竖排左对齐；面包屑首次进产物；详见 Step 7 执行记录 |
 | 8 | 未开始 | | | |
 | 9 | 未开始 | | | |
 | 10 | 未开始 | | | |
@@ -1008,7 +1044,7 @@ grep -rn "MUI v7\|Chrome 116\|segmented\|header-actions" CLAUDE.md entrypoints .
 | 4 | `components/nav-section/`（vertical/mini/dropdown + styles）、`components/settings/drawer/`、`layouts/components/{nav-toggle-button,settings-button}.tsx`、`layouts/dashboard/{layout,nav-vertical,nav-mobile,css-vars}.tsx`、`layouts/nav-config-dashboard.tsx` |
 | 5 | `components/snackbar/{snackbar,styles,classes}.tsx` |
 | 6 | `sections/overview/analytics/{analytics-widget-summary,analytics-current-visits}.tsx`（只借布局与色板，不借 ApexCharts） |
-| 7 | `sections/account/view/account-view.tsx`（Tabs 形态） |
+| 7 | `sections/account/account-layout.tsx`（Tabs 形态；v7.7.0 无 `view/account-view.tsx`）、`sections/_examples/mui/tabs-view/view.tsx:193`（竖排先例） |
 | 9 | `sections/chat/{layout,chat-nav,chat-nav-item,chat-header-compose,chat-message-list,chat-message-item,chat-message-input,styles}.tsx` |
 
 ## 附录 C — `[UNKNOWN]` 清单（执行时消解并回写）

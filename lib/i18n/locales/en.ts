@@ -333,6 +333,9 @@ const en: Record<LocaleKeys, string> = {
   'configurationBlocker.configure.embedding': 'Configure Embedding',
   'configurationBlocker.configure.llm': 'Configure LLM',
 
+  // Breadcrumb ancestry shared by every route that shows a trail (docs/25 Step 7).
+  'breadcrumbs.home': 'Home',
+
   'nav.dashboard': 'Analytics',
   'nav.collections': 'Collections',
   'nav.bilibiliFavorites': 'Bilibili Favorites',

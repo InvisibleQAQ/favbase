@@ -324,6 +324,9 @@ const zhCN = {
   'configurationBlocker.configure.embedding': '配置 Embedding',
   'configurationBlocker.configure.llm': '配置 LLM',
 
+  // 面包屑祖先路径，所有带 trail 的路由共用（docs/25 Step 7）。
+  'breadcrumbs.home': '首页',
+
   'nav.dashboard': 'Analytics',
   'nav.collections': '收藏夹',
   'nav.bilibiliFavorites': 'B 站收藏夹',
