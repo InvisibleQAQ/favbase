@@ -1,7 +1,7 @@
 # docs/25 — app.html 全面向 Minimal v7.7.0 看齐：分步改造手册
 
 日期：2026-09-01
-状态：**Step 0–6 已落地（Step 0–2 于 2026-09-01，Step 3 于 2026-09-02 rebase 合入，Step 4–5 于 2026-09-02 在 main 工作树实施并已 commit，Step 6 于 2026-09-03 在 main 工作树实施、待用户 commit），Step 7+ 未开工**。本文是可执行手册，不是设计随笔；每个 Step 都能独立开工、独立验证、独立回滚。
+状态：**Step 0–6 已落地（Step 0–2 于 2026-09-01，Step 3 于 2026-09-02 rebase 合入，Step 4–5 于 2026-09-02 在 main 工作树实施并已 commit，Step 6 于 2026-09-03 在 main 工作树实施并已 commit），Step 7+ 未开工**。本文是可执行手册，不是设计随笔；每个 Step 都能独立开工、独立验证、独立回滚。
 上位文档：`docs/23_favbase-app-minimal-dashboard-v7-adaptation-plan-zh-CN.md`（第一轮"保留自有世界"路线，本文第二轮**推翻**其 §6/§11 的大部分结论，见 §3）。
 需求与决策来源：`.trellis/tasks/09-01-refactor-app-ui-adopt-minimal-v7-7-0-full-visual-language-while-keeping-favbase-brand-docs-23-round-2/prd.md`（R1–R14，Open Questions 1–6 已全部关闭）。
 事实来源：同目录 `research/favbase-app-ui-current-state.md`（Favbase 现状，433 行）、`research/minimal-v7-ui-catalog.md`（Minimal 目录，299 行）。本文只引用、不复制这两份文件的内容；行号以 2026-09-01 工作树为准。
@@ -980,7 +980,7 @@ grep -rn "MUI v7\|Chrome 116\|segmented\|header-actions" CLAUDE.md entrypoints .
 | 3 | 已落地 2026-09-01（与 Step 2 并列开发，前置只有 Step 1），2026-09-02 rebase 到 Step 2 之上后合入 main（待目测） | `6830293` | app 69,645 B；Container（共享 MUI）118,133 B；jsx-runtime 56,424 B（rebase 到 Step 2 之上后重测；并列分支上单独测得 app 69,294 / Container 118,157） | 六原语 + `theme/create-classes.ts` + `tests/setup/app-dom.ts`；C-6 消解（EmptyContent 不设默认 title）；**修 Minimal 移植缺陷**：MUI v9 不转发 `slotProps.paper.ref`，CustomPopover 箭头改为经自身 `parentElement` 反查 paper；simplebar 因暂无消费者被 tree-shake，未进任何 chunk（体积代价待 Step 4 接入后再记）；详见 Step 3 执行记录 |
 | 4 | 已落地 2026-09-02（待 8 张截图与键盘目测） | `c6a9476` | app 81,516 B；Container（共享 MUI）122,177 B；jsx-runtime 56,544 B | nav-section（vertical+mini+flyout）+ 四控件 + 外观抽屉 + `theme/mode-transition.ts`；simplebar 首次进产物（只在 app chunk）；鱼骨线换 Minimal bullet（用户决定）；`compactLayout` 语义、`nav-active` 归属、激活态两级同色三处偏离手册；第二轮复核补齐 8 处漏掉的调用点同步（六处 CLAUDE.md + `app-runtime-check.mjs` 两处死选择器），详见 Step 4 执行记录 |
 | 5 | 已落地 2026-09-02（待五处 toast 目测） | `a584cd1` | app 91,871 B（+10,355）；Container（共享 MUI）122,743 B（+566）；jsx-runtime 56,694 B（+150）——trellis-check 补完 `closeButtonAriaLabel` 后重测 | sonner 2.0.8 实测 +10.1 KB gz，高于手册估的 ~7 KB（它把自己的 CSS 字符串也打进 JS）；三处偏离手册（`handleSave` 不返回 boolean、守卫并入 `ui-vendor-boundaries`、失败文案具体优先）；详见 Step 5 执行记录 |
-| 6 | 已落地 2026-09-03（待五项目测） | | app 91,443 B（−428）；Container（共享 MUI）122,166 B（−577）；jsx-runtime 56,424 B（−270）——trellis-check 六处修完后重测（较首测 +10 B，`tabsClasses` 常量与共享 registry map 的净差） | 零依赖 SVG 环图 + 四张 KPI 卡；构成卡改上下堆叠（用户决定）；六个子组件而非四个；Card 标题取 `h2 + variant h4`（对齐 `SettingsPanel`）；`data-segment` 取代 `data-platform`；C-7 消解（Export 卡不在 `/`，大纲仍 `[1,2,2,3,2]`）；`app-runtime-check.mjs` 探针同步改读 `kpi-value` 且新增断言；KPI caption 去掉 `opacity`（WCAG）；详见 Step 6 执行记录 |
+| 6 | 已落地 2026-09-03，已 commit（待六项目测） | `6737714` | app 91,443 B（−428）；Container（共享 MUI）122,166 B（−577）；jsx-runtime 56,424 B（−270）——trellis-check 六处修完后重测（较首测 +10 B，`tabsClasses` 常量与共享 registry map 的净差） | 零依赖 SVG 环图 + 四张 KPI 卡；构成卡改上下堆叠（用户决定）；六个子组件而非四个；Card 标题取 `h2 + variant h4`（对齐 `SettingsPanel`）；`data-segment` 取代 `data-platform`；C-7 消解（Export 卡不在 `/`，大纲仍 `[1,2,2,3,2]`）；`app-runtime-check.mjs` 探针同步改读 `kpi-value` 且新增断言；KPI caption 去掉 `opacity`（WCAG）；详见 Step 6 执行记录 |
 | 7 | 未开始 | | | |
 | 8 | 未开始 | | | |
 | 9 | 未开始 | | | |
