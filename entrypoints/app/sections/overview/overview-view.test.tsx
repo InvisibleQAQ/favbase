@@ -40,8 +40,8 @@ const copy: Record<string, string> = {
   'dashboard.loading': 'Loading analytics',
   'dashboard.totalItems': 'Items',
   'dashboard.platformsInUse': 'Platforms in use',
+  'dashboard.usedTags': 'Tags in use',
   'dashboard.tagCoverage': 'Tag coverage',
-  'dashboard.tagCount': '{{value}} tags',
   'dashboard.taggedCount': '{{value}} tagged items',
   'dashboard.noTags': 'No tags in use yet',
   'dashboard.platformComposition': 'Platform composition',
@@ -138,6 +138,12 @@ function expectNoHeadingSkip(levels: number[]) {
     if (index === 0) return;
     expect(level).toBeLessThanOrEqual(levels[index - 1] + 1);
   });
+}
+
+function kpiValues(root: ParentNode): string[] {
+  return Array.from(root.querySelectorAll('[data-slot="kpi-value"]')).map(
+    (value) => value.textContent ?? '',
+  );
 }
 
 describe('CollectionAnalyticsContent', () => {
@@ -245,14 +251,21 @@ describe('CollectionAnalyticsContent', () => {
     expect(tabs[0].getAttribute('aria-controls')).toBe('dashboard-platform-panel-bilibili');
     expect(tabs.slice(1).every((tab) => !tab.hasAttribute('aria-controls'))).toBe(true);
     expect(container.querySelector('a[href="/collections"]')).not.toBeNull();
-    // The zero-tag state is carried by the summary band; no empty Top tags section.
+    // The zero-tag state is carried by the coverage KPI caption; no empty Top tags card.
     expect(container.textContent).toContain('No tags in use yet');
     expect(container.textContent).not.toContain('Top tags');
-    // Zero share → no share bar at all (no 1px fake bars).
-    expect(container.querySelectorAll('[data-slot="share-bar"]')).toHaveLength(0);
+    // An empty library has no coverage: an em dash, never a fabricated 0%.
+    expect(kpiValues(container)).toEqual(['0', '0 / 6', '0', '—']);
+    // Zero share → no arc at all; the ring is just its track (docs/25 Step 6).
+    expect(container.querySelectorAll('[data-segment]')).toHaveLength(0);
     const shareLabels = Array.from(container.querySelectorAll('[data-slot="share-label"]'));
     expect(shareLabels).toHaveLength(6);
-    expect(shareLabels.every((label) => getComputedStyle(label).color === themeConfig.scheme.light.text.primary)).toBe(true);
+    expect(shareLabels.every((label) => label.textContent === '0%')).toBe(true);
+    expect(
+      shareLabels.every(
+        (label) => getComputedStyle(label).color === themeConfig.scheme.light.text.primary,
+      ),
+    ).toBe(true);
     // The selected empty platform explains itself inside the tabpanel.
     expect(container.querySelector('[role="tabpanel"]')?.textContent).toContain(
       'No items on this platform.',
@@ -272,10 +285,12 @@ describe('CollectionAnalyticsContent', () => {
       />,
     );
 
-    expect(container.textContent).toContain('3');
-    expect(container.textContent).toContain('1 / 6');
-    expect(container.textContent).toContain('66.7%');
-    expect(container.textContent).toContain('1 tags · 2 tagged items');
+    // Four KPI cards, every figure a CollectionAnalyticsSnapshot field (D17):
+    // totalItems, platforms with items / platforms, usedTags, taggedItems ratio.
+    expect(kpiValues(container)).toEqual(['3', '1 / 6', '1', '66.7%']);
+    // usedTags has its own card now, so the coverage caption only adds the
+    // tagged-item count instead of repeating the tag total.
+    expect(container.textContent).toContain('2 tagged items');
     expect(container.textContent).not.toContain('No tags in use yet');
     expect(container.textContent).toContain('frontend');
     expect(
@@ -284,11 +299,13 @@ describe('CollectionAnalyticsContent', () => {
       ),
     ).not.toBeNull();
     expect(container.querySelector('[role="tabpanel"]')?.textContent).toContain('TypeScript');
-    // Only the one populated platform draws a share bar.
-    expect(container.querySelectorAll('[data-slot="share-bar"]')).toHaveLength(1);
+    // Only the one populated platform draws an arc, and it owns the whole ring.
+    const arcs = Array.from(container.querySelectorAll('[data-segment]'));
+    expect(arcs).toHaveLength(1);
+    expect(arcs[0].getAttribute('data-segment')).toBe('github');
   });
 
-  it('keeps the heading outline h1 → h2 (sections) → h3 (rankings) without skips', () => {
+  it('keeps the heading outline h1 → h2 (cards) → h3 (rankings) without skips', () => {
     render(
       <CollectionAnalyticsContent
         snapshot={partialSnapshot()}
@@ -301,7 +318,9 @@ describe('CollectionAnalyticsContent', () => {
     );
 
     const levels = headingLevels(container);
-    // h1 title, h2 composition, h2 platform name, h3 ranking, h2 top tags.
+    // h1 title, h2 composition card, h2 detail card (the platform name), h3
+    // ranking, h2 top tags. The four KPI titles are <p> (a metric label is not
+    // a section), and the export card lives in Settings, not here — docs/25 C-7.
     expect(levels).toEqual([1, 2, 2, 3, 2]);
     expectNoHeadingSkip(levels);
     expect(container.querySelector('h3')?.textContent).toBe('Languages');

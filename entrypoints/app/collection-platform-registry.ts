@@ -34,3 +34,12 @@ export const collectionPlatformRegistry: CollectionPlatformConfig[] =
     path: `/collections/${id}`,
     ...PLATFORM_META[id],
   }));
+
+/**
+ * The same registry keyed by discriminator, for the consumers that resolve one
+ * platform at a time (chat source cards, the analytics composition legend and
+ * detail card). It lives with the registry because every consumer that built
+ * its own `new Map(...)` was building the identical map.
+ */
+export const collectionPlatformById: ReadonlyMap<CollectionPlatform, CollectionPlatformConfig> =
+  new Map(collectionPlatformRegistry.map((config) => [config.id, config]));

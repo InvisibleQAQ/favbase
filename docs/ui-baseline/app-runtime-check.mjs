@@ -399,6 +399,20 @@ const auditExpression = `(() => {
       a: alpha,
     };
   };
+  // CSS opacity never reaches getComputedStyle().color, so text faded by an
+  // ancestor used to be measured at full ink -- and the old 'opacity < 0.5'
+  // bail below skipped the rest outright. Both hid real failures (docs/25 Step
+  // 6 shipped a 0.72 KPI caption at 3.48:1 straight past this audit), so the
+  // chain's opacity is folded into the foreground alpha instead.
+  // NOTE: this whole block is a template literal - no backticks in comments.
+  const cumulativeOpacity = (element) => {
+    let result = 1;
+    for (let current = element; current instanceof Element; current = current.parentElement) {
+      const value = Number(getComputedStyle(current).opacity);
+      if (Number.isFinite(value)) result *= value;
+    }
+    return result;
+  };
   const backgroundFor = (element) => {
     const chain = [];
     for (let current = element; current instanceof Element; current = current.parentElement) chain.push(current);
@@ -440,10 +454,12 @@ const auditExpression = `(() => {
     const element = walker.currentNode.parentElement;
     if (!text || !element || !visible(element) || element.closest('[aria-hidden="true"], [disabled], [aria-disabled="true"]')) continue;
     const style = getComputedStyle(element);
-    if (style.visibility === 'hidden' || Number(style.opacity) < 0.5) continue;
-    const foreground = parseColor(style.color);
+    if (style.visibility === 'hidden') continue;
+    const ink = parseColor(style.color);
+    if (!ink) continue;
+    const foreground = { ...ink, a: ink.a * cumulativeOpacity(element) };
     const background = backgroundFor(element);
-    if (!foreground || foreground.a === 0) continue;
+    if (foreground.a === 0) continue;
     const effectiveForeground = blend(foreground, background);
     const fontSize = Number.parseFloat(style.fontSize);
     const fontWeight = Number.parseInt(style.fontWeight, 10) || 400;
@@ -600,11 +616,33 @@ async function runGroup({ name, width, height, mobile, theme, locale, routes, sc
   for (const [routeName, route] of routes) {
     await audit(`${name}-${routeName}`, route, { capture: screenshots.includes(routeName) });
     if (routeName === 'dashboard' && !report.liveDataSummary) {
+      // docs/25 Step 6 traded the hairline summary band for four KPI cards: the
+      // live figures now live in [data-slot="kpi-value"]. The snapshot is an
+      // async DB read, so wait for the loaded state — and then assert the shape
+      // instead of recording an empty probe. A dead selector here has to fail
+      // loudly (Step 4's lesson, ui-design-system.md §16), not silently join
+      // zero values into '' and let the next group retry.
+      for (let attempt = 0; attempt < 50; attempt += 1) {
+        const kpis = await evaluate(`document.querySelectorAll('[data-slot="kpi-value"]').length`);
+        if (kpis === 4) break;
+        await sleep(100);
+      }
       report.liveDataSummary = await evaluate(`(() => ({
-        summary: document.querySelector('[data-section="summary"]')?.textContent?.trim().replace(/\\s+/g, ' '),
+        kpis: [...document.querySelectorAll('[data-slot="kpi-value"]')]
+          .map((value) => value.textContent?.trim()),
         platformTabs: [...document.querySelectorAll('[role="tab"]')]
           .map((tab) => tab.textContent?.trim().replace(/\\s+/g, ' ')),
       }))()`);
+      check(
+        report.liveDataSummary.kpis.length === 4,
+        `${name}-${routeName}: expected four [data-slot="kpi-value"] figures`,
+        report.liveDataSummary,
+      );
+      check(
+        report.liveDataSummary.platformTabs.length === 6,
+        `${name}-${routeName}: expected six platform legend tabs`,
+        report.liveDataSummary,
+      );
     }
     check(report.matrix[`${name}-${routeName}`].theme === theme, `${name}-${routeName}: theme mismatch`, {
       expected: theme,

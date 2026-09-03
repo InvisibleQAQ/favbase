@@ -23,10 +23,12 @@ vi.mock('@/lib/collections', () => ({
   isCollectionPlatform: (platform: string) => platform === 'github',
 }));
 
+// Keyed lookups come from the registry owner's own `collectionPlatformById`,
+// so the fake ships that map rather than a second copy built here.
 vi.mock('../../collection-platform-registry', () => ({
-  collectionPlatformRegistry: [
-    { id: 'github', title: 'platform.github', icon: 'mock:github' },
-  ],
+  collectionPlatformById: new Map([
+    ['github', { id: 'github', title: 'platform.github', icon: 'mock:github' }],
+  ]),
 }));
 
 vi.mock('../../components/iconify', () => ({

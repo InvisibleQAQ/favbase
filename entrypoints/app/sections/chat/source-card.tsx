@@ -7,10 +7,8 @@ import { varAlpha } from 'minimal-shared/utils';
 import { isCollectionPlatform } from '@/lib/collections';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify } from '../../components/iconify';
-import { collectionPlatformRegistry } from '../../collection-platform-registry';
+import { collectionPlatformById } from '../../collection-platform-registry';
 import type { ChatSource } from './use-chat-agent';
-
-const PLATFORM_META = new Map(collectionPlatformRegistry.map((c) => [c.id, c]));
 
 /**
  * Compact source cards under an assistant answer. Each card shows the platform
@@ -70,7 +68,9 @@ interface SourceCardItemProps {
 
 function SourceCardItem({ source, openLabel }: SourceCardItemProps) {
   const { t } = useTranslation();
-  const meta = isCollectionPlatform(source.platform) ? PLATFORM_META.get(source.platform) : undefined;
+  const meta = isCollectionPlatform(source.platform)
+    ? collectionPlatformById.get(source.platform)
+    : undefined;
   const platformLabel = meta ? t(meta.title) : source.platform;
   const canOpen = Boolean(source.url);
 

@@ -1,7 +1,7 @@
 # docs/25 — app.html 全面向 Minimal v7.7.0 看齐：分步改造手册
 
 日期：2026-09-01
-状态：**Step 0–5 已落地（Step 0–2 于 2026-09-01，Step 3 于 2026-09-02 rebase 合入，Step 4–5 于 2026-09-02 在 main 工作树实施并已 commit），Step 6+ 未开工**。本文是可执行手册，不是设计随笔；每个 Step 都能独立开工、独立验证、独立回滚。
+状态：**Step 0–6 已落地（Step 0–2 于 2026-09-01，Step 3 于 2026-09-02 rebase 合入，Step 4–5 于 2026-09-02 在 main 工作树实施并已 commit，Step 6 于 2026-09-03 在 main 工作树实施、待用户 commit），Step 7+ 未开工**。本文是可执行手册，不是设计随笔；每个 Step 都能独立开工、独立验证、独立回滚。
 上位文档：`docs/23_favbase-app-minimal-dashboard-v7-adaptation-plan-zh-CN.md`（第一轮"保留自有世界"路线，本文第二轮**推翻**其 §6/§11 的大部分结论，见 §3）。
 需求与决策来源：`.trellis/tasks/09-01-refactor-app-ui-adopt-minimal-v7-7-0-full-visual-language-while-keeping-favbase-brand-docs-23-round-2/prd.md`（R1–R14，Open Questions 1–6 已全部关闭）。
 事实来源：同目录 `research/favbase-app-ui-current-state.md`（Favbase 现状，433 行）、`research/minimal-v7-ui-catalog.md`（Minimal 目录，299 行）。本文只引用、不复制这两份文件的内容；行号以 2026-09-01 工作树为准。
@@ -678,6 +678,8 @@ pnpm compile && pnpm test && pnpm build
 
 ### Step 6 — Dashboard：KPI 卡 + 原生 SVG 图表
 
+> **2026-09-03 已落地**（未 commit，用户自行提交）。实际与手册的偏差记录在本节末"执行记录"。
+
 **目标**：`/` 改成 Minimal analytics 形态：四张 `AnalyticsWidgetSummary` 风格 KPI 卡 + 平台构成 Card（原生 SVG 环图 + 图例即 Tabs）+ 平台细分 Card + Top tags Card；数据全部来自 `CollectionAnalyticsSnapshot` 真实字段（D17）。
 
 **前置依赖**：Step 3。
@@ -716,10 +718,53 @@ pnpm compile && pnpm test && pnpm build
 **回滚点**：`refactor(overview): rebuild dashboard with Minimal KPI cards and native SVG composition chart`。
 
 **完成判据**
-- [ ] `overview-view.tsx` ≤ 200 行，四个子组件各 ≤ 150 行
-- [ ] `grep -rn "apexcharts\|recharts" entrypoints package.json` 零结果
-- [ ] `ui-design-system.md` §10 改写："KPI 卡只允许绑定 `CollectionAnalyticsSnapshot` 字段；禁止编造/演示数据；无数据显示 `—` 而非 0 假象"
-- [ ] `sections/overview/CLAUDE.md` 更新四子组件 owner 表
+- [x] `overview-view.tsx` 164 行；子组件 `analytics-widget-summary` 71 / `analytics-platform-composition` 131 / `analytics-platform-detail` 112 / `analytics-dimension-ranking` 104 / `analytics-top-tags` 55 / `analytics-loading` 68 行（**六个而非四个**，见执行记录第 3 条）
+- [x] `grep -rn "apexcharts\|recharts" entrypoints package.json` 唯一命中是 `components/chart/CLAUDE.md` 里那条禁令本身；**判据措辞需修正**为"零代码命中"（同 Step 4 的 `header-actions` 先例）
+- [x] `ui-design-system.md` §10 全节改写（含新增 §2 owner 行与 §15 两条禁令行）
+- [x] `sections/overview/CLAUDE.md` 更新为六子组件 owner 表 + `components/chart/CLAUDE.md`（新）
+
+---
+
+#### Step 6 执行记录（2026-09-03，main 工作树）
+
+**做了什么**：新建 `entrypoints/app/components/chart/`（`donut-chart.tsx` / `chart-legends.tsx` / `index.ts` / `donut-chart.test.tsx` / `CLAUDE.md`，零依赖）；`sections/overview/overview-view.tsx` 630 行拆成编排 164 行 + 六个子组件 + `analytics-format.ts`；`overview-view.test.tsx` 六例按新 DOM 重写；新增双语 `dashboard.usedTags`、删孤儿键 `dashboard.tagCount(.one)`；`docs/ui-baseline/app-runtime-check.mjs` 的 dashboard 实况探针从 `[data-section="summary"]` 改读 `[data-slot="kpi-value"]`。
+
+**一处向用户请示、由用户拍板（2026-09-03）**：
+
+1. **构成卡内部上下堆叠，而非手册写的「左环图 / 右图例」**。同一节把该卡定成 `lg: 4`——1200 视口 + 300px 侧栏下内容区 852px，4/12 ≈ 268px，`Card p:3` 后卡内只剩 ~220px（`md` 的 6/12 更窄，~216px），左右并排必然把六行平台名截成两三个字。Minimal 自己的 `AnalyticsCurrentVisits` 本来就是环图 → dashed Divider → 图例的堆叠。Grid 比例仍照手册 4/8。
+
+**其余偏离手册（都是手册未覆盖或与源码/实测冲突，逐条判定）**：
+
+2. **Card 标题 `component="h2" variant="h4"`（16px）**。手册只写「CardHeader 标题 h2」，没区分层级与字号。主题的 `MuiCardHeader.defaultProps.slotProps.title.variant = 'h6'` 在 Favbase 固定字阶（D8）下只有 14px（Minimal 的 h6 是 17→18px），当卡标题太小；旧页面的 `variant="h2"`（24px）在 `p:3` 的卡头里又过重。仓库已有先例是 `sections/settings/settings-panel.tsx` 的 `h2 + variant h4`，照用不另发明一档。heading level 仍是 h2，`[1,2,2,3,2]` 锁值不变；层级变成 KPI 数值 20px > 卡标题 16px > 图例行 14px。顺带证实 MUI v9 的 `resolveProps` 对 `slotProps` 是**按 slot 深合并**，所以调用点只写 `title` 不会打掉主题给 `subheader` 的默认值。
+3. **子组件是六个而非手册列的四个**。`analytics-dimension-ranking.tsx` 从详情卡里再拆一层（两张 `Record<kind,…>` 表 + 榜单 ~104 行，塞进详情卡会破 150 行判据）；`analytics-loading.tsx` 单独成文（手册只说 `AnalyticsLoading`「保留」，未指定落点；68 行的骨架留在编排文件里会顶穿「≤200 行」）。选择器契约（`role="status"` / `aria-busy` / `aria-label`）不变，几何跟着新布局重画。
+4. **图例行用 12px 圆点，不用 36px `PlatformTile`**。手册原文就是「色块」，且 220px 卡宽放不下 tile；圆点还能与自己那段弧同色，这才是图例的本分。平台字形 tile 保留在详情卡 48px 头部（`CardHeader avatar`）。**`data-slot="share-bar"` 随 shelf 消失**（不再有比例条），`data-slot="share-label"`（百分比）保留——空态六个 `0%` 与它们的 `text.primary` 色仍被测试钉着。选中态只洗行底（8% 主色），圆点不翻色，否则它就和弧对不上了。
+5. **环图段用 `data-segment`，不用手册测试段写的 `data-platform`**。`components/chart/` 是平台无关哑组件（spec §15 禁平台分支、§5 目录归属），段 id 恰好是平台判别符，由 `analytics-platform-composition.tsx` 注入；chart 原语不认识「平台」这个词。
+6. **平台数 KPI 保留 `1 / 6` 形态**。D17 给的字段是「有条目平台数」，但裸「1」缺参照系；`x / y` 两端都是快照真实字段（`filter(itemCount>0).length` / `platforms.length`），不是编造，且沿用旧 summary band 已有的读法。
+7. **覆盖率卡带一行 caption，且不再重复标签总数**。手册说 KPI 卡「无 sparkline、无趋势箭头」——caption 不是趋势，而旧 band 的零标签解释句必须有落点（`dashboard.noTags` 是诚实性断言，测试锁着）：`usedTags === 0` → `dashboard.noTags`，否则 → `dashboard.taggedCount`。旧 caption 里的 `dashboard.tagCount` 因为「已用标签」自己成了一张卡而重复，删该键及其 `.one` 变体（沿用 Step 5 A4 的孤儿键处置）。
+8. **KPI 卡底色保留 Minimal 的 `common.white` + 两个 48% 品牌色渐变**（两 scheme 同值）。这正是手册验证项「dark 模式渐变不发灰」的成因：去掉白底、让 48% alpha 直接压在暗色 paper 上才会发灰。文字用 `<color>.darker` 而不是 `text.secondary`（后者是给纸底的墨，不是给这张彩卡的）。**caption 不加 `opacity`**（trellis-check 2026-09-03 实测纠正）：满墨时四色在渐变两端是 6.37–11.40:1（最低是 success 的 `light` 端 6.37，不是初稿写的「同族 ≥ 8:1」——C-5 测的是 `text.accent` 在纸底上的派生阶，不是 `darker` 在这张彩卡上），但叠 `opacity .72` 后掉到 3.48–5.12:1，四色里 success（覆盖率卡本人）3.48、primary 3.91、warning 3.66 全部低于 12px 文字的 4.5:1 底线；六个色彩预设的 primary 同样有 preset4 3.88 不过线。字号本身已经把 caption 压成次级信息，静默 alpha 只是把它压成读不清。
+9. **维度榜单双列断点从 `md` 改到 `lg`**。详情卡在 `md` 只有 6/12（~264px），双列会把两个榜单挤成 120px；`lg` 起卡宽 8/12（~550px）才够。这是第 1 条堆叠决定的连带后果。
+10. **`formatNumber`/`formatShare` 抽到 `sections/overview/analytics-format.ts`**（三个以上子组件共用）。不放 `app/utils/`（那份 CLAUDE.md 明确「非 locale 依赖，locale 相关格式化在 `lib/i18n`」），也不加进 `lib/i18n`（§0.2：本轮不动 `lib/**`）；locale 显式入参保持纯函数。
+
+**附录 C-7 消解（Step 6 的唯一 `[UNKNOWN]`）**：Export 卡**不在** `/`。`grep` 证实 `ExportCard` 只被 `sections/settings/settings-view.tsx` 消费（Step 5 已改），Dashboard 从不渲染它；四张 KPI 卡的标题是 `<p>`（指标名不是区块），所以 heading outline 仍是 `[1, 2, 2, 3, 2]`（h1 → 构成卡 h2 → 详情卡平台名 h2 → 榜单 h3 → Top tags h2），不是手册预留的六元组。
+
+**测试**：`donut-chart.test.tsx` 新增 3 例（六段 dasharray 之和 = 周长且偏移逐段累加 / 零份额段不渲染但底环仍在 / 整块 `aria-hidden` 且中心数字照常打印）；`overview-view.test.tsx` 六例按手册重写——空态断言从「零 `share-bar`」改成「零 `[data-segment]` 弧 + 六个 `0%` 图例」并加 `kpiValues` 四值 `['0','0 / 6','0','—']`，有数据例加 `['3','1 / 6','1','66.7%']` 与唯一 `data-segment="github"`，caption 断言从 `1 tags · 2 tagged items` 改成 `2 tagged items`（第 7 条），大纲例注明 C-7 理由。零 `it.skip`、零放宽。
+
+**验证**：`npx vitest run entrypoints/app/sections/overview entrypoints/app/components/chart` 4 文件 18 例全绿；`tsc --noEmit` 与 `pnpm -r compile` 零错；`vitest run` 193 文件 1395 例——`lib/database/proxy-db.test.ts` 1 例超时，单跑立即通过，属已知满载 flake（memory: `favbase-vitest-load-flake`）；`pnpm -r test` 10 文件 55 例全绿；`wxt build` 成功且 `scripts/check-background-bundle.mjs` 绿（背景图 11 模块 / 939,265 B 不变，app.html 依赖未被 SW 引用）。
+
+**体积**：app **91,433 B**（−438）、Container（共享 MUI）**122,166 B**（−577）、jsx-runtime **56,424 B**（−270）。零依赖图表 + 拆掉 hairline band 与两族比例条后，Dashboard 净变小；Card/CardHeader/CardContent 早已在 Container chunk 里。
+
+**trellis-check（2026-09-03）**：十处偏离逐条复核，`data-segment`（测试等价覆盖 `[data-segment]` 计数 + `data-segment="github"`）、`common.white` 底（暗色下 `darker` 墨 6.37–13.94:1，Minimal 原样）、上下堆叠（用户裁决，不动）、`1 / 6`（两端都是快照字段）、C-7（`ExportCard` 只有设置页一个消费者）全部成立；死选择器 `data-section="summary"` / `data-slot="share-bar"` 除 `app-runtime-check.mjs`（已改）外全仓库无其它活引用（docs/19/23 与归档 task 是历史文档）；`dashboard.tagCount(.one)` 零消费者，`dashboard.usedTags` 双语齐备，新增 tsx 零 CJK。修掉 6 处：
+
+1. **KPI caption 的 `opacity .72` 不过 WCAG**（见上第 8 条，已删 opacity 并把实测数字写进第 8 条、`sections/overview/CLAUDE.md` 与 spec §10）。
+2. **`'& .MuiTabs-flexContainer'` 是死 CSS**——MUI 6 起该 slot 改名 `list`，v9 已无 `flexContainer` 类，图例行的 `gap: 0.5` 从未生效（旧 `PlatformShelf` 抄的就是这条死规则，所以「行为不变」掩盖了它一直没生效）。改用 `tabsClasses.list` / `tabsClasses.indicator` 常量，改名时编译期就炸。**`sections/settings/segmented-tabs-sx.ts:23` 同一条死规则仍在**，不在本步动它：改了会无审阅地改变设置页间距，而 Step 7 计划里那个文件本来就要删。同时把这条 v9 陷阱写进 `entrypoints/app/CLAUDE.md` 约定。
+3. **`app-runtime-check.mjs` 的对比度审计对 `opacity` 是瞎的**——`getComputedStyle().color` 不含 `opacity`，而旧代码还在 `Number(style.opacity) < 0.5` 处直接 `continue`：两条加起来正好让第 1 条这类缺陷完整绕过本该抓住它的工具（KPI 卡的渐变是 `background-image`，`backgroundFor` 只读 `background-color`，于是又按最亮的白底算，双重乐观）。新增 `cumulativeOpacity(element)`，把祖先链的 opacity 折进前景 alpha，删掉 0.5 提前退出。**下次运行可能浮出此前被藏住的低透明度文案——那是真违规，不是 Step 6 的回归。**（该 block 是模板字符串，注释里不能出现反引号，已在原地留 NOTE。）
+4. **dashboard 实况探针没有断言**——`report.liveDataSummary` 只被写入、无人 `check`，选择器一旦再漂就静默产出 `''` 并让下一组重试，正是 Step 4 的老毛病。改成先等 4 个 `[data-slot="kpi-value"]`（快照是异步 DB 读）再 `check` 四值 + 六 tab，字段名由 `summary` 改 `kpis`。
+5. **`new Map(collectionPlatformRegistry.map(...))` 复制到了三处**（chat 来源卡 + 本步两个新文件）。registry owner 新增 `collectionPlatformById: ReadonlyMap`，三处全部改读它；`source-card.test.tsx` 的 registry fake 同步只造那张 map。DRY 红线，不是风格问题。
+6. **`buildKpis` 的 `t: typeof translate` 与 `locale: string`**——前者靠 `import type { t as translate }` 把值当类型使，仓库自己的写法是 `UseTranslationReturn['t']`；后者更要紧：`useTranslation()` 同时给 `locale`（已解析）与 `preference`（可能是 `'auto'`），传错一个字符就是渲染期 `Intl.NumberFormat('auto')` 抛 `RangeError`。`analytics-format.ts` 与 `buildKpis` 的 locale 参数收紧为 `SupportedLocale`（纯类型导入，运行时零成本）。
+
+**判定不是问题**（复核后驳回）：`DonutChart` 的 share 之和 > 1 —— `share = itemCount / totalItems` 且 `totalItems` 是**全部** platform 行的和（含未注册平台），六个之和恒 ≤ 1，逐段 clamp 已是防御性余量，不加全局归一化；主题默认 `variant: 'scrollable'` 不会给竖向 Tabs 塞两个 40px 滚动按钮（v9 的 `showScrollButtons` 还要求 `scrollButtonsActive`，无溢出即不渲染）；`StateBox` 的 `minHeight` 220/200 覆写沿用旧页面同值，不是本步新增；spec §15 六类禁用模式（嵌套 Card、平台 if、裸 hex、`rgba()`、`theme.palette.*`、Tab/Button 内块级后代、图形独自承载信息）逐条无命中。
+
+**仍待目测**：空库（新 profile）四张卡 `0 / 0 / 6 / 0 / —`；有数据时环图弧色与图例圆点逐平台一致；dark 模式四张渐变卡不发灰、`<color>.darker` 文字可读；六个色彩预设下第一张卡（primary）与其余三张语义色卡并排不打架；`lg`/`md`/`sm` 三档下构成卡图例不截断。本轮无法代跑（当前 Chrome 未以 `--remote-debugging-port` 启动，同 Step 4/5）。
 
 ---
 
@@ -919,7 +964,7 @@ grep -rn "MUI v7\|Chrome 116\|segmented\|header-actions" CLAUDE.md entrypoints .
 | 3 | 六个新 `components/*/CLAUDE.md`、`components/collection/CLAUDE.md`、`components/iconify/CLAUDE.md`（图标清单） |
 | 4 | `layouts/CLAUDE.md`（重写）、`components/nav-section/CLAUDE.md`、`components/settings/CLAUDE.md`、`entrypoints/app/CLAUDE.md`（App.tsx 挂载）、`theme/CLAUDE.md`（`mode-transition.ts`）、`components/iconify/CLAUDE.md`（5 图标）、`welcome/CLAUDE.md`（顶栏控件）、**`.trellis/spec/frontend/{ui-design-system,i18n-conventions}.md`**（§8 shell 全节重写 + §12 scope + §15 例外 + 两条 key 命名行；原清单把 spec 全推到 Step 10，但 §8 逐条都已失真，见 trellis-check）、**`sections/{bookmarks,github-stars,x,youtube,zhihu}/CLAUDE.md`**（路由/导航行的 active 判定来源）、**`docs/ui-baseline/app-runtime-check.mjs`**（shell DOM 变了，验证脚本的选择器必须同步——首轮遗漏，见第二轮复核）、`.trellis/spec/frontend/ui-design-system.md` §16（运行时验证 transport 与「验证工具属 shell 契约」，见第二轮 trellis-check） |
 | 5 | `components/snackbar/CLAUDE.md`、`sections/settings/CLAUDE.md`、`sections/overview/CLAUDE.md`、`entrypoints/app/CLAUDE.md`、根 `CLAUDE.md`、**`.trellis/spec/frontend/{ui-design-system,i18n-conventions}.md`**（§11 新增「One-shot Action Results」——toast 与内联状态按**存续期**而非严重度划分、一件事只报一次、region 与关闭按钮都要译名；i18n §2 补 `snackbar.*` 命名行与「具体文案优先」规则。原清单把 spec 全推到 Step 10，但这是本步**新引入**的 UI 契约，不写进去下一步就会有人再加内联 Alert，见 trellis-check） |
-| 6 | `sections/overview/CLAUDE.md`、`components/chart/CLAUDE.md`、`ui-design-system.md` §10 |
+| 6 | `sections/overview/CLAUDE.md`、`components/chart/CLAUDE.md`、`ui-design-system.md` §10（全节改写）+ §2 owner 行 + §15 两条禁令行 + §16（对比度审计现在把 opacity 折进前景，见 trellis-check 第 3 条）、**`docs/ui-baseline/app-runtime-check.mjs`**（dashboard 实况探针的 `[data-section="summary"]` 变成死选择器，同 Step 4 的教训）、根 `CLAUDE.md`、**`entrypoints/app/pages/CLAUDE.md`**（dashboard 行还写着「hairline SummaryBand + 无 KPI 卡片」，是当前有效文档里唯一的漂移）、**`entrypoints/app/CLAUDE.md`**（`collectionPlatformById` + v9 slot 类名陷阱）、`components/iconify/icon-sets.ts` 的「summary-band glyphs」注释；`i18n-conventions.md` 不需改（无新命名族，只增删一个 `dashboard.*` 键） |
 | 7 | `sections/settings/CLAUDE.md` |
 | 8 | `components/collection/CLAUDE.md`、`hooks/CLAUDE.md`、六个 `sections/<platform>/CLAUDE.md` |
 | 9 | `sections/chat/CLAUDE.md` |
@@ -935,7 +980,7 @@ grep -rn "MUI v7\|Chrome 116\|segmented\|header-actions" CLAUDE.md entrypoints .
 | 3 | 已落地 2026-09-01（与 Step 2 并列开发，前置只有 Step 1），2026-09-02 rebase 到 Step 2 之上后合入 main（待目测） | `6830293` | app 69,645 B；Container（共享 MUI）118,133 B；jsx-runtime 56,424 B（rebase 到 Step 2 之上后重测；并列分支上单独测得 app 69,294 / Container 118,157） | 六原语 + `theme/create-classes.ts` + `tests/setup/app-dom.ts`；C-6 消解（EmptyContent 不设默认 title）；**修 Minimal 移植缺陷**：MUI v9 不转发 `slotProps.paper.ref`，CustomPopover 箭头改为经自身 `parentElement` 反查 paper；simplebar 因暂无消费者被 tree-shake，未进任何 chunk（体积代价待 Step 4 接入后再记）；详见 Step 3 执行记录 |
 | 4 | 已落地 2026-09-02（待 8 张截图与键盘目测） | `c6a9476` | app 81,516 B；Container（共享 MUI）122,177 B；jsx-runtime 56,544 B | nav-section（vertical+mini+flyout）+ 四控件 + 外观抽屉 + `theme/mode-transition.ts`；simplebar 首次进产物（只在 app chunk）；鱼骨线换 Minimal bullet（用户决定）；`compactLayout` 语义、`nav-active` 归属、激活态两级同色三处偏离手册；第二轮复核补齐 8 处漏掉的调用点同步（六处 CLAUDE.md + `app-runtime-check.mjs` 两处死选择器），详见 Step 4 执行记录 |
 | 5 | 已落地 2026-09-02（待五处 toast 目测） | `a584cd1` | app 91,871 B（+10,355）；Container（共享 MUI）122,743 B（+566）；jsx-runtime 56,694 B（+150）——trellis-check 补完 `closeButtonAriaLabel` 后重测 | sonner 2.0.8 实测 +10.1 KB gz，高于手册估的 ~7 KB（它把自己的 CSS 字符串也打进 JS）；三处偏离手册（`handleSave` 不返回 boolean、守卫并入 `ui-vendor-boundaries`、失败文案具体优先）；详见 Step 5 执行记录 |
-| 6 | 未开始 | | | |
+| 6 | 已落地 2026-09-03（待五项目测） | | app 91,443 B（−428）；Container（共享 MUI）122,166 B（−577）；jsx-runtime 56,424 B（−270）——trellis-check 六处修完后重测（较首测 +10 B，`tabsClasses` 常量与共享 registry map 的净差） | 零依赖 SVG 环图 + 四张 KPI 卡；构成卡改上下堆叠（用户决定）；六个子组件而非四个；Card 标题取 `h2 + variant h4`（对齐 `SettingsPanel`）；`data-segment` 取代 `data-platform`；C-7 消解（Export 卡不在 `/`，大纲仍 `[1,2,2,3,2]`）；`app-runtime-check.mjs` 探针同步改读 `kpi-value` 且新增断言；KPI caption 去掉 `opacity`（WCAG）；详见 Step 6 执行记录 |
 | 7 | 未开始 | | | |
 | 8 | 未开始 | | | |
 | 9 | 未开始 | | | |
@@ -976,7 +1021,7 @@ grep -rn "MUI v7\|Chrome 116\|segmented\|header-actions" CLAUDE.md entrypoints .
 | C-4 | Menu list padding 移植后实际值（Favbase 现锁 `spacing(0.5)`，Minimal popover list padding 0） | 1 | **已消解（2026-09-01）**：Minimal 无 `MuiMenu` 覆盖；Menu paper 继承 `MuiPopover.paper` = `paperStyles(dropdown)` padding `spacing(0.5)`，`& .MuiList-root` 上下 padding 0。断言改为 `theme.components.MuiMenu` 为 undefined + Popover paper 两值 |
 | C-5 | 六预设的 `text.accent` 派生阶（darker/light）是否全部过 WCAG 4.5 | 2 | **已消解（2026-09-01）**：是——light `darker` 对白底 ≥ 8.74、对 high-contrast 底 ≥ 8.07；dark `light` 对 `#141A21` ≥ 6.44；对 16% soft 洗底 ≥ 5.15（最低均为 preset2/preset4）。无预设需要回退阶；`theme-contract.test.ts` 四组 `it.each(PRESETS)` 锁定 |
 | C-6 | EmptyContent 默认文案复用的现有 i18n key 名 | 3 | **已消解（2026-09-01）**：没有可复用的 key——`zh-CN.ts` 只有平台专用的 `dashboard.platformEmpty`，无通用空态文案。结论是 `EmptyContent` **不设默认 title**（也不设默认插图），既不新增 key 也不硬编码英文；`StateBox` 契约里 title 本就可选，且 `NoMatchesState` 依赖「盒子里只有调用方那一句」（`state-box.test.tsx` 断言 `textContent` 精确相等） |
-| C-7 | Step 6 heading outline 实际序列（Export 卡是否仍在 `/`） | 6 | 以 DOM 为准 |
+| C-7 | Step 6 heading outline 实际序列（Export 卡是否仍在 `/`） | 6 | **已消解（2026-09-03）**：Export 卡不在 `/`——`ExportCard` 只被 `sections/settings/settings-view.tsx` 消费（Step 5 已改）。四张 KPI 卡标题是 `<p>`（指标名不是区块），故大纲仍是 `[1, 2, 2, 3, 2]`（h1 → 构成卡 h2 → 详情卡平台名 h2 → 榜单 h3 → Top tags h2），不是预留的六元组 |
 
 ## 附录 D — 勘误
 
