@@ -91,7 +91,6 @@ const zhCN = {
   'settings.agentBridge.commandsHint': '复制并在终端运行一次：写入本机配置并为 Claude Code 与 Codex 安装 favbase skill。命令包含 Bridge Token，请勿公开。',
   'settings.agentBridge.copySetup': '复制 setup 命令',
   'settings.agentBridge.copySetupToFix': '复制修复命令',
-  'settings.agentBridge.copied': '已复制',
   'settings.agentBridge.copySuccess': '已复制到剪贴板',
   'settings.agentBridge.copyFailed': '复制失败，请检查浏览器剪贴板权限后重试',
   'settings.agentBridge.loadFailed': '无法读取 Agent Bridge 配置，请刷新设置页后重试',
@@ -620,6 +619,19 @@ const zhCN = {
   'tags.showMore': '展开 (+{{n}})',
   'tags.showLess': '收起',
   'tags.noMatches': '没有匹配所选标签的视频',
+
+  // One-shot action results (docs/25 Step 5, D6 plan A). Only the generic
+  // strings live here — a failure that already has a specific message
+  // (settings.sync.err.*, export.*, settings.agentBridge.copy*) keeps it.
+  'snackbar.regionLabel': '通知',
+  'snackbar.closeAria': '关闭通知',
+  'snackbar.saved': '已保存',
+  'snackbar.saveFailed': '保存失败，请重试',
+  'snackbar.synced': '同步完成',
+  'snackbar.syncFailed': '同步失败，请重试',
+  'snackbar.remoteCleared': '云端数据已清除',
+  'snackbar.clearFailed': '清除云端数据失败，请重试',
+  'snackbar.exported': '导出完成',
 
   'export.title': '数据导出',
   'export.subtitle': '导出数据库中的全部数据',

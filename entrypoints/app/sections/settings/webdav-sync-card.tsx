@@ -31,6 +31,7 @@ import {
 } from '@/lib/sync';
 import { sendBackgroundMessage } from '@/lib/background/client';
 import { Iconify } from '../../components/iconify';
+import { toast } from '../../components/snackbar';
 import { useHostPermission } from './use-host-permission';
 import { permissionErrorKey } from './permission-error';
 import { SettingsPanel } from './settings-panel';
@@ -44,7 +45,6 @@ export function WebdavSyncCard() {
   const [form, setForm] = useState<WebdavConfig>(EMPTY);
   const [showPassword, setShowPassword] = useState(false);
   const [status, setStatus] = useState<WebdavSyncStatus | null>(null);
-  const [localError, setLocalError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [clearing, setClearing] = useState(false);
 
@@ -71,37 +71,45 @@ export function WebdavSyncCard() {
   const hasCreds = !!form.url.trim() && !!form.username && !!form.password;
 
   const handleSyncNow = async () => {
-    setLocalError(null);
     const url = form.url.trim();
     if (!/^https:\/\//i.test(url)) {
-      setLocalError(t('settings.sync.err.httpsOnly'));
+      toast.error(t('settings.sync.err.httpsOnly'));
       return;
     }
     // Verify or restore required host access before the SW fetches.
     const res = await ensure(url);
     if (!res.ok) {
-      setLocalError(t(permissionErrorKey(res.reason)));
+      toast.error(t(permissionErrorKey(res.reason)));
       return;
     }
     await persist({ ...form, url });
     // The SW owns the engine + the persisted grant; status flows back via watch.
     const result = await sendBackgroundMessage({ type: 'WEBDAV_SYNC_NOW' });
-    if (!result?.ok && result?.errorCode) {
-      setLocalError(t(`settings.sync.err.${result.errorCode}`));
+    if (result?.ok) {
+      toast.success(t('snackbar.synced'));
+      return;
     }
+    // A stable errorCode carries the actionable half of the message; the
+    // generic string is only the fallback for a refusal without one.
+    toast.error(
+      result?.errorCode ? t(`settings.sync.err.${result.errorCode}`) : t('snackbar.syncFailed'),
+    );
   };
 
   const handleClearRemote = async () => {
     setConfirmOpen(false);
-    setLocalError(null);
     setClearing(true);
     try {
       const result = await sendBackgroundMessage({
         type: 'WEBDAV_CLEAR_REMOTE',
       });
-      if (!result?.ok && result?.errorCode) {
-        setLocalError(t(`settings.sync.err.${result.errorCode}`));
+      if (result?.ok) {
+        toast.success(t('snackbar.remoteCleared'));
+        return;
       }
+      toast.error(
+        result?.errorCode ? t(`settings.sync.err.${result.errorCode}`) : t('snackbar.clearFailed'),
+      );
     } finally {
       setClearing(false);
     }
@@ -265,14 +273,6 @@ export function WebdavSyncCard() {
               <Alert severity="error">
                 {t(`settings.sync.err.${status.errorCode}`)}
                 {status.errorDetail ? ` — ${status.errorDetail}` : ''}
-              </Alert>
-            </Grid>
-          )}
-
-          {localError && (
-            <Grid size={{ xs: 12 }}>
-              <Alert severity="error" onClose={() => setLocalError(null)}>
-                {localError}
               </Alert>
             </Grid>
           )}

@@ -7,6 +7,7 @@ import { sendBackgroundMessage } from '@/lib/background/client';
 import { AUTO_SYNC_PLATFORMS } from './collection-platform-auto-sync';
 import { useDailyAutoSync } from './hooks/use-daily-auto-sync';
 import { SettingsDrawer } from './components/settings';
+import { Snackbar } from './components/snackbar';
 import { ThemeProvider } from './theme/theme-provider';
 
 export default function App() {
@@ -31,6 +32,9 @@ export default function App() {
       {/* Appearance drawer: mounted once at the router root so it survives
           route changes; its open state is context memory (docs/25 Step 4). */}
       <SettingsDrawer />
+      {/* One toast region for the whole app (docs/25 Step 5): every one-shot
+          action result — save, sync, export, copy — surfaces here. */}
+      <Snackbar />
     </ThemeProvider>
   );
 }

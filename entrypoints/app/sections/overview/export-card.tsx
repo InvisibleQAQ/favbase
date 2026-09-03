@@ -8,10 +8,10 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Box from '@mui/material/Box';
 import Divider from '@mui/material/Divider';
 import Typography from '@mui/material/Typography';
-import Alert from '@mui/material/Alert';
 
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify } from '../../components/iconify';
+import { toast } from '../../components/snackbar';
 import { getDb } from '../../../../lib/database/db';
 import { queryAllTables, isTableDataEmpty } from '../../../../lib/export/query';
 import { toExportJson } from '../../../../lib/export/serialize-json';
@@ -41,17 +41,21 @@ export function ExportCard() {
   const [format, setFormat] = useState<BackupFormat>('json');
   const [includeEmbedding, setIncludeEmbedding] = useState(false);
   const [busy, setBusy] = useState<Section | null>(null);
-  const [error, setError] = useState<{ section: Section; message: string } | null>(null);
 
-  /** Wraps the shared busy/error lifecycle so each handler only holds its own logic. */
+  /**
+   * Wraps the shared busy/report lifecycle so each handler only holds its own
+   * logic. An export is a one-shot action, so its outcome is a toast (docs/25
+   * D6 plan A): a returned string is a refusal the user can act on (empty
+   * database) and stays a warning; a throw is a failure.
+   */
   const run = async (section: Section, task: () => Promise<string | null>) => {
-    setError(null);
     setBusy(section);
     try {
       const message = await task();
-      if (message) setError({ section, message });
+      if (message) toast.warning(message);
+      else toast.success(t('snackbar.exported'));
     } catch (err) {
-      setError({ section, message: t(errorKey(err)) });
+      toast.error(t(errorKey(err)));
     } finally {
       setBusy(null);
     }
@@ -83,13 +87,6 @@ export function ExportCard() {
       return null;
     });
 
-  const alertFor = (section: Section) =>
-    error?.section === section ? (
-      <Alert severity="warning" onClose={() => setError(null)}>
-        {error.message}
-      </Alert>
-    ) : null;
-
   return (
     <SettingsPanel title={t('export.title')} description={t('export.subtitle')}>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -119,8 +116,6 @@ export function ExportCard() {
             label={t('export.includeEmbedding')}
           />
 
-          {alertFor('backup')}
-
           <Button
             variant="contained"
             onClick={handleBackup}
@@ -143,8 +138,6 @@ export function ExportCard() {
           <Typography variant="caption" sx={{ color: 'text.secondary' }}>
             {t('export.obsidianHint')}
           </Typography>
-
-          {alertFor('vault')}
 
           <Button
             variant="outlined"

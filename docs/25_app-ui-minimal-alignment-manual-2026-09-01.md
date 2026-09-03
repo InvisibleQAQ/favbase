@@ -1,7 +1,7 @@
 # docs/25 — app.html 全面向 Minimal v7.7.0 看齐：分步改造手册
 
 日期：2026-09-01
-状态：**Step 0–4 已落地（Step 0–2 于 2026-09-01，Step 3 于 2026-09-02 rebase 合入，Step 4 于 2026-09-02 在 main 工作树实施、待用户 commit），Step 5+ 未开工**。本文是可执行手册，不是设计随笔；每个 Step 都能独立开工、独立验证、独立回滚。
+状态：**Step 0–5 已落地（Step 0–2 于 2026-09-01，Step 3 于 2026-09-02 rebase 合入，Step 4–5 于 2026-09-02 在 main 工作树实施，Step 4 已 commit、Step 5 待用户 commit），Step 6+ 未开工**。本文是可执行手册，不是设计随笔；每个 Step 都能独立开工、独立验证、独立回滚。
 上位文档：`docs/23_favbase-app-minimal-dashboard-v7-adaptation-plan-zh-CN.md`（第一轮"保留自有世界"路线，本文第二轮**推翻**其 §6/§11 的大部分结论，见 §3）。
 需求与决策来源：`.trellis/tasks/09-01-refactor-app-ui-adopt-minimal-v7-7-0-full-visual-language-while-keeping-favbase-brand-docs-23-round-2/prd.md`（R1–R14，Open Questions 1–6 已全部关闭）。
 事实来源：同目录 `research/favbase-app-ui-current-state.md`（Favbase 现状，433 行）、`research/minimal-v7-ui-catalog.md`（Minimal 目录，299 行）。本文只引用、不复制这两份文件的内容；行号以 2026-09-01 工作树为准。
@@ -88,7 +88,7 @@ Step 10 收口（截图基线、规范/CLAUDE.md/docs 同步、index.html 契约
 | `@mui/material` | `^7.3.11`（唯一直接 @mui 依赖） | `^9.4.0`（Step 0 实装；Minimal 用 9.0.1，同 major，minor 差异不影响 theme 移植） | `package.json:33` |
 | `minimal-shared` | `^1.1.6` | 不变（Minimal 同版本线） | `package.json` |
 | `simplebar-react` | 无 | `^3.3.2` + `simplebar-react/dist/simplebar.min.css` | Step 3 |
-| `sonner` | 无 | `^2.0.7` | Step 5 |
+| `sonner` | 无 | `^2.0.8`（Step 5 已实装；`pnpm add sonner@^2.0.7` 解析到 2.0.8），**无需 import 它的 CSS**——sonner 自己向 `document.head` 注入（与 simplebar 不同） | Step 5 |
 | `minimum_chrome_version` | `'116'` | `'117'`（Step 0 已落地；理由是 MUI v9 的浏览器下限 Chrome 117，不是"CSS 特性基线"） | `wxt.config.ts:62`，断言 `wxt.config.test.ts:16` |
 | 根 `version` | `0.0.5` | 每次上 Store 前递增（不在本计划内动） | `package.json` |
 
@@ -636,6 +636,46 @@ pnpm compile && pnpm test && pnpm build
 
 ---
 
+#### Step 5 执行记录（2026-09-02，main 工作树）
+
+**做了什么**：`pnpm add sonner`（解析到 2.0.8）；新建 `entrypoints/app/components/snackbar/`（`classes.ts` / `styles.tsx` / `snackbar.tsx` / `index.ts` / `snackbar.test.tsx` / `CLAUDE.md`）；`App.tsx` 在 `SettingsDrawer` 之后挂 `<Snackbar />`；六处触发点改 toast；`tests/ui-vendor-boundaries.test.ts` 加第二条 `VENDOR_RULES`；新增 `snackbar.*` 八个双语键、删孤儿键 `settings.agentBridge.copied`。
+
+**三处偏离手册**（都在开工前向用户摊开，其中第三条由用户 2026-09-02 拍板）：
+
+1. **`handleSave` 不改返回 `boolean`**。手册第 2 点要求 `Promise<void>` 改 `Promise<boolean>`，但 toast 就发在 `useConfigDraft` 内部，返回值没有任何消费者——加了就是死重量。改法是补 try/catch：这顺带修掉一个真 bug——`handleSave` 原先不 catch，`save` reject 会顺着 `SaveActions` 的裸 `onClick={onSave}` 变成未处理 rejection，而屏幕上什么都不显示。现在 `handleSave` 永不 reject。
+2. **守卫并入 `tests/ui-vendor-boundaries.test.ts`，不新建 `tests/snackbar-import-boundary.test.ts`**。该文件是 Step 3 建的，文件头注释本就写着「Step 5 adds sonner here」，`VENDOR_RULES` 是为此预留的表。两个文件执行同一条规则，就是规则在其中一个里慢慢腐烂。§6 验证矩阵的「依赖边界」行已同步改指。判据要求的「确实拦得住」已用临时 `lib/__guard-probe.ts`（一行 `import 'sonner'`）实证：断言给出 `[ 'lib/__guard-probe.ts' ]` 后删除探针。
+3. **失败文案具体优先，`snackbar.*` 只做通用与兜底**（用户决定）。手册列的十个键里只建七个通用串 + 一个 region 标签；`snackbar.exportFailed` / `copied` / `copyFailed` 不建——`settings.sync.err.*`（auth/locked/permission…）、`export.emptyDb|dbNotReady|failed`、`settings.agentBridge.copySuccess|copyFailed` 都已存在且信息量更大，另起一套同义串等于让两套文案互相漂移。WebDAV 两个 handler 只在**没有 errorCode** 时回退 `snackbar.syncFailed`/`clearFailed`。
+
+**手册未覆盖、按 D6 自行判定的两处**：
+
+- **webdav-sync-card 的 `localError` 整体删除**。手册只说两个 handler「结果 toast」，没提 Alert。但三处 `setLocalError` 全在 `handleSyncNow`/`handleClearRemote` 内，留着就是同一件事报两遍。`status.state === 'error'` 的 Alert 是持久状态，按 D6 保留。
+- **agent-bridge-card 的 `localError` 不动**。手册未点名，且它的来源含挂载期 `loadFailed`——不是一次性动作。本步只删 `copyFeedback`。副作用：两个按钮不再把文案切成「已复制」，`settings.agentBridge.copied` 因此成为孤儿键并删除。
+
+**对 Minimal 源的两处有意偏离**（写进 `components/snackbar/CLAUDE.md`）：宽 360 而非 300、toast 表面走 `theme.mixins.paperStyles` 而非扁平 `background.paper`（手册第 1 点要求，也让 toast 与菜单/弹出层同一种浮层质感——`default` 无 `data-type` 那支同时覆盖 `backgroundImage: 'none'`，否则墨色底上会浮着两块角落洗色）；severity 图标底保留 Minimal 的单条 `varAlpha('currentColor', 0.08)`，不按手册拆成四条 per-severity 规则——`varAlpha` 对 `currentColor` 走 `color-mix()`，像素完全相同而规则少三条。
+
+**手册没写、但必须做的两处 i18n**：sonner 的 region `aria-label` 默认是英文 `Notifications`，会被读屏播报，所以经 `containerAriaLabel={t('snackbar.regionLabel')}` 跟随界面语言（第八个新键）；`closeButton` 打开后每条 toast 还带一个 `aria-label` 默认为英文 `Close toast` 的 icon-only 关闭按钮，同样经 `toastOptions.closeButtonAriaLabel={t('snackbar.closeAria')}` 跟随语言（第九个新键，trellis-check 补）。
+
+**测试**：`snackbar.test.tsx`（8 例）、`export-card.test.tsx`（5 例，新文件）、`use-config-draft.test.ts` 增 2 例保存结果、`agent-bridge-card.test.tsx` 两处断言从「卡内文本」改为「toast mock 被调 + 卡内不再残留」、`App.test.tsx` 补 `Snackbar` stub 与挂载断言。两处踩坑记在这里：
+
+- sonner 把每次 store 更新延后一个**宏任务**（`useSonner` 里注释为 “Prevent batching, temp solution”），`await act(async () => toast.success(...))` 只刷微任务，看不到任何 toast。测试里的 `emit()` helper 负责 `await setTimeout(0)`。
+- `useConfigDraft` 的 `derive` 喂着一个 `[derive]` effect，测试探针里每次 render 新建闭包 = 无限重渲染，vitest 直接报 “Worker exited unexpectedly”。探针把 `derive`/`runTest` 提到组件外。
+
+**验证**：`pnpm compile` 零错；`vitest run` 192 文件 / 1391 例全绿；`pnpm -r test` 10 文件 / 55 例全绿；`wxt build` 成功且 `scripts/check-background-bundle.mjs` 绿（背景图 11 模块 / 939,265 B，app.html 依赖未被 SW 引用）。
+
+**trellis-check（2026-09-02，事后补跑）**：六个触发点逐条核对无遗漏也无越界（`toast.*` 的调用点恰好只有那六处，测试连接 / `handleToggleEnabled` / 拉取进度 / 主题语言切换都未被动）；A2（webdav `localError` 全删）与 A3（agent-bridge `localError` 保留）经源码复核成立——前者三处 `setLocalError` 全在两个一次性 handler 内，后者的产出含挂载期 `loadFailed` 与 `persistConfig` 的回滚说明，都不是一次性动作结果；A1 的「不返回 boolean」不影响 `settings-view.tsx` 的 `resume` 派发，因为那段逻辑在 `save` 内部而不是 `handleSave` 的调用者一侧。另发现并修掉 1 处缺陷 + 4 处文档漂移：
+
+1. **每条 toast 的关闭按钮是硬编码英文**（本步唯一功能缺陷）。`closeButton` 打开后 sonner 给每条 toast 挂一个 `aria-label` 默认为 `Close toast` 的 icon-only 控件——与已经修掉的 region 标签是同一类问题，只是漏了。实测（happy-dom 探针）确认渲染出 `aria-label="Close toast"`。改为 `toastOptions.closeButtonAriaLabel={t('snackbar.closeAria')}`，双语新增第九个键，`snackbar.test.tsx` 增一例钉住。
+2. **spec 层没有这条新契约**。`ui-design-system.md` 通篇不提 Alert/toast，Step 5 引入的「按存续期分流」规则若等到 Step 10 才写，Step 6-9 会继续给一次性结果加内联 Alert，而守卫测试拦不住这种漂移。§11 新增「One-shot Action Results」小节，§7 清单同步（理由同 Step 4：spec 不是只在收口时才算文档）。
+3. **i18n spec 的 key 命名表缺 `snackbar.*` 行**，且 A5 的「具体优先」是本步确立的通用规则而非一次性裁决，补进 §2。
+4. **§8 进度表第 4 行仍写「待用户 commit」**，但本次改动的状态行已声明 Step 4 已 commit；补上 `c6a9476`。同行第 5 行「三处偷离手册」错字改「偏离」。
+5. 根 `CLAUDE.md` 的「Minimal 共享原语（docs/25 Step 3 移植）」小标题下多了一条 Step 5 条目，标题改为「Step 3 移植，Step 5 追加 snackbar」。
+
+`git diff --check` 干净。§16 第 8 项「Impeccable detector」本会话无此 skill/脚本可用，未跑。
+
+**仍待目测**（判据第 3 项的运行时半边）：设置页保存 → 右上 toast 与已保存徽标同时出现；导出失败 → 只有 toast；Agent Bridge 复制 → toast、原位无 Alert；WebDAV 同步失败 → toast 文案是具体的 `settings.sync.err.*`；dark 模式 toast 底为 paper 而非透明。本轮无法代跑（同 Step 4：当前 Chrome 未以 `--remote-debugging-port` 启动）。
+
+---
+
 ### Step 6 — Dashboard：KPI 卡 + 原生 SVG 图表
 
 **目标**：`/` 改成 Minimal analytics 形态：四张 `AnalyticsWidgetSummary` 风格 KPI 卡 + 平台构成 Card（原生 SVG 环图 + 图例即 Tabs）+ 平台细分 Card + Top tags Card；数据全部来自 `CollectionAnalyticsSnapshot` 真实字段（D17）。
@@ -866,7 +906,7 @@ grep -rn "MUI v7\|Chrome 116\|segmented\|header-actions" CLAUDE.md entrypoints .
 | a11y | Tab 顺序：nav → toggle → header 四控件 → 内容；抽屉/Drawer 焦点闭环与归还；`aria-current`/`aria-expanded` 正确 | 手动 + 结构测试 |
 | 对比度 | 契约测试（accent/contained/soft/platform）全绿 | vitest |
 | i18n | `tests/i18n-no-hardcoded.test.ts` 绿；zh/en 切换无 missing key warn | vitest + DEV console |
-| 依赖边界 | `tests/snackbar-import-boundary.test.ts`、`tests/platform-completeness-contract.test.ts`、`tests/lib-import-smoke.test.ts` 绿 | vitest |
+| 依赖边界 | `tests/ui-vendor-boundaries.test.ts`（Step 5 把 `sonner` 并入该表，不新建 `snackbar-import-boundary`）、`tests/platform-completeness-contract.test.ts`、`tests/lib-import-smoke.test.ts` 绿 | vitest |
 | 存储 | `favbase-color-mode`、`local:sidebarPinned`、`local:locale` 旧值仍被读取；`local:themeSettings` 缺省回退 | 手动（清 storage 再开） |
 
 ## 7. 文档同步清单
@@ -878,7 +918,7 @@ grep -rn "MUI v7\|Chrome 116\|segmented\|header-actions" CLAUDE.md entrypoints .
 | 2 | `theme/CLAUDE.md`、`lib/storage/CLAUDE.md`、`components/settings/CLAUDE.md`（新） |
 | 3 | 六个新 `components/*/CLAUDE.md`、`components/collection/CLAUDE.md`、`components/iconify/CLAUDE.md`（图标清单） |
 | 4 | `layouts/CLAUDE.md`（重写）、`components/nav-section/CLAUDE.md`、`components/settings/CLAUDE.md`、`entrypoints/app/CLAUDE.md`（App.tsx 挂载）、`theme/CLAUDE.md`（`mode-transition.ts`）、`components/iconify/CLAUDE.md`（5 图标）、`welcome/CLAUDE.md`（顶栏控件）、**`.trellis/spec/frontend/{ui-design-system,i18n-conventions}.md`**（§8 shell 全节重写 + §12 scope + §15 例外 + 两条 key 命名行；原清单把 spec 全推到 Step 10，但 §8 逐条都已失真，见 trellis-check）、**`sections/{bookmarks,github-stars,x,youtube,zhihu}/CLAUDE.md`**（路由/导航行的 active 判定来源）、**`docs/ui-baseline/app-runtime-check.mjs`**（shell DOM 变了，验证脚本的选择器必须同步——首轮遗漏，见第二轮复核）、`.trellis/spec/frontend/ui-design-system.md` §16（运行时验证 transport 与「验证工具属 shell 契约」，见第二轮 trellis-check） |
-| 5 | `components/snackbar/CLAUDE.md`、`sections/settings/CLAUDE.md`、`sections/overview/CLAUDE.md`、`entrypoints/app/CLAUDE.md` |
+| 5 | `components/snackbar/CLAUDE.md`、`sections/settings/CLAUDE.md`、`sections/overview/CLAUDE.md`、`entrypoints/app/CLAUDE.md`、根 `CLAUDE.md`、**`.trellis/spec/frontend/{ui-design-system,i18n-conventions}.md`**（§11 新增「One-shot Action Results」——toast 与内联状态按**存续期**而非严重度划分、一件事只报一次、region 与关闭按钮都要译名；i18n §2 补 `snackbar.*` 命名行与「具体文案优先」规则。原清单把 spec 全推到 Step 10，但这是本步**新引入**的 UI 契约，不写进去下一步就会有人再加内联 Alert，见 trellis-check） |
 | 6 | `sections/overview/CLAUDE.md`、`components/chart/CLAUDE.md`、`ui-design-system.md` §10 |
 | 7 | `sections/settings/CLAUDE.md` |
 | 8 | `components/collection/CLAUDE.md`、`hooks/CLAUDE.md`、六个 `sections/<platform>/CLAUDE.md` |
@@ -893,8 +933,8 @@ grep -rn "MUI v7\|Chrome 116\|segmented\|header-actions" CLAUDE.md entrypoints .
 | 1 | 已落地 2026-09-01，已合入 main（待五路由 light/dark 目测） | `c17625c` | app 69,266 B；Container 117,602 B；theme+registry 共用 chunk 16,395 B；jsx-runtime 56,544 B | C-2 回退 `#222B34`、C-3 soft primary → `text.accent`、C-4 Menu 继承 Popover paper；timeline（@mui/lab）未移植；详见 Step 1 执行记录 |
 | 2 | 已落地 2026-09-01，已合入 main（待预设/高对比目测） | `21323ec` | app 69,717 B；Container 118,269 B；theme+registry 共用 chunk 17,057 B | C-5 全过线无回退；D14 墨/白派生表；无 `update-components.ts`、无 `version` 字段、Provider 挂 main.tsx、ThemeProvider 可选读 context、删 dark `lighter` 再着墨；详见 Step 2 执行记录 |
 | 3 | 已落地 2026-09-01（与 Step 2 并列开发，前置只有 Step 1），2026-09-02 rebase 到 Step 2 之上后合入 main（待目测） | `6830293` | app 69,645 B；Container（共享 MUI）118,133 B；jsx-runtime 56,424 B（rebase 到 Step 2 之上后重测；并列分支上单独测得 app 69,294 / Container 118,157） | 六原语 + `theme/create-classes.ts` + `tests/setup/app-dom.ts`；C-6 消解（EmptyContent 不设默认 title）；**修 Minimal 移植缺陷**：MUI v9 不转发 `slotProps.paper.ref`，CustomPopover 箭头改为经自身 `parentElement` 反查 paper；simplebar 因暂无消费者被 tree-shake，未进任何 chunk（体积代价待 Step 4 接入后再记）；详见 Step 3 执行记录 |
-| 4 | 已落地 2026-09-02（待 8 张截图与键盘目测） | 待用户 commit | app 81,516 B；Container（共享 MUI）122,177 B；jsx-runtime 56,544 B | nav-section（vertical+mini+flyout）+ 四控件 + 外观抽屉 + `theme/mode-transition.ts`；simplebar 首次进产物（只在 app chunk）；鱼骨线换 Minimal bullet（用户决定）；`compactLayout` 语义、`nav-active` 归属、激活态两级同色三处偏离手册；第二轮复核补齐 8 处漏掉的调用点同步（六处 CLAUDE.md + `app-runtime-check.mjs` 两处死选择器），详见 Step 4 执行记录 |
-| 5 | 未开始 | | | |
+| 4 | 已落地 2026-09-02（待 8 张截图与键盘目测） | `c6a9476` | app 81,516 B；Container（共享 MUI）122,177 B；jsx-runtime 56,544 B | nav-section（vertical+mini+flyout）+ 四控件 + 外观抽屉 + `theme/mode-transition.ts`；simplebar 首次进产物（只在 app chunk）；鱼骨线换 Minimal bullet（用户决定）；`compactLayout` 语义、`nav-active` 归属、激活态两级同色三处偏离手册；第二轮复核补齐 8 处漏掉的调用点同步（六处 CLAUDE.md + `app-runtime-check.mjs` 两处死选择器），详见 Step 4 执行记录 |
+| 5 | 已落地 2026-09-02（待五处 toast 目测） | 待用户 commit | app 91,871 B（+10,355）；Container（共享 MUI）122,743 B（+566）；jsx-runtime 56,694 B（+150）——trellis-check 补完 `closeButtonAriaLabel` 后重测 | sonner 2.0.8 实测 +10.1 KB gz，高于手册估的 ~7 KB（它把自己的 CSS 字符串也打进 JS）；三处偏离手册（`handleSave` 不返回 boolean、守卫并入 `ui-vendor-boundaries`、失败文案具体优先）；详见 Step 5 执行记录 |
 | 6 | 未开始 | | | |
 | 7 | 未开始 | | | |
 | 8 | 未开始 | | | |

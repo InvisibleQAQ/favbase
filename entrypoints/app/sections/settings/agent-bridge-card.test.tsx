@@ -32,6 +32,8 @@ const mocks = vi.hoisted(() => ({
   configListener: null as null | ((value: AgentBridgeConfig) => void),
   statusListener: null as null | ((value: AgentBridgeStatus) => void),
   writeText: vi.fn(),
+  toastSuccess: vi.fn(),
+  toastError: vi.fn(),
   t: (key: string, params?: Record<string, string | number>) => {
     let value = key === 'settings.agentBridge.retryIn'
       ? `${key}:{{time}}`
@@ -78,6 +80,10 @@ vi.mock('@/lib/i18n/use-translation', () => ({
 
 vi.mock('../../components/iconify', () => ({
   Iconify: ({ icon }: { icon: string }) => <span data-icon={icon} aria-hidden="true" />,
+}));
+
+vi.mock('../../components/snackbar', () => ({
+  toast: { success: mocks.toastSuccess, error: mocks.toastError },
 }));
 
 import {
@@ -156,6 +162,8 @@ describe('AgentBridgeCard', () => {
     mocks.configListener = null;
     mocks.statusListener = null;
     mocks.writeText.mockReset().mockResolvedValue(undefined);
+    mocks.toastSuccess.mockReset();
+    mocks.toastError.mockReset();
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value: { writeText: mocks.writeText },
@@ -217,7 +225,10 @@ describe('AgentBridgeCard', () => {
     expect(mocks.writeText).toHaveBeenLastCalledWith(
       buildSetupCommand('existing-token', 17_836),
     );
-    expect(container.textContent).toContain('settings.agentBridge.copySuccess');
+    // docs/25 Step 5: a copy is a one-shot action, so the result is a toast and
+    // nothing is left behind in the card.
+    expect(mocks.toastSuccess).toHaveBeenCalledExactlyOnceWith('settings.agentBridge.copySuccess');
+    expect(container.textContent).not.toContain('settings.agentBridge.copySuccess');
   });
 
   it('resets the token without changing enablement or port', async () => {
@@ -238,13 +249,15 @@ describe('AgentBridgeCard', () => {
     expect(persisted.tokenCreatedAt).toEqual(expect.any(Number));
   });
 
-  it('shows a recoverable error when clipboard access fails', async () => {
+  it('reports a clipboard failure through the snackbar, not the card body', async () => {
     mocks.writeText.mockRejectedValueOnce(new Error('permission denied'));
     await render({ ...DEFAULT_CONFIG, token: 'existing-token', tokenCreatedAt: 1 });
 
     await act(async () => findButton(container, 'settings.agentBridge.copySetup').click());
 
-    expect(container.textContent).toContain('settings.agentBridge.copyFailed');
+    expect(mocks.toastError).toHaveBeenCalledExactlyOnceWith('settings.agentBridge.copyFailed');
+    expect(mocks.toastSuccess).not.toHaveBeenCalled();
+    expect(container.textContent).not.toContain('settings.agentBridge.copyFailed');
   });
 
   it('renders status updates from storage without remounting', async () => {

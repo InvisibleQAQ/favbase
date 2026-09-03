@@ -10,7 +10,9 @@ import path from 'node:path';
  * becomes decorative and the bundle grows a second copy of the same idea.
  * `lib/**` must never see them at all — it has no DOM.
  *
- * Step 5 adds `sonner` here, owned by `components/snackbar/**`.
+ * docs/25 Step 5 landed `sonner` in the same table rather than in a second
+ * `tests/snackbar-import-boundary.test.ts`: two files enforcing one rule is the
+ * rule rotting in one of them.
  */
 
 const ROOT = path.resolve(__dirname, '..');
@@ -24,6 +26,7 @@ type VendorRule = {
 
 const VENDOR_RULES: VendorRule[] = [
   { pkg: 'simplebar-react', owner: 'entrypoints/app/components/scrollbar' },
+  { pkg: 'sonner', owner: 'entrypoints/app/components/snackbar' },
 ];
 
 /** Directories scanned for stray imports. */

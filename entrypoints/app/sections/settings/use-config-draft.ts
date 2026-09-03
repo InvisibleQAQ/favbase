@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { t } from '@/lib/i18n';
+import { toast } from '../../components/snackbar';
+
 // ---------------------------------------------------------------------------
 // Pure gate logic (unit-testable without React)
 // ---------------------------------------------------------------------------
@@ -58,7 +61,7 @@ export interface ConfigDraftState<T extends { provider: string }, R> extends Dra
   testResult: R | null;
   /** Last test failure message — cleared when a connection field changes. */
   testError: string | null;
-  /** Runs `save(draft)`; on success resets touched (external syncs resume) and clears the verified signature (Save returns to disabled, success Alert yields to the persistent badge). */
+  /** Runs `save(draft)`; on success resets touched (external syncs resume) and clears the verified signature (Save returns to disabled, success Alert yields to the persistent badge). Either outcome raises a toast; it never rejects. */
   handleSave: () => Promise<void>;
   isSaving: boolean;
 }
@@ -155,6 +158,12 @@ export function useConfigDraft<T extends { provider: string }, R>(options: {
       // (Save returns to disabled, the success Alert yields to the saved badge).
       touchedRef.current = false;
       setVerifiedSig(null);
+      toast.success(t('snackbar.saved'));
+    } catch {
+      // The Save button is a bare `onClick`, so a rejection here used to escape
+      // as an unhandled rejection with nothing on screen. The toast is now the
+      // failure channel; the draft stays touched so the user can retry.
+      toast.error(t('snackbar.saveFailed'));
     } finally {
       setIsSaving(false);
     }

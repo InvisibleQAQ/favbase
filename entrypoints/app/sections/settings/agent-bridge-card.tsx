@@ -30,11 +30,10 @@ import {
   type AgentBridgeConnectionState,
 } from '@/lib/storage';
 import { Iconify } from '../../components/iconify';
+import { toast } from '../../components/snackbar';
 import { SettingsPanel } from './settings-panel';
 
 type DisplayState = AgentBridgeConnectionState | 'loading';
-type CopyTarget = 'token' | 'setup';
-type CopyFeedback = { target: CopyTarget; ok: boolean };
 
 const STATE_LABELS: Record<DisplayState, LocaleKeys> = {
   loading: 'settings.agentBridge.stateLoading',
@@ -116,7 +115,6 @@ export function AgentBridgeCard() {
   const [saving, setSaving] = useState(false);
   const [showToken, setShowToken] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
-  const [copyFeedback, setCopyFeedback] = useState<CopyFeedback | null>(null);
   const [clockNow, setClockNow] = useState(() => Date.now());
   const configRef = useRef(config);
   const portDirtyRef = useRef(false);
@@ -235,14 +233,15 @@ export function AgentBridgeCard() {
     setShowToken(false);
   };
 
-  const handleCopy = async (target: CopyTarget, value: string) => {
-    setCopyFeedback(null);
+  // A copy is a one-shot action, so its result is a toast (docs/25 D6 plan A);
+  // both the token field and the two setup-command buttons share this handler.
+  const handleCopy = async (value: string) => {
     try {
       if (!navigator.clipboard?.writeText) throw new Error('Clipboard API unavailable');
       await navigator.clipboard.writeText(value);
-      setCopyFeedback({ target, ok: true });
+      toast.success(t('settings.agentBridge.copySuccess'));
     } catch {
-      setCopyFeedback({ target, ok: false });
+      toast.error(t('settings.agentBridge.copyFailed'));
     }
   };
 
@@ -367,7 +366,7 @@ export function AgentBridgeCard() {
                               edge="end"
                               disabled={config.token === ''}
                               aria-label={t('settings.agentBridge.copyToken')}
-                              onClick={() => void handleCopy('token', config.token)}
+                              onClick={() => void handleCopy(config.token)}
                             >
                               <Iconify icon="lucide:copy" width={20} />
                             </IconButton>
@@ -453,12 +452,10 @@ export function AgentBridgeCard() {
                     disabled={!commandReady || saving}
                     startIcon={<Iconify icon="lucide:copy" width={18} />}
                     onClick={() => {
-                      void handleCopy('setup', buildSetupCommand(config.token, config.port));
+                      void handleCopy(buildSetupCommand(config.token, config.port));
                     }}
                   >
-                    {copyFeedback?.target === 'setup' && copyFeedback.ok
-                      ? t('settings.agentBridge.copied')
-                      : t('settings.agentBridge.copySetupToFix')}
+                    {t('settings.agentBridge.copySetupToFix')}
                   </Button>
                 </Stack>
               </Alert>
@@ -479,26 +476,14 @@ export function AgentBridgeCard() {
                   disabled={!commandReady || saving}
                   startIcon={<Iconify icon="lucide:copy" width={20} />}
                   onClick={() => {
-                    void handleCopy('setup', buildSetupCommand(config.token, config.port));
+                    void handleCopy(buildSetupCommand(config.token, config.port));
                   }}
                 >
-                  {copyFeedback?.target === 'setup' && copyFeedback.ok
-                    ? t('settings.agentBridge.copied')
-                    : t('settings.agentBridge.copySetup')}
+                  {t('settings.agentBridge.copySetup')}
                 </Button>
               </Box>
             </Box>
           </Grid>
-
-          {copyFeedback && (
-            <Grid size={{ xs: 12 }}>
-              <Alert severity={copyFeedback.ok ? 'success' : 'error'}>
-                {copyFeedback.ok
-                  ? t('settings.agentBridge.copySuccess')
-                  : t('settings.agentBridge.copyFailed')}
-              </Alert>
-            </Grid>
-          )}
 
           {localError && (
             <Grid size={{ xs: 12 }}>

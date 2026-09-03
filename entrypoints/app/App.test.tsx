@@ -39,6 +39,12 @@ vi.mock('./components/settings', () => ({
   SettingsDrawer: () => <div data-testid="settings-drawer" />,
 }));
 
+// Same reasoning for the toast region (docs/25 Step 5): the real one reaches
+// the i18n store, and mounting it here is the wiring under test.
+vi.mock('./components/snackbar', () => ({
+  Snackbar: () => <div data-testid="snackbar" />,
+}));
+
 import App from './App';
 
 describe('App Agent Bridge startup', () => {
@@ -69,6 +75,7 @@ describe('App Agent Bridge startup', () => {
     });
     expect(container.querySelector('[data-testid="outlet"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="settings-drawer"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="snackbar"]')).not.toBeNull();
   });
 
   it('keeps the app mounted when the immediate request fails', async () => {

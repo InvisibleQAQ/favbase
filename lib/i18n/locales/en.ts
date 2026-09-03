@@ -93,7 +93,6 @@ const en: Record<LocaleKeys, string> = {
   'settings.agentBridge.commandsHint': 'Copy and run it once in a terminal: it writes the local config and installs the favbase skill for Claude Code and Codex. It contains the Bridge Token, so do not publish it.',
   'settings.agentBridge.copySetup': 'Copy setup command',
   'settings.agentBridge.copySetupToFix': 'Copy repair command',
-  'settings.agentBridge.copied': 'Copied',
   'settings.agentBridge.copySuccess': 'Copied to the clipboard',
   'settings.agentBridge.copyFailed': 'Copy failed — check browser clipboard permission and try again',
   'settings.agentBridge.loadFailed': 'Could not load Agent Bridge settings — reload Settings and try again',
@@ -633,6 +632,19 @@ const en: Record<LocaleKeys, string> = {
   'tags.showMore': 'Show {{n}} more',
   'tags.showLess': 'Show less',
   'tags.noMatches': 'No videos match the selected tags',
+
+  // One-shot action results (docs/25 Step 5, D6 plan A). Only the generic
+  // strings live here — a failure that already has a specific message
+  // (settings.sync.err.*, export.*, settings.agentBridge.copy*) keeps it.
+  'snackbar.regionLabel': 'Notifications',
+  'snackbar.closeAria': 'Close notification',
+  'snackbar.saved': 'Saved',
+  'snackbar.saveFailed': 'Could not save. Please try again.',
+  'snackbar.synced': 'Sync complete',
+  'snackbar.syncFailed': 'Sync failed. Please try again.',
+  'snackbar.remoteCleared': 'Remote data cleared',
+  'snackbar.clearFailed': 'Could not clear remote data. Please try again.',
+  'snackbar.exported': 'Export complete',
 
   'export.title': 'Data Export',
   'export.subtitle': 'Export all data from the database',

@@ -44,6 +44,7 @@
     "react-router-dom": "^7.18.0",
     "remark-gfm": "^4.0.1",
     "simplebar-react": "^3.3.2",
+    "sonner": "^2.0.8",
     "turndown": "^7.2.4",
     "webdav": "^5.10.0",
     "zod": "^4.4.3"

@@ -1,5 +1,23 @@
-import { describe, it, expect } from 'vitest';
-import { computeDraftGate, connectionSignature } from './use-config-draft';
+import { act, createElement } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+const mocks = vi.hoisted(() => ({
+  toastSuccess: vi.fn(),
+  toastError: vi.fn(),
+}));
+
+vi.mock('@/lib/i18n', () => ({ t: (key: string) => key }));
+
+vi.mock('../../components/snackbar', () => ({
+  toast: { success: mocks.toastSuccess, error: mocks.toastError },
+}));
+
+import { computeDraftGate, connectionSignature, useConfigDraft } from './use-config-draft';
+
+import type { ConfigDraftState } from './use-config-draft';
 
 interface Draft {
   provider: string;
@@ -98,5 +116,75 @@ describe('computeDraftGate', () => {
     const gate = computeDraftGate(draft, saved, CONN_KEYS, staleSig);
     expect(gate.verified).toBe(false);
     expect(gate.canSave).toBe(false);
+  });
+});
+
+describe('useConfigDraft save results', () => {
+  // The Save button is a bare `onClick`, so the hook — not the card — owns the
+  // report (docs/25 Step 5): success and failure both leave through a toast and
+  // handleSave never rejects.
+  let container: HTMLDivElement;
+  let root: Root;
+
+  // Stable identities: `derive` feeds a `[derive]` effect inside the hook, so a
+  // fresh closure per render is an infinite re-render, exactly as it would be
+  // in a card that forgot to memoize it.
+  const derive = () => ({ ...saved });
+  const runTest = async () => true;
+
+  function mount(save: (draft: Draft) => Promise<void>): () => ConfigDraftState<Draft, boolean> {
+    let latest: ConfigDraftState<Draft, boolean> | null = null;
+
+    function Probe() {
+      latest = useConfigDraft<Draft, boolean>({
+        derive,
+        connectionKeys: CONN_KEYS,
+        runTest,
+        save,
+      });
+      return null;
+    }
+
+    act(() => root.render(createElement(Probe)));
+    return () => {
+      if (!latest) throw new Error('Probe never rendered');
+      return latest;
+    };
+  }
+
+  beforeEach(() => {
+    mocks.toastSuccess.mockReset();
+    mocks.toastError.mockReset();
+    container = document.createElement('div');
+    document.body.append(container);
+    root = createRoot(container);
+  });
+
+  afterEach(() => {
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  it('raises one success toast and clears the saving flag', async () => {
+    const save = vi.fn().mockResolvedValue(undefined);
+    const state = mount(save);
+
+    await act(async () => state().handleSave());
+
+    expect(save).toHaveBeenCalledOnce();
+    expect(mocks.toastSuccess).toHaveBeenCalledExactlyOnceWith('snackbar.saved');
+    expect(mocks.toastError).not.toHaveBeenCalled();
+    expect(state().isSaving).toBe(false);
+  });
+
+  it('swallows a rejected save into one error toast instead of an unhandled rejection', async () => {
+    const save = vi.fn().mockRejectedValue(new Error('storage unavailable'));
+    const state = mount(save);
+
+    await act(async () => expect(state().handleSave()).resolves.toBeUndefined());
+
+    expect(mocks.toastError).toHaveBeenCalledExactlyOnceWith('snackbar.saveFailed');
+    expect(mocks.toastSuccess).not.toHaveBeenCalled();
+    expect(state().isSaving).toBe(false);
   });
 });
