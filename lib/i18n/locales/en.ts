@@ -382,6 +382,8 @@ const en: Record<LocaleKeys, string> = {
   'chat.composerLabel': 'Message',
   'chat.loading': 'Preparing assistant…',
   'chat.closeHistory': 'Close conversation history',
+  'chat.collapseNav': 'Collapse conversation list',
+  'chat.expandNav': 'Expand conversation list',
   'chat.userMessage': 'Your message',
   'chat.assistantMessage': 'Assistant response',
 

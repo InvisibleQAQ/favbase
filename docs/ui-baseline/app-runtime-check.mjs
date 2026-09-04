@@ -807,8 +807,10 @@ check(
 
 await goto('/chat');
 await cdp.send('Target.activateTarget', { targetId });
-const chatHistoryLabel = await evaluate(`document.querySelector('main h1')?.parentElement?.querySelector('button')?.getAttribute('aria-label')`);
-await evaluate(`document.querySelector('main h1')?.parentElement?.querySelector('button')?.click()`);
+// The history trigger sits in the chat card header (docs/25 Step 9); the h1's
+// parent is now the title column and holds no button.
+const chatHistoryLabel = await evaluate(`document.querySelector('[data-slot="chat-header"] button')?.getAttribute('aria-label')`);
+await evaluate(`document.querySelector('[data-slot="chat-header"] button')?.click()`);
 await sleep(400);
 report.interactions.chatDrawerOpen = await evaluate(`(() => {
   const papers = [...document.querySelectorAll('.MuiDrawer-paper')].filter((paper) => {

@@ -128,6 +128,15 @@ describe('ChatWorkspace', () => {
     expect(messageLog).not.toBeNull();
     expect(composer).not.toBeNull();
     expect(messageLog?.contains(composer)).toBe(false);
+    // The three regions are also addressable by slot, which is how the shell
+    // pieces are wired together after the Minimal split (docs/25 Step 9).
+    expect(conversationNav?.getAttribute('data-slot')).toBe('chat-nav');
+    expect(messageLog?.getAttribute('data-slot')).toBe('chat-messages');
+    // Reached by selector, not `form.contains(...)`: happy-dom's `contains`
+    // answers false for every descendant of a <form>.
+    expect(
+      container.querySelector('[data-slot="chat-input"] textarea[aria-label="chat.composerLabel"]'),
+    ).toBe(composer);
     expect(messageLog?.querySelector('[aria-label="chat.userMessage"]')).not.toBeNull();
     expect(messageLog?.querySelector('[aria-label="chat.assistantMessage"]')).not.toBeNull();
     expect(container.querySelectorAll('h1')).toHaveLength(1);
@@ -323,5 +332,49 @@ describe('ChatWorkspace', () => {
       pressEnter(textarea!, { isComposing: true });
     });
     expect(agent.send).not.toHaveBeenCalled();
+  });
+
+  it('collapses the desktop rail to icon width and back', () => {
+    act(() => {
+      root.render(
+        <ThemeProvider>
+          <ChatWorkspace agent={agent} />
+        </ThemeProvider>,
+      );
+    });
+
+    const rail = container.querySelector<HTMLElement>('[data-slot="chat-nav"]');
+    expect(rail).not.toBeNull();
+    expect(getComputedStyle(rail!).width).toBe('320px');
+
+    const collapse = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="chat.collapseNav"]',
+    );
+    act(() => collapse?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(getComputedStyle(rail!).width).toBe('96px');
+
+    const expand = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="chat.expandNav"]',
+    );
+    expect(expand).not.toBeNull();
+    act(() => expand?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(getComputedStyle(rail!).width).toBe('320px');
+  });
+
+  it('scrolls the message log through a real overflow element', () => {
+    act(() => {
+      root.render(
+        <ThemeProvider>
+          <ChatWorkspace agent={agent} />
+        </ThemeProvider>,
+      );
+    });
+
+    // Scrollbar draws its own bar but keeps the native scroll container, which
+    // is what keyboard and screen-reader scrolling ride on.
+    const scrollable = container.querySelector(
+      '[data-slot="chat-messages"] .simplebar-content-wrapper',
+    );
+    expect(scrollable).not.toBeNull();
   });
 });

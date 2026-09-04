@@ -373,6 +373,8 @@ const zhCN = {
   'chat.composerLabel': '提问内容',
   'chat.loading': '正在准备助手…',
   'chat.closeHistory': '关闭对话历史',
+  'chat.collapseNav': '收起会话列表',
+  'chat.expandNav': '展开会话列表',
   'chat.userMessage': '你的消息',
   'chat.assistantMessage': '助手回复',
 

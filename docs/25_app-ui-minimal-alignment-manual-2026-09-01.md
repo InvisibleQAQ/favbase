@@ -1,7 +1,7 @@
 # docs/25 — app.html 全面向 Minimal v7.7.0 看齐：分步改造手册
 
 日期：2026-09-01
-状态：**Step 0–7 已落地（Step 0–2 于 2026-09-01，Step 3 于 2026-09-02 rebase 合入，Step 4–5 于 2026-09-02 在 main 工作树实施并已 commit，Step 6–7 于 2026-09-03 在 main 工作树实施并已 commit），Step 8+ 未开工**。本文是可执行手册，不是设计随笔；每个 Step 都能独立开工、独立验证、独立回滚。
+状态：**Step 0–9 已落地（Step 0–2 于 2026-09-01，Step 3 于 2026-09-02 rebase 合入，Step 4–5 于 2026-09-02 在 main 工作树实施并已 commit，Step 6–7 于 2026-09-03、Step 8–9 于 2026-09-04 同样在 main 工作树实施并已 commit），Step 10 未开工**。本文是可执行手册，不是设计随笔；每个 Step 都能独立开工、独立验证、独立回滚。
 上位文档：`docs/23_favbase-app-minimal-dashboard-v7-adaptation-plan-zh-CN.md`（第一轮"保留自有世界"路线，本文第二轮**推翻**其 §6/§11 的大部分结论，见 §3）。
 需求与决策来源：`.trellis/tasks/09-01-refactor-app-ui-adopt-minimal-v7-7-0-full-visual-language-while-keeping-favbase-brand-docs-23-round-2/prd.md`（R1–R14，Open Questions 1–6 已全部关闭）。
 事实来源：同目录 `research/favbase-app-ui-current-state.md`（Favbase 现状，433 行）、`research/minimal-v7-ui-catalog.md`（Minimal 目录，299 行）。本文只引用、不复制这两份文件的内容；行号以 2026-09-01 工作树为准。
@@ -924,6 +924,8 @@ pnpm compile && pnpm test && pnpm build
 
 ### Step 9 — Chat shell 完整移植
 
+> **2026-09-04 已落地**（未 commit，用户自行提交）。实际与手册的偏差记录在本节末"执行记录"。
+
 **目标**：`sections/chat/chat-view.tsx` 拆成 Minimal chat 形态（`chat-layout / chat-nav / chat-header / chat-message-list / chat-message-item / chat-message-input / styles`），`NAV_WIDTH 320 / NAV_COLLAPSE_WIDTH 96`、header 72、input 56、气泡 `p 1.5 maxWidth 320`；保留 `ChatWorkspace` 7 个结构契约。
 
 **前置依赖**：Step 3（Scrollbar、CustomPopover）。
@@ -964,9 +966,45 @@ pnpm compile && pnpm test && pnpm build
 **回滚点**：`refactor(chat): port Minimal chat shell layout, nav, message list and input`。
 
 **完成判据**
-- [ ] `chat-view.tsx` ≤ 250 行；七个子文件各 ≤ 200 行
-- [ ] 7 个既有契约全部通过（允许选择器变更，不允许删除用例）
-- [ ] `sections/chat/CLAUDE.md` 重写文件 owner 表
+- [x] `chat-view.tsx` **190 行**；八个子文件 `layout` 91 / `chat-nav` 173 / `chat-nav-drawer` 68 / `chat-nav-item` 107 / `chat-header` 62 / `chat-message-list` 80 / `chat-message-item` 128 / `chat-message-input` 119，各 ≤ 200（**八个而非七个**：`styles.tsx` 无内容可放，Drawer 独立成文件，见执行记录第 4 条）
+- [x] 7 个既有契约全部通过（只改了选择器，零删除）+ 2 个新增
+- [x] `sections/chat/CLAUDE.md` 重写文件 owner 表
+- [x] 四步验证全绿：`vitest run entrypoints/app/sections/chat` 3 文件 20 例；`pnpm compile`；`pnpm test` 1407 例 + CLI 55 例（三个与本步无关的文件有 CPU 争用超时 flake，单独重跑全绿，见执行记录）；`pnpm build` + bundle contract 绿
+
+---
+
+#### Step 9 执行记录（2026-09-04，main 工作树）
+
+**做了什么**：`chat-view.tsx` 656 行拆成 190 行编排 + 八个子文件（`layout` / `chat-nav` / `chat-nav-drawer` / `chat-nav-item` / `chat-header` / `chat-message-list` / `chat-message-item` / `chat-message-input`）。会话 rail 320 可折叠到 96、列表走 `Scrollbar`、行是 72 高 `ListItemButton` + 48 首字头像；卡片 header 72 承载 h1 + 当前会话标题 + 移动端历史触发；composer 换 `InputBase`；用户气泡吃 Minimal 几何。新增 `chat.collapseNav` / `chat.expandNav` 两个双语 key，其余全部复用。
+
+**一处向用户请示、由用户拍板（2026-09-04）**：
+
+1. **助手回答不进气泡，用户提问进**。手册第 5 点写的是「气泡 `maxWidth 320`、助手气泡 `background.neutral`」，那是 Minimal 的 IM 尺寸。照抄会同时踩两个坑：320px 放不下 markdown 表格与代码块（横滚变成每个回答都要拖）；`chat-markdown.tsx` 的 `code`/`pre` 底色本来就是 `background.neutral`，助手气泡再铺一层，代码块与正文同色。备选是「助手上 neutral 底但不设 320」——代价是要连带改 `chat-markdown` 的代码块底色，越出本步。选定方案：用户提问 `p 1.5` / `minWidth 48` / `maxWidth 320` / `borderRadius 1` / `body2` / 16% 主色，助手保持满 760 轨道无框（即现状）。规则连同理由写进 `sections/chat/CLAUDE.md` 与 spec §11。
+
+**手册勘误（执行时核实）**：
+
+2. **「`layout.tsx` 的 `sx` 变量 `--nav-width 320 / --nav-collapse-width 96`」不存在**。`$MIN/sections/chat/layout.tsx` 全文只有六个 styled div，没有任何 CSS 变量；`NAV_WIDTH`/`NAV_COLLAPSE_WIDTH` 是 `$MIN/sections/chat/chat-nav.tsx:35-36` 的模块常量。本步照 Minimal 用常量（导出自 `layout.tsx`，rail 与 Drawer 共用）。造那两个变量只会多两个没人读的 token——移动 Drawer 在 portal 里，本来就读不到卡片 root 的变量。
+3. **「会话操作（`CustomPopover` 菜单：重命名/删除）」做不了**。`ConversationRuntime` 只有 `new/switch/delete`，标题是 `deriveTitle()` 从首轮消息派生的（`lib/chat/history.ts:54`）。加重命名要改 `lib/chat/history.ts` 并引入「用户标题 vs 派生标题」的持久化语义，越过 §0.2「不动 `lib/**`」；只剩删除的话，单项菜单不过是给按钮套了层壳，而删除已经在每一行上了。故 header 不放菜单——`CustomPopover` 的消费者仍然只有 Step 4 的 `LanguagePopover`。
+4. **文件名两处调整**：`chat-header-compose.tsx` → **`chat-header.tsx`**（Favbase 没有 compose，收件人选择无对应数据）；`styles.tsx` **不建**——Minimal 那两个 styled 都没有对应物（`ToggleButton` 是移动端浮动开关，我们的触发在 header 里；`CollapseButton` 是聊天室分组折叠头，我们没有分组）。空文件比没有文件更糟。腾出的位置给了 `chat-nav-drawer.tsx`：`chat-nav.tsx` 含 Drawer 是 238 行，超判据的 200，而 Drawer 的退出焦点契约本来就该独立成篇。
+
+**其余偏离手册（逐条判定）**：
+
+5. **composer 是 `minHeight: 56` 不是 `height: 56`**。Minimal 那条是单行输入；我们 Shift+Enter 要换行、`maxRows={6}`，写死 56 会把第二行裁掉。
+6. **发送/停止按钮留在 composer 行内**，不做成 Minimal 的「只能回车发送」。触屏用户没有回车键。位置从原来的输入框下方独立一行移进 `endAdornment`，`size="small"`，文案仍是 `chat.send`/`chat.stop`；附件/表情/麦克风三个装饰按钮不移植。
+7. **断点仍是 `lg`，不跟 Minimal 的 `md`**。改断点等于改响应式行为，属破坏（铁律 1），且 Drawer 的 `left` 偏移与全局 nav 宽联动也是按 `lg` 调好的。
+8. **激活行洗底用 8% 主色，不用 Minimal 的 `action.selected`**。这是 Step 2/Step 4 定下的 nav 激活图案，chat 会话行是同一类东西；用两套选中色只会让人以为它们含义不同。
+9. **`t` 不再从父组件透传**。原 `ConversationRail`/`ConversationRow` 是文件内的局部函数，靠 props 拿 `t`；拆成真正的组件后各自 `useTranslation()`，这也是根 `CLAUDE.md` i18n 段写的默认做法。
+10. **文档与验证脚本比 §7 清单多改三处**：spec `ui-design-system.md` §11 Chat 整节的数值全部失真（rail 264、Drawer 288、"outlined Paper"），§12 那句「trigger 与 modal 在同一组件」在本步之后字面上不成立——契约锁的是**显式 ref**，不是同一个文件，句子按此改写；根 `CLAUDE.md` 的 chat 索引行把会话持久化写成「WXT storage」，实际是 PGlite `chat_conversations`（`lib/chat/CLAUDE.md` 写对了，是索引行抄错），顺手修正。此外 **`docs/ui-baseline/app-runtime-check.mjs` 的 chat 探针变成死选择器**——它靠 `main h1` 的 `parentElement` 找历史按钮，而 h1 的父节点现在是标题列、里面没有按钮；改由 `LayoutHeader` 上新加的 `data-slot="chat-header"` 定位（同 Step 4/6 的教训：shell DOM 变了，验证脚本的选择器必须同 commit 跟上）。另外补了 `entrypoints/app/CLAUDE.md` 路由枚举里一直缺的 `/chat`。
+
+**测试**：`chat-view.test.tsx` 7 例全部保留、零 `it.skip`、零放宽；改动只有第 1 例新增三条 `data-slot` 断言（`chat-nav` / `chat-messages` / `chat-input`）。新增 2 例：折叠后 rail 计算宽度 320 → 96 → 320（`getComputedStyle`，与 `nav-vertical.test.tsx` 同法）；消息列表内存在 simplebar 的真实滚动容器。`chat-markdown.test.tsx`、`source-card.test.tsx` 零改动。
+
+**踩到的坑**：happy-dom 的 `Node.contains()` 对 `<form>` 的后代**一律返回 `false`**（同一棵树里 `div.contains(child)` 正常）。第 1 例原本想写 `form.contains(composer)`，只能改成后代选择器 `[data-slot="chat-input"] textarea[aria-label=…]`。已在测试与 `sections/chat/CLAUDE.md` 记下，免得下一个人把它「修」回去——注意原有的 `messageLog.contains(composer)` 断言不受影响（log 是 div，那条否定断言仍然有效）。
+
+**验证**：`npx vitest run entrypoints/app/sections/chat` 3 文件 20 例全绿；`pnpm compile` 零错；`pnpm test` **1407 例**（Step 8 的 1405 + 2 例新增）+ CLI 55 例；`pnpm build` 成功，`scripts/check-background-bundle.mjs` 绿（背景图 11 模块 / 939,265 B 不变）。全量跑里出现过 1–3 个 **`Test timed out in 5000ms`**，每次命中的文件都不同（`lib/database/proxy-db` / `lib/database/db` / `tests/lib-import-smoke` 的 bilibili 那例），三个文件单独重跑 21 例 2.9s 全绿——是已知的满载 CPU 争用 flake（同 Step 8），与本步无关：这三个文件本步一行没动。
+
+**体积**：app **91,616 B**（+53）、Container（共享 MUI）**122,157 B**（+478）、jsx-runtime **56,544 B**（−5）、chat 路由 chunk **54,155 B**。Container 涨的 478 B 是 chat 首次引入 `ListItemButton`/`ListItemText`/`InputBase`/`Avatar` 到共享 MUI chunk；simplebar 早在 Step 4 就进了 app chunk，本步复用不再计费。
+
+**仍待目测**：**页面 h1 从卡片外搬进了卡片 header**（与其他页面「标题在卡片上方」的排版不同——chat 是满高应用页，把唯一 h1 放进 72 header 才让那条 header 有内容，且省下 56px 高度；若目测觉得与其他页不协调，改回「h1 在卡外 + header 只放会话名」只动 `chat-view.tsx` 与 `chat-header.tsx` 两个文件）；桌面 320 ↔ 96 折叠动画与折叠态首字头像；移动端 Drawer 打开/Escape/选中后关闭与焦点归还；长 markdown 回答（表格 + 代码块）在 760 轨道内的滚动与横滚；dark 模式下用户气泡 16% 洗底与助手正文的对比；六个预设切换后用户气泡随主色；72px header 在窄屏下 h1 + 会话标题两行不溢出。本轮无法代跑（当前 Chrome 未以 `--remote-debugging-port` 启动，同 Step 4–8）。
 
 ---
 
@@ -1038,7 +1076,7 @@ grep -rn "MUI v7\|Chrome 116\|segmented\|header-actions" CLAUDE.md entrypoints .
 | 6 | `sections/overview/CLAUDE.md`、`components/chart/CLAUDE.md`、`ui-design-system.md` §10（全节改写）+ §2 owner 行 + §15 两条禁令行 + §16（对比度审计现在把 opacity 折进前景，见 trellis-check 第 3 条）、**`docs/ui-baseline/app-runtime-check.mjs`**（dashboard 实况探针的 `[data-section="summary"]` 变成死选择器，同 Step 4 的教训）、根 `CLAUDE.md`、**`entrypoints/app/pages/CLAUDE.md`**（dashboard 行还写着「hairline SummaryBand + 无 KPI 卡片」，是当前有效文档里唯一的漂移）、**`entrypoints/app/CLAUDE.md`**（`collectionPlatformById` + v9 slot 类名陷阱）、`components/iconify/icon-sets.ts` 的「summary-band glyphs」注释；`i18n-conventions.md` 不需改（无新命名族，只增删一个 `dashboard.*` 键） |
 | 7 | `sections/settings/CLAUDE.md`、**`.trellis/spec/frontend/{ui-design-system,i18n-conventions}.md`**（§11 Settings 两条 bullet 失真 + 测试断言行；i18n §2 新增 `breadcrumbs.*` 命名族）、**`entrypoints/app/CLAUDE.md`**（v9 死 CSS 的活例子随文件删除而失效）、**`components/custom-breadcrumbs/CLAUDE.md`** 与 **`components/collection/CLAUDE.md`**（首个 `links` 消费者 + `href` 写路由相对路径）——首轮清单只列了第一项，见 Step 7 执行记录第 7-9 条 |
 | 8 | `components/collection/CLAUDE.md`、`hooks/CLAUDE.md`、六个 `sections/<platform>/CLAUDE.md`、**`sections/collections/CLAUDE.md`**（聚合页也接了面包屑）、**`components/tags/CLAUDE.md`**（chip 变体规则）、**`components/label/CLAUDE.md`**（首个真实消费者）、**`components/custom-breadcrumbs/CLAUDE.md`**（消费者 1 → 8）、**`.trellis/spec/frontend/ui-design-system.md`** §9 + §15——首轮清单只列了前两类，见 Step 8 执行记录第 10 条 |
-| 9 | `sections/chat/CLAUDE.md` |
+| 9 | `sections/chat/CLAUDE.md`（重写为文件 owner 表）、**`.trellis/spec/frontend/ui-design-system.md`** §11 Chat 全节（rail 264 → 320/96、Drawer 288 → 320、outlined Paper → Minimal 卡片、气泡与 composer 两条新规）+ §12 退出焦点契约的 scope 句（trigger 与 Drawer 现在分处两个文件，契约锁的是显式 ref 不是同一文件）、根 `CLAUDE.md`（索引行 + chat 会话持久化写的是 WXT storage，实为 PGlite）、**`docs/ui-baseline/app-runtime-check.mjs`**（chat 探针改经 `data-slot="chat-header"`）、`entrypoints/app/CLAUDE.md`（路由枚举补 `/chat`）——首轮清单只列了第一项，见 Step 9 执行记录第 10 条 |
 | 10 | `index.html` 契约注释、`ui-design-system.md` 全量、`directory-structure.md`、`docs/23` 注记、根 `CLAUDE.md` 索引状态 |
 
 ## 8. 进度勾选表
@@ -1054,7 +1092,7 @@ grep -rn "MUI v7\|Chrome 116\|segmented\|header-actions" CLAUDE.md entrypoints .
 | 6 | 已落地 2026-09-03，已 commit（待六项目测） | `6737714` | app 91,443 B（−428）；Container（共享 MUI）122,166 B（−577）；jsx-runtime 56,424 B（−270）——trellis-check 六处修完后重测（较首测 +10 B，`tabsClasses` 常量与共享 registry map 的净差） | 零依赖 SVG 环图 + 四张 KPI 卡；构成卡改上下堆叠（用户决定）；六个子组件而非四个；Card 标题取 `h2 + variant h4`（对齐 `SettingsPanel`）；`data-segment` 取代 `data-platform`；C-7 消解（Export 卡不在 `/`，大纲仍 `[1,2,2,3,2]`）；`app-runtime-check.mjs` 探针同步改读 `kpi-value` 且新增断言；KPI caption 去掉 `opacity`（WCAG）；详见 Step 6 执行记录 |
 | 7 | 已落地 2026-09-03，已 commit（待五项目测） | `82c6d80` | app 91,599 B（+156）；Container（共享 MUI）122,390 B（+224）；jsx-runtime 56,544 B；settings 路由 chunk 29,876 B | 两级导航改吃 theme 默认下划线 Tabs，`segmented-tabs-sx.ts` 删除；新增 `breadcrumbs.home`（用户决定，Step 8 复用）；**手册两处勘误**——crumb `href` 是 `'/'` 不是 `'#/'`、指示条是 `currentColor` 不是 `primary.main`；rail 保留响应式两形态 + 竖排左对齐；面包屑首次进产物；详见 Step 7 执行记录 |
 | 8 | 已落地 2026-09-04，已 commit（待五项目测） | `f11b8ed` | app 91,563 B（−36）；Container（共享 MUI）121,679 B（−711）；jsx-runtime 56,549 B（+5） | `use-collection-breadcrumbs.ts` + 七个收藏页接面包屑（末项取导航名、bilibili 详情页多一级夹名，用户决定）；chip 全面吃主题默认 soft（`CollapsibleChipRow` 的展开 chip 刻意留 outlined）；zhihu 类型戳 → `Label`；**手册四处勘误**——六个 view 测试不存在 / zhihu 戳无 `data-slot` / soft 已是默认 / 聚合页不走 scaffold；平台契约测试新增「view 必须调用面包屑 hook」；详见 Step 8 执行记录 |
-| 9 | 未开始 | | | |
+| 9 | 已落地 2026-09-04（未 commit，待用户提交；待六项目测） | | app 91,616 B（+53）；Container（共享 MUI）122,157 B（+478）；jsx-runtime 56,544 B（−5）；chat 路由 chunk 54,155 B | `chat-view.tsx` 656 → 190 行编排 + 八个子文件；**用户决定**助手回答不进气泡（320 宽放不下 markdown）；`styles.tsx` 不建、`chat-nav-drawer.tsx` 顶替；三处手册勘误（layout 无 CSS 变量 / 无重命名 API / 文件名 compose）；详见 Step 9 执行记录 |
 | 10 | 未开始 | | | |
 
 ---
@@ -1098,6 +1136,6 @@ grep -rn "MUI v7\|Chrome 116\|segmented\|header-actions" CLAUDE.md entrypoints .
 
 - **D-1** PRD "DESIGN.md（根）需同步"：根目录不存在 `DESIGN.md`（`git ls-files` 无匹配）。`entrypoints/app/index.html` 契约注释里对它的引用是悬空的，Step 10 改指 docs/25。
 - **D-2** PRD R3 曾写 `shape.borderRadius → 16`：错误。base 仍 8，Card/Dialog 16 是 Minimal `×2` 派生（D9）。
-- **D-3** 我在早期讨论中说 chat 有"26 个结构测试"：实际 `sections/chat/` 3 个测试文件共 16 例，`ChatWorkspace` 受影响 7 例（Step 9）。
+- **D-3** 我在早期讨论中说 chat 有"26 个结构测试"：实际 `sections/chat/` 3 个测试文件共 16 例，`ChatWorkspace` 受影响 7 例（Step 9）。Step 9 落地后是 3 文件 20 例，`ChatWorkspace` 9 例（7 保留 + 2 新增）。
 - **D-4** D5 的 simplebar/sonner 是用户决定，我的原建议（只引 sonner）被否；本文按用户决定执行，不再重议。
 
