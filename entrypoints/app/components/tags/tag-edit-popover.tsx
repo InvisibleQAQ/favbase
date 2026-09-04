@@ -103,7 +103,6 @@ export function TagEditPopover({
               key={tag.id}
               label={tag.name}
               size="small"
-              variant="outlined"
               disabled={busy}
               onDelete={() => void handleRemove(tag.id)}
             />

@@ -2,6 +2,8 @@
 
 浏览器书签收藏页（显示名固定为 `Browser Bookmarks` / `浏览器书签`，路由为 `/collections/bookmarks` + `/collections/bookmarks/:folderId`）。消费共享 `CollectionPageScaffold`，固定顺序：标题/系统状态（含统一「立即获取」按钮）→ 搜索 → 配置提醒横幅（若有）→ 正文提取进度面板 → 文件夹主分类 → 标签 → 卡片列表。同步挂载时自动触发一次（`startJob` 去重使按钮与 auto-sync 互不冲突）；**同步成功后自动链式启动正文提取**（2026-07-26 推翻 `5a04c87` 的「手动提取」决策——控制面收敛为统一获取按钮 + per-platform 闸门，暂停/继续经 `pauseLibrary('bookmarks')`，不再有平台私有启停按钮）。
 
+**面包屑**（docs/25 Step 8）：`useCollectionBreadcrumbs('bookmarks')` → `首页 / 收藏夹 / 浏览器书签`。**`:folderId` 不进面包屑**——文件夹是带「全部」chip 的可选筛选，不是必经层级（对比 bilibili：那里强制重定向到某个夹，夹是层级）。
+
 ## 模块结构
 
 - `bookmarks-view.tsx` — scaffold Adapter：常驻 pipeline 为 Fetch → Extraction → Embedding/Tagging 并行，段装配/标签/coverage key 经共享 `useCollectionPipeline`（`app/hooks/`，docs/20 中-7）——本 view 注入默认 progress 的 Fetch runtime（本地书签无 `fetchedCount`）、`extraction` content 段（`extraction.extractJob`）与 `extraRefreshKey: extraction.running`；Search 后注入共享 provider Configuration Blocker notice。coverage/runtime、统一获取按钮、文件夹、卡片和 page-scope operation 不变。

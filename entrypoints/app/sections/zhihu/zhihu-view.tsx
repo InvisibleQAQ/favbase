@@ -14,6 +14,7 @@ import {
 } from '../../components/collection';
 import { backgroundJobRuntime, fetchedCountProgress } from '../../hooks/pipeline-segments';
 import { useCollectionPipeline } from '../../hooks/use-collection-pipeline';
+import { useCollectionBreadcrumbs } from '../../hooks/use-collection-breadcrumbs';
 import { useZhihuFavorites, type ZhihuSyncError } from './use-zhihu-favorites';
 import { CollectionChips } from './collection-chips';
 import { ZhihuCard } from './zhihu-card';
@@ -110,6 +111,7 @@ function EmptyLibraryState({ syncing, onSync }: { syncing: boolean; onSync: () =
 export function ZhihuView() {
   const { t } = useTranslation();
   const zhihu = useZhihuFavorites();
+  const breadcrumbs = useCollectionBreadcrumbs(PLATFORM);
   const { coverage, coverageStatus, segments } = useCollectionPipeline({
     platform: PLATFORM,
     syncing: zhihu.syncing,
@@ -151,6 +153,7 @@ export function ZhihuView() {
       onSearchInput={zhihu.setSearchInput}
       copy={{
         title: t('zhihu.title'),
+        breadcrumbs,
         caption: captionParts.length > 0 ? captionParts.join(' · ') : undefined,
         searchPlaceholder: t('zhihu.searchPlaceholder'),
         noMatches: t('zhihu.noMatches'),

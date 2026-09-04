@@ -845,6 +845,8 @@ pnpm compile && pnpm test && pnpm build
 
 ### Step 8 — 六平台收藏页
 
+> **2026-09-04 已落地**（未 commit，用户自行提交）。实际与手册的偏差记录在本节末"执行记录"。
+
 **目标**：平台页几乎全部继承 Step 1/3；本步只处理 chip 变体、`Label`、面包屑、`CollectionCard` 复核。
 
 **前置依赖**：Step 3。
@@ -881,9 +883,42 @@ pnpm compile && pnpm test && pnpm build
 **回滚点**：`refactor(collections): soft chips, Label stamps and breadcrumbs across six platform pages`。
 
 **完成判据**
-- [ ] 七个页面面包屑末项正确，Home/Collections 可点
-- [ ] `grep -rn 'variant="filled"' entrypoints/app/components/tags` 零结果
-- [ ] 文档同步七个 `CLAUDE.md`
+- [x] 七个页面面包屑末项正确，Home/Collections 可点（数据层锁在 `use-collection-breadcrumbs.test.tsx`，渲染层锁在 `custom-breadcrumbs.test.tsx` + `section-title-bar.test.tsx`，接线锁在 `collection-page-scaffold.test.tsx` + `collections-view.test.tsx` + `configuration-heading.test.tsx` + 平台契约测试）
+- [x] `grep -rn 'variant="filled"' entrypoints/app/components/tags` 零结果（本就为零；真正有意义的判据是 `variant="outlined"` 零结果，见执行记录第 4 条）
+- [x] 文档同步：七个 `sections/*/CLAUDE.md` + `components/collection` / `components/tags` / `components/label` / `components/custom-breadcrumbs` / `hooks` 五个 `CLAUDE.md` + spec `ui-design-system.md` §9/§15（见执行记录第 10 条）
+
+---
+
+#### Step 8 执行记录（2026-09-04，main 工作树）
+
+**做了什么**：新建 `entrypoints/app/hooks/use-collection-breadcrumbs.ts`（+ 单测）；`CollectionPageCopy` 加可选 `breadcrumbs`，scaffold 原样转给 `SectionTitleBar links`；七个收藏页（六平台 + 聚合页）接面包屑，bilibili 详情页多一级收藏夹名并把夹名移出 caption；`FilterChip` 未选态改吃主题默认 soft；`components/tags` 两处 Chip 与 `sections/bilibili/auto-transcribe-bar.tsx` 四个统计 Chip 同样去 `outlined`；zhihu 类型戳 Chip → `Label variant="soft"`；`CoverBadge` 圆角 0.5 → 0.75；`collections.sidebarTitle` 中文对齐 `nav.bilibiliFavorites`。
+
+**一处向用户请示、由用户拍板（2026-09-04）**：
+
+1. **面包屑末项取导航名，并对齐 bilibili 文案**。备选是「末项一律复用页面 h1」。选定方案下 `/collections` 末项读「收藏夹」而 h1 是「全部收藏」——末项是导航节点名、h1 是页面名，接受这个差异；但**同一平台不允许两个名字**，故 `collections.sidebarTitle` 的中文由「BiliBili 收藏夹」改成「B 站收藏夹」（en 两者本就同为 `Bilibili Favorites`；该 key 只有 bilibili-view 两处消费、无测试断言）。
+
+**手册勘误（执行时核实）**：
+
+2. **「六个 `sections/<platform>/*-view.test.tsx` 的 copy fixture」不存在**。全仓库只有 `chat-view` / `collections-view` / `overview-view` / `settings-view` 四个 view 测试，六个平台 view 一个测试文件都没有；`breadcrumbs` 又是可选字段，本来也不会强制 fixture 更新。覆盖改由四层承担：hook 单测锁数据形状；scaffold 契约测试锁 `copy.breadcrumbs → links` 的转交与省略；`collections-view.test.tsx` 与 `configuration-heading.test.tsx` 锁两类页面渲染出的 trail；`tests/platform-completeness-contract.test.ts` 新增一条逐平台断言「该平台的 view 调用了 `useCollectionBreadcrumbs`」（页面是一行 re-export，顺着它的 `../sections/…` import 找到 view 文件）。第七个平台漏接面包屑会在那条契约上红。
+3. **「zhihu 类型戳保留原 `data-slot`」**：那个 Chip 走 `CollectionCard` 的 `stamp` 槽，本来就没有 `data-slot`，无契约可保留。
+4. **「`FilterChip` 未选改 `variant="soft"`」**：Step 1 换血后 `MuiChip.defaultProps.variant` 已经是 `soft`，真实改动是**删掉显式 `variant="outlined"`**（`color="default"` 同理是 MUI 默认，也不写）。相应地完成判据里的 `variant="filled"` grep 是空转——tags 目录本就没有 filled。
+5. **`sections/collections/collections-view.tsx` 不走 `CollectionPageScaffold`**（手册把它与六个平台页并列）。它自绘 `SectionTitleBar`，面包屑直接传 `links`，不经 `CollectionPageCopy`。
+
+**其余偏离手册（逐条判定）**：
+
+6. **hook 签名多一个 `leaf?`，且不 memo**。手册给的是 `(platform) => BreadcrumbLink[]`；bilibili 详情页要多一级，把「深一层」做成参数比让 view 自己拼数组更能守住「页面不手写 crumb」。实现上先排完整祖先链、再摘掉最后一格的 href，没有 per-case 分支。**不 `useMemo`**：`t` 是稳定的模块函数，`useMemo([platform, leaf, t])` 会把字符串冻死在旧 locale（切语言不更新），与 `use-collection-pipeline.ts` / `use-jobs-badge.ts` 的既有做法一致——翻译结果每次 render 重算。
+7. **bookmarks 的 `:folderId` 不加级**。手册只点名 bilibili，但两条路由形态相同，不写清楚就是给下一个人留特例。判定依据是语义不是形状：bookmarks 的文件夹是带「全部」chip 的**可选筛选**（`/collections/bookmarks` 是合法默认落点），bilibili 强制 `navigate` 到第一个夹、没有「全部」，夹是**必经层级**。已写进 `sections/bookmarks/CLAUDE.md` 与 spec §9。
+8. **配置门早退分支也传 `links`**。手册没提。github 的 `NoTokenState` 与 youtube 的 `NotConnectedState` 在 scaffold 之前整页短路，但那是同一条路由；两种状态给不同路径，会变成「配好 token 刷新一下面包屑就变了」。`configuration-heading.test.tsx` 加 2 例锁定。
+9. **多改了三处 chip**：`components/tags/tag-edit-popover.tsx` 的已选标签 Chip（手册只写了 `tag-row`）与 `sections/bilibili/auto-transcribe-bar.tsx` 的四个统计 Chip——它们与筛选 chip 同屏，留着 outlined 正是本步要消灭的那种不一致。反过来，`collapsible-chip-row.tsx` 的展开/收起 Chip **刻意保留 `outlined`** 并在源码写明理由：它是行上的动作，不是又一个可选值；筛选 chip 全变 soft 之后，这个区分反而比之前更清楚。
+10. **文档比 §7 清单多改四处**：`components/tags/CLAUDE.md`（chip 变体规则）、`components/label/CLAUDE.md`（首个真实消费者；且 `inverted` 的对比度遗留项**仍未消解**，因为消费者用的是 `soft`）、`components/custom-breadcrumbs/CLAUDE.md`（消费者 1 → 8）、`sections/collections/CLAUDE.md`（聚合页不在 §7 的「六个」里）。另有两处**失真回填**：`sections/bilibili/CLAUDE.md` 首段的「h1 + 收藏夹名·计数」（夹名已移走）、`sections/zhihu/CLAUDE.md` 的「类型 Chip 徽标」。spec `ui-design-system.md` §9 补面包屑与 chip 变体两段、§15 加两行禁令——同 Step 4/5/6/7 的处理，规范正文失真同 commit 收，不推到 Step 10。
+
+**测试**：新增 `entrypoints/app/hooks/use-collection-breadcrumbs.test.tsx`（3 例：聚合页 / 平台页 / 带 leaf 的详情页，逐项断言 name 与 href，末项无 href）；`chip-row.test.tsx` +2 例（选中命中 `MuiChip-filled` + `MuiChip-colorPrimary`；未选命中 `MuiChip-soft` 且既非 outlined 也非 filled）；`collection-page-scaffold.test.tsx` +1 例（`copy.breadcrumbs` 原样到 `links`，省略时为 `undefined`）；`collections-view.test.tsx` +1 例（`aria-current="page"` 是「收藏夹」，唯一链接是 Home → `/`）；`configuration-heading.test.tsx` +2 例（两个配置门与加载后同路径）；`tests/platform-completeness-contract.test.ts` +1 条聚合断言（已用「把 x-view 的 hook 调用换掉」实测它会红，再还原）。九槽顺序断言、`collection-card.test.tsx` 10+1 例、`state-box.test.tsx` 均零改动通过。零 `it.skip`、零放宽。
+
+**验证**：`npx vitest run entrypoints/app tests/platform-completeness-contract.test.ts` 83 文件 481 例全绿；`pnpm compile` 零错；`pnpm test` **1405 例**（较 Step 7 的 1396 恰好 +9，正是新增的 9 例）——首跑 `lib/database/proxy-db.test.ts` 2 例 5s 超时，单独重跑 3 例 1.4s 全绿，是已知的满载 CPU 争用 flake，与本步无关；`pnpm build` 成功且 `scripts/check-background-bundle.mjs` 绿（背景图 11 模块 / 939,265 B 不变）。
+
+**体积**：app **91,563 B**（−36）、Container（共享 MUI）**121,679 B**（−711）、jsx-runtime **56,549 B**（+5）。加了一个 hook 和 8 个消费点却几乎不变，是因为面包屑组件在 Step 7 已经进产物；Container 掉的 700 B 来自 Chip `outlined` 变体在本步之后基本无人消费。
+
+**仍待目测**：七个页面（六平台 + `/collections`）与 bilibili 详情页的面包屑末项、可点祖先；筛选 chip 选中/未选两态在 light/dark 与六个预设下的对比度（未选是 soft default，选中是 filled primary）；zhihu 卡片类型戳换成 `Label` 后与计数行的基线对齐；卡片封面角标 6px 圆角；bilibili 详情页 caption 去掉夹名后不显空。本轮无法代跑（当前 Chrome 未以 `--remote-debugging-port` 启动，同 Step 4/5/6/7）。
 
 ---
 
@@ -1002,7 +1037,7 @@ grep -rn "MUI v7\|Chrome 116\|segmented\|header-actions" CLAUDE.md entrypoints .
 | 5 | `components/snackbar/CLAUDE.md`、`sections/settings/CLAUDE.md`、`sections/overview/CLAUDE.md`、`entrypoints/app/CLAUDE.md`、根 `CLAUDE.md`、**`.trellis/spec/frontend/{ui-design-system,i18n-conventions}.md`**（§11 新增「One-shot Action Results」——toast 与内联状态按**存续期**而非严重度划分、一件事只报一次、region 与关闭按钮都要译名；i18n §2 补 `snackbar.*` 命名行与「具体文案优先」规则。原清单把 spec 全推到 Step 10，但这是本步**新引入**的 UI 契约，不写进去下一步就会有人再加内联 Alert，见 trellis-check） |
 | 6 | `sections/overview/CLAUDE.md`、`components/chart/CLAUDE.md`、`ui-design-system.md` §10（全节改写）+ §2 owner 行 + §15 两条禁令行 + §16（对比度审计现在把 opacity 折进前景，见 trellis-check 第 3 条）、**`docs/ui-baseline/app-runtime-check.mjs`**（dashboard 实况探针的 `[data-section="summary"]` 变成死选择器，同 Step 4 的教训）、根 `CLAUDE.md`、**`entrypoints/app/pages/CLAUDE.md`**（dashboard 行还写着「hairline SummaryBand + 无 KPI 卡片」，是当前有效文档里唯一的漂移）、**`entrypoints/app/CLAUDE.md`**（`collectionPlatformById` + v9 slot 类名陷阱）、`components/iconify/icon-sets.ts` 的「summary-band glyphs」注释；`i18n-conventions.md` 不需改（无新命名族，只增删一个 `dashboard.*` 键） |
 | 7 | `sections/settings/CLAUDE.md`、**`.trellis/spec/frontend/{ui-design-system,i18n-conventions}.md`**（§11 Settings 两条 bullet 失真 + 测试断言行；i18n §2 新增 `breadcrumbs.*` 命名族）、**`entrypoints/app/CLAUDE.md`**（v9 死 CSS 的活例子随文件删除而失效）、**`components/custom-breadcrumbs/CLAUDE.md`** 与 **`components/collection/CLAUDE.md`**（首个 `links` 消费者 + `href` 写路由相对路径）——首轮清单只列了第一项，见 Step 7 执行记录第 7-9 条 |
-| 8 | `components/collection/CLAUDE.md`、`hooks/CLAUDE.md`、六个 `sections/<platform>/CLAUDE.md` |
+| 8 | `components/collection/CLAUDE.md`、`hooks/CLAUDE.md`、六个 `sections/<platform>/CLAUDE.md`、**`sections/collections/CLAUDE.md`**（聚合页也接了面包屑）、**`components/tags/CLAUDE.md`**（chip 变体规则）、**`components/label/CLAUDE.md`**（首个真实消费者）、**`components/custom-breadcrumbs/CLAUDE.md`**（消费者 1 → 8）、**`.trellis/spec/frontend/ui-design-system.md`** §9 + §15——首轮清单只列了前两类，见 Step 8 执行记录第 10 条 |
 | 9 | `sections/chat/CLAUDE.md` |
 | 10 | `index.html` 契约注释、`ui-design-system.md` 全量、`directory-structure.md`、`docs/23` 注记、根 `CLAUDE.md` 索引状态 |
 
@@ -1018,7 +1053,7 @@ grep -rn "MUI v7\|Chrome 116\|segmented\|header-actions" CLAUDE.md entrypoints .
 | 5 | 已落地 2026-09-02（待五处 toast 目测） | `a584cd1` | app 91,871 B（+10,355）；Container（共享 MUI）122,743 B（+566）；jsx-runtime 56,694 B（+150）——trellis-check 补完 `closeButtonAriaLabel` 后重测 | sonner 2.0.8 实测 +10.1 KB gz，高于手册估的 ~7 KB（它把自己的 CSS 字符串也打进 JS）；三处偏离手册（`handleSave` 不返回 boolean、守卫并入 `ui-vendor-boundaries`、失败文案具体优先）；详见 Step 5 执行记录 |
 | 6 | 已落地 2026-09-03，已 commit（待六项目测） | `6737714` | app 91,443 B（−428）；Container（共享 MUI）122,166 B（−577）；jsx-runtime 56,424 B（−270）——trellis-check 六处修完后重测（较首测 +10 B，`tabsClasses` 常量与共享 registry map 的净差） | 零依赖 SVG 环图 + 四张 KPI 卡；构成卡改上下堆叠（用户决定）；六个子组件而非四个；Card 标题取 `h2 + variant h4`（对齐 `SettingsPanel`）；`data-segment` 取代 `data-platform`；C-7 消解（Export 卡不在 `/`，大纲仍 `[1,2,2,3,2]`）；`app-runtime-check.mjs` 探针同步改读 `kpi-value` 且新增断言；KPI caption 去掉 `opacity`（WCAG）；详见 Step 6 执行记录 |
 | 7 | 已落地 2026-09-03，已 commit（待五项目测） | `82c6d80` | app 91,599 B（+156）；Container（共享 MUI）122,390 B（+224）；jsx-runtime 56,544 B；settings 路由 chunk 29,876 B | 两级导航改吃 theme 默认下划线 Tabs，`segmented-tabs-sx.ts` 删除；新增 `breadcrumbs.home`（用户决定，Step 8 复用）；**手册两处勘误**——crumb `href` 是 `'/'` 不是 `'#/'`、指示条是 `currentColor` 不是 `primary.main`；rail 保留响应式两形态 + 竖排左对齐；面包屑首次进产物；详见 Step 7 执行记录 |
-| 8 | 未开始 | | | |
+| 8 | 已落地 2026-09-04（未 commit，用户自行提交；待五项目测） | | app 91,563 B（−36）；Container（共享 MUI）121,679 B（−711）；jsx-runtime 56,549 B（+5） | `use-collection-breadcrumbs.ts` + 七个收藏页接面包屑（末项取导航名、bilibili 详情页多一级夹名，用户决定）；chip 全面吃主题默认 soft（`CollapsibleChipRow` 的展开 chip 刻意留 outlined）；zhihu 类型戳 → `Label`；**手册四处勘误**——六个 view 测试不存在 / zhihu 戳无 `data-slot` / soft 已是默认 / 聚合页不走 scaffold；平台契约测试新增「view 必须调用面包屑 hook」；详见 Step 8 执行记录 |
 | 9 | 未开始 | | | |
 | 10 | 未开始 | | | |
 

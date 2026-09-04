@@ -2,6 +2,8 @@
 
 YouTube 公开播放列表收藏页（`/collections/youtube`，扁平单集合无详情路由，第六个平台）。视觉结构对齐 X/知乎收藏页：28px route h1 + 计数 + lastSynced + 同步按钮 → pipeline 行（strip + 闸门）→ 全宽搜索框 → 配置提醒横幅（若有）→ 播放列表 chips → 卡片 grid（xs12/sm6/md4/lg3）+ Pagination。**数据一律从 PGlite 经 `lib/youtube/youtube-sync-service` 查询方法读取（UI 零 drizzle 导入），不直读 Data API**；同步（`syncYoutubePlaylists`）在 app.html context 跑，经 RPC proxy 写 Offscreen PGlite。**凭据是 API key 形态（无 OAuth）**：`youtubeApiKey`/`youtubeChannel` 在 `UserSettings`（设置页「账号连接」的 `youtube-connection-card` 填写+测试，见 `sections/settings/CLAUDE.md`），「未配置」是**单一同步维度**（settings 同步读 `hasConfig`——旧双门禁的异步授权探针随 OAuth 移除）。
 
+**面包屑**（docs/25 Step 8）：`useCollectionBreadcrumbs('youtube')` → `首页 / 收藏夹 / YouTube 播放列表`，同时传给 `copy.breadcrumbs` 与 **NotConnectedState 早退分支的 `SectionTitleBar links`**（配置门与加载后同路由同路径，`sections/configuration-heading.test.tsx` 断言）。
+
 ## 模块结构
 
 - `youtube-view.tsx` — scaffold Adapter；常驻 pipeline 为 Fetch → Embedding/Tagging 并行（无 content 段），段装配/标签/coverage key 经共享 `useCollectionPipeline`（`app/hooks/`，docs/20 中-7），本 view 只传 `backgroundJobRuntime(syncJob, fetchedCountProgress)`；Search 后注入共享 provider Configuration Blocker notice；YouTube 连接配置整页门仍优先，但先渲染 `SectionTitleBar` 保留 route 单 h1。runtime、phase、设置跳转、错误翻译与标签职责不变。

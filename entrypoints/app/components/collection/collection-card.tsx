@@ -91,7 +91,9 @@ export function CoverBadge({
         gap: 0.25,
         px: 0.75,
         py: 0.25,
-        borderRadius: 0.5,
+        // 6px reads as a corner inside the card's 16px radius; 4px reads as a
+        // square.
+        borderRadius: 0.75,
         typography: 'caption',
         lineHeight: 1.4,
         // Scrim over imagery — scheme-independent by design (common.black is

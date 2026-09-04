@@ -17,6 +17,7 @@ import {
 } from '../../components/collection';
 import { backgroundJobRuntime, fetchedCountProgress } from '../../hooks/pipeline-segments';
 import { useCollectionPipeline } from '../../hooks/use-collection-pipeline';
+import { useCollectionBreadcrumbs } from '../../hooks/use-collection-breadcrumbs';
 import { useYoutubePlaylists, type YoutubeSyncError } from './use-youtube-playlists';
 import { PlaylistChips } from './playlist-chips';
 import { YoutubeCard } from './youtube-card';
@@ -120,6 +121,7 @@ export function YoutubeView() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const yt = useYoutubePlaylists();
+  const breadcrumbs = useCollectionBreadcrumbs(PLATFORM);
   const { coverage, coverageStatus, segments } = useCollectionPipeline({
     platform: PLATFORM,
     syncing: yt.syncing,
@@ -134,7 +136,7 @@ export function YoutubeView() {
   if (!yt.settingsLoading && !yt.hasConfig) {
     return (
       <DashboardContent maxWidth="xl">
-        <SectionTitleBar title={t('youtube.title')} />
+        <SectionTitleBar title={t('youtube.title')} links={breadcrumbs} />
         <NotConnectedState onGoToSettings={() => navigate('/settings')} />
       </DashboardContent>
     );
@@ -173,6 +175,7 @@ export function YoutubeView() {
       onSearchInput={yt.setSearchInput}
       copy={{
         title: t('youtube.title'),
+        breadcrumbs,
         caption: captionParts.length > 0 ? captionParts.join(' · ') : undefined,
         searchPlaceholder: t('youtube.searchPlaceholder'),
         noMatches: t('youtube.noMatches'),

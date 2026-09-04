@@ -46,6 +46,9 @@ vi.mock('../../collection-platform-registry', () => ({
     { id: 'bilibili', title: 'nav.bilibiliFavorites' },
     { id: 'github', title: 'nav.githubStars' },
   ],
+  // The aggregate page passes `null`, so the trail never looks a platform up;
+  // the map is here so the module's shape stays honest.
+  collectionPlatformById: new Map(),
 }));
 
 vi.mock('./collection-item-card', () => ({
@@ -76,6 +79,8 @@ const copy: Record<string, string> = {
   'common.retry': 'Retry',
   'nav.bilibiliFavorites': 'Bilibili',
   'nav.githubStars': 'GitHub',
+  'breadcrumbs.home': 'Home',
+  'nav.collections': 'Collections',
 };
 
 vi.mock('@/lib/i18n/use-translation', () => ({
@@ -156,6 +161,18 @@ describe('CollectionsView', () => {
     expect(container.querySelectorAll('[data-collection-card-skeleton]')).toHaveLength(8);
     expect(container.querySelectorAll('[data-collection-card-skeleton] [data-slot="header"]'))
       .toHaveLength(8);
+  });
+
+  it('puts the aggregate page under Home in the trail, with itself as the inert crumb', () => {
+    mocks.useCollections.mockReturnValue(state());
+    render();
+
+    const nav = container.querySelector('nav');
+    expect(nav?.querySelector('[aria-current="page"]')?.textContent).toBe('Collections');
+    const links = Array.from(nav?.querySelectorAll('a') ?? []);
+    expect(links.map((link) => [link.textContent, link.getAttribute('href')])).toEqual([
+      ['Home', '/'],
+    ]);
   });
 
   it('renders the shared empty state with a 48px secondary information glyph', () => {

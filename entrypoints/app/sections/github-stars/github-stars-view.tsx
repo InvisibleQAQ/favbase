@@ -22,6 +22,7 @@ import {
   type PipelineRuntimeSnapshot,
 } from '../../hooks/pipeline-segments';
 import { useCollectionPipeline } from '../../hooks/use-collection-pipeline';
+import { useCollectionBreadcrumbs } from '../../hooks/use-collection-breadcrumbs';
 import { useGithubStars, type GithubSyncError } from './use-github-stars';
 import { LanguageChips } from './language-chips';
 import { RepoCard } from './repo-card';
@@ -103,6 +104,7 @@ export function GithubStarsView() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const gh = useGithubStars();
+  const breadcrumbs = useCollectionBreadcrumbs(PLATFORM);
 
   // Two-phase sync: Fetch settles the moment the readme phase starts (the
   // stars pass is done even though the sync job stays running), and the
@@ -138,7 +140,7 @@ export function GithubStarsView() {
   if (!gh.settingsLoading && !gh.hasToken) {
     return (
       <DashboardContent maxWidth="xl">
-        <SectionTitleBar title={t('githubStars.title')} />
+        <SectionTitleBar title={t('githubStars.title')} links={breadcrumbs} />
         <NoTokenState onGoToSettings={() => navigate('/settings')} />
       </DashboardContent>
     );
@@ -182,6 +184,7 @@ export function GithubStarsView() {
       onSearchInput={gh.setSearchInput}
       copy={{
         title: t('githubStars.title'),
+        breadcrumbs,
         caption: captionParts.length > 0 ? captionParts.join(' · ') : undefined,
         searchPlaceholder: t('githubStars.searchPlaceholder'),
         noMatches: t('githubStars.noMatches'),

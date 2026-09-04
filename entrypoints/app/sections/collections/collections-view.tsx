@@ -21,6 +21,7 @@ import { TagEditPopover } from '../../components/tags';
 import { Iconify } from '../../components/iconify';
 import { DashboardContent } from '../../layouts/dashboard';
 import { collectionPlatformRegistry } from '../../collection-platform-registry';
+import { useCollectionBreadcrumbs } from '../../hooks/use-collection-breadcrumbs';
 import { isCollectionPlatform, type CollectionPlatform } from '@/lib/collections';
 import { useCollections } from './use-collections';
 import { CollectionItemCard } from './collection-item-card';
@@ -51,6 +52,7 @@ function EmptyCollectionsState({ title, description }: { title: string; descript
 
 export function CollectionsView() {
   const { t } = useTranslation();
+  const breadcrumbs = useCollectionBreadcrumbs(null);
   const {
     items,
     total,
@@ -113,6 +115,7 @@ export function CollectionsView() {
     <DashboardContent maxWidth="xl">
       <SectionTitleBar
         title={t('allCollections.title')}
+        links={breadcrumbs}
         caption={t('allCollections.count', { count: total })}
       />
 

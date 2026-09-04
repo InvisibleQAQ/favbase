@@ -2,7 +2,7 @@
 
 页面标题 + 祖先路径 + 右侧动作（Minimal `components/custom-breadcrumbs/` 移植，docs/25 Step 3）。
 
-`components/collection/section-title-bar.tsx` 的 `SectionTitleBar` 在传了 `links` 时委托给本组件；不传 `links` 时保持原有的「h1 + caption」堆叠。首个真实消费者是 `sections/settings/settings-view.tsx`（docs/25 Step 7，「首页 / 设置」两级）；六平台页仍走后者，路径形态留给 Step 8。
+`components/collection/section-title-bar.tsx` 的 `SectionTitleBar` 在传了 `links` 时委托给本组件；不传 `links` 时保持原有的「h1 + caption」堆叠。首个真实消费者是 `sections/settings/settings-view.tsx`（docs/25 Step 7，「首页 / 设置」两级）。**docs/25 Step 8 起七个收藏页全部走这条**：聚合页「首页 / 收藏夹」，六平台页「首页 / 收藏夹 / 平台」，bilibili 详情页再多一级收藏夹名；祖先由 `entrypoints/app/hooks/use-collection-breadcrumbs.ts` 从导航注册表派生，页面不手写 crumb。
 
 **crumb 的 `href` 写路由相对路径**（`'/'`、`'/collections'`），不写 `'#/'`：`breadcrumb-link.tsx` 用 `RouterLink`，hash router 的 `#` 由它自己补；手写 `#` 会被当成路径段。
 

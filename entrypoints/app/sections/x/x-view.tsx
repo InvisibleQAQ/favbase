@@ -14,6 +14,7 @@ import {
 } from '../../components/collection';
 import { backgroundJobRuntime, fetchedCountProgress } from '../../hooks/pipeline-segments';
 import { useCollectionPipeline } from '../../hooks/use-collection-pipeline';
+import { useCollectionBreadcrumbs } from '../../hooks/use-collection-breadcrumbs';
 import { useXBookmarks, type XSyncError } from './use-x-bookmarks';
 import { formatCountdown } from './cooldown';
 import { AuthorChips } from './author-chips';
@@ -114,6 +115,7 @@ function EmptyLibraryState({ syncing, onSync }: { syncing: boolean; onSync: () =
 export function XView() {
   const { t } = useTranslation();
   const x = useXBookmarks();
+  const breadcrumbs = useCollectionBreadcrumbs(PLATFORM);
   const { coverage, coverageStatus, segments } = useCollectionPipeline({
     platform: PLATFORM,
     syncing: x.syncing,
@@ -169,6 +171,7 @@ export function XView() {
       onSearchInput={x.setSearchInput}
       copy={{
         title: t('x.title'),
+        breadcrumbs,
         caption: captionParts.length > 0 ? captionParts.join(' · ') : undefined,
         searchPlaceholder: t('x.searchPlaceholder'),
         noMatches: t('x.noMatches'),

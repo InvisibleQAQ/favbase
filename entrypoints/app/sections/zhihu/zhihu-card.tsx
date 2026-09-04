@@ -1,4 +1,3 @@
-import Chip from '@mui/material/Chip';
 import Avatar from '@mui/material/Avatar';
 import Typography from '@mui/material/Typography';
 
@@ -7,6 +6,7 @@ import type { LocaleKeys } from '@/lib/i18n/locales/zh-CN';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify } from '../../components/iconify';
 import { CollectionCard } from '../../components/collection';
+import { Label } from '../../components/label';
 import { TagRow } from '../../components/tags';
 import type { ZhihuFavoriteItem, ZhihuItemType } from '@/lib/zhihu/zhihu-sync-service';
 import type { TagRef } from '@/lib/tagging';
@@ -87,7 +87,7 @@ export function ZhihuCard({ favorite, tags, onEditTags }: ZhihuCardProps) {
         ) : undefined
       }
       date={favorite.publishedAt ? formatDateTime(favorite.publishedAt.getTime()) : undefined}
-      stamp={<Chip size="small" variant="outlined" label={t(TYPE_LABEL_KEY[favorite.type])} />}
+      stamp={<Label variant="soft">{t(TYPE_LABEL_KEY[favorite.type])}</Label>}
       tags={tags ? <TagRow tags={tags} onEditTags={onEditTags} /> : undefined}
     />
   );

@@ -71,7 +71,7 @@ export function TagRow({ tags, onEditTags }: TagRowProps) {
   return (
     <CollectionCardRow sx={{ gap: 0.5 }}>
       {tags.map((tag) => (
-        <Chip key={tag.id} label={tag.name} size="small" variant="outlined" />
+        <Chip key={tag.id} label={tag.name} size="small" />
       ))}
       {editButton}
     </CollectionCardRow>

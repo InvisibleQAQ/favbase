@@ -50,7 +50,8 @@ export interface FilterChipProps {
   maxWidth?: number;
 }
 
-/** Filter chip: the coral stamp (filled primary, ink text) when selected, a hairline outline otherwise. */
+/** Filter chip: the coral stamp (filled primary, ink text) when selected, the
+ *  theme's soft neutral otherwise. */
 export function FilterChip({ label, selected, onClick, icon, maxWidth }: FilterChipProps) {
   return (
     <Chip
@@ -59,7 +60,9 @@ export function FilterChip({ label, selected, onClick, icon, maxWidth }: FilterC
       clickable
       onClick={onClick}
       color={selected ? 'primary' : 'default'}
-      variant={selected ? 'filled' : 'outlined'}
+      // Unselected chips ride the theme default (`soft`); only the selected
+      // one declares a variant.
+      variant={selected ? 'filled' : undefined}
       sx={
         maxWidth
           ? {

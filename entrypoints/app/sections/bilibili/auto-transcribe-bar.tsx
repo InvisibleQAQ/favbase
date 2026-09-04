@@ -75,16 +75,16 @@ function StatsChips({ stats }: { stats: AutoTranscribeState['stats'] }) {
   return (
     <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0, flexWrap: 'wrap' }}>
       {stats.existing > 0 && (
-        <Chip label={t('autoTranscribe.statsExisting', { count: stats.existing })} size="small" variant="outlined" />
+        <Chip label={t('autoTranscribe.statsExisting', { count: stats.existing })} size="small" />
       )}
       {stats.cc > 0 && (
-        <Chip label={t('autoTranscribe.statsCC', { count: stats.cc })} size="small" variant="outlined" />
+        <Chip label={t('autoTranscribe.statsCC', { count: stats.cc })} size="small" />
       )}
       {stats.asr > 0 && (
-        <Chip label={t('autoTranscribe.statsASR', { count: stats.asr })} size="small" variant="outlined" />
+        <Chip label={t('autoTranscribe.statsASR', { count: stats.asr })} size="small" />
       )}
       {stats.skipped > 0 && (
-        <Chip label={t('autoTranscribe.statsSkipped', { count: stats.skipped })} size="small" variant="outlined" />
+        <Chip label={t('autoTranscribe.statsSkipped', { count: stats.skipped })} size="small" />
       )}
     </Box>
   );

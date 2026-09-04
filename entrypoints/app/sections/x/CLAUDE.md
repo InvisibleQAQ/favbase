@@ -2,6 +2,8 @@
 
 X (Twitter) 书签收藏页（`/collections/x`，扁平单集合无详情路由，第四个平台）。视觉结构对齐 GitHub Stars 收藏页（`sections/github-stars/`）：28px route h1 + 计数 + lastSynced + **本次新增 N** + 同步按钮 → pipeline 行（strip + 闸门）→ 全宽搜索框 → 配置提醒横幅（若有）→ 作者 chips → 卡片 grid（xs12/sm6/md4/lg3）+ Pagination。**数据一律从 PGlite 经 `lib/x/x-sync-service` 查询方法读取（UI 零 drizzle 导入），不直读 X GraphQL API**；同步（`syncBookmarks`）在 app.html context 跑，经 RPC proxy 写 Offscreen PGlite。**X 同步单一入口 = app.html**（07-20 删除 x.com 浮层按钮及其整条 CS→bg→offscreen→tab 管线；浮层冗余，auth 捕获链保留即可自同步）。**凭据无 UI 半（D6）**：无 Connections 卡、无 `UserSettings.xToken`——认证由 background `webRequest` 从用户浏览 x.com 的真实请求中捕获完整 `Cookie`+csrf+bearer（见 `lib/x/x-auth.ts`），同步时 hook 先 `getXAuth()` 读 session 存储（app.html 是 storage-capable context）再传入 `syncBookmarks(auth)`；未捕获到（用户本 session 没访问过 x.com）auth 为 null 由 lib 层抛 `XAuthError`，UI 映射为「打开 x.com/i/bookmarks 登录，让扩展捕获会话后回来点同步」空态（deep-link）。
 
+**面包屑**（docs/25 Step 8）：`useCollectionBreadcrumbs('x')` → `首页 / 收藏夹 / X 书签`。
+
 ## 模块结构
 
 - `x-view.tsx` — scaffold Adapter；常驻 pipeline 为 Fetch → Embedding/Tagging 并行（无 content 段），段装配/标签/coverage key 经共享 `useCollectionPipeline`（`app/hooks/`，docs/20 中-7），本 view 只传 `backgroundJobRuntime(syncJob, fetchedCountProgress)`；Search 后注入共享 provider Configuration Blocker notice。auth/cooldown、runtime、caption、phase 与标签职责不变。

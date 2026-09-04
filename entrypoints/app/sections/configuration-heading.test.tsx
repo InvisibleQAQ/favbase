@@ -63,6 +63,10 @@ vi.mock('@/lib/i18n/use-translation', () => ({
     preference: 'en',
     setLocale: vi.fn(),
     t: (key: string) => ({
+      'breadcrumbs.home': 'Home',
+      'nav.collections': 'Collections',
+      'nav.githubStars': 'GitHub Stars',
+      'nav.youtubePlaylists': 'YouTube Playlists',
       'githubStars.title': 'GitHub Stars',
       'githubStars.noTokenTitle': 'Connect GitHub',
       'githubStars.noTokenDesc': 'Add a token to continue.',
@@ -130,5 +134,19 @@ describe('platform configuration gates', () => {
     expect(headings[0].textContent).toBe(title);
     expect(container.textContent).toContain(stateTitle);
     expect(container.querySelector('[data-state-box]')).not.toBeNull();
+  });
+
+  it.each([
+    ['GitHub', <GithubStarsView />, 'GitHub Stars'],
+    ['YouTube', <YoutubeView />, 'YouTube Playlists'],
+  ])('keeps the %s configuration gate on the same trail as its loaded page', (_p, view, title) => {
+    render(view);
+
+    const nav = container.querySelector('nav');
+    expect(Array.from(nav?.querySelectorAll('a') ?? []).map((a) => a.textContent)).toEqual([
+      'Home',
+      'Collections',
+    ]);
+    expect(nav?.querySelector('[aria-current="page"]')?.textContent).toBe(title);
   });
 });

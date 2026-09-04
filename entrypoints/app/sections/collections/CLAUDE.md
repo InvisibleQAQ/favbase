@@ -2,6 +2,8 @@
 
 `/collections` 全平台聚合页。默认显示 Bilibili/GitHub/浏览器书签/X/知乎/YouTube 的全部持久化条目，按 `lib/collections` 的平台原生时间全局降序；支持标题/作者搜索、平台单选、URL 单标签筛选、全局分页和逐卡标签编辑。
 
+**面包屑**（docs/25 Step 8）：本页不走 `CollectionPageScaffold`，直接把 `useCollectionBreadcrumbs(null)` 传给 `SectionTitleBar links` → `首页 / 收藏夹`（末项惰性）。末项取导航名「收藏夹」，与 h1「全部收藏」不逐字相同——末项是导航节点名，h1 是页面名（用户 2026-09-04 决定）。
+
 ## 模块结构
 
 - `use-collections.ts` — 只读页面状态：300ms 搜索防抖、平台/搜索/标签切换回第 1 页、cancelled guard、分页查询、手动/AI 标签变更刷新；先读取 Used Tags，再验证 Hash Router `tag` 参数

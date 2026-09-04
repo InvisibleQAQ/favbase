@@ -14,7 +14,11 @@
 - **children 原样渲染**。Minimal 用 `es-toolkit` 的 `upperFirst` 大写首字母；这里不做——文案来自 `t()`，大小写由 locale 决定，组件不得改写。也因此不引入 `es-toolkit`。
 - `inverted` 变体用 `palette[color].lighter/.darker` 是**刻意反色**（浅底深字，暗色互换），不是 docs/25 Step 2 第 9 点要替换成 `varAlpha` 的「浅底当选中背景」那类用法。Step 2 换预设时这里无需改动，五阶随预设走。
 - 零 `t()`、零平台字面量，与 `components/collection/` 同一档哑组件纪律。
-- 颜色对比度不在本目录断言，由 `theme/theme-contract.test.ts` 统一守。
+- 颜色对比度不在本目录断言，由 `theme/theme-contract.test.ts` 统一守。**`inverted` 仍无真实消费者**，因此六预设下 `darker`-on-`lighter` 的对比度仍无人验证（docs/25 跨 Step 遗留项，Step 8 未消解——首个消费者是 zhihu 类型戳，用的是 `soft`）。
+
+## 消费方
+
+- `sections/zhihu/zhihu-card.tsx` — 条目类型戳（answer/article/pin/zvideo），`variant="soft"` + 默认 `color`，落在 `CollectionCard` 的 `stamp` 槽（docs/25 Step 8，此前是 outlined Chip）。这是本组件的首个真实消费者。
 
 ## 测试
 

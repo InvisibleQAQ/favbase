@@ -1,6 +1,8 @@
 # bilibili
 
-app.html B站收藏夹页面 adapter，消费共享 `CollectionPageScaffold`。固定顺序：28px route h1 + 收藏夹名·计数 + 立即获取 → pipeline 行（strip + 闸门）→ 全宽搜索框 → 配置提醒横幅（若有待配置项）→ 自动转录（仅运行/完成/配额时占一行）→ 收藏夹 chips → 标签 → 服务端排序行 → 视频列表。（docs/19 P0-1 三行压缩于 2026-08-20 被用户否决并恢复堆叠；docs/23 Phase 5 统一状态与 chip header。）
+app.html B站收藏夹页面 adapter，消费共享 `CollectionPageScaffold`。固定顺序：面包屑 + 28px route h1 + 计数·上次同步 + 立即获取（收藏夹名自 docs/25 Step 8 起在面包屑末项，不再进 caption）→ pipeline 行（strip + 闸门）→ 全宽搜索框 → 配置提醒横幅（若有待配置项）→ 自动转录（仅运行/完成/配额时占一行）→ 收藏夹 chips → 标签 → 服务端排序行 → 视频列表。（docs/19 P0-1 三行压缩于 2026-08-20 被用户否决并恢复堆叠；docs/23 Phase 5 统一状态与 chip header。）
+
+**面包屑**（docs/25 Step 8）：`useCollectionBreadcrumbs('bilibili', 夹名)` → `首页 / 收藏夹 / B 站收藏夹 / <夹名>`；夹名因此**从 caption 移除**，不同屏重复。夹名优先取自 folders 列表（深链时回退 `useBiliFavVideos` 的 `folderTitle`），空则退回三级。无夹 fallback 页传 `useCollectionBreadcrumbs('bilibili')`。`collections.sidebarTitle` 的中文已对齐 `nav.bilibiliFavorites`（「B 站收藏夹」），末项与 h1 才不打架。
 
 ## 模块结构
 

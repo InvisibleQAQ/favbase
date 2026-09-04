@@ -175,6 +175,20 @@ describe('CollectionPageScaffold section contract', () => {
     ]);
   });
 
+  it('hands the page ancestry to the title bar, and omits it when there is none', () => {
+    const breadcrumbs = [{ name: 'Home', href: '/' }, { name: 'Repos' }];
+
+    act(() => {
+      root.render(
+        <CollectionPageScaffold {...baseProps} copy={{ ...baseProps.copy, breadcrumbs }} />,
+      );
+    });
+    expect(titleBarProps.last?.links).toEqual(breadcrumbs);
+
+    act(() => root.render(<CollectionPageScaffold {...baseProps} />));
+    expect(titleBarProps.last?.links).toBeUndefined();
+  });
+
   it('wraps the pipeline slot in one row that also hosts the library-gate toggle', () => {
     act(() => {
       root.render(

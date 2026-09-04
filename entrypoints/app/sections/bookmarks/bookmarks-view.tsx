@@ -9,6 +9,7 @@ import {
 } from '../../components/collection';
 import { backgroundJobRuntime } from '../../hooks/pipeline-segments';
 import { useCollectionPipeline } from '../../hooks/use-collection-pipeline';
+import { useCollectionBreadcrumbs } from '../../hooks/use-collection-breadcrumbs';
 import { Iconify } from '../../components/iconify';
 import { CollectionConfigurationNotice } from '../../components/configuration-blocker';
 import { BookmarkCard } from './bookmark-card';
@@ -44,6 +45,9 @@ export function BookmarksView() {
   const { folderId } = useParams<{ folderId: string }>();
   const navigate = useNavigate();
   const bm = useBookmarks(folderId);
+  // The folder segment is a chip filter, not a level: bookmarks keeps an
+  // "All" chip and never forces a folder into the URL (bilibili does).
+  const breadcrumbs = useCollectionBreadcrumbs(PLATFORM);
   const extraction = useBookmarkExtraction(bm.lastSyncedAt?.getTime());
   const { coverage, coverageStatus, segments } = useCollectionPipeline({
     platform: PLATFORM,
@@ -94,6 +98,7 @@ export function BookmarksView() {
       onSearchInput={bm.setSearchInput}
       copy={{
         title: t('bookmarks.title'),
+        breadcrumbs,
         caption: captionParts.length > 0 ? captionParts.join(' · ') : undefined,
         searchPlaceholder: t('bookmarks.searchPlaceholder'),
         noMatches: t('bookmarks.noMatches'),

@@ -5,6 +5,8 @@ import Typography from '@mui/material/Typography';
 
 import type { TagRef, TaggedItem } from '@/lib/tagging';
 
+import type { BreadcrumbsLinkProps } from '../custom-breadcrumbs';
+
 import { DashboardContent } from '../../layouts/dashboard';
 import { resolveCollectionPhase } from '../../hooks/collection-phase';
 import {
@@ -30,6 +32,8 @@ import { NoMatchesState } from './no-matches-state';
 export interface CollectionPageCopy {
   /** SectionTitleBar heading. */
   title: string;
+  /** Ancestry above the heading (`useCollectionBreadcrumbs`); omit for none. */
+  breadcrumbs?: BreadcrumbsLinkProps[];
   /** SectionTitleBar sub-caption (count · lastSynced), already joined; omit to hide. */
   caption?: string;
   searchPlaceholder: string;
@@ -309,6 +313,7 @@ export function CollectionPageScaffold<T>({
     <DashboardContent maxWidth="xl">
       <SectionTitleBar
         title={copy.title}
+        links={copy.breadcrumbs}
         caption={copy.caption}
         syncing={syncing}
         onSync={showSyncButton ? onSync : undefined}

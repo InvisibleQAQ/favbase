@@ -15,6 +15,7 @@ import {
 } from '../../components/collection';
 import { backgroundJobRuntime, fetchedCountProgress } from '../../hooks/pipeline-segments';
 import { useCollectionPipeline } from '../../hooks/use-collection-pipeline';
+import { useCollectionBreadcrumbs } from '../../hooks/use-collection-breadcrumbs';
 import { useJob, type BackgroundJob } from '../../hooks/background-jobs-store';
 import { Iconify } from '../../components/iconify';
 import { CollectionConfigurationNotice } from '../../components/configuration-blocker';
@@ -188,8 +189,13 @@ function BilibiliCollectionPage({
     extraRefreshKey: `${autoTranscribe.running}:${activeBvid ?? ''}:${transcribeJob?.generation ?? 0}`,
   });
 
+  // The folder is the route's own level, so it names the trailing crumb
+  // instead of repeating itself in the caption. The folder list resolves it
+  // before the video query does; `folderTitle` covers a direct deep link.
+  const folderName = folders.find((folder) => folder.id === mediaId)?.title || folderTitle;
+  const breadcrumbs = useCollectionBreadcrumbs(PLATFORM, folderName || undefined);
+
   const captionParts: string[] = [];
-  if (!loading && folderTitle) captionParts.push(folderTitle);
   if (totalCount > 0) {
     captionParts.push(t('collections.videoCount', { count: totalCount }));
   }
@@ -222,6 +228,7 @@ function BilibiliCollectionPage({
       onSearchInput={onSearchInput}
       copy={{
         title: t('collections.sidebarTitle'),
+        breadcrumbs,
         caption: captionParts.length > 0 ? captionParts.join(' · ') : undefined,
         searchPlaceholder: t('collections.searchPlaceholder'),
         noMatches: t('collections.noMatches'),
@@ -316,6 +323,7 @@ function BilibiliFallbackPage({
   onSelectFolder,
 }: BilibiliFallbackPageProps) {
   const { t } = useTranslation();
+  const breadcrumbs = useCollectionBreadcrumbs(PLATFORM);
   const transcribeJob = useJob(PLATFORM, 'transcribe');
   const embedJob = useJob(PLATFORM, 'embed');
   const tagJob = useJob(PLATFORM, 'tag');
@@ -351,6 +359,7 @@ function BilibiliFallbackPage({
       onSearchInput={onSearchInput}
       copy={{
         title: t('collections.sidebarTitle'),
+        breadcrumbs,
         searchPlaceholder: t('collections.searchPlaceholder'),
         noMatches: t('collections.noMatches'),
         syncLabel: t('pipeline.fetchNow'),

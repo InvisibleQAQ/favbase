@@ -209,6 +209,22 @@ function resolveImportedPage(relativeImport: string): string | undefined {
   return undefined;
 }
 
+/**
+ * The section view a lazy page renders. Pages are one-line re-exports, so the
+ * single `../sections/…` import is the view module.
+ */
+function resolveViewModule(pageFile: string): string | undefined {
+  const specifier = readFileSync(pageFile, 'utf8').match(
+    /from\s+['"](\.\.\/sections\/[^'"]+)['"]/,
+  )?.[1];
+  if (!specifier) return undefined;
+  const base = path.join(path.dirname(pageFile), specifier);
+  for (const candidate of [`${base}.tsx`, `${base}.ts`, base]) {
+    if (existsSync(candidate)) return candidate;
+  }
+  return undefined;
+}
+
 describe('platform completeness contract', () => {
   it('reports every missing platform Adapter in one failure', () => {
     const missing: string[] = [];
@@ -315,10 +331,19 @@ describe('platform completeness contract', () => {
         const importPath = initializer
           ?.getText(pageLoaders.source.ast)
           .match(/import\(\s*['"](.+?)['"]\s*\)/)?.[1];
+        const pageFile = importPath ? resolveImportedPage(importPath) : undefined;
+        const viewFile = pageFile ? resolveViewModule(pageFile) : undefined;
         if (!importPath) {
           missing.push(`${platform}: lazy page import`);
-        } else if (!resolveImportedPage(importPath)) {
+        } else if (!pageFile) {
           missing.push(`${platform}: lazy page module does not exist (${importPath})`);
+        } else if (!viewFile) {
+          missing.push(`${platform}: lazy page does not render a sections/ view`);
+        } else if (!readFileSync(viewFile, 'utf8').includes('useCollectionBreadcrumbs(')) {
+          // Every collection route sits under Home > Collections. The trail is
+          // derived from the navigation registry, so a new platform gets it by
+          // calling the shared hook — never by hand-writing crumbs.
+          missing.push(`${platform}: collection page ancestry (useCollectionBreadcrumbs)`);
         }
       }
     }

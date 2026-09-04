@@ -123,6 +123,8 @@ export function CollapsibleChipRow<T>({
       {collapsible && (
         <Chip
           clickable
+          // Deliberately NOT the filter chips' soft skin: this one is an
+          // action on the row, not another value you can select.
           variant="outlined"
           onClick={() => setExpanded((v) => !v)}
           icon={

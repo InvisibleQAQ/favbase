@@ -2,6 +2,8 @@
 
 GitHub Stars 收藏页（`/collections/github`），视觉结构对齐 B站收藏页（`sections/bilibili/`）：28px route h1 + 计数 + lastSynced + 同步按钮 → pipeline 行（strip + 闸门）→ 全宽搜索框 → 配置提醒横幅（若有）→ 语言 chips → 卡片 grid（xs12/sm6/md4/lg3）+ Pagination。**数据一律从 PGlite 经 `lib/github/github-sync-service` 查询方法读取（UI 零 drizzle 导入），不直读 GitHub API**；同步（`syncStars`）在 app.html context 跑，经 RPC proxy 写 Offscreen PGlite。
 
+**面包屑**（docs/25 Step 8）：`useCollectionBreadcrumbs('github')` → `首页 / 收藏夹 / GitHub Stars`，同时传给 `copy.breadcrumbs` 与 **NoTokenState 早退分支的 `SectionTitleBar links`**——配置门和加载后的页面是同一条路由，必须同一条路径（`sections/configuration-heading.test.tsx` 断言）。
+
 ## 模块结构
 
 - `github-stars-view.tsx` — scaffold Adapter；常驻 pipeline 为 Fetch → README → Embedding/Tagging 并行，段装配/标签/coverage key 经共享 `useCollectionPipeline`（`app/hooks/`，docs/20 中-7），本 view 只注入 Fetch runtime 与 `readme` content 段——readme 相位把 Fetch 段提前 settle（`settledFetchRuntime`）的两相位特例是 github 专属，留在 view；`syncing` 仍按 sync job 传给 hook 以驱动 acquisition 再查询。Search 后注入共享 provider Configuration Blocker notice；token 整页配置门仍优先，但先渲染 `SectionTitleBar` 保留 route 单 h1。Fetch/README/runtime、phase、标签和错误职责不变。
