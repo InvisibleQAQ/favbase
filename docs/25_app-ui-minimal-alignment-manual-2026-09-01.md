@@ -845,7 +845,7 @@ pnpm compile && pnpm test && pnpm build
 
 ### Step 8 — 六平台收藏页
 
-> **2026-09-04 已落地**（未 commit，用户自行提交）。实际与手册的偏差记录在本节末"执行记录"。
+> **2026-09-04 已落地**（`f11b8ed`）。实际与手册的偏差记录在本节末"执行记录"。
 
 **目标**：平台页几乎全部继承 Step 1/3；本步只处理 chip 变体、`Label`、面包屑、`CollectionCard` 复核。
 
@@ -1053,7 +1053,7 @@ grep -rn "MUI v7\|Chrome 116\|segmented\|header-actions" CLAUDE.md entrypoints .
 | 5 | 已落地 2026-09-02（待五处 toast 目测） | `a584cd1` | app 91,871 B（+10,355）；Container（共享 MUI）122,743 B（+566）；jsx-runtime 56,694 B（+150）——trellis-check 补完 `closeButtonAriaLabel` 后重测 | sonner 2.0.8 实测 +10.1 KB gz，高于手册估的 ~7 KB（它把自己的 CSS 字符串也打进 JS）；三处偏离手册（`handleSave` 不返回 boolean、守卫并入 `ui-vendor-boundaries`、失败文案具体优先）；详见 Step 5 执行记录 |
 | 6 | 已落地 2026-09-03，已 commit（待六项目测） | `6737714` | app 91,443 B（−428）；Container（共享 MUI）122,166 B（−577）；jsx-runtime 56,424 B（−270）——trellis-check 六处修完后重测（较首测 +10 B，`tabsClasses` 常量与共享 registry map 的净差） | 零依赖 SVG 环图 + 四张 KPI 卡；构成卡改上下堆叠（用户决定）；六个子组件而非四个；Card 标题取 `h2 + variant h4`（对齐 `SettingsPanel`）；`data-segment` 取代 `data-platform`；C-7 消解（Export 卡不在 `/`，大纲仍 `[1,2,2,3,2]`）；`app-runtime-check.mjs` 探针同步改读 `kpi-value` 且新增断言；KPI caption 去掉 `opacity`（WCAG）；详见 Step 6 执行记录 |
 | 7 | 已落地 2026-09-03，已 commit（待五项目测） | `82c6d80` | app 91,599 B（+156）；Container（共享 MUI）122,390 B（+224）；jsx-runtime 56,544 B；settings 路由 chunk 29,876 B | 两级导航改吃 theme 默认下划线 Tabs，`segmented-tabs-sx.ts` 删除；新增 `breadcrumbs.home`（用户决定，Step 8 复用）；**手册两处勘误**——crumb `href` 是 `'/'` 不是 `'#/'`、指示条是 `currentColor` 不是 `primary.main`；rail 保留响应式两形态 + 竖排左对齐；面包屑首次进产物；详见 Step 7 执行记录 |
-| 8 | 已落地 2026-09-04（未 commit，用户自行提交；待五项目测） | | app 91,563 B（−36）；Container（共享 MUI）121,679 B（−711）；jsx-runtime 56,549 B（+5） | `use-collection-breadcrumbs.ts` + 七个收藏页接面包屑（末项取导航名、bilibili 详情页多一级夹名，用户决定）；chip 全面吃主题默认 soft（`CollapsibleChipRow` 的展开 chip 刻意留 outlined）；zhihu 类型戳 → `Label`；**手册四处勘误**——六个 view 测试不存在 / zhihu 戳无 `data-slot` / soft 已是默认 / 聚合页不走 scaffold；平台契约测试新增「view 必须调用面包屑 hook」；详见 Step 8 执行记录 |
+| 8 | 已落地 2026-09-04，已 commit（待五项目测） | `f11b8ed` | app 91,563 B（−36）；Container（共享 MUI）121,679 B（−711）；jsx-runtime 56,549 B（+5） | `use-collection-breadcrumbs.ts` + 七个收藏页接面包屑（末项取导航名、bilibili 详情页多一级夹名，用户决定）；chip 全面吃主题默认 soft（`CollapsibleChipRow` 的展开 chip 刻意留 outlined）；zhihu 类型戳 → `Label`；**手册四处勘误**——六个 view 测试不存在 / zhihu 戳无 `data-slot` / soft 已是默认 / 聚合页不走 scaffold；平台契约测试新增「view 必须调用面包屑 hook」；详见 Step 8 执行记录 |
 | 9 | 未开始 | | | |
 | 10 | 未开始 | | | |
 
