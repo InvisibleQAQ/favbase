@@ -106,7 +106,11 @@ consumer is Minimal's own `core/components/avatar.tsx` surplus badge. Consumers:
 - Tabs: `variant="scrollable"`, `textColor`/`indicatorColor="inherit"`,
   `allowScrollButtonsMobile`; Tab `disableRipple`, `iconPosition="start"`,
   `text.secondary` at rest, semibold selected, 48px MUI default height.
-  `indicatorColor="custom"` is the segmented pill form.
+  `indicatorColor="custom"` is the segmented pill form. The horizontal `list`
+  gap (40 / 24 below `sm`) is skipped for `orientation="vertical"`, so a
+  vertical consumer owns its own row spacing; the two sanctioned vertical forms
+  are fixed in `ui-design-system.md` section 11 ("Vertical Tabs") and must not
+  be unified.
 - Skeleton `animation="wave"`, `variant="rounded"` (16px). Stack `useFlexGap`.
   LinearProgress / CircularProgress default `color="inherit"`, bar radius 16.
 - Table: dashed row borders, `TableCell.head` on `background.neutral`,
@@ -129,8 +133,12 @@ when matching a Card. `50%` is reserved for circular/pill controls.
   `createTheme({ settingsState })` palettes: `text.accent` vs both grounds and
   the high-contrast ground, `primary.contrastText` vs `primary.main` (D14),
   accent on the 16% soft wash (C-3/C-5), body text on the high-contrast ground
-  (4.508), plus the default theme's accent = coral `darker`/`light` and one
-  primary ramp for both schemes. Imports only types from `@/lib/storage`, so it
+  (4.508), `palette[color].darker` on `palette[color].lighter` for all six
+  colors — the `Label variant="inverted"` pair, floor 6.89:1 at success and
+  7.95:1 for primary at preset4 (docs/25 Step 10; one pass covers both schemes
+  because dark swaps the same pair and the ratio is symmetric) — plus the
+  default theme's accent = coral `darker`/`light` and one primary ramp for both
+  schemes. Imports only types from `@/lib/storage`, so it
   stays storage-free.
 - `with-settings/update-core.test.ts` — default preset equals the base ramp /
   text / shadows; preset2 swaps `primary` (+ `118 53 220` channel and shadow)

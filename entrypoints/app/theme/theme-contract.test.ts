@@ -6,6 +6,7 @@ import { COLOR_MODE_STORAGE_KEY } from './theme-provider';
 import { createTheme } from './create-theme';
 import { themeConfig } from './theme-config';
 import { customShadows } from './core/custom-shadows';
+import { colorKeys } from './core/palette';
 import { primaryColorPresets } from './with-settings/color-presets';
 import { INPUT_PADDING, INPUT_TYPOGRAPHY } from './core/components/text-field';
 
@@ -161,6 +162,25 @@ describe('theme token contract', () => {
       const palette = paletteOf(themeFor(preset), scheme);
       const wash = blend(palette.primary.main, 0.16, palette.background.paper);
       expect(contrastRatio(palette.text.accent, wash), `${preset} ${scheme}`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  // docs/25 Step 10: `Label variant="inverted"` inks `palette[color].darker`
+  // on `palette[color].lighter` — a deliberate reversal, not the "pale block as
+  // selected background" the brand wash replaced. Two facts collapse the matrix:
+  // (1) the dark scheme swaps foreground and background of the *same* pair, and
+  // a contrast ratio is symmetric, so one pass covers both schemes; (2) only
+  // `primary` moves with the preset, so the other five ramps are re-asserted
+  // per preset for free. Measured floor 6.89:1 (success); primary's own floor is
+  // 7.95:1 (preset4). The variant has no consumer yet — this is what keeps it
+  // from shipping unreadable the day it gets one.
+  it.each(PRESETS)('%s inverted label ink meets WCAG contrast on its own lighter stage', (preset) => {
+    const palette = paletteOf(themeFor(preset), 'light');
+    for (const key of colorKeys.palette) {
+      expect(
+        contrastRatio(palette[key].darker, palette[key].lighter),
+        `${preset} ${key} darker on lighter`,
+      ).toBeGreaterThanOrEqual(4.5);
     }
   });
 

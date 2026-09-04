@@ -1,6 +1,11 @@
 # Favbase app.html 对齐 Minimal Dashboard v7.7.0 的前端 UI 重构计划
 
-> 文档状态：Phase 0-4 已完成，Phase 5 已实施、待人工运行时审阅（后续 Phase 仍按计划推进；**仅限前端 UI** / UI-only）
+> **文档状态（2026-09-04 更新）：本文的路线已被 `docs/25_app-ui-minimal-alignment-manual-2026-09-01.md` 取代。**
+> docs/23 走的是「保留自有世界、只借 Minimal 结构」；docs/25 改为「借全套视觉语言、只保品牌」，
+> 并在 §3.1 逐条推翻本文 §6 适配矩阵与 §11 拒绝清单的视觉结论（§3.2 列出仍然保留的部分）。
+> 本文自此**仅作历史记录**：读它是为了知道当时为什么那样选，实施一律以 docs/25 为准。
+> `docs/ui-baseline/2026-08-31/phase7-validation/` 是本文 Phase 5 的运行时验证截图。
+> 原状态行：Phase 0-4 已完成，Phase 5 已实施、待人工运行时审阅（**仅限前端 UI** / UI-only）
 > 目标入口：`entrypoints/app/index.html` 构建出的 `app.html`，以及其 React/MUI
 > 界面代码 `entrypoints/app/**`  
 > 参考项目：`minimal-vite-ts-main`，Minimal Dashboard v7.7.0  
