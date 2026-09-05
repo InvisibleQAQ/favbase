@@ -18,7 +18,7 @@ import { NavVertical } from './nav-vertical';
 import { useTranslatedNav } from './use-translated-nav';
 import { useJobsBadge } from '../../hooks/use-jobs-badge';
 import { BackgroundJobsIndicator } from './background-jobs-indicator';
-import { GithubButton, LanguagePopover, SettingsButton } from '../components';
+import { GithubButton, LanguagePopover, SettingsButton, ThemeModeButton } from '../components';
 import { layoutClasses } from '../core/classes';
 import { dashboardLayoutVars } from './css-vars';
 import { DASHBOARD_CONTENT_QUERY } from './content';
@@ -120,6 +120,7 @@ export function DashboardLayout({
             }}
           >
             <BackgroundJobsIndicator />
+            <ThemeModeButton />
             <LanguagePopover />
             <SettingsButton />
             <GithubButton />

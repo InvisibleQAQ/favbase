@@ -52,9 +52,14 @@ const mediaState = vi.hoisted(() => ({ isDesktop: true }));
 vi.mock('@mui/material/useMediaQuery', () => ({ default: () => mediaState.isDesktop }));
 
 // Both hooks reach the module-level background-jobs store and chrome.action;
-// the shell contract under test is composition, not job tracking.
+// the shell contract under test is composition, not job tracking. The indicator
+// still renders a marker: it is the first control of the header row, and a stub
+// returning null would let the order case silently assert one control less than
+// its name claims (it is a Chip, so an `MuiIconButton-root` scan misses it too).
 vi.mock('../../hooks/use-jobs-badge', () => ({ useJobsBadge: () => undefined }));
-vi.mock('./background-jobs-indicator', () => ({ BackgroundJobsIndicator: () => null }));
+vi.mock('./background-jobs-indicator', () => ({
+  BackgroundJobsIndicator: () => <span data-testid="jobs-indicator" />,
+}));
 
 import { ThemeProvider } from '../../theme/theme-provider';
 import { layoutClasses } from '../core/classes';
@@ -185,20 +190,31 @@ describe('DashboardLayout shell', () => {
     expect(outside[0].getAttribute('aria-label')).toBe('nav.collapseAria');
   });
 
-  it('mounts the four header controls in order', async () => {
+  it('mounts the five header controls in order', async () => {
     mediaState.isDesktop = true;
     renderShell(root);
     await act(async () => {
       await Promise.resolve();
     });
 
-    // BackgroundJobsIndicator is stubbed out above; the remaining three are the
-    // shell's own (docs/25 Step 4 header contract).
-    const labels = Array.from(container.querySelectorAll(`.${'MuiIconButton-root'}`))
-      .map((node) => node.getAttribute('aria-label'))
-      .filter((label): label is string => !!label && label.startsWith('header.'));
+    // docs/25 Step 4 header contract plus the light/dark button that came back
+    // to the Header on 2026-09-05 (light mode here, so its label is the
+    // dark-mode one). The job indicator is a Chip and is stubbed, hence the
+    // marker; scoping to the header keeps the rail's own buttons out.
+    const row = header(container);
+    expect(row).not.toBeNull();
 
-    expect(labels).toEqual(['header.languageAria', 'header.settingsAria', 'header.githubAria']);
+    const controls = Array.from(
+      row!.querySelectorAll('[data-testid="jobs-indicator"], .MuiIconButton-root'),
+    ).map((node) => node.getAttribute('data-testid') ?? node.getAttribute('aria-label'));
+
+    expect(controls).toEqual([
+      'jobs-indicator',
+      'header.themeToDark',
+      'header.languageAria',
+      'header.settingsAria',
+      'header.githubAria',
+    ]);
   });
 
   it('closes the mobile drawer on navigation and returns focus to the menu button', async () => {

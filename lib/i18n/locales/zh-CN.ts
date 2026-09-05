@@ -380,7 +380,8 @@ const zhCN = {
 
   'header.githubAria': '在 GitHub 上查看仓库',
   'header.languageAria': '切换界面语言',
-  'header.themeAria': '切换深色模式',
+  'header.themeToDark': '切换到深色模式',
+  'header.themeToLight': '切换到浅色模式',
   'header.menuAria': '打开导航菜单',
   'header.settingsAria': '外观设置',
 

@@ -1,6 +1,6 @@
 # app/layouts
 
-仪表盘布局系统。docs/25 Step 4（2026-09-02）把侧栏换成移植后的 Minimal `nav-section`（vertical / mini / mobile 三形态）、把 Header 右侧换成四控件、把主题控制搬进外观抽屉。
+仪表盘布局系统。docs/25 Step 4（2026-09-02）把侧栏换成移植后的 Minimal `nav-section`（vertical / mini / mobile 三形态）、把 Header 右侧换成四控件、把主题控制搬进外观抽屉；2026-09-05 把其中的 light/dark 二态又收回 Header（`theme-mode-button.tsx`，第五个控件），`system` 仍只在抽屉。
 
 ## Shell 几何契约
 
@@ -35,7 +35,7 @@ CSS 变量是 shell 的唯一 owner，页面只消费变量名，不复制数值
 
 - `dashboard/css-vars.ts` — rail 宽度 + content padding + transition；`NAV_VERTICAL_WIDTH = { vertical: '300px', mini: '88px' }`
 - `dashboard/content.tsx` — DashboardContent：Container maxWidth + padding 变量；导出 `DASHBOARD_CONTENT_QUERY`。**Step 4 起消费 `compactLayout`**：经 leaf `SettingsContext` 可选读取（无 provider 时视为 off），on 时把内容列收窄到 `lg`，off 时用调用方自己传的 cap。Minimal 是 `compact ? 'lg' : false`，但本仓库每个页面都显式传了 `maxWidth`（多为 `xl`），照抄既会推翻页面的决定、又因为是默认参数值而永不生效
-- `dashboard/layout.tsx` — DashboardLayout：必填 `navigation: NavGroup[]`（app composition root 解析好的不可变导航），经 `useTranslatedNav` 翻一次后同一份数据给 `NavVertical` + `NavMobile`；读 `sidebarPinnedStorage` 得 `pinned`，`isNavMini = !pinned`。Header 左侧**只有移动端汉堡**（`header.menuAria` + Tooltip，其 ref 作为 `NavMobile.onExited` 的焦点归位目标）——桌面 toggle 已搬到 rail 边缘。Header `rightArea` = `BackgroundJobsIndicator` → `LanguagePopover` → `SettingsButton` → `GithubButton`（一个 `minWidth: 0` 的 flex Box，390px 下 chip 先收缩）。**常驻挂载 `useJobsBadge()`**。`layout.test.tsx` 锁：toggle 的 aria 翻转 + storage 写入 + toggle 不在 header 内、四控件顺序、移动 Drawer 路由关闭 + 焦点回菜单按钮
+- `dashboard/layout.tsx` — DashboardLayout：必填 `navigation: NavGroup[]`（app composition root 解析好的不可变导航），经 `useTranslatedNav` 翻一次后同一份数据给 `NavVertical` + `NavMobile`；读 `sidebarPinnedStorage` 得 `pinned`，`isNavMini = !pinned`。Header 左侧**只有移动端汉堡**（`header.menuAria` + Tooltip，其 ref 作为 `NavMobile.onExited` 的焦点归位目标）——桌面 toggle 已搬到 rail 边缘。Header `rightArea` = `BackgroundJobsIndicator` → `ThemeModeButton` → `LanguagePopover` → `SettingsButton` → `GithubButton`（一个 `minWidth: 0` 的 flex Box，390px 下 chip 先收缩；不做窄屏特判）。**常驻挂载 `useJobsBadge()`**。`layout.test.tsx` 锁：toggle 的 aria 翻转 + storage 写入 + toggle 不在 header 内、五控件顺序（header 内的 DOM 序，jobs 指示器由 stub 渲染成 `data-testid` 标记参与断言——它是 Chip，只扫 `MuiIconButton-root` 会漏；light 下主题按钮是 `header.themeToDark`）、移动 Drawer 路由关闭 + 焦点回菜单按钮
 - `dashboard/use-translated-nav.ts` — **i18n seam**：`NavGroup[]`（locale key）→ `NavSectionData[]`（显示串），`useMemo` 依赖 `[data, locale]`（`t` 读模块级消息表，所以依赖是 locale）。顺手合成 disclosure 的 `toggleLabel`（`nav.toggleSubmenuAria`）。因此 `components/nav-section/**` 一个 `t()` 都没有
 - `dashboard/nav-vertical.tsx` — 桌面 rail：`position: fixed` + `overflow: hidden` + 宽度变量 + 120ms width transition；顶部品牌行（`/icon/128.png` 36px，vertical 时 `pl: 2.75` 让 logo 中心落在行图标竖轴 40px 上，mini 时居中且不出 wordmark）；`isNavMini` 决定 `NavSectionMini`（`hideScrollY`，flyout 不能被裁）还是 `Scrollbar fillContent` 包 `NavSectionVertical`（`px: 2`）。`NavToggleButton` 是它的**兄弟节点**而非子节点：rail 保留 `overflow: hidden`（88→300 展开时不闪出内容），子节点会被裁掉
 - `dashboard/nav-mobile.tsx` — `layoutQuery` 以下的 temporary Drawer，始终 vertical 形态。**焦点契约与 Chat history drawer 相同且未变**：`disableRestoreFocus` + `ModalProps.onTransitionExited` 先 blur 抽屉内焦点 + `slotProps.transition.onExited` 把焦点交还触发按钮——绝不手动改 `aria-hidden`
@@ -49,11 +49,12 @@ CSS 变量是 shell 的唯一 owner，页面只消费变量名，不复制数值
 - `components/language-popover.tsx` — 语言切换（原 `header-actions.tsx` 的语言部分，MUI `Menu` 换成 Step 3 的 `CustomPopover`）。触发按钮显示**解析后 locale** 的国旗（`flagpack:cn`/`flagpack:gb`，24×18 保 4:3），弹出两项「国旗 + 语言名」，当前项 `Mui-selected`（去掉了原先额外的 `primary.main` 小圆点，选中态交给 `menuItemStyles`）。header 不含 auto 项——auto 留在「设置 > 通用」。国旗必须是离线多色 SVG（Windows Chrome 不把 emoji 国旗渲染成国旗）
 - `components/settings-button.tsx` — 打开外观抽屉（`solar:settings-bold-duotone` + `header.settingsAria`）；`Badge` dot 由 `useSettingsReset().canReset` 驱动 = 「有任何一项不是默认」（含 mode）。不移植 Minimal 的 framer-motion 旋转
 - `components/github-button.tsx` — 仓库外链（`mdi:github` + `header.githubAria`），app Header 与 welcome 顶栏共用
-- `components/index.ts` 是 barrel，但**welcome 必须按叶文件 import**（`github-button` / `language-popover`）：barrel 会连带 `settings-button` → `components/settings` → storage，把 provider 层拖进 welcome 包
+- `components/theme-mode-button.tsx` — light↔dark 一键切换（2026-09-05；原 welcome 私有的 `styled(Switch)` 旋钮已删）。图标显示**目标模式**（亮色 → `custom:moon-color`，暗色 → `custom:sun-color`，配色论证见 `components/iconify/icon-sets.ts` 那两个图标上方的注释），Tooltip 与 `aria-label` 同一条动态文案（`header.themeToDark`/`header.themeToLight`），点击走 `theme/mode-transition.ts` 的圆形揭示。解析值 = `mode === 'system' ? systemMode : mode`，mount 前回退读 `<html data-color-scheme>`（否则挂载后图标会闪一下）。写入永远是显式 `light`/`dark`，**不写 `system`**。与 `github-button`/`language-popover` 同为 **leaf**：只依赖 react / MUI / `theme/mode-transition` / `components/iconify` / `lib/i18n`，零 `components/settings`（`lib/i18n` 自带 `localeStorage`，那是三个叶共同的底座，不是本条要挡的东西）。`theme-mode-button.test.tsx` 锁两态图标 + 标签、`system` 下点击写显式值、二次点击回摆
+- `components/index.ts` 是 barrel，但**welcome 必须按叶文件 import**（`github-button` / `language-popover` / `theme-mode-button`）：barrel 会连带 `settings-button` → `components/settings` → storage，把 provider 层拖进 welcome 包。**不再只是约定，有守卫**：`tests/ui-vendor-boundaries.test.ts` 的 `IMPORT_BOUNDARY_RULES` 禁 welcome 碰 barrel 与 `components/settings`，并反向断言 welcome 确实还按叶消费着控件
 
 ## 约定
 
 - 侧边栏 Pin/Unpin: `sidebarPinnedStorage`（`lib/storage/ui-state.ts`，`local:sidebarPinned`，默认 true）。`pinned` → vertical 300px（图标+文字+分组 subheader），`!pinned` → mini 88px（图标 tile + hover/ArrowRight flyout）。Mobile（md 以下）不受影响，始终 Drawer。**存储键与语义不变**，只是 UI 词表由 compact 改叫 mini
-- 主题（light/dark/system）不再在 Header：`components/settings/drawer/`（外观抽屉）的 Mode 三选负责，View Transition 圆形揭示逻辑收进 `theme/mode-transition.ts` 供抽屉与 welcome 顶栏共用
+- 主题按状态数拆两处（用户 2026-09-05 决定）：高频的 light/dark 二态在 Header（`components/theme-mode-button.tsx`），`system` 只在 `components/settings/drawer/`（外观抽屉）的 Mode 三选——二态控件表达不了第三态，把日常动作埋进抽屉两级更差。代价是**碰过按钮就离开 `system`**，回去只能开抽屉，且齿轮红点会亮（`canReset` 含「mode 不是 system」）：两者都是有意的，不是 bug。View Transition 圆形揭示逻辑在 `theme/mode-transition.ts`，抽屉、Header 按钮与 welcome 顶栏共用
 - 拒绝清单（docs/23 §11 仍生效的部分）：Header 不加页面搜索、账号、workspace、通知中心；nav 不做 horizontal 模式、不加 upgrade 卡；app.html 不引入 `motion`
 - nav 嵌套只做**一级**（Collections 父项 → 平台叶），止于平台名，不展开收藏夹；收藏夹列表留在平台页内的过滤器。`Onboarding Platform Preference` 只决定叶子优先级，禁止隐藏平台或反向重排 registry

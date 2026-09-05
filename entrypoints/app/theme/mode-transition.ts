@@ -12,9 +12,10 @@ export type ColorModeValue = 'light' | 'dark' | 'system';
  * The companion `::view-transition-*(root)` rules live in `app/global.css`.
  *
  * Moved out of the deleted `layouts/dashboard/header-actions.tsx` in docs/25
- * Step 4: the appearance drawer's Mode options and the welcome top bar's switch
- * both need it. `ThemeProvider` keeps `disableTransitionOnChange` so the
- * snapshot swap is not fighting per-element CSS transitions.
+ * Step 4. Two callers: the appearance drawer's Mode options and
+ * `layouts/components/theme-mode-button.tsx`, which the app Header and the
+ * welcome top bar share. `ThemeProvider` keeps `disableTransitionOnChange` so
+ * the snapshot swap is not fighting per-element CSS transitions.
  */
 export function setModeWithReveal(
   setMode: (mode: ColorModeValue) => void,

@@ -389,7 +389,8 @@ const en: Record<LocaleKeys, string> = {
 
   'header.githubAria': 'View repository on GitHub',
   'header.languageAria': 'Switch interface language',
-  'header.themeAria': 'Toggle dark mode',
+  'header.themeToDark': 'Switch to dark mode',
+  'header.themeToLight': 'Switch to light mode',
   'header.menuAria': 'Open navigation menu',
   'header.settingsAria': 'Appearance settings',
 

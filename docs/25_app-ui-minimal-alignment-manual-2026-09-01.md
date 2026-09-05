@@ -583,6 +583,8 @@ pnpm compile && pnpm test && pnpm build
 
 **仍待目测**：8 张截图与键盘顺序仍未做。本轮无法代跑——`DevToolsActivePort` 停留在 2026-09-01，对该 WS 端点握手超时，`/json` 也空，即当前 Chrome 未以 `--remote-debugging-port` 启动；且脚本现有矩阵只有 theme × viewport × locale，**没有 vertical/mini 这一维**，要覆盖手册要求的 8 张还需给 `runGroup` 接上已存在但未被调用的 `configure({ pinned })` 参数，并补 mini flyout 与抽屉两张交互截图。
 
+**后续偏离（2026-09-05，用户决定）**：本步「把 light/dark/system 一起搬进外观抽屉」被**部分推翻**——高频的 light/dark 二态回到 Header，`system` 留在抽屉（二态控件表达不了第三态；抽屉两级仍是回 `system` 的唯一入口）。落点是新的共享叶 `layouts/components/theme-mode-button.tsx`（leaf 契约同 `github-button`/`language-popover`：零 settings context、零 storage），形态是**单个 IconButton**、图标显示目标模式（亮色 `custom:moon-color` / 暗色 `custom:sun-color`，正是上面第 11 点给这对多色图标写的配色论证），Header 顺序变为 Jobs → 主题 → Language → Gear → Github（五控件，`layout.test.tsx` 的顺序例同步）。welcome 顶栏那份私有 `styled(Switch)` 旋钮（上面第 1 点）随之删除，两页回到同一个组件；`favbase-color-mode`、`theme/mode-transition.ts` 与抽屉 Mode 三选均未变。`header.themeAria` 换成两条动态文案 `header.themeToDark`/`header.themeToLight`（Tooltip 与 `aria-label` 同一条，永远描述点下去会发生什么）。`app-runtime-check.mjs` 的 reduced-motion 块**不动**：它走的抽屉路径与这条 seam 同源，没有选择器失效。
+
 ---
 
 ### Step 5 — Snackbar（sonner）+ 六处触发点
@@ -1076,7 +1078,7 @@ grep -rn "MUI v7\|Chrome 116\|segmented\|header-actions" CLAUDE.md entrypoints .
 | 构建 | `pnpm build` 成功；`scripts/check-background-bundle.mjs` 绿 | wxt |
 | CSP | DevTools Console 无 CSP 违规；Network 无 `api.iconify`/CDN | 手动 |
 | 主题 | light/dark 各路由截图；六预设各一张 `/` | `app-runtime-check.mjs` |
-| a11y | Tab 顺序：nav → toggle → header 四控件 → 内容；抽屉/Drawer 焦点闭环与归还；`aria-current`/`aria-expanded` 正确 | 手动 + 结构测试 |
+| a11y | Tab 顺序：nav → toggle → header 五控件（2026-09-05 起含主题按钮）→ 内容；抽屉/Drawer 焦点闭环与归还；`aria-current`/`aria-expanded` 正确 | 手动 + 结构测试 |
 | 对比度 | 契约测试（accent/contained/soft/platform）全绿 | vitest |
 | i18n | `tests/i18n-no-hardcoded.test.ts` 绿；zh/en 切换无 missing key warn | vitest + DEV console |
 | 依赖边界 | `tests/ui-vendor-boundaries.test.ts`（Step 5 把 `sonner` 并入该表，不新建 `snackbar-import-boundary`）、`tests/platform-completeness-contract.test.ts`、`tests/lib-import-smoke.test.ts` 绿 | vitest |

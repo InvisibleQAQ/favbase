@@ -116,8 +116,9 @@ export function BackgroundJobsIndicator() {
           : <CircularProgress size={12} color="inherit" />}
         label={reminder}
         sx={{
-          // 390px budget: menu button + theme switch + flag + GitHub leave
-          // ~140px; the chip yields first and truncates instead of overlapping.
+          // 390px budget: the menu button and the four header icon buttons
+          // (theme, flag, gear, GitHub) are fixed width, so the chip is the one
+          // element that yields — it truncates instead of overlapping them.
           maxWidth: { xs: 136, sm: 320 },
           minWidth: 0,
           flexShrink: 1,
