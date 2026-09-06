@@ -8,7 +8,9 @@ import { SettingsContext } from '../components/settings/context/settings-context
 
 import type {} from './extend-theme-types';
 
-// Must match the FOUC guard key in public/theme-init.js.
+// Must match the FOUC guard key in public/theme-init.js, which also normalizes
+// anything that is not 'light' / 'dark' (absent, or a legacy 'system' from
+// before mode became two-state) so MUI never reads a third value back.
 export const COLOR_MODE_STORAGE_KEY = 'favbase-color-mode';
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
@@ -23,7 +25,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   return (
     <ThemeVarsProvider
       disableTransitionOnChange
-      defaultMode="system"
+      defaultMode="light"
       modeStorageKey={COLOR_MODE_STORAGE_KEY}
       theme={theme}
     >

@@ -1,4 +1,5 @@
 import type { IconButtonProps } from '@mui/material/IconButton';
+import type { ColorModeValue } from '../../theme/mode-transition';
 
 import Tooltip from '@mui/material/Tooltip';
 import IconButton from '@mui/material/IconButton';
@@ -20,8 +21,9 @@ import { setModeWithReveal, revealOriginFrom } from '../../theme/mode-transition
  * way the other two leaves do — that is not what this rule keeps out).
  *
  * Mode belongs to MUI (`favbase-color-mode`), not `local:themeSettings`
- * (docs/25 D13), hence `useColorScheme()`. `system` is not reachable from
- * here — the appearance drawer's three-way Mode block owns it.
+ * (docs/25 D13), hence `useColorScheme()`. Since 2026-09-06 this button is the
+ * *only* mode control: `system` was dropped from the product and the appearance
+ * drawer no longer carries a Mode block.
  *
  * The glyph shows the *target* mode and the label says what the click does.
  * That is also what the two multi-color icons were drawn for (`icon-sets.ts`
@@ -30,13 +32,15 @@ import { setModeWithReveal, revealOriginFrom } from '../../theme/mode-transition
  */
 export function ThemeModeButton({ sx, ...other }: IconButtonProps) {
   const { t } = useTranslation();
-  const { mode, systemMode, setMode } = useColorScheme();
+  const { mode, setMode } = useColorScheme();
 
-  // Before mount MUI returns mode=undefined; fall back to the attribute the
-  // FOUC guard already set, so the icon never flips post-mount.
-  const resolved =
-    (mode === 'system' ? systemMode : mode) ??
-    (document.documentElement.getAttribute('data-color-scheme') === 'dark' ? 'dark' : 'light');
+  // Before mount MUI reports `undefined`; fall back to the attribute the FOUC
+  // guard already resolved, so the icon never flips post-mount. That fallback
+  // also absorbs a legacy `system` still sitting in MUI's state — the guard has
+  // normalized the stored value by the time anything paints.
+  const fallback =
+    document.documentElement.getAttribute('data-color-scheme') === 'dark' ? 'dark' : 'light';
+  const resolved: ColorModeValue = mode === 'light' || mode === 'dark' ? mode : fallback;
 
   const isDark = resolved === 'dark';
   const label = t(isDark ? 'header.themeToLight' : 'header.themeToDark');

@@ -397,10 +397,6 @@ const en: Record<LocaleKeys, string> = {
   // Appearance drawer (docs/25 Step 4). Called Appearance, not Settings: the
   // Settings *page* owns AI / accounts / storage; this drawer is theme-only.
   'settingsDrawer.title': 'Appearance',
-  'settingsDrawer.mode': 'Mode',
-  'settingsDrawer.modeLight': 'Light',
-  'settingsDrawer.modeDark': 'Dark',
-  'settingsDrawer.modeSystem': 'System',
   'settingsDrawer.contrast': 'Contrast',
   'settingsDrawer.contrastHint': 'Deepens the page ground so card edges read more clearly',
   'settingsDrawer.compact': 'Compact',

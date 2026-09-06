@@ -388,10 +388,6 @@ const zhCN = {
   // Appearance drawer (docs/25 Step 4). Named 外观 rather than 设置 because the
   // Settings *page* owns AI / accounts / storage; this drawer is theme-only.
   'settingsDrawer.title': '外观',
-  'settingsDrawer.mode': '模式',
-  'settingsDrawer.modeLight': '浅色',
-  'settingsDrawer.modeDark': '深色',
-  'settingsDrawer.modeSystem': '跟随系统',
   'settingsDrawer.contrast': '对比度',
   'settingsDrawer.contrastHint': '加深页面底色，让卡片边界更清晰',
   'settingsDrawer.compact': '紧凑',

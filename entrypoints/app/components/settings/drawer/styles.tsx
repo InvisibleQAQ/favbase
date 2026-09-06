@@ -11,8 +11,9 @@ import { Iconify } from '../../iconify';
 /**
  * Drawer building blocks (Minimal `components/settings/drawer/styles.tsx`).
  * `LargeBlock` is a fieldset-looking card whose floating label doubles as its
- * per-block reset; `OptionButton` is the tile used by the Mode and Presets
- * grids. `SmallBlock` is not ported — Favbase has no nested option groups.
+ * per-block reset; `OptionButton` is the tile used by the Presets grid (the
+ * Mode grid that shared it is gone since 2026-09-06). `SmallBlock` is not
+ * ported — Favbase has no nested option groups.
  */
 
 type LargeBlockProps = React.ComponentProps<typeof LargeBlockRoot> & {

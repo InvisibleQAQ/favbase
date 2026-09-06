@@ -28,9 +28,9 @@ describe('ThemeModeButton', () => {
   let container: HTMLDivElement;
   let root: Root;
 
-  /** happy-dom reports `prefers-color-scheme: light`, so `system` resolves light. */
-  function render(storedMode: 'light' | 'dark' | 'system') {
-    localStorage.setItem(COLOR_MODE_STORAGE_KEY, storedMode);
+  /** `null` = nothing stored yet, the state a fresh profile is in. */
+  function render(storedMode: 'light' | 'dark' | null) {
+    if (storedMode) localStorage.setItem(COLOR_MODE_STORAGE_KEY, storedMode);
     act(() => {
       root.render(
         <ThemeProvider>
@@ -77,15 +77,16 @@ describe('ThemeModeButton', () => {
     expect(button().getAttribute('aria-label')).toBe('header.themeToLight');
   });
 
-  it('writes an explicit mode from system, never system itself', () => {
-    render('system');
-    // Resolved appearance, not the preference: `system` is light here.
+  it('defaults to light with nothing stored, and stays two-state', () => {
+    // `system` was dropped on 2026-09-06: `defaultMode` is light and the FOUC
+    // guard normalizes the stored key, so a fresh profile starts light no
+    // matter what the OS prefers.
+    render(null);
     expect(icon()).toBe('custom:moon-color');
+    expect(button().getAttribute('aria-label')).toBe('header.themeToDark');
 
     act(() => button().click());
 
-    // Mode is MUI's own key (docs/25 D13); `system` stays reachable only from
-    // the appearance drawer, so a click must leave a two-state value behind.
     expect(localStorage.getItem(COLOR_MODE_STORAGE_KEY)).toBe('dark');
     expect(document.documentElement.getAttribute('data-color-scheme')).toBe('dark');
     expect(icon()).toBe('custom:sun-color');

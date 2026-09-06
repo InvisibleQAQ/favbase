@@ -7,17 +7,17 @@ import IconButton from '@mui/material/IconButton';
 import { useTranslation } from '@/lib/i18n/use-translation';
 
 import { Iconify } from '../../components/iconify';
-import { useSettingsContext, useSettingsReset } from '../../components/settings';
+import { useSettingsContext } from '../../components/settings';
 
 /**
  * Opens the appearance drawer (Minimal `layouts/components/settings-button.tsx`
  * minus its framer-motion spin — app.html carries no animation library).
- * The dot means "something here is not on its default".
+ * The dot means "something in the drawer is not on its default" — light/dark
+ * is not one of them: it is the Header's own button, not a drawer option.
  */
 export function SettingsButton({ sx, ...other }: IconButtonProps) {
   const { t } = useTranslation();
-  const { onToggleDrawer } = useSettingsContext();
-  const { canReset } = useSettingsReset();
+  const { canReset, onToggleDrawer } = useSettingsContext();
 
   return (
     <Tooltip title={t('header.settingsAria')}>

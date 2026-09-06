@@ -16,10 +16,8 @@ import { Iconify } from '../../iconify';
 import { LargeBlock } from './styles';
 import { Scrollbar } from '../../scrollbar';
 import { BaseOption } from './base-option';
-import { ModeOptions } from './mode-options';
 import { PresetsOptions } from './presets-options';
 import { useSettingsContext } from '../context';
-import { useSettingsReset } from '../use-settings-reset';
 import { primaryColorPresets } from '../../../theme/with-settings';
 
 import type { ThemeColorPreset } from '@/lib/storage';
@@ -27,15 +25,19 @@ import type { ThemeColorPreset } from '@/lib/storage';
 /**
  * Appearance drawer (Minimal `components/settings/drawer/settings-drawer.tsx`).
  *
- * Favbase ships four of Minimal's options — Mode, Contrast, Compact, Presets —
- * and drops font family / font size / RTL / nav layout / nav color / fullscreen
+ * Favbase ships three of Minimal's options — Contrast, Compact, Presets — and
+ * drops font family / font size / RTL / nav layout / nav color / fullscreen
  * (docs/25 §0.2), so there is no `defaultSettings`-driven visibility map: the
  * option set is fixed. Open/closed is in-memory context state, never persisted.
+ *
+ * Mode is deliberately absent: light/dark is the Header's own button
+ * (`layouts/components/theme-mode-button.tsx`) and there is no third value to
+ * pick, so a drawer block would only duplicate it (2026-09-06).
  */
 export function SettingsDrawer({ sx }: { sx?: SxProps<Theme> }) {
   const { t } = useTranslation();
-  const { state, setField, openDrawer, onCloseDrawer } = useSettingsContext();
-  const { canReset, onResetAll } = useSettingsReset();
+  const { state, canReset, onReset, setField, openDrawer, onCloseDrawer } =
+    useSettingsContext();
 
   const presetOptions = (Object.keys(primaryColorPresets) as ThemeColorPreset[]).map((name) => ({
     name,
@@ -49,7 +51,7 @@ export function SettingsDrawer({ sx }: { sx?: SxProps<Theme> }) {
       </Typography>
 
       <Tooltip title={t('settingsDrawer.reset')}>
-        <IconButton aria-label={t('settingsDrawer.reset')} onClick={onResetAll}>
+        <IconButton aria-label={t('settingsDrawer.reset')} onClick={onReset}>
           <Badge color="error" variant="dot" invisible={!canReset}>
             <Iconify icon="solar:restart-bold" />
           </Badge>
@@ -90,10 +92,6 @@ export function SettingsDrawer({ sx }: { sx?: SxProps<Theme> }) {
 
       <Scrollbar>
         <Box sx={{ pb: 5, gap: 6, px: 2.5, display: 'flex', flexDirection: 'column' }}>
-          <LargeBlock title={t('settingsDrawer.mode')}>
-            <ModeOptions />
-          </LargeBlock>
-
           <Box sx={{ gap: 2, display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)' }}>
             <BaseOption
               icon="mdi:contrast-circle"

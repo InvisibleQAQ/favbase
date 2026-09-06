@@ -1,6 +1,7 @@
 import { flushSync } from 'react-dom';
 
-export type ColorModeValue = 'light' | 'dark' | 'system';
+/** Two-state on purpose: `system` was dropped from the product on 2026-09-06. */
+export type ColorModeValue = 'light' | 'dark';
 
 /**
  * Swap the color mode with a circular reveal growing from `origin` (View
@@ -12,7 +13,7 @@ export type ColorModeValue = 'light' | 'dark' | 'system';
  * The companion `::view-transition-*(root)` rules live in `app/global.css`.
  *
  * Moved out of the deleted `layouts/dashboard/header-actions.tsx` in docs/25
- * Step 4. Two callers: the appearance drawer's Mode options and
+ * Step 4. Sole caller since 2026-09-06:
  * `layouts/components/theme-mode-button.tsx`, which the app Header and the
  * welcome top bar share. `ThemeProvider` keeps `disableTransitionOnChange` so
  * the snapshot swap is not fighting per-element CSS transitions.

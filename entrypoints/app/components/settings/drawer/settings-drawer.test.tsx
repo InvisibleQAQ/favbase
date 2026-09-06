@@ -84,14 +84,6 @@ function buttonByLabel(label: string): HTMLButtonElement {
   return node;
 }
 
-function buttonByText(text: string): HTMLButtonElement {
-  const node = Array.from(dialog()?.querySelectorAll('button') ?? []).find((candidate) =>
-    candidate.textContent?.includes(text),
-  );
-  if (!node) throw new Error(`no button containing ${text}`);
-  return node;
-}
-
 function lastWrite() {
   return storageMock.writes.at(-1);
 }
@@ -189,20 +181,25 @@ describe('SettingsDrawer', () => {
     });
   });
 
-  it('switches color mode through MUI, not through themeSettings', async () => {
+  it('carries no mode control and leaves the color mode alone', async () => {
+    localStorage.setItem(COLOR_MODE_STORAGE_KEY, 'dark');
     await open();
-    await clickInDialog(buttonByText('settingsDrawer.modeDark'));
 
-    // Mode belongs to MUI's own storage key (docs/25 D13), so no themeSettings write.
+    // Light/dark is the Header's own button since 2026-09-06 and `system` is
+    // gone, so nothing in here may name a mode or touch MUI's key.
+    const labels = Array.from(dialog()?.querySelectorAll('button') ?? []).map(
+      (node) => `${node.getAttribute('aria-label') ?? ''} ${node.textContent ?? ''}`,
+    );
+    expect(labels.join(' ')).not.toMatch(/mode/i);
+
+    await clickInDialog(buttonByLabel('settingsDrawer.preset2'));
     expect(localStorage.getItem(COLOR_MODE_STORAGE_KEY)).toBe('dark');
-    expect(document.documentElement.getAttribute('data-color-scheme')).toBe('dark');
-    expect(storageMock.writes).toEqual([]);
   });
 
-  it('resets both the persisted settings and the color mode', async () => {
+  it('resets the persisted settings and hides the dot again', async () => {
+    localStorage.setItem(COLOR_MODE_STORAGE_KEY, 'dark');
     await open();
     await clickInDialog(buttonByLabel('settingsDrawer.preset2'));
-    await clickInDialog(buttonByText('settingsDrawer.modeDark'));
 
     const reset = buttonByLabel('settingsDrawer.reset');
     expect(reset.querySelector('.MuiBadge-invisible')).toBeNull();
@@ -210,7 +207,9 @@ describe('SettingsDrawer', () => {
     await clickInDialog(reset);
 
     expect(lastWrite()?.value).toEqual({ ...DEFAULT_THEME_SETTINGS });
-    expect(localStorage.getItem(COLOR_MODE_STORAGE_KEY)).toBe('system');
+    // The drawer owns no mode option, so "reset all" must not silently repaint
+    // the app — that was the bug the old `onResetAll` shipped.
+    expect(localStorage.getItem(COLOR_MODE_STORAGE_KEY)).toBe('dark');
     // canReset is back to false, so the dot on "reset all" is hidden again.
     expect(
       buttonByLabel('settingsDrawer.reset').querySelector('.MuiBadge-invisible'),

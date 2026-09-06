@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import type { ThemeContrast, ThemeColorPreset } from '@/lib/storage';
@@ -338,5 +341,49 @@ describe('theme mode compatibility', () => {
     expect(COLOR_MODE_STORAGE_KEY).toBe('favbase-color-mode');
     expect(themeConfig.cssVariables.colorSchemeSelector).toBe('data-color-scheme');
     expect(theme.defaultColorScheme).toBe('light');
+  });
+
+  /**
+   * `public/theme-init.js` is a classic script no bundler touches, so nothing
+   * else type-checks or exercises it. Run the real source against stubs: the
+   * only reason the extension does not flash the wrong scheme is that this
+   * agrees with `defaultMode` and the selector asserted above.
+   */
+  describe('public/theme-init.js', () => {
+    // Same `__dirname` convention as `tests/*-contract.test.ts`.
+    const source = readFileSync(path.resolve(__dirname, '../../../public/theme-init.js'), 'utf8');
+
+    function runGuard(stored: string | null) {
+      const store = new Map<string, string>();
+      if (stored !== null) store.set(COLOR_MODE_STORAGE_KEY, stored);
+
+      const root: Record<string, string> = {};
+      const localStorageStub = {
+        getItem: (key: string) => store.get(key) ?? null,
+        setItem: (key: string, value: string) => void store.set(key, value),
+      };
+      const documentStub = {
+        documentElement: { setAttribute: (name: string, value: string) => void (root[name] = value) },
+      };
+
+      new Function('localStorage', 'document', source)(localStorageStub, documentStub);
+
+      return { stored: store.get(COLOR_MODE_STORAGE_KEY) ?? null, attribute: root['data-color-scheme'] };
+    }
+
+    it('seeds light on a fresh profile', () => {
+      expect(runGuard(null)).toEqual({ stored: 'light', attribute: 'light' });
+    });
+
+    it('migrates a legacy `system` to light instead of resolving the OS', () => {
+      // The write-back is what makes it stick: MUI reads this key itself and a
+      // stored value beats `defaultMode`.
+      expect(runGuard('system')).toEqual({ stored: 'light', attribute: 'light' });
+    });
+
+    it('leaves an explicit choice untouched', () => {
+      expect(runGuard('dark')).toEqual({ stored: 'dark', attribute: 'dark' });
+      expect(runGuard('light')).toEqual({ stored: 'light', attribute: 'light' });
+    });
   });
 });
