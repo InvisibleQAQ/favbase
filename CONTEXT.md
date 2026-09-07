@@ -5,8 +5,13 @@ This context defines product language shared by collection and analytics feature
 
 ## Language
 
+**Collection Platform**:
+A supported external service whose favorites favbase collects and stores locally, such as a video site, a code host, a microblog, a Q&A site, or the browser's own bookmarks.
+It is available to every user the moment it ships; onboarding selection only orders it in navigation and never enables or disables it.
+_Avoid_: Provider (that is an AI vendor), integration, connector, channel
+
 **Collection Item**:
-One persisted favorite, bookmark, video, repository, answer, article, or post from a supported platform.
+One persisted favorite, bookmark, video, repository, answer, article, or post from a Collection Platform.
 _Avoid_: Task, job, record
 
 **Collection Analytics**:
@@ -49,6 +54,11 @@ _Avoid_: Tagged task, completed item
 A read-only, platform-scoped snapshot of how many locally persisted, eligible Collection Items have completed each content-processing stage.
 It does not claim that the local collection contains every current item from the external platform.
 _Avoid_: Remote sync completeness, job history, processing dashboard
+
+**Platform Sync**:
+One complete act of collecting a Collection Platform's current favorites into the local collection.
+It is defined once per platform and is the same act however it starts, whether a person presses the button or the daily automatic run fires; a completed Platform Sync means that run finished, never that the local collection now mirrors the platform.
+_Avoid_: Fetch job, refresh, import, Pipeline Run
 
 **Pipeline Run**:
 One bounded execution attempt for a Collection pipeline stage; its completion does not claim that local items fully cover the external platform.
@@ -103,7 +113,10 @@ _Avoid_: API key, provider key, password
 - The **Dashboard** presents **Collection Analytics**
 - **Library Composition** is the primary **Collection Analytics** view
 - **Collection Analytics** summarizes zero or more **Collection Items**
-- A **Collection Item** belongs to exactly one supported platform
+- A **Collection Item** belongs to exactly one **Collection Platform**
+- A **Platform Sync** is defined once per **Collection Platform**; the manual trigger and the daily automatic trigger perform that same **Platform Sync**
+- A completed **Platform Sync** does not claim that the local collection covers the **Collection Platform**'s current favorites
+- A **Platform Request** asks for a service to become a **Collection Platform**; until it does, it has no **Platform Sync** and holds no **Collection Items**
 - A **Collection Item** has one **Creator** or bookmark **Domain**
 - A **Collection Item** belongs to one or more **Sources** when the platform exposes containers
 - A platform Collection page may present **Processing Coverage** for its locally persisted **Collection Items**
