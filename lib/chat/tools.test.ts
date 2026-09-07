@@ -188,7 +188,7 @@ describe('chatTools', () => {
   });
 
   /**
-   * platform-onboarding.md §9 item 3: `z.enum(COLLECTION_PLATFORMS)` is derived,
+   * docs/26 appendix A item 3: `z.enum(COLLECTION_PLATFORMS)` is derived,
    * so the schema accepts a newly onboarded platform while a hand-written prose
    * list keeps telling the model only the old ones exist — Chat and the Agent
    * Bridge then never filter by it. Both halves of the model-facing surface (the

@@ -1,7 +1,8 @@
 # Platform Descriptor 收敛手册
 
 > 把接入一个 Collection Platform 时要手写的 **16 处注册表收敛成 2 份 descriptor**，并把
-> `.trellis/spec/frontend/platform-onboarding.md` §9 的**无守卫清单从 7 条压到 2 条**。
+> `.trellis/spec/frontend/platform-onboarding.md` §9 的**无守卫清单从 8 条压到 2 条**
+> （立项时 6 条，2026-09-06 复核加第 7 条 marquee，Step 3 复核加第 8 条 SKILL.md frontmatter）。
 >
 > 本文是执行手册，不是论证。为什么要做、为什么是这个形状，看 §1 决策记录；
 > 接入平台的**契约**仍然是 `.trellis/spec/frontend/platform-onboarding.md`，本文只负责把它
@@ -22,7 +23,7 @@
 | --- | --- | --- | --- | --- |
 | **1** | 零依赖前置：能独立做完的五件事，先把 §9 的 3 条无守卫项和 2 处噪音清掉 | 无 | 低 | **已落地 2026-09-07** |
 | **2** | descriptor 双份落地，12 处注册表改派生，删两张表，重写契约测试 | Step 1 | **中**（动 manifest） | **已落地 2026-09-07** |
-| **3** | 文档同步：spec §6/§7/§9/§12/§13 重写 + 根 CLAUDE.md + ADR 0004 | Step 2 | 无 | 待执行 |
+| **3** | 文档同步：spec §6/§7/§9/§12/§13 重写 + 根 CLAUDE.md + ADR 0004 | Step 2 | 无 | **已落地 2026-09-07** |
 
 ### 0.2 不做什么
 
@@ -46,7 +47,7 @@
 | 平台专属代码 `lib/<p>/` + `sections/<p>/` | 15 文件 / **2230 行** | **不变** |
 | locale 键 | `<p>.*` 19 + `settings.<p>.*` 19 + `nav.*` + `welcome.picker.hint.*` ≈ **40 键 × 2 语言** | **不变** |
 | 注册表手写处 | **13 文件 / 16 条** | → **6 文件**（2 descriptor + 4 重值） |
-| 静默失败面（§9） | **7 条** | → **2 条** |
+| 静默失败面（§9） | **8 条**（见附录 A） | → **2 条** |
 
 大头是前两项，且不可压缩——那就是真正的平台集成工作。16 处注册表从来不是工作量的主体，**它们是会被忘掉的那部分**。如果目标是"少干活"，本手册解决不了，方向要换。
 
@@ -434,12 +435,49 @@ pnpm test
 **回滚点**：`docs(platform): rewrite the onboarding contract for the descriptor split`
 
 **完成判据**
-- [ ] `platform-onboarding.md` §9 只剩两行，且每行注明"为什么守卫救不了"
-- [ ] `platform-onboarding.md` §6 与本文 §2.1/§2.2 一致，无残留的 13+3 说法
-- [ ] 根 `CLAUDE.md` 三处更新
-- [ ] `docs/adr/0004` 写成，只含 D2 / D3
-- [ ] 本文 §7 勾选表全勾，附录 B 全部消解
-- [ ] `grep -rn "13 " .trellis/spec/frontend/platform-onboarding.md` 无残留的旧计数说法（人工判读，不是硬判据）
+- [x] `platform-onboarding.md` §9 只剩两行，且每行注明"为什么守卫救不了"（加一句共性：两条都**不是平台的事实**，那就是 descriptor 的能力边界）
+- [x] `platform-onboarding.md` §6 与本文 §2.1/§2.2 一致，无残留的 13+3 说法
+- [x] 根 `CLAUDE.md` 三处更新
+- [x] `docs/adr/0004` 写成，只含 D2 / D3
+- [x] 本文 §7 勾选表全勾，附录 B 全部消解（U-1/U-2/U-3/U-5 四条，铁律 8）
+- [x] 无残留旧计数说法（人工判读：`13+3` 在 spec 与 `index.md` 已清零）
+
+**执行结果（2026-09-07）**
+
+`pnpm test` **196 文件 / 1441 例 + packages 10 文件 / 55 例，exit=0**（详见下方验证段）。本 Step 唯一代码改动是 `tests/agent-bridge-cli-aliases.test.ts` 的一例新断言与它逼出的一个 SKILL.md 用词修正——因为复核发现了手册未料到的第 8 条无守卫项（见附录 A）。
+
+**用户决定（grill-with-docs，2026-09-07）**
+
+| # | 决策 | 否决的方案 | 理由 |
+| --- | --- | --- | --- |
+| **D9** | `skills/favbase/SKILL.md` frontmatter `description` 的第二份平台清单**现在就补守卫**，§9 仍收成两行 | ① 记为 §9 第三条活的，守卫另开任务 ② 判定为非问题（散文概述不算清单） | 失败模式静默且**模型可见**：frontmatter 是 agent 选不选这个 skill 的依据，第 7 个平台漏在这里，用户问该平台时 agent 根本不调 favbase。与 Step 1 杀掉的第 3 条同缺陷类，双向集合手法已在同一文件建立，扩一例十几行 |
+| **D10** | 「守卫会红、但活儿仍是手写」的三条（`.env.example` 平台块 / marquee 药丸 / SKILL.md 两份清单）进 **spec §2 守卫表**（3 → 5 行，加"You still hand-write"列） | ① §9 内部分两段 ② 进 §13 Definition of done | §2 的定位是「让机器给你生成 TODO」，这三条正是机器会告诉你的；§9 的唯一价值是「机器不会告诉你的」，混进去就稀释了它。§13 是收尾清单，不是发现工作项的地方 |
+
+**手册勘误（Step 3 复核，已就地回写）**
+
+| # | 手册说 | 实际 |
+| --- | --- | --- |
+| E-1 | 「§9 七条 → 两条」 | **八条 → 两条**。`SKILL.md` 有两份手写平台清单（`<platform>` 句 + frontmatter `description`），Step 1 的守卫只盖了前者。§9 原表的 3b 行写着 "GUARDED" 而只对了一半 |
+| E-2 | 「§7.1 / §7.2：`childRoutes` 不再在 `collection-platform-pages.ts` 填」 | §7 从来**没提过** `childRoutes`（它只在 §6.1 表里）。实际是 §7.1 **新增**一句，指向 §6.2 |
+| E-3 | 「§13 注册表勾选项从 13+3 改成 2+4」 | §13 **没有**这条勾选项。实际是新增两条（两份 descriptor + 四处重值；manifest diff） |
+| E-4 | 文档同步清单（§6）未列 `.trellis/spec/frontend/index.md` | 该文件第 34 行也写着 "the 13+3 registries" |
+| E-5 | 「根 `CLAUDE.md`：加 `platform-descriptor.ts` 的定位行」 | 「平台领域（lib）」段根本**没有** `lib/collections/` 行。实际加的是该目录 `CLAUDE.md` 的索引行（含 descriptor 与 ADR 0004 指针） |
+| E-6 | 未预见 | §9 重编号后，三处代码注释的 "platform-onboarding.md §9 item 3" 成了幽灵引用（`lib/chat/tools.test.ts`、`lib/chat/CLAUDE.md`、`tests/agent-bridge-cli-aliases.test.ts`），改指本文附录 A 第 3 条 |
+
+**偏离手册（Step 3）**
+
+- **spec §2 从两张表变成「一张机制表 + 一张五行守卫表」**（D10）。marquee 覆盖断言在 §2 与 §6 各出现一次是刻意的：§2 讲「机器会告诉你」，§6 讲「字段怎么填」，不是同一条规则写两遍。
+- **§8 首句改写**：原文说 `WELCOME_READINESS_BY_PLATFORM` is contract-checked——它现在是 descriptor 的派生物，被类型系统而非契约测试守。改成「`readiness` 是穷举的，所以你不会忘记回答这个问题，但没有任何东西验证回答 `'credentials'` 的平台有地方输入凭据」。
+- **§12 的 manifest diff 不是等值检查**。手册 Step 2 的 recipe 要求 `diff` 无输出（那是纯重构）；对**新平台**而言 `host_permissions` 理应变长，所以 spec 里写成「只准多出你自己的那几行，顺序按 `COLLECTION_PLATFORMS`」，并解释为什么重排既有条目会让所有已安装用户重新授权。也没抄 `git stash` 那套（新平台带未跟踪文件，stash 后构建会缺模块），改为「基线在开工前的干净树上取」。
+- **SKILL.md 改了一个词**：`Zhihu collections` → `Zhihu favorites`。守卫对账的是产品内名（`nav.zhihuFavorites` = "Zhihu Favorites"），让断言精确而非启发式（否则只能按首词模糊匹配）；顺带消掉了 shipped skill 与产品用词的一处真实漂移。
+- **ADR 0004 只记形状**（手册要求），但把「三条从代码里看不出来的约束」提到 Decision 段而非 Consequences：那三条正是这份 ADR 存在的理由，埋在后果里读者会先问「为什么不是一份」。
+
+**证伪记录**
+
+| 破坏 | 结果 |
+| --- | --- |
+| 删掉 SKILL.md frontmatter 的 `, YouTube playlists` | 新断言红，diff 直接指出缺 `youtube playlists` |
+| 保留 `Zhihu collections` 原文 | 新断言红（`zhihu collections` ≠ 产品内名 `zhihu favorites`）——这就是它被发现的方式 |
 
 ---
 
@@ -468,7 +506,10 @@ pnpm test
 | `entrypoints/app/layouts/CLAUDE.md` | 2 | `PLATFORM_LABEL` 已删，改 descriptor join |
 | `entrypoints/welcome/CLAUDE.md` | 2（执行时追加） | readiness 由穷举声明改为 descriptor 派生 |
 | `.trellis/spec/frontend/ui-design-system.md` | 2（执行时追加） | 平台色来源改 `PLATFORM_META.palette`；「六键显式好让 AST 读到」的理由已死 |
-| `.trellis/spec/frontend/platform-onboarding.md` | 3（§9 第 1-2 条与 §6 横幅在 2 就地改） | §2/§6/§7/§9/§11/§12/§13 |
+| `.trellis/spec/frontend/platform-onboarding.md` | 3（§9 第 1-2 条与 §6 横幅在 2 就地改） | §2/§6/§7/§9/**§10**/§11/§12/§13 |
+| `.trellis/spec/frontend/index.md` | 3（**手册原漏**） | 第 34 行也说 "the 13+3 registries" |
+| `lib/chat/tools.test.ts`、`lib/chat/CLAUDE.md`、`tests/agent-bridge-cli-aliases.test.ts` | 3（**手册原漏**） | 三处注释指向 "platform-onboarding.md §9 item 3"，§9 重编号后成幽灵引用，改指 docs/26 附录 A 第 3 条 |
+| `packages/favbase-cli/CLAUDE.md` + 根 `CLAUDE.md` 的 CLI 行 | 3（**手册原漏**，铁律 6） | 两处都写着 SKILL.md 有「**一份**」手写平台清单并已双向对账；实际是两份，Step 3 前只对账了一份 |
 | 根 `CLAUDE.md` | 1, 2, 3 | Step 1 改 `lib/env.ts` 行；Step 2 改 `wxt.config.ts` 行 + 契约测试行 + docs/26 状态；Step 3 改索引 |
 | `docs/adr/0004` | 3 | 新建 |
 
@@ -478,7 +519,7 @@ pnpm test
 
 - [x] **Step 1** 零依赖前置 — `refactor(collections): land the dependency-free platform onboarding fixes`（2026-09-07）
 - [x] **Step 2** descriptor 双份落地 — `refactor(collections): derive platform registries from two descriptors`（2026-09-07）
-- [ ] **Step 3** 文档同步与收口 — `docs(platform): rewrite the onboarding contract for the descriptor split`
+- [x] **Step 3** 文档同步与收口 — `docs(platform): rewrite the onboarding contract for the descriptor split`（2026-09-07）
 
 ---
 
@@ -495,8 +536,9 @@ pnpm test
 | 5 | 新 view 里的英文硬编码文案 | **活** | 无。`i18n-no-hardcoded.test.ts` 只拦 CJK，与注册表无关 |
 | 6 | `.env.local` 平台块无文档 | **死** ✅ | Step 1 让 `.env.example` 转正（tracked，43 键，零密钥），守卫该半边改为**必须存在** |
 | 7 | `capability-marquee.tsx` 手工药丸表（本次发现） | **死** ✅ | Step 1 加 AST 覆盖断言（D5：不派生） |
+| 8 | `skills/favbase/SKILL.md` frontmatter `description` 的显示名清单（**Step 3 复核发现**） | **死** ✅ | Step 1 的 `agent-bridge-cli-aliases.test.ts` 只守了 `` `<platform>` is one of … `` 那句；SKILL.md 其实有**两份**手写清单，frontmatter 那份零守卫，Step 3 补一例双向断言（对账 `PLATFORM_META.title` 经 en locale 的显示名） |
 
-**七条 → 两条。**
+**八条 → 两条。** 第 3 条原以「三处 prompt 字面量」立项，执行时发现是四处（含 `CHAT_SYSTEM_PROMPT`）；第 8 条则说明同一个「模型可见面出示部分平台清单」缺陷类在 Step 1 只被杀了一半——`SKILL.md` 那个文件里有两处，守卫只盖了一处。
 
 ---
 
@@ -504,11 +546,11 @@ pnpm test
 
 | # | 项 | 在哪一步消解 |
 | --- | --- | --- |
-| **U-1** | `theme/core/palette.ts` 改为 import `collection-platform-registry.ts` 后，模块初始化顺序是否影响 `createPaletteChannel`。静态分析无环（`register-icons.ts` 无 theme 回边，registry 的 `IconifyName` 是 `import type`），但同 chunk 内的初始化顺序需实测 | Step 2 |
-| **U-2** | WXT 的 config 加载器对 `wxt.config.ts` → `./lib/collections/platform-descriptor` → `import type ./analytics-types` 这条链是否干净。高置信度可以，但要 `pnpm build` 证 | Step 2 |
-| **U-3** | 契约测试要删/改的断言精确条数。已知是 §2.1 那 12 项对应的 AST 读取，但该测试内部结构未逐行核过 | Step 2 |
+| ~~**U-1**~~ | **已消解 2026-09-07（Step 2）**：无环推断成立，`palette.ts` 顶层只读 `PLATFORM_META` 的纯数据。`theme/core/palette.test.ts` 八个品牌 hex 断言 + `pnpm build` 均绿，无 TDZ / undefined 中间态 | ~~Step 2~~ |
+| ~~**U-2**~~ | **已消解 2026-09-07（Step 2）**：`pnpm build` 绿且 **manifest 逐字节相同**，`wxt.config.ts` → descriptor → `import type` 链干净（`import type` 被编译期擦除，Node 侧不解析 `analytics-types`） | ~~Step 2~~ |
+| ~~**U-3**~~ | **已消解 2026-09-07（Step 2）**：删掉 12 项纯数据的 AST 对账，保留 4 处重值覆盖 + 全部结构规则，新增 `dimensions` 自一致与两处显式数组字面量断言。改写后的对账清单以 Step 2「执行结果」与根 `CLAUDE.md` 的契约测试行为准 | ~~Step 2~~ |
 | ~~**U-4**~~ | **已消解 2026-09-07**：`.env.local` 已用 `# KEY=` 形式覆盖全部 30 个平台键、值与守卫表 fallback 逐条相同，`.env.example` 直接由它派生（去密钥、去 douyin 死块）。转正后守卫该半边为绿 | ~~Step 1~~ |
-| **U-5** | `BrandColoredPlatform`（`theme-config.ts:48` 附近）除 `platform` 块外是否还有消费者。有则不能随块删除 | Step 2 |
+| ~~**U-5**~~ | **已消解 2026-09-07（Step 2）**：实测唯一消费者是 `theme/core/palette.test.ts`，随 `platform` 块与 `CollectionPlatform` 死引用一并删除 | ~~Step 2~~ |
 
 ---
 

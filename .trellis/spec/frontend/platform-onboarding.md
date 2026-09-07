@@ -35,15 +35,19 @@ is **making them generate your TODO list instead of writing one yourself**.
 | Mechanism | What it catches | How you invoke it |
 | --- | --- | --- |
 | TypeScript exhaustive `Record<CollectionPlatform, T>` | Every registry that must gain a key. The error lands on the object literal, naming the missing property. | `pnpm compile` |
-| `tests/platform-completeness-contract.test.ts` | What types cannot see: a lazy import resolving to nothing, a page that renders no `sections/` view, a view that skips `useCollectionBreadcrumbs`, `main.tsx` naming a platform, a hand-written `jobPlatform`, `hooks/` importing `sections/`, a host-permission list that is not an array literal, a platform literal leaking into `collection-processing-policy.ts`. Reports **all** failures as one aggregated list. | `pnpm vitest run tests/platform-completeness-contract.test.ts` |
+| `tests/platform-completeness-contract.test.ts` | What types cannot see: a lazy import resolving to nothing, a page that renders no `sections/` view, a view that skips `useCollectionBreadcrumbs`, `main.tsx` naming a platform, a hand-written `jobPlatform`, `hooks/` importing `sections/`, a `childRoutes` or `hostPermissions` value that is computed instead of written out, an analytics axis absent from its own ranked list, a platform literal leaking into `collection-processing-policy.ts`, a missing `lib/<platform>/` directory. Reports **all** failures as one aggregated list. | `pnpm vitest run tests/platform-completeness-contract.test.ts` |
 
-Three more guards fire automatically for a new platform directory:
+Five more guards fire with no wiring on your part. Three of them reconcile an
+artefact you still write by hand: the guard turns "silently absent" into a red
+test, it does not do the work for you.
 
-| Guard | Contract |
-| --- | --- |
-| `tests/lib-import-smoke.test.ts` | `lib/<platform>/` MUST contain **exactly one** non-test `*-sync-service.ts`, and it MUST `import()` cleanly with no `chrome` global and zero `vi.mock` — i.e. no `@/lib/storage` (or any module with a `chrome.*` load side effect) in its static graph. |
-| `tests/http-fetch-deadline-guard.test.ts` | No bare `fetch(` anywhere in `lib/**`. Use `fetchWithDeadline` (`lib/http/`). |
-| `tests/platform-env-constants-guard.test.ts` | No bare numeric `SCREAMING_CASE` module constant in `lib/<platform>/`. Every policy number goes through `envNumber('VITE_<PLATFORM>_<NAME>', default)` **and** is registered in that test's `EXPECTED_ENV_CONSTANTS` table with its exact fallback. |
+| Guard | Contract | You still hand-write |
+| --- | --- | --- |
+| `tests/lib-import-smoke.test.ts` | `lib/<platform>/` MUST contain **exactly one** non-test `*-sync-service.ts`, and it MUST `import()` cleanly with no `chrome` global and zero `vi.mock` — i.e. no `@/lib/storage` (or any module with a `chrome.*` load side effect) in its static graph. | — |
+| `tests/http-fetch-deadline-guard.test.ts` | No bare `fetch(` anywhere in `lib/**`. Use `fetchWithDeadline` (`lib/http/`). | — |
+| `tests/platform-env-constants-guard.test.ts` | No bare numeric `SCREAMING_CASE` module constant in `lib/<platform>/`. Every policy number goes through `envNumber('VITE_<PLATFORM>_<NAME>', default)` **and** is registered in that test's `EXPECTED_ENV_CONSTANTS` table with its exact fallback. | your platform's block in `.env.example` — tracked and secret-free, one documented line per key, checked both ways |
+| `tests/platform-completeness-contract.test.ts` — marquee coverage | Every platform's `PLATFORM_META.title` appears as a pill in `entrypoints/welcome/sections/capability-marquee.tsx`. | the pill. Those rows are hand-authored on purpose (docs/26 D5) — the interleaving of platform and capability pills is a design decision, so coverage is checked, never generated |
+| `tests/agent-bridge-cli-aliases.test.ts` | `skills/favbase/SKILL.md` carries **two** platform lists and both are reconciled: the `` `<platform>` is one of … `` sentence against the ids, and the frontmatter `description` against the in-app names (`PLATFORM_META.title` through the en locale). | both lists. Shipped markdown derives nothing, and the frontmatter one is what an external agent *selects the skill by* — miss it and the agent never reaches for favbase when the user asks about your platform |
 
 ## 3. Decide before you write code
 
@@ -166,51 +170,72 @@ transcribe them into a side document that will rot.
 
 ## 6. Phase 3 — The registries
 
-> **2026-09-07 — docs/26 Step 2 landed.** Twelve of the entries below are now
-> two Platform Descriptors: the domain five (`jobPlatform`, `readiness`,
-> `hostPermissions`, `sortKey`, `dimensions`) in
-> `lib/collections/platform-descriptor.ts`, and the app five (`title`, `icon`,
-> `palette`, `hint`, `childRoutes`) in `PLATFORM_META`
-> (`entrypoints/app/collection-platform-registry.ts`). Four heavy-value
-> registries stay where they are (`COLLECTION_PAGE_LOADERS`, `CARD_ADAPTERS`,
-> auto-sync `runSync`, `PLATFORM_DOWNSTREAM_ELIGIBILITY`). The tables in §6.1 /
-> §6.2 still name the old locations; they are rewritten in docs/26 Step 3 —
-> until then declare a new platform in the two descriptors and read those two
-> files as the list.
+The facts a platform used to declare one file at a time are now ten fields
+across two **Platform Descriptors** (ADR 0004). Both are exhaustive
+`Record<CollectionPlatform, …>`, so an undeclared platform is a compile error on
+the object literal that names the platform — and the whole point is that it
+lands there, in the file you are meant to edit, instead of in whatever consumer
+happened to index it first. Four registries stay where they are, because their
+values are not data.
 
-### 6.1 Checked by the completeness contract (13 entries, 11 files)
+### 6.1 The domain descriptor — `lib/collections/platform-descriptor.ts`
+
+`PLATFORM_DESCRIPTORS`. The build config loads this file in Node by relative
+path, so **its only value import may be `./platforms`** and it never enters the
+`lib/collections` barrel (§11 — both rules exist to keep it loadable).
+
+| Field | You declare | Read by |
+| --- | --- | --- |
+| `jobPlatform` | the background-job namespace, unique across platforms (`{jobPlatform}:sync｜embed｜tag｜extract`) | `jobPlatformForCollection`, and the background-jobs indicator's label — a join onto `PLATFORM_META.title` (§6.2) |
+| `readiness` | `'credentials'` / `'login'` / `'local'` (§3) | `WELCOME_READINESS_BY_PLATFORM`, the welcome landing route |
+| `hostPermissions` | an explicit array literal of match patterns, in the order you want them in the manifest | `PLATFORM_HOST_PERMISSION_LIST`, spread into `wxt.config.ts` `host_permissions` |
+| `sortKey` | `{ source: 'publishedAt' }`, or `{ source: 'meta', field, format }` (§3) | `PLATFORM_SORT_KEYS`, re-exported from `platform-sort-keys.ts` |
+| `dimensions` | `{ ranked, author, source }` — the ordered Collection Analytics facets, which one carries the **Creator** axis, and which one carries the **Source** membership (`source: null` when the platform has no Source) | the Dashboard composition and breakdown cards, read inline |
+
+Two of those fields have a cost you cannot see from the object literal, so both
+are pinned in `lib/collections/platform-descriptor.test.ts`:
+
+- **`hostPermissions` order is a manifest contract.** An installed MV3 extension
+  whose `host_permissions` set changes asks its user to re-authorize. The test
+  locks the flattened golden order, not just the membership.
+- **`jobPlatform` must be unique.** Two platforms sharing a job lane means the
+  second sync is discarded as a duplicate of the first.
+
+### 6.2 The app descriptor — `entrypoints/app/collection-platform-registry.ts`
+
+`PLATFORM_META`. It is a separate literal from §6.1 rather than one manifest
+because its field types are app-owned — `LocaleKeys`, `IconifyName` — and
+`lib/` must not depend on `entrypoints/` (ADR 0004).
+
+| Field | You declare | Read by |
+| --- | --- | --- |
+| `title` | your `nav.*` locale key | `collectionPlatformRegistry` (sidebar, breadcrumb ancestry, chat source cards), the marquee coverage check and the SKILL.md description reconciliation (§2) |
+| `icon` | an `IconifyName` | the same registry |
+| `palette` | `{ light, dark }` brand hues, or `'ink'` for a black-logo brand (github, x), which resolves to the scheme's own text ink | `PLATFORM_PALETTE_LIGHT` / `PLATFORM_PALETTE_DARK` in `theme/core/palette.ts` |
+| `hint` | the one-line onboarding hint locale key — a `welcome.picker.hint.*` key, not any `LocaleKeys` that compiles | the welcome platform picker |
+| `childRoutes` | an explicit array literal of nested detail routes; `[]` for a flat platform | `COLLECTION_PAGE_CHILD_ROUTES`, spread into the router (§7.1) |
+
+`icon` is typed `IconifyName = keyof typeof allIcons`, so a glyph you have not
+added to `entrypoints/app/components/iconify/icon-sets.ts` is a **compile error
+in this file** — a different file from the one you forgot to edit. Add the
+offline SVG body first; there is no CDN.
+
+`palette` is not the brand's own hex. The values come from the dataviz palette
+validator (bilibili's `#FB7299` fails contrast at 2.4:1), `theme/core/palette.test.ts`
+locks every one of them, and changing one requires re-running the validator.
+
+### 6.3 The four heavy-value registries
+
+Their values are `lazy()` thunks, React components, functions and drizzle `SQL`
+— not data — so they stay in place and stay exhaustive (docs/26 D2). The
+completeness contract checks each one for per-platform coverage.
 
 | File | Symbol | You declare |
 | --- | --- | --- |
-| `lib/collections/platform-eligibility.ts` | `PLATFORM_DOWNSTREAM_ELIGIBILITY` | `SQL` predicate, or `null`. The rule itself lives in `lib/<platform>/`; this table only registers it. |
-| `lib/collections/collection-analytics.ts` | `PLATFORM_DIMENSIONS` | the ranked dimension kinds this platform contributes |
-| `lib/collections/collection-analytics.ts` | `AUTHOR_DIMENSION` | which kind is the **Creator** axis |
-| `entrypoints/app/collection-platform-registry.ts` | `PLATFORM_META` | `{ title: LocaleKeys, icon: IconifyName }` |
 | `entrypoints/app/collection-platform-pages.ts` | `COLLECTION_PAGE_LOADERS` | `lazy(() => import('./pages/<platform>'))` |
-| `entrypoints/app/collection-platform-pages.ts` | `COLLECTION_PAGE_CHILD_ROUTES` | explicit array literal; `[]` for a flat platform |
-| `entrypoints/app/collection-platform-auto-sync.ts` | `AUTO_SYNC_PLATFORM_BY_COLLECTION` | `{ runSync, ...<p>AutoSyncPolicy }` — **`runSync` required, `jobPlatform` forbidden** (it is derived) |
-| `entrypoints/app/hooks/collection-job-platform.ts` | `JOB_PLATFORM_BY_COLLECTION` | the background-job namespace string |
 | `entrypoints/app/sections/collections/collection-item-card.tsx` | `CARD_ADAPTERS` | the `Tagged<P>Card` component |
-| `entrypoints/app/theme/core/palette.ts` | `PLATFORM_PALETTE_LIGHT` | brand hue, or `text.light.primary` for a black-logo brand |
-| `entrypoints/app/theme/core/palette.ts` | `PLATFORM_PALETTE_DARK` | same, dark scheme |
-| `entrypoints/welcome/landing.ts` | `WELCOME_READINESS_BY_PLATFORM` | `'credentials'` / `'login'` / `'local'` |
-| `wxt.config.ts` | `PLATFORM_HOST_PERMISSIONS` | explicit array literal of match patterns |
-
-### 6.2 Checked by the type system only
-
-The contract test does not enumerate these, but they are exhaustive `Record`s,
-so `pnpm compile` names them anyway:
-
-| File | Symbol | Note |
-| --- | --- | --- |
-| `lib/collections/platform-sort-keys.ts` | `PLATFORM_SORT_KEYS` | `{ source: 'publishedAt' }` or `{ source: 'meta', field, format }` |
-| `entrypoints/welcome/sections/platform-picker.tsx` | `HINT_KEYS` | one-line onboarding hint key |
-| `entrypoints/app/theme/theme-config.ts` | `platform.light` / `platform.dark` | **only if the brand has a hue.** A black-logo brand is added to `Exclude<CollectionPlatform, 'github' \| 'x'>` instead, and maps to ink in `palette.ts`. |
-
-`PLATFORM_META.icon` is typed `IconifyName = keyof typeof allIcons`, so a glyph
-you have not added to `entrypoints/app/components/iconify/icon-sets.ts` is a
-**compile error in `collection-platform-registry.ts`** — a different file from
-the one you forgot to edit. Add the offline SVG body first; there is no CDN.
+| `entrypoints/app/collection-platform-auto-sync.ts` | `AUTO_SYNC_PLATFORM_BY_COLLECTION` | `{ runSync, ...<p>AutoSyncPolicy }` — **`runSync` required, `jobPlatform` forbidden** (it is derived from §6.1) |
+| `lib/collections/platform-eligibility.ts` | `PLATFORM_DOWNSTREAM_ELIGIBILITY` | a `SQL` predicate, or `null`. The rule itself lives in `lib/<platform>/`; this table only registers it |
 
 ## 7. Phase 4 — App UI
 
@@ -231,6 +256,11 @@ export default function RedditPage() {
 `main.tsx` is not edited. Ever. Routes are spread from
 `collectionPlatformRoutes`, and the contract test fails if `main.tsx` contains
 the string `collections/<platform>`.
+
+A nested detail route (`/collections/bilibili/:mediaId`) is not declared here
+either: it is the `childRoutes` field of the app descriptor (§6.2), from which
+`collection-platform-pages.ts` derives `COLLECTION_PAGE_CHILD_ROUTES`. This file
+stays a one-line re-export whether your platform has child routes or not.
 
 ### 7.2 `entrypoints/app/sections/<platform>/`
 
@@ -266,9 +296,9 @@ sits on the same route and must keep the same trail and the same single `h1`).
 
 ## 8. Phase 5 — The credentials chain (only if readiness is `'credentials'`)
 
-`WELCOME_READINESS_BY_PLATFORM` is contract-checked, but **nothing verifies that
-a platform declaring `'credentials'` has anywhere to enter them.** Five
-hand-written edits, zero cross-checks:
+The descriptor's `readiness` is exhaustive, so you cannot forget to answer the
+question — but **nothing verifies that a platform answering `'credentials'` has
+anywhere to enter them.** Five hand-written edits, zero cross-checks:
 
 1. `lib/storage/settings-schema.ts` — the `UserSettings` fields, the zod
    entries, and the `configSavedAt` key union.
@@ -284,25 +314,23 @@ hand-written edits, zero cross-checks:
 
 Everything above is caught by a compiler or a test. **The following is not.**
 Each item is silent when missed: no error, no red test, just a subtly wrong
-product. Verified against the code on 2026-09-06.
+product. Verified against the code on 2026-09-07.
 
-> **2026-09-07 — items 1, 2, 3 and 6 are now guarded** (docs/26 Step 1 killed 3
-> and 6; Step 2 killed 1 and 2). They are struck through below rather than
-> deleted; the whole section is rewritten in docs/26 Step 3, and until then a
-> reader must not be told "nothing catches this" about a rule that now has a
-> test. A seventh item — the welcome capability marquee — was found during that
-> review and is guarded too, so it never joins this list. **What is left is 4
-> and 5**: the credentials chain and English hard-coded copy.
-
-| # | Location | Why nothing catches it | Symptom if missed |
+| # | Location | Why nothing catches it — and why no descriptor can | Symptom if missed |
 | --- | --- | --- | --- |
-| ~~1~~ | ~~`background-jobs-indicator.tsx` — `PLATFORM_LABEL`~~ **GUARDED**: the table is deleted; `backgroundJobPlatformLabel` joins `collectionPlatformForJob` (domain descriptor) to `PLATFORM_META.title` (app descriptor), both exhaustive | `background-jobs-indicator.test.ts` locks the six job namespace → `nav.*` pairs and the raw-namespace fallback | — |
-| ~~2~~ | ~~`collection-analytics.ts` — `SOURCE_DIMENSION`~~ **GUARDED**: the three dimension tables are one `dimensions: { ranked, author, source }` object in the domain descriptor, with `source: null` explicit | `platform-completeness-contract` asserts `author` / `source` are members of `ranked` (or `null`) — declaring an axis the ranking never renders is now a red test | — |
-| ~~3~~ | ~~`lib/chat/tools.ts` — three prompt literals~~ **GUARDED**: all three, plus a fourth in `lib/chat/prompts.ts` (`CHAT_SYSTEM_PROMPT`) that this table missed, now derive the list from `COLLECTION_PLATFORMS` | `lib/chat/tools.test.ts` › `model-facing platform list` checks all four model-facing surfaces: naming any platform obliges naming every platform | — |
-| ~~3b~~ | ~~`skills/favbase/SKILL.md` — the same list, hand-written for the **external** agent~~ **GUARDED**. Shipped markdown cannot derive it, so it is reconciled instead | `tests/agent-bridge-cli-aliases.test.ts` › `favbase SKILL.md matches the live platform list` — set equality, both directions | — |
-| 4 | the whole credentials chain (§8) | `'credentials'` in the readiness table implies a Connections card; no test asserts one exists | onboarding tells the user to add a key, and Settings offers nowhere to add it |
-| 5 | user-facing English copy in the new view | `tests/i18n-no-hardcoded.test.ts` bans **CJK only**; an English string literal passes every gate | untranslatable copy ships, and the zh locale silently degrades |
-| ~~6~~ | ~~`.env.local` platform block~~ **GUARDED**: `.env.example` is now tracked and secret-free, so document your platform's block there | `platform-env-constants-guard` requires `.env.example` to exist and to carry a line per `EXPECTED_ENV_CONSTANTS` key, both ways. (`.env.local` stays gitignored and is still only checked where present.) | — |
+| 1 | the whole credentials chain (§8) | `readiness: 'credentials'` implies a Connections card; no test asserts one exists. The five values are a zod schema, two hook functions, a `ConnSection` union member, a React card and a `probeReady` closure — structure and behaviour, not data, so there is no field a descriptor could hold | onboarding tells the user to add a key, and Settings offers nowhere to add it |
+| 2 | user-facing English copy in the new view | `tests/i18n-no-hardcoded.test.ts` bans **CJK only**; an English string literal passes every gate. This is orthogonal to the registries — no per-platform field expresses "the copy in your view is translated" | untranslatable copy ships, and the zh locale silently degrades |
+
+This section had six rows, then seven when a review found the welcome marquee,
+then eight when the SKILL.md frontmatter turned out to be a *second*
+hand-written list in a file already thought reconciled. The other six were not
+dropped for brevity — each one got a guard, and each
+guard is named in §2 or §11: the background-jobs label and the analytics Source
+axis became descriptor fields (§6.1, §6.2), the chat prompts derive their list
+from `COLLECTION_PLATFORMS`, the marquee and both SKILL.md lists are reconciled,
+and `.env.example` is tracked. Per-item history is docs/26 appendix A. Note
+what the surviving two have in common: **neither is a fact about a platform.**
+That is the boundary of what a descriptor can buy you.
 
 ## 10. Shape variance — what you may skip
 
@@ -311,8 +339,8 @@ platform into the wrong one produces worse code than opting out.
 
 **Mandatory for every platform**, no exceptions: `ingestCollection`, the shared
 read helpers, `CollectionPageScaffold`, `useCollectionPipeline`,
-`useCollectionBreadcrumbs`, the shared `*-sync-adapter.ts` seam, and all 13+3
-registries.
+`useCollectionBreadcrumbs`, the shared `*-sync-adapter.ts` seam, both Platform
+Descriptors and all four heavy-value registries (§6).
 
 **Optional**: `useCollectionLibrary`. It models *one list + facets + manual
 sync*. `bilibili` opts out — it has two coupled hooks (folders and videos), a
@@ -328,6 +356,8 @@ opt out of the hook; **do not** opt out of the scaffold or the registries.
 | a route line naming a platform in `main.tsx` | completeness contract |
 | a hand-written `jobPlatform` in the auto-sync registry | completeness contract |
 | any `entrypoints/app/hooks/**` module importing `sections/` | completeness contract |
+| a value import other than `./platforms` in `lib/collections/platform-descriptor.ts` | `platform-descriptor.test.ts` reads its own imports by AST, and `lib-import-smoke` loads it with no `chrome` global. Break it and the build fails in `wxt.config.ts`, which never mentions the real culprit |
+| re-exporting the descriptor from `lib/collections/index.ts` | review — that barrel goes through `collections-query`, so it drags drizzle and `@/lib/database` into every importer, welcome.html and the Node build config included |
 | a bare `fetch(` in `lib/**` | `http-fetch-deadline-guard` |
 | a bare numeric module constant in `lib/<platform>/` | `platform-env-constants-guard` |
 | `@/lib/storage` (or any `chrome.*`-touching barrel) in the sync-service static graph | `lib-import-smoke` |
@@ -348,13 +378,27 @@ pnpm test
 pnpm build
 ```
 
-Then, by hand, walk §9 — the rows no command above will tell you about. After
-docs/26 Steps 1-2 that is items **4 and 5** (the credentials chain and English
-hard-coded copy); the rest now have guards.
+Then diff the manifest. Your platform legitimately adds `host_permissions`, so
+this is not an equality check — it is a check that **nothing else moved**:
+
+```bash
+# baseline: on a clean tree, before you start (or from a fresh checkout of main)
+pnpm build && cp .output/chrome-mv3/manifest.json /tmp/manifest-before.json
+# at the end
+pnpm build && diff /tmp/manifest-before.json .output/chrome-mv3/manifest.json
+```
+
+The only added lines may be your own `hostPermissions`, in
+`COLLECTION_PLATFORMS` order. A reordered or reworded existing entry means every
+installed extension asks its user to re-authorize.
+
+Finally, walk §9 by hand — the two rows no command above will tell you about.
 
 ## 13. Definition of done
 
 - [ ] `pnpm compile`, `pnpm test`, `pnpm build` all green
+- [ ] both Platform Descriptors (§6.1, §6.2) and the four heavy-value registries (§6.3) declare your platform
+- [ ] the manifest diff adds only your own `host_permissions` (§12)
 - [ ] `lib/<platform>/CLAUDE.md` and `entrypoints/app/sections/<platform>/CLAUDE.md` written
 - [ ] root `CLAUDE.md` directory index gains both entries
 - [ ] `entrypoints/app/CLAUDE.md` route list gains the new route
