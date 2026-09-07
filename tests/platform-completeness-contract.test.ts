@@ -149,6 +149,57 @@ function arrayFieldValues(
   return values;
 }
 
+/**
+ * String-literal members of a union that sits in a *type* position, located by
+ * the name of the declaration holding it — a type alias
+ * (`type ConnSection = 'github' | …`) or a property signature
+ * (`configSavedAt?: Partial<Record<'github' | …, number>>`). Descends to the
+ * first union inside that type, so a union nested in type arguments is read
+ * without hard-coding `Partial<Record<…>>`.
+ * `undefined` when the declaration is absent or carries no union.
+ */
+function stringLiteralUnion(module: SourceModule, name: string): string[] | undefined {
+  const type = (function findType(node: ts.Node): ts.TypeNode | undefined {
+    if (ts.isTypeAliasDeclaration(node) && node.name.text === name) return node.type;
+    if (ts.isPropertySignature(node) && propertyName(node.name) === name) return node.type;
+    return ts.forEachChild(node, findType);
+  })(module.ast);
+  if (!type) return undefined;
+
+  const union = (function findUnion(node: ts.Node): ts.UnionTypeNode | undefined {
+    if (ts.isUnionTypeNode(node)) return node;
+    return ts.forEachChild(node, findUnion);
+  })(type);
+  if (!union) return undefined;
+
+  return union.types.flatMap((member) =>
+    ts.isLiteralTypeNode(member) && ts.isStringLiteralLike(member.literal)
+      ? [member.literal.text]
+      : [],
+  );
+}
+
+/**
+ * Names a module declares as *API*: function declarations plus the member
+ * signatures of its interfaces and type literals. Variable declarations and
+ * shorthand properties are excluded on purpose — `useSettings` also holds a
+ * local `const saveGithub` and returns it as a shorthand property, so a
+ * source-text or variable-level match would still find the name after the
+ * `UseSettingsReturn` member that makes it callable had been deleted.
+ */
+function declaredApiNames(module: SourceModule): Set<string> {
+  const names = new Set<string>();
+  module.ast.forEachChild(function visit(node) {
+    if (ts.isFunctionDeclaration(node) && node.name) names.add(node.name.text);
+    if (ts.isPropertySignature(node) || ts.isMethodSignature(node)) {
+      const name = propertyName(node.name);
+      if (name) names.add(name);
+    }
+    node.forEachChild(visit);
+  });
+  return names;
+}
+
 function collectRegistryCoverage(
   missing: string[],
   label: string,
@@ -418,6 +469,57 @@ describe('platform completeness contract', () => {
         if (propertyValue(autoSync, platform, 'jobPlatform')) {
           missing.push(`${platform}: auto-sync job namespace is hand-written`);
         }
+      }
+    }
+
+    // The credentials chain (spec §8). `readiness: 'credentials'` promises a
+    // person somewhere to type a key in; the edits that keep that promise are
+    // a schema key, two hook declarations, a `ConnSection` union member, a
+    // rail entry and a React card — structure, not data, so no descriptor
+    // field can hold them (ADR 0004). Not-data is why they are read by AST
+    // here, exactly as CARD_ADAPTERS is; it was never a reason to leave them
+    // unchecked.
+    //
+    // LIMIT: this proves the structure *exists*, not that it is wired
+    // correctly. A card that renders while the Sync Adapter's `probeReady`
+    // reads the wrong settings key — or a zod entry that drops the field on
+    // load — passes every line below. Spec §8 still has to be read by hand.
+    //
+    // One-directional on purpose: platform ⊆ ConnSection. That union also
+    // carries 'agent-bridge', which is neither a platform nor a Collection
+    // Item holder (CONTEXT.md), so the reverse containment is not a defect.
+    const settingsView = sourceModule('entrypoints/app/sections/settings/settings-view.tsx');
+    const connSections = stringLiteralUnion(settingsView, 'ConnSection');
+    const connNavValues = arrayFieldValues(settingsView, 'connNavItems', 'value');
+    const settingsApi = declaredApiNames(sourceModule('lib/hooks/useSettings.ts'));
+    const savedAtSections = stringLiteralUnion(
+      sourceModule('lib/storage/settings-schema.ts'),
+      'configSavedAt',
+    );
+    if (!connSections) missing.push('all: settings ConnSection is not a string-literal union');
+    if (!connNavValues) missing.push('all: settings connNavItems is not an explicit array literal');
+    if (!savedAtSections) missing.push('all: configSavedAt carries no string-literal union');
+    for (const platform of COLLECTION_PLATFORMS) {
+      if (PLATFORM_DESCRIPTORS[platform].readiness !== 'credentials') continue;
+      const pascal = platform
+        .split('-')
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join('');
+      const card = `entrypoints/app/sections/settings/${platform}-connection-card.tsx`;
+      if (!existsSync(path.join(ROOT, card))) {
+        missing.push(`${platform}: Connections card (${card})`);
+      }
+      if (connSections && !connSections.includes(platform)) {
+        missing.push(`${platform}: settings ConnSection union member`);
+      }
+      if (connNavValues && !connNavValues.includes(platform)) {
+        missing.push(`${platform}: settings connections rail entry (connNavItems)`);
+      }
+      for (const declaration of [`derive${pascal}Draft`, `save${pascal}`]) {
+        if (!settingsApi.has(declaration)) missing.push(`${platform}: useSettings ${declaration}`);
+      }
+      if (savedAtSections && !savedAtSections.includes(platform)) {
+        missing.push(`${platform}: configSavedAt key`);
       }
     }
 

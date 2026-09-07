@@ -532,7 +532,7 @@ pnpm test
 | 1 | `background-jobs-indicator.tsx` 的 `PLATFORM_LABEL` | **死** | Step 2 删表，改两份 descriptor join |
 | 2 | `collection-analytics.ts` 的 `SOURCE_DIMENSION` 是 `Partial` | **死** | Step 2 合进 `dimensions.source`，`null` 显式 |
 | 3 | `lib/chat/tools.ts` 三处 prompt 平台字面量 | **死** ✅ | Step 1 改 `COLLECTION_PLATFORMS` 派生（**并含 `lib/chat/prompts.ts` 的第四处**）+ `tools.test.ts` 的 `model-facing platform list` 守卫 |
-| 4 | 凭据链 5 处手写零交叉校验 | **活** | 无。那 5 处的值是 zod schema / hook / union 类型 / React 卡片 / `probeReady` 闭包，全是重物或结构 |
+| 4 | 凭据链 5 处手写零交叉校验 | **活**（2026-09-07 已补守，见右） | 本手册执行时：无。那 5 处的值是 zod schema / hook / union 类型 / React 卡片 / `probeReady` 闭包，全是重物或结构。**2026-09-07 后续补守**：`platform-completeness-contract` 按 AST/`existsSync` 守住结构存在性（卡片文件 / `ConnSection` 成员 / `connNavItems` 项 / `derive<Pascal>Draft` + `save<Pascal>` / `configSavedAt` 键）——「重物或结构」是「descriptor 装不下」的理由，不是「守不住」的理由；`probeReady` 与 zod 条目仍零守卫，spec §8 逐条标注 checked/unchecked |
 | 5 | 新 view 里的英文硬编码文案 | **活** | 无。`i18n-no-hardcoded.test.ts` 只拦 CJK，与注册表无关 |
 | 6 | `.env.local` 平台块无文档 | **死** ✅ | Step 1 让 `.env.example` 转正（tracked，43 键，零密钥），守卫该半边改为**必须存在** |
 | 7 | `capability-marquee.tsx` 手工药丸表（本次发现） | **死** ✅ | Step 1 加 AST 覆盖断言（D5：不派生） |

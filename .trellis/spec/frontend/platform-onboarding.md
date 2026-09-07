@@ -35,7 +35,7 @@ is **making them generate your TODO list instead of writing one yourself**.
 | Mechanism | What it catches | How you invoke it |
 | --- | --- | --- |
 | TypeScript exhaustive `Record<CollectionPlatform, T>` | Every registry that must gain a key. The error lands on the object literal, naming the missing property. | `pnpm compile` |
-| `tests/platform-completeness-contract.test.ts` | What types cannot see: a lazy import resolving to nothing, a page that renders no `sections/` view, a view that skips `useCollectionBreadcrumbs`, `main.tsx` naming a platform, a hand-written `jobPlatform`, `hooks/` importing `sections/`, a `childRoutes` or `hostPermissions` value that is computed instead of written out, an analytics axis absent from its own ranked list, a platform literal leaking into `collection-processing-policy.ts`, a missing `lib/<platform>/` directory. Reports **all** failures as one aggregated list. | `pnpm vitest run tests/platform-completeness-contract.test.ts` |
+| `tests/platform-completeness-contract.test.ts` | What types cannot see: a lazy import resolving to nothing, a page that renders no `sections/` view, a view that skips `useCollectionBreadcrumbs`, `main.tsx` naming a platform, a hand-written `jobPlatform`, `hooks/` importing `sections/`, a `childRoutes` or `hostPermissions` value that is computed instead of written out, an analytics axis absent from its own ranked list, a platform literal leaking into `collection-processing-policy.ts`, a missing `lib/<platform>/` directory, and — for a platform whose `readiness` is `'credentials'` — a missing link in the credentials chain (§8): the Connections card file, the `ConnSection` union member, the `connNavItems` rail entry, `derive<Pascal>Draft` / `save<Pascal>` in `useSettings`, the `configSavedAt` key. Reports **all** failures as one aggregated list. | `pnpm vitest run tests/platform-completeness-contract.test.ts` |
 
 Five more guards fire with no wiring on your part. Three of them reconcile an
 artefact you still write by hand: the guard turns "silently absent" into a red
@@ -297,18 +297,40 @@ sits on the same route and must keep the same trail and the same single `h1`).
 ## 8. Phase 5 — The credentials chain (only if readiness is `'credentials'`)
 
 The descriptor's `readiness` is exhaustive, so you cannot forget to answer the
-question — but **nothing verifies that a platform answering `'credentials'` has
-anywhere to enter them.** Five hand-written edits, zero cross-checks:
+question — and since 2026-09-07 the completeness contract (§2) also checks that
+a platform answering `'credentials'` has **somewhere to enter them**: for every
+platform whose `readiness` is `'credentials'` it reads each anchor below by AST
+or by `existsSync` and joins the gaps to its one aggregated list. **The guard
+proves the structure exists, not that it is wired correctly.** The values are
+still yours to get right, and the parts marked *unchecked* below have no guard
+at all — an overstated guard would be worse than none, because it stops people
+looking. Five hand-written edits:
 
 1. `lib/storage/settings-schema.ts` — the `UserSettings` fields, the zod
-   entries, and the `configSavedAt` key union.
-2. `lib/hooks/useSettings.ts` — `derive<P>Draft` + `save<P>`.
+   entries, and the `configSavedAt` key union. *Checked:* the `configSavedAt`
+   key, because that union names platform ids exactly. *Unchecked:* the
+   settings fields and the zod entries — those names are free-form, so any
+   assertion on them would be a heuristic that passes on the wrong field.
+2. `lib/hooks/useSettings.ts` — `derive<P>Draft` + `save<P>`. *Checked:* both
+   names, and only where they form the module's declared **API** — a function
+   declaration or a type-member signature (the Pascal form is derived from the
+   platform id). A local `const save<Pascal>` returned as a shorthand property
+   does **not** satisfy it, deliberately: this file holds all three shapes of
+   the same name, and it is the `UseSettingsReturn` member that makes the
+   function reachable from a card. What either one *does* is not read.
 3. `entrypoints/app/sections/settings/settings-view.tsx` — extend the
-   `ConnSection` union **and** add the `connNavItems` rail entry.
+   `ConnSection` union **and** add the `connNavItems` rail entry. *Checked:*
+   both, one-directionally — platform ⊆ union. `'agent-bridge'` is legitimately
+   in that union and is not a platform, so the reverse containment is not a
+   defect.
 4. `entrypoints/app/sections/settings/<platform>-connection-card.tsx` — the card
    itself, using `useConfigDraft` + `SaveActions` + `SettingsPanel`, with a live
-   probe that reuses a real API call.
+   probe that reuses a real API call. *Checked:* that the file exists. Nothing
+   asserts it renders, that the rail reaches it, or that it probes anything.
 5. `<platform>-sync-adapter.ts` — read the same settings keys in `probeReady`.
+   *Unchecked.* Reading the wrong key here is silent in the worst way: the
+   guard stays green, the card saves, and the platform reports "not configured"
+   forever.
 
 ## 9. Phase 6 — The unguarded checklist
 
@@ -318,19 +340,22 @@ product. Verified against the code on 2026-09-07.
 
 | # | Location | Why nothing catches it — and why no descriptor can | Symptom if missed |
 | --- | --- | --- | --- |
-| 1 | the whole credentials chain (§8) | `readiness: 'credentials'` implies a Connections card; no test asserts one exists. The five values are a zod schema, two hook functions, a `ConnSection` union member, a React card and a `probeReady` closure — structure and behaviour, not data, so there is no field a descriptor could hold | onboarding tells the user to add a key, and Settings offers nowhere to add it |
-| 2 | user-facing English copy in the new view | `tests/i18n-no-hardcoded.test.ts` bans **CJK only**; an English string literal passes every gate. This is orthogonal to the registries — no per-platform field expresses "the copy in your view is translated" | untranslatable copy ships, and the zh locale silently degrades |
+| 1 | user-facing English copy in the new view | `tests/i18n-no-hardcoded.test.ts` bans **CJK only**; an English string literal passes every gate. This is orthogonal to the registries — no per-platform field expresses "the copy in your view is translated" | untranslatable copy ships, and the zh locale silently degrades |
 
 This section had six rows, then seven when a review found the welcome marquee,
 then eight when the SKILL.md frontmatter turned out to be a *second*
-hand-written list in a file already thought reconciled. The other six were not
-dropped for brevity — each one got a guard, and each
-guard is named in §2 or §11: the background-jobs label and the analytics Source
-axis became descriptor fields (§6.1, §6.2), the chat prompts derive their list
-from `COLLECTION_PLATFORMS`, the marquee and both SKILL.md lists are reconciled,
-and `.env.example` is tracked. Per-item history is docs/26 appendix A. Note
-what the surviving two have in common: **neither is a fact about a platform.**
-That is the boundary of what a descriptor can buy you.
+hand-written list in a file already thought reconciled. Seven of those eight
+were not dropped for brevity — each one got a guard, and each guard is named in
+§2, §8 or §11: the background-jobs label and the analytics Source axis became
+descriptor fields (§6.1, §6.2), the chat prompts derive their list from
+`COLLECTION_PLATFORMS`, the marquee and both SKILL.md lists are reconciled,
+`.env.example` is tracked, and the credentials chain is read anchor by anchor
+(§8). Per-item history is docs/26 appendix A. Note what the survivor is — and
+what the credentials chain was too: **not a fact about a platform.** That is
+the boundary of what a *descriptor* can buy you. It is not, as the credentials
+chain's removal from this table showed, the boundary of what a *guard* can:
+"no descriptor field can hold it" and "nothing can check it" are different
+claims, and the second one has to be argued separately every time.
 
 ## 10. Shape variance — what you may skip
 
@@ -392,7 +417,10 @@ The only added lines may be your own `hostPermissions`, in
 `COLLECTION_PLATFORMS` order. A reordered or reworded existing entry means every
 installed extension asks its user to re-authorize.
 
-Finally, walk §9 by hand — the two rows no command above will tell you about.
+Finally, walk §9 by hand — the one row no command above will tell you about —
+and re-read the *unchecked* parts of §8: anchor 1's settings fields and zod
+entries, and anchor 5's `probeReady`. The credentials-chain guard deliberately
+covers neither.
 
 ## 13. Definition of done
 
