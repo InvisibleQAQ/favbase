@@ -171,9 +171,11 @@ Every app UI change is checked in both schemes.
 
 - Allowed: platform glyph and platform-owned data graphic.
 - Forbidden: body text, panel background, selected navigation, focus ring.
-- GitHub and X resolve to current-scheme text ink in the palette owner.
-- All six keys remain explicit in `PLATFORM_PALETTE_LIGHT/DARK` so the
-  completeness AST test can read them.
+- GitHub and X declare `palette: 'ink'` in `PLATFORM_META` and resolve to the
+  current scheme's text ink in the palette owner.
+- Brand values live in `PLATFORM_META.palette` (docs/26 Step 2), one entry per
+  platform; `core/palette.ts` derives both schemes from it and never lists
+  platforms itself. `core/palette.test.ts` locks the eight hexes as literals.
 
 Brand-colored platforms must retain at least 3:1 contrast on
 `background.default` and `background.neutral`.

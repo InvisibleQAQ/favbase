@@ -23,9 +23,11 @@ vi.mock('@/lib/collections', () => ({
   isCollectionPlatform: (platform: string) => platform === 'github',
 }));
 
-// Keyed lookups come from the registry owner's own `collectionPlatformById`,
-// so the fake ships that map rather than a second copy built here.
-vi.mock('../../collection-platform-registry', () => ({
+// Keyed lookups come from the registry owner's own `collectionPlatformById`, so
+// the fake overrides that map alone; everything else (the app Platform
+// Descriptor the theme reads for brand colors) stays real.
+vi.mock('../../collection-platform-registry', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../collection-platform-registry')>()),
   collectionPlatformById: new Map([
     ['github', { id: 'github', title: 'platform.github', icon: 'mock:github' }],
   ]),

@@ -8,7 +8,10 @@ import {
   COLLECTION_PLATFORMS,
   type CollectionPlatform,
 } from '@/lib/collections/platforms';
-import { jobPlatformForCollection } from '@/entrypoints/app/hooks/collection-job-platform';
+import {
+  PLATFORM_DESCRIPTORS,
+  type PlatformDimensions,
+} from '@/lib/collections/platform-descriptor';
 import { PLATFORM_DIRS, PLATFORM_KEY_LINE } from './platform-env-guard-contract';
 
 const ROOT = path.resolve(__dirname, '..');
@@ -177,6 +180,28 @@ function collectRegistryCoverage(
   return registry;
 }
 
+/**
+ * Parse a registry this contract needs to *read* — to join two registries, or
+ * to check the shape of a value — without re-asserting per-platform coverage.
+ * Both Platform Descriptors are exhaustive `Record`s, so a missing or stale
+ * platform is a compile error on the object literal that names the platform;
+ * reading it a second time by AST would be the same rule in two places.
+ */
+function readRegistry(
+  missing: string[],
+  label: string,
+  relativeFile: string,
+  variable: string,
+): ObjectRegistry | undefined {
+  if (!existsSync(path.join(ROOT, relativeFile))) {
+    missing.push(`all: ${label} file missing (${relativeFile})`);
+    return undefined;
+  }
+  const registry = objectRegistry(relativeFile, variable);
+  if (!registry) missing.push(`all: ${label} (${variable}) is not an object literal`);
+  return registry;
+}
+
 function hasIdentifierSpread(module: SourceModule, identifier: string): boolean {
   let found = false;
   module.ast.forEachChild(function visit(node) {
@@ -258,11 +283,17 @@ describe('platform completeness contract', () => {
   it('reports every missing platform Adapter in one failure', () => {
     const missing: string[] = [];
 
-    const navMeta = collectRegistryCoverage(
+    const navMeta = readRegistry(
       missing,
-      'navigation metadata',
+      'app Platform Descriptor',
       'entrypoints/app/collection-platform-registry.ts',
       'PLATFORM_META',
+    );
+    const descriptors = readRegistry(
+      missing,
+      'domain Platform Descriptor',
+      'lib/collections/platform-descriptor.ts',
+      'PLATFORM_DESCRIPTORS',
     );
     const pageLoaders = collectRegistryCoverage(
       missing,
@@ -276,30 +307,21 @@ describe('platform completeness contract', () => {
       'entrypoints/app/sections/collections/collection-item-card.tsx',
       'CARD_ADAPTERS',
     );
-    collectRegistryCoverage(
-      missing,
-      'Collection Analytics dimensions',
-      'lib/collections/collection-analytics.ts',
-      'PLATFORM_DIMENSIONS',
-    );
-    collectRegistryCoverage(
-      missing,
-      'Collection Analytics author dimension',
-      'lib/collections/collection-analytics.ts',
-      'AUTHOR_DIMENSION',
-    );
-    const jobMap = collectRegistryCoverage(
-      missing,
-      'background-job namespace',
-      'entrypoints/app/hooks/collection-job-platform.ts',
-      'JOB_PLATFORM_BY_COLLECTION',
-    );
-    collectRegistryCoverage(
-      missing,
-      'welcome readiness policy',
-      'entrypoints/welcome/landing.ts',
-      'WELCOME_READINESS_BY_PLATFORM',
-    );
+
+    // The three analytics dimension tables are one `dimensions` object now, so
+    // the pair that used to be impossible to cross-check is checkable: a Source
+    // (or Creator) axis the ranked list never renders is a dimension the
+    // Dashboard breakdown card silently leaves empty.
+    for (const platform of COLLECTION_PLATFORMS) {
+      const { ranked, author, source }: PlatformDimensions =
+        PLATFORM_DESCRIPTORS[platform].dimensions;
+      if (!ranked.includes(author)) {
+        missing.push(`${platform}: author dimension '${author}' is absent from the ranked list`);
+      }
+      if (source !== null && !ranked.includes(source)) {
+        missing.push(`${platform}: source dimension '${source}' is absent from the ranked list`);
+      }
+    }
 
     // The welcome capability marquee is hand-authored on purpose: the pill
     // rhythm (platforms leading the top row, capabilities trailing the bottom)
@@ -322,7 +344,8 @@ describe('platform completeness contract', () => {
     if (navMeta && marqueeRows.every(([, labelKeys]) => labelKeys)) {
       for (const platform of COLLECTION_PLATFORMS) {
         const title = stringValue(propertyValue(navMeta, platform, 'title'));
-        // A missing title is already reported as navigation-metadata coverage.
+        // A missing title is a compile error on the exhaustive `PLATFORM_META`,
+        // so it is not reported a second time here.
         if (title && !pillLabelKeys.has(title)) {
           missing.push(`${platform}: welcome capability marquee pill`);
         }
@@ -334,40 +357,20 @@ describe('platform completeness contract', () => {
       'entrypoints/app/collection-platform-auto-sync.ts',
       'AUTO_SYNC_PLATFORM_BY_COLLECTION',
     );
-    const hostPermissions = collectRegistryCoverage(
-      missing,
-      'host-permission declaration',
-      'wxt.config.ts',
-      'PLATFORM_HOST_PERMISSIONS',
-    );
-    // Brand identity color: the six-key tables in palette.ts are explicit (no spread)
-    // so black-logo brands that intentionally map to ink are still declared per key.
-    collectRegistryCoverage(
-      missing,
-      'platform brand palette (light)',
-      'entrypoints/app/theme/core/palette.ts',
-      'PLATFORM_PALETTE_LIGHT',
-    );
-    collectRegistryCoverage(
-      missing,
-      'platform brand palette (dark)',
-      'entrypoints/app/theme/core/palette.ts',
-      'PLATFORM_PALETTE_DARK',
-    );
-
-    // Child param segments (detail routes) are a platform fact too: every platform
-    // declares an explicit list (possibly empty) and main.tsx never names a platform.
-    const childRoutes = collectRegistryCoverage(
-      missing,
-      'page child routes',
-      'entrypoints/app/collection-platform-pages.ts',
-      'COLLECTION_PAGE_CHILD_ROUTES',
-    );
-    if (childRoutes) {
+    // Two descriptor fields must stay explicit array literals rather than
+    // anything computed: detail child routes (the router's shape) and host
+    // permissions (the manifest's). A value assembled from a helper hides a
+    // platform's real surface from review and, for the manifest, from the
+    // re-authorization prompt an installed extension shows the user.
+    for (const [label, registry, field] of [
+      ['page child-route list', navMeta, 'childRoutes'],
+      ['host-permission list', descriptors, 'hostPermissions'],
+    ] as const) {
+      if (!registry) continue;
       for (const platform of COLLECTION_PLATFORMS) {
-        const value = childRoutes.properties.get(platform)?.initializer;
-        if (!value || !ts.isArrayLiteralExpression(unwrap(value))) {
-          missing.push(`${platform}: page child-route list is not explicit`);
+        const value = propertyValue(registry, platform, field);
+        if (!value || !ts.isArrayLiteralExpression(value)) {
+          missing.push(`${platform}: ${label} is not explicit`);
         }
       }
     }
@@ -405,15 +408,6 @@ describe('platform completeness contract', () => {
       }
     }
 
-    if (jobMap) {
-      for (const platform of COLLECTION_PLATFORMS) {
-        const actual = stringValue(jobMap.properties.get(platform)?.initializer);
-        if (actual !== jobPlatformForCollection(platform)) {
-          missing.push(`${platform}: background-job namespace value`);
-        }
-      }
-    }
-
     if (autoSync) {
       for (const platform of COLLECTION_PLATFORMS) {
         if (!propertyValue(autoSync, platform, 'runSync')) {
@@ -439,14 +433,6 @@ describe('platform completeness contract', () => {
     const wxt = sourceModule('wxt.config.ts');
     if (!hasArrayPropertySpread(wxt, 'host_permissions', 'PLATFORM_HOST_PERMISSION_LIST')) {
       missing.push('all: platform host-permission list not spread into manifest');
-    }
-    if (hostPermissions) {
-      for (const platform of COLLECTION_PLATFORMS) {
-        const value = hostPermissions.properties.get(platform)?.initializer;
-        if (!value || !ts.isArrayLiteralExpression(unwrap(value))) {
-          missing.push(`${platform}: host-permission list is not explicit`);
-        }
-      }
     }
 
     // Downstream eligibility is a platform fact: the shared processing policy

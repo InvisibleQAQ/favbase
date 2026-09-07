@@ -21,8 +21,11 @@
  *     have to be storage-free at load time rather than merely lazy.
  *   - lib-layer platform sync-services import `@/lib/embedding/<leaf>`, never
  *     the `@/lib/embedding` barrel, and never `@/lib/storage`/`@/lib/tagging`.
- *   - the shared ingest pipeline, database entry, chunkers and the platform
- *     discriminator list stay storage-free.
+ *   - the shared ingest pipeline, database entry, chunkers, the platform
+ *     discriminator list and the domain Platform Descriptor stay storage-free.
+ *     The descriptor is additionally loaded by `wxt.config.ts` in Node, so its
+ *     value imports are pinned by `lib/collections/platform-descriptor.test.ts`
+ *     (docs/26 iron rule 3); this contract covers the load-time half.
  *   - the Bilibili transcription seam (`transcribe-utils`) never value-imports
  *     `@/lib/embedding`/`@/lib/tagging`; post-processing is injected via
  *     `startProcessing` (docs/20 中-5).
@@ -61,6 +64,7 @@ const PURE_ENTRIES: readonly string[] = [
   '@/lib/embedding/chunker',
   '@/lib/embedding/char-split',
   '@/lib/collections/platforms',
+  '@/lib/collections/platform-descriptor',
   '@/lib/ingest/ingest',
   '@/lib/database',
   '@/lib/database/proxy-db',

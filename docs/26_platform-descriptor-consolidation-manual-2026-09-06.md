@@ -21,7 +21,7 @@
 | Step | 一句话 | 依赖 | 风险 | 状态 |
 | --- | --- | --- | --- | --- |
 | **1** | 零依赖前置：能独立做完的五件事，先把 §9 的 3 条无守卫项和 2 处噪音清掉 | 无 | 低 | **已落地 2026-09-07** |
-| **2** | descriptor 双份落地，12 处注册表改派生，删两张表，重写契约测试 | Step 1 | **中**（动 manifest） | 待执行 |
+| **2** | descriptor 双份落地，12 处注册表改派生，删两张表，重写契约测试 | Step 1 | **中**（动 manifest） | **已落地 2026-09-07** |
 | **3** | 文档同步：spec §6/§7/§9/§12/§13 重写 + 根 CLAUDE.md + ADR 0004 | Step 2 | 无 | 待执行 |
 
 ### 0.2 不做什么
@@ -236,7 +236,9 @@ pnpm compile && pnpm test && pnpm build
 
 ---
 
-### Step 2 — descriptor 双份落地
+### Step 2 — descriptor 双份落地 ✅ 已落地 2026-09-07
+
+> 执行记录在本节末「执行结果」。下面的正文保留原样，**勘误与偏离就地记录在执行结果里**。
 
 **目标**：12 项纯数据收进两份 descriptor，12 处消费点改派生，删两张表，重写契约测试。**零行为变更**。
 
@@ -328,18 +330,59 @@ pnpm build && diff /tmp/manifest-before.json .output/chrome-mv3/manifest.json
 ```
 `diff` 必须无输出。有输出就是破坏了 userspace——MV3 已安装扩展的 `host_permissions` 集合一变就要用户重新授权。
 
+**执行结果（2026-09-07）**
+
+四步验证全绿：focused vitest（38 文件 / 286 例）→ `pnpm compile` 干净 → `pnpm test` **196 文件 / 1441 例 + packages 10 文件 / 55 例，exit=0** → `pnpm build` 绿（Background 图 **939165 bytes，与基线逐字节同值**）→ **`diff` manifest 无输出**。
+全量共跑四轮，前三轮各有**一个** 5 秒超时抖动且每轮换文件（`lib/database/db.test.ts` → `lib/bilibili/transcribe-utils.test.ts` → `tests/lib-import-smoke.test.ts` → 又是 `db.test.ts`），四个都在单独重跑时立刻绿，第四轮全量零失败——§3 铁律 7 的已知 CPU 争用现象，与本 Step 改动无关（`db.test.ts` 碰的是 PGlite）。
+
+**用户决定（grill-with-docs，2026-09-07）**
+
+| # | 决策 | 否决的方案 | 理由 |
+| --- | --- | --- | --- |
+| **D8** | analytics 三张维度表**直接内联**读 `PLATFORM_DESCRIPTORS[p].dimensions.*`，三个 const 删除 | 保留三个派生 `Record`（手册字面「派生自 `d.dimensions`」） | 三者都是 module-private 且各只有一个调用点，契约测试也不再按名读它们；派生中间层零消费者 |
+
+**我方判断（非用户决策）**
+
+- **`mapPlatforms` 的泛型故意不加约束**。第一版写 `S extends Record<CollectionPlatform, unknown>`：删掉 descriptor 一个平台键时，约束失败让 `S` 退化成约束本身、`descriptor` 变 `unknown`，**级联到 17 个文件**（六个 sync-adapter、library-gate、processing-resume 全红），根错误被埋在文件序里——正是铁律 3 抱怨的「错误信息不指向真凶」。改成无约束 `S` + `S[CollectionPlatform & keyof S]` 后，残缺表只让**直接索引 descriptor 的 5 个文件**报错（descriptor 自己 + analytics + wxt.config + 两个测试），派生注册表全部安静，且 `CollectionJobPlatform` 仍是六个字面量的并集（类型探针验证：赋 `'not-a-namespace'` 报 TS2322）。误传非平台键的 map 依然会红（回调参数塌成 `never`）。
+- `PlatformSortKey` 类型搬进 descriptor，`platform-sort-keys.ts` re-export（手册两选一里的「更内聚」那支）。`PlatformReadiness`、`PlatformDimensions` 同住 descriptor，`WelcomeReadiness` 成为 `PlatformReadiness` 的别名以保住 welcome 的导出名。
+- `PLATFORM_META` 导出为五字段 `Record`，但 `CollectionPlatformConfig` / `collectionPlatformRegistry` 保持四字段（手册「两个导出保持不变」）：palette / hint / childRoutes 的消费者按判别符索引，挤进导航元数据会把品牌 hex 带进 nav-section 与 welcome orbit。
+- **`HINT_KEYS` 整表消失而非改派生**：`PlatformCard` 手上本来就有 registry 条目，`PLATFORM_META[platform.id].hint` 一句话读完。
+- `theme-config.ts` 的 `BrandColoredPlatform` 实测只有 `core/palette.test.ts` 一个消费者，随 `platform` 块一并删除；`CollectionPlatform` 的 import 随之成为死引用，也删。品牌 hex 的 provenance 注释（dataviz validator + `palette-validation.md`）搬进 `collection-platform-registry.ts`，没有留在旧址变成幽灵。
+- **新增五处断言**（铁律 5 要求逐处回写）：① `platform-descriptor.test.ts` 锁 `hostPermissions` flatMap 的**黄金顺序**——铁律 2 从「人工 build diff」升级成 CI 守卫；② 同文件锁 `jobPlatform` 唯一性（同名会让两平台共用一条 job lane，后一个 sync 被当重复丢弃）；③ `core/palette.test.ts` 锁八个品牌 hex 为字面量（数据源换了，值不许变），并顺带锁「哪四个平台是有色的」；④ `collection-platform-registry.test.ts` 锁 `hint` 键命名约定（`hint` 只被类型系统当作*某个* `LocaleKeys`，张冠李戴能编译通过并出现在产品第一屏）；⑤ `background-jobs-indicator.test.ts` 锁六个 job 命名空间 → `nav.*` 文案 + 原样兜底——**这一处是手册没料到的空缺**：手册说「现有测试断言零改动」，但现有测试只覆盖 `backgroundJobDetail`，`platformLabel` 是组件内闭包、零覆盖，所以把它提成导出的 `backgroundJobPlatformLabel` 再锁值，否则「行为必须相同」只是一句自述。
+- **铁律 3 从注释升级为可执行守卫**：`platform-descriptor.test.ts` 用 TS AST 断言本文件的 value import 只有 `./platforms`，`tests/lib-import-smoke.test.ts` 的 `PURE_ENTRIES` 加入该模块（load-time 半边）。手册只要求写文件头注释；注释会腐，而这条规则一旦破，报错落在 `wxt.config.ts` 而不是真凶。
+- `dimensions` 自一致断言**只放契约测试一处**（手册在契约测试与 descriptor 测试各写了一遍）：同一条规则放两处，就是让它在其中一处腐掉。
+- **两处 `vi.mock` 的残缺工厂是本 Step 唯一的真回归**（`sections/chat/source-card.test.tsx`、`sections/collections/collections-view.test.tsx`）：它们用整体工厂替换 registry 模块只提供 1-2 个导出，而 theme 现在要读 `PLATFORM_META.palette`，于是 import 期崩在 `theme/core/palette.ts` 里、报错不提 mock 一个字。改成 vitest 的部分 mock（`importOriginal()` 展开 + 只覆盖要假的那个导出）治本：模块以后再长字段也不会再炸，且两个测试的 fixture 语义（github 单条 / 两平台 chips）原样保留。
+- **文档同步超出手册清单三处**：`entrypoints/welcome/CLAUDE.md`（readiness 由「穷举声明」改为「派生」）、`.trellis/spec/frontend/ui-design-system.md`（「六键显式好让 AST 读到」的理由随 AST 断言一起死了）、根 `CLAUDE.md`（`wxt.config.ts` 行与契约测试行都还在说已删的 `PLATFORM_HOST_PERMISSIONS` / 12 项 AST 对账）。留着就是幽灵引用，不等 Step 3。
+- spec `platform-onboarding.md` 的就地改动共四处（沿用 Step 1 先例，整节重写仍归 Step 3）：§9 第 1、2 条划掉并写明接管者；§6 顶部加「十二项已进两份 descriptor」横幅；**§3 三行**改指 descriptor 字段——它点名的 `PLATFORM_DIMENSIONS`/`SOURCE_DIMENSION` 已删除，而 §3 **不在** 手册 §6 给 Step 3 的清单里，不改就永远是假话；§12 的「六项人工清单」改成「第 4、5 项」。
+- **§11 禁止模式新增一行**（trellis-check 的 spec-sync 环节产出）：禁止对 `collection-platform-registry` 用整体 `vi.mock` 工厂。这条是本 Step 唯一真回归的教训，写在平台作者会读的地方，否则下一个人照样踩。
+
+**证伪记录**（九项，均已还原）
+
+| 破坏 | 结果 |
+| --- | --- |
+| 删掉 descriptor 的 `youtube` 整块 | `platform-descriptor.ts:111` TS1360 + `Property 'youtube' is missing`，落在对象字面量上；另 4 个直接索引者同时指名 youtube |
+| `youtube` 改名 `youtubeX` | TS2561 落在字面量，`Did you mean to write 'youtube'?` |
+| x 的 `source: null` 改 `'folder'` | 契约测试红：`x: source dimension 'folder' is absent from the ranked list` |
+| github 的 `hostPermissions` 改成算出来的 | 契约测试红：`github: host-permission list is not explicit` |
+| bilibili 的 `childRoutes` 改成算出来的 | 契约测试红：`bilibili: page child-route list is not explicit` |
+| youtube 的 `hint` 指向 zhihu 的键 | registry 测试红（onboarding hint 例） |
+| zhihu light hex 改一位 | palette 测试红（brand hues 例） |
+| 交换 bilibili 两条 host permission 的顺序 | descriptor 测试红（manifest 顺序锁） |
+| x 的 `jobPlatform` 改成 `'bookmarks'` | descriptor 测试红（唯一性） |
+| `analytics-types` 的 `import type` 改成 value import | descriptor 测试红并指名 `./analytics-types`（铁律 3 守卫） |
+
 **回滚点**：`refactor(collections): derive platform registries from two descriptors`
 
 **完成判据**
-- [ ] `lib/collections/platform-descriptor.ts` 的值导入只有 `./platforms`（`grep -n "^import " lib/collections/platform-descriptor.ts` 人工判读）
-- [ ] descriptor 不在 `lib/collections/index.ts` 的 re-export 里
-- [ ] `theme-config.ts` 零 `platform` 块，`BrandColoredPlatform` 若无消费者则一并删除
-- [ ] `background-jobs-indicator.tsx` 零 `PLATFORM_LABEL`
-- [ ] `wxt.config.ts` 零 `PLATFORM_HOST_PERMISSIONS` 对象，只剩派生的 `PLATFORM_HOST_PERMISSION_LIST`
-- [ ] **`diff` manifest 无输出**
-- [ ] 契约测试仍是单一聚合失败；手动删 descriptor 里一个平台键，验证 `pnpm compile` 报错落在对象字面量上并指名平台
-- [ ] 四个 `CLAUDE.md` 同 commit 更新
-- [ ] 四步验证全绿
+- [x] `lib/collections/platform-descriptor.ts` 的值导入只有 `./platforms`（不再靠人工判读：`platform-descriptor.test.ts` 用 AST 断言，已证伪）
+- [x] descriptor 不在 `lib/collections/index.ts` 的 re-export 里
+- [x] `theme-config.ts` 零 `platform` 块，`BrandColoredPlatform` 无其他消费者、已一并删除
+- [x] `background-jobs-indicator.tsx` 零 `PLATFORM_LABEL`（改导出的两跳 join + 六平台文案锁）
+- [x] `wxt.config.ts` 零 `PLATFORM_HOST_PERMISSIONS` 对象，只剩派生的 `PLATFORM_HOST_PERMISSION_LIST`
+- [x] **`diff` manifest 无输出**
+- [x] 契约测试仍是单一聚合失败；删 descriptor 一个平台键，`pnpm compile` 报错落在对象字面量上并指名平台（见证伪记录第 1-2 行）
+- [x] 四个 `CLAUDE.md` 同 commit 更新（另加 welcome、根 CLAUDE.md、两份 spec）
+- [x] 四步验证全绿
 
 ---
 
@@ -423,8 +466,10 @@ pnpm test
 | `entrypoints/app/CLAUDE.md` | 2 | `PLATFORM_META` 扩到 5 字段 |
 | `entrypoints/app/theme/CLAUDE.md` | 2 | 平台色来源改 registry；`theme-config.platform` 已删 |
 | `entrypoints/app/layouts/CLAUDE.md` | 2 | `PLATFORM_LABEL` 已删，改 descriptor join |
-| `.trellis/spec/frontend/platform-onboarding.md` | 3 | §2/§6/§7/§9/§11/§12/§13 |
-| 根 `CLAUDE.md` | 1, 3 | Step 1 改 `lib/env.ts` 行；Step 3 改索引 + 契约测试行 + 加 docs/26 |
+| `entrypoints/welcome/CLAUDE.md` | 2（执行时追加） | readiness 由穷举声明改为 descriptor 派生 |
+| `.trellis/spec/frontend/ui-design-system.md` | 2（执行时追加） | 平台色来源改 `PLATFORM_META.palette`；「六键显式好让 AST 读到」的理由已死 |
+| `.trellis/spec/frontend/platform-onboarding.md` | 3（§9 第 1-2 条与 §6 横幅在 2 就地改） | §2/§6/§7/§9/§11/§12/§13 |
+| 根 `CLAUDE.md` | 1, 2, 3 | Step 1 改 `lib/env.ts` 行；Step 2 改 `wxt.config.ts` 行 + 契约测试行 + docs/26 状态；Step 3 改索引 |
 | `docs/adr/0004` | 3 | 新建 |
 
 ---
@@ -432,7 +477,7 @@ pnpm test
 ## 7. 进度勾选表
 
 - [x] **Step 1** 零依赖前置 — `refactor(collections): land the dependency-free platform onboarding fixes`（2026-09-07）
-- [ ] **Step 2** descriptor 双份落地 — `refactor(collections): derive platform registries from two descriptors`
+- [x] **Step 2** descriptor 双份落地 — `refactor(collections): derive platform registries from two descriptors`（2026-09-07）
 - [ ] **Step 3** 文档同步与收口 — `docs(platform): rewrite the onboarding contract for the descriptor split`
 
 ---

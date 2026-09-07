@@ -13,22 +13,16 @@ import { varAlpha } from 'minimal-shared/utils';
 
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify } from '@/entrypoints/app/components/iconify';
-import { collectionPlatformRegistry } from '@/entrypoints/app/collection-platform-registry';
+import {
+  collectionPlatformRegistry,
+  PLATFORM_META,
+} from '@/entrypoints/app/collection-platform-registry';
 
 import { readinessFor } from '../landing';
 import { FadeIn } from '../components/fade-in';
 import { MotionBox, MotionButtonBase } from '../components/motion-box';
 import { useOnboardingExit } from '../use-onboarding-exit';
 import { ctaGlowShadow, Eyebrow, Headline, WelcomeSection } from '../components/section-shell';
-
-const HINT_KEYS: Record<CollectionPlatform, LocaleKeys> = {
-  bilibili: 'welcome.picker.hint.bilibili',
-  github: 'welcome.picker.hint.github',
-  bookmarks: 'welcome.picker.hint.bookmarks',
-  x: 'welcome.picker.hint.x',
-  zhihu: 'welcome.picker.hint.zhihu',
-  youtube: 'welcome.picker.hint.youtube',
-};
 
 /** What the user has to do before this platform can sync, at a glance. */
 function readiness(platform: CollectionPlatform): { labelKey: LocaleKeys; icon: IconifyName } {
@@ -103,7 +97,7 @@ function PlatformCard({
       <Box sx={{ minWidth: 0 }}>
         <Typography variant="subtitle1">{t(platform.title)}</Typography>
         <Typography variant="body2" sx={{ mt: 0.5, color: 'text.secondary' }}>
-          {t(HINT_KEYS[platform.id])}
+          {t(PLATFORM_META[platform.id].hint)}
         </Typography>
 
         <Box

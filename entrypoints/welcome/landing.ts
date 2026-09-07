@@ -1,16 +1,15 @@
+import {
+  mapPlatforms,
+  PLATFORM_DESCRIPTORS,
+  type PlatformReadiness,
+} from '@/lib/collections/platform-descriptor';
 import { COLLECTION_PLATFORMS, type CollectionPlatform } from '@/lib/collections/platforms';
 
-export type WelcomeReadiness = 'credentials' | 'login' | 'local';
+export type WelcomeReadiness = PlatformReadiness;
 
 /** Readiness shape for every platform; welcome owns the interpretation. */
-export const WELCOME_READINESS_BY_PLATFORM: Record<CollectionPlatform, WelcomeReadiness> = {
-  bilibili: 'login',
-  github: 'credentials',
-  bookmarks: 'local',
-  x: 'login',
-  zhihu: 'login',
-  youtube: 'credentials',
-};
+export const WELCOME_READINESS_BY_PLATFORM: Record<CollectionPlatform, WelcomeReadiness> =
+  mapPlatforms(PLATFORM_DESCRIPTORS, (descriptor) => descriptor.readiness);
 
 /** True when the platform needs a token/key before its first sync can run. */
 export function needsCredentials(platform: CollectionPlatform): boolean {

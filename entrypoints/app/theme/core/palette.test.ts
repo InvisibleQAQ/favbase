@@ -3,11 +3,25 @@ import { describe, expect, it } from 'vitest';
 import { COLLECTION_PLATFORMS } from '@/lib/collections/platforms';
 
 import { createTheme } from '../create-theme';
-import { themeConfig, type BrandColoredPlatform } from '../theme-config';
+import { themeConfig } from '../theme-config';
+import { PLATFORM_META } from '../../collection-platform-registry';
 import { background, platform, text } from './palette';
 
 const SCHEMES = ['light', 'dark'] as const;
-const BRAND_COLORED = Object.keys(themeConfig.platform.light) as BrandColoredPlatform[];
+
+/** The hued brands; github and x declare `'ink'` in the app Platform Descriptor. */
+const BRAND_COLORED = COLLECTION_PLATFORMS.filter((id) => PLATFORM_META[id].palette !== 'ink');
+
+/**
+ * docs/26 Step 2 moved these values out of `themeConfig.platform` and into
+ * `PLATFORM_META.palette`; the refactor is only correct if every rendered value
+ * is unchanged, so they are locked here as literals rather than cross-checked
+ * against the registry they now come from.
+ */
+const BRAND_HEX: Record<(typeof SCHEMES)[number], Record<string, string>> = {
+  light: { bilibili: '#C2185B', bookmarks: '#B8760A', zhihu: '#1A73E8', youtube: '#C62828' },
+  dark: { bilibili: '#E8497F', bookmarks: '#BF8A10', zhihu: '#3B8BEA', youtube: '#D94040' },
+};
 
 /** WCAG 2.x relative luminance of a `#RRGGBB` color. */
 function relativeLuminance(hex: string): number {
@@ -81,18 +95,24 @@ describe('palette.platform', () => {
     expect(platform[scheme].x).toBe(text[scheme].primary);
   });
 
-  it.each(SCHEMES)('%s scheme takes the hued four from themeConfig.platform', (scheme) => {
+  it('keeps exactly bilibili, bookmarks, zhihu and youtube hued', () => {
+    expect(BRAND_COLORED).toEqual(['bilibili', 'bookmarks', 'zhihu', 'youtube']);
+  });
+
+  it.each(SCHEMES)('%s scheme keeps the validated brand hues unchanged', (scheme) => {
+    expect(Object.keys(BRAND_HEX[scheme])).toEqual(BRAND_COLORED);
     for (const id of BRAND_COLORED) {
-      expect(platform[scheme][id]).toBe(themeConfig.platform[scheme][id]);
+      expect(platform[scheme][id]).toBe(BRAND_HEX[scheme][id]);
     }
   });
 
   // Locks the dataviz validator's conclusion into the repo: every brand color is a
   // 3:1 graphic on both the page ground and the neutral tile of its scheme. Do not
-  // "brighten" a value without re-running the validator (see theme-config.ts).
+  // "brighten" a value without re-running the validator (see the palette
+  // provenance comment in `collection-platform-registry.ts`).
   it.each(SCHEMES)('%s brand colors hold >= 3:1 on background.default and background.neutral', (scheme) => {
     for (const id of BRAND_COLORED) {
-      const color = themeConfig.platform[scheme][id];
+      const color = platform[scheme][id];
       expect(contrastRatio(color, background[scheme].default), `${scheme} ${id} on default`).toBeGreaterThanOrEqual(3);
       expect(contrastRatio(color, background[scheme].neutral), `${scheme} ${id} on neutral`).toBeGreaterThanOrEqual(3);
     }

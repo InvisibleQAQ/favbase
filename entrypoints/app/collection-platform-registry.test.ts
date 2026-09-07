@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { COLLECTION_PLATFORMS } from '@/lib/collections';
-import { collectionPlatformRegistry } from './collection-platform-registry';
+import { collectionPlatformRegistry, PLATFORM_META } from './collection-platform-registry';
 import { createNavData, type NavGroup } from './layouts/nav-config';
 
 /** The Collections branch, wherever its group sits (docs/25 D16 grouping). */
@@ -28,6 +28,14 @@ describe('collection platform registry', () => {
     );
     expect(collectionPlatformRegistry.map((platform) => platform.path)).toEqual(
       COLLECTION_PLATFORMS.map((platform) => `/collections/${platform}`),
+    );
+  });
+
+  it('names every onboarding hint after its own platform', () => {
+    // `hint` is typed as *a* `LocaleKeys`, so pointing youtube at zhihu's hint
+    // compiles and ships the wrong copy on the product's first screen.
+    expect(COLLECTION_PLATFORMS.map((id) => PLATFORM_META[id].hint)).toEqual(
+      COLLECTION_PLATFORMS.map((id) => `welcome.picker.hint.${id}`),
     );
   });
 

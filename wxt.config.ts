@@ -1,9 +1,7 @@
 import { defineConfig } from 'wxt';
 import { LLM_PROVIDERS, EMBEDDING_PROVIDERS, ASR_PROVIDERS } from './lib/providers';
-import {
-  COLLECTION_PLATFORMS,
-  type CollectionPlatform,
-} from './lib/collections/platforms';
+import { PLATFORM_DESCRIPTORS } from './lib/collections/platform-descriptor';
+import { COLLECTION_PLATFORMS } from './lib/collections/platforms';
 
 // See https://wxt.dev/api/config.html
 
@@ -29,29 +27,15 @@ const providerHostPermissions = [
   ),
 ];
 
-/** Built-in platform origins, kept in build configuration rather than app runtime. */
-export const PLATFORM_HOST_PERMISSIONS = {
-  bilibili: [
-    'https://*.bilibili.com/*',
-    'https://api.bilibili.com/*',
-    'https://*.hdslb.com/*',
-    'https://*.bilivideo.com/*',
-    'https://*.bilivideo.cn/*',
-  ],
-  github: ['https://api.github.com/*'],
-  // Bookmark content extraction deliberately needs broad access and sends credentials:'omit'.
-  bookmarks: ['<all_urls>'],
-  // X auth headers are captured from the logged-in web client's own requests.
-  x: ['*://x.com/*'],
-  // Zhihu uses extension-context fetch with credentials:'include'.
-  zhihu: ['https://www.zhihu.com/*', 'https://api.zhihu.com/*'],
-  // YouTube public playlists use the official Data API with an API key.
-  youtube: ['https://www.googleapis.com/*'],
-} as const satisfies Record<CollectionPlatform, readonly string[]>;
-
-/** Final platform permission list; the manifest spreads this single Adapter. */
+/**
+ * Final platform permission list; the manifest spreads this single Adapter.
+ * Origins are declared per platform in the domain Platform Descriptor, which
+ * this Node-side config loads by relative path (`@/` is unavailable here).
+ * The flatMap order is part of the manifest contract: an installed MV3
+ * extension asks the user to re-authorize the moment this set changes.
+ */
 export const PLATFORM_HOST_PERMISSION_LIST = COLLECTION_PLATFORMS.flatMap(
-  (platform) => PLATFORM_HOST_PERMISSIONS[platform],
+  (platform) => PLATFORM_DESCRIPTORS[platform].hostPermissions,
 );
 
 export default defineConfig({

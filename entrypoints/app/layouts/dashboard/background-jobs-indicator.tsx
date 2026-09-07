@@ -10,21 +10,23 @@ import { useTranslation } from '@/lib/i18n/use-translation';
 import type { BackgroundJob } from '../../hooks/background-jobs-store';
 import { useRunningJobs } from '../../hooks/background-jobs-store';
 import { Iconify } from '../../components/iconify';
-
-/** Platform logTag → nav display-name key (reuses existing nav.* copy). */
-const PLATFORM_LABEL: Record<string, LocaleKeys> = {
-  bilibili: 'nav.bilibiliFavorites',
-  'github-stars': 'nav.githubStars',
-  bookmarks: 'nav.bookmarks',
-  'x-bookmarks': 'nav.xBookmarks',
-  'zhihu-favorites': 'nav.zhihuFavorites',
-  'youtube-playlists': 'nav.youtubePlaylists',
-};
+import { PLATFORM_META } from '../../collection-platform-registry';
+import { collectionPlatformForJob } from '../../hooks/collection-job-platform';
 
 type Translate = (
   key: LocaleKeys,
   params?: Record<string, string | number>,
 ) => string;
+
+/**
+ * Job namespace -> Collection platform (domain descriptor) -> display name (app
+ * descriptor). Anything that reaches here without a platform is not a
+ * Collection platform at all, so the raw namespace stays the honest fallback.
+ */
+export function backgroundJobPlatformLabel(jobPlatform: string, t: Translate): string {
+  const platform = collectionPlatformForJob(jobPlatform);
+  return platform ? t(PLATFORM_META[platform].title) : jobPlatform;
+}
 
 export function backgroundJobDetail(job: BackgroundJob, t: Translate): string {
   const progress = job.progress;
@@ -87,11 +89,6 @@ export function BackgroundJobsIndicator() {
   const reminder = t('backgroundJobs.reminder', { count: jobs.length });
   const allPaused = jobs.every((job) => job.phase === 'paused');
 
-  const platformLabel = (platform: string): string => {
-    const key = PLATFORM_LABEL[platform];
-    return key ? t(key) : platform;
-  };
-
   const title = (
     <Box>
       <Typography variant="caption" sx={{ display: 'block', fontWeight: 600 }}>
@@ -99,7 +96,7 @@ export function BackgroundJobsIndicator() {
       </Typography>
       {jobs.map((job) => (
         <Typography key={`${job.platform}:${job.kind}`} variant="caption" sx={{ display: 'block' }}>
-          {`${platformLabel(job.platform)} · ${backgroundJobDetail(job, t)}`}
+          {`${backgroundJobPlatformLabel(job.platform, t)} · ${backgroundJobDetail(job, t)}`}
         </Typography>
       ))}
     </Box>

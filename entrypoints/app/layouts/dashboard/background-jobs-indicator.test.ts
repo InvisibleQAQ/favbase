@@ -6,7 +6,7 @@ vi.mock('@/lib/i18n/use-translation', () => ({
 
 import type { LocaleKeys } from '@/lib/i18n';
 import type { BackgroundJob } from '../../hooks/background-jobs-store';
-import { backgroundJobDetail } from './background-jobs-indicator';
+import { backgroundJobDetail, backgroundJobPlatformLabel } from './background-jobs-indicator';
 
 const messages: Partial<Record<LocaleKeys, string>> = {
   'backgroundJobs.embedding': 'Embedding {{done}}/{{total}}',
@@ -22,6 +22,26 @@ function translate(
     String(params[name] ?? ''),
   );
 }
+
+describe('background job platform label', () => {
+  // docs/26 Step 2 replaced the hand-written `PLATFORM_LABEL` table with a join
+  // across the two Platform Descriptors. These six pairs are what the table
+  // held, so they are the lock that the reminder copy did not change.
+  it.each([
+    ['bilibili', 'nav.bilibiliFavorites'],
+    ['github-stars', 'nav.githubStars'],
+    ['bookmarks', 'nav.bookmarks'],
+    ['x-bookmarks', 'nav.xBookmarks'],
+    ['zhihu-favorites', 'nav.zhihuFavorites'],
+    ['youtube-playlists', 'nav.youtubePlaylists'],
+  ])('names %s after its platform', (jobPlatform, key) => {
+    expect(backgroundJobPlatformLabel(jobPlatform, translate)).toBe(key);
+  });
+
+  it('falls back to the raw namespace for a job that is not a platform', () => {
+    expect(backgroundJobPlatformLabel('p-runtime-adapter', translate)).toBe('p-runtime-adapter');
+  });
+});
 
 describe('background job reminder detail', () => {
   it('identifies a paused lane without describing it as running', () => {

@@ -1,9 +1,12 @@
 import { lazy, type ComponentType, type LazyExoticComponent } from 'react';
 
+import { mapPlatforms } from '@/lib/collections/platform-descriptor';
 import {
   COLLECTION_PLATFORMS,
   type CollectionPlatform,
 } from '@/lib/collections/platforms';
+
+import { PLATFORM_META } from './collection-platform-registry';
 
 export type CollectionPage = LazyExoticComponent<ComponentType>;
 
@@ -18,14 +21,8 @@ export const COLLECTION_PAGE_LOADERS: Record<CollectionPlatform, CollectionPage>
 };
 
 /** Child param segments that render the same lazy Page; flat platforms declare an explicit empty list. */
-export const COLLECTION_PAGE_CHILD_ROUTES: Record<CollectionPlatform, readonly string[]> = {
-  bilibili: [':mediaId'],
-  github: [],
-  bookmarks: [':folderId'],
-  x: [],
-  zhihu: [],
-  youtube: [],
-};
+export const COLLECTION_PAGE_CHILD_ROUTES: Record<CollectionPlatform, readonly string[]> =
+  mapPlatforms(PLATFORM_META, (meta) => meta.childRoutes);
 
 export interface CollectionPlatformRoute {
   platform: CollectionPlatform;

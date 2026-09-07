@@ -13,8 +13,8 @@ typography, radius, or elevation values into local `sx`.
 
 | file | owns |
 | --- | --- |
-| `theme-config.ts` | Primitive colors/fonts, scheme-owned `text` / `background` values (dark ink = white / grey 500 / grey 600; dark `neutral` stays `#222B34`, see C-2 below), platform identity colors, `data-color-scheme` selector. Since Step 2 the scheme owns no brand shades (the dark `lighter` re-ink and the per-scheme accent constant are gone; the accent is derived, see `core/palette.ts`) |
-| `core/palette.ts` | Minimal palette skeleton: channels, `action`, `divider` (grey 500 @ 0.2), `TableCell.border`, `shared` hairlines (`inputOutlined` .2 / `inputUnderline` .32 / `paperOutlined` .16 / `buttonOutlined` .32), `colorKeys` iteration order. Favbase adds `accentTextFor(primary, scheme)` + `createTextPalette(scheme, primary)` (the derived `text.accent`), one coral `primary` ramp shared by both schemes, and the six-key `platform` palette |
+| `theme-config.ts` | Primitive colors/fonts, scheme-owned `text` / `background` values (dark ink = white / grey 500 / grey 600; dark `neutral` stays `#222B34`, see C-2 below), `data-color-scheme` selector. It owns **no** platform colors since docs/26 Step 2: the `platform` block was a relay to `core/palette.ts` and now lives in `collection-platform-registry.ts` (`PLATFORM_META.palette`). Since Step 2 the scheme owns no brand shades (the dark `lighter` re-ink and the per-scheme accent constant are gone; the accent is derived, see `core/palette.ts`) |
+| `core/palette.ts` | Minimal palette skeleton: channels, `action`, `divider` (grey 500 @ 0.2), `TableCell.border`, `shared` hairlines (`inputOutlined` .2 / `inputUnderline` .32 / `paperOutlined` .16 / `buttonOutlined` .32), `colorKeys` iteration order. Favbase adds `accentTextFor(primary, scheme)` + `createTextPalette(scheme, primary)` (the derived `text.accent`), one coral `primary` ramp shared by both schemes, and the `platform` palette — derived per scheme from `PLATFORM_META.palette` (`'ink'` resolves to that scheme's `text.primary`), never hand-listed |
 | `with-settings/color-presets.ts` | `primaryColorPresets: Record<ThemeColorPreset, …>` — `default` = `themeConfig.palette.primary`, preset1–5 = Minimal's five ramps; `pickContrastText(main)` chooses ink `#1F1B17` or white per WCAG (docs/25 D14: ink for default/1/4/5, white for 2/3). Preset ids come from `lib/storage/theme-settings.ts`; a missing key fails compilation |
 | `with-settings/update-core.ts` | `applySettingsToTheme(baseTheme, settingsState)`: swaps `primary` (channels) + `text` (via `createTextPalette`, so `text.accent` follows the preset) + `customShadows.primary` in both schemes; `contrast: 'high'` sets the light ground to grey 200 (`background.default` + channel) and both schemes' `customShadows.card` to `z1` (token-level stand-in for Minimal's `update-components.ts` body rule — Favbase's `MuiCssBaseline` function override cannot be merged with a second one). Pure; never mutates `baseTheme` |
 | `core/opacity.ts` | `theme.vars.opacity.*`: `switchTrack` / `inputUnderline` system alphas, `filled.commonHoverBg`, `outlined.border`, `soft.{bg,hoverBg,commonBg,commonHoverBg,border}` |
@@ -38,7 +38,7 @@ typography, radius, or elevation values into local `sx`.
 - `core/components/link.tsx` — `color: text.accent`.
 - `core/components/dialog.tsx` — `defaultProps { fullWidth, maxWidth: 'sm' }`, paper `width calc(100% - 32px)` / `maxHeight calc(100dvh - 32px)`, actions `flexWrap + gap 12` (Minimal uses sibling margins).
 - `core/components/tooltip.tsx` — `arrow: true, enterDelay: 400`; Minimal's arrowless `-4px` popper offset is not applied.
-- `theme-config.ts` / `core/palette.ts` — coral `primary` (one ramp for both schemes), Favbase `error`, `platform.*`, derived `text.accent`, dark `background.neutral` `#222B34`.
+- `theme-config.ts` / `core/palette.ts` — coral `primary` (one ramp for both schemes), Favbase `error`, derived `text.accent`, dark `background.neutral` `#222B34`. `palette.platform.*` is derived from the app Platform Descriptor, so a brand hue is changed there, not here.
 - `with-settings/` — preset `contrastText` picked by WCAG (D14), `text.accent` re-derived per preset, high contrast flattens `customShadows.card` to `z1` at token level (see Owners).
 
 ## Token contract
@@ -151,7 +151,10 @@ when matching a Card. `50%` is reserved for circular/pill controls.
 - `core/palette.test.ts` — scheme surfaces, Minimal grey ramp, dark ink,
   accent derivation (light `darker` / dark `light`), six-platform keys /
   channels / ≥ 3:1 contrast, `platform` survives `createTheme` as one CSS var
-  per platform.
+  per platform. Since docs/26 Step 2 it also locks **which** four platforms are
+  hued and the eight brand hexes as literals — the values must survive their
+  move into `PLATFORM_META.palette`, so they are not cross-checked against the
+  registry they now come from.
 - Provider wiring (bare `ThemeProvider` = coral, inside a preset2
   `SettingsProvider` = `#7635dc`) is covered by
   `components/settings/context/settings-provider.test.tsx`.

@@ -52,10 +52,10 @@ a rewrite, not an edit.
 
 | Question | Where the answer lands | Reference answers |
 | --- | --- | --- |
-| **Auth shape** — what must exist before the first sync can run? | `WELCOME_READINESS_BY_PLATFORM` (`'credentials'` / `'login'` / `'local'`), and whether you owe a Connections card (§8) | `credentials`: github, youtube · `login`: bilibili, x, zhihu · `local`: bookmarks |
-| **Source shape** — does the platform expose containers (folders / playlists / collections)? | `PLATFORM_DIMENSIONS`, `SOURCE_DIMENSION`, whether a Collection Item may hold N memberships | multi-Source: bilibili, bookmarks, zhihu, youtube · single: github, x |
+| **Auth shape** — what must exist before the first sync can run? | the descriptor's `readiness` (`'credentials'` / `'login'` / `'local'`; `WELCOME_READINESS_BY_PLATFORM` derives from it), and whether you owe a Connections card (§8) | `credentials`: github, youtube · `login`: bilibili, x, zhihu · `local`: bookmarks |
+| **Source shape** — does the platform expose containers (folders / playlists / collections)? | the descriptor's `dimensions` (`ranked` / `author` / `source`, `null` when the platform has no Source), whether a Collection Item may hold N memberships | multi-Source: bilibili, bookmarks, zhihu, youtube · single: github, x |
 | **Content shape** — what text feeds Embedding, and is it available at sync time? | the `content` block of `IngestInput`, the `contentState` you declare, whether the pipeline gains a content stage | inline at sync: github README, zhihu answer, youtube description, x tweet · deferred: bookmarks extraction, bilibili transcription |
-| **Sort key** — what is the platform's native "recency"? | `PLATFORM_SORT_KEYS` | `publishedAt` column, or a `platform_meta` field with `unixSeconds` / `iso8601` format |
+| **Sort key** — what is the platform's native "recency"? | the descriptor's `sortKey` (`PLATFORM_SORT_KEYS` derives from it) | `publishedAt` column, or a `platform_meta` field with `unixSeconds` / `iso8601` format |
 | **Downstream eligibility** — are some persisted items ineligible for Content → Embedding → Tags? | `PLATFORM_DOWNSTREAM_ELIGIBILITY` (`null` when none) | only bilibili has one (taken-down videos) |
 
 **No database migration is ever required.** `items.platform` is a plain `text`
@@ -166,6 +166,18 @@ transcribe them into a side document that will rot.
 
 ## 6. Phase 3 — The registries
 
+> **2026-09-07 — docs/26 Step 2 landed.** Twelve of the entries below are now
+> two Platform Descriptors: the domain five (`jobPlatform`, `readiness`,
+> `hostPermissions`, `sortKey`, `dimensions`) in
+> `lib/collections/platform-descriptor.ts`, and the app five (`title`, `icon`,
+> `palette`, `hint`, `childRoutes`) in `PLATFORM_META`
+> (`entrypoints/app/collection-platform-registry.ts`). Four heavy-value
+> registries stay where they are (`COLLECTION_PAGE_LOADERS`, `CARD_ADAPTERS`,
+> auto-sync `runSync`, `PLATFORM_DOWNSTREAM_ELIGIBILITY`). The tables in §6.1 /
+> §6.2 still name the old locations; they are rewritten in docs/26 Step 3 —
+> until then declare a new platform in the two descriptors and read those two
+> files as the list.
+
 ### 6.1 Checked by the completeness contract (13 entries, 11 files)
 
 | File | Symbol | You declare |
@@ -274,17 +286,18 @@ Everything above is caught by a compiler or a test. **The following is not.**
 Each item is silent when missed: no error, no red test, just a subtly wrong
 product. Verified against the code on 2026-09-06.
 
-> **2026-09-07 — items 3 and 6 are now guarded** (docs/26 Step 1). They are
-> struck through below rather than deleted; the whole section is rewritten in
-> docs/26 Step 3, and until then a reader must not be told "nothing catches
-> this" about a rule that now has a test. A seventh item — the welcome
-> capability marquee — was found during that review and is guarded too, so it
-> never joins this list.
+> **2026-09-07 — items 1, 2, 3 and 6 are now guarded** (docs/26 Step 1 killed 3
+> and 6; Step 2 killed 1 and 2). They are struck through below rather than
+> deleted; the whole section is rewritten in docs/26 Step 3, and until then a
+> reader must not be told "nothing catches this" about a rule that now has a
+> test. A seventh item — the welcome capability marquee — was found during that
+> review and is guarded too, so it never joins this list. **What is left is 4
+> and 5**: the credentials chain and English hard-coded copy.
 
 | # | Location | Why nothing catches it | Symptom if missed |
 | --- | --- | --- | --- |
-| 1 | `entrypoints/app/layouts/dashboard/background-jobs-indicator.tsx` — `PLATFORM_LABEL` | typed `Record<string, LocaleKeys>`, not `Record<CollectionJobPlatform, …>`; the lookup falls back with `key ? t(key) : platform` | the global do-not-close reminder shows the raw job namespace (`reddit-saved · syncing`) instead of the platform's name |
-| 2 | `lib/collections/collection-analytics.ts` — `SOURCE_DIMENSION` | `Partial<Record<…>>`, and it is intentionally partial (github and x have no Source). Nothing cross-checks it against the contract-checked `PLATFORM_DIMENSIONS`. | you declare a Source dimension in `PLATFORM_DIMENSIONS`, and the Dashboard breakdown card silently never populates it |
+| ~~1~~ | ~~`background-jobs-indicator.tsx` — `PLATFORM_LABEL`~~ **GUARDED**: the table is deleted; `backgroundJobPlatformLabel` joins `collectionPlatformForJob` (domain descriptor) to `PLATFORM_META.title` (app descriptor), both exhaustive | `background-jobs-indicator.test.ts` locks the six job namespace → `nav.*` pairs and the raw-namespace fallback | — |
+| ~~2~~ | ~~`collection-analytics.ts` — `SOURCE_DIMENSION`~~ **GUARDED**: the three dimension tables are one `dimensions: { ranked, author, source }` object in the domain descriptor, with `source: null` explicit | `platform-completeness-contract` asserts `author` / `source` are members of `ranked` (or `null`) — declaring an axis the ranking never renders is now a red test | — |
 | ~~3~~ | ~~`lib/chat/tools.ts` — three prompt literals~~ **GUARDED**: all three, plus a fourth in `lib/chat/prompts.ts` (`CHAT_SYSTEM_PROMPT`) that this table missed, now derive the list from `COLLECTION_PLATFORMS` | `lib/chat/tools.test.ts` › `model-facing platform list` checks all four model-facing surfaces: naming any platform obliges naming every platform | — |
 | ~~3b~~ | ~~`skills/favbase/SKILL.md` — the same list, hand-written for the **external** agent~~ **GUARDED**. Shipped markdown cannot derive it, so it is reconciled instead | `tests/agent-bridge-cli-aliases.test.ts` › `favbase SKILL.md matches the live platform list` — set equality, both directions | — |
 | 4 | the whole credentials chain (§8) | `'credentials'` in the readiness table implies a Connections card; no test asserts one exists | onboarding tells the user to add a key, and Settings offers nowhere to add it |
@@ -321,6 +334,7 @@ opt out of the hook; **do not** opt out of the scaffold or the registries.
 | a `t()` call inside `components/collection/**` | design contract (`components/collection/CLAUDE.md`) |
 | duplicating credential resolution or post-sync dispatch across the manual and daily triggers | review — the shared `*-sync-adapter.ts` exists precisely to make this unnecessary |
 | a new table or migration for a platform | §3 — escalate instead |
+| a whole-module `vi.mock('…/collection-platform-registry', () => ({ … }))` factory | review — pass `async (importOriginal) => ({ ...(await importOriginal()), … })` and override the one export you are faking. A partial factory goes stale the moment the registry grows a field: docs/26 Step 2 added `palette`, the theme these tests render in reads it, and two suites died at import time with a stack in `theme/core/palette.ts` that never mentioned the mock. |
 
 ## 12. Verification order
 
@@ -334,7 +348,9 @@ pnpm test
 pnpm build
 ```
 
-Then, by hand, walk §9 — the six items no command above will tell you about.
+Then, by hand, walk §9 — the rows no command above will tell you about. After
+docs/26 Steps 1-2 that is items **4 and 5** (the credentials chain and English
+hard-coded copy); the rest now have guards.
 
 ## 13. Definition of done
 

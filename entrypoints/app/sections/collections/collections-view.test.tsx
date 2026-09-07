@@ -41,13 +41,15 @@ vi.mock('../../components/tags', () => ({
   TagEditPopover: () => null,
 }));
 
-vi.mock('../../collection-platform-registry', () => ({
+// Two platforms instead of six keeps the chip assertions readable; the rest of
+// the module (the app Platform Descriptor the theme reads) stays real.
+vi.mock('../../collection-platform-registry', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../collection-platform-registry')>()),
   collectionPlatformRegistry: [
     { id: 'bilibili', title: 'nav.bilibiliFavorites' },
     { id: 'github', title: 'nav.githubStars' },
   ],
-  // The aggregate page passes `null`, so the trail never looks a platform up;
-  // the map is here so the module's shape stays honest.
+  // The aggregate page passes `null`, so the trail never looks a platform up.
   collectionPlatformById: new Map(),
 }));
 

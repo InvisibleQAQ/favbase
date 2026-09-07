@@ -15,6 +15,7 @@ vi.mock('@/lib/storage', () => ({
 
 import { ThemeProvider } from '../../theme/theme-provider';
 import { themeConfig } from '../../theme/theme-config';
+import { platform as platformPalette } from '../../theme/core/palette';
 import { navSectionClasses } from '../../components/nav-section';
 import type { NavSectionData } from '../../components/nav-section';
 import { NavVertical } from './nav-vertical';
@@ -171,7 +172,7 @@ describe('Collections sidebar navigation', () => {
     );
 
     expect(icon).not.toBeNull();
-    expect(getComputedStyle(icon!).color).toBe(themeConfig.platform.light.bilibili);
+    expect(getComputedStyle(icon!).color).toBe(platformPalette.light.bilibili);
   });
 
   it('renders the Platform Request action as readable secondary text with a caption', () => {

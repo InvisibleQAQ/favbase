@@ -1,17 +1,15 @@
+import { mapPlatforms, PLATFORM_DESCRIPTORS } from '@/lib/collections/platform-descriptor';
 import {
   COLLECTION_PLATFORMS,
   isCollectionPlatform,
   type CollectionPlatform,
 } from '@/lib/collections/platforms';
 
-export const JOB_PLATFORM_BY_COLLECTION = {
-  bilibili: 'bilibili',
-  github: 'github-stars',
-  bookmarks: 'bookmarks',
-  x: 'x-bookmarks',
-  zhihu: 'zhihu-favorites',
-  youtube: 'youtube-playlists',
-} as const satisfies Record<CollectionPlatform, string>;
+/** Background-job namespace per platform, from the Platform Descriptor. */
+export const JOB_PLATFORM_BY_COLLECTION = mapPlatforms(
+  PLATFORM_DESCRIPTORS,
+  (descriptor) => descriptor.jobPlatform,
+);
 
 export type CollectionJobPlatform = (typeof JOB_PLATFORM_BY_COLLECTION)[CollectionPlatform];
 

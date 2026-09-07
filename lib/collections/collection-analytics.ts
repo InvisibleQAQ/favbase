@@ -9,6 +9,7 @@ import { sources } from '@/lib/database/entities/sources';
 import { tags } from '@/lib/database/entities/tags';
 
 import type { CollectionAnalyticsDimensionKind } from './analytics-types';
+import { PLATFORM_DESCRIPTORS } from './platform-descriptor';
 import {
   COLLECTION_PLATFORMS,
   isCollectionPlatform,
@@ -54,36 +55,6 @@ export interface CollectionAnalyticsSnapshot {
   topTags: CollectionAnalyticsTag[];
 }
 
-const PLATFORM_DIMENSIONS: Record<
-  CollectionPlatform,
-  readonly CollectionAnalyticsDimensionKind[]
-> = {
-  bilibili: ['uploader', 'favoriteFolder'],
-  github: ['language', 'repositoryOwner'],
-  bookmarks: ['domain', 'folder'],
-  x: ['author'],
-  zhihu: ['author', 'collection'],
-  youtube: ['channel', 'playlist'],
-};
-
-const AUTHOR_DIMENSION: Record<CollectionPlatform, CollectionAnalyticsDimensionKind> = {
-  bilibili: 'uploader',
-  github: 'repositoryOwner',
-  bookmarks: 'domain',
-  x: 'author',
-  zhihu: 'author',
-  youtube: 'channel',
-};
-
-const SOURCE_DIMENSION: Partial<
-  Record<CollectionPlatform, CollectionAnalyticsDimensionKind>
-> = {
-  bilibili: 'favoriteFolder',
-  bookmarks: 'folder',
-  zhihu: 'collection',
-  youtube: 'playlist',
-};
-
 interface RankedRow {
   platform: string;
   id: string;
@@ -93,7 +64,7 @@ interface RankedRow {
 
 function groupRankedRows(
   rows: RankedRow[],
-  dimensionOf: (platform: CollectionPlatform) => CollectionAnalyticsDimensionKind | undefined,
+  dimensionOf: (platform: CollectionPlatform) => CollectionAnalyticsDimensionKind | null,
 ): Map<CollectionPlatform, Map<CollectionAnalyticsDimensionKind, CollectionAnalyticsRankedEntry[]>> {
   const result = new Map<
     CollectionPlatform,
@@ -209,8 +180,14 @@ export async function getCollectionAnalytics(
     if (isCollectionPlatform(row.platform)) itemCountByPlatform.set(row.platform, row.itemCount);
   }
   const totalItems = platformRows.reduce((sum, row) => sum + row.itemCount, 0);
-  const authorDimensions = groupRankedRows(authorRows, (platform) => AUTHOR_DIMENSION[platform]);
-  const sourceDimensions = groupRankedRows(sourceRows, (platform) => SOURCE_DIMENSION[platform]);
+  const authorDimensions = groupRankedRows(
+    authorRows,
+    (platform) => PLATFORM_DESCRIPTORS[platform].dimensions.author,
+  );
+  const sourceDimensions = groupRankedRows(
+    sourceRows,
+    (platform) => PLATFORM_DESCRIPTORS[platform].dimensions.source,
+  );
   const languageDimensions = groupRankedRows(languageRows, () => 'language');
 
   const platforms = COLLECTION_PLATFORMS.map((platform) => {
@@ -219,7 +196,7 @@ export async function getCollectionAnalytics(
       platform,
       itemCount,
       share: totalItems === 0 ? 0 : itemCount / totalItems,
-      dimensions: PLATFORM_DIMENSIONS[platform].map((kind) => ({
+      dimensions: PLATFORM_DESCRIPTORS[platform].dimensions.ranked.map((kind) => ({
         kind,
         entries:
           languageDimensions.get(platform)?.get(kind) ??

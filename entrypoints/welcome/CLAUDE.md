@@ -15,7 +15,7 @@
 CTA 落地规则在 `landing.ts`（纯函数 + `landing.test.ts`）：
 
 - `normalizePicks` — 去重 + 排成 registry 顺序（点击顺序是噪声）
-- `WELCOME_READINESS_BY_PLATFORM` — 穷举声明 `credentials` / `login` / `local` 三种就绪形态；`needsCredentials(platform)` 与 picker readiness 都从此 Adapter 派生，新增平台不能静默落入默认分支
+- `WELCOME_READINESS_BY_PLATFORM` — 三种就绪形态 `credentials` / `login` / `local`，自 docs/26 Step 2 起由 `lib/collections/platform-descriptor.ts` 的 `readiness` 派生（`WelcomeReadiness` 是 `PlatformReadiness` 的别名，导出名不变）；`needsCredentials(platform)` 与 picker readiness 都从此 Adapter 读，新增平台不能静默落入默认分支
 - `needsCredentials(platform)` — `github`/`youtube` 需要 token/key，其余靠浏览器登录态或本地读取
 - `landingHash(picked)` — 首个（registry 序）选择需要凭证 → `#/settings`；否则 → `#/collections/<platform>`；零选择 → 裸 app.html（dashboard）
 
@@ -26,7 +26,7 @@ CTA 落地规则在 `landing.ts`（纯函数 + `landing.test.ts`）：
 - `index.html` / `main.tsx` — 入口。`main.tsx` 复用 app 的 `ThemeProvider` + `global.css`（字体 + reset），再叠 `welcome.css`；外层 `MotionConfig reducedMotion="user"` 让全页 motion 组件统一尊重系统「减弱动效」。**它只管声明式 `animate`**：`style` 绑定的 MotionValue（scroll-linked parallax / scale）不受其约束，须在组件里用 `useReducedMotion()` 手动 gate（现有：capability-marquee、how-it-works）
 - `welcome.css` — 只放 sx 表达不了的东西：`.fb-headline` 渐变裁字（`background-clip:text` 必须挂在画字的那个元素上）+ 两个 aurora 色值 CSS var（`[data-color-scheme='dark']` 覆盖，与 `public/theme-init.js` 的属性同源）+ `.fb-caret` 流式光标 keyframes + `scroll-behavior: smooth`（包在 `prefers-reduced-motion: no-preference` 里）
 - `welcome-view.tsx` — 段落装配 + 顶部滚动进度条；并订阅 `useTranslation().locale` 同步 `document.documentElement.lang`（a11y。**只准在 welcome 入口做**——`lib/i18n` 共享给 Content Script，绝不能改宿主页的 lang）。根 Box 用 `overflowX: 'clip'` 而非 `hidden`：`clip` 不建立滚动容器，sticky 叠卡才活得下来
-- `landing.ts` / `landing.test.ts` — 落地路由纯函数与穷举 readiness Adapter（见上）
+- `landing.ts` / `landing.test.ts` — 落地路由纯函数与派生 readiness Adapter（见上）
 - `use-onboarding-exit.ts` / `use-onboarding-exit.test.tsx` — 写记录 + 跳转，返回 `{ exit, leaving }`（`leaving` 禁用 CTA 防重复点）。写失败只 console.error 后照常跳转——记录写不上最多让引导多出现一次，不能把用户困在这页（此行为有测试守着）
 
 ### components/

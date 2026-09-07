@@ -8,9 +8,11 @@ import type {
 import { varAlpha, createPaletteChannel } from 'minimal-shared/utils';
 
 import type { CollectionPlatform } from '@/lib/collections/platforms';
+import { mapPlatforms } from '@/lib/collections/platform-descriptor';
 
 import { opacity } from './opacity';
 import { themeConfig } from '../theme-config';
+import { PLATFORM_META } from '../../collection-platform-registry';
 
 import type { SchemesRecord, ThemeColorScheme } from '../types';
 
@@ -145,30 +147,18 @@ export const action = (mode: 'light' | 'dark'): Partial<TypeAction> => ({
 });
 
 // ➤ Platform identity
-// Six keys written out explicitly (no spread) so the platform completeness
-// contract can read every property from the AST. Black-logo brands (github, x)
-// are the scheme's ink; the hued four come from `themeConfig.platform`.
-const PLATFORM_PALETTE_LIGHT = {
-  bilibili: themeConfig.platform.light.bilibili,
-  github: text.light.primary,
-  bookmarks: themeConfig.platform.light.bookmarks,
-  x: text.light.primary,
-  zhihu: themeConfig.platform.light.zhihu,
-  youtube: themeConfig.platform.light.youtube,
-} satisfies PlatformPalette;
-
-const PLATFORM_PALETTE_DARK = {
-  bilibili: themeConfig.platform.dark.bilibili,
-  github: text.dark.primary,
-  bookmarks: themeConfig.platform.dark.bookmarks,
-  x: text.dark.primary,
-  zhihu: themeConfig.platform.dark.zhihu,
-  youtube: themeConfig.platform.dark.youtube,
-} satisfies PlatformPalette;
+// Brand identity per platform comes from the app Platform Descriptor
+// (`PLATFORM_META.palette`, docs/26 Step 2); black-logo brands declare `'ink'`
+// and resolve to this scheme's own text ink.
+function platformPaletteFor(scheme: 'light' | 'dark'): PlatformPalette {
+  return mapPlatforms(PLATFORM_META, (meta) =>
+    meta.palette === 'ink' ? text[scheme].primary : meta.palette[scheme],
+  );
+}
 
 export const platform = {
-  light: createPaletteChannel(PLATFORM_PALETTE_LIGHT),
-  dark: createPaletteChannel(PLATFORM_PALETTE_DARK),
+  light: createPaletteChannel(platformPaletteFor('light')),
+  dark: createPaletteChannel(platformPaletteFor('dark')),
 };
 
 // ➤ Extended palette
