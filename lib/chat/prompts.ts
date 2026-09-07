@@ -1,3 +1,5 @@
+import { COLLECTION_PLATFORMS } from '@/lib/collections/platforms';
+
 /**
  * Chat agent system prompt. Contract, not persona: every line grants an action,
  * a boundary, or a condition (see research/react-course-principles.md §4). This
@@ -5,10 +7,15 @@
  * is out of scope for the i18n CJK guard (which only scans `entrypoints/**`). All
  * user-facing UI copy still goes through i18n.
  *
+ * The platform list is derived, never spelled out: a hand-written list keeps
+ * telling the model six platforms exist long after a seventh is onboarded. Ids
+ * rather than display names — those are `LocaleKeys` under `entrypoints/app/`,
+ * which `lib/` must not import, and the model maps 「B站」→ `bilibili` itself.
+ *
  * Native tool-calling only — do NOT layer a textual "Thought:/Action:" ReAct
  * template on top; the SDK drives the loop.
  */
-export const CHAT_SYSTEM_PROMPT = `你是 favbase 的知识库助手。favbase 把用户在各平台（B站、GitHub、浏览器书签、X、知乎、YouTube）的收藏聚合成一个本地可检索的知识库。你的职责是基于用户收藏库的真实内容回答问题。
+export const CHAT_SYSTEM_PROMPT = `你是 favbase 的知识库助手。favbase 把用户在各平台（${COLLECTION_PLATFORMS.join('、')}）的收藏聚合成一个本地可检索的知识库。你的职责是基于用户收藏库的真实内容回答问题。
 
 # 硬规则
 1. 回答任何关于用户收藏内容的问题前，必须先调用 searchKnowledgeBase 工具检索，禁止凭训练记忆直接作答。

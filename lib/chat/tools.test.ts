@@ -17,10 +17,29 @@ vi.mock('@/lib/tagging/tag-queries', () => ({ getAllUsedTags: vi.fn() }));
 
 import { hybridRetrieve } from './retrieval';
 import { getAllUsedTags } from '@/lib/tagging/tag-queries';
+import { COLLECTION_PLATFORMS } from '@/lib/collections/platforms';
+import { CHAT_SYSTEM_PROMPT } from './prompts';
 import { chatTools } from './tools';
 
 const hybridRetrieveMock = vi.mocked(hybridRetrieve);
 const getAllUsedTagsMock = vi.mocked(getAllUsedTags);
+
+/**
+ * Whole-token match, so the single-letter platform id `x` is not found inside
+ * "text" or "index".
+ */
+function mentionsPlatform(text: string, platform: string): boolean {
+  return new RegExp(`(^|[^a-z])${platform}([^a-z]|$)`, 'i').test(text);
+}
+
+/** Everything a tool puts in front of the model: its description + schema doc. */
+function modelFacingText(toolDef: {
+  description?: string;
+  inputSchema: unknown;
+}): string {
+  const schema = toolDef.inputSchema as z.ZodType;
+  return `${toolDef.description ?? ''}\n${schema.description ?? ''}`;
+}
 
 /** Invoke a tool's execute with a fake ToolExecutionOptions carrying the db. */
 async function runTool<T>(
@@ -165,6 +184,49 @@ describe('chatTools', () => {
       expect(out.count).toBe(2);
       expect(out.tags[0]).toEqual({ id: 'tg1', name: 'ml', count: 3 });
       expect(getAllUsedTagsMock).toHaveBeenCalledWith('bilibili', db);
+    });
+  });
+
+  /**
+   * platform-onboarding.md §9 item 3: `z.enum(COLLECTION_PLATFORMS)` is derived,
+   * so the schema accepts a newly onboarded platform while a hand-written prose
+   * list keeps telling the model only the old ones exist — Chat and the Agent
+   * Bridge then never filter by it. Both halves of the model-facing surface (the
+   * three tool texts and the system prompt) are checked here rather than split
+   * across two files: one rule, one place, or it rots in whichever half is
+   * forgotten.
+   *
+   * The contract is "no PARTIAL list", not "always list them": `getItemContent`
+   * legitimately names no platform at all.
+   */
+  describe('model-facing platform list', () => {
+    it('never shows the model a partial platform list', () => {
+      const surfaces: [string, string][] = [
+        ...Object.entries(chatTools).map(
+          ([name, toolDef]) => [`chatTools.${name}`, modelFacingText(toolDef)] as [string, string],
+        ),
+        ['CHAT_SYSTEM_PROMPT', CHAT_SYSTEM_PROMPT],
+      ];
+      const partial = surfaces
+        .filter(([, text]) => COLLECTION_PLATFORMS.some((p) => mentionsPlatform(text, p)))
+        .flatMap(([name, text]) => {
+          const absent = COLLECTION_PLATFORMS.filter((p) => !mentionsPlatform(text, p));
+          return absent.length > 0 ? [`${name}: missing ${absent.join(', ')}`] : [];
+        });
+      expect(
+        partial,
+        `model-facing text enumerates platforms by hand (derive it from COLLECTION_PLATFORMS):\n${partial.join('\n')}`,
+      ).toEqual([]);
+    });
+
+    it('tells the model about every platform the schema accepts', () => {
+      const searchText = modelFacingText(chatTools.searchKnowledgeBase);
+      const tagsText = modelFacingText(chatTools.listTags);
+      for (const platform of COLLECTION_PLATFORMS) {
+        expect(mentionsPlatform(searchText, platform), `searchKnowledgeBase: ${platform}`).toBe(true);
+        expect(mentionsPlatform(tagsText, platform), `listTags: ${platform}`).toBe(true);
+        expect(mentionsPlatform(CHAT_SYSTEM_PROMPT, platform), `system prompt: ${platform}`).toBe(true);
+      }
     });
   });
 });

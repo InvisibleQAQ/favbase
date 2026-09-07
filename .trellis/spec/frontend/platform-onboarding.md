@@ -274,14 +274,22 @@ Everything above is caught by a compiler or a test. **The following is not.**
 Each item is silent when missed: no error, no red test, just a subtly wrong
 product. Verified against the code on 2026-09-06.
 
+> **2026-09-07 — items 3 and 6 are now guarded** (docs/26 Step 1). They are
+> struck through below rather than deleted; the whole section is rewritten in
+> docs/26 Step 3, and until then a reader must not be told "nothing catches
+> this" about a rule that now has a test. A seventh item — the welcome
+> capability marquee — was found during that review and is guarded too, so it
+> never joins this list.
+
 | # | Location | Why nothing catches it | Symptom if missed |
 | --- | --- | --- | --- |
 | 1 | `entrypoints/app/layouts/dashboard/background-jobs-indicator.tsx` — `PLATFORM_LABEL` | typed `Record<string, LocaleKeys>`, not `Record<CollectionJobPlatform, …>`; the lookup falls back with `key ? t(key) : platform` | the global do-not-close reminder shows the raw job namespace (`reddit-saved · syncing`) instead of the platform's name |
 | 2 | `lib/collections/collection-analytics.ts` — `SOURCE_DIMENSION` | `Partial<Record<…>>`, and it is intentionally partial (github and x have no Source). Nothing cross-checks it against the contract-checked `PLATFORM_DIMENSIONS`. | you declare a Source dimension in `PLATFORM_DIMENSIONS`, and the Dashboard breakdown card silently never populates it |
-| 3 | `lib/chat/tools.ts` — three prompt literals (the `searchKnowledgeBase` `description`, and the two `.describe()` parameter docs) enumerate the platforms by hand | `z.enum(COLLECTION_PLATFORMS)` is derived, so the **schema** accepts the new platform while the **prompt** tells the model only six exist. Prompt strings are outside `i18n-no-hardcoded.test.ts` (it scans `entrypoints/**/*.tsx` for CJK only). | Chat and the Agent Bridge never filter by the new platform, because the model was never told it exists |
+| ~~3~~ | ~~`lib/chat/tools.ts` — three prompt literals~~ **GUARDED**: all three, plus a fourth in `lib/chat/prompts.ts` (`CHAT_SYSTEM_PROMPT`) that this table missed, now derive the list from `COLLECTION_PLATFORMS` | `lib/chat/tools.test.ts` › `model-facing platform list` checks all four model-facing surfaces: naming any platform obliges naming every platform | — |
+| ~~3b~~ | ~~`skills/favbase/SKILL.md` — the same list, hand-written for the **external** agent~~ **GUARDED**. Shipped markdown cannot derive it, so it is reconciled instead | `tests/agent-bridge-cli-aliases.test.ts` › `favbase SKILL.md matches the live platform list` — set equality, both directions | — |
 | 4 | the whole credentials chain (§8) | `'credentials'` in the readiness table implies a Connections card; no test asserts one exists | onboarding tells the user to add a key, and Settings offers nowhere to add it |
 | 5 | user-facing English copy in the new view | `tests/i18n-no-hardcoded.test.ts` bans **CJK only**; an English string literal passes every gate | untranslatable copy ships, and the zh locale silently degrades |
-| 6 | `.env.local` platform block | the docs half of `platform-env-constants-guard` early-returns when the env file is absent, and this repo has no `.env.example` at all. (`EXPECTED_ENV_CONSTANTS` itself **is** enforced both ways — that half you cannot forget.) | your platform's tunables are undocumented for anyone whose checkout has no `.env.local` |
+| ~~6~~ | ~~`.env.local` platform block~~ **GUARDED**: `.env.example` is now tracked and secret-free, so document your platform's block there | `platform-env-constants-guard` requires `.env.example` to exist and to carry a line per `EXPECTED_ENV_CONSTANTS` key, both ways. (`.env.local` stays gitignored and is still only checked where present.) | — |
 
 ## 10. Shape variance — what you may skip
 

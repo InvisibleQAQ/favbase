@@ -6,6 +6,9 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CollectionAnalyticsSnapshot } from '@/lib/collections';
+// The pure discriminator leaf, not the `@/lib/collections` barrel: the barrel
+// drags drizzle + `@/lib/database` in through `collections-query`.
+import { COLLECTION_PLATFORMS } from '@/lib/collections/platforms';
 import { themeConfig } from '../../theme/theme-config';
 import { ThemeProvider } from '../../theme/theme-provider';
 
@@ -247,7 +250,7 @@ describe('CollectionAnalyticsContent', () => {
     expect(container.textContent).toContain('No collection data yet');
     expect(document.querySelectorAll('h1')).toHaveLength(1);
     const tabs = Array.from(container.querySelectorAll('[role="tab"]'));
-    expect(tabs).toHaveLength(6);
+    expect(tabs).toHaveLength(COLLECTION_PLATFORMS.length);
     expect(tabs[0].getAttribute('aria-controls')).toBe('dashboard-platform-panel-bilibili');
     expect(tabs.slice(1).every((tab) => !tab.hasAttribute('aria-controls'))).toBe(true);
     expect(container.querySelector('a[href="/collections"]')).not.toBeNull();
@@ -255,11 +258,16 @@ describe('CollectionAnalyticsContent', () => {
     expect(container.textContent).toContain('No tags in use yet');
     expect(container.textContent).not.toContain('Top tags');
     // An empty library has no coverage: an em dash, never a fabricated 0%.
-    expect(kpiValues(container)).toEqual(['0', '0 / 6', '0', '—']);
+    expect(kpiValues(container)).toEqual([
+      '0',
+      `0 / ${COLLECTION_PLATFORMS.length}`,
+      '0',
+      '—',
+    ]);
     // Zero share → no arc at all; the ring is just its track (docs/25 Step 6).
     expect(container.querySelectorAll('[data-segment]')).toHaveLength(0);
     const shareLabels = Array.from(container.querySelectorAll('[data-slot="share-label"]'));
-    expect(shareLabels).toHaveLength(6);
+    expect(shareLabels).toHaveLength(COLLECTION_PLATFORMS.length);
     expect(shareLabels.every((label) => label.textContent === '0%')).toBe(true);
     expect(
       shareLabels.every(
@@ -287,7 +295,12 @@ describe('CollectionAnalyticsContent', () => {
 
     // Four KPI cards, every figure a CollectionAnalyticsSnapshot field (D17):
     // totalItems, platforms with items / platforms, usedTags, taggedItems ratio.
-    expect(kpiValues(container)).toEqual(['3', '1 / 6', '1', '66.7%']);
+    expect(kpiValues(container)).toEqual([
+      '3',
+      `1 / ${COLLECTION_PLATFORMS.length}`,
+      '1',
+      '66.7%',
+    ]);
     // usedTags has its own card now, so the coverage caption only adds the
     // tagged-item count instead of repeating the tag total.
     expect(container.textContent).toContain('2 tagged items');

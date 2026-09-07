@@ -16,6 +16,18 @@ const { itemContents } = schema;
 const DEFAULT_TOP_K = 8;
 
 /**
+ * The platform discriminators spelled out for the model, derived so a newly
+ * onboarded platform reaches the prompt at the same moment it reaches
+ * `z.enum(COLLECTION_PLATFORMS)`. Hand-writing this list is how the schema
+ * ends up accepting a platform the model was never told exists.
+ *
+ * Ids, not display names: display names live in `PLATFORM_META.title` as
+ * `LocaleKeys` under `entrypoints/app/`, which `lib/` must not import. The
+ * model maps 「B站」→ `bilibili` on its own.
+ */
+const PLATFORM_LIST = COLLECTION_PLATFORMS.join('/');
+
+/**
  * Object flowed into `streamText({ experimental_context })` and read back inside
  * each tool's `execute`. Keeps the read-only DB handle off the model wire. Treat
  * as immutable inside tools (parallel calls share it).
@@ -40,7 +52,7 @@ function contextDb(experimental_context: unknown): FavbaseDb {
  */
 const searchKnowledgeBase = tool({
   description:
-    '在用户的本地收藏知识库里做混合检索（pgvector 语义 + trigram 关键词），覆盖 B站/GitHub/浏览器书签/X/知乎/YouTube 的收藏内容。回答任何关于"用户收藏了什么/某个话题/某篇文章/某个视频"的问题前，必须先调用它，不要凭记忆作答。返回命中的收藏片段及其来源标题、链接与相关度分数。知识库为空或无相关内容时 count 为 0。',
+    `在用户的本地收藏知识库里做混合检索（pgvector 语义 + trigram 关键词），覆盖 ${PLATFORM_LIST} 的收藏内容。回答任何关于"用户收藏了什么/某个话题/某篇文章/某个视频"的问题前，必须先调用它，不要凭记忆作答。返回命中的收藏片段及其来源标题、链接与相关度分数。知识库为空或无相关内容时 count 为 0。`,
   inputSchema: z.object({
     query: z.string(),
     platform: z.enum(COLLECTION_PLATFORMS).optional(),
@@ -48,7 +60,7 @@ const searchKnowledgeBase = tool({
     top_k: z.number().int().min(1).max(20).optional(),
   }).describe(
     '检索参数。query=用户问题的检索关键词或自然语言描述（中英皆可，如 "机器学习入门教程"）；' +
-      'platform=可选，限定单个收藏平台，取值之一 bilibili/github/bookmarks/x/zhihu/youtube，不确定时省略；' +
+      `platform=可选，限定单个收藏平台，取值之一 ${PLATFORM_LIST}，不确定时省略；` +
       'tag_id=可选，限定携带该标签 id 的收藏项，id 来自 listTags 返回，不确定时省略；' +
       'top_k=可选，返回的最大命中数（整数，1-20，默认 8）。',
   ),
@@ -113,7 +125,7 @@ const listTags = tool({
   inputSchema: z.object({
     platform: z.enum(COLLECTION_PLATFORMS).optional(),
   }).describe(
-    '统计参数。platform=可选，只统计某个平台的标签，取值之一 bilibili/github/bookmarks/x/zhihu/youtube；省略则统计全部平台。',
+    `统计参数。platform=可选，只统计某个平台的标签，取值之一 ${PLATFORM_LIST}；省略则统计全部平台。`,
   ),
   execute: async ({ platform }, { experimental_context }) => {
     const db = contextDb(experimental_context);

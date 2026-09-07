@@ -20,8 +20,9 @@ import { PLATFORM_DIRS, PLATFORM_KEY_LINE } from './platform-env-guard-contract'
  *    pre-migration value — behavior with an empty env is provably unchanged,
  *    and a silently edited default fails here.
  * 3. Call sites ↔ EXPECTED table ↔ `.env.example` docs stay in sync both
- *    ways (the env files are gitignored, so the docs check runs only where
- *    they exist — this table is the tracked source of truth).
+ *    ways. `.env.example` is tracked and carries no secrets, so that half runs
+ *    everywhere; `.env.local` is gitignored (it carries the real keys) and is
+ *    checked only on the machines that have one.
  *
  * Deliberately NOT env-configurable (identity/contract constants): API
  * URLs/endpoints, X BOOKMARKS_QUERY_ID, protocol channel/version, storage
@@ -200,13 +201,20 @@ describe('platform env constants guard', () => {
     ).toEqual([]);
   });
 
-  // .env.example / .env.local are gitignored (they carry real keys), so the
-  // docs check runs only where the file exists; the table above is the
-  // tracked contract.
+  // `.env.example` is tracked and secret-free: it MUST exist, so this half is a
+  // real check for everyone. `.env.local` carries the real keys and is
+  // gitignored, so it is only checked where a checkout actually has one.
   for (const envFile of ['.env.example', '.env.local']) {
-    it(`keeps ${envFile} platform blocks in sync with the expected table (when present)`, () => {
+    const required = envFile === '.env.example';
+    it(`keeps ${envFile} platform blocks in sync with the expected table${required ? '' : ' (when present)'}`, () => {
       const full = path.join(ROOT, envFile);
-      if (!existsSync(full)) return;
+      if (required) {
+        // A missing `.env.example` is the very defect this half exists to
+        // catch: without it the table below documents nothing anyone can read.
+        expect(existsSync(full), `${envFile} is tracked and must exist`).toBe(true);
+      } else if (!existsSync(full)) {
+        return;
+      }
       const content = readFileSync(full, 'utf8');
 
       const missing = EXPECTED_ENV_CONSTANTS.filter(

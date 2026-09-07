@@ -7,6 +7,7 @@
 - `platforms.ts` — `COLLECTION_PLATFORMS` / `CollectionPlatform` / `isCollectionPlatform`，持久化平台判别符的唯一白名单
 - `platform-sort-keys.ts` — `PlatformSortKey` + `PLATFORM_SORT_KEYS`，穷举声明每个平台的原生排序时间来源与格式
 - `collections-query.ts` — `getCollectionItems`：限定平台注册项，标题/作者 ILIKE 搜索，全局分页；按 `COLLECTION_PLATFORMS` 遍历 `PLATFORM_SORT_KEYS` 生成绑定参数的排序 `CASE`（无日期条目置后并以 `createdAt`/id 稳定排序）；分页后批量加载 tags
+- `analytics-types.ts` — `CollectionAnalyticsDimensionKind` 的定义处（纯类型，零 import）。拆出来是为了让消费者能命名维度而不拖 `collection-analytics.ts` 的 drizzle + `getDb` + 六张表；`collection-analytics.ts` re-export 它，`@/lib/collections` barrel 与全部现有消费者路径不变
 - `collection-analytics.ts` — `getCollectionAnalytics`：一次返回去重 Item Count、Used Tags、Tagged Items、六平台构成、Top Tags 和平台原生维度；补齐零平台、稳定排序并限制榜单长度
 - `platform-eligibility.ts` — `PLATFORM_DOWNSTREAM_ELIGIBILITY: Record<CollectionPlatform, SQL | null>`，穷举登记每个平台的 downstream eligibility predicate（`null` = 无专属排除；bilibili 取 `lib/bilibili/video-eligibility.ts` 的 `bilibiliDownstreamEligibleSql()`）。规则归平台 owner，本表只登记，契约测试按 AST 对账六平台显式键
 - `collection-processing-policy.ts` — Collection processing stage SQL facts 的唯一 Implementation：可选 platform scope、按 registry 注入的 per-platform downstream eligibility（scoped 取该平台 predicate，未知平台字符串仍 eligible；unscoped 把每条 predicate 放宽为 `platform <> X OR eligible(X)` 后合取）、Content/Embedding/Tags 的 `total`/`done` 与 pending candidate。第三参数默认 `PLATFORM_DOWNSTREAM_ELIGIBILITY`，调用方零改动、不可能忘注入；源码不含任何平台字面量/`platformMeta`（契约守卫）。Coverage 和各 worker Adapter 不重写资格规则。

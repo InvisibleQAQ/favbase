@@ -54,6 +54,12 @@ provides no MCP server.
   copy message schemas or descriptions. Tool and argument names live only in
   `commands.ts`, and `tests/agent-bridge-cli-aliases.test.ts` at the repo root
   checks that table against `describeTools()`.
+- SKILL.md spells the Collection Platform ids for the external agent, which the
+  extension's own tool descriptions derive from `COLLECTION_PLATFORMS`. Shipped
+  markdown cannot derive, so the same contract test reconciles the
+  `` `<platform>` is one of … `` sentence against the live list, both
+  directions. Reword that sentence freely; keep the phrase the test anchors on
+  or update the test with it.
 - stdout carries JSON results only; every diagnostic goes to stderr and never
   includes the Bridge Token.
 - `/status` may add diagnostics, but it never returns received/expected token

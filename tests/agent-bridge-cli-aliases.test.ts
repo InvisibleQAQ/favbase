@@ -1,6 +1,10 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import { describeTools } from '@/lib/agent-bridge/tool-registry';
+import { COLLECTION_PLATFORMS } from '@/lib/collections/platforms';
 import { TOOL_ALIASES } from '../packages/favbase-cli/commands';
 
 /**
@@ -42,4 +46,29 @@ describe('favbase CLI aliases match the Knowledge Tool registry', () => {
       }
     },
   );
+});
+
+/**
+ * SKILL.md is the other half of that same sentence: besides the tool and
+ * argument names above, it is the only place outside the extension that spells
+ * the Collection Platform ids — and it teaches them to an external agent, the
+ * way `chatTools`' descriptions teach them to the in-app one (docs/26 Step 1,
+ * platform-onboarding.md §9 item 3). Being shipped markdown it cannot derive
+ * the list, so the reconciliation has to live here.
+ */
+describe('favbase SKILL.md matches the live platform list', () => {
+  const SKILL_MD = path.resolve(__dirname, '..', 'skills', 'favbase', 'SKILL.md');
+  const PLATFORM_SENTENCE = /`<platform>` is one of ([^.]+)\./;
+
+  it('names every platform, and no platform the product dropped', () => {
+    const skill = readFileSync(SKILL_MD, 'utf8');
+    const sentence = skill.match(PLATFORM_SENTENCE)?.[1];
+    expect(
+      sentence,
+      'SKILL.md no longer carries the "`<platform>` is one of …." sentence this contract reads',
+    ).toBeDefined();
+
+    const listed = [...(sentence ?? '').matchAll(/`([a-z][a-z0-9-]*)`/g)].map((m) => m[1]);
+    expect(listed.slice().sort()).toEqual([...COLLECTION_PLATFORMS].sort());
+  });
 });

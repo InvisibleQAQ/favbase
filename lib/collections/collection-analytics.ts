@@ -8,26 +8,19 @@ import { itemTags } from '@/lib/database/entities/item-tags';
 import { sources } from '@/lib/database/entities/sources';
 import { tags } from '@/lib/database/entities/tags';
 
+import type { CollectionAnalyticsDimensionKind } from './analytics-types';
 import {
   COLLECTION_PLATFORMS,
   isCollectionPlatform,
   type CollectionPlatform,
 } from './platforms';
 
+// Re-exported so every existing consumer (and the `@/lib/collections` barrel)
+// keeps naming the Kind through this module.
+export type { CollectionAnalyticsDimensionKind };
+
 const TOP_TAG_LIMIT = 8;
 const DIMENSION_ENTRY_LIMIT = 8;
-
-export type CollectionAnalyticsDimensionKind =
-  | 'uploader'
-  | 'favoriteFolder'
-  | 'language'
-  | 'repositoryOwner'
-  | 'domain'
-  | 'folder'
-  | 'author'
-  | 'collection'
-  | 'channel'
-  | 'playlist';
 
 export interface CollectionAnalyticsRankedEntry {
   id: string;

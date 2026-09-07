@@ -117,6 +117,35 @@ function isExplicitUndefined(expression: ts.Expression | undefined): boolean {
   return !!expression && ts.isIdentifier(expression) && expression.text === 'undefined';
 }
 
+/**
+ * String values of one field across an array literal of object literals — e.g.
+ * every `labelKey` in `const ROW_TOP: Pill[] = [{ labelKey: '…' }, …]`.
+ * `undefined` when the binding is missing or is not an array literal.
+ */
+function arrayFieldValues(
+  module: SourceModule,
+  name: string,
+  field: string,
+): string[] | undefined {
+  const initializer = variableInitializer(module, name);
+  if (!initializer) return undefined;
+  const array = unwrap(initializer);
+  if (!ts.isArrayLiteralExpression(array)) return undefined;
+
+  const values: string[] = [];
+  for (const element of array.elements) {
+    const object = unwrap(element);
+    if (!ts.isObjectLiteralExpression(object)) continue;
+    for (const property of object.properties) {
+      if (!ts.isPropertyAssignment(property) || !property.name) continue;
+      if (propertyName(property.name) !== field) continue;
+      const value = stringValue(unwrap(property.initializer));
+      if (value) values.push(value);
+    }
+  }
+  return values;
+}
+
 function collectRegistryCoverage(
   missing: string[],
   label: string,
@@ -229,7 +258,7 @@ describe('platform completeness contract', () => {
   it('reports every missing platform Adapter in one failure', () => {
     const missing: string[] = [];
 
-    collectRegistryCoverage(
+    const navMeta = collectRegistryCoverage(
       missing,
       'navigation metadata',
       'entrypoints/app/collection-platform-registry.ts',
@@ -271,6 +300,34 @@ describe('platform completeness contract', () => {
       'entrypoints/welcome/landing.ts',
       'WELCOME_READINESS_BY_PLATFORM',
     );
+
+    // The welcome capability marquee is hand-authored on purpose: the pill
+    // rhythm (platforms leading the top row, capabilities trailing the bottom)
+    // is a design decision, not a derivation (docs/26 D5). Coverage still is a
+    // platform fact — an unlisted platform is silently absent from the
+    // product's first screen. Read by AST: the rows are module-private and the
+    // module pulls MUI + Iconify + motion, which this contract never loads.
+    const marquee = sourceModule('entrypoints/welcome/sections/capability-marquee.tsx');
+    const marqueeRows = ['ROW_TOP', 'ROW_BOTTOM'].map(
+      (row) => [row, arrayFieldValues(marquee, row, 'labelKey')] as const,
+    );
+    const pillLabelKeys = new Set<string>();
+    for (const [row, labelKeys] of marqueeRows) {
+      if (!labelKeys) {
+        missing.push(`all: welcome marquee ${row} is not an explicit array literal`);
+        continue;
+      }
+      for (const labelKey of labelKeys) pillLabelKeys.add(labelKey);
+    }
+    if (navMeta && marqueeRows.every(([, labelKeys]) => labelKeys)) {
+      for (const platform of COLLECTION_PLATFORMS) {
+        const title = stringValue(propertyValue(navMeta, platform, 'title'));
+        // A missing title is already reported as navigation-metadata coverage.
+        if (title && !pillLabelKeys.has(title)) {
+          missing.push(`${platform}: welcome capability marquee pill`);
+        }
+      }
+    }
     const autoSync = collectRegistryCoverage(
       missing,
       'daily auto-sync Adapter',
