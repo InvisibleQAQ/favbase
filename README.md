@@ -108,6 +108,8 @@ favbase is built with WXT, React, TypeScript, PGlite/pgvector, and Vitest.
 | `pnpm compile` | Run TypeScript checks without emitting files |
 | `pnpm test` | Run the test suite |
 
+Before opening a pull request, read [CONTRIBUTING.md](./CONTRIBUTING.md). It covers the checks to run, the commit convention, and the written route for the contribution this codebase is shaped around — [adding a collection platform](./CONTRIBUTING.md#adding-a-collection-platform).
+
 Architecture notes and implementation specifications live in [`docs/`](./docs/). Some documents record historical decisions; current source and tests remain authoritative when an older plan disagrees with the implementation.
 
 ## Project status and license

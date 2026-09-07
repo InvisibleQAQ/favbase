@@ -92,6 +92,8 @@ favbase 使用 WXT、React、TypeScript、PGlite/pgvector 和 Vitest 构建。
 | `pnpm compile` | 执行 TypeScript 检查，不生成文件 |
 | `pnpm test` | 运行测试套件 |
 
+提交 Pull Request 前请先阅读 [CONTRIBUTING.md](./CONTRIBUTING.md)（英文）：其中说明了应跑哪些检查、提交信息约定，以及本项目最主要的一类贡献——[新增收藏平台](./CONTRIBUTING.md#adding-a-collection-platform)——的完整路线。该路线所指向的规格文档同样为英文。
+
 架构记录和实现规格位于 [`docs/`](./docs/)。其中部分文档记录的是历史决策；当旧计划与当前实现冲突时，应以当前源码和测试为准。
 
 ## 项目状态与许可证
