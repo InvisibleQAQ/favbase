@@ -33,7 +33,19 @@ node_modules/
 .agents/
 .claude/
 .codex/
-.trellis/
+# Trellis: the spec layer is tracked (durable, reviewable contracts); task
+# state, journals, runtime and scripts stay local. Three lines, in this order,
+# and none of them is redundant:
+#   !.trellis/       re-includes the directory itself. Without it the
+#                    machine-wide core.excludesFile rule `.trellis/` still hides
+#                    the whole tree, git never descends, and the negation below
+#                    is dead. Verify with `git check-ignore -v`, not by eye.
+#   .trellis/*       ignores the direct children. A negation under a fully
+#                    ignored parent cannot work, so this must be `*`.
+#   !.trellis/spec/  re-includes the one subtree we track.
+!.trellis/
+.trellis/*
+!.trellis/spec/
 audit-report-favbase-2026-07-08.html
 audit-report-favbase-2026-07-08.md
 .env.example
