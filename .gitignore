@@ -10,6 +10,8 @@ lerna-debug.log*
 node_modules
 .pnpm-store/
 packages/*/dist/
+# `npm pack` output from the Step 0 local-install path (docs/27).
+packages/*/*.tgz
 .output
 stats.html
 stats-*.json
