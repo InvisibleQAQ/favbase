@@ -88,7 +88,7 @@ const zhCN = {
   'settings.agentBridge.retryIn': '下次自动重试：{{time}} 后',
   'settings.agentBridge.lastAuthFailure': '最近一次认证失败',
   'settings.agentBridge.commandsTitle': '连接 Claude Code / Codex',
-  'settings.agentBridge.commandsHint': '复制并在终端运行一次：写入本机配置并为 Claude Code 与 Codex 安装 favbase skill。命令包含 Bridge Token，请勿公开。',
+  'settings.agentBridge.commandsHint': '先安装 CLI（需要 Node.js 20+）：npm install -g favbase。再复制下面的命令在终端运行一次：写入本机配置并为 Claude Code 与 Codex 安装 favbase skill。命令包含 Bridge Token，请勿公开。',
   'settings.agentBridge.copySetup': '复制 setup 命令',
   'settings.agentBridge.copySetupToFix': '复制修复命令',
   'settings.agentBridge.copySuccess': '已复制到剪贴板',

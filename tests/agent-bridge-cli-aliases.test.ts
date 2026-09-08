@@ -99,3 +99,34 @@ describe('favbase SKILL.md matches the live platform list', () => {
     );
   });
 });
+
+/**
+ * The third hand-written thing in SKILL.md is the invocation itself. Its
+ * frontmatter declares `allowed-tools: Bash(favbase:*)`, which permits exactly
+ * one command shape — an agent that reads a `npx -y favbase …` instruction
+ * follows it, gets denied by its own permission layer, and reports the library
+ * as unreachable. The contradiction is invisible in review because the two
+ * halves sit twenty lines apart, so it is asserted instead: this file said
+ * "prefix every command with `npx -y favbase`" until docs/27 Step 1.
+ */
+describe('favbase SKILL.md only teaches the invocation its allowed-tools permit', () => {
+  const SKILL_MD = path.resolve(__dirname, '..', 'skills', 'favbase', 'SKILL.md');
+
+  it('declares the bare `favbase` command as its only allowed tool', () => {
+    const skill = readFileSync(SKILL_MD, 'utf8');
+    expect(skill).toMatch(/^allowed-tools: Bash\(favbase:\*\)$/m);
+  });
+
+  it('never instructs the agent to reach for a runner allowed-tools would deny', () => {
+    const skill = readFileSync(SKILL_MD, 'utf8');
+    const offenders = skill
+      .split('\n')
+      .map((line, index) => [index + 1, line] as const)
+      .filter(([, line]) => /\b(npx|pnpm dlx|bunx|yarn dlx)\b/.test(line));
+
+    expect(
+      offenders.map(([line, text]) => `SKILL.md:${line} ${text.trim()}`),
+      'allowed-tools permits `favbase` only; a runner prefix here is an instruction the agent cannot follow',
+    ).toEqual([]);
+  });
+});

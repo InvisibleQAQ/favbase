@@ -19,11 +19,11 @@
 
 | # | 决策 | 来源 | 状态 |
 |---|---|---|---|
-| D1 | 暂不发布 npm，先在本地跑通 | 用户 2026-09-07 | 已定 |
+| D1 | ~~暂不发布 npm，先在本地跑通~~ **已作废**：按 0.1.0 发布 npm | 用户 2026-09-07 定，2026-09-08 推翻 | 手册的选项 1c 成了现实；Step 1 的结论不受影响 |
 | D2 | 不提供 MCP server | ADR 0003 | 已定 |
 | D3 | Agent Bridge 暴露的 Knowledge Tool 集必须与 Chat **完全相同**，两边都不能多一个 | `CONTEXT.md:138` | 已定，是 Step 4 的成本来源 |
 | D4 | 诊断信息不做成 Knowledge Tool，走 `/status` 通道 | 本文建议 | **待用户确认**（Step 3） |
-| D5 | 发布前 `favbase` 必须真的在 PATH 上，而不是靠 `npx` 回退 | 本文建议，理由见证据 3 | **待用户确认**（Step 1） |
+| D5 | `favbase` 必须真的在 PATH 上，而不是靠 `npx` 回退（发布后依然如此：人侧经 npx 配对会留下 agent 用不了的机器） | 用户 2026-09-08 | 已定，已落地（Step 1，选 1a，不建共享常量） |
 | D6 | 只补 `listItems` 一个新工具，`getItemByUrl` / `collectionStats` 留待需求出现 | 本文建议 | **待用户确认**（Step 4） |
 | D7 | 实机 E2E 不进 vitest，产出人工 checklist | 本文建议 | **待用户确认**（Step 5） |
 | D8 | Step 0 连带做 Step 0.5a：删掉入口守卫而非取 realpath 比较 | 用户 2026-09-07 | 已定，已落地 |
@@ -322,6 +322,17 @@ POSIX 忽略该 type，退化成普通目录符号链接。**本机实测未走 
 **回滚** 单 commit revert；无数据迁移。
 
 **判据** 三处指引与「未发布 + 已 link」的现实一致；SKILL.md 内不再存在与 `allowed-tools` 冲突的指令。
+
+**2026-09-08 落地（选 1a，判据改写）** D1「暂不发布」当天作废，包按 0.1.0 发 npm，所以判据的前半句换成「三处指引与已发布的 `favbase@0.1.0` 一致」。选项仍取 1a 而非 1b，理由不变且更硬：`allowed-tools` 把 agent 侧锁死成裸 `favbase`，人侧若经 npx 配对，`setup` 写完 config 与 skill 就结束，机器上并没有 agent 能调用的 `favbase`——那是一台「配好了但用不了」的机器。
+
+**偏离手册两处**：
+
+1. **不建共享常量**。手册 1a 让三处消费 `CLI_COMMAND = 'favbase'`，但三个消费点里只有 `agent-bridge-card.tsx` 是代码，SKILL.md 与 README 是 shipped markdown，引不到常量。为单一消费者建常量是仪式，真正的跨文件约束由测试守，不由常量守。
+2. **加了手册没要求的守卫**。`tests/agent-bridge-cli-aliases.test.ts` 追加一个 describe：一例锁 `allowed-tools: Bash(favbase:*)` 行的形状，一例断言正文零 `npx`/`pnpm dlx`/`bunx`/`yarn dlx`。理由是这条矛盾隐性——frontmatter 与正文隔二十行，review 看不出来。第一版守卫**红在自己身上**：改写后的 Prerequisites 里那句「so there is no npx fallback」含该词。没有给守卫开例外，而是把散文里的词也去掉，让规则无例外（先红后绿已验证）。
+
+**手册未记的证据** `settings.agentBridge.errorBadToken` 的文案本就是「复制并运行修复命令，然后执行 `favbase daemon restart`」。同一张卡片里，错误提示早已假定 CLI 在 PATH 上，只有复制按钮在发 npx。这不是「发布前的权宜」，是卡片内部自相矛盾——这条使 1b（保留 npx + 折叠块）连过渡方案都算不上。
+
+**实际改动** `agent-bridge-card.tsx` 的 `buildSetupCommand` 与其 JSDoc（写明为什么是裸命令）、`agent-bridge-card.test.tsx:128` 的字面量锚点、`commandsHint` zh/en（补 `npm install -g favbase`，命令仍单行——不发 `A && B`，Windows PowerShell 5.1 没有 `&&`）、`skills/favbase/SKILL.md` Prerequisites、根 `README.md:88-96`（`npx skills add InvisibleQAQ/favbase` 保留，那是另一个工具）、`tests/agent-bridge-cli-aliases.test.ts` 新 describe、`entrypoints/app/sections/settings/CLAUDE.md`。`packages/favbase/README.md` 本就写的 `npm install -g favbase`，无需改——它才是 npm 详情页正文。
 
 ---
 

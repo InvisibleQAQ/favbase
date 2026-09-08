@@ -64,9 +64,15 @@ export function generateAgentBridgeToken(): string {
  * One-time pairing command for the favbase CLI (`packages/favbase`): writes
  * `~/.favbase/config.json` and installs the Agent Skill for Claude Code and
  * Codex. The same command serves every agent, so there is a single copy button.
+ *
+ * Bare `favbase`, never `npx -y favbase`: the Agent Skill declares
+ * `allowed-tools: Bash(favbase:*)`, so an agent can only ever run what is
+ * already on `PATH`. Pairing through npx would leave the machine in a state
+ * the agent cannot use. `commandsHint` carries the `npm install -g favbase`
+ * step that has to come first.
  */
 export function buildSetupCommand(token: string, port: number): string {
-  return `npx -y favbase setup --token ${token} --port ${port}`;
+  return `favbase setup --token ${token} --port ${port}`;
 }
 
 export function formatRetryCountdown(retryAt: number, now: number): string {

@@ -90,7 +90,7 @@ const en: Record<LocaleKeys, string> = {
   'settings.agentBridge.retryIn': 'Next automatic retry in {{time}}',
   'settings.agentBridge.lastAuthFailure': 'Last authentication failure',
   'settings.agentBridge.commandsTitle': 'Connect Claude Code / Codex',
-  'settings.agentBridge.commandsHint': 'Copy and run it once in a terminal: it writes the local config and installs the favbase skill for Claude Code and Codex. It contains the Bridge Token, so do not publish it.',
+  'settings.agentBridge.commandsHint': 'Install the CLI first (Node.js 20+): npm install -g favbase. Then copy the command below and run it once in a terminal: it writes the local config and installs the favbase skill for Claude Code and Codex. It contains the Bridge Token, so do not publish it.',
   'settings.agentBridge.copySetup': 'Copy setup command',
   'settings.agentBridge.copySetupToFix': 'Copy repair command',
   'settings.agentBridge.copySuccess': 'Copied to the clipboard',
