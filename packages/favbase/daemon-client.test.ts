@@ -21,7 +21,7 @@ async function serveStatus(extension: unknown): Promise<ResolvedConfig> {
     const body = JSON.stringify({
       ok: true,
       daemon: {
-        name: 'favbase-cli',
+        name: 'favbase',
         version: 'old-or-untrusted',
         pid: process.pid,
         port: 0,

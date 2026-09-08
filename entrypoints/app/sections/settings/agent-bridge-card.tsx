@@ -61,12 +61,12 @@ export function generateAgentBridgeToken(): string {
 }
 
 /**
- * One-time pairing command for the favbase CLI (`packages/favbase-cli`): writes
+ * One-time pairing command for the favbase CLI (`packages/favbase`): writes
  * `~/.favbase/config.json` and installs the Agent Skill for Claude Code and
  * Codex. The same command serves every agent, so there is a single copy button.
  */
 export function buildSetupCommand(token: string, port: number): string {
-  return `npx -y favbase-cli setup --token ${token} --port ${port}`;
+  return `npx -y favbase setup --token ${token} --port ${port}`;
 }
 
 export function formatRetryCountdown(retryAt: number, now: number): string {

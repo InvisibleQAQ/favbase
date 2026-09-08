@@ -258,10 +258,10 @@ Envelope：`{ channel: 'favbase-agent-bridge', protocolVersion: 1, id: string, t
 | Q5 多 agent 并发留 v2 的 B' daemon | **v1 必做**。CLI 每次调用是新进程，扩展 30 s 轮询出站，没有常驻 daemon 每次都要等一个周期再断线 |
 | Q9 「带脚本的 Skill = 绕过 MCP 的第二条数据路径，否决」 | 原则不变（数据路径唯一，CLI 不碰 DB 只打 daemon），但 Skill 现在描述的就是那条路径的前端 |
 | Q10 不实现 `tools/list_changed` | 无对象了；`/status?wait=1` 沿用 `listTools` 有界等待 |
-| §6.6 `claude mcp add` / `codex mcp add` 两条命令 | 一条 `npx -y favbase-cli setup --token <token> --port <port>`：写 `~/.favbase/config.json` 并装 `~/.claude/skills/favbase/`、`~/.agents/skills/favbase/`；之后 `favbase doctor` 验证 |
+| §6.6 `claude mcp add` / `codex mcp add` 两条命令 | 一条 `npx -y favbase setup --token <token> --port <port>`：写 `~/.favbase/config.json` 并装 `~/.claude/skills/favbase/`、`~/.agents/skills/favbase/`；之后 `favbase doctor` 验证 |
 | A1「Skill 碰不到数据」 | 仍成立，正因如此才必须有 daemon |
 
-实现：`packages/favbase-cli`（取代 `packages/favbase-mcp`，删 `@modelcontextprotocol/sdk`），`skills/favbase/SKILL.md`，设置卡单按钮，`tests/agent-bridge-cli-aliases.test.ts`；细节见 ADR 0003 与 `packages/favbase-cli/CLAUDE.md`。剩余风险表中「Claude Code 对超大 tool result 的截断」改为「agent 对超大 stdout 的截断」，「`npx skills add` 命令最终形态」已解决为 `npx skills add InvisibleQAQ/favbase`（vercel-labs/skills）。
+实现：`packages/favbase`（取代 `packages/favbase-mcp`，删 `@modelcontextprotocol/sdk`），`skills/favbase/SKILL.md`，设置卡单按钮，`tests/agent-bridge-cli-aliases.test.ts`；细节见 ADR 0003 与 `packages/favbase/CLAUDE.md`。剩余风险表中「Claude Code 对超大 tool result 的截断」改为「agent 对超大 stdout 的截断」，「`npx skills add` 命令最终形态」已解决为 `npx skills add InvisibleQAQ/favbase`（vercel-labs/skills）。
 
 ## 10. 参考
 

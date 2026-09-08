@@ -1,4 +1,4 @@
-# favbase-cli
+# favbase (Node package)
 
 This package is the Node half of the Agent Bridge (ADR 0003): a thin `favbase`
 CLI plus a long-lived loopback Bridge Daemon. It accepts one authenticated
@@ -71,7 +71,7 @@ provides no MCP server.
 - Listen only on `127.0.0.1`. A peer is usable only after its hello token and
   extension ID match the WebSocket Origin; a CLI request is served only with the
   matching Bearer token and no `Origin` header.
-- Never kill a port occupant that did not answer `/health` as `favbase-cli`.
+- Never kill a port occupant that did not answer `/health` as `favbase`.
 - tsup bundles the protocol leaf and `skills/favbase/SKILL.md` into
   `dist/cli.js`; the published CLI cannot depend on repository-relative paths.
 

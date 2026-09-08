@@ -4,7 +4,7 @@
 
 ## Decision
 
-- `packages/favbase-cli`（npm `favbase-cli`，bin `favbase`）取代 `packages/favbase-mcp`；`@modelcontextprotocol/sdk` 依赖删除，`mcp-server.ts` 删除。
+- `packages/favbase`（npm `favbase`，bin `favbase`）取代 `packages/favbase-mcp`；`@modelcontextprotocol/sdk` 依赖删除，`mcp-server.ts` 删除。包名与目录名 2026-08-28 原定为 `favbase-cli` / `packages/favbase-cli`，2026-09-07 改为现名，见下方 Amendments。
 - 一个 loopback 端口（默认 `17836`）同时承载两半：`/bridge` 是扩展的 WebSocket（协议、Origin + Bridge Token 认证、心跳、有界等待全部沿用），`/rpc`、`/status`、`/shutdown` 是 CLI 的 JSON 路由，`/health` 无鉴权只回 `{ name, version, pid }`。
 - CLI → daemon 必须带 `Authorization: Bearer <Bridge Token>`（timing-safe 比较）；任何携带 `Origin` 头的请求一律 403，把「网页 fetch 127.0.0.1」这条路在鉴权之前就关掉。
 - daemon 由 CLI 首个数据命令 detached 自启（stdout/stderr 落 `~/.favbase/daemon.log`），`FAVBASE_DAEMON_IDLE_MINUTES`（默认 120，0 = 不退出）无 CLI 请求后自灭；`favbase daemon run|start|stop|restart` 显式控制。第二个 `daemon run` 遇端口占用退出码 1、绝不杀占用者；端口被非 favbase 程序占用时 CLI 退出码 2 并指引换端口。
@@ -28,4 +28,12 @@
 - agent 侧失去 MCP 的 schema 校验，CLI 的 argv 解析、JSON stdout、stderr 错误与退出码成为品质线，由包内测试锁定。
 - CONTEXT.md 的 **Agent Bridge** 定义不变，新增 **Bridge Daemon** 与 **favbase CLI**；「MCP 还是 Skill」歧义的解决改为：桥不变、前端是 CLI + Skill。
 - docs/21 的 Q5 / Q9 / Q10 与 §6.6 安装流程被本 ADR 取代；ADR 0002 中「agent 以 stdio 拉起 `favbase-mcp`」「一个进程对应一个 agent 会话」两句不再成立，其余仍有效。
-- npm 发布与 Windows 实机 E2E 仍未做（`favbase-cli` / `favbase` 两个包名 2026-08-28 查询均未被占用）。
+- npm 发布与 Windows 实机 E2E 仍未做（`favbase-cli` / `favbase` 两个包名 2026-08-28 查询均未被占用；2026-09-07 复查仍均为 404）。
+
+## Amendments
+
+- **2026-09-07 —— 包名与目录改为 `favbase`**（用户决定）。本 ADR 的技术决策一条未变：数据路径、认证、daemon 生命周期、CLI 接口面全部照旧；改的只是这个 Node 包的身份。
+  - npm 包名 `favbase-cli` → `favbase`；目录 `packages/favbase-cli/` → `packages/favbase/`。bin 名一直是 `favbase`，改后包名、目录名、bin 名三者一致，不必再向读者解释「命令为什么和包不同名」。
+  - `rpc-server.ts` 的 `DAEMON_NAME` 从 `'favbase-cli'` 改为 `'favbase'`。它是 `/health` 的自我识别串，供 `daemon-client.ts` 判断端口占用者是否为自己人；不属于 `lib/agent-bridge/protocol.ts` 的 v1 wire envelope，故扩展侧契约未变。
+  - **不向后兼容的唯一后果**：改名前启动的 daemon 自称 `favbase-cli`，改名后的 CLI 会把它判为「非 favbase 程序占用端口」而拒绝杀它（退出码 2）。因为包从未发布 npm，受影响的只有开发机上已在运行的进程；处理办法是先 `favbase daemon stop`（或结束进程）再升级。
+  - 前置事实：2026-09-07 `npm view favbase` 与 `npm view favbase-cli` 均 404，两名皆未被占用。

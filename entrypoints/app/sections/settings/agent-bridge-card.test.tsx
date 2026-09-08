@@ -125,7 +125,7 @@ describe('AgentBridgeCard helpers', () => {
 
   it('builds the single favbase CLI setup command for every agent', () => {
     expect(buildSetupCommand('bridge_token', 17_836)).toBe(
-      'npx -y favbase-cli setup --token bridge_token --port 17836',
+      'npx -y favbase setup --token bridge_token --port 17836',
     );
   });
 

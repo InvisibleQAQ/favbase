@@ -18,7 +18,7 @@ interface Run {
 }
 
 async function run(argv: string[], env: Record<string, string> = {}): Promise<Run> {
-  const home = await mkdtemp(join(tmpdir(), 'favbase-cli-'));
+  const home = await mkdtemp(join(tmpdir(), 'favbase-'));
   temps.push(home);
   let stdout = '';
   let stderr = '';

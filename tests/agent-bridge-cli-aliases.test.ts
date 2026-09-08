@@ -7,7 +7,7 @@ import { PLATFORM_META } from '@/entrypoints/app/collection-platform-registry';
 import { describeTools } from '@/lib/agent-bridge/tool-registry';
 import { COLLECTION_PLATFORMS } from '@/lib/collections/platforms';
 import en from '@/lib/i18n/locales/en';
-import { TOOL_ALIASES } from '../packages/favbase-cli/commands';
+import { TOOL_ALIASES } from '../packages/favbase/commands';
 
 /**
  * The favbase CLI's ergonomic subcommands (`search` / `tags` / `get`) are the

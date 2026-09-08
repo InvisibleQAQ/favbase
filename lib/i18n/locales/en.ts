@@ -102,7 +102,7 @@ const en: Record<LocaleKeys, string> = {
   'settings.agentBridge.errorInvalidPort': 'The port is invalid — enter an integer from 1 to 65535',
   'settings.agentBridge.errorBadToken': 'The Bridge Token does not match the local daemon. Copy and run the repair command, then run favbase daemon restart.',
   'settings.agentBridge.errorBadOrigin': 'The local daemon rejected this extension identity',
-  'settings.agentBridge.errorVersion': 'Bridge protocol versions do not match — update favbase-cli',
+  'settings.agentBridge.errorVersion': 'Bridge protocol versions do not match — update the favbase CLI',
   'settings.agentBridge.errorConnectionClosed': 'The local daemon disconnected — the next favbase command starts it again',
   'settings.agentBridge.errorConnection': 'Not connected to the local daemon yet — run any favbase command (such as favbase doctor) in a terminal and confirm the port matches',
 

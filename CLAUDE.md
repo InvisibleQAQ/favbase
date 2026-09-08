@@ -11,7 +11,7 @@ Turn your social media Favorites into a searchable knowledge base just with a lo
 - **动画**: `motion` 12（framer-motion 现名），**仅 welcome.html 用**（单独 code-split 进 welcome chunk）。app.html / Content Script 保持纯 MUI + CSS，不要因为装了这个包就往其他入口加动画依赖
 - **AI SDK**: Vercel AI SDK v6（`ai` + `@ai-sdk/openai` + `@ai-sdk/anthropic` + `@ai-sdk/google` + `@ai-sdk/openai-compatible`）
 - **存储**: WXT `storage.defineItem`（设置/缓存） + PGlite 0.5 + Drizzle ORM 0.45 + pgvector（知识库）
-- **Agent Bridge 外部面**: `packages/favbase-cli`（npm `favbase-cli`，bin `favbase`；Node 20+，仅 `ws` + `zod`，tsup ESM）= 薄 CLI + 常驻 Bridge Daemon；agent 经 `skills/favbase/SKILL.md` 学会调 CLI。**不提供 MCP server**（ADR 0003）
+- **Agent Bridge 外部面**: `packages/favbase`（npm `favbase`，bin `favbase`；Node 20+，仅 `ws` + `zod`，tsup ESM）= 薄 CLI + 常驻 Bridge Daemon；agent 经 `skills/favbase/SKILL.md` 学会调 CLI。**不提供 MCP server**（ADR 0003）
 - **包管理**: pnpm workspace；根 `compile` / `test` 依次覆盖扩展与 `packages/*`
 
 ## Chrome 发布
@@ -146,7 +146,7 @@ WXT 入口点及运行时角色总览，详细结构见对应目录 `CLAUDE.md`�
 - `spikes/agent-bridge/CLAUDE.md` — Agent Bridge Phase 0 可复现实机探针：SW→Offscreen DB proxy/hybridRetrieve、Knowledge Tool JSON Schema/execute、出站 loopback WebSocket 20s 心跳与派生 manifest 无 host permission 验证；非正式实现
 - `scripts/CLAUDE.md` — 离线构建产物检查；Chrome build 后锁定 Background SW 体积并拒绝 PGlite runtime marker
 - `lib/agent-bridge/CLAUDE.md` — Agent Bridge 正式层：严格 v1 协议、三工具 registry、Background WebSocket client、持久认证退避与 30 秒 alarm scheduler；Node CLI 只打包协议 leaf
-- `packages/favbase-cli/CLAUDE.md` — Agent Bridge Node 包：`favbase` CLI（`search`/`tags`/`get` 别名 + 零知识 `call`/`tools`）、自启/空闲自灭 Bridge Daemon（同端口 `/bridge` WS + `/rpc` HTTP，Bearer 鉴权 + Origin 拒绝）、`~/.favbase/config.json`、skill 安装、进程级集成测试；`skills/favbase/SKILL.md` 是 Skill 单源并打进 CLI；`tests/agent-bridge-cli-aliases.test.ts` 用 `describeTools()` 对账别名表，并把 `SKILL.md` 的**两份**手写平台清单双向对账（`<platform>` 句对 `COLLECTION_PLATFORMS` 的 id，frontmatter `description` 对 `PLATFORM_META.title` 经 en locale 的显示名——后者是 agent **据以选不选这个 skill** 的那份；外部 agent 的模型可见面，shipped markdown 无法派生）
+- `packages/favbase/CLAUDE.md` — Agent Bridge Node 包：`favbase` CLI（`search`/`tags`/`get` 别名 + 零知识 `call`/`tools`）、自启/空闲自灭 Bridge Daemon（同端口 `/bridge` WS + `/rpc` HTTP，Bearer 鉴权 + Origin 拒绝）、`~/.favbase/config.json`、skill 安装、进程级集成测试；`skills/favbase/SKILL.md` 是 Skill 单源并打进 CLI；`tests/agent-bridge-cli-aliases.test.ts` 用 `describeTools()` 对账别名表，并把 `SKILL.md` 的**两份**手写平台清单双向对账（`<platform>` 句对 `COLLECTION_PLATFORMS` 的 id，frontmatter `description` 对 `PLATFORM_META.title` 经 en locale 的显示名——后者是 agent **据以选不选这个 skill** 的那份；外部 agent 的模型可见面，shipped markdown 无法派生）
 - `lib/ai/CLAUDE.md` — Vercel AI SDK 集成（LLM + Embedding provider/client）+ Provider 定义（`lib/providers.ts`）
 - `lib/chat/CLAUDE.md` — Chat（Agentic RAG 助手）平台无关 lib：`config.ts`（`resolveChatModel` 复用主 LLM）+ `retrieval.ts`/`rrf.ts`（hybrid：语义 `semanticSearchChunks` + trigram 关键词 word_similarity + RRF）+ `tools.ts`（3 只读工具）+ `agent.ts`（`streamText`+`stepCountIs(8)`）+ `prompts.ts` + `history.ts`（多会话持久化，PGlite `chat_conversations`），检索面对知识库表全程只读，唯一写入是 chat 自有的会话表
 - `lib/permissions/CLAUDE.md` — host access 检查与恢复：静态 `<all_urls>` 覆盖书签、API 与 WebDAV；用户拒绝/收回必选站点权限后由设置页恢复 HTTPS origin

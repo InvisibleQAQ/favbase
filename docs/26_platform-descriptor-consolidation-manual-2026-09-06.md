@@ -187,7 +187,7 @@
 **测试重写**
 - `tests/platform-completeness-contract.test.ts`：新增 marquee 覆盖断言（并入现有聚合失败列表，不新建测试文件）。
 - `lib/chat/tools.test.ts`（**手册原未列，铁律 5 补记**）：新增 `model-facing platform list` 守卫。派生只是「这次修好了」，守卫才让 §9 第 3 条**死**。三处工具文本 + `CHAT_SYSTEM_PROMPT` 四个面在**同一文件**里查——一条规则拆两个文件就是它在被遗忘的那半边里腐掉。
-- `tests/agent-bridge-cli-aliases.test.ts`（**Trellis check 阶段发现的第三处，用户 2026-09-07 决定收进 Step 1**）：`skills/favbase/SKILL.md:45` 手写平台清单，是**外部 agent** 的模型可见面（打进 `favbase-cli`，装到 `~/.claude/skills/`）。工具 schema 那半随本 Step 已派生（Agent Bridge 复用 `chatTools`），但 shipped markdown 派生不了，只能对账。落在该文件是因为它自述「扩展之外唯一拼写 Knowledge Tool 与参数名的地方」——同一句话对平台 id 成立。双向集合相等。
+- `tests/agent-bridge-cli-aliases.test.ts`（**Trellis check 阶段发现的第三处，用户 2026-09-07 决定收进 Step 1**）：`skills/favbase/SKILL.md:45` 手写平台清单，是**外部 agent** 的模型可见面（打进 `favbase`，装到 `~/.claude/skills/`）。工具 schema 那半随本 Step 已派生（Agent Bridge 复用 `chatTools`），但 shipped markdown 派生不了，只能对账。落在该文件是因为它自述「扩展之外唯一拼写 Knowledge Tool 与参数名的地方」——同一句话对平台 id 成立。双向集合相等。
 - `entrypoints/app/sections/overview/overview-view.test.tsx`：四处 `6` 改派生，断言语义不变。
 - `tests/platform-env-constants-guard.test.ts`：只改注释，断言零改动。`.env.example` 存在后其文档半边**首次真正运行**——如果现有平台的 env 文档不全，这一步会红。那正是它该干的事，按红灯补齐 `.env.example`，不要放宽断言。
 - `lib/collections/collection-analytics.test.ts`：如仍从 `collection-analytics.ts` 引 Kind 类型则零改动（re-export 保持）。
@@ -509,7 +509,7 @@ pnpm test
 | `.trellis/spec/frontend/platform-onboarding.md` | 3（§9 第 1-2 条与 §6 横幅在 2 就地改） | §2/§6/§7/§9/**§10**/§11/§12/§13 |
 | `.trellis/spec/frontend/index.md` | 3（**手册原漏**） | 第 34 行也说 "the 13+3 registries" |
 | `lib/chat/tools.test.ts`、`lib/chat/CLAUDE.md`、`tests/agent-bridge-cli-aliases.test.ts` | 3（**手册原漏**） | 三处注释指向 "platform-onboarding.md §9 item 3"，§9 重编号后成幽灵引用，改指 docs/26 附录 A 第 3 条 |
-| `packages/favbase-cli/CLAUDE.md` + 根 `CLAUDE.md` 的 CLI 行 | 3（**手册原漏**，铁律 6） | 两处都写着 SKILL.md 有「**一份**」手写平台清单并已双向对账；实际是两份，Step 3 前只对账了一份 |
+| `packages/favbase/CLAUDE.md` + 根 `CLAUDE.md` 的 CLI 行 | 3（**手册原漏**，铁律 6） | 两处都写着 SKILL.md 有「**一份**」手写平台清单并已双向对账；实际是两份，Step 3 前只对账了一份 |
 | 根 `CLAUDE.md` | 1, 2, 3 | Step 1 改 `lib/env.ts` 行；Step 2 改 `wxt.config.ts` 行 + 契约测试行 + docs/26 状态；Step 3 改索引 |
 | `docs/adr/0004` | 3 | 新建 |
 

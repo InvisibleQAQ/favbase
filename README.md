@@ -89,13 +89,13 @@ favbase ships an [Agent Skill](https://agentskills.io) plus a small CLI so a cod
 2. Run it once in a terminal (requires Node.js 20+):
 
    ```bash
-   npx -y favbase-cli setup --token <Bridge Token> --port 17836
+   npx -y favbase setup --token <Bridge Token> --port 17836
    ```
 
    This writes `~/.favbase/config.json` and installs the `favbase` skill for Claude Code (`~/.claude/skills/favbase/`) and Codex (`~/.agents/skills/favbase/`). Any agent that reads `SKILL.md` can also install it with `npx skills add InvisibleQAQ/favbase`.
-3. `npx -y favbase-cli doctor` confirms the daemon and the extension are connected. Chrome must be running for queries to work.
+3. `npx -y favbase doctor` confirms the daemon and the extension are connected. Chrome must be running for queries to work.
 
-Agents then run `favbase search "<query>"`, `favbase tags` and `favbase get <item-id>`; every command is read-only and prints JSON. See [`skills/favbase/SKILL.md`](./skills/favbase/SKILL.md) and [`packages/favbase-cli/CLAUDE.md`](./packages/favbase-cli/CLAUDE.md).
+Agents then run `favbase search "<query>"`, `favbase tags` and `favbase get <item-id>`; every command is read-only and prints JSON. See [`skills/favbase/SKILL.md`](./skills/favbase/SKILL.md) and [`packages/favbase/CLAUDE.md`](./packages/favbase/CLAUDE.md).
 
 ## Development
 

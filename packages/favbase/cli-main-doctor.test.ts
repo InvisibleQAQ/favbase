@@ -29,13 +29,13 @@ const temps: string[] = [];
 
 beforeEach(() => {
   daemonMocks.ensureDaemon.mockReset().mockResolvedValue({
-    health: { name: 'favbase-cli', version: 'test', pid: 123 },
+    health: { name: 'favbase', version: 'test', pid: 123 },
     spawned: false,
   });
   daemonMocks.fetchStatus.mockReset().mockResolvedValue({
     ok: true,
     daemon: {
-      name: 'favbase-cli',
+      name: 'favbase',
       version: 'test',
       pid: 123,
       port: 17_836,

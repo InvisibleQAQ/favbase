@@ -154,7 +154,7 @@ describe('Daemon', () => {
     await vi.advanceTimersByTimeAsync(500);
     await expect(http(port, 'GET', '/health')).resolves.toMatchObject({
       status: 200,
-      body: { name: 'favbase-cli' },
+      body: { name: 'favbase' },
     });
   });
 

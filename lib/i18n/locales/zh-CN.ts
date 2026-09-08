@@ -100,7 +100,7 @@ const zhCN = {
   'settings.agentBridge.errorInvalidPort': '端口无效，请输入 1 到 65535 之间的整数',
   'settings.agentBridge.errorBadToken': 'Bridge Token 与本机 daemon 不一致。复制并运行修复命令，然后执行 favbase daemon restart。',
   'settings.agentBridge.errorBadOrigin': '本机 daemon 拒绝了当前扩展身份',
-  'settings.agentBridge.errorVersion': 'Bridge 协议版本不兼容，请升级 favbase-cli',
+  'settings.agentBridge.errorVersion': 'Bridge 协议版本不兼容，请升级 favbase CLI',
   'settings.agentBridge.errorConnectionClosed': '本机 daemon 已断开，下一次 favbase 命令会自动重新拉起',
   'settings.agentBridge.errorConnection': '尚未连接本机 daemon：在终端运行任意 favbase 命令（如 favbase doctor）并确认端口一致',
 

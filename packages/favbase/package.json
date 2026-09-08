@@ -1,12 +1,12 @@
 {
-  "name": "favbase-cli",
+  "name": "favbase",
   "version": "0.1.0",
   "description": "Local CLI and daemon that let AI agents (Claude Code, Codex) search the favbase browser extension through an Agent Skill",
   "license": "GPL-3.0-only",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/InvisibleQAQ/favbase.git",
-    "directory": "packages/favbase-cli"
+    "directory": "packages/favbase"
   },
   "type": "module",
   "bin": {

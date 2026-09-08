@@ -1,7 +1,7 @@
 # Agent Bridge 重连延迟整改方案（2026-09-01）
 
 状态：Step 0 已执行（2026-09-01，结论见 §9：§2 成立，可按方案执行）；**Step 1 已落地（2026-09-01，见 §6 Step 1 的「实施记录」）**；**Step 2 已落地（2026-09-01，见 §6 Step 2 的「实施记录」）**；**Step 3 已落地（2026-09-01，见 §6 Step 3 的「实施记录」）**；**Step 4 已落地（2026-09-01，见 §6 Step 4 的「实施记录」）**；Step 5-6 待实施
-范围：`lib/agent-bridge/`、`lib/storage/agent-bridge.ts`、`packages/favbase-cli/`、`skills/favbase/SKILL.md`、`entrypoints/app/sections/settings/agent-bridge-card.tsx`
+范围：`lib/agent-bridge/`、`lib/storage/agent-bridge.ts`、`packages/favbase/`、`skills/favbase/SKILL.md`、`entrypoints/app/sections/settings/agent-bridge-card.tsx`
 前置：ADR 0002（扩展出站 WebSocket）、ADR 0003（Skill-first CLI + Daemon）、`docs/21_agent-bridge-analysis-2026-08-22.md`
 
 ---
@@ -38,11 +38,11 @@
 | `connectNow()` → `enqueueRefresh(false)` → `refresh(false)` → `client.tryConnect()`，**不 close、不清退避** | `scheduler.ts` |
 | 状态字段定义（`authFailureCount` / `nextRetryAt` 注释已写明「reset only by a valid welcome」） | `lib/storage/agent-bridge.ts:25-27` |
 | 存储键 `local:agent-bridge` / `local:agent-bridge-status` | `lib/storage/keys.ts:25-26` |
-| daemon idle 默认 120 分钟，`FAVBASE_DAEMON_IDLE_MINUTES` 可配，`0` 关闭 | `packages/favbase-cli/daemon.ts` `DaemonOptions.idleMinutes` / `touch()` |
-| CLI HTTP 鉴权成功后的 `onActivity()` 与已认证 peer 的 `onPeerActivity` / `onPeerDisconnected` 都驱动 daemon idle 计时 | `packages/favbase-cli/rpc-server.ts:147`、`packages/favbase-cli/bridge-server.ts`、`packages/favbase-cli/daemon.ts` |
-| WS 心跳 `DEFAULT_HEARTBEAT_MS = 20_000`（daemon 发 ping，扩展回 pong） | `packages/favbase-cli/bridge-server.ts:26` |
-| daemon 等扩展 peer 的上限 `DEFAULT_HELLO_WAIT_MS = 75_000` | `packages/favbase-cli/bridge-server.ts:25` |
-| SKILL.md 的「~35 s」和 `EXTENSION_HINT` 的「within 30 seconds」是两个独立硬编码文案 | `skills/favbase/SKILL.md:68`、`packages/favbase-cli/cli-main.ts:38-39` |
+| daemon idle 默认 120 分钟，`FAVBASE_DAEMON_IDLE_MINUTES` 可配，`0` 关闭 | `packages/favbase/daemon.ts` `DaemonOptions.idleMinutes` / `touch()` |
+| CLI HTTP 鉴权成功后的 `onActivity()` 与已认证 peer 的 `onPeerActivity` / `onPeerDisconnected` 都驱动 daemon idle 计时 | `packages/favbase/rpc-server.ts:147`、`packages/favbase/bridge-server.ts`、`packages/favbase/daemon.ts` |
+| WS 心跳 `DEFAULT_HEARTBEAT_MS = 20_000`（daemon 发 ping，扩展回 pong） | `packages/favbase/bridge-server.ts:26` |
+| daemon 等扩展 peer 的上限 `DEFAULT_HELLO_WAIT_MS = 75_000` | `packages/favbase/bridge-server.ts:25` |
+| SKILL.md 的「~35 s」和 `EXTENSION_HINT` 的「within 30 seconds」是两个独立硬编码文案 | `skills/favbase/SKILL.md:68`、`packages/favbase/cli-main.ts:38-39` |
 
 外部平台事实：
 
@@ -214,7 +214,7 @@ Bad case / Tests / Wrong-vs-Correct）、根 `CLAUDE.md` 的 docs/24 条目。
 
 ### Step 2 — daemon idle 计时认扩展（修 D2）
 
-**文件**：`packages/favbase-cli/bridge-server.ts`、`packages/favbase-cli/daemon.ts`
+**文件**：`packages/favbase/bridge-server.ts`、`packages/favbase/daemon.ts`
 
 1. `BridgeServer` 增加一个活动回调（如 `onPeerActivity?: () => void`），在**扩展 hello 认证成功**和**收到 pong / 任意已认证帧**时触发。不要在 daemon 自己发 ping 时触发 —— 那是自说自话，永远不会 idle。
 2. `Daemon` 把 `onPeerActivity` 接到现有的 `touch()`。
@@ -222,13 +222,13 @@ Bad case / Tests / Wrong-vs-Correct）、根 `CLAUDE.md` 的 docs/24 条目。
 
 选 3 的话实现是：`touch()` 里 `if (this.bridge.peerSnapshot().connected) { clearTimeout; return; }`，并在 peer 断开的回调里调一次 `touch()` 启动计时。
 
-**测试**（`packages/favbase-cli/daemon.test.ts`）：
+**测试**（`packages/favbase/daemon.test.ts`）：
 
 - 用极小 `idleMinutes` + fake timers：有已认证 peer 时推进远超 idle 的时间，daemon 不退出。
 - peer 断开后推进 idle 时长，daemon 退出。
 - 无 peer 且无 CLI 请求，行为与现在一致（回归）。
 
-**文档同步**：`packages/favbase-cli/CLAUDE.md` 的 `daemon.ts` 条目，把 idle 语义从「没有 CLI 请求」改成准确描述。
+**文档同步**：`packages/favbase/CLAUDE.md` 的 `daemon.ts` 条目，把 idle 语义从「没有 CLI 请求」改成准确描述。
 
 #### 实施记录（2026-09-01 已落地）
 
@@ -244,13 +244,13 @@ Bad case / Tests / Wrong-vs-Correct）、根 `CLAUDE.md` 的 docs/24 条目。
 
 ### Step 3 — 常量对齐（修 D3）
 
-**文件**：`lib/agent-bridge/scheduler.ts`、`packages/favbase-cli/bridge-server.ts`
+**文件**：`lib/agent-bridge/scheduler.ts`、`packages/favbase/bridge-server.ts`
 
 问题的本质是 daemon 的 `helloWaitMs` 必须 **≥ 扩展 alarm 的实际周期 + 一次连接握手余量**，否则冷启动必超时。
 
 1. 认清 alarm 实际周期的上界：Chrome < 120 会把 `0.5` 夹到 **60 秒**。所以实际上界是 60 秒，不是 30 秒。
 2. 把 `DEFAULT_HELLO_WAIT_MS` 从 35 秒提到 **75 秒**（60 + 15 余量）。这不会让「热连接」变慢 —— 有 peer 时 `waitForPeer` 立即返回；它只影响冷启动那一次的耐心程度。
-3. 在两处常量上互相写明依赖关系的注释（`scheduler.ts` 的 `AGENT_BRIDGE_POLL_MINUTES` 旁注明「daemon 的 helloWait 必须覆盖本周期在旧 Chrome 上被夹到的 60 秒」，反之亦然）。**这是跨包的隐式契约，注释是当前唯一可行的表达方式** —— CLI 包只允许 import `protocol.ts` 这一个 leaf（`packages/favbase-cli/CLAUDE.md` Boundaries），把周期常量塞进 protocol 会污染 wire contract，不要这么干。
+3. 在两处常量上互相写明依赖关系的注释（`scheduler.ts` 的 `AGENT_BRIDGE_POLL_MINUTES` 旁注明「daemon 的 helloWait 必须覆盖本周期在旧 Chrome 上被夹到的 60 秒」，反之亦然）。**这是跨包的隐式契约，注释是当前唯一可行的表达方式** —— CLI 包只允许 import `protocol.ts` 这一个 leaf（`packages/favbase/CLAUDE.md` Boundaries），把周期常量塞进 protocol 会污染 wire contract，不要这么干。
 
 **测试**：`bridge-server.test.ts` 现有 hello-wait 用例改用注入值，避免把 75 这个数字硬编进断言。
 
@@ -259,7 +259,7 @@ Bad case / Tests / Wrong-vs-Correct）、根 `CLAUDE.md` 的 docs/24 条目。
 #### 实施记录（2026-09-01）
 
 - 保留 `AGENT_BRIDGE_POLL_MINUTES = 0.5`；在 Chrome 116–119 上该值实际按 60 秒执行。
-- 将 `packages/favbase-cli/bridge-server.ts` 的 `DEFAULT_HELLO_WAIT_MS` 从 `35_000` 提升为 `75_000`（60 秒周期 + 15 秒握手余量）。
+- 将 `packages/favbase/bridge-server.ts` 的 `DEFAULT_HELLO_WAIT_MS` 从 `35_000` 提升为 `75_000`（60 秒周期 + 15 秒握手余量）。
 - 两处常量旁增加跨包依赖注释；未把 alarm 常量移入 `protocol.ts`，未改变 wire contract。
 - `bridge-server.test.ts` 的 hello-wait 用例继续注入短等待值，避免测试真实等待 75 秒。
 
@@ -267,7 +267,7 @@ Bad case / Tests / Wrong-vs-Correct）、根 `CLAUDE.md` 的 docs/24 条目。
 
 ### Step 4 — 可观测性与文案诚实化（修 D4）
 
-**文件**：`packages/favbase-cli/rpc-server.ts`（或经由 `/status` 透传）、`cli-main.ts`、`skills/favbase/SKILL.md`、`entrypoints/app/sections/settings/agent-bridge-card.tsx`
+**文件**：`packages/favbase/rpc-server.ts`（或经由 `/status` 透传）、`cli-main.ts`、`skills/favbase/SKILL.md`、`entrypoints/app/sections/settings/agent-bridge-card.tsx`
 
 1. **`doctor` 要能看到扩展侧状态**。当前 `/status` 的 `extension` 字段来自 `peerSnapshot()`，是 daemon 视角，扩展没连上时一片空白。两个选择：
    - 轻量（原推荐，已被 §9.6 F2 的实验证据取代）：不动协议。`doctor` 在 `extension.connected === false` 时，明确列出**待排查清单**：token 是否一致（可直接对比 `config.token` 与用户从设置页复制的值）、Agent Bridge 开关是否打开、Chrome 是否在运行、`daemon.log` 路径。
@@ -282,7 +282,7 @@ Bad case / Tests / Wrong-vs-Correct）、根 `CLAUDE.md` 的 docs/24 条目。
 
 **测试**：`cli-main.test.ts` 断言 `doctor` 失败时的排查清单包含 token 与开关两项；i18n 硬编码守卫（`tests/i18n-no-hardcoded.test.ts`）对新增中文文案会自动拦截，记得走 `lib/i18n/locales/{zh-CN,en}.ts`。
 
-**文档同步**：`entrypoints/app/sections/settings/CLAUDE.md`、`packages/favbase-cli/CLAUDE.md`。
+**文档同步**：`entrypoints/app/sections/settings/CLAUDE.md`、`packages/favbase/CLAUDE.md`。
 
 #### 实施记录（2026-09-01 已落地）
 
@@ -315,7 +315,7 @@ Bad case / Tests / Wrong-vs-Correct）、根 `CLAUDE.md` 的 docs/24 条目。
 
 ### Step 5 — 阶段 B：把常连变成默认（可选但强烈建议）
 
-**文件**：`packages/favbase-cli/cli-main.ts`（`daemonOptions`）、`packages/favbase-cli/CLAUDE.md`
+**文件**：`packages/favbase/cli-main.ts`（`daemonOptions`）、`packages/favbase/CLAUDE.md`
 
 Step 2 做完之后，「有扩展连着的 daemon 不自灭」已经成立，`FAVBASE_DAEMON_IDLE_MINUTES` 的语义退化为「扩展也不在时，daemon 还等多久」。此时：
 
@@ -372,7 +372,7 @@ Step 2 做完之后，「有扩展连着的 daemon 不自灭」已经成立，`F
 
 ### 9.1 执行说明
 
-2026-09-01 执行。环境：Chrome 149.0.7827.104（≥ 120，`chrome.alarms` 30 秒周期生效，**D3 的「116–119 被夹到 60 秒」在本机不成立**）、扩展 ID `ifnlocdgkmdkkokbgddfpjjpngddkopk`、CLI `packages/favbase-cli/dist/cli.js` 0.1.0（未全局安装，`doctor` 给出的安装口令是 `npx -y favbase-cli setup`）。
+2026-09-01 执行。环境：Chrome 149.0.7827.104（≥ 120，`chrome.alarms` 30 秒周期生效，**D3 的「116–119 被夹到 60 秒」在本机不成立**）、扩展 ID `ifnlocdgkmdkkokbgddfpjjpngddkopk`、CLI `packages/favbase/dist/cli.js` 0.1.0（未全局安装，`doctor` 给出的安装口令是 `npx -y favbase setup`）。
 
 **方案 §6 Step 0 自身的两处缺陷（已在执行中暴露，实施时须一并修正）**：
 
@@ -412,7 +412,7 @@ Step 2 做完之后，「有扩展连着的 daemon 不自灭」已经成立，`F
 
 **§2 成立。** 本方案可以按原计划执行，「token 不匹配」应列为 Step 4 文案的头号提示。
 
-佐证唯一性：全量 grep `lib/agent-bridge/` + `packages/favbase-cli/`，**`AUTH_BACKOFF_MAX_MS = 5 * 60_000`（`client.ts:25`）是整个系统里唯一的 5 分钟量级常量**；CLI 侧最长的两个是 `REQUEST_TIMEOUT_MS = 120_000` 与当前 `DEFAULT_HELLO_WAIT_MS = 75_000`（实验时仍为修复前的 35 秒）。不存在第二个能产生 5 分钟的源头。
+佐证唯一性：全量 grep `lib/agent-bridge/` + `packages/favbase/`，**`AUTH_BACKOFF_MAX_MS = 5 * 60_000`（`client.ts:25`）是整个系统里唯一的 5 分钟量级常量**；CLI 侧最长的两个是 `REQUEST_TIMEOUT_MS = 120_000` 与当前 `DEFAULT_HELLO_WAIT_MS = 75_000`（实验时仍为修复前的 35 秒）。不存在第二个能产生 5 分钟的源头。
 
 ### 9.5 §1 代码事实复核
 

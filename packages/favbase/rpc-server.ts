@@ -11,7 +11,7 @@ import {
   type BridgePeerSnapshot,
 } from './bridge-server';
 
-export const DAEMON_NAME = 'favbase-cli';
+export const DAEMON_NAME = 'favbase';
 
 export const RPC_ROUTES = Object.freeze({
   health: '/health',

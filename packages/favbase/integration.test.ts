@@ -278,7 +278,7 @@ describe('favbase CLI process integration', () => {
     expect(JSON.parse(doctor.stdout)).toMatchObject({
       ok: true,
       config: { port, tokenSource: 'env', portSource: 'env' },
-      daemon: { name: 'favbase-cli', spawned: false },
+      daemon: { name: 'favbase', spawned: false },
       extension: { connected: true, extensionId: EXTENSION_ID },
     });
   });

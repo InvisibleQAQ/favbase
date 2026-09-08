@@ -23,8 +23,8 @@ nothing is ever written to the library.
 
 - Chrome is running with favbase installed and **Settings > Connections >
   Agent Bridge** switched on.
-- `favbase` is on `PATH` (`npm install -g favbase-cli`), or prefix every
-  command with `npx -y favbase-cli`.
+- `favbase` is on `PATH` (`npm install -g favbase`), or prefix every
+  command with `npx -y favbase`.
 - One-time pairing (the user does this once, values come from that settings
   card): `favbase setup --token <Bridge Token> --port <port>`.
 - `favbase doctor` verifies config, background daemon and extension link.
