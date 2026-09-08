@@ -96,3 +96,32 @@ provides no MCP server.
 - `pnpm test` - build, then run unit tests (args/commands/config/rpc-server/
   daemon-client/daemon/cli-main/bridge-server, including doctor diagnostics) and the process integration suite (real CLI
   child processes, foreground and auto-spawned daemons, `ws` fake extension).
+
+## Release
+
+Published to npm as the unscoped package `favbase`. Its version line is
+**independent of the root `package.json`**, which versions the Chrome extension
+and never reaches npm (the root is `private: true`).
+
+1. Bump `version` here. Never reuse a published version - npm keeps a tombstone
+   even after an unpublish, and the 72-hour unpublish window is the only escape.
+2. `pnpm compile && pnpm test` - the gate is manual on purpose; a
+   `prepublishOnly` hook would drag every publish through a suite that flakes on
+   local CPU contention.
+3. `npm publish --dry-run` and read the file list. It must stay at 5 files:
+   `package.json`, `README.md`, `LICENSE`, `dist/cli.js`, `dist/cli.js.map`.
+   Anything else means `files` or the packed defaults drifted.
+4. `npm publish`. It triggers `prepack` (tsup rebuild) on its own, so no manual
+   build first. Unscoped packages default to public access; `--access public` is
+   noise. A 2FA challenge is expected - npm requires it for every publish, and
+   there is no token that skips it here.
+5. `npm view favbase version` then `npm i -g favbase && favbase --version`. The
+   global install is the regression check for the entry-point guard removed in
+   docs/27 Step 0.5: a symlinked `bin` used to exit 0 with empty output.
+
+Use `npm publish`, not `pnpm publish`: pnpm wants the OTP passed as `--otp`,
+while the interactive 2FA prompt is the whole point. Nothing here depends on
+pnpm's `workspace:` rewriting - `ws` and `zod` are pinned semver.
+
+The published README is **this directory's** `README.md`, not the repository
+root one. Installation instructions shown on the npm page live here.
