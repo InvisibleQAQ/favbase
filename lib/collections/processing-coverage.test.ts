@@ -9,9 +9,10 @@ import type { FavbaseDb } from '@/lib/database';
 import { runMigrations } from '@/lib/database/migrations';
 import * as schema from '@/lib/database/schema';
 
-import { getProcessingCoverage } from './processing-coverage';
+import { getAllProcessingCoverage, getProcessingCoverage } from './processing-coverage';
+import { COLLECTION_PLATFORMS } from './platforms';
 
-describe('getProcessingCoverage (in-memory PGlite)', () => {
+describe('processing coverage (in-memory PGlite)', () => {
   let pg: PGlite;
   let db: FavbaseDb;
 
@@ -101,6 +102,82 @@ describe('getProcessingCoverage (in-memory PGlite)', () => {
       content: { done: 1, total: 1 },
       embedding: { done: 0, total: 1 },
       tagging: { done: 0, total: 1 },
+    });
+  });
+
+  describe('getAllProcessingCoverage', () => {
+    it('returns a zero snapshot for every platform when nothing is persisted', async () => {
+      const all = await getAllProcessingCoverage(db);
+
+      expect(Object.keys(all).sort()).toEqual([...COLLECTION_PLATFORMS].sort());
+      for (const platform of COLLECTION_PLATFORMS) {
+        expect(all[platform]).toEqual({
+          acquisition: { done: 0, total: null },
+          content: { done: 0, total: 0 },
+          embedding: { done: 0, total: 0 },
+          tagging: { done: 0, total: 0 },
+        });
+      }
+    });
+
+    it('matches the scoped reader for every platform, seeded or not', async () => {
+      await seedItems('github', [
+        { id: 'gh-chunked', contentState: 'chunked' },
+        { id: 'gh-embedded', contentState: 'embedded' },
+        { id: 'gh-pending', contentState: 'pending' },
+      ]);
+      await seedItems('bilibili', [
+        { id: 'bl-valid', contentState: 'embedded', platformMeta: { attr: 0 } },
+        { id: 'bl-invalid', contentState: 'embedded', platformMeta: { attr: 9 } },
+      ]);
+      const zhihuIds = await seedItems('zhihu', [
+        { id: 'zh-embedded', contentState: 'embedded' },
+        { id: 'zh-no-content', contentState: 'no_content' },
+      ]);
+      const tag = await db
+        .insert(schema.tags)
+        .values({ name: 'covered' })
+        .returning({ id: schema.tags.id });
+      await db.insert(schema.itemTags).values({ itemId: zhihuIds['zh-embedded'], tagId: tag[0].id });
+
+      const all = await getAllProcessingCoverage(db);
+
+      for (const platform of COLLECTION_PLATFORMS) {
+        await expect(getProcessingCoverage(platform, db)).resolves.toEqual(all[platform]);
+      }
+    });
+
+    it('keeps downstream-ineligible items in the acquisition count', async () => {
+      // The eligibility predicate belongs in the stage `filter`s only. An
+      // invalid Bilibili video is excluded from content/embedding/tagging but
+      // was still fetched, so hoisting that predicate to `WHERE` — which would
+      // drop the row from `count(*)` too — is the bug this locks down.
+      await seedItems('bilibili', [
+        { id: 'valid', contentState: 'chunked', platformMeta: { attr: 0 } },
+        { id: 'invalid-a', contentState: 'embedded', platformMeta: { attr: 9 } },
+        { id: 'invalid-b', contentState: 'embedded', platformMeta: { attr: 9 } },
+      ]);
+
+      const all = await getAllProcessingCoverage(db);
+
+      expect(all.bilibili.acquisition).toEqual({ done: 3, total: null });
+      expect(all.bilibili.content.total).toBe(1);
+      expect(all.bilibili.embedding.total).toBe(1);
+    });
+
+    it('scopes each platform to its own rows', async () => {
+      await seedItems('github', [{ id: 'gh', contentState: 'embedded' }]);
+      await seedItems('x', [
+        { id: 'x-1', contentState: 'chunked' },
+        { id: 'x-2', contentState: 'pending' },
+      ]);
+
+      const all = await getAllProcessingCoverage(db);
+
+      expect(all.github.acquisition.done).toBe(1);
+      expect(all.x.acquisition.done).toBe(2);
+      expect(all.bookmarks.acquisition.done).toBe(0);
+      expect(all.youtube.acquisition.done).toBe(0);
     });
   });
 });

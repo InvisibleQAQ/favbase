@@ -58,7 +58,7 @@ a rewrite, not an edit.
 | --- | --- | --- |
 | **Auth shape** — what must exist before the first sync can run? | the descriptor's `readiness` (`'credentials'` / `'login'` / `'local'`; `WELCOME_READINESS_BY_PLATFORM` derives from it), and whether you owe a Connections card (§8) | `credentials`: github, youtube · `login`: bilibili, x, zhihu · `local`: bookmarks |
 | **Source shape** — does the platform expose containers (folders / playlists / collections)? | the descriptor's `dimensions` (`ranked` / `author` / `source`, `null` when the platform has no Source), whether a Collection Item may hold N memberships | multi-Source: bilibili, bookmarks, zhihu, youtube · single: github, x |
-| **Content shape** — what text feeds Embedding, and is it available at sync time? | the `content` block of `IngestInput`, the `contentState` you declare, whether the pipeline gains a content stage | inline at sync: github README, zhihu answer, youtube description, x tweet · deferred: bookmarks extraction, bilibili transcription |
+| **Content shape** — what text feeds Embedding, and is it available at sync time? | the `content` block of `IngestInput`, the `contentState` you declare, the descriptor's `contentKind` (§6.1), whether the pipeline gains a content stage | inline at sync: github README, zhihu answer, youtube description, x tweet · deferred: bookmarks extraction, bilibili transcription |
 | **Sort key** — what is the platform's native "recency"? | the descriptor's `sortKey` (`PLATFORM_SORT_KEYS` derives from it) | `publishedAt` column, or a `platform_meta` field with `unixSeconds` / `iso8601` format |
 | **Downstream eligibility** — are some persisted items ineligible for Content → Embedding → Tags? | `PLATFORM_DOWNSTREAM_ELIGIBILITY` (`null` when none) | only bilibili has one (taken-down videos) |
 
@@ -170,7 +170,7 @@ transcribe them into a side document that will rot.
 
 ## 6. Phase 3 — The registries
 
-The facts a platform used to declare one file at a time are now ten fields
+The facts a platform used to declare one file at a time are now eleven fields
 across two **Platform Descriptors** (ADR 0004). Both are exhaustive
 `Record<CollectionPlatform, …>`, so an undeclared platform is a compile error on
 the object literal that names the platform — and the whole point is that it
@@ -181,8 +181,11 @@ values are not data.
 ### 6.1 The domain descriptor — `lib/collections/platform-descriptor.ts`
 
 `PLATFORM_DESCRIPTORS`. The build config loads this file in Node by relative
-path, so **its only value import may be `./platforms`** and it never enters the
-`lib/collections` barrel (§11 — both rules exist to keep it loadable).
+path, so **its only value import may be `./platforms`** and the `lib/collections`
+barrel never re-exports it (§11 — both rules exist to keep it loadable). The
+second rule is about the barrel's *exports*, not the descriptor's consumers:
+three modules that are themselves in the barrel import the descriptor, which is
+fine, because the first rule keeps its own graph at one leaf.
 
 | Field | You declare | Read by |
 | --- | --- | --- |
@@ -190,16 +193,24 @@ path, so **its only value import may be `./platforms`** and it never enters the
 | `readiness` | `'credentials'` / `'login'` / `'local'` (§3) | `WELCOME_READINESS_BY_PLATFORM`, the welcome landing route |
 | `hostPermissions` | an explicit array literal of match patterns, in the order you want them in the manifest | `PLATFORM_HOST_PERMISSION_LIST`, spread into `wxt.config.ts` `host_permissions` |
 | `sortKey` | `{ source: 'publishedAt' }`, or `{ source: 'meta', field, format }` (§3) | `PLATFORM_SORT_KEYS`, re-exported from `platform-sort-keys.ts` |
+| `contentKind` | the English semantic id for what your Content stage actually produces — `transcript`, `readme`, `page-text`, `post-text`, `body-text`, `description`, or a new member of the union if yours is genuinely a different artefact | the `getProcessingCoverage` Knowledge Tool, which returns it as `content.kind` and derives its own description from the distinct set |
 | `dimensions` | `{ ranked, author, source }` — the ordered Collection Analytics facets, which one carries the **Creator** axis, and which one carries the **Source** membership (`source: null` when the platform has no Source) | the Dashboard composition and breakdown cards, read inline |
 
-Two of those fields have a cost you cannot see from the object literal, so both
-are pinned in `lib/collections/platform-descriptor.test.ts`:
+Three of those fields have a cost you cannot see from the object literal, so all
+three are pinned in `lib/collections/platform-descriptor.test.ts`:
 
 - **`hostPermissions` order is a manifest contract.** An installed MV3 extension
   whose `host_permissions` set changes asks its user to re-authorize. The test
   locks the flattened golden order, not just the membership.
 - **`jobPlatform` must be unique.** Two platforms sharing a job lane means the
   second sync is discarded as a duplicate of the first.
+- **`contentKind` must stay a machine id, never a display string.** It is the
+  word a model uses for your platform's body text, and the localized names are
+  app-side `LocaleKeys` that `lib/` cannot import (ADR 0004 D3). The closed
+  union enforces this today; the test enforces it for the member you add. Do
+  **not** write a per-platform sentence into the tool description instead —
+  `lib/chat/tools.test.ts` rejects a hand-written list there, and that rejection
+  is why this field exists.
 
 ### 6.2 The app descriptor — `entrypoints/app/collection-platform-registry.ts`
 

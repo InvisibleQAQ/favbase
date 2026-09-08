@@ -136,6 +136,8 @@ _Avoid_: API key, provider key, password
 - A **Platform Request** entry may follow the platform list in navigation or onboarding, but is visually marked as an outbound action and never participates in platform aggregation, sync, or active-route highlighting
 - An **Onboarding Platform Preference** prioritizes zero or more supported platform leaves while every unselected platform remains available after them
 - The **Agent Bridge** exposes exactly the **Knowledge Tools** that Chat uses; neither side defines a tool the other lacks
+- The **Agent Bridge** presents **Processing Coverage** through a **Knowledge Tool**, so an external agent can tell "nothing saved" apart from "saved but not processed yet"; that report is still not a **Pipeline Run** and still never claims remote sync completeness
+- A **Configuration Blocker** reaches an external agent only where it follows from absent provider configuration plus pending eligible work; a blocker that needs a live pipeline signal stays inside the app page
 - The **Agent Bridge** keeps Chat's table-level read-only boundary: it never writes any table, not even **Conversations**
 - The **Agent Bridge** serves live Collection Items only; an exported snapshot is never an Agent Bridge
 - An **Agent Bridge** connection is accepted only when both ends present the same **Bridge Token**; resetting the token ends every existing connection

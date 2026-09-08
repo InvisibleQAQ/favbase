@@ -8,10 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ProcessingCoverage } from '@/lib/collections';
 
 import { ThemeProvider } from '../../theme/theme-provider';
-import {
-  CollectionConfigurationNotice,
-  deriveConfigurationBlockers,
-} from './collection-configuration-notice';
+import { CollectionConfigurationNotice } from './collection-configuration-notice';
 
 const configState = vi.hoisted(() => ({
   asr: false,
@@ -43,88 +40,6 @@ const coverage: ProcessingCoverage = {
   embedding: { done: 1, total: 3 },
   tagging: { done: 3, total: 3 },
 };
-
-describe('deriveConfigurationBlockers', () => {
-  it('reports an incomplete Embed backlog only when coverage is ready and Embedding is disabled', () => {
-    expect(
-      deriveConfigurationBlockers({
-        coverage,
-        coverageStatus: 'ready',
-        asrBlocked: false,
-        asrConfigured: false,
-        embeddingConfigured: false,
-        llmConfigured: true,
-      }),
-    ).toEqual([{ capability: 'embedding', pending: 2 }]);
-
-    expect(
-      deriveConfigurationBlockers({
-        coverage,
-        coverageStatus: 'loading',
-        asrBlocked: false,
-        asrConfigured: false,
-        embeddingConfigured: false,
-        llmConfigured: true,
-      }),
-    ).toEqual([]);
-
-    expect(
-      deriveConfigurationBlockers({
-        coverage,
-        coverageStatus: 'error',
-        asrBlocked: false,
-        asrConfigured: false,
-        embeddingConfigured: false,
-        llmConfigured: true,
-      }),
-    ).toEqual([]);
-
-    expect(
-      deriveConfigurationBlockers({
-        coverage,
-        coverageStatus: 'ready',
-        asrBlocked: false,
-        asrConfigured: false,
-        embeddingConfigured: true,
-        llmConfigured: true,
-      }),
-    ).toEqual([]);
-  });
-
-  it('combines independent Embed and Tags blockers', () => {
-    expect(
-      deriveConfigurationBlockers({
-        coverage: {
-          ...coverage,
-          tagging: { done: 0, total: 3 },
-        },
-        coverageStatus: 'ready',
-        asrBlocked: false,
-        asrConfigured: false,
-        embeddingConfigured: false,
-        llmConfigured: false,
-      }),
-    ).toEqual([
-      { capability: 'embedding', pending: 2 },
-      { capability: 'llm', pending: 3 },
-    ]);
-  });
-
-  it('reports ASR only for the authoritative wait state while ASR remains disabled', () => {
-    const input = {
-      coverage,
-      coverageStatus: 'loading' as const,
-      asrBlocked: true,
-      asrConfigured: false,
-      embeddingConfigured: false,
-      llmConfigured: false,
-    };
-
-    expect(deriveConfigurationBlockers(input)).toEqual([{ capability: 'asr' }]);
-    expect(deriveConfigurationBlockers({ ...input, asrBlocked: false })).toEqual([]);
-    expect(deriveConfigurationBlockers({ ...input, asrConfigured: true })).toEqual([]);
-  });
-});
 
 describe('CollectionConfigurationNotice', () => {
   it('renders one passive status banner with a platform-scoped settings link for every blocker', () => {

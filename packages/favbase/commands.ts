@@ -55,6 +55,13 @@ const ALIASES: ToolAlias[] = [
     positional: { arg: 'item_id', label: '<item-id>' },
     flags: {},
   },
+  {
+    command: 'coverage',
+    tool: 'getProcessingCoverage',
+    summary: 'per-platform processing progress and what is blocking it',
+    positional: null,
+    flags: { platform: PLATFORM_FLAG },
+  },
 ];
 
 export const TOOL_ALIASES: readonly ToolAlias[] = Object.freeze(ALIASES);

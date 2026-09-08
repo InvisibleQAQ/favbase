@@ -23,7 +23,7 @@ provides no MCP server.
   wording. Foreground daemon logs receive one ISO-8601 prefix here. Data results
   go to stdout as JSON only.
 - `args.ts` is the argv parser (`--flag value`, `--flag=value`, boolean set,
-  `--`); `commands.ts` is the alias table (`search`/`tags`/`get` → Knowledge
+  `--`); `commands.ts` is the alias table (`search`/`tags`/`get`/`coverage` → Knowledge
   Tool + argument names) and the only place tool names appear.
 - `config.ts` resolves token/port: env `FAVBASE_TOKEN`/`FAVBASE_BRIDGE_PORT`,
   then `~/.favbase/config.json` (`FAVBASE_HOME` overrides the root), then

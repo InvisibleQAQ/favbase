@@ -39,6 +39,7 @@ All data commands print JSON to stdout; diagnostics go to stderr.
 favbase tags [--platform <platform>]
 favbase search "<query>" [--platform <platform>] [--tag <tag-id>] [--limit <1-20>]
 favbase get <item-id>
+favbase coverage [--platform <platform>]
 favbase tools                       # Knowledge Tools the extension advertises, with JSON Schemas
 favbase call <tool> --args '<json>' # call any advertised tool directly
 favbase doctor                      # config + daemon + extension status
@@ -55,11 +56,33 @@ this file and the CLI disagree.
 2. `favbase search "<query>"` runs hybrid retrieval (vector + keyword; Chinese
    and English both work). Output:
    `{ "count": n, "results": [{ "item_id", "title", "url", "platform", "chunk_text", "score" }] }`.
-   `count: 0` means the user saved nothing on that topic; say so instead of
-   guessing.
-3. When a `chunk_text` snippet is too short, `favbase get <item_id>` returns
+   A `count: 0`, or a result set that looks suspiciously thin, is **not** by
+   itself evidence that the user saved nothing — go to step 3 before saying so.
+3. `favbase coverage` reports each platform's processing progress:
+   `{ "platforms": [{ "platform", "acquisition", "content", "embedding",
+   "tagging", "blockers" }] }`, each stage as `done`/`total`. It separates the
+   three causes of an empty search, which need three different answers:
+   - `acquisition.done` is 0 — that platform was never fetched. Ask the user to
+     open favbase and fetch it; do not report an empty topic.
+   - a later stage is behind (`embedding.done` < `embedding.total`) — the items
+     are saved but not searchable yet. Say what is still being processed.
+   - `blockers` is non-empty — that stage has no provider configured and will
+     **never** advance on its own. Point the user at the extension's Settings
+     page; do **not** tell them to try again later.
+   Each blocker is `{ "capability", "pending" }`, and `capability` is only ever
+   `embedding` or `llm`. The content stage has no blocker entry — its provider
+   readiness is not visible to this command — so an empty `blockers` does **not**
+   prove content is advancing. If `content.done` sits at the same number across
+   calls, treat it like a blocker: send the user to Settings instead of telling
+   them to wait.
+   Report progress in the platform's own vocabulary: `content.kind` names what
+   "content" means there, so a `transcript` platform is "1100 transcribed", not
+   "1100 content acquisitions". `acquisition.total` is always `null` because the
+   remote total is not knowable — say "1100 fetched so far", never "fully
+   synced".
+4. When a `chunk_text` snippet is too short, `favbase get <item_id>` returns
    `{ "found", "item_id", "content" }` with the full extracted text.
-4. Answer from the returned text and cite each source by `title` and `url`.
+5. Answer from the returned text and cite each source by `title` and `url`.
 
 ## Errors and exit codes
 

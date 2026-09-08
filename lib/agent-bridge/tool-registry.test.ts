@@ -11,14 +11,15 @@ const KNOWLEDGE_TOOL_NAMES = [
   'searchKnowledgeBase',
   'getItemContent',
   'listTags',
+  'getProcessingCoverage',
 ] as const;
 
 describe('Agent Bridge Knowledge Tool registry', () => {
-  it('describes exactly the three Chat Knowledge Tools as JSON Schema 2020-12', () => {
+  it('describes exactly the Chat Knowledge Tools as JSON Schema 2020-12', () => {
     const descriptors = describeTools();
 
     expect(descriptors.map(({ name }) => name)).toEqual(KNOWLEDGE_TOOL_NAMES);
-    expect(descriptors).toHaveLength(3);
+    expect(descriptors).toHaveLength(KNOWLEDGE_TOOL_NAMES.length);
     for (const descriptor of descriptors) {
       expect(descriptor.description.length).toBeGreaterThan(0);
       expect(descriptor.inputSchema).toMatchObject({

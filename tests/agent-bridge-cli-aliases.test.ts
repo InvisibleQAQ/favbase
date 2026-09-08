@@ -10,9 +10,9 @@ import en from '@/lib/i18n/locales/en';
 import { TOOL_ALIASES } from '../packages/favbase/commands';
 
 /**
- * The favbase CLI's ergonomic subcommands (`search` / `tags` / `get`) are the
- * only place outside the extension that spells Knowledge Tool and argument
- * names. This contract pins every alias to the live `chatTools` registry so a
+ * The favbase CLI's ergonomic subcommands (`search` / `tags` / `get` /
+ * `coverage`) are the only place outside the extension that spells Knowledge
+ * Tool and argument names. This contract pins every alias to the live `chatTools` registry so a
  * renamed tool or argument fails here instead of at an agent's terminal.
  */
 describe('favbase CLI aliases match the Knowledge Tool registry', () => {

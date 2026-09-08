@@ -70,6 +70,19 @@ describe('platform descriptor', () => {
     expect(valueImports).toEqual(['./platforms']);
   });
 
+  it('keeps every content kind a machine-readable semantic id', () => {
+    // `contentKind` is the word a model uses for a platform's body text, and it
+    // must stay an English semantic id: the localized names are app-side
+    // `LocaleKeys` that `lib/` cannot import (ADR 0004 D3). While
+    // `PlatformContentKind` is a closed union the compiler enforces this, but
+    // the union grows with every platform whose artefact is new — and the moment
+    // a member is added, `contentKind: '字幕'` or `'Transcript'` compiles and
+    // ships a display string down the Knowledge Tool.
+    for (const platform of COLLECTION_PLATFORMS) {
+      expect(PLATFORM_DESCRIPTORS[platform].contentKind, platform).toMatch(/^[a-z][a-z0-9-]*$/);
+    }
+  });
+
   it('keeps background-job namespaces unique', () => {
     // Jobs are keyed `{jobPlatform}:{kind}`, so two platforms sharing a
     // namespace share one lane: the second sync is dropped as a duplicate and

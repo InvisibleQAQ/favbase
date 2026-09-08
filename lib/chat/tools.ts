@@ -3,7 +3,20 @@ import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import type { FavbaseDb } from '@/lib/database';
 import * as schema from '@/lib/database/schema';
-import { COLLECTION_PLATFORMS } from '@/lib/collections/platforms';
+import { COLLECTION_PLATFORMS, type CollectionPlatform } from '@/lib/collections/platforms';
+import { PLATFORM_DESCRIPTORS } from '@/lib/collections/platform-descriptor';
+// Leaves, never the `@/lib/collections` barrel: that barrel goes through
+// `collections-query` and drags drizzle plus `@/lib/database` (and with it
+// PGlite) into every importer — including this Background Service Worker graph.
+import {
+  getAllProcessingCoverage,
+  getProcessingCoverage,
+  type ProcessingCoverage,
+} from '@/lib/collections/processing-coverage';
+import { deriveConfigurationBlockers } from '@/lib/collections/configuration-blockers';
+import { resolveEmbeddingConfig } from '@/lib/embedding/config';
+import { settingsStorage } from '@/lib/storage/settings';
+import { resolveLlmConfig } from '@/lib/storage/resolve';
 // Static on purpose: these tools also run inside the Background Service
 // Worker (Agent Bridge), and a Service Worker cannot use dynamic `import()`
 // (disallowed on ServiceWorkerGlobalScope by the HTML specification).
@@ -26,6 +39,15 @@ const DEFAULT_TOP_K = 8;
  * model maps 「B站」→ `bilibili` on its own.
  */
 const PLATFORM_LIST = COLLECTION_PLATFORMS.join('/');
+
+/**
+ * The distinct Content-stage artefacts across platforms, derived the same way
+ * and for the same reason as `PLATFORM_LIST`. Spelling these out lets the model
+ * report 「已转录」 instead of the meaningless 「已完成正文获取」.
+ */
+const CONTENT_KIND_LIST = [
+  ...new Set(COLLECTION_PLATFORMS.map((platform) => PLATFORM_DESCRIPTORS[platform].contentKind)),
+].join('/');
 
 /**
  * Object flowed into `streamText({ experimental_context })` and read back inside
@@ -138,7 +160,70 @@ const listTags = tool({
 });
 
 /**
+ * Per-platform Processing Coverage plus the count-derived reasons a stage is
+ * stalled. Call when a search comes back empty or visibly thin: "nothing saved"
+ * and "saved but not processed yet" need different answers, and an unconfigured
+ * provider means the backlog will never drain on its own. Read-only (SELECT
+ * only).
+ *
+ * `blockers` is deliberately *not* exhaustive, and the description says so: the
+ * Content stage's own readiness is a platform state-machine wait signal that no
+ * Knowledge Tool can see (PRD D4), so a backlog stuck there reports an empty
+ * `blockers`. Left unsaid, the model would read empty `blockers` as "still
+ * working, try later" — the exact answer this tool exists to prevent.
+ */
+const getProcessingCoverageTool = tool({
+  description:
+    `列出用户收藏库各平台的处理进度（${PLATFORM_LIST}）：已拉取条数、正文获取、Embedding 向量化、AI 标签四个阶段各自的 done/total，以及 blockers（缺失的 provider 配置）。当 searchKnowledgeBase 返回 count 为 0、或命中结果明显偏少时调用它，据此区分「用户确实没收藏这个主题」与「收藏了但 AI 还没处理完」，并把真实进度告诉用户。` +
+    `content.kind 说明该平台的「正文」具体是什么（取值之一 ${CONTENT_KIND_LIST}），据此选用贴切的说法，例如 transcript 就说「已转录」而不是「已完成正文获取」。` +
+    'acquisition.total 恒为 null：平台不提供可靠的远端总数，所以只能说「已拉取 N 条」，不得声称收藏已同步完整。' +
+    'blockers 非空表示该阶段缺 provider 配置、不会自行推进，此时应提示用户去设置页配置，而不是让用户稍后再试。' +
+    'blockers 只判定 embedding（向量化）与 llm（AI 标签）两项能力；正文阶段的 provider 就绪状态本工具看不到，所以 blockers 为空只说明这两段没被配置卡住，不能推断正文会自行推进——若 content.done 长期停在同一数字，同样要让用户去设置页确认正文/转录 provider，别只说稍后再试。',
+  inputSchema: z.object({
+    platform: z.enum(COLLECTION_PLATFORMS).optional(),
+  }).describe(
+    `进度参数。platform=可选，只看某个平台，取值之一 ${PLATFORM_LIST}；省略则返回全部平台（含一条都没同步过的平台，其计数为 0）。`,
+  ),
+  execute: async ({ platform }, { experimental_context }) => {
+    const db = contextDb(experimental_context);
+    const settings = await settingsStorage.getValue();
+    const embeddingConfigured = resolveEmbeddingConfig(settings).enabled;
+    const llmConfigured = resolveLlmConfig(settings).enabled;
+    const coverages: Array<[CollectionPlatform, ProcessingCoverage]> = platform
+      ? [[platform, await getProcessingCoverage(platform, db)]]
+      : Object.entries(await getAllProcessingCoverage(db)) as Array<
+          [CollectionPlatform, ProcessingCoverage]
+        >;
+
+    return {
+      platforms: coverages.map(([id, coverage]) => ({
+        platform: id,
+        acquisition: coverage.acquisition,
+        content: { ...coverage.content, kind: PLATFORM_DESCRIPTORS[id].contentKind },
+        embedding: coverage.embedding,
+        tagging: coverage.tagging,
+        blockers: deriveConfigurationBlockers({
+          coverage,
+          // The ASR blocker is raised by the Bilibili state machine's wait
+          // signal, which no Knowledge Tool can see; only the two
+          // count-derived capabilities are reportable here.
+          asrBlocked: false,
+          asrConfigured: false,
+          embeddingConfigured,
+          llmConfigured,
+        }),
+      })),
+    };
+  },
+});
+
+/**
  * Read-only chat tool registry. The object KEY is the tool name the model sees
  * (referenced by that name in the system prompt).
  */
-export const chatTools = { searchKnowledgeBase, getItemContent, listTags };
+export const chatTools = {
+  searchKnowledgeBase,
+  getItemContent,
+  listTags,
+  getProcessingCoverage: getProcessingCoverageTool,
+};

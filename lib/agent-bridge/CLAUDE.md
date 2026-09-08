@@ -12,10 +12,13 @@ CLI package (`packages/favbase`) consumes only the protocol leaf; extension stor
   This is a leaf bundled by `packages/favbase` and may depend only on Zod.
 - `tool-registry.ts` — derives agent-facing tool descriptors (JSON Schema 2020-12) from `chatTools`
   and validates every call with the owning Zod schema before execution. Tool
-  names, descriptions, and schemas must never be copied here. Everything this
+  names, descriptions, and schemas must never be copied here. The surface is
+  **four** tools since `getProcessingCoverage` landed (2026-09-08); it grows
+  purely by `chatTools` growing, which is the point — `CONTEXT.md` requires Chat
+  and the Agent Bridge to expose exactly the same set. Everything this
   module reaches loads in the Background Service Worker, where the HTML spec
   forbids dynamic `import()` — so `chatTools` and its `tag-queries` /
-  `embedding/config` dependencies must be statically imported. Deferring them
+  `embedding/config` / settings-resolver / Collection-coverage dependencies must be statically imported — and, for the same graph reason, through **leaves rather than barrels**: `@/lib/collections` and `@/lib/database` both drag PGlite in. Deferring them
   used to make `listTags` and `searchKnowledgeBase` fail with a misleading
   `window is not defined` (Vite's `__vitePreload` masking Chrome's rejection);
   guarded by `tests/agent-bridge-background-bundle-contract.test.ts` and
@@ -67,8 +70,10 @@ CLI package (`packages/favbase`) consumes only the protocol leaf; extension stor
 
 - `protocol.test.ts` — message registry completeness, encode/decode, constants,
   failure result variant, and malformed-envelope rejection.
-- `tool-registry.test.ts` — exact three-tool surface, JSON Schema Draft 2020-12,
-  validated rejection, and DB context forwarding.
+- `tool-registry.test.ts` — the exact Knowledge Tool surface (four tools, pinned
+  by name and by count from one `KNOWLEDGE_TOOL_NAMES` list so a duplicate key
+  cannot slip past the names), JSON Schema Draft 2020-12, validated rejection,
+  and DB context forwarding.
 - `client.test.ts` — fake transport hello/welcome/call/ping/close, stable error
   mapping, malformed frames, persistent backoff, user-triggered backoff pierce and
   base-delay restart, retained authentication-failure history, and reconfiguration race.

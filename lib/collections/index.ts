@@ -23,8 +23,15 @@ export {
 } from './collection-analytics';
 export {
   EMPTY_PROCESSING_COVERAGE,
+  getAllProcessingCoverage,
   getProcessingCoverage,
   type ProcessingCoverage,
   type ProcessingCoverageCount,
 } from './processing-coverage';
+export {
+  deriveConfigurationBlockers,
+  type ConfigurationBlocker,
+  type ConfigurationCapability,
+  type DeriveConfigurationBlockersInput,
+} from './configuration-blockers';
 export type { CooperativeCheckpoint } from './cooperative-checkpoint';

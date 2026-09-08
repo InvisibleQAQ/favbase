@@ -7,7 +7,7 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { varAlpha } from 'minimal-shared/utils';
 
-import type { ProcessingCoverage } from '@/lib/collections';
+import { deriveConfigurationBlockers, type ProcessingCoverage } from '@/lib/collections';
 import type { CollectionPlatform } from '@/lib/collections/platforms';
 import { resolveEmbeddingConfig } from '@/lib/embedding/config';
 import { useSettings } from '@/lib/hooks/useSettings';
@@ -16,46 +16,6 @@ import { resolveAsrConfig, resolveLlmConfig } from '@/lib/storage/resolve';
 
 import { Iconify } from '../iconify';
 import type { ProcessingCoverageStatus } from '../../hooks/pipeline-segments';
-
-export type ConfigurationCapability = 'asr' | 'embedding' | 'llm';
-
-export interface ConfigurationBlocker {
-  capability: ConfigurationCapability;
-  pending?: number;
-}
-
-export interface DeriveConfigurationBlockersInput {
-  coverage: ProcessingCoverage;
-  coverageStatus: ProcessingCoverageStatus;
-  asrBlocked: boolean;
-  asrConfigured: boolean;
-  embeddingConfigured: boolean;
-  llmConfigured: boolean;
-}
-
-export function deriveConfigurationBlockers({
-  coverage,
-  coverageStatus,
-  asrBlocked,
-  asrConfigured,
-  embeddingConfigured,
-  llmConfigured,
-}: DeriveConfigurationBlockersInput): ConfigurationBlocker[] {
-  const blockers: ConfigurationBlocker[] = [];
-  if (asrBlocked && !asrConfigured) blockers.push({ capability: 'asr' });
-  if (coverageStatus !== 'ready') return blockers;
-
-  const embeddingPending = (coverage.embedding.total ?? 0) - coverage.embedding.done;
-  if (!embeddingConfigured && embeddingPending > 0) {
-    blockers.push({ capability: 'embedding', pending: embeddingPending });
-  }
-
-  const taggingPending = (coverage.tagging.total ?? 0) - coverage.tagging.done;
-  if (!llmConfigured && taggingPending > 0) {
-    blockers.push({ capability: 'llm', pending: taggingPending });
-  }
-  return blockers;
-}
 
 export interface CollectionConfigurationNoticeProps {
   platform: CollectionPlatform;
@@ -83,8 +43,7 @@ export function CollectionConfigurationNotice({
   const blockers = loading
     ? []
     : deriveConfigurationBlockers({
-        coverage,
-        coverageStatus,
+        coverage: coverageStatus === 'ready' ? coverage : null,
         asrBlocked,
         asrConfigured: Boolean(resolveAsrConfig(settings).apiKey),
         embeddingConfigured: resolveEmbeddingConfig(settings).enabled,

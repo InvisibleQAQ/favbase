@@ -36,6 +36,7 @@ Data commands print JSON to stdout; every diagnostic goes to stderr.
 favbase search "<query>" [--platform <platform>] [--tag <tag_id>] [--limit <top_k>]
 favbase tags [--platform <platform>]
 favbase get <item-id>
+favbase coverage [--platform <platform>]
 
 favbase tools                            # the Knowledge Tools the extension advertises, with JSON Schemas
 favbase call <tool> [--args '<json>']    # call any advertised tool directly
@@ -48,9 +49,11 @@ favbase daemon [run|start|stop|restart]
 
 `search` runs hybrid retrieval (vector + keyword) inside the extension and answers with `{ count, results: [{ item_id, title, url, platform, chunk_text, score }] }`. A `count` of `0` means nothing you saved matches — not that the search failed. When a `chunk_text` snippet is too short to answer from, `favbase get <item_id>` returns `{ found, item_id, content }` with the full extracted text.
 
+`coverage` answers the question a `count` of `0` raises next: per platform it reports how many items have been fetched and how far each processing stage (content, embedding, tags) has got, plus `blockers` — a stage whose AI provider is not configured and so will never advance on its own. That is the difference between "you saved nothing about this", "it is still being processed" and "it will never be processed until you configure a provider". The fetched count has no denominator on purpose: the remote total is not knowable, so nothing here claims your library is fully synced.
+
 For the accepted `--platform` values run `favbase tools` — the tool schemas are generated from whatever the installed extension actually supports, so they are always current. `favbase --help` is authoritative if this file and the CLI ever disagree.
 
-`search`, `tags` and `get` are ergonomic aliases over the extension's Knowledge Tools. `tools` and `call` are the zero-knowledge channel: anything the extension advertises is reachable without a CLI update.
+`search`, `tags`, `get` and `coverage` are ergonomic aliases over the extension's Knowledge Tools. `tools` and `call` are the zero-knowledge channel: anything the extension advertises is reachable without a CLI update.
 
 ## Exit codes
 

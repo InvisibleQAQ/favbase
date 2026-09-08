@@ -22,7 +22,7 @@
 | D1 | ~~暂不发布 npm，先在本地跑通~~ **已作废**：按 0.1.0 发布 npm | 用户 2026-09-07 定，2026-09-08 推翻 | 手册的选项 1c 成了现实；Step 1 的结论不受影响 |
 | D2 | 不提供 MCP server | ADR 0003 | 已定 |
 | D3 | Agent Bridge 暴露的 Knowledge Tool 集必须与 Chat **完全相同**，两边都不能多一个 | `CONTEXT.md:138` | 已定，是 Step 4 的成本来源 |
-| D4 | 诊断信息不做成 Knowledge Tool，走 `/status` 通道 | 本文建议 | **待用户确认**（Step 3） |
+| D4 | 诊断信息不做成 Knowledge Tool，走 `/status` 通道 | 本文建议 | **大部分已被绕过，2026-09-08**：`getProcessingCoverage` 落地为第四个 Knowledge Tool（该任务 PRD D1），其 `blockers` 已承担 Step 3 想要的「embedding 就绪态」。D4 本身未被推翻——它管的是**配置态诊断**（随 hello 带一次），而 coverage 是每次都要查 DB 的**活数据**，`hello`/`/status` 通道装不下（daemon 从不接触 DB）。Step 3 剩余部分见下 |
 | D5 | `favbase` 必须真的在 PATH 上，而不是靠 `npx` 回退（发布后依然如此：人侧经 npx 配对会留下 agent 用不了的机器） | 用户 2026-09-08 | 已定，已落地（Step 1，选 1a，不建共享常量） |
 | D6 | 只补 `listItems` 一个新工具，`getItemByUrl` / `collectionStats` 留待需求出现 | 本文建议 | **待用户确认**（Step 4） |
 | D7 | 实机 E2E 不进 vitest，产出人工 checklist | 本文建议 | **待用户确认**（Step 5） |
@@ -371,6 +371,24 @@ doctor 输出新增
 ---
 
 ## Step 3 — 检索健康度可见
+
+> **2026-09-08 回写：本 Step 的目标已大半由别处达成，剩下两个字段。**
+> `getProcessingCoverage` Knowledge Tool 已落地（`lib/chat/tools.ts`，第四个工具）。
+> 它每平台返回四段 `done`/`total` 加 `blockers`，而 `blockers` 里的 `embedding`
+> 条目正是本 Step 的 `embedding: 'off'` 想表达的东西——且比它强：不只说
+> 「没配」，还说「有 N 条在等」，所以 agent 能分辨「没配但也没活儿」与
+> 「没配且积压 1100 条」。因此**本 Step 独立价值只剩两个字段**：
+> - `dimension-mismatch`：维度漂移是**已配置但静默降级**，`blockers` 抓不到
+>   （provider 配了，`resolveEmbeddingConfig().enabled` 为真）。这是唯一
+>   仍然完全不可见的失效模式。
+> - `embeddedChunks`：chunk 级计数。coverage 是 **Item 级**的，两者口径不同
+>   （`lib/collections/CLAUDE.md`），互相替代不了。
+>
+> 下面 D4 的论证有一处**已被事实推翻**：它说不做成 Knowledge Tool 是因为
+> 「那会强制给 Chat 也加一个工具，而 Chat 页有自己的 UI」。Chat 确实有 UI，
+> 但那个 UI 在**页面**上——模型看不见它，所以模型照样会把「provider 没配」
+> 说成「稍后再试」。铁律 1（两侧工具集完全相同）是**成本**，不是反对理由。
+> D4 未被整体推翻的部分见上表：配置态诊断与活数据走不同通道。
 
 **目标** 让 agent 能区分「用户确实没收藏这个」和「语义检索根本没在工作」（证据 5）。
 
