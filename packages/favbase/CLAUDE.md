@@ -52,6 +52,15 @@ provides no MCP server.
   or attach to the daemon's server.
 - `skill-install.ts` writes SKILL.md to `~/.claude/skills/favbase/` and
   `~/.agents/skills/favbase/` (Codex user scope), or an explicit `--dir`.
+- `README.md` and `LICENSE` exist for the npm page and for GPL-3.0 conveyance:
+  `files: ["dist"]` does not list them, but npm always ships a package
+  directory's README and LICENSE, so `npm pack` carries 5 files, not 3.
+  `LICENSE` is a byte copy of the repository root's; keep it that way. The
+  README deliberately enumerates **no** platform list -- SKILL.md's two are the
+  only hand-written ones and they are reconciled by
+  `tests/agent-bridge-cli-aliases.test.ts`; a third copy on a published page
+  would be unguarded, so the README points at `favbase tools` the way the
+  `--platform` flag help already does.
 
 ## Boundaries
 
