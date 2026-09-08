@@ -1,9 +1,10 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
+import { mkdtemp, rm, symlink } from 'node:fs/promises';
 import { createServer, request } from 'node:http';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { WebSocket, type RawData } from 'ws';
@@ -19,6 +20,9 @@ import {
 } from '../../lib/agent-bridge/protocol';
 
 const CLI_PATH = fileURLToPath(new URL('./dist/cli.js', import.meta.url));
+const PACKAGE_VERSION = (JSON.parse(
+  readFileSync(new URL('./package.json', import.meta.url), 'utf8'),
+) as { version: string }).version;
 const EXTENSION_ID = 'abcdefghijklmnopabcdefghijklmnop';
 const TOKEN = 'integration-test-token';
 const TOOL: AgentBridgeToolDescriptor = {
@@ -395,5 +399,30 @@ describe('favbase CLI process integration', () => {
     const result = await runCli(['search', 'x'], env);
     expect(result.code).toBe(1);
     expect(result.stderr).toContain('favbase setup --token');
+  });
+
+  // Regression: `npm i -g` delivers this CLI through a symlink on every
+  // platform, and a pnpm global link does the same. Every other case here
+  // spawns dist/cli.js by its real path -- the one call shape that cannot
+  // catch an entrypoint guard comparing process.argv[1] to import.meta.url.
+  it('runs when reached through a symlink, the way a global install delivers it', async (ctx) => {
+    const linkDir = join(await tempHome(), 'linked-dist');
+    try {
+      // 'junction' keeps this working for unprivileged Windows users; POSIX
+      // ignores the type and creates a plain directory symlink.
+      await symlink(dirname(CLI_PATH), linkDir, 'junction');
+    } catch (error) {
+      ctx.skip(`cannot create a symlink here: ${(error as Error).message}`);
+      return;
+    }
+    const child = spawn(process.execPath, [join(linkDir, 'cli.js'), '--version'], {
+      env: process.env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    });
+    children.push(child);
+    const result = await collect(child);
+    expect(result.stdout.trim()).toBe(PACKAGE_VERSION);
+    expect(result.code).toBe(0);
   });
 });

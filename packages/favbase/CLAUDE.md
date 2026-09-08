@@ -9,7 +9,12 @@ provides no MCP server.
 ## Modules
 
 - `cli.ts` is the bundled entrypoint: imports `../../skills/favbase/SKILL.md`
-  as text, wires `process` I/O, and calls `main`.
+  as text, wires `process` I/O, and calls `main` unconditionally. It carries
+  no "am I the entrypoint?" guard on purpose: nothing imports it, and any
+  guard comparing `process.argv[1]` with `import.meta.url` disables the CLI
+  silently (empty output, exit 0) once a symlink sits between them -- which is
+  how `npm i -g` and `pnpm link --global` deliver the bin on every platform.
+  `integration.test.ts` spawns it through a symlinked `dist/` to hold that.
 - `cli-main.ts` owns dispatch, usage text, exit codes (0 ok, 1 usage/config,
   2 daemon or extension unreachable, 3 Knowledge Tool error) and every command:
   alias commands, `tools`, `call`, `doctor`, `daemon run|start|stop|restart`,
