@@ -1,39 +1,17 @@
 import { useEffect } from 'react';
-import { useScroll } from 'motion/react';
 
 import Box from '@mui/material/Box';
 
 import { useTranslation } from '@/lib/i18n/use-translation';
 
-import { MotionBox } from './components/motion-box';
+import { WelcomeLayout } from './layout';
 import { Hero } from './sections/hero';
-import { TopBar } from './sections/top-bar';
 import { ChatShowcase } from './sections/chat-showcase';
 import { HowItWorks } from './sections/how-it-works';
 import { PlatformPicker } from './sections/platform-picker';
 import { PlatformRequest } from './sections/platform-request';
 import { CapabilityMarquee } from './sections/capability-marquee';
 import { BilibiliShowcase } from './sections/bilibili-showcase';
-
-/** Hairline reading indicator above the header. */
-function ScrollProgress() {
-  const { scrollYProgress } = useScroll();
-
-  return (
-    <MotionBox
-      aria-hidden
-      style={{ scaleX: scrollYProgress }}
-      sx={{
-        position: 'fixed',
-        inset: '0 0 auto 0',
-        zIndex: 30,
-        height: 3,
-        transformOrigin: '0% 50%',
-        bgcolor: 'primary.main',
-      }}
-    />
-  );
-}
 
 export function WelcomeView() {
   const { locale } = useTranslation();
@@ -47,17 +25,22 @@ export function WelcomeView() {
   }, [locale]);
 
   return (
-    <Box sx={{ position: 'relative', overflowX: 'clip', bgcolor: 'background.default' }}>
-      <ScrollProgress />
-      <TopBar />
-
+    <WelcomeLayout>
       <Hero />
-      <CapabilityMarquee />
-      <HowItWorks />
-      <ChatShowcase />
-      <BilibiliShowcase />
-      <PlatformPicker />
-      <PlatformRequest />
-    </Box>
+
+      {/* Everything after the fold needs its own stacking context and an
+          opaque ground: the hero's inner layer is `position: fixed` on desktop,
+          so without this it would float over the bands below. Mirrors
+          Minimal's `HomeView`, which wraps its ten remaining sections the same
+          way. */}
+      <Box sx={{ position: 'relative', bgcolor: 'background.default' }}>
+        <CapabilityMarquee />
+        <HowItWorks />
+        <ChatShowcase />
+        <BilibiliShowcase />
+        <PlatformPicker />
+        <PlatformRequest />
+      </Box>
+    </WelcomeLayout>
   );
 }

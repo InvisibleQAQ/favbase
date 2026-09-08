@@ -33,6 +33,11 @@ type VendorRule = {
 const VENDOR_RULES: VendorRule[] = [
   { pkg: 'simplebar-react', owner: 'entrypoints/app/components/scrollbar' },
   { pkg: 'sonner', owner: 'entrypoints/app/components/snackbar' },
+  // `motion` is welcome.html's alone (root CLAUDE.md): it code-splits into the
+  // welcome chunk, and app.html / the content scripts stay plain MUI + CSS. The
+  // rule was prose until docs/28; the whole entrypoint is the owner because the
+  // animated sections all reach for it directly.
+  { pkg: 'motion', owner: 'entrypoints/welcome' },
 ];
 
 type ImportBoundaryRule = {

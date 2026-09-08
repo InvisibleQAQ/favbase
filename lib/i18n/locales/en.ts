@@ -671,6 +671,7 @@ const en: Record<LocaleKeys, string> = {
   // Welcome / first-run onboarding (welcome.html)
   'welcome.brandTagline': 'A local-first knowledge base for your favorites',
   'welcome.scrollHint': 'Scroll',
+  'welcome.backToTop': 'Back to top',
 
   'welcome.hero.eyebrow': 'Browser extension · nothing leaves this machine',
   'welcome.hero.titleLine1': 'Your favorites,',

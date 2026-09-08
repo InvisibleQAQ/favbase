@@ -657,6 +657,7 @@ const zhCN = {
   // Welcome / first-run onboarding (welcome.html)
   'welcome.brandTagline': '本地优先的收藏知识库',
   'welcome.scrollHint': '往下看',
+  'welcome.backToTop': '回到顶部',
 
   'welcome.hero.eyebrow': '浏览器扩展 · 数据不出本机',
   'welcome.hero.titleLine1': '把收藏',

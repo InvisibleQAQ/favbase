@@ -3,28 +3,19 @@
    stays light/dark aware without a second palette. Loaded after app/global.css
    (fonts + baseline reset), which welcome/main.tsx imports first. */
 
-/* Headline gradient. Two stops of theme grey into the coral primary in light
-   mode; inverted (white → coral light) in dark so the text stays the brightest
-   thing on screen. Kept in CSS because -webkit-background-clip needs the
-   background on the very element that paints the glyphs. */
+/* Aurora blob colours for the hero. The headline gradient used to live here
+   too; it now comes from `theme.mixins.textGradient` inside `Headline`, so the
+   stops are palette tokens instead of six hex values duplicated across a light
+   and a dark block. These two stay in CSS because they are `radial-gradient`
+   stops consumed by `background`, not a per-element paint. */
 :root {
-  --fb-welcome-headline: linear-gradient(112deg, #1c252e 0%, #454f5b 42%, #fc7e5b 100%);
   --fb-welcome-aurora-a: rgba(252, 126, 91, 0.3);
   --fb-welcome-aurora-b: rgba(142, 51, 255, 0.22);
 }
 
 [data-color-scheme='dark'] {
-  --fb-welcome-headline: linear-gradient(112deg, #ffffff 0%, #c4cdd5 38%, #fda48a 100%);
   --fb-welcome-aurora-a: rgba(252, 126, 91, 0.34);
   --fb-welcome-aurora-b: rgba(142, 51, 255, 0.3);
-}
-
-.fb-headline {
-  background-image: var(--fb-welcome-headline);
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: transparent;
 }
 
 /* Streaming-answer caret in the chat demo. `steps(1)` keeps it a hard blink

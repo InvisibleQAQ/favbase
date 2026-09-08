@@ -18,6 +18,31 @@ export function ctaGlowShadow(theme: Theme) {
   return `0 10px 28px 0 ${varAlpha(theme.vars.palette.primary.mainChannel, 0.34)}`;
 }
 
+/**
+ * The page's display gradient, painted as text: grey into coral in light mode,
+ * inverted (white into coral light) in dark so the glyphs stay the brightest
+ * thing on screen.
+ *
+ * Shared by `Headline` and the how-it-works step numerals — the two must not
+ * drift, which is exactly what happened while this lived in `welcome.css` as a
+ * `.fb-headline` class plus two blocks of hard-coded hex.
+ *
+ * Minimal's own section titles fade to *grey* (text.primary -> 20% alpha)
+ * because it ships as a neutral UI kit; favbase has a brand colour.
+ */
+export function headlineGradient(theme: Theme) {
+  return {
+    ...theme.mixins.textGradient(
+      `112deg, ${theme.vars.palette.grey['800']} 0%, ${theme.vars.palette.grey['700']} 42%, ${theme.vars.palette.primary.main} 100%`
+    ),
+    ...theme.applyStyles('dark', {
+      ...theme.mixins.textGradient(
+        `112deg, ${theme.vars.palette.common.white} 0%, ${theme.vars.palette.grey['400']} 38%, ${theme.vars.palette.primary.light} 100%`
+      ),
+    }),
+  };
+}
+
 /** Vertical rhythm for every band on the page. */
 export function WelcomeSection({
   id,
@@ -30,7 +55,7 @@ export function WelcomeSection({
       id={id}
       component="section"
       sx={[
-        { position: 'relative', py: { xs: 10, md: 16 } },
+        { position: 'relative', py: { xs: 10, md: 20 } },
         ...(Array.isArray(sx) ? sx : [sx]),
       ]}
       {...other}
@@ -72,9 +97,17 @@ export function Eyebrow({ children, icon }: { children: ReactNode; icon?: Iconif
 }
 
 /**
- * Oversized display headline with the page's gradient fill (`.fb-headline`,
- * see welcome.css). `hero` is the first-screen size; `section` is every band
- * below it.
+ * Oversized display headline with the page's brand gradient. `hero` is the
+ * first-screen size; `section` is every band below it.
+ *
+ * The gradient comes from `headlineGradient` above.
+ *
+ * Sizes stay on `clamp()` and do NOT switch to `variant="h1"/"h2"`: this app's
+ * typography scale was deliberately compressed when `theme/core` was ported
+ * (docs/25 Step 1 dropped Minimal's `responsiveFontSizes`, so h1 is a flat
+ * 28px and h2 a flat 24px — right for a dashboard title bar, far too small for
+ * a landing headline). Minimal's own h1 runs 40 -> 64px, which is what these
+ * clamps already approximate.
  *
  * Renders a real heading (`h2` by default) so the page keeps a document
  * outline; pass `component` to change the level, or `span` when the semantic
@@ -101,10 +134,12 @@ export function Headline({
   return (
     <Box
       component={component}
-      className="fb-headline"
       sx={[
         (theme) => ({
           m: 0,
+          // `background-clip: text` has to sit on the element that paints the
+          // glyphs, which is this one.
+          ...headlineGradient(theme),
           fontFamily: theme.typography.fontSecondaryFamily,
           fontWeight: 800,
           lineHeight: isCjk ? 1.12 : 0.98,
