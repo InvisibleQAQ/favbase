@@ -617,10 +617,24 @@ what stays forbidden is inventing the numbers on them.
   is a broken link, not a shortcut.
 - `SettingsTabs({ value, onChange, tabs, ariaLabel })` and
   `SectionRail({ value, onChange, items, ariaLabel })` are the theme's default
-  underline Tabs: no local `variant`, `scrollButtons`, indicator, or track
-  styling, and no segmented pill skin. Labels stay on one line
+  underline Tabs: no local `variant`, `scrollButtons`, indicator or track
+  *skin*, and no segmented pill. Labels stay on one line
   (`whiteSpace: 'nowrap'`) and overflow into a scroll; never compress four
   localized labels into equal-width tracks.
+- The top `SettingsTabs` track is the one sanctioned exception, and it is
+  *positioning*, not skin: `width: 'fit-content'` plus `mx: 'auto'` centers the
+  row inside the page (user decision 2026-09-08). The accepted cost is stated
+  once, here: the row no longer shares the left baseline of the `Settings` `h1`
+  and its breadcrumbs — do not "restore consistency" by deleting it. It is
+  `fit-content` rather than `centered` or a centered `MuiTabs-list` because the
+  theme's `scrollable` default rules both out. What keeps the track scrolling at
+  390px with no breakpoint branch is the `maxWidth: 1` clamp beside it, not
+  `fit-content`'s own resolution: whether a flex root whose only child is a
+  scroll container degrades on its own has never been measured in a browser, so
+  the clamp is load-bearing until it is, and deleting it as redundant during
+  cleanup is forbidden (the failure mode is an unreachable leading tab).
+  `SectionRail` is **not** centered; a 2026-09-08 attempt to center it was
+  reverted by the user as a no-op.
 - Beyond that shared `whiteSpace`, `SectionRail` owns exactly two locals:
   orientation (`vertical` at `md+`, `horizontal` below) and, while vertical,
   `justifyContent: 'flex-start'` so the icon column lines up instead of
