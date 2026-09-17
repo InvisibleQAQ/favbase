@@ -473,8 +473,23 @@ export function AgentBridgeCard() {
               <Typography id="agent-bridge-command-title" variant="subtitle2" sx={{ mb: 0.75 }}>
                 {t('settings.agentBridge.commandsTitle')}
               </Typography>
-              <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
-                {t('settings.agentBridge.commandsHint')}
+              <Box
+                component="ol"
+                sx={{
+                  m: 0,
+                  mb: 1,
+                  pl: 2.5,
+                  typography: 'body2',
+                  color: 'text.secondary',
+                  '& li + li': { mt: 0.5 },
+                }}
+              >
+                <li>{t('settings.agentBridge.commandsStep1')}</li>
+                <li>{t('settings.agentBridge.commandsStep2')}</li>
+                <li>{t('settings.agentBridge.commandsStep3')}</li>
+              </Box>
+              <Typography variant="caption" sx={{ display: 'block', mb: 2, color: 'text.secondary' }}>
+                {t('settings.agentBridge.commandsTokenWarning')}
               </Typography>
               <Box>
                 <Button

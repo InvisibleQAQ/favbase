@@ -49,7 +49,7 @@ export const SETTINGS_NAV = [
     sections: [
       { id: 'github', label: 'settings.github.title', icon: 'mdi:github' },
       { id: 'youtube', label: 'settings.youtube.title', icon: 'mdi:youtube' },
-      { id: 'agent-bridge', label: 'settings.agentBridge.title', icon: 'solar:code-bold-duotone' },
+      { id: 'agent-skills', label: 'settings.agentBridge.title', icon: 'solar:code-bold-duotone' },
     ],
   },
   {

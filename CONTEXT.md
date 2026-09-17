@@ -89,7 +89,7 @@ The canonical-order subset of supported platforms a user picks during onboarding
 _Avoid_: Enabled platforms, platform gate, click order
 
 **Agent Bridge**:
-A user-enabled, read-only connection between the running favbase extension and an external agent on the same machine; it exists only while the extension runs and is neither a platform nor a Collection Item holder.
+A user-enabled, read-only connection between the running favbase extension and an external agent on the same machine; it exists only while the extension runs and is neither a platform nor a Collection Item holder. Settings presents it to users as **Agent Skills** (route `/settings/connections/agent-skills`), because installing the Skill is the outcome a user is after; the domain term and `lib/agent-bridge/` keep the name Agent Bridge.
 _Avoid_: MCP server, API, plugin sync, export
 
 **Bridge Daemon**:
@@ -165,4 +165,5 @@ _Avoid_: API key, provider key, password
 - External platforms do not expose a durable remote-total snapshot, so **Processing Coverage** must not be described as remote sync completeness.
 - "Selected platform" in onboarding previously sounded like an availability gate; it is now defined as an **Onboarding Platform Preference**, never a platform enablement setting.
 - "Stuck" previously mixed missing provider configuration with slow, failed, or paused work; only missing configuration with eligible pending work is a **Configuration Blocker**.
+- "Agent Skills" is a UI label, not a term: the Settings section named Agent Skills configures one **Agent Bridge** (enable, port, **Bridge Token**, connection status), not a list of installable skills. A Skill is still only the markdown that teaches an agent to call the **favbase CLI**; when the two readings could be confused, say Agent Bridge.
 - "MCP or Skill" was framed as a choice; resolved (revised 2026-08-28, ADR 0003): the **Agent Bridge** is the data path and the **Bridge Daemon** is its external half; the **favbase CLI** is the agent-facing front, a Skill only teaches an agent how to use that CLI, and no MCP server is provided.

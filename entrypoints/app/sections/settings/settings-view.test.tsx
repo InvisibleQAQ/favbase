@@ -187,7 +187,7 @@ describe('SettingsView routing', () => {
     ['/settings/ai/embedding', 'embedding', 'embedding-card'],
     ['/settings/connections/github', 'github', 'github-card'],
     ['/settings/connections/youtube', 'youtube', 'youtube-card'],
-    ['/settings/connections/agent-bridge', 'agent-bridge', 'agent-bridge-card'],
+    ['/settings/connections/agent-skills', 'agent-skills', 'agent-bridge-card'],
     ['/settings/storage/export', 'export', 'export-card'],
     ['/settings/storage/webdav', 'webdav', 'webdav-card'],
   ])('renders %s directly', (path, section, card) => {
@@ -257,8 +257,8 @@ describe('SettingsView routing', () => {
     click('connections');
     expect(location()).toBe('/settings/connections/github');
 
-    click('agent-bridge');
-    expect(location()).toBe('/settings/connections/agent-bridge');
+    click('agent-skills');
+    expect(location()).toBe('/settings/connections/agent-skills');
 
     await act(async () => {
       await router.navigate(-1);
@@ -267,7 +267,7 @@ describe('SettingsView routing', () => {
   });
 
   it('lands on a tab first section rather than the one last seen there', () => {
-    renderAt('/settings/connections/agent-bridge');
+    renderAt('/settings/connections/agent-skills');
 
     click('ai');
     expect(location()).toBe('/settings/ai/llm');
@@ -293,7 +293,7 @@ describe('SettingsView routing', () => {
   });
 
   it('hands the shared title bar a Home -> Settings trail', () => {
-    renderAt('/settings/connections/agent-bridge');
+    renderAt('/settings/connections/agent-skills');
 
     // The rendered `nav` and its `aria-current="page"` crumb are locked by
     // custom-breadcrumbs.test.tsx and section-title-bar.test.tsx; the only

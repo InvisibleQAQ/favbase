@@ -155,7 +155,7 @@ export function SettingsView() {
         return <GithubConnectionCard settings={s.settings} saveGithub={s.saveGithub} />;
       case 'connections/youtube':
         return <YoutubeConnectionCard settings={s.settings} saveYoutube={s.saveYoutube} />;
-      case 'connections/agent-bridge':
+      case 'connections/agent-skills':
         return <AgentBridgeCard />;
       case 'general/language':
         return (

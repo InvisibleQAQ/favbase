@@ -45,13 +45,13 @@ describe('Settings responsive navigation', () => {
             tabs={[...TOP_TABS]}
           />
           <SectionRail
-            value="agent-bridge"
+            value="agent-skills"
             onChange={() => {}}
             ariaLabel="Connections"
             items={[
               { value: 'github', label: 'GitHub', icon: 'mdi:github' },
               { value: 'youtube', label: 'YouTube', icon: 'mdi:youtube' },
-              { value: 'agent-bridge', label: 'Agent Bridge', icon: 'solar:code-bold-duotone' },
+              { value: 'agent-skills', label: 'Agent Skills', icon: 'solar:code-bold-duotone' },
             ]}
           />
         </ThemeProvider>,
