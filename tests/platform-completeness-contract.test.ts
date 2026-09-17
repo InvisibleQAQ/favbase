@@ -12,6 +12,7 @@ import {
   PLATFORM_DESCRIPTORS,
   type PlatformDimensions,
 } from '@/lib/collections/platform-descriptor';
+import { SETTINGS_NAV } from '@/entrypoints/app/sections/settings/settings-nav';
 import { PLATFORM_DIRS, PLATFORM_KEY_LINE } from './platform-env-guard-contract';
 
 const ROOT = path.resolve(__dirname, '..');
@@ -474,30 +475,36 @@ describe('platform completeness contract', () => {
 
     // The credentials chain (spec §8). `readiness: 'credentials'` promises a
     // person somewhere to type a key in; the edits that keep that promise are
-    // a schema key, two hook declarations, a `ConnSection` union member, a
-    // rail entry and a React card — structure, not data, so no descriptor
-    // field can hold them (ADR 0004). Not-data is why they are read by AST
-    // here, exactly as CARD_ADAPTERS is; it was never a reason to leave them
-    // unchecked.
+    // a schema key, two hook declarations, a Connections section and a React
+    // card — structure, not data, so no *platform* descriptor field can hold
+    // them (ADR 0004). Not-data is why the rest are read by AST here, exactly
+    // as CARD_ADAPTERS is; it was never a reason to leave them unchecked.
+    //
+    // The section itself is the exception: it is plain data in `SETTINGS_NAV`
+    // (the settings two-level route registry), which has no value imports, so
+    // it is read by importing it rather than by parsing the view. That table
+    // replaced the two hand-written lists this check used to parse — a
+    // `ConnSection` union and a `connNavItems` array — and `tsc` now catches
+    // *half* of a removal on its own, because `SettingsLeaf` is derived from
+    // it and the view's switch is exhaustive. The half left is deleting the
+    // section and its case together, which silently strands the card.
     //
     // LIMIT: this proves the structure *exists*, not that it is wired
     // correctly. A card that renders while the Sync Adapter's `probeReady`
     // reads the wrong settings key — or a zod entry that drops the field on
     // load — passes every line below. Spec §8 still has to be read by hand.
     //
-    // One-directional on purpose: platform ⊆ ConnSection. That union also
-    // carries 'agent-bridge', which is neither a platform nor a Collection
-    // Item holder (CONTEXT.md), so the reverse containment is not a defect.
-    const settingsView = sourceModule('entrypoints/app/sections/settings/settings-view.tsx');
-    const connSections = stringLiteralUnion(settingsView, 'ConnSection');
-    const connNavValues = arrayFieldValues(settingsView, 'connNavItems', 'value');
+    // One-directional on purpose: platform ⊆ Connections sections. That tab
+    // also carries 'agent-bridge', which is neither a platform nor a
+    // Collection Item holder (CONTEXT.md), so the reverse is not a defect.
+    const connSections = SETTINGS_NAV.find((entry) => entry.tab === 'connections')
+      ?.sections.map((section) => section.id);
     const settingsApi = declaredApiNames(sourceModule('lib/hooks/useSettings.ts'));
     const savedAtSections = stringLiteralUnion(
       sourceModule('lib/storage/settings-schema.ts'),
       'configSavedAt',
     );
-    if (!connSections) missing.push('all: settings ConnSection is not a string-literal union');
-    if (!connNavValues) missing.push('all: settings connNavItems is not an explicit array literal');
+    if (!connSections) missing.push('all: SETTINGS_NAV has no connections tab');
     if (!savedAtSections) missing.push('all: configSavedAt carries no string-literal union');
     for (const platform of COLLECTION_PLATFORMS) {
       if (PLATFORM_DESCRIPTORS[platform].readiness !== 'credentials') continue;
@@ -509,11 +516,8 @@ describe('platform completeness contract', () => {
       if (!existsSync(path.join(ROOT, card))) {
         missing.push(`${platform}: Connections card (${card})`);
       }
-      if (connSections && !connSections.includes(platform)) {
-        missing.push(`${platform}: settings ConnSection union member`);
-      }
-      if (connNavValues && !connNavValues.includes(platform)) {
-        missing.push(`${platform}: settings connections rail entry (connNavItems)`);
+      if (connSections && !connSections.some((id) => id === platform)) {
+        missing.push(`${platform}: SETTINGS_NAV connections section`);
       }
       for (const declaration of [`derive${pascal}Draft`, `save${pascal}`]) {
         if (!settingsApi.has(declaration)) missing.push(`${platform}: useSettings ${declaration}`);

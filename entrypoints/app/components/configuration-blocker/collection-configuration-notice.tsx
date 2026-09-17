@@ -12,6 +12,7 @@ import type { CollectionPlatform } from '@/lib/collections/platforms';
 import { resolveEmbeddingConfig } from '@/lib/embedding/config';
 import { useSettings } from '@/lib/hooks/useSettings';
 import { useTranslation } from '@/lib/i18n/use-translation';
+import { settingsPath } from '../../sections/settings/settings-nav';
 import { resolveAsrConfig, resolveLlmConfig } from '@/lib/storage/resolve';
 
 import { Iconify } from '../iconify';
@@ -94,7 +95,7 @@ export function CollectionConfigurationNotice({
             </Typography>
             <Button
               component={RouterLink}
-              to={`/settings?section=${blocker.capability}&resume=${platform}`}
+              to={`${settingsPath(`ai/${blocker.capability}`)}?resume=${platform}`}
               size="small"
               startIcon={<Iconify icon="solar:settings-bold-duotone" width={16} />}
               sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}

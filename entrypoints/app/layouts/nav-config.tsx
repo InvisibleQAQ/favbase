@@ -89,6 +89,10 @@ export function createNavData(
         {
           title: 'nav.settings',
           path: '/settings',
+          // Every tab and section is a route (`/settings/connections/agent-bridge`);
+          // without this the row is only lit on the bare path, which nothing
+          // ever stays on.
+          deepMatch: true,
           icon: <Iconify icon="solar:settings-bold-duotone" width={24} />,
         },
       ],

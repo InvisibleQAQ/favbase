@@ -2,7 +2,7 @@
 
 import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ThemeProvider } from '../theme/theme-provider';
@@ -82,6 +82,10 @@ vi.mock('@/lib/i18n/use-translation', () => ({
 import { GithubStarsView } from './github-stars/github-stars-view';
 import { YoutubeView } from './youtube/youtube-view';
 
+function LocationProbe() {
+  return <div data-testid="location">{useLocation().pathname}</div>;
+}
+
 describe('platform configuration gates', () => {
   let container: HTMLDivElement;
   let root: Root;
@@ -117,7 +121,10 @@ describe('platform configuration gates', () => {
     act(() => {
       root.render(
         <ThemeProvider>
-          <MemoryRouter>{ui}</MemoryRouter>
+          <MemoryRouter>
+            {ui}
+            <LocationProbe />
+          </MemoryRouter>
         </ThemeProvider>,
       );
     });
@@ -134,6 +141,24 @@ describe('platform configuration gates', () => {
     expect(headings[0].textContent).toBe(title);
     expect(container.textContent).toContain(stateTitle);
     expect(container.querySelector('[data-state-box]')).not.toBeNull();
+  });
+
+  it.each([
+    ['GitHub', <GithubStarsView />, '/settings/connections/github'],
+    ['YouTube', <YoutubeView />, '/settings/connections/youtube'],
+  ])('sends the %s configuration gate to its own Connections section', (_p, view, path) => {
+    // Before the settings sections became routes this button could only reach
+    // `/settings`, which lands on AI > LLM -- a dead end one tab away from the
+    // card the copy just asked the reader to fill in.
+    render(view);
+
+    const button = [...container.querySelectorAll('button')].find(
+      (candidate) => candidate.textContent === 'Open settings',
+    );
+    if (!(button instanceof HTMLButtonElement)) throw new Error('no settings button');
+    act(() => button.click());
+
+    expect(container.querySelector('[data-testid="location"]')?.textContent).toBe(path);
   });
 
   it.each([

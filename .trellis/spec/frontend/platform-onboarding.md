@@ -35,7 +35,7 @@ is **making them generate your TODO list instead of writing one yourself**.
 | Mechanism | What it catches | How you invoke it |
 | --- | --- | --- |
 | TypeScript exhaustive `Record<CollectionPlatform, T>` | Every registry that must gain a key. The error lands on the object literal, naming the missing property. | `pnpm compile` |
-| `tests/platform-completeness-contract.test.ts` | What types cannot see: a lazy import resolving to nothing, a page that renders no `sections/` view, a view that skips `useCollectionBreadcrumbs`, `main.tsx` naming a platform, a hand-written `jobPlatform`, `hooks/` importing `sections/`, a `childRoutes` or `hostPermissions` value that is computed instead of written out, an analytics axis absent from its own ranked list, a platform literal leaking into `collection-processing-policy.ts`, a missing `lib/<platform>/` directory, and — for a platform whose `readiness` is `'credentials'` — a missing link in the credentials chain (§8): the Connections card file, the `ConnSection` union member, the `connNavItems` rail entry, `derive<Pascal>Draft` / `save<Pascal>` in `useSettings`, the `configSavedAt` key. Reports **all** failures as one aggregated list. | `pnpm vitest run tests/platform-completeness-contract.test.ts` |
+| `tests/platform-completeness-contract.test.ts` | What types cannot see: a lazy import resolving to nothing, a page that renders no `sections/` view, a view that skips `useCollectionBreadcrumbs`, `main.tsx` naming a platform, a hand-written `jobPlatform`, `hooks/` importing `sections/`, a `childRoutes` or `hostPermissions` value that is computed instead of written out, an analytics axis absent from its own ranked list, a platform literal leaking into `collection-processing-policy.ts`, a missing `lib/<platform>/` directory, and — for a platform whose `readiness` is `'credentials'` — a missing link in the credentials chain (§8): the Connections card file, the `SETTINGS_NAV` connections section, `derive<Pascal>Draft` / `save<Pascal>` in `useSettings`, the `configSavedAt` key. Reports **all** failures as one aggregated list. | `pnpm vitest run tests/platform-completeness-contract.test.ts` |
 
 Five more guards fire with no wiring on your part. Three of them reconcile an
 artefact you still write by hand: the guard turns "silently absent" into a red
@@ -329,11 +329,18 @@ looking. Five hand-written edits:
    does **not** satisfy it, deliberately: this file holds all three shapes of
    the same name, and it is the `UseSettingsReturn` member that makes the
    function reachable from a card. What either one *does* is not read.
-3. `entrypoints/app/sections/settings/settings-view.tsx` — extend the
-   `ConnSection` union **and** add the `connNavItems` rail entry. *Checked:*
-   both, one-directionally — platform ⊆ union. `'agent-bridge'` is legitimately
-   in that union and is not a platform, so the reverse containment is not a
-   defect.
+3. `entrypoints/app/sections/settings/settings-nav.ts` — add one section to the
+   `connections` tab of `SETTINGS_NAV`, then add its case to the view's switch.
+   Since 2026-09-16 that single row replaces the two hand-written lists this
+   step used to name (a `ConnSection` union and a `connNavItems` array): the
+   section id is also the URL segment of `/settings/connections/<id>`.
+   *Checked:* the section, one-directionally — platform ⊆ the tab's section
+   ids. `'agent-bridge'` is legitimately a section there and is not a platform,
+   so the reverse containment is not a defect. The table has no value imports,
+   so the guard imports it instead of parsing the view. `tsc` independently
+   catches deleting *only* the row (`SettingsLeaf` is derived from the table
+   and the switch is exhaustive); deleting the row **and** its case together is
+   the hole this guard covers.
 4. `entrypoints/app/sections/settings/<platform>-connection-card.tsx` — the card
    itself, using `useConfigDraft` + `SaveActions` + `SettingsPanel`, with a live
    probe that reuses a real API call. *Checked:* that the file exists. Nothing

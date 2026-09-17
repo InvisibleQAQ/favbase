@@ -18,6 +18,7 @@ import {
 import { backgroundJobRuntime, fetchedCountProgress } from '../../hooks/pipeline-segments';
 import { useCollectionPipeline } from '../../hooks/use-collection-pipeline';
 import { useCollectionBreadcrumbs } from '../../hooks/use-collection-breadcrumbs';
+import { settingsPath } from '../settings/settings-nav';
 import { useYoutubePlaylists, type YoutubeSyncError } from './use-youtube-playlists';
 import { PlaylistChips } from './playlist-chips';
 import { YoutubeCard } from './youtube-card';
@@ -137,7 +138,7 @@ export function YoutubeView() {
     return (
       <DashboardContent maxWidth="xl">
         <SectionTitleBar title={t('youtube.title')} links={breadcrumbs} />
-        <NotConnectedState onGoToSettings={() => navigate('/settings')} />
+        <NotConnectedState onGoToSettings={() => navigate(settingsPath('connections/youtube'))} />
       </DashboardContent>
     );
   }
@@ -206,7 +207,7 @@ export function YoutubeView() {
         <AuthFailedState
           syncing={yt.syncing}
           onSync={yt.sync}
-          onGoToSettings={() => navigate('/settings')}
+          onGoToSettings={() => navigate(settingsPath('connections/youtube'))}
         />
       }
       configurationNotice={

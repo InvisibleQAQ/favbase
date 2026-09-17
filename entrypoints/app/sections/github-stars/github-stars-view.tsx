@@ -23,6 +23,7 @@ import {
 } from '../../hooks/pipeline-segments';
 import { useCollectionPipeline } from '../../hooks/use-collection-pipeline';
 import { useCollectionBreadcrumbs } from '../../hooks/use-collection-breadcrumbs';
+import { settingsPath } from '../settings/settings-nav';
 import { useGithubStars, type GithubSyncError } from './use-github-stars';
 import { LanguageChips } from './language-chips';
 import { RepoCard } from './repo-card';
@@ -141,7 +142,7 @@ export function GithubStarsView() {
     return (
       <DashboardContent maxWidth="xl">
         <SectionTitleBar title={t('githubStars.title')} links={breadcrumbs} />
-        <NoTokenState onGoToSettings={() => navigate('/settings')} />
+        <NoTokenState onGoToSettings={() => navigate(settingsPath('connections/github'))} />
       </DashboardContent>
     );
   }

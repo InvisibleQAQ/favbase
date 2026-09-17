@@ -54,7 +54,9 @@ async function bootstrap() {
               element: <Page />,
             })),
             { path: 'chat', element: <ChatPage /> },
-            { path: 'settings', element: <SettingsPage /> },
+            // Optional segments: `/settings` and a bare tab both resolve to a
+            // canonical leaf inside the view, which redirects with `replace`.
+            { path: 'settings/:tab?/:section?', element: <SettingsPage /> },
           ],
         },
       ],

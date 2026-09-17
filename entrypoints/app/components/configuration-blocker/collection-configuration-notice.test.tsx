@@ -70,8 +70,8 @@ describe('CollectionConfigurationNotice', () => {
     expect(container.textContent).toContain('configurationBlocker.llm:3');
     expect(Array.from(container.querySelectorAll('a')).map((link) => link.getAttribute('href')))
       .toEqual([
-        '/settings?section=embedding&resume=github',
-        '/settings?section=llm&resume=github',
+        '/settings/ai/embedding?resume=github',
+        '/settings/ai/llm?resume=github',
       ]);
 
     act(() => root.unmount());

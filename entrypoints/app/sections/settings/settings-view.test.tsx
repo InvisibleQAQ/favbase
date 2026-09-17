@@ -3,7 +3,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type { ReactNode } from 'react';
-import { MemoryRouter } from 'react-router-dom';
+import { RouterProvider, createMemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const settingsState = vi.hoisted(() => ({
@@ -104,19 +104,65 @@ vi.mock('./embedding/embedding-config-card', () => ({
     return <div data-testid="embedding-card" />;
   },
 }));
-vi.mock('./github-connection-card', () => ({ GithubConnectionCard: () => null }));
-vi.mock('./youtube-connection-card', () => ({ YoutubeConnectionCard: () => null }));
+vi.mock('./github-connection-card', () => ({
+  GithubConnectionCard: () => <div data-testid="github-card" />,
+}));
+vi.mock('./youtube-connection-card', () => ({
+  YoutubeConnectionCard: () => <div data-testid="youtube-card" />,
+}));
 vi.mock('./agent-bridge-card', () => ({
   AgentBridgeCard: () => <div data-testid="agent-bridge-card" />,
 }));
-vi.mock('../overview/export-card', () => ({ ExportCard: () => null }));
-vi.mock('./webdav-sync-card', () => ({ WebdavSyncCard: () => null }));
+vi.mock('../overview/export-card', () => ({
+  ExportCard: () => <div data-testid="export-card" />,
+}));
+vi.mock('./webdav-sync-card', () => ({
+  WebdavSyncCard: () => <div data-testid="webdav-card" />,
+}));
 
 import { SettingsView } from './settings-view';
 
-describe('SettingsView deep links', () => {
+function LocationProbe() {
+  const { pathname, search } = useLocation();
+  return <div data-testid="location">{`${pathname}${search}`}</div>;
+}
+
+describe('SettingsView routing', () => {
   let container: HTMLDivElement;
   let root: Root;
+  let router: ReturnType<typeof createMemoryRouter>;
+
+  // The route pattern is the one main.tsx registers. Mounting through a real
+  // router (not a bare MemoryRouter) is the point: it is what proves the
+  // optional `:tab?/:section?` segments actually match `/settings`, a bare tab
+  // and a full leaf, and it lets the redirects be read off the location.
+  function renderAt(entry: string) {
+    router = createMemoryRouter(
+      [
+        {
+          path: '/settings/:tab?/:section?',
+          element: (
+            <>
+              <SettingsView />
+              <LocationProbe />
+            </>
+          ),
+        },
+      ],
+      { initialEntries: [entry] },
+    );
+    act(() => {
+      root.render(<RouterProvider router={router} />);
+    });
+  }
+
+  const location = () => container.querySelector('[data-testid="location"]')?.textContent;
+  const railValue = () => container.querySelector('[data-testid="rail-value"]')?.textContent;
+  const click = (label: string) => {
+    const button = [...container.querySelectorAll('button')].find((b) => b.textContent === label);
+    if (!(button instanceof HTMLButtonElement)) throw new Error(`no button: ${label}`);
+    act(() => button.click());
+  };
 
   beforeEach(() => {
     settingsState.saveLlm.mockReset().mockResolvedValue(undefined);
@@ -135,28 +181,111 @@ describe('SettingsView deep links', () => {
     container.remove();
   });
 
-  it('selects AI / ASR from the section query', () => {
-    act(() => {
-      root.render(
-        <MemoryRouter initialEntries={['/settings?section=asr']}>
-          <SettingsView />
-        </MemoryRouter>,
-      );
-    });
+  it.each([
+    ['/settings/ai/llm', 'llm', 'llm-card'],
+    ['/settings/ai/asr', 'asr', 'asr-card'],
+    ['/settings/ai/embedding', 'embedding', 'embedding-card'],
+    ['/settings/connections/github', 'github', 'github-card'],
+    ['/settings/connections/youtube', 'youtube', 'youtube-card'],
+    ['/settings/connections/agent-bridge', 'agent-bridge', 'agent-bridge-card'],
+    ['/settings/storage/export', 'export', 'export-card'],
+    ['/settings/storage/webdav', 'webdav', 'webdav-card'],
+  ])('renders %s directly', (path, section, card) => {
+    renderAt(path);
 
-    expect(container.querySelector('[data-testid="rail-value"]')?.textContent).toBe('asr');
-    expect(container.querySelector('[data-testid="asr-card"]')).not.toBeNull();
-    expect(container.querySelector('[data-testid="llm-card"]')).toBeNull();
+    expect(location()).toBe(path);
+    expect(railValue()).toBe(section);
+    expect(container.querySelector(`[data-testid="${card}"]`)).not.toBeNull();
+  });
+
+  it('renders the language section, which has no card of its own', () => {
+    renderAt('/settings/general/language');
+
+    expect(location()).toBe('/settings/general/language');
+    expect(railValue()).toBe('language');
+    expect(container.querySelector('.MuiSelect-root, [role="combobox"]')).not.toBeNull();
+  });
+
+  it.each([
+    ['/settings', '/settings/ai/llm'],
+    ['/settings/connections', '/settings/connections/github'],
+    ['/settings/storage', '/settings/storage/export'],
+    ['/settings/nonsense', '/settings/ai/llm'],
+    ['/settings/ai/nonsense', '/settings/ai/llm'],
+  ])('redirects %s to %s', (entry, expected) => {
+    renderAt(entry);
+
+    expect(location()).toBe(expected);
+  });
+
+  it('redirects without leaving the bare path in history', async () => {
+    renderAt('/settings');
+    expect(location()).toBe('/settings/ai/llm');
+
+    // A redirect that pushed would send Back to `/settings`, which would
+    // redirect forward again and trap the user on the settings page.
+    expect(router.state.historyAction).toBe('REPLACE');
+  });
+
+  it.each([
+    ['asr', '/settings/ai/asr'],
+    ['embedding', '/settings/ai/embedding'],
+  ])('upgrades the legacy ?section=%s bookmark', (section, expected) => {
+    renderAt(`/settings?section=${section}`);
+
+    // The query is consumed by the redirect, not carried into the new URL.
+    expect(location()).toBe(expected);
+    expect(railValue()).toBe(section);
+  });
+
+  it('keeps ?resume= while upgrading a legacy bookmark', () => {
+    renderAt('/settings?section=embedding&resume=github');
+
+    expect(location()).toBe('/settings/ai/embedding?resume=github');
+  });
+
+  it('falls back to the default leaf for an unknown legacy section', () => {
+    renderAt('/settings?section=unknown');
+
+    expect(location()).toBe('/settings/ai/llm');
+    expect(railValue()).toBe('llm');
+  });
+
+  it('pushes rail navigation so Back walks section by section', async () => {
+    renderAt('/settings/ai/llm');
+
+    click('connections');
+    expect(location()).toBe('/settings/connections/github');
+
+    click('agent-bridge');
+    expect(location()).toBe('/settings/connections/agent-bridge');
+
+    await act(async () => {
+      await router.navigate(-1);
+    });
+    expect(location()).toBe('/settings/connections/github');
+  });
+
+  it('lands on a tab first section rather than the one last seen there', () => {
+    renderAt('/settings/connections/agent-bridge');
+
+    click('ai');
+    expect(location()).toBe('/settings/ai/llm');
+
+    click('connections');
+    // URL is the only source of truth: no remembered per-tab section.
+    expect(location()).toBe('/settings/connections/github');
+  });
+
+  it('carries ?resume= across manual navigation', () => {
+    renderAt('/settings/ai/llm?resume=github');
+
+    click('embedding');
+    expect(location()).toBe('/settings/ai/embedding?resume=github');
   });
 
   it('uses the shared route title and keeps settings panels unnested', () => {
-    act(() => {
-      root.render(
-        <MemoryRouter initialEntries={['/settings']}>
-          <SettingsView />
-        </MemoryRouter>,
-      );
-    });
+    renderAt('/settings');
 
     expect(container.querySelectorAll('h1')).toHaveLength(1);
     expect(container.querySelector('h1')?.textContent).toBe('settings.title');
@@ -164,18 +293,15 @@ describe('SettingsView deep links', () => {
   });
 
   it('hands the shared title bar a Home -> Settings trail', () => {
-    act(() => {
-      root.render(
-        <MemoryRouter initialEntries={['/settings']}>
-          <SettingsView />
-        </MemoryRouter>,
-      );
-    });
+    renderAt('/settings/connections/agent-bridge');
 
     // The rendered `nav` and its `aria-current="page"` crumb are locked by
     // custom-breadcrumbs.test.tsx and section-title-bar.test.tsx; the only
     // thing SettingsView owns is the trail data. The home href is the
     // router-relative '/' -- RouterLink adds the '#' for the hash router.
+    // The trail is deliberately fixed at two entries: the active tab and
+    // section are already stated by the two tab tracks and the card heading
+    // (user decision 2026-09-16), so routing did not add breadcrumb levels.
     expect(titleBarProps.links).toEqual([
       { name: 'breadcrumbs.home', href: '/' },
       { name: 'settings.title' },
@@ -183,45 +309,11 @@ describe('SettingsView deep links', () => {
   });
 
   it.each([
-    ['llm', 'llm-card'],
-    ['asr', 'asr-card'],
-    ['embedding', 'embedding-card'],
-  ])('selects AI / %s from a valid section query', (section, card) => {
-    act(() => {
-      root.render(
-        <MemoryRouter initialEntries={[`/settings?section=${section}`]}>
-          <SettingsView />
-        </MemoryRouter>,
-      );
-    });
-
-    expect(container.querySelector('[data-testid="rail-value"]')?.textContent).toBe(section);
-    expect(container.querySelector(`[data-testid="${card}"]`)).not.toBeNull();
-  });
-
-  it('falls back to LLM for an invalid section query', () => {
-    act(() => {
-      root.render(
-        <MemoryRouter initialEntries={['/settings?section=unknown']}>
-          <SettingsView />
-        </MemoryRouter>,
-      );
-    });
-
-    expect(container.querySelector('[data-testid="rail-value"]')?.textContent).toBe('llm');
-    expect(container.querySelector('[data-testid="llm-card"]')).not.toBeNull();
-  });
-
-  it.each([
     ['llm', 'llm'],
     ['embedding', 'embedding'],
   ] as const)('resumes the source platform after a successful %s save', async (section, capability) => {
     await act(async () => {
-      root.render(
-        <MemoryRouter initialEntries={[`/settings?section=${section}&resume=github`]}>
-          <SettingsView />
-        </MemoryRouter>,
-      );
+      renderAt(`/settings/ai/${section}?resume=github`);
     });
 
     await act(async () => {
@@ -235,11 +327,7 @@ describe('SettingsView deep links', () => {
   it('does not resume after a failed save', async () => {
     settingsState.saveLlm.mockRejectedValueOnce(new Error('save failed'));
     await act(async () => {
-      root.render(
-        <MemoryRouter initialEntries={['/settings?section=llm&resume=github']}>
-          <SettingsView />
-        </MemoryRouter>,
-      );
+      renderAt('/settings/ai/llm?resume=github');
     });
 
     await expect(cardProps.llm?.saveLlm({})).rejects.toThrow('save failed');
@@ -248,39 +336,12 @@ describe('SettingsView deep links', () => {
 
   it('ignores an invalid resume platform after a successful save', async () => {
     await act(async () => {
-      root.render(
-        <MemoryRouter initialEntries={['/settings?section=llm&resume=unknown']}>
-          <SettingsView />
-        </MemoryRouter>,
-      );
+      renderAt('/settings/ai/llm?resume=unknown');
     });
 
     await cardProps.llm?.saveLlm({});
 
     expect(settingsState.saveLlm).toHaveBeenCalledOnce();
     expect(resumeCollectionProcessing).not.toHaveBeenCalled();
-  });
-
-  it('renders Agent Bridge from the Connections section rail', () => {
-    act(() => {
-      root.render(
-        <MemoryRouter initialEntries={['/settings']}>
-          <SettingsView />
-        </MemoryRouter>,
-      );
-    });
-
-    const connections = [...container.querySelectorAll('button')]
-      .find((button) => button.textContent === 'connections');
-    if (!(connections instanceof HTMLButtonElement)) throw new Error('Connections tab not found');
-    act(() => connections.click());
-
-    const agentBridge = [...container.querySelectorAll('button')]
-      .find((button) => button.textContent === 'agent-bridge');
-    if (!(agentBridge instanceof HTMLButtonElement)) throw new Error('Agent Bridge rail item not found');
-    act(() => agentBridge.click());
-
-    expect(container.querySelector('[data-testid="rail-value"]')?.textContent).toBe('agent-bridge');
-    expect(container.querySelector('[data-testid="agent-bridge-card"]')).not.toBeNull();
   });
 });
