@@ -110,7 +110,7 @@ function extensionTroubleshooting(
         ? ''
         : ` at ${new Date(extension.lastRejectedHelloAt).toISOString()}`
     } (rejected hellos this daemon run: ${extension.rejectedHelloCount}).`
-    : 'Confirm the Bridge Token matches the token copied from Settings > Connections > Agent Bridge.';
+    : 'Confirm the Bridge Token matches the token copied from Settings > Connections > Agent Skills.';
   return [
     tokenCheck,
     'Confirm Agent Bridge is enabled in Settings > Connections.',

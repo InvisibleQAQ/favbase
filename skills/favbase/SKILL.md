@@ -22,13 +22,13 @@ nothing is ever written to the library.
 ## Prerequisites
 
 - Chrome is running with favbase installed and **Settings > Connections >
-  Agent Bridge** switched on.
+  Agent Skills** switched on.
 - `favbase` is on `PATH`. If it is not, stop and ask the user to run
   `npm install -g favbase` (Node.js 20+). This skill may only run the
   `favbase` command itself: you cannot install it, and no other runner will be
   permitted.
 - One-time pairing (the user does this once, values come from that settings
-  card): `favbase setup --token <Bridge Token> --port <port>`.
+  card): `favbase setup --token <pairing token> --port <port>`.
 - `favbase doctor` verifies config, background daemon and extension link.
 
 ## Commands

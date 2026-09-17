@@ -695,6 +695,7 @@ const en: Record<LocaleKeys, string> = {
   'welcome.tags.noServer': 'No server',
   'welcome.tags.pglite': 'In-browser database',
   'welcome.tags.incremental': 'Incremental sync',
+  'welcome.tags.agentSkills': 'Agent Skills',
 
   'welcome.flow.eyebrow': 'How it works',
   'welcome.flow.heading': 'Three steps',
@@ -729,6 +730,21 @@ const en: Record<LocaleKeys, string> = {
   'welcome.chat.demoSource1': 'The RAG retrieval pipeline in one hour',
   'welcome.chat.demoSource2': 'pgvector in practice: tuning HNSW',
   'welcome.chat.demoSource3': 'Why your vector recall is stuck',
+
+  'welcome.agentSkills.eyebrow': 'For your coding agent',
+  'welcome.agentSkills.heading': 'Let Claude Code search what you saved',
+  'welcome.agentSkills.desc':
+    'The same local knowledge base, asked from your coding agent instead of from here. Hand it the line below and it installs the CLI, installs the skill, and walks you through pairing.',
+  'welcome.agentSkills.promptLabel': 'Send this to your agent',
+  'welcome.agentSkills.prompt': 'Set up favbase for me by following {{url}}',
+  'welcome.agentSkills.copy': 'Copy',
+  'welcome.agentSkills.copied': 'Copied',
+  'welcome.agentSkills.copyFailed': 'Copy failed',
+  'welcome.agentSkills.feature1': 'Works with Claude Code and Codex out of the box',
+  'welcome.agentSkills.feature2': 'Read-only — an agent can never write to your library',
+  'welcome.agentSkills.feature3': 'Nothing leaves the machine; it asks the running extension itself',
+  'welcome.agentSkills.requirement':
+    'Needs Node.js 20+. Pairing happens in Settings > Connections > Agent Skills.',
 
   'welcome.bilibili.eyebrow': 'On bilibili video pages',
   'welcome.bilibili.heading': 'An extra panel while you watch',

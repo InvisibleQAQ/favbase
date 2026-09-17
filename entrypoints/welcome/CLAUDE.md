@@ -1,6 +1,6 @@
 # welcome (welcome.html)
 
-首装引导页（WXT unlisted page，目录内 `index.html` → 产物 `welcome.html`）。一条纵向叙事：Hero → 能力 pill 双行 → 三步 sticky 叠卡（收录 → 知识库 → 提问）→ Chat 主功能演示 → B 站 CS 面板演示 → 平台多选 + 进入 app.html → 页尾 Footer。
+首装引导页（WXT unlisted page，目录内 `index.html` → 产物 `welcome.html`）。一条纵向叙事：Hero → 能力 pill 双行 → 三步 sticky 叠卡（收录 → 知识库 → 提问）→ Chat 主功能演示 → Agent Skills → B 站 CS 面板演示 → 平台多选 + 进入 app.html → 页尾 Footer。
 
 外壳自 2026-09-08 起是 Minimal v7.7.0 默认路由（`MainLayout` + `HomeView`）的移植：`layout.tsx` 吃 `app/layouts/core` 三件套，Hero 换 Minimal 的负 margin 几何 + 钉住淡出 + 四层视差，`components/animate/` 是移植进来的 motion 原语层。**决策与拒绝清单在 `docs/28`**——「为什么没抄 HeroBackground / LazyMotion / AnimateText」这类问题在那里有答案，别对着参考源重问一遍。
 
@@ -58,6 +58,7 @@ CTA 落地规则在 `landing.ts`（纯函数 + `landing.test.ts`）：
 - `capability-marquee.tsx` — 双行反向 pill 跑马灯，**由页面滚动驱动**（`useScroll` + `useTransform`）而非 CSS 无限循环：读者停下它就停，不跟正文抢注意力。行内容三倍复制保证两端不露白，两侧 `maskImage` 渐隐。`useReducedMotion()` 为真时不绑 `style={{x}}`，pill 行静止
 - `how-it-works.tsx` — 三步 sticky 叠卡。`useScroll` 测整栈进度，每张卡 `1 - (total-1-index) * 0.04` 目标缩放做景深；卡内右侧 `StepGlyph`（rows / grid / bubble 三种抽象装饰）。sticky 在 `md+` 生效，窄屏退化为普通堆叠；reduce-motion 时不绑 `style={{scale}}`，卡片全尺寸堆叠
 - `chat-showcase.tsx` — **主功能演示**。`useInView(once)` 触发脚本化播放：提问 → tool call（转圈 → ✓ 命中 N 条）→ 打字机流式作答 → 来源卡片 stagger。phase 常量 + 定时器数组，`useReducedMotion` 时直接跳到终态（流式动画没有「慢一点」的降级）。面板 `minHeight` 按终态尺寸给足，避免播放中把页面顶下去
+- `agent-skills.tsx` — Agent Skills 段落（2026-09-17）：同一个本地知识库，改由用户自己的 coding agent 来问。**主体就是那一条可复制的指令**（`welcome.agentSkills.prompt` 内插 `lib/repo.ts` 的 `AGENT_SETUP_GUIDE_URL`），不画演示 mock——上下两屏各已有一段脚本化演示，第三块会被当成装饰，把这屏唯一真能用的东西稀释掉。**刻意不出示任何 `npm` / `favbase setup` 命令**：配对要 Bridge Token，而首装时开关还没开、token 还不存在，印出来的命令必然是用户只能用来失败的占位符；安装流程归 URL 背后的 Agent Setup Guide（`skills/favbase/INSTALL.md`），它会停下来让用户去设置卡取真命令，理由见 `docs/adr/0005`。复制反馈是本地的三态按钮（`idle`/`copied`/`failed` + 2s 回弹 + 视觉隐藏的 `aria-live`）——welcome 没挂 `<Snackbar/>`，`sonner` 也被 `VENDOR_RULES` 锁在 `app/components/snackbar/**`；`visuallyHidden` 样式是手写的，本仓库的 MUI 构建不带那个 helper。剪贴板会被拒绝或缺席，所以 catch 分支照实说"复制失败"（命令仍是可选中的文本）
 - `bilibili-showcase.tsx` — B 站视频页 CS 面板演示：左侧播放器骨架 + 右侧面板 mock（字幕 / AI 总结双 tab，`layoutId` 让选中胶囊滑动）。入场 2.8s 后自动切到总结 tab 展示第二种能力，但 `pickedRef` 记录真人点击后不再自动切。tab 行 `role="tablist"`、`TabButton` 带 `role="tab"`/`aria-selected` + `Mui-focusVisible` 焦点环；播放器进度条动画走 `scaleX`（`transformOrigin: left`）而非 `width`，不逐帧 relayout
 - `platform-picker.tsx` — 六平台多选卡（`collectionPlatformRegistry` 驱动）+ 就绪态标签（`readinessFor()`：需密钥 / 用登录态 / 开箱即用）+ 进入按钮。CTA 文案与 caption 随选择数变化（`welcome.picker.selected` 走复数 key）。卡片未选中态边框 `2px solid transparent`（选中亮 primary；宽度恒定防 layout shift），键盘焦点走 `Mui-focusVisible` 环；readiness 文字 `text.secondary` 保对比度
 - `platform-request.tsx` — 页尾 Platform Request 引导（`welcome.request.*`）：Headline + 一句引导 + outlined 按钮外跳 `lib/repo.ts` 的预填 new-issue URL（`target="_blank"`）。刻意克制（outlined、无光晕）不抢上方 picker 主 CTA；它是动作外链不是平台，不进 registry（领域定义见根 `CONTEXT.md`）
@@ -73,5 +74,6 @@ CTA 落地规则在 `landing.ts`（纯函数 + `landing.test.ts`）：
 - 图标只用 `entrypoints/app/components/iconify/icon-sets.ts` 里注册过的名字——未注册会走网络加载，MV3 CSP 下直接不显示。移植 Minimal 组件时尤其要查：`BackToTopButton` 上游用的 `solar:double-alt-arrow-up-bold-duotone` 没注册，已换成 `eva:arrow-ios-upward-fill`
 - **`motion` 只属于本入口**（根 `CLAUDE.md` 铁律，2026-09-08 起有守卫）：`tests/ui-vendor-boundaries.test.ts` 的 `VENDOR_RULES` 把 `motion` 的 owner 定为 `entrypoints/welcome`，app.html 与 Content Script 保持纯 MUI + CSS。构建后可复验——app.html 引用的 chunk 里 `framerAppearId`/`MotionConfigContext`/`createMotionComponent` 应零命中
 - **向 Minimal 借鉴前先读 `docs/28`**：那里有逐条带理由的拒绝清单（`HeroBackground` 619 行 + 360 KB webp、`LazyMotion`、`AnimateText`、`animate-count-up`、九个未用 variants、Pricing/Testimonials/FAQs 那些销售页段落、`renderIcons` 的第四份平台清单）。**不看就照抄参考源，会把已经论证过不要的东西搬回来**
+- **welcome 里唯一的可执行出口是 `agent-skills.tsx` 那条指令**，其余一律不放命令：安装命令的真源是设置卡（给人，自带 token）与 `skills/favbase/INSTALL.md`（给 agent），这里不做第三份
 - 演示内容是**示意，不是真数据**：不要在这页放看起来像统计的数字（收藏数、用户数、准确率），首装时数据库是空的，任何数字都是假的
 - 新增段落：`sections/` 加文件 → `welcome-view.tsx` 装配 → 动画元素从 `components/motion-box` 取 `MotionBox` → 文案补双语 key

@@ -22,6 +22,7 @@ const ROW_TOP: Pill[] = [
   { labelKey: 'nav.bookmarks', icon: 'solar:bookmark-bold-duotone' },
   { labelKey: 'welcome.tags.aiTags' },
   { labelKey: 'nav.xBookmarks', icon: 'mdi:twitter' },
+  { labelKey: 'welcome.tags.agentSkills' },
 ];
 
 const ROW_BOTTOM: Pill[] = [

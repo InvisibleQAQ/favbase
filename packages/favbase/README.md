@@ -14,10 +14,10 @@ Requires Node.js 20+ and the favbase extension running in Chrome.
 npm install -g favbase
 ```
 
-In the extension open **Settings > Connections > Agent Bridge**, switch it on, and copy the Bridge Token and port. Then pair once:
+In the extension open **Settings > Connections > Agent Skills**, switch it on, and copy the pairing token and port. Then pair once:
 
 ```bash
-favbase setup --token <Bridge Token> --port <port>
+favbase setup --token <pairing token> --port <port>
 ```
 
 That writes `~/.favbase/config.json` and installs the Agent Skill for Claude Code (`~/.claude/skills/favbase/`) and Codex (`~/.agents/skills/favbase/`), so an agent learns the commands on its own. Pass `--no-skill` to skip that, or install only the skill later with `favbase install-skill`.
@@ -64,7 +64,7 @@ For the accepted `--platform` values run `favbase tools` — the tool schemas ar
 | 2 | the daemon or the extension is unreachable |
 | 3 | the Knowledge Tool itself returned an error |
 
-Exit code 2 usually means Chrome is closed or Agent Bridge is switched off. The extension reconnects on a periodic alarm, so the first call after Chrome starts can wait roughly 30 seconds on Chrome 120+, or 60 seconds on Chrome 116–119. `favbase doctor` reports which half of the link is missing.
+Exit code 2 usually means Chrome is closed or Agent Skills is switched off. The extension reconnects on a periodic alarm, so the first call after Chrome starts can wait roughly 30 seconds on Chrome 120+, or 60 seconds on Chrome 116–119. `favbase doctor` reports which half of the link is missing.
 
 ## The daemon
 

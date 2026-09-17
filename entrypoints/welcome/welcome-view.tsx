@@ -6,6 +6,7 @@ import { useTranslation } from '@/lib/i18n/use-translation';
 
 import { WelcomeLayout } from './layout';
 import { Hero } from './sections/hero';
+import { AgentSkills } from './sections/agent-skills';
 import { ChatShowcase } from './sections/chat-showcase';
 import { HowItWorks } from './sections/how-it-works';
 import { PlatformPicker } from './sections/platform-picker';
@@ -37,6 +38,7 @@ export function WelcomeView() {
         <CapabilityMarquee />
         <HowItWorks />
         <ChatShowcase />
+        <AgentSkills />
         <BilibiliShowcase />
         <PlatformPicker />
         <PlatformRequest />

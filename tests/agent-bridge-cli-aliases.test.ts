@@ -1,12 +1,14 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
 import { PLATFORM_META } from '@/entrypoints/app/collection-platform-registry';
+import { DEFAULT_AGENT_BRIDGE_PORT } from '@/lib/agent-bridge/protocol';
 import { describeTools } from '@/lib/agent-bridge/tool-registry';
 import { COLLECTION_PLATFORMS } from '@/lib/collections/platforms';
 import en from '@/lib/i18n/locales/en';
+import { AGENT_SETUP_GUIDE_URL } from '@/lib/repo';
 import { TOOL_ALIASES } from '../packages/favbase/commands';
 
 /**
@@ -127,6 +129,78 @@ describe('favbase SKILL.md only teaches the invocation its allowed-tools permit'
     expect(
       offenders.map(([line, text]) => `SKILL.md:${line} ${text.trim()}`),
       'allowed-tools permits `favbase` only; a runner prefix here is an instruction the agent cannot follow',
+    ).toEqual([]);
+  });
+});
+
+/**
+ * INSTALL.md (the Agent Setup Guide, docs/adr/0005) is the fourth hand-written
+ * copy of "how to install favbase" -- after the settings card's
+ * `settings.agentBridge.commands*`, SKILL.md's prerequisites and the npm
+ * README. Four copies drift, and they already did: renaming the settings
+ * section to Agent Skills (e462948) left SKILL.md and the README pointing at a
+ * menu entry that no longer exists, with nothing red to show for it.
+ *
+ * Unlike SKILL.md this file is fetched over the network from `main`, so a
+ * mistake here is live for every user the moment it merges -- and the agent
+ * reading it has no way to tell a stale instruction from a current one.
+ */
+describe('favbase INSTALL.md stays reconciled with what it installs', () => {
+  const INSTALL_MD = path.resolve(__dirname, '..', 'skills', 'favbase', 'INSTALL.md');
+  // Read per test, not once in the describe body: a missing file there throws
+  // during collection and vitest reports "no tests" instead of naming the
+  // contract that broke.
+  const read = () => readFileSync(INSTALL_MD, 'utf8');
+
+  // The URL is a public contract: users paste it into their own prompts, so
+  // the file has to sit exactly where lib/repo.ts says it does. Moving the
+  // file is otherwise a silent 404 nobody in this repo ever sees.
+  it('is reachable at the path the published URL promises', () => {
+    const repoPath = AGENT_SETUP_GUIDE_URL.split('/main/')[1];
+    expect(repoPath, 'AGENT_SETUP_GUIDE_URL no longer points into the `main` branch').toBe(
+      'skills/favbase/INSTALL.md',
+    );
+    expect(existsSync(path.resolve(__dirname, '..', repoPath))).toBe(true);
+  });
+
+  it('sends the user to the settings section that actually exists', () => {
+    const install = read();
+    expect(install).toContain(en['settings.agentBridge.title']);
+    expect(install).toContain(en['settings.tabConnections']);
+  });
+
+  it('installs the package this repository publishes', () => {
+    const pkg = JSON.parse(
+      readFileSync(path.resolve(__dirname, '..', 'packages', 'favbase', 'package.json'), 'utf8'),
+    ) as { name: string };
+    expect(read()).toContain(`npm install -g ${pkg.name}`);
+  });
+
+  it('quotes the pairing command and default port the CLI really uses', () => {
+    const usage = readFileSync(
+      path.resolve(__dirname, '..', 'packages', 'favbase', 'cli-main.ts'),
+      'utf8',
+    );
+    const install = read();
+    expect(usage).toContain('setup --token <token> [--port <port>]');
+    expect(install).toContain('favbase setup --token');
+    expect(install).toContain('--port');
+    expect(install).toContain(String(DEFAULT_AGENT_BRIDGE_PORT));
+  });
+
+  // The whole reason this document pauses in the middle is that the pairing
+  // token lives only inside the running extension. An edit that quietly turns
+  // the pause into a ready-made command hands the agent a placeholder to fail
+  // with -- and the failure surfaces as "favbase is broken", not as a doc bug.
+  it('never hands the agent a runnable setup command of its own', () => {
+    const offenders = read()
+      .split('\n')
+      .map((line, index) => [index + 1, line] as const)
+      .filter(([, line]) => /favbase setup --token\s+(?!<)/.test(line));
+
+    expect(
+      offenders.map(([line, text]) => `INSTALL.md:${line} ${text.trim()}`),
+      'the token must stay a placeholder: only the extension can produce a real one',
     ).toEqual([]);
   });
 });

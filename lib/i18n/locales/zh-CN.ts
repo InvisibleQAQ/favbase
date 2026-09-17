@@ -681,6 +681,7 @@ const zhCN = {
   'welcome.tags.noServer': '没有服务器',
   'welcome.tags.pglite': '浏览器内数据库',
   'welcome.tags.incremental': '增量同步',
+  'welcome.tags.agentSkills': 'Agent Skills',
 
   'welcome.flow.eyebrow': '它怎么工作',
   'welcome.flow.heading': '三步',
@@ -715,6 +716,20 @@ const zhCN = {
   'welcome.chat.demoSource1': '一小时讲透 RAG 检索管线',
   'welcome.chat.demoSource2': 'pgvector 实战：HNSW 索引调参',
   'welcome.chat.demoSource3': '为什么你的向量检索召回率上不去',
+
+  'welcome.agentSkills.eyebrow': '给你的 coding agent',
+  'welcome.agentSkills.heading': '让 Claude Code 查你的收藏',
+  'welcome.agentSkills.desc':
+    '同一个本地知识库，除了在这里问，也可以让你的 coding agent 直接查。把下面这句话交给它，它会自己装好命令行、装好 skill，并带你完成配对。',
+  'welcome.agentSkills.promptLabel': '把这句话发给你的 agent',
+  'welcome.agentSkills.prompt': '帮我按照 {{url}} 安装并配置 favbase',
+  'welcome.agentSkills.copy': '复制',
+  'welcome.agentSkills.copied': '已复制',
+  'welcome.agentSkills.copyFailed': '复制失败',
+  'welcome.agentSkills.feature1': 'Claude Code 与 Codex 开箱可用',
+  'welcome.agentSkills.feature2': '只读：agent 永远不会改写你的库',
+  'welcome.agentSkills.feature3': '数据不出本机，问的是正在运行的扩展本身',
+  'welcome.agentSkills.requirement': '需要 Node.js 20+；配对那一步在设置 → 账号连接 → Agent Skills 完成',
 
   'welcome.bilibili.eyebrow': 'B 站视频页',
   'welcome.bilibili.heading': '看视频时，右边多一块',

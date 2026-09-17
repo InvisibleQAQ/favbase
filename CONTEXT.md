@@ -100,6 +100,10 @@ _Avoid_: MCP server, backend, service, database
 The terminal program (`favbase`) an external agent runs to reach the Knowledge Tools through the Bridge Daemon; an Agent Skill teaches the agent how to use it and never carries data itself.
 _Avoid_: MCP client, API client, skill (the CLI is what the skill describes, not the skill)
 
+**Agent Setup Guide**:
+A public, agent-facing markdown in this repository that walks an external agent through installing the **favbase CLI** and pairing it; the user hands their agent its URL. It is not an **Agent Skill**: it is read once, before anything is installed, and it can never carry a **Bridge Token**, so it must stop and ask the user to copy the pairing command out of Settings.
+_Avoid_: Skill, skill link, one-click installer, install script
+
 **Knowledge Tool**:
 One read-only retrieval action over Collection Items and their derived knowledge, defined once and shared by Chat and the Agent Bridge.
 _Avoid_: Endpoint, command, skill
@@ -144,6 +148,7 @@ _Avoid_: API key, provider key, password
 - A **Bridge Daemon** remains alive while an authenticated **Agent Bridge** peer is connected; its idle deadline starts only after that peer disconnects
 - The **favbase CLI** reaches the **Agent Bridge** only through the **Bridge Daemon** on loopback and presents the same **Bridge Token**; a request carrying a browser Origin is never a favbase CLI request
 - A Skill installed for an agent describes the **favbase CLI**; it never opens the **Agent Bridge** or reads Collection Items itself
+- The **Agent Setup Guide** leads an agent to the **favbase CLI**; pairing still passes through the user, because the **Bridge Token** exists only inside the running extension
 
 ## Example dialogue
 
@@ -166,4 +171,5 @@ _Avoid_: API key, provider key, password
 - "Selected platform" in onboarding previously sounded like an availability gate; it is now defined as an **Onboarding Platform Preference**, never a platform enablement setting.
 - "Stuck" previously mixed missing provider configuration with slow, failed, or paused work; only missing configuration with eligible pending work is a **Configuration Blocker**.
 - "Agent Skills" is a UI label, not a term: the Settings section named Agent Skills configures one **Agent Bridge** (enable, port, **Bridge Token**, connection status), not a list of installable skills. A Skill is still only the markdown that teaches an agent to call the **favbase CLI**; when the two readings could be confused, say Agent Bridge.
+- A repository markdown that installs the CLI is an **Agent Setup Guide**, not a Skill; only the markdown that teaches an agent to call the **favbase CLI** (`skills/favbase/SKILL.md`, shipped inside the CLI) is a Skill.
 - "MCP or Skill" was framed as a choice; resolved (revised 2026-08-28, ADR 0003): the **Agent Bridge** is the data path and the **Bridge Daemon** is its external half; the **favbase CLI** is the agent-facing front, a Skill only teaches an agent how to use that CLI, and no MCP server is provided.
