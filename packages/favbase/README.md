@@ -4,7 +4,7 @@ Read-only command line access to your own [favbase](https://github.com/Invisible
 
 favbase is a local-first browser extension that turns the things you save on social media — favorites, stars, bookmarks, playlists — into a searchable knowledge base built in your browser. This package is the Node half of its **Agent Bridge**: a thin `favbase` CLI plus a loopback daemon that lets Claude Code, Codex or any other agent query that library.
 
-**Nothing leaves your machine.** The daemon listens only on `127.0.0.1`, the running extension connects out to it, and retrieval happens inside the extension. This CLI holds no data, no API keys and no credentials beyond the Bridge Token you paste during pairing. Every command is read-only; there is no way to write to your library through it.
+**Nothing leaves your machine.** The daemon listens only on `127.0.0.1`, the running extension connects out to it, and retrieval happens inside the extension. This CLI holds no data, no API keys and no credentials beyond the pairing token you paste in once. Every command is read-only; there is no way to write to your library through it.
 
 Requires Node.js 20+ and the favbase extension running in Chrome.
 
@@ -70,13 +70,13 @@ Exit code 2 usually means Chrome is closed or Agent Skills is switched off. The 
 
 The first data command starts a background daemon automatically (detached, logging to `~/.favbase/daemon.log`). It serves the extension's WebSocket and the CLI's HTTP routes on one loopback port, and exits on its own once no authenticated extension is connected and no CLI request has arrived for a while. `favbase daemon run|start|stop|restart` controls it explicitly.
 
-CLI requests must carry the Bridge Token as a bearer token, and any request arriving with an `Origin` header is rejected before authentication — so a web page cannot reach the daemon by fetching `127.0.0.1`.
+CLI requests must carry the pairing token as a bearer token, and any request arriving with an `Origin` header is rejected before authentication — so a web page cannot reach the daemon by fetching `127.0.0.1`.
 
 ## Configuration
 
 | Variable | Effect |
 |---|---|
-| `FAVBASE_TOKEN` | Bridge Token, overrides the config file |
+| `FAVBASE_TOKEN` | pairing token, overrides the config file |
 | `FAVBASE_BRIDGE_PORT` | port, overrides the config file |
 | `FAVBASE_HOME` | config/log root, default `~/.favbase` |
 | `FAVBASE_DAEMON_IDLE_MINUTES` | idle timeout, default `120`; `0` never exits |

@@ -89,8 +89,8 @@ describe('favbase doctor diagnostics', () => {
     expect(result.code).toBe(EXIT_UNAVAILABLE);
     expect(output.extension.lastRejectedHelloReason).toBe('bad-token');
     expect(output.troubleshooting[0]).toContain('did not match this daemon');
-    expect(output.troubleshooting.join(' ')).toContain('Bridge Token');
-    expect(output.troubleshooting.join(' ')).toContain('Agent Bridge is enabled');
+    expect(output.troubleshooting.join(' ')).toContain('pairing token');
+    expect(output.troubleshooting.join(' ')).toContain('Agent Skills is enabled');
     expect(output.troubleshooting.join(' ')).toContain('Chrome is running');
     expect(output.troubleshooting.join(' ')).toContain('17836');
     expect(output.troubleshooting.join(' ')).toContain('daemon.log');

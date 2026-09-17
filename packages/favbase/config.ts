@@ -31,7 +31,7 @@ export class ConfigError extends Error {
 }
 
 export const SETUP_HINT =
-  'copy the Bridge Token from favbase Settings > Connections > Agent Bridge and run: favbase setup --token <token> [--port <port>]';
+  'copy the pairing token from favbase Settings > Connections > Agent Skills and run: favbase setup --token <token> [--port <port>]';
 
 /** Root for the config file and daemon log; `FAVBASE_HOME` overrides `~/.favbase`. */
 export function favbaseHome(env: ConfigEnv = process.env): string {
@@ -117,7 +117,7 @@ export async function resolveConfig(env: ConfigEnv = process.env): Promise<Resol
   const envPort = parsePort(env.FAVBASE_BRIDGE_PORT, 'FAVBASE_BRIDGE_PORT');
 
   const token = envToken ?? file.token;
-  if (!token) throw new ConfigError(`No Bridge Token configured; ${SETUP_HINT}`);
+  if (!token) throw new ConfigError(`No pairing token configured; ${SETUP_HINT}`);
 
   const port = envPort ?? file.port ?? DEFAULT_AGENT_BRIDGE_PORT;
   return {

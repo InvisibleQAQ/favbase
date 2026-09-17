@@ -80,6 +80,18 @@ provides no MCP server.
   list; a comma-separated parenthesis) or update the test with it.
 - stdout carries JSON results only; every diagnostic goes to stderr and never
   includes the Bridge Token.
+- Two vocabularies, one boundary. Code keeps the domain names (`CONTEXT.md`):
+  `BridgeServer`, `BridgeCallError`, `AgentBridge*`, the `/bridge` route, the
+  Bridge Token. Everything a user or an agent *reads* uses the product's words:
+  the settings section is **Agent Skills**, the secret is a **pairing token**, a
+  port is just a port. That covers `--help`, every stderr diagnostic,
+  `doctor`'s troubleshooting list, `SKILL.md` and the npm README -- the README's
+  opening line naming the **Agent Bridge** as the architecture is the deliberate
+  exception, and so is `bridge-server.ts`'s rejected-hello log line: it names a
+  wire event, goes to `~/.favbase/daemon.log`, and its user-facing rendering is
+  `doctor`'s first troubleshooting sentence, which does say pairing token.
+  Nothing enforces the split; the doctor and integration suites only pin the
+  strings they happen to assert.
 - `/status` may add diagnostics, but it never returns received/expected token
   material. A later valid hello does not erase the last rejection evidence.
 - Listen only on `127.0.0.1`. A peer is usable only after its hello token and

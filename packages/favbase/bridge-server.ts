@@ -78,7 +78,7 @@ export class BridgeCallError extends Error {
 
 export class BridgePortInUseError extends Error {
   constructor(readonly port: number) {
-    super(`Bridge port ${port} is already in use`);
+    super(`port ${port} is already in use`);
     this.name = 'BridgePortInUseError';
   }
 }
@@ -468,7 +468,7 @@ export class BridgeServer {
           this.finishPeerWaiter(waiter, {
             error: new BridgeCallError(
               'extension-unavailable',
-              'favbase extension is not connected; open Chrome and enable Agent Bridge with the same port and token',
+              'favbase extension is not connected; open Chrome and enable Agent Skills with the same port and token',
             ),
           });
         }, this.helloWaitMs),

@@ -17,7 +17,14 @@ section name, package name, setup command shape and default port, and fails on
 a runnable setup command.
 
 Keep exit codes and prerequisites aligned with `packages/favbase`. Reconnect
-copy must use the CLI's canonical wording: an authenticated bridge skips alarm
-waiting; cold reconnect is about 30 seconds on Chrome 120+ or 60 seconds on
-Chrome 116-119; longer failures run `favbase doctor`. Never promise `~35 s`,
-claim every browser reconnects within 30 seconds, or include a real Bridge Token.
+copy must use the CLI's canonical wording, verbatim -- `cli-main-doctor.test.ts`
+compares this file against `EXTENSION_LATENCY_HINT`: an already connected
+extension skips alarm waiting; cold reconnect is about 30 seconds on Chrome 120+
+or 60 seconds on Chrome 116-119; longer failures run `favbase doctor`. Never
+promise `~35 s`, claim every browser reconnects within 30 seconds, or include a
+real token.
+
+Both files here are read by a user or an agent, so they follow the CLI's
+user-facing vocabulary (`packages/favbase/CLAUDE.md`, Boundaries): **Agent
+Skills** for the settings section, **pairing token** for the secret. The domain
+names -- Agent Bridge, Bridge Token -- stay in code and in notes like this one.

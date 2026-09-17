@@ -90,13 +90,13 @@ this file and the CLI disagree.
 | --- | --- | --- |
 | 0 | success | use the JSON on stdout |
 | 1 | usage or missing config | show the stderr message; the user must run `favbase setup` |
-| 2 | daemon or extension unreachable | run `favbase doctor`; fix the reported Chrome, Agent Bridge, port, or Bridge Token check |
+| 2 | daemon or extension unreachable | run `favbase doctor`; fix the reported Chrome, Agent Skills, port, or pairing token check |
 | 3 | Knowledge Tool error (bad argument, tool failure) | read the stderr message and adjust the arguments |
 
-An already connected bridge has no alarm wait and uses local RPC. After Chrome
-or the daemon starts, reconnection can take one alarm period: about 30 seconds
-on Chrome 120+ or about 60 seconds on Chrome 116-119. If it takes longer, run
-`favbase doctor`.
+An already connected extension has no alarm wait and uses local RPC. After
+Chrome or the daemon starts, reconnection can take one alarm period: about 30
+seconds on Chrome 120+ or about 60 seconds on Chrome 116-119. If it takes
+longer, run `favbase doctor`.
 
 The background daemon starts automatically on the first data command. Once no
 extension is connected, it exits after two hours without a CLI request;

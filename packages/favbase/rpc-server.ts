@@ -142,7 +142,7 @@ export function createRpcHandler(
   const authenticate = (request: IncomingMessage): void => {
     const token = bearerToken(request);
     if (!token || !tokensMatch(token, options.token)) {
-      throw new HttpError(401, 'unauthorized', 'Bridge Token missing or does not match this daemon');
+      throw new HttpError(401, 'unauthorized', 'pairing token missing or does not match this daemon');
     }
     options.onActivity();
   };

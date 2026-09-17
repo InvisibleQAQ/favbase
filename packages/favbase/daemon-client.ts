@@ -119,7 +119,7 @@ function isStatusDaemon(value: unknown): value is StatusResponse['daemon'] {
 function foreignPort(port: number): DaemonError {
   return new DaemonError(
     'foreign',
-    `127.0.0.1:${port} is served by something that is not the favbase daemon; pick another port in favbase Settings > Connections > Agent Bridge and run favbase setup --port <port>`,
+    `127.0.0.1:${port} is served by something that is not the favbase daemon; pick another port in favbase Settings > Connections > Agent Skills and run favbase setup --port <port>`,
   );
 }
 
@@ -196,7 +196,7 @@ export async function ensureDaemon(
 function unauthorized(port: number): DaemonError {
   return new DaemonError(
     'unauthorized',
-    `the favbase daemon on port ${port} uses a different Bridge Token; run favbase daemon restart`,
+    `the favbase daemon on port ${port} uses a different pairing token; run favbase daemon restart`,
   );
 }
 

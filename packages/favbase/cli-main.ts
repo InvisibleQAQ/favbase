@@ -41,9 +41,9 @@ export const EXIT_TOOL = 3;
 
 const DEFAULT_IDLE_MINUTES = 120;
 export const EXTENSION_LATENCY_HINT =
-  'An already connected bridge has no alarm wait and uses local RPC. After Chrome or the daemon starts, reconnection can take one alarm period: about 30 seconds on Chrome 120+ or about 60 seconds on Chrome 116-119. If it takes longer, run favbase doctor.';
+  'An already connected extension has no alarm wait and uses local RPC. After Chrome or the daemon starts, reconnection can take one alarm period: about 30 seconds on Chrome 120+ or about 60 seconds on Chrome 116-119. If it takes longer, run favbase doctor.';
 const EXTENSION_HINT =
-  `confirm Chrome is running, Agent Bridge is enabled, and the port and Bridge Token match. ${EXTENSION_LATENCY_HINT}`;
+  `confirm Chrome is running, Agent Skills is enabled, and the port and pairing token match. ${EXTENSION_LATENCY_HINT}`;
 
 export interface CliIo {
   env: ConfigEnv;
@@ -105,17 +105,17 @@ function extensionTroubleshooting(
   extension: BridgePeerSnapshot,
 ): string[] {
   const tokenCheck = extension.lastRejectedHelloReason === 'bad-token'
-    ? `The last extension hello was rejected because its Bridge Token did not match this daemon${
+    ? `The last extension hello was rejected because its pairing token did not match this daemon${
       extension.lastRejectedHelloAt === null
         ? ''
         : ` at ${new Date(extension.lastRejectedHelloAt).toISOString()}`
     } (rejected hellos this daemon run: ${extension.rejectedHelloCount}).`
-    : 'Confirm the Bridge Token matches the token copied from Settings > Connections > Agent Skills.';
+    : 'Confirm the pairing token matches the token copied from Settings > Connections > Agent Skills.';
   return [
     tokenCheck,
-    'Confirm Agent Bridge is enabled in Settings > Connections.',
+    'Confirm Agent Skills is enabled in Settings > Connections.',
     'Confirm Chrome is running with favbase installed.',
-    `Confirm the extension Bridge port is ${config.port}.`,
+    `Confirm the extension port is ${config.port}.`,
     `Inspect the daemon log at ${daemonLogPath(env)}.`,
   ];
 }

@@ -346,7 +346,7 @@ describe('favbase CLI process integration', () => {
         lastRejectedHelloReason: 'bad-token',
       },
     });
-    expect(doctorOutput.troubleshooting[0]).toContain('Bridge Token');
+    expect(doctorOutput.troubleshooting[0]).toContain('pairing token');
     expect(doctorOutput.troubleshooting).toHaveLength(5);
     expect(doctor.stderr).toContain('about 30 seconds on Chrome 120+');
     expect(doctor.stderr).toContain('about 60 seconds on Chrome 116-119');
