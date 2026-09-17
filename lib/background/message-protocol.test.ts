@@ -6,6 +6,7 @@ import {
   BACKGROUND_PROTOCOL_VERSION,
   MAX_RUNTIME_SUBTITLE_ROWS,
   decodeBackgroundMessage,
+  decodeBackgroundResponse,
 } from './message-protocol';
 import {
   OFFSCREEN_PROTOCOL_CHANNEL,
@@ -119,5 +120,44 @@ describe('Background runtime message protocol', () => {
     ],
   ])('rejects %s', (_case, message) => {
     expect(decodeBackgroundMessage(message)).toBeNull();
+  });
+});
+
+describe('TRANSCRIBE_AUDIO response contract', () => {
+  const rows = [{ start: 0, end: 1, text: 'line' }];
+
+  it('rejects a success response that does not name the video it belongs to', () => {
+    expect(decodeBackgroundResponse('TRANSCRIBE_AUDIO', {
+      success: true,
+      data: { rows, source: 'official', cached: false },
+    })).toEqual({ ok: false });
+  });
+
+  it('carries the video id across the wire byte-exact', () => {
+    // Case matters: BV is base58, so the wire must not fold it. The consumer's
+    // persistence gate compares byte-exact and would break on any normalizing.
+    const decoded = decodeBackgroundResponse('TRANSCRIBE_AUDIO', {
+      success: true,
+      data: { videoId: 'BV1XN416DEeR', rows, source: 'official', cached: false },
+    });
+
+    expect(decoded).toEqual({
+      ok: true,
+      value: {
+        success: true,
+        data: { videoId: 'BV1XN416DEeR', rows, source: 'official', cached: false },
+      },
+    });
+  });
+
+  it('keeps carrying the mismatch refusal as a typed transcription error', () => {
+    expect(decodeBackgroundResponse('TRANSCRIBE_AUDIO', {
+      success: false,
+      error: {
+        code: 'TRANSCRIBE_VIDEO_ID_MISMATCH',
+        message: 'Transcript for BV_other was returned for BV_self',
+        params: { requested: 'BV_self', received: 'BV_other' },
+      },
+    }).ok).toBe(true);
   });
 });

@@ -283,6 +283,8 @@ const zhCN = {
   'error.DOWNLOAD_FAILED': '音频下载失败 (HTTP {{status}})',
   'error.ASR_UNKNOWN': '未知错误: {{detail}}',
   'error.TRANSCRIBE_DUPLICATE': '该视频正在转录中，请勿重复发起',
+  'error.TRANSCRIBE_VIDEO_ID_MISMATCH': '返回的字幕属于另一个视频（{{received}}），已拒绝写入',
+  'error.UNSUPPORTED_PLATFORM': '暂不支持该平台的转录',
 
   'card.transcribe': '转录',
   'card.sourceCC': 'CC 官方',

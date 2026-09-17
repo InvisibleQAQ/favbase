@@ -3,6 +3,9 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 // happy-dom provides navigator.language; detectLocale reads it. Default to 'en'
 // then flip via setLocale in tests so we control the resolved locale.
 import { t, setLocale, formatCompactNumber, getResolvedLocale } from './index';
+import type { LocaleKeys } from './locales/zh-CN';
+import { transcribeErrorSchema } from '@/lib/runtime-message/schemas';
+import type { TranscribeErrorCode } from '@/lib/transcription/types';
 
 // Mock the locale storage watch/getValue so setLocale('...') doesn't get
 // overridden by the async localeStorage.getValue().then(...) at module load.
@@ -84,6 +87,37 @@ describe('platform labels', () => {
     setLocale('zh-CN');
     expect(t('nav.bookmarks')).toBe('浏览器书签');
     expect(t('bookmarks.title')).toBe('浏览器书签');
+  });
+});
+
+// A TS union cannot be enumerated at runtime, so the honest set of error codes
+// has to come from the wire enum. These two aliases make that enum a faithful
+// copy of `TranscribeErrorCode`: either side gaining a member the other lacks
+// fails to compile, so the list below can never quietly go short.
+type WireErrorCode = (typeof transcribeErrorSchema.shape.code.options)[number];
+type DomainCoversWire = WireErrorCode extends TranscribeErrorCode ? true : never;
+type WireCoversDomain = TranscribeErrorCode extends WireErrorCode ? true : never;
+const errorCodeParity: [DomainCoversWire, WireCoversDomain] = [true, true];
+
+describe('transcribe error codes', () => {
+  // The parity check itself is the type annotation above — tsc is what reds.
+  // This case exists so the assertion has a live consumer and survives a future
+  // "unused variable" cleanup.
+  it('holds the wire/domain parity assertion that tsc enforces', () => {
+    expect(errorCodeParity).toEqual([true, true]);
+  });
+
+  // Both consumers render `error.${code}` (app.html `video-card.tsx` and the
+  // content script's `TranscribeButton.tsx`). A code with no locale entry shows
+  // the user the raw key: t() falls back to it and nothing else reds.
+  it.each(transcribeErrorSchema.shape.code.options)('translates %s in both locales', (code) => {
+    const key = `error.${code}` as LocaleKeys;
+
+    setLocale('en');
+    expect(t(key)).not.toBe(key);
+
+    setLocale('zh-CN');
+    expect(t(key)).not.toBe(key);
   });
 });
 

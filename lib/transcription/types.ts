@@ -65,11 +65,20 @@ export type TranscribeErrorCode =
   | 'DOWNLOAD_FAILED'
   | 'ASR_UNKNOWN'
   | 'TRANSCRIBE_DUPLICATE'
+  | 'TRANSCRIBE_VIDEO_ID_MISMATCH'
   | 'UNSUPPORTED_PLATFORM';
 
 export interface TranscribeSuccess {
   success: true;
   data: {
+    /**
+     * The video these rows belong to — the echo of `TranscribeRequest.videoId`.
+     * Binding the payload to its request across the runtime boundary is what
+     * lets a consumer refuse to persist a transcript that is not its own; a
+     * caller holding only `rows` cannot tell whose subtitles it received.
+     * Compare byte-exact: ids are case-sensitive (Bilibili BV ids are base58).
+     */
+    videoId: string;
     rows: SubtitleRow[];
     source: SubtitleSource;
     cached: boolean;

@@ -26,10 +26,10 @@ function video(videoId: string): AutoTranscribeVideo {
   };
 }
 
-function success(): TranscribeResponse {
+function success(videoId = 'BV1'): TranscribeResponse {
   return {
     success: true,
-    data: { rows: [], source: 'official', cached: false },
+    data: { videoId, rows: [], source: 'official', cached: false },
   };
 }
 

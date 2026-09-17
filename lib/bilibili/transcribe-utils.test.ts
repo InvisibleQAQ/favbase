@@ -101,10 +101,11 @@ describe('transcribeAndPersist', () => {
     return Number(row?.value ?? 0);
   }
 
-  function successResponse(): TranscribeResponse {
+  function successResponse(videoId: string): TranscribeResponse {
     return {
       success: true,
       data: {
+        videoId,
         rows: [{ start: 0, end: 3, text: 'content ready for both processors' }],
         source: 'asr',
         cached: false,
@@ -114,7 +115,7 @@ describe('transcribeAndPersist', () => {
 
   it('hands the durable item to the injected seam and returns without awaiting either ticket', async () => {
     await seedItem('BV-PROCESSING-RUNS');
-    const response = successResponse();
+    const response = successResponse('BV-PROCESSING-RUNS');
     boundary.sendMessage.mockResolvedValueOnce(response);
     const embedding = deferred<PersistContentResult>();
     const chunksAtStart: number[] = [];
@@ -148,7 +149,7 @@ describe('transcribeAndPersist', () => {
 
   it('emits item-content-updated after transcription content is durably persisted', async () => {
     await seedItem('BV-CONTENT-EVENT');
-    boundary.sendMessage.mockResolvedValueOnce(successResponse());
+    boundary.sendMessage.mockResolvedValueOnce(successResponse('BV-CONTENT-EVENT'));
     const seen: string[] = [];
     const off = onDomainEvent('item-content-updated', (event) => seen.push(event.platformItemId));
 
@@ -167,7 +168,7 @@ describe('transcribeAndPersist', () => {
 
   it('reports chunked when the Embedding ticket rejects and leaves the Tag ticket independent', async () => {
     await seedItem('BV-EMBED-FAIL');
-    const response = successResponse();
+    const response = successResponse('BV-EMBED-FAIL');
     boundary.sendMessage.mockResolvedValueOnce(response);
     const embedding = deferred<PersistContentResult>();
     const onIndexed = vi.fn();
@@ -188,7 +189,7 @@ describe('transcribeAndPersist', () => {
   });
 
   it('starts no post-processors when transcript persistence fails', async () => {
-    const response = successResponse();
+    const response = successResponse('BV-MISSING');
     boundary.sendMessage.mockResolvedValueOnce(response);
     const startProcessing = vi.fn(() => settledTicket());
     const onIndexed = vi.fn();
@@ -202,6 +203,73 @@ describe('transcribeAndPersist', () => {
     await expect(run).resolves.toEqual(response);
     expect(startProcessing).not.toHaveBeenCalled();
     expect(onIndexed).toHaveBeenCalledWith(null);
+  });
+
+  it('refuses to persist a transcript that belongs to another video', async () => {
+    await seedItem('BV-WRONG-OWNER');
+    boundary.sendMessage.mockResolvedValueOnce(successResponse('BV-SOMEONE-ELSE'));
+    const startProcessing = vi.fn(() => settledTicket());
+    const onIndexing = vi.fn();
+    const onIndexed = vi.fn();
+    const seen: string[] = [];
+    const off = onDomainEvent('item-content-updated', (event) => seen.push(event.platformItemId));
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    let result: TranscribeResponse;
+    try {
+      result = await (await import('./transcribe-utils')).transcribeAndPersist(
+        'BV-WRONG-OWNER',
+        'Mismatched transcript',
+        { onIndexing, onIndexed, startProcessing },
+      );
+    } finally {
+      off();
+    }
+    // Snapshot before restoring: mockRestore also drops the call history.
+    const errorArgs = logged.mock.calls;
+    logged.mockRestore();
+
+    expect(result).toEqual({
+      success: false,
+      error: expect.objectContaining({
+        code: 'TRANSCRIBE_VIDEO_ID_MISMATCH',
+        params: { requested: 'BV-WRONG-OWNER', received: 'BV-SOMEONE-ELSE' },
+      }),
+    });
+    await expect(chunkCount('BV-WRONG-OWNER')).resolves.toBe(0);
+    expect(startProcessing).not.toHaveBeenCalled();
+    expect(onIndexing).not.toHaveBeenCalled();
+    expect(onIndexed).not.toHaveBeenCalled();
+    expect(seen).toEqual([]);
+    // The gate is a locating tool first: both ids must reach the console.
+    expect(errorArgs).toHaveLength(1);
+    expect(String(errorArgs[0][0])).toContain('BV-WRONG-OWNER');
+    expect(String(errorArgs[0][0])).toContain('BV-SOMEONE-ELSE');
+  });
+
+  // BV ids are case-sensitive base58 — 'BV1a' and 'bv1a' are different videos,
+  // and nothing on the wire lowercases the echo. A case-insensitive compare
+  // could only ever hide a real mismatch, so the guard stays byte-exact.
+  it('treats a case-only difference as a mismatch', async () => {
+    await seedItem('BV-CASE-SENSITIVE');
+    boundary.sendMessage.mockResolvedValueOnce(successResponse('bv-case-sensitive'));
+    const startProcessing = vi.fn(() => settledTicket());
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    let result: TranscribeResponse;
+    try {
+      result = await (await import('./transcribe-utils')).transcribeAndPersist(
+        'BV-CASE-SENSITIVE',
+        'Case-only difference',
+        { startProcessing },
+      );
+    } finally {
+      logged.mockRestore();
+    }
+
+    expect(result.success).toBe(false);
+    await expect(chunkCount('BV-CASE-SENSITIVE')).resolves.toBe(0);
+    expect(startProcessing).not.toHaveBeenCalled();
   });
 
   it('neither persists nor starts post-processors when transcription fails', async () => {

@@ -25,4 +25,5 @@ Agent Bridge 设置页使用 `settings.agentBridge.*`；连接状态只消费 `A
 
 - 修改 locale 后运行 `pnpm.cmd test -- lib/i18n/index.test.ts` 与 `pnpm.cmd compile`。
 - `index.test.ts` 通过公开 `t()` 覆盖双语平台名、插值、复数和数字格式化。
+- 转录错误码的可翻译性由 `index.test.ts` 的 `transcribe error codes` 守：清单从 `transcribeErrorSchema` 的 wire enum **派生**（TS union 在运行时枚举不出来），并用一对类型断言把 wire enum 与 `TranscribeErrorCode` 锁成同一集合——任一边多出成员即 `tsc` 报错。新增错误码必须同时补 `error.<CODE>` 的 zh/en（en 是 `Record<LocaleKeys, string>`，zh 少写编译就红），否则用户看到的是裸 key。
 - Dashboard 与聚合标签筛选的所有可见文案使用 `dashboard.*` / `allCollections.*`；`overview-view.tsx` 不再享有硬编码守卫豁免。

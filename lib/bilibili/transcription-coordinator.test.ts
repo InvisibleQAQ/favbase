@@ -44,7 +44,7 @@ describe('TranscriptionCoordinator processing seam', () => {
       onIndexed = hooks?.onIndexed;
       return {
         success: true as const,
-        data: { rows: [], source: 'asr' as const, cached: false },
+        data: { videoId: 'BV-LATE-EMBED', rows: [], source: 'asr' as const, cached: false },
       };
     });
     const coordinator = new TranscriptionCoordinator(vi.fn());

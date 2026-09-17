@@ -32,6 +32,7 @@ export const transcribeErrorSchema = z.object({
     'DOWNLOAD_FAILED',
     'ASR_UNKNOWN',
     'TRANSCRIBE_DUPLICATE',
+    'TRANSCRIBE_VIDEO_ID_MISMATCH',
     'UNSUPPORTED_PLATFORM',
   ]),
   message: z.string().max(50_000),

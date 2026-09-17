@@ -62,6 +62,10 @@ const transcribeResponseSchema = z.discriminatedUnion('success', [
   z.object({
     success: z.literal(true),
     data: z.object({
+      // Required, never optional: the consumer's persistence gate compares it
+      // against the id it asked for, and an absent field would make the gate
+      // silently permissive again.
+      videoId: idSchema,
       rows: z.array(subtitleRowSchema).max(MAX_RUNTIME_SUBTITLE_ROWS),
       source: subtitleSourceSchema,
       cached: z.boolean(),

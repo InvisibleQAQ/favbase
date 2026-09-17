@@ -32,6 +32,7 @@ describe('Background typed client', () => {
     const sendMessage = vi.fn().mockResolvedValue({
       success: true,
       data: {
+        videoId: 'BV1protocol',
         rows: [{ start: 0, end: 1, text: 'line' }],
         source: 'official',
         cached: false,
@@ -47,11 +48,34 @@ describe('Background typed client', () => {
     });
 
     expect(result.success).toBe(true);
+    expect(result.success && result.data.videoId).toBe('BV1protocol');
     expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
       type: 'TRANSCRIBE_AUDIO',
       channel: 'favbase-background',
       protocolVersion: 1,
     }));
+  });
+
+  it('rejects a transcript that does not say which video it belongs to', async () => {
+    vi.stubGlobal('browser', {
+      runtime: {
+        sendMessage: vi.fn().mockResolvedValue({
+          success: true,
+          data: {
+            rows: [{ start: 0, end: 1, text: 'line' }],
+            source: 'official',
+            cached: false,
+          },
+        }),
+      },
+    });
+
+    await expect(sendBackgroundMessage({
+      type: 'TRANSCRIBE_AUDIO',
+      platform: 'bilibili',
+      videoId: 'BV1protocol',
+      title: 'Protocol test',
+    })).rejects.toBeInstanceOf(BackgroundProtocolError);
   });
 
   it('validates the Agent Bridge immediate-connect acknowledgement', async () => {

@@ -66,6 +66,18 @@ function assertNotAborted(signal: AbortSignal): void {
   if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
 }
 
+/**
+ * The pipeline is the sole owner of `TranscribeSuccess.data.videoId`: it holds
+ * the three places a success can be returned (cache hit, official subtitle,
+ * ASR) and it is platform-agnostic, so every platform gets the stamp for free.
+ * Letting each platform handler stamp its own would be the same line copied per
+ * platform, and the one that forgets is exactly the one that needs it.
+ *
+ * The value is the *requested* id — the pipeline has no deeper source of truth
+ * (cache, official subtitle and ASR are all addressed by this same id). The
+ * stamp therefore binds the payload to its request, so a response delivered to
+ * the wrong caller stops at that caller's gate instead of reaching the DB.
+ */
 export async function runTranscriptionPipeline(
   request: PipelineRequest,
   deps: PipelineDeps,
@@ -75,7 +87,8 @@ export async function runTranscriptionPipeline(
 
   const cached = await deps.cacheGet(videoId);
   if (cached) {
-    return { success: true, data: { ...cached, cached: true } };
+    // Stamp last: the requested id outranks anything the cache hands back.
+    return { success: true, data: { ...cached, videoId, cached: true } };
   }
 
   try {
@@ -87,7 +100,7 @@ export async function runTranscriptionPipeline(
       const rows = deps.postProcess(official);
       await deps.cacheSave(videoId, rows, officialSourceLabel);
       onProgress(PROGRESS.DONE, 'done');
-      return { success: true, data: { rows, source: officialSourceLabel, cached: false } };
+      return { success: true, data: { videoId, rows, source: officialSourceLabel, cached: false } };
     }
 
     assertNotAborted(signal);
@@ -113,7 +126,7 @@ export async function runTranscriptionPipeline(
     await deps.cacheSave(videoId, rows, asrSourceLabel);
     onProgress(PROGRESS.DONE, 'done');
 
-    return { success: true, data: { rows, source: asrSourceLabel, cached: false } };
+    return { success: true, data: { videoId, rows, source: asrSourceLabel, cached: false } };
   } catch (err) {
     return { success: false, error: toErrorInfo(err) };
   }

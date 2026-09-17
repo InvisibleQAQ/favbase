@@ -292,6 +292,9 @@ const en: Record<LocaleKeys, string> = {
   'error.DOWNLOAD_FAILED': 'Audio download failed (HTTP {{status}})',
   'error.ASR_UNKNOWN': 'Unknown error: {{detail}}',
   'error.TRANSCRIBE_DUPLICATE': 'This video is already being transcribed',
+  'error.TRANSCRIBE_VIDEO_ID_MISMATCH':
+    'The transcript came back for another video ({{received}}); nothing was saved',
+  'error.UNSUPPORTED_PLATFORM': 'Transcription is not supported for this platform',
 
   'card.transcribe': 'Transcribe',
   'card.sourceCC': 'CC Official',

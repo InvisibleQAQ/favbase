@@ -1,4 +1,8 @@
-import type { TranscribeResponse, TranscribeStatusPush } from '@/lib/transcription/types';
+import {
+  createErrorInfo,
+  type TranscribeResponse,
+  type TranscribeStatusPush,
+} from '@/lib/transcription/types';
 import { onBackgroundPush, sendBackgroundMessage } from '@/lib/background/client';
 import { emitDomainEvent } from '@/lib/events';
 import { persistContentChunks, type PersistContentResult } from './bili-sync-service';
@@ -42,6 +46,26 @@ export async function transcribeAndPersist(
     videoId: bvid,
     title,
   });
+
+  if (response.success && response.data.videoId !== bvid) {
+    // Byte-exact on purpose. BV ids are case-sensitive base58, so a case-only
+    // difference is a different video, not the same one spelled differently —
+    // and nothing between the request and here normalizes the echo. A lenient
+    // compare here could only ever let a foreign transcript through, which is
+    // the exact failure this gate exists to stop.
+    console.error(
+      `[transcribe] Refusing to persist: requested ${bvid}, transcript claims ${response.data.videoId}`,
+      { rows: response.data.rows.length, source: response.data.source, cached: response.data.cached },
+    );
+    return {
+      success: false,
+      error: createErrorInfo(
+        'TRANSCRIBE_VIDEO_ID_MISMATCH',
+        `Transcript for ${response.data.videoId} was returned for ${bvid}; refusing to persist`,
+        { requested: bvid, received: response.data.videoId },
+      ),
+    };
+  }
 
   if (response.success) {
     hooks.onIndexing?.();
