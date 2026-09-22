@@ -352,7 +352,7 @@ function ownsSubtitleUrl(url: string, aid: unknown, cid: number): boolean {
 
 **验证**（顺序不能乱，见 §5）：
 1. 重新加载扩展，确认跑的是含 Step 1 的构建；
-2. Step 3：清 `vc:bilibili:*`；
+2. Step 3：清 `vc:bilibili:*`（**清之前先跑 E3**：E3 读的正是这一步要删的条目，删完证据就没了；Step 3 自己的验证「重跑 E3 应为空表」也假定 E3 先跑过）；
 3. E1 的 `wbi/v2` 半边在 5+ 个视频上恒为 `OWN` / `NOT-AI-URL` / `(none)`（E1 判据已与代码同一条）；
 4. E2 的 `code` 列全为 0——Step 1 起 SW 批量转录也走无签名的 `wbi/v2`，这一条确认 SW 上下文没被风控；
 5. 打开 5 个视频，面板字幕与视频内容一致；app.html 抽样转录，标题与正文匹配（PRD AC 第 5 条）。
@@ -360,6 +360,8 @@ function ownsSubtitleUrl(url: string, aid: unknown, cid: number): boolean {
 **回滚**：单文件 revert。
 
 **落地记录（2026-09-22）**：改动只有 `lib/bilibili/bilibili-api.ts` + 新建 `bilibili-api.test.ts`（7 例）+ 两份目录 CLAUDE.md。红态在改实现之前跑：`3 failed | 3 passed (6)`，外来前缀那例的失败输出就是 bug 本身（别的视频的字幕以 `status:'ok'`、`source:'official'` 返回）；补上第 7 例后在原实现上重跑为 `4 failed | 3 passed (7)`。绿态 7/7。`pnpm compile`、`pnpm test`（200 文件 / 1544 例 + `packages/favbase` 10 / 56）、`pnpm build`（background graph 13 modules，无 PGlite 标记）全绿；产物里新端点与拒收日志同时出现在 SW 引用的 chunk 与 `content-scripts/bilibili-video.js`，两个调用方（F15）都带上了修复。运行时复核（上面 1-5）待用户执行。
+
+**运行时复核进度（2026-09-22 晚）**：第 1 条已由产物核对——`.output/chrome-mv3` 构建于 16:32 UTC（`b9a0a40` 提交后 12 分钟），`content-scripts/bilibili-video.js` 与 SW 引用的 `chunks/format-*.js` 同时含 `x/player/wbi/v2` 与拒收日志，`x/player/v2?` 只剩 defuddle 的休眠回退（`chunks/use-bookmark-extraction-*.js`，见 Step 1 末段）；用户确认该构建已装入 Chrome。第 2-5 条全部要在浏览器控制台里做（本会话无浏览器自动化，Bridge 的四个 Knowledge Tool 也只读），待用户执行；第 5 条的 app.html 半边由用户触发转录、经 CLI `get` 比对标题与正文。
 
 ### Step 2 — 不动竞态（对 C3 的处置）
 
@@ -491,6 +493,8 @@ Decision 1 维持，Step 6 取消。这个回答的影响超出 Q1 本身：**�
 
 `favbase doctor`：扩展在线。`favbase coverage --platform bilibili`：acquisition 494，content 27/489，embedding 0/27，tagging 0/27，与 PRD 09-21 记录一致。
 注意：blockers 里没有 `asr` **不说明 ASR 已配置**——Knowledge Tool 侧 `asrBlocked` 恒传 `false`（`lib/collections/CLAUDE.md`）。ASR 是否配置 `[UNKNOWN]`。
+
+**2026-09-22 晚追加**（经 `favbase call getProcessingCoverage --args '{"platform":"bilibili"}'`；本机全局 CLI 0.1.0 没有 `coverage` 别名）：acquisition 1065，content 55/1047，embedding 0/55，tagging 0/55。较 09-21 多出 28 条正文，它们全部落库于 Step 3 清缓存之前，可能是脏缓存命中，按 Decision 1 不追溯；Step 1 验证第 5 条的抽样必须取**仍无正文**的条目，落库后再比对。
 
 ### 9.4 尚未证伪的 UNKNOWN
 
