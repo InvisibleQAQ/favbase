@@ -15,8 +15,10 @@ import type { BiliAuthInfo, BiliFavFolder, BiliFavOrder, BiliFavVideoListRespons
 const ENDPOINTS = {
   pageList: (bvid: string) =>
     `https://api.bilibili.com/x/player/pagelist?bvid=${encodeURIComponent(bvid)}`,
-  playerV2: (bvid: string, cid: number) =>
-    `https://api.bilibili.com/x/player/v2?bvid=${encodeURIComponent(bvid)}&cid=${encodeURIComponent(String(cid))}`,
+  // Not the non-wbi x/player/v2: it serves logged-in requests other videos' AI subtitles
+  // (docs/29 C1). wbi/v2 answers without a w_rid signature (docs/29 F8/F9), so none is sent.
+  playerWbiV2: (bvid: string, cid: number) =>
+    `https://api.bilibili.com/x/player/wbi/v2?bvid=${encodeURIComponent(bvid)}&cid=${encodeURIComponent(String(cid))}`,
   playUrl: (bvid: string, cid: number) =>
     `https://api.bilibili.com/x/player/playurl?bvid=${encodeURIComponent(bvid)}&cid=${encodeURIComponent(String(cid))}&fnval=16&fnver=0&platform=html5&high_quality=1&otype=json`,
   favFolderListAll: (mid: string) =>
@@ -145,8 +147,21 @@ function buildFetchInit(auth?: BiliAuthInfo): RequestInit {
   return { credentials: 'include' };
 }
 
+const AI_SUBTITLE_NAME = /\/bfs\/ai_subtitle\/prod\/([^/?]+)/;
+/** What follows `{aid}{cid}` in an AI subtitle file name. */
+const MD5_HEX = /^[0-9a-f]{32}$/i;
+
+/** AI subtitle files are named `{aid}{cid}{md5}`; any other prefix is another video's track. */
+function ownsSubtitleUrl(url: string, aid: unknown, cid: number): boolean {
+  const name = AI_SUBTITLE_NAME.exec(url)?.[1];
+  if (!name) return true; // uploader CC lives at /bfs/subtitle/<hash>.json and names no owner
+  const owner = `${aid}${cid}`;
+  return name.startsWith(owner) && MD5_HEX.test(name.slice(owner.length));
+}
+
 /**
  * Fetch bilibili AI subtitles via player API + CDN.
+ * Refuses a track whose file name belongs to another video (status 'error', CDN never requested).
  * Content Script: omit auth (uses same-origin cookies).
  * Extension Page: pass auth for explicit Cookie header.
  */
@@ -155,7 +170,7 @@ export async function fetchSubtitle(
   cid: number,
   auth?: BiliAuthInfo,
 ): Promise<SubtitleResult> {
-  const playerUrl = ENDPOINTS.playerV2(bvid, cid);
+  const playerUrl = ENDPOINTS.playerWbiV2(bvid, cid);
   const playerRes = await fetchWithDeadline(playerUrl, buildFetchInit(auth));
 
   if (!playerRes.ok) {
@@ -184,6 +199,14 @@ export async function fetchSubtitle(
   }
 
   const subtitleUrl = rawUrl.startsWith('//') ? `https:${rawUrl}` : rawUrl;
+  const aid = playerData?.data?.aid;
+  if (!ownsSubtitleUrl(subtitleUrl, aid, cid)) {
+    console.error(
+      `[bilibili-api] Refusing subtitle for ${bvid}: requested aid ${aid} cid ${cid}, track is ${subtitleUrl.split('?')[0]}`,
+    );
+    return { status: 'error', rows: [], error: 'Subtitle track belongs to another video' };
+  }
+
   const subRes = await fetchWithDeadline(subtitleUrl, buildFetchInit(auth));
 
   if (!subRes.ok) {

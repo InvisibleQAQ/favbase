@@ -246,6 +246,8 @@ export function extractBvid(url: string): string | null {
 
 ### 5.2 字幕获取 API
 
+> **2026-09-22 已被取代**：字幕列表端点现为不签名的 `x/player/wbi/v2`，拉 CDN 前按 AI 字幕文件名 `{aid}{cid}{md5}` 校验归属（`lib/bilibili/bilibili-api.ts` 的 `fetchSubtitle`）。下面示例里的非 wbi `x/player/v2` 会给已登录请求别的视频的 AI 字幕，不要照抄；见 docs/29 C1 / Step 1。本节保留原文备查。
+
 ```typescript
 // lib/bilibili/subtitle-fetcher.ts
 
