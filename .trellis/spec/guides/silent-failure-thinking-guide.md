@@ -68,3 +68,41 @@ capability it deliberately omits, a denominator it cannot know.
       list of limits rots the moment the blind spot is fixed; a derived one reds.
       Pattern: `lib/chat/tools.test.ts`
 - [ ] Owners: `lib/chat/CLAUDE.md`, `skills/favbase/CLAUDE.md`
+
+---
+
+## Gotcha 3: The id matches because it is an echo; the content is someone else's
+
+**Symptom**: Stored content belongs to a different item — one video's transcript
+is another video's subtitles — yet every id along the way agrees: the request,
+the cache key, the response's `videoId`. Tests are green and a line-by-line
+review of the chain finds nothing wrong.
+
+**Cause**: The only identity the chain compares is one it carried itself. The
+pipeline stamps the requested id onto the response, and a cache is keyed by
+whatever id its writer claims. When the remote API returns another item's content
+inside a correct envelope (Bilibili's non-wbi `x/player/v2`, docs/29 C1), a gate
+on that id is a tautology — the 4dad4df gate says so in its own commit message.
+A shared cache is only as trustworthy as its least trustworthy writer: one bad
+writer poisons every reader that treats a hit as fact.
+
+**Trigger — ask this whenever**:
+
+- you add a gate that compares an id the pipeline carried along: what would it
+  compare if the *content* were wrong?
+- you persist or cache remote content under the id you *asked for*
+- you add a writer to a cache another runtime reads as truth (`vc:*` via
+  `CACHE_SUBTITLE`, read by the transcription pipeline's first step)
+
+**Prevention checklist**:
+
+- [ ] Find an owner marker inside the content and check it before trusting the
+      content (Bilibili AI subtitle files are named `{aid}{cid}{md5}`); decide on
+      purpose what happens when the marker is missing — `ownsSubtitleUrl` fails
+      closed on a missing `aid` but passes URLs that name no owner (docs/29 §7)
+- [ ] Take the comparison key from your own request, not the response, so a
+      wholly foreign response still mismatches
+- [ ] Lock it with a red-green test whose fixture is a real foreign response, not
+      an invented one. Pattern: `lib/bilibili/bilibili-api.test.ts`
+- [ ] Owners: `lib/bilibili/CLAUDE.md` (`fetchSubtitle` / `ownsSubtitleUrl`),
+      docs/29 §2-§3
