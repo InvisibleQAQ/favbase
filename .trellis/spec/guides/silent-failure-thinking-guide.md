@@ -97,9 +97,21 @@ writer poisons every reader that treats a hit as fact.
 **Prevention checklist**:
 
 - [ ] Find an owner marker inside the content and check it before trusting the
-      content (Bilibili AI subtitle files are named `{aid}{cid}{md5}`); decide on
-      purpose what happens when the marker is missing — `ownsSubtitleUrl` fails
-      closed on a missing `aid` but passes URLs that name no owner (docs/29 §7)
+      content (a Bilibili original AI subtitle file is named `{aid}{cid}{md5}`).
+      A marker has three states — names us, names someone else, names nobody —
+      and "names nobody" is not "someone else". `ownsSubtitleUrl` passes uploader
+      CC and B站's machine translations (a bare md5), and fails closed only on a
+      claim it cannot verify (missing `aid`). Reading a bare name as foreign
+      refused every translated zh track (docs/29 Step 1b; URL-shape drift, §7)
+- [ ] Judge the marker over everything one response returned, not just the item
+      you picked: the picked item may name nobody while its sibling names someone
+      else. Pattern: the whole-list check in `fetchSubtitle`. Then write down the
+      flip side: when nothing in the response names an owner, there is nothing to
+      compare and it passes — decide that on purpose (docs/29 Step 1b「残留」)
+- [ ] When a probe applies your rule, its labels are the rule's verdicts, not
+      ground truth. Before acting on "FOREIGN", check whether the item is the same
+      across requests and endpoints and appears in a known-good response — that is
+      how docs/29 E1's five "foreign" tracks turned out to be the video's own
 - [ ] Take the comparison key from your own request, not the response, so a
       wholly foreign response still mismatches
 - [ ] Lock it with a red-green test whose fixture is a real foreign response, not
@@ -138,6 +150,11 @@ a logged-out user can still browse, and the UI says they are logged in.
 - [ ] Before trusting a new assertion, break the code on purpose in every
       allowed input shape and watch it go red. Pattern: `writtenHeaderNames` in
       `lib/bilibili/bilibili-api.test.ts`
+- [ ] When a test asserts a refusal, also assert *what* the refusal names, or
+      it stays green while the code refuses for the wrong reason. docs/29 Step 1b's
+      case C was predicted green on the old code (it did refuse — the wrong track);
+      only "the log names the foreign track" made it red. Pattern: the
+      `with machine-translated tracks` cases in `lib/bilibili/bilibili-api.test.ts`
 - [ ] Give a kept-for-its-effect call a one-line comment saying it is a gate, a
       test per caller that deletes-it-and-goes-red, and a line in the owner's
       `CLAUDE.md`. Pattern: the two「refuses to … without a Bilibili login」cases
