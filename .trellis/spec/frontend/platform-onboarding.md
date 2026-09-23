@@ -84,6 +84,19 @@ nothing from it.
   expected, MUST throw with a body snippet. Swallowing it into an empty array
   is how a sync silently reports success and persists nothing. An `items: []`
   that the API genuinely returns is a legal zero result — let that through.
+- **A cookie-session login rides the cookie jar, not a hand-built header.**
+  Write `{ credentials: 'include' }` on every request that needs the user's
+  site login; never copy a cookie value into `headers.Cookie`. The extension's
+  host permission already makes the Background SW and app.html attach the
+  site's jar — docs/29 E2 measured a SW `fetch(url)` with *no init at all*
+  coming back logged in (F26), so the header only makes the login look like it
+  depends on a Chromium forbidden-header exception. The only anonymous mode is
+  `credentials: 'omit'`, and it also drops a hand-built `Cookie` header
+  (`lib/x/x-api.ts:493`). Read cookies with `chrome.cookies` only for a
+  no-network logged-in check or an id the URL needs (Bilibili's `mid`). Test the
+  `init` each request function passes; pattern: `lib/bilibili/bilibili-api.test.ts`
+  「Bilibili request credentials」. Existing exception, not re-litigated: X
+  replays a captured web-client header set verbatim (`lib/x/x-api.ts:205`).
 - Export structured error classes (`<P>AuthError`, `<P>RateLimitError`). They
   are the lib half of the i18n seam; the view maps them to locale keys.
 - Pagination: serial, with a politeness delay. Numeric constants via

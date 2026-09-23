@@ -106,3 +106,40 @@ writer poisons every reader that treats a hit as fact.
       an invented one. Pattern: `lib/bilibili/bilibili-api.test.ts`
 - [ ] Owners: `lib/bilibili/CLAUDE.md` (`fetchSubtitle` / `ownsSubtitleUrl`),
       docs/29 §2-§3
+
+---
+
+## Gotcha 4: The check that cannot fail, and the gate that looks dead
+
+**Symptom**: A test named after a rule stays green when the rule is broken; or
+a logged-out user can still browse, and the UI says they are logged in.
+
+**Cause**: Two shapes met in docs/29 Step 4, both found only by trellis-check:
+
+- **Vacuous assertion.** "No `Cookie` header" was asserted with
+  `Object.keys(init.headers)`. `RequestInit.headers` also takes a
+  `[name, value][]` array (keys read as `'0'`) and a `Headers` instance (keys
+  read as `[]`), so a Cookie written either way passed. The assertion only
+  covered the shape the current code happened to use.
+- **Gate that looks dead.** Once `fetchFavVideos` stopped taking `auth`, its
+  callers' `await checkAuth()` produced no used value — it reads as dead code.
+  But it is the only thing that turns "logged out" into `BiliAuthError` before a
+  request, and a public folder's `resource/list` answers anonymously, so
+  deleting it fails nothing: the page loads and the hook reports `logged_in`.
+
+**Trigger — ask this whenever**:
+
+- you assert the *absence* of something: does the reader see every shape the
+  input type allows?
+- a call's result stops being used after a refactor, but the call has to stay
+
+**Prevention checklist**:
+
+- [ ] Before trusting a new assertion, break the code on purpose in every
+      allowed input shape and watch it go red. Pattern: `writtenHeaderNames` in
+      `lib/bilibili/bilibili-api.test.ts`
+- [ ] Give a kept-for-its-effect call a one-line comment saying it is a gate, a
+      test per caller that deletes-it-and-goes-red, and a line in the owner's
+      `CLAUDE.md`. Pattern: the two「refuses to … without a Bilibili login」cases
+      in `lib/bilibili/bili-sync-service.test.ts`; owner `lib/bilibili/CLAUDE.md`
+      「B 站认证」
