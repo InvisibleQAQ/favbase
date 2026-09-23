@@ -58,14 +58,19 @@ describe('Agent Bridge Knowledge Tool registry', () => {
   });
 
   it('executes the selected Chat tool with the provided database context', async () => {
+    // Mirrors getItemContent's `items LEFT JOIN item_contents` chain; the
+    // query's own behaviour is exercised against real PGlite in
+    // `lib/chat/tools.test.ts`. This case only proves the db reaches the tool.
     const limit = vi.fn().mockResolvedValue([{ plainText: 'Saved article body' }]);
     const where = vi.fn(() => ({ limit }));
-    const from = vi.fn(() => ({ where }));
+    const leftJoin = vi.fn(() => ({ where }));
+    const from = vi.fn(() => ({ leftJoin }));
     const select = vi.fn(() => ({ from }));
     const db = { select } as unknown as FavbaseDb;
 
     await expect(callTool('getItemContent', { item_id: 'item-1' }, db)).resolves.toEqual({
       found: true,
+      item_exists: true,
       item_id: 'item-1',
       content: 'Saved article body',
     });

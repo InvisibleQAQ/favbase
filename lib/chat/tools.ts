@@ -23,8 +23,17 @@ import { resolveLlmConfig } from '@/lib/storage/resolve';
 import { getAllUsedTags } from '@/lib/tagging/tag-queries';
 import { hybridRetrieve } from './retrieval';
 
-const { itemContents } = schema;
+const { items, itemContents } = schema;
 
+/**
+ * `top_k` range and default. The zod chain and the model-facing describe string
+ * are both built from these, so the model is never told a range the schema does
+ * not enforce. SKILL.md's `--limit <min-max>` cannot import them (shipped
+ * markdown), so `tests/agent-bridge-cli-aliases.test.ts` reconciles that
+ * hand-written copy against the emitted JSON Schema. The CLI holds no copy.
+ */
+const TOP_K_MIN = 1;
+const TOP_K_MAX = 20;
 /** Default top-K for the knowledge-base search when the model omits it. */
 const DEFAULT_TOP_K = 8;
 
@@ -79,12 +88,12 @@ const searchKnowledgeBase = tool({
     query: z.string(),
     platform: z.enum(COLLECTION_PLATFORMS).optional(),
     tag_id: z.string().optional(),
-    top_k: z.number().int().min(1).max(20).optional(),
+    top_k: z.number().int().min(TOP_K_MIN).max(TOP_K_MAX).optional(),
   }).describe(
     '检索参数。query=用户问题的检索关键词或自然语言描述（中英皆可，如 "机器学习入门教程"）；' +
       `platform=可选，限定单个收藏平台，取值之一 ${PLATFORM_LIST}，不确定时省略；` +
       'tag_id=可选，限定携带该标签 id 的收藏项，id 来自 listTags 返回，不确定时省略；' +
-      'top_k=可选，返回的最大命中数（整数，1-20，默认 8）。',
+      `top_k=可选，返回的最大命中数（整数，${TOP_K_MIN}-${TOP_K_MAX}，默认 ${DEFAULT_TOP_K}）。`,
   ),
   execute: async ({ query, platform, tag_id, top_k }, { experimental_context }) => {
     const db = contextDb(experimental_context);
@@ -111,10 +120,20 @@ const searchKnowledgeBase = tool({
  * Read the full plain-text body of one collected item. Call when a
  * searchKnowledgeBase snippet is too short to answer and the full source text is
  * needed. Read-only (SELECT only).
+ *
+ * Two flags, two questions (docs/27 Step 6). `found` keeps the meaning it has
+ * always had — an extracted body exists — because the published CLI's bundled
+ * SKILL.md describes it and the extension and the CLI version independently.
+ * `item_exists` is additive: without it a mistyped id and an item still waiting
+ * for its body returned the same `found: false`, and the model could only guess
+ * between "the id is wrong" and "not extracted yet".
  */
 const getItemContent = tool({
   description:
-    '按收藏项 id 读取其完整正文全文。当 searchKnowledgeBase 返回的某条片段不足以回答、需要该来源的完整内容时调用。found=false 表示该项没有已提取的正文。',
+    '按收藏项 id 读取其完整正文全文。当 searchKnowledgeBase 返回的某条片段不足以回答、需要该来源的完整内容时调用。' +
+    'item_exists=false 表示不存在这个 id 的收藏项——是 id 错了：请重新从 searchKnowledgeBase 的结果里取 item_id，绝不能据此说「用户没收藏」。' +
+    'item_exists=true 且 found=false 表示收藏项存在，但（还）没有已提取的正文：改用检索片段或标题作答；用户问处理进度时调用 getProcessingCoverage。' +
+    'found=true 时 content 为完整正文。',
   inputSchema: z.object({
     item_id: z.string(),
   }).describe(
@@ -122,16 +141,22 @@ const getItemContent = tool({
   ),
   execute: async ({ item_id }, { experimental_context }) => {
     const db = contextDb(experimental_context);
+    // One LEFT JOIN answers both questions. `item_contents.item_id` is both the
+    // primary key and a cascading FK to `items.id`, so an item has at most one
+    // body row, and a missing one comes back as a null `plain_text` (the column
+    // itself is NOT NULL, so null can only mean "no row").
     const rows = await db
       .select({ plainText: itemContents.plainText })
-      .from(itemContents)
-      .where(eq(itemContents.itemId, item_id))
+      .from(items)
+      .leftJoin(itemContents, eq(itemContents.itemId, items.id))
+      .where(eq(items.id, item_id))
       .limit(1);
-    const found = rows.length > 0;
+    const plainText = rows[0]?.plainText ?? null;
     return {
-      found,
+      found: plainText !== null,
+      item_exists: rows.length > 0,
       item_id,
-      content: found ? rows[0].plainText : '',
+      content: plainText ?? '',
     };
   },
 });

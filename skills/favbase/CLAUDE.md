@@ -16,7 +16,15 @@ into their own prompts, so this path and the `main` branch cannot move.
 section name, package name, setup command shape and default port, and fails on
 a runnable setup command.
 
-Keep exit codes and prerequisites aligned with `packages/favbase`. Reconnect
+Keep exit codes and prerequisites aligned with `packages/favbase`. The
+`--limit <min-max>` synopsis is contract-checked against the live `top_k`
+schema (`packages/favbase/CLAUDE.md`, Boundaries). Workflow step 4's
+`item_exists` / `found` meanings mirror `getItemContent`'s description in
+`lib/chat/tools.ts` and have **no** guard: change both or neither. The exit-1
+row tells an agent to recognise a usage error by the CLI's closing line
+`Run favbase --help for usage.` (fix the command, don't send the user to
+`favbase setup`); `packages/favbase/cli-main.test.ts` checks that line is quoted
+here. Reconnect
 copy must use the CLI's canonical wording, verbatim -- `cli-main-doctor.test.ts`
 compares this file against `EXTENSION_LATENCY_HINT`: an already connected
 extension skips alarm waiting; cold reconnect is about 30 seconds on Chrome 120+

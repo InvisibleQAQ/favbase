@@ -30,7 +30,7 @@ describe('favbase CLI aliases match the Knowledge Tool registry', () => {
       const descriptor = descriptors.get(alias.tool);
       expect(descriptor).toBeDefined();
       const schema = descriptor!.inputSchema as {
-        properties?: Record<string, { type?: string }>;
+        properties?: Record<string, { type?: string; minimum?: number }>;
         required?: string[];
       };
       const properties = schema.properties ?? {};
@@ -44,9 +44,20 @@ describe('favbase CLI aliases match the Knowledge Tool registry', () => {
 
       for (const required of schema.required ?? []) expect(mapped).toContain(required);
 
-      for (const flag of Object.values(alias.flags)) {
-        const type = properties[flag.arg]?.type;
-        expect(flag.kind === 'integer' ? ['integer', 'number'] : ['string']).toContain(type);
+      for (const [name, flag] of Object.entries(alias.flags)) {
+        const property = properties[flag.arg];
+        expect(flag.kind === 'positive-integer' ? ['integer', 'number'] : ['string']).toContain(
+          property?.type,
+        );
+        // The CLI refuses anything below 1 on its own (`buildAliasArgs`). A
+        // schema that accepts 0 would make that local refusal stricter than the
+        // tool it fronts, turning a valid call into a usage error.
+        if (flag.kind === 'positive-integer') {
+          expect(
+            property?.minimum,
+            `favbase ${alias.command} --${name} refuses values below 1 locally, but ${alias.tool}.${flag.arg} accepts them`,
+          ).toBeGreaterThanOrEqual(1);
+        }
       }
     },
   );
@@ -202,5 +213,71 @@ describe('favbase INSTALL.md stays reconciled with what it installs', () => {
       offenders.map(([line, text]) => `INSTALL.md:${line} ${text.trim()}`),
       'the token must stay a placeholder: only the extension can produce a real one',
     ).toEqual([]);
+  });
+});
+
+/**
+ * `top_k`'s range is the one argument contract spelled out by hand outside the
+ * zod chain. docs/27 Step 6 found it in three places with no guard on any; the
+ * third, the CLI's `AliasFlag.help`, was never rendered by `favbase --help` and
+ * has been deleted (docs/27 D9), so the CLI holds no copy at all. The describe
+ * string is now built from the same constants as the zod chain; SKILL.md cannot
+ * be (shipped markdown). Both are reconciled here against the JSON Schema the
+ * extension actually advertises -- the describe string too, because it stays
+ * honest only while the zod chain keeps using the constants. Every failure
+ * names the copy that went stale.
+ */
+describe('hand-written top_k bounds match the live search schema', () => {
+  const SKILL_MD = path.resolve(__dirname, '..', 'skills', 'favbase', 'SKILL.md');
+
+  // Derived, not named: whichever alias flag fronts `top_k` is the `--<flag>`
+  // synopsis SKILL.md has to carry.
+  const search = TOOL_ALIASES.find((alias) => alias.tool === 'searchKnowledgeBase');
+  const limit = Object.entries(search?.flags ?? {}).find(([, flag]) => flag.arg === 'top_k');
+
+  function liveTopK(): { range: string; description: string } {
+    const schema = describeTools().find((tool) => tool.name === 'searchKnowledgeBase')?.inputSchema as
+      | {
+          properties?: Record<string, { minimum?: number; maximum?: number }>;
+          description?: string;
+        }
+      | undefined;
+    const { minimum, maximum } = schema?.properties?.top_k ?? {};
+    expect(minimum, 'searchKnowledgeBase.top_k no longer emits a JSON Schema `minimum`').toBeTypeOf('number');
+    expect(maximum, 'searchKnowledgeBase.top_k no longer emits a JSON Schema `maximum`').toBeTypeOf('number');
+    return { range: `${minimum}-${maximum}`, description: schema?.description ?? '' };
+  }
+
+  it('finds the CLI flag that fronts top_k', () => {
+    // Reverse assertion: without it, a renamed alias or argument would turn
+    // every check below into a crash on `limit!` instead of a named failure.
+    expect(limit, 'no `favbase` alias flag maps onto searchKnowledgeBase.top_k').toBeDefined();
+  });
+
+  it('SKILL.md states the schema range in its --limit synopsis', () => {
+    const { range } = liveTopK();
+    const [name] = limit!;
+    const stated = [
+      ...readFileSync(SKILL_MD, 'utf8').matchAll(new RegExp(`--${name} <(\\d+-\\d+)>`, 'g')),
+    ].map((match) => match[1]);
+
+    expect(
+      stated,
+      `skills/favbase/SKILL.md no longer carries the \`--${name} <min-max>\` synopsis this contract reads`,
+    ).not.toEqual([]);
+    for (const value of stated) {
+      expect(value, `skills/favbase/SKILL.md \`--${name} <${value}>\`: range differs from the top_k schema`).toBe(
+        range,
+      );
+    }
+  });
+
+  it('the model-facing describe string states the schema range', () => {
+    const { range, description } = liveTopK();
+    const clause = description.split('top_k=')[1];
+    const copy = 'lib/chat/tools.ts searchKnowledgeBase describe string';
+
+    expect(clause, `${copy} no longer documents top_k`).toBeDefined();
+    expect(clause, `${copy}: range differs from what the zod chain enforces`).toContain(range);
   });
 });

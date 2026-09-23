@@ -4,8 +4,14 @@ import { UsageError } from './args';
 export interface AliasFlag {
   /** Knowledge Tool argument name this flag maps to. */
   arg: string;
-  kind: 'string' | 'integer';
-  help: string;
+  /**
+   * `positive-integer` rejects anything below 1 before the daemon is touched:
+   * that is a usage error whatever the tool's schema says. The upper bound is
+   * deliberately left to the schema, which owns it — a copy here would be a
+   * second source of truth. The repo-root alias contract checks that the
+   * schema's `minimum` is never below this local floor.
+   */
+  kind: 'string' | 'positive-integer';
 }
 
 export interface ToolAlias {
@@ -17,11 +23,7 @@ export interface ToolAlias {
   flags: Readonly<Record<string, AliasFlag>>;
 }
 
-const PLATFORM_FLAG: AliasFlag = {
-  arg: 'platform',
-  kind: 'string',
-  help: 'restrict to one platform (values: see `favbase tools`)',
-};
+const PLATFORM_FLAG: AliasFlag = { arg: 'platform', kind: 'string' };
 
 /**
  * Ergonomic subcommands over the Knowledge Tools. This table is the only place
@@ -37,8 +39,8 @@ const ALIASES: ToolAlias[] = [
     positional: { arg: 'query', label: '<query>' },
     flags: {
       platform: PLATFORM_FLAG,
-      tag: { arg: 'tag_id', kind: 'string', help: 'restrict to one tag id (from `favbase tags`)' },
-      limit: { arg: 'top_k', kind: 'integer', help: 'maximum hits, 1-20 (default 8)' },
+      tag: { arg: 'tag_id', kind: 'string' },
+      limit: { arg: 'top_k', kind: 'positive-integer' },
     },
   },
   {
@@ -90,10 +92,12 @@ export function buildAliasArgs(
     const flag = alias.flags[name];
     if (!flag) throw new UsageError(`Unknown option --${name} for favbase ${alias.command}`);
     if (value === true) throw new UsageError(`Option --${name} requires a value`);
-    if (flag.kind === 'integer') {
+    if (flag.kind === 'positive-integer') {
+      // `--limit=` reaches here as '' and `Number('')` is 0, so the floor also
+      // catches an empty value, not only `--limit 0` / `--limit -5`.
       const parsed = Number(value);
-      if (!Number.isSafeInteger(parsed)) {
-        throw new UsageError(`Option --${name} must be an integer`);
+      if (!Number.isSafeInteger(parsed) || parsed < 1) {
+        throw new UsageError(`Option --${name} must be a positive integer`);
       }
       args[flag.arg] = parsed;
     } else {

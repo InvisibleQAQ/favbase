@@ -1,5 +1,7 @@
 # Agent Bridge 本地测试路径与改进汇总手册（2026-09-07）
 
+> **状态（2026-09-23）**：Step 0 / 0.5 / 1 / 6 已落地；Step 2-5 待实施（Step 3 大半已被 `getProcessingCoverage` 绕过，见该节回写）。D1「暂不发布 npm」已于 2026-09-08 作废，`favbase@0.1.0` 已在 npm 上——下方「尚未发布」是 2026-09-07 的历史表述。
+
 ## 目的
 
 > **2026-09-07 改名记录**：npm 包名与包目录从 `favbase-cli` / `packages/favbase-cli/` 改为 `favbase` / `packages/favbase/`（用户决定，bin 名一直是 `favbase`，改后两者一致；`npm view` 确认两名皆未被占用）。`rpc-server.ts` 的 `DAEMON_NAME` 随之改为 `'favbase'`。本文下方 Step 0 / 0.5 的 `验证` 表在 2026-09-07 实跑时用的是旧名 tarball `favbase-cli-0.1.0.tgz`，为让读者能直接重跑，命令与文件名已统一改为新名。**表内体积是改名前的实测值**：改名后重新构建为 `dist/cli.js` 56.46 KB（比 56.47 KB 少 0.01 KB，`'favbase-cli'` 字面量短了 4 字符），包数、退出码、命令数等结论不变。
@@ -27,6 +29,8 @@
 | D6 | 只补 `listItems` 一个新工具，`getItemByUrl` / `collectionStats` 留待需求出现 | 本文建议 | **待用户确认**（Step 4） |
 | D7 | 实机 E2E 不进 vitest，产出人工 checklist | 本文建议 | **待用户确认**（Step 5） |
 | D8 | Step 0 连带做 Step 0.5a：删掉入口守卫而非取 realpath 比较 | 用户 2026-09-07 | 已定，已落地 |
+| D9 | `top_k` 范围与默认值单源 + 守卫：`lib/chat/tools.ts` 三常量拼出 zod 链与模型面 describe 串；CLI 不持有任何副本（从未被渲染的 `AliasFlag.help` 已删）；SKILL.md 的 `--limit <1-20>` 是唯一手写副本，由根契约测试对账 | 用户 2026-09-23（Q2 派生 + 守卫；Q3 删 CLI help） | 已定，已落地（Step 6 第 1 条） |
+| D10 | `getItemContent` 纯追加 `item_exists`，`found` 不改义 | 用户 2026-09-23（Q1） | 已定，已落地（Step 6 第 2 条） |
 
 ---
 
@@ -135,7 +139,7 @@ guard passes    = false
 2. **stdout 只放 JSON**，诊断全走 stderr，且**永不含 Bridge Token**（`packages/favbase/CLAUDE.md` Boundaries）。
 3. **SKILL.md 是单源**：仓库 `skills/favbase/SKILL.md` → tsup 打进 `dist/cli.js` → `install-skill` 写出。任何改文案的 Step 都要想到「已安装副本会过期」（Step 2 的存在理由）。
 4. **SKILL.md 的两份平台清单**由 `tests/agent-bridge-cli-aliases.test.ts` 双向对账（`<platform>` 句 vs 平台 id；frontmatter `description` vs `PLATFORM_META.title` 经 en locale）。改文案要保住测试锚定的形状。
-5. **v1 wire protocol 只加可选字段**，不改语义。旧 daemon／旧扩展的组合必须继续工作（`daemon-client.ts` 已为老 daemon 供 null／零诊断）。
+5. **v1 wire protocol 只加可选字段**，不改语义。旧 daemon／旧扩展的组合必须继续工作（`daemon-client.ts` 已为老 daemon 供 null／零诊断）。**2026-09-23 订正**：WebSocket 上每条消息的 envelope 与 payload 都是 `z.strictObject`，给它们加**可选**字段同样会被旧对端以 `1002 invalid-message` 关连接；真正纯追加的只有 daemon→CLI 的 `/status`（Step 6 第 3 条）。
 6. **只读**：Agent Bridge 从不写任何表，连 Conversations 都不写（`CONTEXT.md:139`）。
 
 ---
@@ -390,6 +394,8 @@ doctor 输出新增
 > 说成「稍后再试」。铁律 1（两侧工具集完全相同）是**成本**，不是反对理由。
 > D4 未被整体推翻的部分见上表：配置态诊断与活数据走不同通道。
 
+> **2026-09-23 回写（Step 6 复核发现）**：下文「`hello` 或 status 响应加可选字段」只有 `/status` 那半边是纯追加。`hello` 的 payload 是 `z.strictObject`（`protocol.ts:92`），加一个可选字段就会让所有 0.1.0 daemon 以 `1002` 关连接；扩展侧诊断要送达 daemon，得在收到 `welcome` 后按 `serverVersion` 门控发送——那已是版本协商。详见 Step 6 第 3 条。
+
 **目标** 让 agent 能区分「用户确实没收藏这个」和「语义检索根本没在工作」（证据 5）。
 
 **依赖** Step 0。与 Step 2 并列，无先后。
@@ -484,7 +490,7 @@ extension: {
 
 ---
 
-## Step 6 — 小瑕疵收口
+## Step 6 — 小瑕疵收口 —— **已落地 2026-09-23**
 
 **目标** 清掉三处已定位但不紧急的粗糙点。
 
@@ -505,6 +511,47 @@ extension: {
 **回滚** 三条独立，可逐条 revert。
 
 **判据** 每条要么改掉，要么在本文明确记为「接受现状」并写下理由。
+
+**2026-09-23 落地** 前两条改掉，第三条接受现状。三个用户决定记为 §1 的 D9（Q2、Q3）/ D10（Q1）。
+
+**第 1 条 `--limit`：改掉。**
+
+- `AliasFlag.kind` 由 `'integer'` 改名 `'positive-integer'`，让 kind 名说清它验什么（唯一用户是 `limit`）。`buildAliasArgs` 要求 `Number.isSafeInteger(parsed) && parsed >= 1`，否则抛 `UsageError('Option --<name> must be a positive integer')`。上界不在 CLI 查，仍归 schema，`--limit 999` 照旧透传到扩展、由 zod 拒。
+- **危害比上文写的大**。上文说「多跑一趟 RPC、返回 exit 3」，实际上坏参数要先走 daemon 自启和 alarm 等待；扩展不在线时，用户拿到的是 exit 2（「修你的连接」），而这本是 exit 1 的用法错误。上文还漏了两个入口：`args.ts` 让取值 flag 无条件吞下一个 token，所以 `--limit -5` 原样到达；`--limit=` 变成 `Number('')` 即 `0`，也能过 `isSafeInteger`。`buildAliasArgs` 在 `cli-main.ts:322` 作为 `runTool` 的实参先求值，所以拒绝发生在 `ensureDaemon` 之前。实测已构建的 `dist/cli.js`（隔离 `FAVBASE_HOME`）：`--limit 0` / `-5` / `=` / `2.5` 四种都是 exit 1 + `Option --limit must be a positive integer`，隔离目录保持为空，没有写配置，也没有起 daemon。
+- **上文与代码不一致**。上文说「别在 CLI 里手写 `1-20`」，但它早已手写在三处，且一处守卫都没有：`commands.ts` 的 `--limit` help（`1-20 (default 8)`）、`SKILL.md` 的 `--limit <1-20>`、`lib/chat/tools.ts` 给模型看的 describe 串（就在 zod 的 `min(1).max(20)` 旁边）。**用户 2026-09-23 决定（Q2，D9）：派生 + 守卫。** `tools.ts` 抽出 `TOP_K_MIN` / `TOP_K_MAX`，与既有的 `DEFAULT_TOP_K` 一起拼出 zod 链与 describe 串，串里不再有字面量 `1-20` / `默认 8`；三个常量都不导出。SKILL.md 引不到常量（shipped markdown），所以保留文字，由 `tests/agent-bridge-cli-aliases.test.ts` 新增的 describe 对账 `describeTools()` 实际产出的 `top_k.minimum` / `maximum`。CLI help 那份副本后来删了（Q3，见下方 trellis-check 第一条）。键名是先实测再写的断言：`z.toJSONSchema` draft-2020-12、`io: 'input'` 产出 `{ type: 'integer', minimum: 1, maximum: 20 }`。describe 串也在同一处查，因为只有 zod 链继续用这些常量，它才说真话。同文件的别名对账例追加一条：`positive-integer` flag 对应的 schema `minimum` 必须 ≥ 1，否则 CLI 的本地拒绝会比它背后的工具更严。
+- 反向验证（每项都先改红再还原，还原后与备份逐字节 `cmp` 一致；前四项在删掉 CLI help 之后重跑过）：
+  - zod 链改 `.max(21)`：SKILL.md、describe 串两例同红。
+  - `TOP_K_MAX = 21`：只有 SKILL.md 例红；describe 串跟常量一起变，保持绿是对的。
+  - SKILL.md 改 `<1-25>`：只有该例红，失败信息点名那份副本（`skills/favbase/SKILL.md \`--limit <1-25>\`: range differs from the top_k schema`）。
+  - `.min(0)`：`minimum ≥ 1` 例红（`favbase search --limit refuses values below 1 locally, but searchKnowledgeBase.top_k accepts them`），SKILL.md 与 describe 串两例也跟着红。
+  - 删掉 `parsed < 1`：`commands.test.ts` 的 `'0'` / `'-5'` / `''` 三例红。
+- **trellis-check 复核补的三处（2026-09-23）**：
+  - 「CLI help」这份副本**没有任何人看得到**。`AliasFlag.help` 自 `c289c3b` 引入起从未被读过：`cli-main.ts` 的 `usage()` → `aliasUsageLine` 只印 `[--limit <top_k>]`，实测 `favbase --help` 里没有 `1-20`。Q2 把它当成「看得见的副本」，是主会话没核实的前提。**用户 2026-09-23 决定（Q3，D9）：删掉这个字段**，而不是去渲染它。`AliasFlag` 去掉 `help` 成员，三个 flag（`--platform` / `--tag` / `--limit`）的 help 文字一起删，根测试里读 `flag.help` 的那一例（范围 + 默认值）随之删除。`DEFAULT_TOP_K` 原本只为那一例导出，现已改回不导出。`packages/favbase/CLAUDE.md` 拿 `--platform` 的 help 当 README 的先例，这个先例同样是死的，已改写。现在 CLI 不持有 `top_k` 的任何副本，SKILL.md 是唯一的手写副本。默认值 8 除了 `tools.ts` 以外哪里都没写，也就不需要对账。`favbase --help` 删前删后逐字节一致：重建 `dist/cli.js` 后，在隔离的 `FAVBASE_HOME` 下取输出，两次都是 1725 字节，sha256 `4d81cf01…6a27`，`cmp` 无差异。`dist/cli.js` 从 59.29 KB 降到 58.93 KB，里面剩下的唯一一处 `1-20` 是打包进去的 SKILL.md。
+  - 「拒绝发生在 daemon 之前」原先只靠调用表达式的求值顺序，没有测试。`packages/favbase/cli-main.test.ts` 新增一例：配好 token 与端口后跑 `search q --limit 0`，断言 exit 1。反向验证：把 `connectedConfig` 挪到 `buildAliasArgs` 之前，该例因等待 spawn 超时而红。
+  - `--limit 0` 从 exit 3（「调整参数」）挪到了 exit 1，而 SKILL.md 退出码表对 exit 1 的建议只有「用户必须跑 `favbase setup`」。agent 照表会把自己的传参错误说成用户没配好。exit 1 那行改为：以 `Run favbase --help for usage.` 结尾的是用法错误，自己修命令重试；否则才让用户跑 `favbase setup`。同一例 `cli-main.test.ts` 断言 SKILL.md 引用的正是 CLI 实际输出的这一行（改掉 SKILL.md 的引文就红，已验证）。
+
+**第 2 条 `getItemContent`：改掉。**
+
+- 改成一条 `items LEFT JOIN item_contents`（`item_contents.item_id` 同时是 PK 和指向 `items.id` 的级联 FK，1:1；`plain_text` NOT NULL，join 出 null 只可能是没有正文行），返回 `{ found, item_exists, item_id, content }`。`items` 与 `itemContents` 一样取自 `@/lib/database/schema` leaf，不走 barrel。
+- **用户 2026-09-23 决定（Q1，D10）：纯追加 `item_exists`，`found` 保持原义**（有已提取的正文）。已发布的 `favbase@0.1.0` 捆绑的 SKILL.md 已经在描述 `found`，而扩展与 CLI 各自发版；`found` 一改义，用户机器上那份旧 SKILL.md 就会说错。另外两种形状没有采用：用 `status` 枚举取代 `found` 是破坏性改名，理由同上；透出 `content_state` 会把 ingest 状态机的六个内部值（`pending` / `has_content` / `chunked` / `embedded` / `no_content` / `error`）交给模型，而模型只需要回答两个问题，进度另有 `getProcessingCoverage` 负责。
+- 模型面 description 按 silent-failure guide Gotcha 2 写明两态的含义**和下一步**：`item_exists=false` 表示 id 错了，要回 searchKnowledgeBase 重新取，绝不能说成「用户没收藏」；`item_exists=true` 且 `found=false` 表示有这一项但还没有正文，改用片段或标题作答，用户问进度时调 getProcessingCoverage。`SKILL.md` Workflow 第 4 步与 `packages/favbase/README.md` 用英文写了同样的两态。
+- 守卫：`lib/chat/tools.test.ts` 的三态例走真 PGlite。无正文条目在该 describe 自己的 `beforeAll` 里补，用 bilibili 平台，因为 coverage 块不断言 bilibili 计数。「状态旗标」例从真实返回值里反射出布尔键，要求每个都以 `<flag>=false` 的形式出现在 description 里。反向验证：
+  - 换回旧的单表查询（`item_exists` 取 `rows.length > 0`）：「存在无正文」例红，收到 `item_exists: false`，正是原来那个语义重载。
+  - 删掉 description 的 `item_exists=false` 句：旗标例红。
+  - trellis-check 复核：旗标例原先对「下一步」做整段匹配，`searchKnowledgeBase` 那条是空转——首句和 schema describe 本来就提到它，删掉「重新从 searchKnowledgeBase 取 item_id」之后照样绿（实测）。现在改为只在引出该状态的那一句里找：`item_exists=false` 句须含 `searchKnowledgeBase`，`found=false` 句须含 `getProcessingCoverage`。两处分别删掉，各自都红。
+  - `lib/agent-bridge/tool-registry.test.ts` 的 drizzle mock 链补上 `.leftJoin()`，期望值加 `item_exists: true`。
+- 非 uuid 的 id 会让 Postgres 抛错，工具随之报错、CLI exit 3（「调整参数」）。这个语义本来就准确，不处理。
+- **遗留**：SKILL.md 第 4 步与 description 对两态的说明是同一事实的两份手写副本，没有守卫，`skills/favbase/CLAUDE.md` 已注明要改就两处一起改。本机已安装的 SKILL.md 副本从此又落后一轮，这正是 Step 2 要让 `doctor` 报出来的东西。本任务不跑 `install-skill`，不动用户 home。
+
+**第 3 条 版本比对：接受现状。**
+
+- `settings.agentBridge.errorVersion` **今天不可达**。daemon 从不发 `reject: version`，`bridge-server.ts:383/387` 只发 `bad-token` 与 `bad-origin`。协议不兼容时（比如 envelope 的 `protocolVersion` 是 `z.literal(1)`，对不上），严格解码直接失败，`bridge-server.ts:357` 以 `1002 invalid-message` 关 socket，扩展侧 `handleRemoteClose` 记为 `connection-closed`。反方向（daemon 较新，发来扩展解不开的消息）由扩展自己断开并记 `protocol-error`（`client.ts:256`）。两条路都走不到 `errorVersion`，所以用户看到的是「连接断开」或「协议错误」，不是「版本不兼容」。
+- **上文一处勘误**：上文说「hello 已带 CLI 版本」，不对。`hello` 是扩展发给 daemon 的，带的是 `extensionVersion`；daemon 自己的版本在 `welcome.serverVersion` 里。
+- 文案指向哪一边是 `[UNKNOWN]`。只有**未来的** daemon 会按版本拒绝，那时 daemon 是较新的一方，「升级 favbase CLI」恰好指错了边。v2 的设计出现之前，写哪一边都是猜。
+- **Step 3 的陷阱**：WS 上每条消息的 envelope 与 payload 都是 `z.strictObject`（`protocol.ts:68`、`:92`），给 `hello` 加哪怕一个可选字段，所有 0.1.0 daemon 都会以 `1002` 关连接。Step 3 说「在 hello 或 status 上加可选字段」，其中只有 `/status` 那半边是纯追加，因为 `daemon-client.ts` 的 `normalizeStatus` 只挑它认识的字段。扩展侧的诊断要送到 daemon，得在收到 `welcome` 之后按 `serverVersion` 门控发送，那已经是版本协商。§3 铁律 5 已同步订正。
+- 结论：等真的出现第二个协议版本、拒绝方向也定下来再改。今天去改文案或加比对，都是在为不存在的场景写代码。
+
+**未做** 实机验证（真 Chrome + 真扩展下 `favbase get <不存在的 id>` 与 `favbase get <无正文的 id>` 的输出）没跑，两态只由真 PGlite 单测覆盖，留给 Step 5 的清单。`packages/favbase` 不升版本、不发 npm：`favbase@0.1.0` 的用户在下一次发版前看不到 `--limit` 的本地拒绝和新的 SKILL.md。
 
 ---
 

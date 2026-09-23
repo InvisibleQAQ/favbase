@@ -162,26 +162,104 @@ describe('chatTools', () => {
     });
   });
 
+  /**
+   * Two flags, two questions (docs/27 Step 6): `item_exists` says whether the id
+   * names a Collection Item at all, `found` whether that item has an extracted
+   * body. Before `item_exists` a mistyped id and an item still waiting for its
+   * body both came back as `found: false`, so the model could not tell "the id
+   * is wrong" from "not extracted yet".
+   *
+   * Seeds its own body-less item. The outer fixture has no `afterEach` cleanup,
+   * so this item is still present when `getProcessingCoverage` runs below; it is
+   * a bilibili item, and that block asserts nothing about bilibili counts.
+   */
   describe('getItemContent', () => {
+    interface ItemContentResult {
+      found: boolean;
+      item_exists: boolean;
+      item_id: string;
+      content: string;
+    }
+    let bodylessItemId: string;
+
+    beforeAll(async () => {
+      const [author] = await db
+        .insert(schema.authors)
+        .values({ platform: 'bilibili', platformAuthorId: 'a-bodyless', name: 'B' })
+        .returning();
+      const [item] = await db
+        .insert(schema.items)
+        .values({
+          platform: 'bilibili',
+          platformItemId: 'BV-bodyless',
+          authorId: author.id,
+          title: 'not transcribed yet',
+          authorName: 'B',
+          originalUrl: 'http://b/bodyless',
+          contentState: 'pending',
+        })
+        .returning();
+      bodylessItemId = item.id;
+    });
+
+    function readItem(item_id: string): Promise<ItemContentResult> {
+      return runTool<ItemContentResult>(chatTools.getItemContent, { item_id }, db);
+    }
+
     it('reads the full plain text for an existing item (read-only)', async () => {
-      const out = await runTool<{ found: boolean; item_id: string; content: string }>(
-        chatTools.getItemContent,
-        { item_id: itemId },
-        db,
-      );
-      expect(out.found).toBe(true);
-      expect(out.item_id).toBe(itemId);
+      const out = await readItem(itemId);
+      expect(out).toMatchObject({ found: true, item_exists: true, item_id: itemId });
       expect(out.content).toContain('完整正文');
     });
 
-    it('returns found=false + empty content for a missing item', async () => {
-      const out = await runTool<{ found: boolean; content: string }>(
-        chatTools.getItemContent,
-        { item_id: '00000000-0000-0000-0000-000000000000' },
-        db,
+    it('says the id is wrong when no Collection Item has it', async () => {
+      const missing = '00000000-0000-0000-0000-000000000000';
+      expect(await readItem(missing)).toEqual({
+        found: false,
+        item_exists: false,
+        item_id: missing,
+        content: '',
+      });
+    });
+
+    // The state the old single-table query could not see: it asked
+    // `item_contents` only, so this item looked exactly like a wrong id.
+    it('tells an item without an extracted body apart from a wrong id', async () => {
+      expect(await readItem(bodylessItemId)).toEqual({
+        found: false,
+        item_exists: true,
+        item_id: bodylessItemId,
+        content: '',
+      });
+    });
+
+    // Gotcha 2 (silent-failure guide): what each flag means, and what to do
+    // about it, exists only as prose in the description. The flags are read off
+    // a real result rather than listed by hand, so a state flag added later
+    // without being explained to the model reds here.
+    it('explains every state flag it returns to the model', async () => {
+      const text = modelFacingText(chatTools.getItemContent);
+      const flags = Object.entries(await readItem(bodylessItemId))
+        .filter(([, value]) => typeof value === 'boolean')
+        .map(([key]) => key);
+
+      // Non-vacuity: if reading the flags ever breaks, the loop below would pass
+      // on an empty list.
+      expect(flags).toEqual(expect.arrayContaining(['found', 'item_exists']));
+      for (const flag of flags) expect(text, flag).toContain(`${flag}=false`);
+
+      // Each next step is checked inside the sentence that introduces its
+      // state. A whole-text match is vacuous for "wrong id": the opening
+      // sentence and the schema doc both name searchKnowledgeBase already, so
+      // deleting the "take the id again from search" advice stayed green.
+      const sentenceWith = (token: string) => text.split('。').find((s) => s.includes(token));
+      expect(sentenceWith('item_exists=false'), 'wrong id: go back to search').toContain(
+        'searchKnowledgeBase',
       );
-      expect(out.found).toBe(false);
-      expect(out.content).toBe('');
+      // "Exists, no body yet" points at the progress tool, not a retry.
+      expect(sentenceWith('found=false'), 'no body yet: ask for progress').toContain(
+        'getProcessingCoverage',
+      );
     });
   });
 

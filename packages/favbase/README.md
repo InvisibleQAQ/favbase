@@ -47,7 +47,7 @@ favbase doctor
 favbase daemon [run|start|stop|restart]
 ```
 
-`search` runs hybrid retrieval (vector + keyword) inside the extension and answers with `{ count, results: [{ item_id, title, url, platform, chunk_text, score }] }`. A `count` of `0` means nothing you saved matches — not that the search failed. When a `chunk_text` snippet is too short to answer from, `favbase get <item_id>` returns `{ found, item_id, content }` with the full extracted text.
+`search` runs hybrid retrieval (vector + keyword) inside the extension and answers with `{ count, results: [{ item_id, title, url, platform, chunk_text, score }] }`. A `count` of `0` means nothing you saved matches — not that the search failed. When a `chunk_text` snippet is too short to answer from, `favbase get <item_id>` returns `{ found, item_exists, item_id, content }`, with the full extracted text in `content` when `found` is true. `item_exists: false` means no saved item has that id — the id is wrong, not the library empty. `item_exists: true` with `found: false` means the item is saved but its text has not been extracted (yet); `coverage` shows how far processing has got.
 
 `coverage` answers the question a `count` of `0` raises next: per platform it reports how many items have been fetched and how far each processing stage (content, embedding, tags) has got, plus `blockers` — a stage whose AI provider is not configured and so will never advance on its own. That is the difference between "you saved nothing about this", "it is still being processed" and "it will never be processed until you configure a provider". The fetched count has no denominator on purpose: the remote total is not knowable, so nothing here claims your library is fully synced.
 

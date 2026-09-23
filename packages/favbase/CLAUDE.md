@@ -24,7 +24,18 @@ provides no MCP server.
   go to stdout as JSON only.
 - `args.ts` is the argv parser (`--flag value`, `--flag=value`, boolean set,
   `--`); `commands.ts` is the alias table (`search`/`tags`/`get`/`coverage` → Knowledge
-  Tool + argument names) and the only place tool names appear.
+  Tool + argument names) and the only place tool names appear. A
+  `positive-integer` flag (only `--limit`) refuses anything below 1 in
+  `buildAliasArgs`, so `--limit 0`, `--limit -5` and `--limit=` are exit 1
+  before the daemon is touched -- otherwise a usage error costs an auto-start
+  plus an alarm wait and, with the extension away, reports as exit 2. That
+  order holds only because `buildAliasArgs` is an argument to `runTool`;
+  `cli-main.test.ts` pins it with a paired config. The upper bound is
+  deliberately **not** checked here: the tool schema owns it. `AliasFlag` has
+  no help text, so the CLI spells no range or default anywhere; `--help` shows
+  a flag only as `[--limit <top_k>]`. The `help` field it had until docs/27
+  Step 6 was never rendered and was deleted (D9) -- don't add prose per flag
+  back without also rendering it in `aliasUsageLine`.
 - `config.ts` resolves token/port: env `FAVBASE_TOKEN`/`FAVBASE_BRIDGE_PORT`,
   then `~/.favbase/config.json` (`FAVBASE_HOME` overrides the root), then
   `DEFAULT_AGENT_BRIDGE_PORT`.
@@ -59,8 +70,8 @@ provides no MCP server.
   README deliberately enumerates **no** platform list -- SKILL.md's two are the
   only hand-written ones and they are reconciled by
   `tests/agent-bridge-cli-aliases.test.ts`; a third copy on a published page
-  would be unguarded, so the README points at `favbase tools` the way the
-  `--platform` flag help already does.
+  would be unguarded, so the README points at `favbase tools`, whose schemas
+  the extension generates.
 
 ## Boundaries
 
@@ -78,6 +89,11 @@ provides no MCP server.
   never reaches for favbase when the user asks about it, with nothing to notice.
   Reword either freely; keep the shape each test anchors on (a backticked id
   list; a comma-separated parenthesis) or update the test with it.
+- The `top_k` range is hand-written in exactly one place outside the
+  extension: SKILL.md's `--limit <min-max>` synopsis. The same contract test
+  reconciles it against the live `searchKnowledgeBase` JSON Schema
+  (`top_k.minimum`/`maximum`), and checks that a `positive-integer` flag's
+  schema `minimum` is at least 1 (docs/27 Step 6). Keep the `min-max` shape.
 - stdout carries JSON results only; every diagnostic goes to stderr and never
   includes the Bridge Token.
 - Two vocabularies, one boundary. Code keeps the domain names (`CONTEXT.md`):

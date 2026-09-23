@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -62,6 +63,25 @@ describe('favbase CLI dispatch', () => {
     const result = await run(['tags']);
     expect(result.code).toBe(EXIT_USAGE);
     expect(result.stderr).toContain('favbase setup --token');
+  });
+
+  // docs/27 Step 6: with a token configured, only the argument check stands
+  // between this call and a daemon auto-start. The order is not a structural
+  // property: `buildAliasArgs` runs first only because it is an argument to
+  // `runTool`. Move it past `connectedConfig` and this goes red: the call then
+  // sits waiting on a spawn of the never-spawnable `cliPath` until it times out.
+  it('refuses a non-positive --limit as a usage error before touching any daemon', async () => {
+    const result = await run(['search', 'q', '--limit', '0'], {
+      FAVBASE_TOKEN: 'abc',
+      FAVBASE_BRIDGE_PORT: '1',
+    });
+    expect(result.code).toBe(EXIT_USAGE);
+    expect(result.stderr).toContain('Option --limit must be a positive integer');
+
+    // SKILL.md tells an agent to recognise a usage error by this closing line
+    // (and fix its command) rather than send the user to `favbase setup`.
+    const skill = readFileSync(new URL('../../skills/favbase/SKILL.md', import.meta.url), 'utf8');
+    expect(skill).toContain(result.stderr.trim().split('\n').at(-1));
   });
 
   it('setup writes the config file and installs the skill for every agent', async () => {

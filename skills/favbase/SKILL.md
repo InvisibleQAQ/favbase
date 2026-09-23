@@ -81,7 +81,15 @@ this file and the CLI disagree.
    remote total is not knowable — say "1100 fetched so far", never "fully
    synced".
 4. When a `chunk_text` snippet is too short, `favbase get <item_id>` returns
-   `{ "found", "item_id", "content" }` with the full extracted text.
+   `{ "found", "item_exists", "item_id", "content" }`, with the full extracted
+   text in `content` when `found` is true. The two flags answer different
+   questions:
+   - `item_exists: false` — no saved item has that id, so the id is wrong. Take
+     `item_id` again from a `search` result; never read this as "the user did
+     not save it".
+   - `item_exists: true` with `found: false` — the item is saved but has no
+     extracted text (yet). Answer from the search snippet or the title, and run
+     `favbase coverage` if the user asks how processing is going.
 5. Answer from the returned text and cite each source by `title` and `url`.
 
 ## Errors and exit codes
@@ -89,7 +97,7 @@ this file and the CLI disagree.
 | Exit | Meaning | What to do |
 | --- | --- | --- |
 | 0 | success | use the JSON on stdout |
-| 1 | usage or missing config | show the stderr message; the user must run `favbase setup` |
+| 1 | usage or missing config | a usage error ends with `Run favbase --help for usage.` — fix your command and retry; otherwise show the stderr message: the user must run `favbase setup` |
 | 2 | daemon or extension unreachable | run `favbase doctor`; fix the reported Chrome, Agent Skills, port, or pairing token check |
 | 3 | Knowledge Tool error (bad argument, tool failure) | read the stderr message and adjust the arguments |
 

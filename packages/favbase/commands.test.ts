@@ -41,7 +41,28 @@ describe('TOOL_ALIASES', () => {
     expect(() => buildAliasArgs(alias('coverage'), ['extra'], {})).toThrow(UsageError);
     expect(() => buildAliasArgs(alias('search'), ['q'], { bogus: 'x' })).toThrow(UsageError);
     expect(() => buildAliasArgs(alias('search'), ['q'], { limit: 'many' })).toThrow(UsageError);
+    expect(() => buildAliasArgs(alias('search'), ['q'], { limit: '2.5' })).toThrow(UsageError);
     expect(() => buildAliasArgs(alias('search'), ['q'], { limit: true })).toThrow(UsageError);
+  });
+
+  // A limit below 1 is a usage error whatever the tool's schema says, so it
+  // must stop here: past this point it costs a daemon auto-start and an alarm
+  // wait, and an unreachable extension would turn it into exit 2 ("fix your
+  // connection") for what is really exit 1. `''` is `--limit=`, which
+  // `Number('')` reads as 0; `-5` is what the argv parser hands over for
+  // `--limit -5`, since a value-taking flag consumes the next token as-is.
+  it.each(['0', '-5', ''])('rejects the non-positive limit %j locally', (limit) => {
+    expect(() => buildAliasArgs(alias('search'), ['q'], { limit })).toThrow(
+      new UsageError('Option --limit must be a positive integer'),
+    );
+  });
+
+  // The upper bound belongs to the Knowledge Tool's schema, not to the CLI: a
+  // local copy would be a second source of truth. 999 must reach the extension
+  // and be refused there.
+  it('leaves the upper bound to the tool schema', () => {
+    expect(buildAliasArgs(alias('search'), ['q'], { limit: '1' })).toEqual({ query: 'q', top_k: 1 });
+    expect(buildAliasArgs(alias('search'), ['q'], { limit: '999' })).toEqual({ query: 'q', top_k: 999 });
   });
 
   it('renders one usage line per alias with every flag', () => {
