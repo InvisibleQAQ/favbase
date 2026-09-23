@@ -37,6 +37,20 @@ CLI package (`packages/favbase`) consumes only the protocol leaf; extension stor
 
 - Unknown message types, wrong channel/version, and malformed payloads decode
   to `null`; there is no legacy unversioned Agent Bridge wire shape.
+- **"Strict" means no field is additive on the WebSocket.** Every envelope and
+  payload is `z.strictObject`. Add even an optional field to `hello` and an
+  older daemon decodes `null` and closes with `1002 invalid-message`; the
+  extension records `connection-closed`, not a version error. In the opposite
+  direction, a newer daemon's message fails the extension's decoder as
+  `protocol-error`. The one exception is `tools.result.result`, which is free
+  JSON, so a Knowledge Tool's output can grow (`getItemContent.item_exists`,
+  docs/27 Step 6). The only additive diagnostics path is daemon → CLI `/status`,
+  because `normalizeStatus` in `packages/favbase/daemon-client.ts` keeps just the
+  fields it knows. Getting a new extension-side field to the daemon requires
+  gating on `welcome.serverVersion`, and that is version negotiation.
+- `reject: version` is reserved: no daemon sends it, so
+  `settings.agentBridge.errorVersion` cannot be reached. Which side its advice
+  should blame is `[UNKNOWN]` until a v2 design exists (docs/27 Step 6 item 3).
 - `AgentBridgeToolCallError` distinguishes `unknown-tool` from `invalid-args`.
   Tool execution failures remain untouched for the transport layer to map.
 - Both production modules are enrolled in `tests/lib-import-smoke.test.ts` and

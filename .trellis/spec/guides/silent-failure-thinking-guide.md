@@ -139,10 +139,28 @@ a logged-out user can still browse, and the UI says they are logged in.
   request, and a public folder's `resource/list` answers anonymously, so
   deleting it fails nothing: the page loads and the hook reports `logged_in`.
 
+docs/27 Step 6 turned up two more, again found only by trellis-check:
+
+- **Vacuous presence.** The rule was "the `item_exists=false` clause names
+  `searchKnowledgeBase` as the next step", and the test asserted it with
+  `toContain('searchKnowledgeBase')` over the whole description. The first
+  sentence already says that word, so deleting the clause's instruction left
+  the test 19/19 green.
+- **The copy that looks alive**, the mirror image of the dead-looking gate.
+  `AliasFlag.help` held `1-20 (default 8)` and was treated as a visible
+  second copy of the `top_k` range. A user decision was argued from it and a
+  guard was written for it. Nothing had ever rendered it (`usage()` only calls
+  `aliasUsageLine`, which prints `[--limit <top_k>]`). The guard protected
+  text that no one could see, and the premise behind the decision was false.
+
 **Trigger — ask this whenever**:
 
 - you assert the *absence* of something: does the reader see every shape the
   input type allows?
+- you assert that a text *contains* a token the text may already contain
+  somewhere else
+- you are about to sync, guard or argue from a "copy" of a fact: which code
+  path shows it to someone?
 - a call's result stops being used after a refactor, but the call has to stay
 
 **Prevention checklist**:
@@ -155,8 +173,48 @@ a logged-out user can still browse, and the UI says they are logged in.
       case C was predicted green on the old code (it did refuse — the wrong track);
       only "the log names the foreign track" made it red. Pattern: the
       `with machine-translated tracks` cases in `lib/bilibili/bilibili-api.test.ts`
+- [ ] Scope a presence assertion to the clause the rule is about (for example,
+      split on `。` and search only the sentence that introduces the state), then
+      delete the instruction and watch it go red. Pattern: the "next step"
+      cases in `lib/chat/tools.test.ts`
+- [ ] Before treating a field or string as a copy someone reads, grep for its
+      *reads*, not its definition, and run the surface that supposedly shows it
+      (`favbase --help`). An unread copy gets deleted, not guarded (docs/27 D9)
 - [ ] Give a kept-for-its-effect call a one-line comment saying it is a gate, a
       test per caller that deletes-it-and-goes-red, and a line in the owner's
       `CLAUDE.md`. Pattern: the two「refuses to … without a Bilibili login」cases
       in `lib/bilibili/bili-sync-service.test.ts`; owner `lib/bilibili/CLAUDE.md`
       「B 站认证」
+
+---
+
+## Gotcha 5: An error changes exit code, and the agent gets different advice
+
+**Symptom**: The fix is correct and every test passes. The agent, though, now
+tells the user to run `favbase setup` because of a typo in the agent's own
+command.
+
+**Cause**: SKILL.md's exit-code table *is* the agent's error handling. It maps
+each code to an action. docs/27 Step 6 moved `--limit 0` from exit 3 ("read the
+stderr message and adjust the arguments") to exit 1, a code shared by usage
+errors and missing config. Exit 1's row only knew about missing config ("the
+user must run `favbase setup`"), so the moved error picked up that advice.
+No test checks what the table *tells the agent to do*.
+
+**Trigger — ask this whenever**:
+
+- an error moves to a different exit code, or a new error lands in a code that
+  already has a meaning
+- a code starts to cover more than one kind of error
+
+**Prevention checklist**:
+
+- [ ] Reread the destination row in `skills/favbase/SKILL.md` as the agent
+      would: does its action fit the error that just arrived?
+- [ ] If a code covers several kinds of error, give the row a way to tell them
+      apart using something the agent can see in the output (usage errors end
+      with `Run favbase --help for usage.`)
+- [ ] Lock that marker by quoting the CLI's *actual* output into SKILL.md in a
+      test, rather than a hand-typed copy. Pattern: the `--limit 0` case in
+      `packages/favbase/cli-main.test.ts`
+- [ ] Owners: `skills/favbase/CLAUDE.md`, `packages/favbase/CLAUDE.md`
