@@ -1,6 +1,6 @@
 # B 站转录字幕串行：诊断与修复方案（2026-09-21）
 
-状态：诊断完成，**Step 0（运行时验证）待用户执行**；**Step 1 已落地 2026-09-22**（代码与单测，运行时复核见 Step 1「验证」五步）；Step 4 待实施；**Step 3 已改为一次性手工清理、Step 6 已取消**（用户 2026-09-21：扩展尚未上线，库里全是测试数据，见 §8 Q1）；Step 5 不在本任务；**§8 Q5 已答（用户 2026-09-22）：收藏夹 API 并入 Step 4，且 favbase 只做公开收藏夹**；**2026-09-22 勘误**：C5「SW 路径未登录」由结论降级为 `[UNKNOWN]`，E2 裁决（§1 F21–F25、§3 C5）
+状态：诊断完成；**Step 0 的 E2 / E4 已由用户跑完 2026-09-22**（§9.5：E2 = 分支 L，SW 默认就带 jar cookie；E4 本账号 39 个夹全公开、无私密样本），E1 待用户，E3 未判读即随 Step 3 清空（清掉 1228 条）；**Step 1 已落地 2026-09-22**（代码与单测；运行时复核五步中 1/2/4 已过，3/5 待用户）；**Step 4 已落地 2026-09-22**（代码与单测；运行时复核待用户：临时私密夹 + 手动转录看 `source=official`）；**Step 3 已改为一次性手工清理、Step 6 已取消**（用户 2026-09-21：扩展尚未上线，库里全是测试数据，见 §8 Q1）；Step 5 不在本任务；**§8 Q5 已答（用户 2026-09-22）：收藏夹 API 并入 Step 4，且 favbase 只做公开收藏夹**；**2026-09-22 勘误**：C5「SW 路径未登录」由结论降级为 `[UNKNOWN]`，E2 裁决（§1 F21–F25、§3 C5）——同日 E2 裁决为分支 L（F26）
 范围：`lib/bilibili/bilibili-api.ts`、`lib/bilibili/bilibili-transcription-adapter.ts`、`lib/cache/`、`entrypoints/bilibili-video.content/hooks/`
 前置：`.trellis/tasks/09-17-bilibili-transcripts-land-on-the-wrong-items/prd.md`（及其 `research/` 四份材料）、commit `4dad4df`
 
@@ -13,12 +13,12 @@ PRD 的 H4 **找对了毒源，找错了入口**。
 | PRD 的说法 | 核实结果 |
 |---|---|
 | B 站非 wbi 的 `x/player/v2` 会返回别的视频的 AI 字幕 | **外部证实**（yt-dlp #11708、bilibili-api #841 原文已核对），本仓库确实在调这个端点（`bilibili-api.ts:18-19`）。今天对本账号是否仍成立 `[UNKNOWN]`，见 Step 0 / E1 |
-| 收藏页批量转录（SW 路径）很可能未登录，「正是错乱最严重的场景」 | **后半句不成立，前半句 `[UNKNOWN]`**。未登录拿到的是**空列表，不是随机字幕**（本次实测，§9.1），「未登录 = 错乱最严重」的因果是反的。SW 路径是否登录态取决于两条我在这里无法验证的 Chromium 行为，仓内记载互相矛盾（F21–F25），由 E2 裁决。**若 SW 是登录态，它就是 H4 的第二个入口**——本文初稿断言「不可能是入口」是过度推断（2026-09-22 勘误）。两种情况下 Step 1 都覆盖：两个入口走同一个 `fetchSubtitle` |
+| 收藏页批量转录（SW 路径）很可能未登录，「正是错乱最严重的场景」 | **两半都不成立**。未登录拿到的是**空列表，不是随机字幕**（本次实测，§9.1），「未登录 = 错乱最严重」的因果是反的；而 SW 路径**是登录态**——E2（2026-09-22，§9.5）显示 SW 连 init 都不传就已带上 jar cookie（F26）。**所以 Step 1 之前 SW 批量转录就是 H4 的第二个入口**，本文初稿断言「不可能是入口」是过度推断（2026-09-22 勘误，E2 已裁决为分支 L）。Step 1 覆盖两个入口：它们走同一个 `fetchSubtitle` |
 | 用落库的 `source` 字段确认错配是否全为 official | **无法执行**。`item_contents` 只有四列，**没有 `source`**（`lib/database/entities/item-contents.ts`）。`source` 只进了一行 `console.info`（`bili-sync-service.ts:169-171`） |
 | 09-17「ASR 路径也在错配」 | 仅凭「无标点」判读，**站不住**。09-21 有两条错配正文逐字相同（3074 字）——两段不同音频不可能转出逐字相同的文本。该冲突大概率不存在 |
 | `♪ 音乐 ♪` 是独立问题（H3，转录截断） | **大概率是同一个 bug**。同一个视频 09-17 是 `♪ 音乐 ♪`、09-21 变成 LOL 采访/兴趣快问快答——它只是随机池里的又一条外来字幕（一个纯音乐视频的 AI 字幕），不是截断 |
 
-**真正的链条（H5）**：毒**至少**从 **Content Script 的字幕面板**进来——这条链每一环都读到了源码。转录管线（SW 批量路径）是否是第二个入口，见上表第二行与 C5。
+**真正的链条（H5）**：毒从两个入口进来。下图是 **Content Script 的字幕面板**那一条——每一环都读到了源码；另一条是转录管线自己（SW 批量路径，已登录 + 非 wbi，E2 裁决为分支 L，见上表第二行与 C5），它不经过缓存，直接把 B 站给错的字幕交给 pipeline 落库。
 
 ```
 用户在 B 站看视频（已登录）
@@ -34,7 +34,7 @@ PRD 的 H4 **找对了毒源，找错了入口**。
 
 这解释了 09-17 的静态审查为什么「全部正确」：审的是**转录链**（SW → pipeline → DB），那条链本身确实没错——即便 SW 也是登录态（分支 L），它也只是在忠实搬运 B 站给错的数据，代码依然「全对」。字幕展示链这条入口当时没人把它算作转录路径的一部分。
 
-另外一条独立线索（C5）：SW 侧显式拼的 `Cookie` header 按 Fetch 规范是 forbidden header，**它是否真的生效 `[UNKNOWN]`**。不生效且 Chromium 也不默认附带 cookie jar → 批量转录一直在对有免费官方字幕的视频白烧 ASR 额度；生效（或 host permission 让 jar cookie 默认附带）→ SW 路径是登录态，也就是 H4 的第二个入口。E2 一次实验分辨两种情况。
+另外一条独立线索（C5）：SW 侧显式拼的 `Cookie` header 按 Fetch 规范是 forbidden header，它是否生效曾是 `[UNKNOWN]`。**E2 已裁决（2026-09-22）**：host permission 让 SW 的 fetch 默认附带 jar cookie，SW 路径是登录态（分支 L），也就是 H4 的第二个入口；显式 header 是冗余，是否真被发出分不开也无须分开。C5 不是缺陷，Step 4 的字幕半边是零行为变化的显式化。
 
 方案：**止血所需的代码改动只有 Step 1（换端点 + 归属校验）**，Step 4 是独立的还债 PR；旧缓存不写失效机制，开发机手工清一次（Step 3）——扩展尚未上线，不存在装着脏缓存的用户。**但清缓存这一步不能省**：不清，`pipeline.ts:88` 永远先命中脏条目，修好的代码根本执行不到，验证时症状原样复现。wbi 签名、rows 指纹、cid 进协议、缓存 rev 失效四条路径已评估并否决（§4）。
 
@@ -71,6 +71,8 @@ PRD 的 H4 **找对了毒源，找错了入口**。
 | F23 | **SW 上下文**：fetch 自设的 `Referer` 被 Chrome MV3 剥离，只能靠 DNR——同为 forbidden header，但 Referer 与 Cookie 在 Chromium 里的处理不同，**不能类推** | 源码（仓内实测，`public/rules.json` 是产物） | `lib/background/CLAUDE.md:25` |
 | F24 | 收藏夹同步（app.html 上下文，同样只靠显式 `Cookie` header）今天能拉到 494 条；而**未登录**打 `list-all?up_mid=` 对 7 个大号全返回 `code 0, list: []` | 实测 + 推论 | `bili-sync-service.ts:69/86/113`；§9.1 追加。⇒ app.html 发出的收藏夹请求**大概率是登录态** |
 | F25 | 两条外部资料称 host permission 下扩展 fetch 默认附带该域 cookie，其中 chromium-extensions 讨论组同一帖里也有相反报告 | 外部，互相矛盾 | §11 |
+| F26 | **SW 上下文**：`credentials:'omit'` → `login_mid 0`；**不传 init**、只塞 `Cookie` header、`credentials:'include'` 三种写法**全是登录态**，`code` 全 0（无签名 `wbi/v2` 不被风控） | **实测**（用户，E2） | §9.5。⇒ F22/F25 对 SW 成立，分支 L（jar 默认附带） |
+| F27 | 登录态 `list-all` 对本账号返回 39 个夹，`attr` 仅 0/2/22、bit0 全 0；匿名请求 `list-all` 返回 `data: null`，而覆盖这三种取值的四个夹 `fav/folder/info` / `resource/list` 匿名可读（⇒ 全为公开夹，按 attr 取值推及其余 35 个） | **实测**（用户 E4 + 本机匿名 curl） | §9.5。私密侧无本账号样本，`attr & 1` 靠 8 个独立开源实现 + 1 份真实私密样本（§9.5） |
 
 **2026-09-22 勘误**：本文初稿在此处写了三级推论（F5+F3+F4+F6 ⇒ SW 未登录 ⇒ 拿不到官方字幕 ⇒ 库里的 official 正文只能来自 CS）。它**只采信了 F5 这一条外部记载**，没有对照仓内 F21–F24。证据指向两种互斥的可能：
 
@@ -78,6 +80,8 @@ PRD 的 H4 **找对了毒源，找错了入口**。
 - **分支 L（SW 登录态）**：F21 的「扩展上下文可设 forbidden header」也适用于 SW，**或** F22/F25 的「host permission 默认附带 jar cookie」成立——任一成立即够。SW 批量转录直接命中 C1，是 H4 的**第二个入口**；C5 不成立（`Cookie` header 是死代码但无害，或根本没死）。
 
 F24 已把 app.html 上下文定为分支 L；SW 上下文只有 F23 一条反向证据且不能类推。**E2 一次实验分辨两个分支。Step 1 对两个分支同样有效**（F15：两个入口走同一个 `fetchSubtitle`），所以这条勘误改变的是诊断叙述与 Step 4 的定位，不改变止血方案。
+
+**E2 结果（2026-09-22，F26）：分支 L**，且是「jar 默认附带」那一行——连 init 都不传就已登录。F23 的「SW 剥离自设 forbidden header」对 Referer 成立、与 Cookie 是否被发出无关：jar cookie 走的是浏览器自己的附带路径，不经过 header 白名单。
 
 ---
 
@@ -131,7 +135,9 @@ CS 面板的 `useSubtitle` 有三个数据来源，按优先级：缓存 → 拦
 1. E1 显示非 wbi 端点对本账号**稳定返回属于自己的字幕** → C1 今天不成立。
 2. E3 显示某条错配 item 的缓存条目是 `source:'asr'` → ASR 路径确实在错配，存在第二个根因。
 3. 某条错配 item 对应的视频，用户**确定从未在装着本扩展的浏览器里打开过** → 存在 CS 之外的入口（E2 落在分支 L 时这是预期，不算证伪）。
-4. E2 显示 SW 路径是登录态（分支 L）→ H5 **不完整而非错误**：SW 批量转录是第二个入口，PRD H4 关于入口的判断对了一半。Step 1 仍覆盖，§0 / §3 C5 按分支 L 回写。
+4. E2 显示 SW 路径是登录态（分支 L）→ H5 **不完整而非错误**：SW 批量转录是第二个入口，PRD H4 关于入口的判断对了一半。Step 1 仍覆盖，§0 / §3 C5 按分支 L 回写。**——已触发（E2 2026-09-22，F26），§0 / C5 已回写。**
+
+第 2 条已无法检验：用户按 Step 1 验证顺序清缓存时 E3 表的 `source` 列没有被读出，条目随之删除（§9.5）。第 1 条待 E1。
 
 ---
 
@@ -155,7 +161,9 @@ CS 面板的 `useSubtitle` 有三个数据来源，按优先级：缓存 → 拦
 
 F2。B 站在 URL 里写明了这条字幕属于谁（F10），代码没看。
 
-### C5 — SW 侧显式 `Cookie` header 是否生效 `[UNKNOWN]`（独立线索，非错配根因；2026-09-22 由「缺陷」降级为「待裁决」）
+### C5 — SW 侧显式 `Cookie` header 是否生效（独立线索，非错配根因；2026-09-22 由「缺陷」降级为「待裁决」，同日 E2 裁决为**分支 L，不是缺陷**）
+
+**裁决（E2，F26）**：SW 的 fetch 不传 init 就已带 jar cookie。下面「分支 L」那一条成立：SW 批量路径在 Step 1 之前同样命中 C1，是错配的第二个入口；Step 4 的字幕半边是零行为变化的显式化，commit message 不得写「修复」。以下保留裁决前的两分支分析备查。
 
 F3 只塞 header 不设 `credentials`。它是否让 SW 请求带上登录态，仓内外记载互相矛盾（F5/F23 说剥离，F21/F22/F25 说生效或默认附带）；本文初稿只采信 F5 就把它写成了确定缺陷。**E2 裁决**，两个分支的后果：
 
@@ -166,7 +174,7 @@ F3 只塞 header 不设 `credentials`。它是否让 SW 请求带上登录态，
 
 **已确定的部分**：`lib/bilibili/CLAUDE.md` 的「需要认证的 API 手动拼 `Cookie: SESSDATA=xxx` header」把一个依赖 Chromium 扩展特例（F21）的做法写成了通用机制，且没说它在 SW 上下文是否成立——无论 E2 结果如何，这句都要改写（§10）。
 
-**收藏夹路径（app.html 上下文）已由 F24 定为分支 L**：`fetchFavFolders` / `fetchFavVideos` 是登录态请求。这带来一个与错配无关、但被用户 2026-09-22 的产品决定点名的问题——登录态下 `list-all` 对夹主返回**全部**创建的夹，私密夹折叠在 `attr` 位里 `[UNKNOWN，E4 核实]`，而代码里 `attr` 只被原样存进 `platformMeta`（`favorites-sync.ts:122`），**没有任何过滤**。「只做公开收藏夹」今天没有代码承载。归入 Step 4（§8 Q5）。
+**收藏夹路径（app.html 上下文）已由 F24 定为分支 L**：`fetchFavFolders` / `fetchFavVideos` 是登录态请求。这带来一个与错配无关、但被用户 2026-09-22 的产品决定点名的问题——登录态下 `list-all` 对夹主返回**全部**创建的夹，私密夹折叠在 `attr` 位里 `[UNKNOWN，E4 核实]`，而代码里 `attr` 只被原样存进 `platformMeta`（`favorites-sync.ts:122`），**没有任何过滤**。「只做公开收藏夹」今天没有代码承载。归入 Step 4（§8 Q5）。（2026-09-22 Step 4 落地后：`fetchFavFolders` 按 `attr & 1` 在 API 层过滤；E4 的结论见 §6 E4「结果」与 §9.5。）
 
 ### C6 — 正文来源不落库
 
@@ -201,7 +209,7 @@ F17。`persistContentChunks` 的第三个参数 `source` 是个摆设。库里�
 | 阶段 | 内容 | 性质 |
 |---|---|---|
 | A 止血（必做） | Step 1 换端点 + 归属校验（唯一的代码改动）；Step 3 开发机手工清一次缓存（零代码） | 修 C1/C2/C4，满足 PRD 全部 Acceptance Criteria |
-| B 还债（强烈建议，独立 PR） | Step 4 登录态显式化（字幕/pagelist/收藏夹四个函数）+ 「只做公开收藏夹」过滤 | 按 E2 分支是修复或显式化 C5；落实用户 2026-09-22 的产品决定；需 E2 + E4 先过 |
+| B 还债（强烈建议，独立 PR） | Step 4 登录态显式化（字幕/pagelist/收藏夹四个函数）+ 「只做公开收藏夹」过滤 | E2 = 分支 L ⇒ C5 的显式化（非修复）；落实用户 2026-09-22 的产品决定；E2 + E4 已过（§9.5） |
 | C 不在本任务 | Step 5 正文来源落库 | 留作独立小任务，见 §8 Q3 |
 
 **顺序约束**：先合 Step 1，**再**清缓存，然后才验证。先清后合没用——下次打开视频页缓存立刻被旧代码重新下毒；合了不清也没用——脏条目在 `pipeline.ts:88` 永远先命中。
@@ -276,6 +284,8 @@ C 行逐字复刻生产代码。读法（`login_mid` 为你的 uid 即登录态�
 
 **先看 `code` 列**（2026-09-22 补）：Step 1 起 SW 批量转录也走这个无签名的 `wbi/v2`，而 F8 的「无签名不被拒」是 curl 带 B 站 `Referer` 测的，SW 的请求带不上 B 站页面的 `Referer`（自设会被剥离，F23）。任一行 `code` 非 0（如 -352 风控）→ SW 上下文被拒，Step 1 之后 SW 路径的官方字幕全部落 `error` → 重试两次后降级 ASR（功能不坏、烧额度），§4 第一行「不做 wbi 签名」需复议。初稿的 `probe` 在 `data` 为 null 时直接抛 TypeError，看不到这个信号。
 
+**结果（用户 2026-09-22）**：A `0` / B `uid` / C `uid` / D `uid`，`code` 四行全 0，B/C/D 均 `need_login_subtitle:false, subs:1` → 读法表第三行，**分支 L（jar 默认附带）**。原始数据见 §9.5。
+
 **E3 — 看缓存里的来源（替代 PRD 那条无法执行的「查 source」）**
 同一个 SW Console：
 
@@ -292,6 +302,8 @@ console.table(Object.entries(all).filter(([k]) => k.startsWith('vc:bilibili:')).
 - 任一错配条目是 `source:'asr'` → §2.5 第 2 条，**停**。
 - 分支 L 下，`official` 条目可能来自 CS 面板也可能来自 SW 批量转录，E3 分不开——不需要分，Step 1 对两者一视同仁。
 
+**结果（用户 2026-09-22）**：用户回报「E3 输出 1228」，按 Step 3 清缓存脚本的返回值（`keys.length`）理解为清掉 1228 条；E3 表本身（尤其 `source` 列）没有回报。条目已删，§2.5 第 2 条从此无法检验 `[UNKNOWN]`。
+
 **E4 — 收藏夹端点：登录态是否返回私密夹、未登录是否返回公开夹（Step 4 收藏夹半边的依据）**
 在 bilibili.com 任意页（已登录）的 DevTools Console：
 
@@ -307,6 +319,8 @@ console.table(await list({ credentials: 'omit' }));
 对照你自己知道哪些夹是私密的。预期：`include` 列出全部夹且私密夹 `privateBit === 1`；`omit` 只列公开夹或为空（§9.1 追加的 7 个大号未登录全为空，所以「未登录只回公开夹」本身就 `[UNKNOWN]`）。
 - `privateBit` 与你的私密夹**对不上** → attr 位规则不成立，Step 4 的过滤改按 E4 观察到的真实字段写。
 - `include` 也不返回私密夹 → 「只做公开夹」今天已天然成立，Step 4 的过滤仍加（把事实变契约），但它是零行为变化。
+
+**结果（用户 2026-09-22 + 本机匿名探测）**：`include` 返回 39 个夹，`attr` 只有 0 / 2 / 22，`privateBit` 全 0；`omit` 行未回报，也没有建临时私密夹。匿名 curl 补上了 `omit` 那半边：`list-all` 返回 `data: null`（**未登录一个夹都不给**，§4 否决 `credentials:'omit'` 的理由由推断变实测），而 `attr` 0 / 2 / 22 的夹 `fav/folder/info` 匿名可读 ⇒ 全是公开夹。**这是「本账号没有私密夹」，不是「`include` 不返回私密夹」**——第二个分支不适用，过滤对本账号零行为变化。私密侧没有本账号样本，规则 `attr & 1` 取自外部多源证据（§9.5）；判错的最坏后果是私密夹照旧可见（= 今天），不会误删公开夹（44 个公开样本 bit0 全 0：本账号 39 个 + bilibili-API-collect `list-all` 样例 5 个）。
 
 ### Step 1 — 换端点 + 归属校验（修 C1、C4）
 
@@ -363,6 +377,8 @@ function ownsSubtitleUrl(url: string, aid: unknown, cid: number): boolean {
 
 **运行时复核进度（2026-09-22 晚）**：第 1 条已由产物核对——`.output/chrome-mv3` 构建于 16:32 UTC（`b9a0a40` 提交后 12 分钟），`content-scripts/bilibili-video.js` 与 SW 引用的 `chunks/format-*.js` 同时含 `x/player/wbi/v2` 与拒收日志，`x/player/v2?` 只剩 defuddle 的休眠回退（`chunks/use-bookmark-extraction-*.js`，见 Step 1 末段）；用户确认该构建已装入 Chrome。第 2-5 条全部要在浏览器控制台里做（本会话无浏览器自动化，Bridge 的四个 Knowledge Tool 也只读），待用户执行；第 5 条的 app.html 半边由用户触发转录、经 CLI `get` 比对标题与正文。
 
+**2026-09-22 再追加**：第 2 条已做（清掉 1228 条，但 E3 未判读，见 E3「结果」）；第 4 条已过（E2 `code` 四行全 0）。第 3 条（E1）与第 5 条（重新抽样）仍待用户。
+
 ### Step 2 — 不动竞态（对 C3 的处置）
 
 **不改 `useSubtitle.ts`。**
@@ -395,7 +411,7 @@ C3 之所以有害，是因为两个通道给的内容不一样、而错的那�
 **验证**：重跑 E3 应为空表；随后打开一个曾错配的视频页，E3 出现新条目且 `head` 与视频内容相符。
 **回滚**：无。被删的就是要丢的。
 
-### Step 4 — 把 B 站 API 的登录态写成显式意图，并让「只做公开收藏夹」成为代码（独立 PR；前置 E2 + E4）
+### Step 4 — 把 B 站 API 的登录态写成显式意图，并让「只做公开收藏夹」成为代码（独立 PR；前置 E2 + E4，**2026-09-22 均已满足**：E2 = 分支 L，E4 见其「结果」）
 
 **用户 2026-09-22 决定**：(a) 收藏夹 API 并入本步（§8 Q5）；(b) favbase 暂不做私密收藏夹，只针对公开夹。
 
@@ -418,6 +434,16 @@ C3 之所以有害，是因为两个通道给的内容不一样、而错的那�
 **验证**：分支 U 下 app.html 手动转录一个有 AI 字幕的视频，Console 出现 `[bili-sync] Persisted … (source=official)`；两个分支下 B 站收藏页重新同步后私密夹不再出现。
 **回滚**：单 PR revert。字幕半边回到今天的状态（分支 U 下即「全走 ASR」）；收藏夹半边回到「私密夹可见」。
 
+**落地记录（2026-09-22）**：E2 = 分支 L，所以字幕/pagelist 半边是零行为变化的显式化，commit message 不写「修复」；唯一的行为变化是私密夹从收藏夹列表消失（本账号无私密夹，对它零变化）。
+
+- **改动**：`bilibili-api.ts`（删 `buildFetchInit`；五个请求——player、字幕 CDN、pagelist、`list-all`、`resource/list`——一律 `{ credentials: 'include' }`；`fetchSubtitle(bvid, cid)`、`fetchCidByPageList(bvid, pageNum = 1)` 删 `auth?`；`fetchFavVideos(mediaId, …)` 删 `auth`；`fetchFavFolders(auth)` 保留 `auth` 并经 `isPublicFolder`（`(attr & 1) === 0`，注释指向 §9.5）过滤；`need_login_subtitle` 一行 `console.warn`）、`bilibili-transcription-adapter.ts`（不再调 `getBiliAuth()`）、`bili-sync-service.ts`（两处 `fetchFavVideos` 调用去掉 auth，`await checkAuth()` 作为无网络的登录门保留）、两个测试文件。`useSubtitle.ts` / `useVideoDetect.ts` 本就不传 auth，**未改**，`tsc` 通过即对齐。
+- **红态**（先写测试、在原实现上跑）：`bilibili-api.test.ts` `4 failed | 9 passed (13)`，`bili-sync-service.test.ts` `1 failed | 3 passed (4)`。红的五例：`fetchFavFolders` / `fetchFavVideos` 的 credentials、公开夹过滤（返回了 `[1, 2, 3, 4, 5]`）、`need_login_subtitle` 的 warn、sync-service 对 `fetchFavVideos` 的调用实参（首参是 auth 对象）。**改前改后皆绿的三例及理由**：`fetchSubtitle` / `fetchCidByPageList` 的 credentials——CS 的调用形式本就不带 auth、早已走 `credentials:'include'`，SW 那一半的变化是签名删除，由 `tsc` 守；sync-service 新增的「未登录即拒、零请求」——锁的是保留下来的 `await checkAuth()`，它不再产出被消费的值，看上去像死代码。绿态 17/17。
+- **变异检查**（各自单独改一处、跑、还原）：过滤改成 `attr & 2` → 只有夹具那一例红（`1 failed | 12 passed`）；给 `fetchFavVideos` 在 `credentials:'include'` 旁再塞 `headers: { Cookie }` → 只有它那一例红，且红在 `Cookie` 断言上——证明断言按调用方写下的 header 名读、没被 happy-dom 的 `Headers` 吞掉 forbidden `Cookie`；删掉 `syncAllFavoriteVideos` 的 `await checkAuth()` → 只有登录门那一例红（`1 failed | 3 passed`）。
+- **验证**：`pnpm compile` 0；`pnpm test` 200 文件 / 1551 例（Step 1 时 1544，+7）+ `packages/favbase` 10 / 56 全绿——第一次全量跑有 8 个 PGlite 套件在 `beforeAll` 超时（10 s，并行负载，与本改动无关，单独重跑 8/8 文件 78 例全绿），第二次全量全绿；`pnpm build` 通过，background graph 13 modules / 946495 bytes、无 PGlite 标记。产物里 `need_login_subtitle` 同时出现在 SW 引用的 `chunks/format-*.js` 与 `content-scripts/bilibili-video.js`，`SESSDATA=` 全产物零命中；`grep -rn Cookie lib/bilibili` 只剩注释、测试散文与 `getBiliAuth` 的局部变量名，零 header 构造。
+- **与计划的出入**：(1) 无参的 `createFetchOfficialSubtitle()` 不留——一个什么都不捕获的工厂只是间接层，改成模块级函数 `fetchOfficialSubtitle` 直接挂进返回值，重试逻辑逐字不变；(2) 测试多了一例（登录门，理由见上）；(3) credentials 断言是一个 `it.each` 覆盖四个函数、五个请求，而非四个独立用例。
+- **trellis-check 追加（2026-09-22）**：(1) `bili-sync-service.test.ts` 补 `fetchFavoriteVideosPage` 的登录门一例——`lib/bilibili/CLAUDE.md` 写的是「两个调用方」的 `await checkAuth()` 都被锁住，实际只锁了 `syncAllFavoriteVideos`；而浏览页这道门更要紧：公开夹的 `resource/list` 匿名可读（§9.5），删掉它，登出用户照样看到内容且 hook 报 `logged_in`。门在 Step 4 之前就在，所以改前改后皆绿；变异（删掉该 `await checkAuth()`）→ 只有它红（`1 failed | 4 passed`）。(2) credentials 断言的 `writtenHeaderNames` 原来只做 `Object.keys`：`[['Cookie', …]]` 读成 `['0']`、`new Headers({ Cookie })` 读成 `[]`，两种写法都让断言空转；改为读三种 `HeadersInit` 形状。原注释「happy-dom 的 `Headers` 可能吞掉 `Cookie`」不成立（测试环境实测 `new Headers({ Cookie, Accept }).keys()` 为 `['Cookie', 'Accept']`），已改。变异（CDN 请求分别塞数组形、`Headers` 形 `Cookie`）→ 各自只红 `fetchSubtitle` 那一例。(3) 过滤 / pagelist 另做了三处变异复核（`isPublicFolder` 恒真、CDN 请求塞对象形 `Cookie`、pagelist 去掉 `credentials`），各自只红目标用例。合计：`bilibili-api.test.ts` 13 + `bili-sync-service.test.ts` 5 = 18/18；`pnpm compile` 0；`pnpm test` 200 文件 / 1552 例 + `packages/favbase` 10 / 56，首次全量即全绿；`pnpm build` background graph 13 modules / 946495 bytes、无 PGlite 标记，过滤 `(e.attr&1)==0` 在 SW 引用的 `chunks/format-*.js` 里。
+- **运行时复核（待用户）**：建一个临时私密夹 → B 站收藏页重新同步 → 它不出现（这是「确实拦住私密夹」这一侧唯一的本机证据，§7）；app.html 手动转录一个有 AI 字幕的视频 → Console 出现 `[bili-sync] Persisted … (source=official)`。
+
 ### Step 5 — 正文来源落库（不在本任务）
 
 给 `item_contents` 加来源列需要一个迁移。它能让下次排查不再栽在 C6 上，但对本次修复不是必需。见 §8 Q3。
@@ -434,12 +460,12 @@ C3 之所以有害，是因为两个通道给的内容不一样、而错的那�
 |---|---|---|
 | `{aid}{cid}{md5}` 规则来自外部样本（初稿 3 份，其中正确的只有 1 份；2026-09-22 补到 7 份正确样本、两个独立来源，7/7 成立，F10） | 规则不普适时，正确字幕被拒收 → 多花一次 ASR，**不会损坏数据** | E1 在 5+ 视频上复核；不成立则降为仅日志 |
 | AI 字幕 URL 换了形状（不在 `/bfs/ai_subtitle/prod/` 下，或 `subtitle_url` 改成 `subtitle_url_v2` 那种混淆串） | `ownsSubtitleUrl` 把它当作无归属信息的上传者 CC 放行，归属校验**静默失效**、不打任何日志（2026-09-22 复核探针实测：`/bfs/ai_subtitle/test/<外来名>` 与 `//subtitle.bilibili.com/<混淆串>` 都放行）；换端点那一半不受影响 | E1 的 `NOT-AI-URL` 计数突增就是信号。收紧有两档：「含 `ai_subtitle` 却不合形状即拒收」是一行改动，只堵前一种；连混淆串也堵就得改成「只放行已知的上传者 CC 形状」，而上传者 CC 的真实 URL 样本一份都没有（任务 research 证据文件 §6）。7/7 样本都是 `prod` 形状，今天没有证据需要收紧——**是否收紧由用户决定** |
-| B 站日后对 `wbi/v2` 强制签名；或 SW 上下文今天就被拒（没有 B 站页面 `Referer`，F8 只测过带 Referer 的 curl） | 字幕请求 -352/-403 → `error` → 降级 ASR，功能不坏 | E2 的 `code` 列先验 SW 上下文；届时再实现签名；`fetchSubtitle` 已检查 `code !== 0` |
-| SW 里 `credentials:'include'` 带不上 cookie（E2 D 列为 0） | Step 4 字幕半边无效 | 预案二选一：DNR 会话规则补 `cookie` header（F5 那个项目的做法，DNR 的 `cookie` 在 append 白名单内）；或把官方字幕请求挪到 app.html 发（F18 已证明扩展页可行）。**现在不设计，E2 失败再说** |
+| B 站日后对 `wbi/v2` 强制签名；或 SW 上下文今天就被拒（没有 B 站页面 `Referer`，F8 只测过带 Referer 的 curl） | 字幕请求 -352/-403 → `error` → 降级 ASR，功能不坏 | E2 的 `code` 列先验 SW 上下文（**2026-09-22 已过：四行全 0**）；届时再实现签名；`fetchSubtitle` 已检查 `code !== 0` |
+| ~~SW 里 `credentials:'include'` 带不上 cookie（E2 D 列为 0）~~ **已排除：E2 D 列为 uid** | Step 4 字幕半边无效 | 预案二选一：DNR 会话规则补 `cookie` header（F5 那个项目的做法，DNR 的 `cookie` 在 append 白名单内）；或把官方字幕请求挪到 app.html 发（F18 已证明扩展页可行）。**现在不设计，E2 失败再说** |
 | 合了 Step 1 但验证前忘了清本机缓存 | `pipeline.ts:88` 命中脏条目，症状原样复现，**会被误判成「修复无效」** | §5 顺序约束；Step 3 的验证第一步就是 E3 为空表 |
 | 将来上线后才发现又有一类脏缓存 | 届时才有真实用户需要保护 | 到那时再写失效机制。现在写是给零个人写的 |
-| 私密夹的 `attr` 位规则来自社区记忆，未经本机验证 | 过滤漏掉私密夹或误删公开夹 | E4 用你自己的夹对照后再写夹具，夹具注释记下观察到的取值 |
-| 分支 L 下 Step 4 的字幕半边是零行为改动 | 无风险，但 commit message 不得写「修复」 | E2 结果决定措辞 |
+| 私密夹的 `attr` 位规则来自社区记忆，未经本机验证 | 过滤漏掉私密夹或误删公开夹 | E4 用你自己的夹对照后再写夹具，夹具注释记下观察到的取值。**2026-09-22**：「误删公开夹」一侧已排除（44 个公开样本 bit0 全 0：本账号实测 39 个 + bilibili-API-collect `list-all` 样例 5 个）；「漏掉私密夹」一侧本账号无样本，靠 8 个独立实现 + 1 份真实私密样本（§9.5），落空时退回今天的行为。Step 4 运行时验证请用户建一个临时私密夹复核 |
+| 分支 L 下 Step 4 的字幕半边是零行为改动 | 无风险，但 commit message 不得写「修复」 | E2 结果决定措辞——**已定：分支 L** |
 
 全部代码步骤都是单 PR revert 可回滚；没有迁移，没有不可逆的数据写入。
 
@@ -460,7 +486,7 @@ Decision 1 维持，Step 6 取消。这个回答的影响超出 Q1 本身：**�
 **Q5 — `fetchFavFolders` / `fetchFavVideos` 要不要并进 Step 4？** **已答（用户 2026-09-22）：并入；且 favbase 暂不做私密收藏夹，只针对公开夹。**
 落地见 Step 4 改法第 2、3 条。两点说明：
 - 初稿建议的「两分钟实验：建一个私密夹看 favbase 能不能看到」**方向反了**——它假定收藏夹请求未登录（C5 的推论），而 F24 表明 app.html 的收藏夹请求是登录态，私密夹**大概率今天就在被同步**。实验改为 E4，直接看端点在两种 credentials 下返回什么。
-- 「只做公开夹」今天没有任何代码承载（`attr` 只被存进 `platformMeta`），是产品决定先于实现。Step 4 把它写成 API 层一行过滤 + 一例测试。zhihu 已有同类先例（`is_public` 过滤，`lib/zhihu/CLAUDE.md`）。已记入 `CONTEXT.md` Flagged ambiguities。
+- 「只做公开夹」今天没有任何代码承载（`attr` 只被存进 `platformMeta`），是产品决定先于实现。Step 4 把它写成 API 层一行过滤 + 一例测试（**已落地 2026-09-22**）。zhihu 已有同类先例（`is_public` 过滤，`lib/zhihu/CLAUDE.md`）。已记入 `CONTEXT.md` Flagged ambiguities。
 
 ---
 
@@ -487,7 +513,7 @@ Decision 1 维持，Step 6 取消。这个回答的影响超出 Q1 本身：**�
 - `Cooper-X-Oak/LongYinMod_RisingFame` 的 `doc/bilibili/raw/subtitles/*.md`：front matter 同时记录 aid、cid、`subtitle_url`，6 份（2026-03）逐条验证归属规则成立。
 - bilibili-api #841：原文已读。「获取到的大概率是其他视频的字幕，偶尔也能获取到正确的字幕」，网页端 `x/player/wbi/v2` 正常。issue 至 2025-02 仍 open。
 - yt-dlp master `bilibili.py:255-276`：`_get_subtitles` 用 `x/player/wbi/v2`、不调 `_sign_wbi`、读 `need_login_subtitle`。
-- `SocialSisterYi/bilibili-API-collect` 已 404，未采用其任何内容。
+- `SocialSisterYi/bilibili-API-collect` 已 404，未采用其任何内容。（2026-09-22 补：§9.5 的 `attr` 位证据取自它的镜像——ShiranGit / pskdje，不是原仓库。）
 
 ### 9.3 本机只读采集
 
@@ -502,24 +528,55 @@ Decision 1 维持，Step 6 取消。这个回答的影响超出 Q1 本身：**�
 |---|---|
 | 已登录 + 非 wbi 今天对本账号是否仍返回外来字幕 | E1 |
 | `{aid}{cid}{md5}` 是否对全部 AI 字幕成立（外部 7/7 已成立，F10；本账号未测） | E1（多视频） |
-| SW 上下文的无签名 `wbi/v2` 是否被风控拒绝（Step 1 起 SW 批量转录也走它） | E2 的 `code` 列 |
-| SW 字幕请求今天是否登录态（C5 分支 U / L） | E2 的 B、C 列 |
-| SW 里 `credentials:'include'` 是否带得上 B 站 cookie | E2 的 D 列 |
-| 8 条错配的缓存条目是否全为 `official` | E3 |
-| 09-21 那 8 条对应的视频，用户重装后是否都打开过 | 用户回忆；§2.5 第 3 条 |
+| ~~SW 上下文的无签名 `wbi/v2` 是否被风控拒绝~~ | **已消解**：E2 `code` 全 0（F26） |
+| ~~SW 字幕请求今天是否登录态（C5 分支 U / L）~~ | **已消解**：分支 L，jar 默认附带（F26） |
+| ~~SW 里 `credentials:'include'` 是否带得上 B 站 cookie~~ | **已消解**：E2 D 列 = uid（F26） |
+| 8 条错配的缓存条目是否全为 `official` | **永久 `[UNKNOWN]`**：E3 未判读，条目已随 Step 3 清空 |
+| 09-21 那 8 条对应的视频，用户重装后是否都打开过 | 用户回忆；§2.5 第 3 条（分支 L 下它已不构成证伪：SW 批量转录本身就是入口） |
 | ASR 是否配置；27/489 是否全部来自缓存命中 | 用户 |
-| 登录态 `list-all` 是否返回私密夹；私密位是否是 `attr & 1` | E4 的 `include` 行 |
-| 未登录 `list-all` 是否返回公开夹（还是一律为空） | E4 的 `omit` 行 |
+| 登录态 `list-all` 是否返回私密夹；私密位是否是 `attr & 1` | 半消解：本账号无私密夹（F27），`attr & 1` 取外部多源证据（§9.5）；Step 4 运行时验证用临时私密夹补 |
+| ~~未登录 `list-all` 是否返回公开夹（还是一律为空）~~ | **已消解**：一律 `data: null`（§9.5 匿名探测，本账号有 39 个公开夹） |
+
+### 9.5 Step 0 运行时实验结果（2026-09-22，用户浏览器 + 本机匿名 curl）
+
+**E2（扩展 SW Console，`wbi/v2?bvid=BV1XN416DEeR&cid=41389916397`）**
+
+| 行 | code | login_mid | need_login_subtitle | subs |
+|---|---|---|---|---|
+| A `credentials:'omit'` | 0 | 0 | true | 0 |
+| B 不传 init | 0 | uid | false | 1 |
+| C 只塞 `Cookie` header | 0 | uid | false | 1 |
+| D `credentials:'include'` | 0 | uid | false | 1 |
+
+**E3 / Step 3**：清掉 1228 条 `vc:bilibili:*`；E3 表未回报（见 §6 E3「结果」）。
+
+**E4（bilibili.com Console，`include`）**：39 个夹。`attr` 分布：`0` × 1（默认夹）、`2` × 2、`22` × 36；`attr & 1` 全为 0。`omit` 行未回报。
+
+**匿名 curl（无 cookie，带浏览器 UA + `Referer: https://www.bilibili.com/`，间隔 2 秒）**
+
+| 请求 | 结果 |
+|---|---|
+| `fav/folder/created/list-all?up_mid=<本账号>` | `code 0, data: null` |
+| `fav/folder/info` + `fav/resource/list`，`attr` = 2 的两个夹 | 均 `code 0`，返回夹信息与内容 |
+| 同上，`attr` = 22 的一个夹、`attr` = 0 的默认夹 | 均 `code 0`，返回夹信息与内容 |
+
+⇒ 未登录 `list-all` 一个夹都不给；`attr` 0 / 2 / 22 全是公开夹，2 与 22 相差的 bit2、bit4 与可见性无关。
+
+**私密位的外部证据**（本账号无私密样本，这是规则 `attr & 1` 的全部依据）：
+- 8 个互相独立的开源实现以 `attr & 1` 判私密：xfangfang/wiliwili（`player_collection.cpp`）、keleus/BewlyCat（`FavoritesPage.vue` 的 `isFavoriteFolderPrivate`）、synctv-org/synctv（`bilibili/client.rs`）、AktuelleKamera/BiliClassic（`FavoriteApi.java`）、VZRXS/bilikara（`bilibili.py`）、DiWu17/namida-bilibili-provider、yxyusage/BiliLearn-AI、alexliu07/toolbox-web（`Bilibili.vue` 的「私密」徽标）。检索方式：`gh search code "attr & 1" fav bilibili`。
+- CSDN「网页脚本 bilibili001：计算自己收藏了多少视频」（2024-02）贴出的真实 `list-all` 响应里，私密的默认夹是 `attr: 1`。
+- bilibili-API-collect 现行版 `attr` 表：bit0 = 私有、bit1 = 非默认夹。其历史上两位的表述对调过一次（ShiranGit 镜像 commit `1e007cc855` 改正），现行版与其自身样例（默认夹 0、公开夹 22）自洽，与本账号 39 个公开夹也自洽（二者合计即他处所说的 44 个公开样本）。
 
 ---
 
 ## 10. 实施时须同步的文档
 
-- `lib/bilibili/CLAUDE.md`：`bilibili-api.ts` 条目（端点、归属校验、`auth?` 删除、公开夹过滤）；「B 站认证」约定那条——「手动拼 Cookie header」改成 `credentials:'include'` 并注明它依赖的是 host permission 而非 forbidden-header 特例；「CID 获取…不需要 WBI 签名」旁补一句字幕端点同样不签名及依据；「收藏夹视频同步」约定补「只拉公开夹」。**Step 1 的部分已于 2026-09-22 同步**（端点、归属校验、字幕端点不签名、降级路径与主路径同源）；`auth?` 删除、认证约定改写、公开夹过滤随 Step 4。
+- `lib/bilibili/CLAUDE.md`：`bilibili-api.ts` 条目（端点、归属校验、`auth?` 删除、公开夹过滤）；「B 站认证」约定那条——「手动拼 Cookie header」改成 `credentials:'include'` 并注明它依赖的是 host permission 而非 forbidden-header 特例；「CID 获取…不需要 WBI 签名」旁补一句字幕端点同样不签名及依据；「收藏夹视频同步」约定补「只拉公开夹」。**Step 1 的部分已于 2026-09-22 同步**（端点、归属校验、字幕端点不签名、降级路径与主路径同源）；**Step 4 的部分已于同日同步**（`bilibili-api.ts` / adapter 条目的新签名与 `credentials:'include'`、「B 站认证」约定改写——依据写的是 E2 的 jar cookie，`getBiliAuth()` 只剩登录判定 + `mid`；「收藏夹视频同步」补「只拉公开夹」及两处已知残留）。
+- `lib/transcription/CLAUDE.md`：转录总流程里 adapter 的碎片清单去掉「auth」。**已于 2026-09-22 随 Step 4 同步。**
 - `lib/cache/CLAUDE.md`：**无需改动**（Step 3 已改为零代码）。
 - `entrypoints/bilibili-video.content/hooks/CLAUDE.md`：`useSubtitle` 三层数据流处注明 API 降级与拦截通道现在同源，以及为什么不动竞态。**已于 2026-09-22 同步。**
 - 任务 `prd.md`：H5 取代 H4；更正 `source` 列那条；Decision 1/2 按 §8 的答复更新。
-- `CONTEXT.md`：**已于 2026-09-22 追加**一条 Flagged ambiguity——Bilibili 的 Source 只含公开收藏夹，私密夹不是 Source（zhihu 已按 `is_public` 过滤，是先例）。错配本身涉及的字幕缓存/端点/来源都是实现层概念，不进术语表。
+- `CONTEXT.md`：**已于 2026-09-22 追加**一条 Flagged ambiguity——Bilibili 的 Source 只含公开收藏夹，私密夹不是 Source（zhihu 已按 `is_public` 过滤，是先例）。Step 4 落地后，其中「代码尚未承载」改为「`fetchFavFolders` 在取夹列表处就丢掉私密夹」（**已于同日随 Step 4 改写**）。错配本身涉及的字幕缓存/端点/来源都是实现层概念，不进术语表。
 - ADR：**不需要**。三条改动都易于回退，不满足「难以反悔」。
 
 ## 11. 参考

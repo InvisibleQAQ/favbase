@@ -43,7 +43,7 @@ vi.mock('@/lib/ingest/ingest', () => ({
   persistExistingItemContent: vi.fn(),
 }));
 
-import { fetchAndSyncFolders, syncAllFavoriteVideos } from './bili-sync-service';
+import { fetchAndSyncFolders, fetchFavoriteVideosPage, syncAllFavoriteVideos } from './bili-sync-service';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -106,6 +106,25 @@ describe('fetchAndSyncFolders', () => {
   });
 });
 
+describe('fetchFavoriteVideosPage', () => {
+  it('refuses to browse without a Bilibili login, before any request', async () => {
+    // A public folder's `resource/list` answers anonymous requests too (docs/29
+    // §9.5), so without this gate a logged-out user would see the page and the
+    // hook would report `logged_in`. The gate, not the request, says "log in".
+    vi.clearAllMocks();
+    boundary.getBiliAuth.mockResolvedValue(null);
+    boundary.fetchFavVideos.mockResolvedValue({
+      has_more: false,
+      medias: [],
+      info: { id: 42, title: 'Folder', media_count: 0 },
+    });
+
+    await expect(fetchFavoriteVideosPage(42, 1)).rejects.toThrow('Not logged in');
+
+    expect(boundary.fetchFavVideos).not.toHaveBeenCalled();
+  });
+});
+
 describe('syncAllFavoriteVideos', () => {
   const db = { marker: 'db' };
   const videos = [makeVideo('BV-EXISTING'), makeVideo('BV-INSERTED')];
@@ -143,6 +162,8 @@ describe('syncAllFavoriteVideos', () => {
       onItemsPersisted,
     );
 
+    // The browser's cookie jar authenticates the request; no auth object is passed down.
+    expect(boundary.fetchFavVideos).toHaveBeenCalledWith(42, 1, expect.any(Number), 'mtime', '');
     expect(boundary.syncFavVideosToDb).toHaveBeenCalledWith(db, videos, '42');
     expect(onItemsPersisted).toHaveBeenCalledOnce();
     expect(onItemsPersisted.mock.calls[0][0]).toEqual([videos[1]]);
@@ -170,5 +191,15 @@ describe('syncAllFavoriteVideos', () => {
 
     expect(onItemsPersisted).not.toHaveBeenCalled();
     expect(boundary.markVideoHistoryComplete).not.toHaveBeenCalled();
+  });
+
+  it('refuses to start without a Bilibili login, before any request', async () => {
+    // `fetchFavVideos` no longer takes the auth object, but the login check stays:
+    // it is what turns "logged out" into BiliAuthError instead of a half-run sync.
+    boundary.getBiliAuth.mockResolvedValue(null);
+
+    await expect(syncAllFavoriteVideos([makeFolder()])).rejects.toThrow('Not logged in');
+
+    expect(boundary.fetchFavVideos).not.toHaveBeenCalled();
   });
 });

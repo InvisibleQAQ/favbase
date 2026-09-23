@@ -1,7 +1,13 @@
 /**
  * Bilibili API layer — all B站 API calls consolidated here.
- * Internal: URL builders, response validation, auth.
+ * Internal: URL builders, response validation.
  * Adding a new API: add a function here + types in types.ts.
+ *
+ * Login state: every request goes out with `credentials: 'include'` and no
+ * hand-built `Cookie` header. The browser attaches the bilibili cookie jar in
+ * every context we run in — the Content Script is same-site, and the
+ * extension's host permission makes app.html and the Background SW send it
+ * too (docs/29 E2: a SW fetch was logged in even with no init at all).
  */
 
 import type { SubtitleResult, SubtitleRow } from '@/lib/subtitle/types';
@@ -47,7 +53,10 @@ export class BiliAuthError extends Error {
 // Auth — requires chrome.cookies (Extension Page / Background SW)
 // ---------------------------------------------------------------------------
 
-/** Read SESSDATA + DedeUserID from bilibili cookies. Returns null if missing or expired. */
+/**
+ * Read SESSDATA + DedeUserID from bilibili cookies. Returns null if missing or expired.
+ * A no-network login check and the source of `mid` — never copied into a request header.
+ */
 export async function getBiliAuth(): Promise<BiliAuthInfo | null> {
   const [sessdataCookie, midCookie] = await Promise.all([
     chrome.cookies.get({ url: BILI_COOKIE_URL, name: 'SESSDATA' }),
@@ -68,7 +77,7 @@ export async function getBiliAuth(): Promise<BiliAuthInfo | null> {
 }
 
 // ---------------------------------------------------------------------------
-// Favorites — requires explicit auth (Extension Page / Background SW)
+// Favorites — logged-in listing (Extension Page / Background SW)
 // ---------------------------------------------------------------------------
 
 interface BiliFavFolderListResponse {
@@ -80,14 +89,29 @@ interface BiliFavFolderListResponse {
   } | null;
 }
 
-/** Fetch all favorite folders for the authenticated user. */
+/**
+ * favbase covers public folders only (user decision 2026-09-22, docs/29 §8 Q5);
+ * `attr` bit 0 marks a private one. Evidence (docs/29 §9.5): eight independent
+ * clients test `attr & 1`, a real `list-all` response shows the private default
+ * folder as `attr: 1`, and all 39 folders of the dev account (attr 0 / 2 / 22)
+ * have it clear; a folder of each value is anonymously readable. Wrong in the
+ * other direction, a private folder would slip through — today's behavior —
+ * never a public one lost.
+ */
+function isPublicFolder(folder: BiliFavFolder): boolean {
+  return (folder.attr & 1) === 0;
+}
+
+/**
+ * Fetch the logged-in user's public favorite folders. Needs the login state:
+ * an anonymous `list-all` returns `data: null`, not the public folders.
+ * `auth.mid` names whose folders to list.
+ */
 export async function fetchFavFolders(
   auth: BiliAuthInfo,
 ): Promise<BiliFavFolder[]> {
   const url = ENDPOINTS.favFolderListAll(auth.mid);
-  const res = await fetchWithDeadline(url, {
-    headers: { Cookie: `SESSDATA=${auth.sessdata}` },
-  });
+  const res = await fetchWithDeadline(url, { credentials: 'include' });
 
   if (!res.ok) {
     throw new Error(`Bilibili API HTTP ${res.status}`);
@@ -103,13 +127,12 @@ export async function fetchFavFolders(
     throw new Error(`Bilibili API error ${json.code}: ${json.message}`);
   }
 
-  return json.data?.list ?? [];
+  return (json.data?.list ?? []).filter(isPublicFolder);
 }
 
 /** Fetch paginated video list for a favorite folder. A non-empty keyword
  *  searches video titles within that folder (server-side, type=0). */
 export async function fetchFavVideos(
-  auth: BiliAuthInfo,
   mediaId: number,
   page: number = 1,
   ps: number = 20,
@@ -117,9 +140,7 @@ export async function fetchFavVideos(
   keyword: string = '',
 ): Promise<BiliFavVideoListResponse> {
   const url = ENDPOINTS.favResourceList(mediaId, page, ps, order, keyword);
-  const res = await fetchWithDeadline(url, {
-    headers: { Cookie: `SESSDATA=${auth.sessdata}` },
-  });
+  const res = await fetchWithDeadline(url, { credentials: 'include' });
 
   if (!res.ok) {
     throw new Error(`Bilibili API HTTP ${res.status}`);
@@ -139,13 +160,8 @@ export async function fetchFavVideos(
 }
 
 // ---------------------------------------------------------------------------
-// Subtitle — Content Script (credentials: include) or Extension Page (explicit auth)
+// Subtitle — Content Script and Background SW alike
 // ---------------------------------------------------------------------------
-
-function buildFetchInit(auth?: BiliAuthInfo): RequestInit {
-  if (auth) return { headers: { Cookie: `SESSDATA=${auth.sessdata}` } };
-  return { credentials: 'include' };
-}
 
 const AI_SUBTITLE_NAME = /\/bfs\/ai_subtitle\/prod\/([^/?]+)/;
 /** What follows `{aid}{cid}` in an AI subtitle file name. */
@@ -162,16 +178,13 @@ function ownsSubtitleUrl(url: string, aid: unknown, cid: number): boolean {
 /**
  * Fetch bilibili AI subtitles via player API + CDN.
  * Refuses a track whose file name belongs to another video (status 'error', CDN never requested).
- * Content Script: omit auth (uses same-origin cookies).
- * Extension Page: pass auth for explicit Cookie header.
  */
 export async function fetchSubtitle(
   bvid: string,
   cid: number,
-  auth?: BiliAuthInfo,
 ): Promise<SubtitleResult> {
   const playerUrl = ENDPOINTS.playerWbiV2(bvid, cid);
-  const playerRes = await fetchWithDeadline(playerUrl, buildFetchInit(auth));
+  const playerRes = await fetchWithDeadline(playerUrl, { credentials: 'include' });
 
   if (!playerRes.ok) {
     return { status: 'error', rows: [], error: `Player API HTTP ${playerRes.status}` };
@@ -188,6 +201,11 @@ export async function fetchSubtitle(
   const subtitles: SubtitleTrack[] | undefined = playerData?.data?.subtitle?.subtitles;
 
   if (!subtitles?.length) {
+    // B站 has tracks but withholds them from anonymous requests. Still no_subtitle (the
+    // caller falls back to ASR); whether to tell the user is open (docs/29 §8 Q4).
+    if (playerData?.data?.need_login_subtitle === true) {
+      console.warn(`[bilibili-api] Subtitles for ${bvid} need a logged-in request (need_login_subtitle)`);
+    }
     return { status: 'no_subtitle', rows: [] };
   }
 
@@ -207,7 +225,7 @@ export async function fetchSubtitle(
     return { status: 'error', rows: [], error: 'Subtitle track belongs to another video' };
   }
 
-  const subRes = await fetchWithDeadline(subtitleUrl, buildFetchInit(auth));
+  const subRes = await fetchWithDeadline(subtitleUrl, { credentials: 'include' });
 
   if (!subRes.ok) {
     return { status: 'error', rows: [], error: `Subtitle CDN HTTP ${subRes.status}` };
@@ -237,13 +255,13 @@ export async function fetchSubtitle(
 }
 
 // ---------------------------------------------------------------------------
-// Video info — Content Script (credentials: include) or Extension Page (auth)
+// Video info — Content Script and Background SW alike
 // ---------------------------------------------------------------------------
 
 /** Fetch CID for a video page via pagelist API. Works from any extension context. */
-export async function fetchCidByPageList(bvid: string, pageNum: number = 1, auth?: BiliAuthInfo): Promise<number> {
+export async function fetchCidByPageList(bvid: string, pageNum: number = 1): Promise<number> {
   const url = ENDPOINTS.pageList(bvid);
-  const res = await fetchWithDeadline(url, buildFetchInit(auth));
+  const res = await fetchWithDeadline(url, { credentials: 'include' });
   if (!res.ok) throw new Error(`Pagelist API HTTP ${res.status}`);
   const json = await res.json();
   const pages: { cid: number; page: number }[] = json?.data ?? [];

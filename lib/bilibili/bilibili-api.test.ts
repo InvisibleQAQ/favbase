@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { fetchSubtitle } from './bilibili-api';
+import { fetchCidByPageList, fetchFavFolders, fetchFavVideos, fetchSubtitle } from './bilibili-api';
+import type { BiliFavFolder } from './types';
 
 /**
  * `fetchSubtitle` must never hand back another video's subtitle (docs/29 C1/C4):
@@ -52,17 +53,20 @@ function playerResponse(aid: number | undefined, cid: number, subtitleUrl: strin
   };
 }
 
-/** Player API calls get `player`; every other URL is the subtitle CDN. */
-function stubBilibili(player: unknown) {
-  const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
-    const body = String(input).includes('api.bilibili.com/x/player/') ? player : CDN_BODY;
-    return new Response(JSON.stringify(body), { status: 200 });
-  });
+function stubFetch(bodyFor: (url: string) => unknown) {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) =>
+    new Response(JSON.stringify(bodyFor(String(input))), { status: 200 }),
+  );
   vi.stubGlobal('fetch', fetchMock);
   return fetchMock;
 }
 
-function requestedUrls(fetchMock: ReturnType<typeof stubBilibili>): string[] {
+/** Player API calls get `player`; every other URL is the subtitle CDN. */
+function stubBilibili(player: unknown) {
+  return stubFetch((url) => (url.includes('api.bilibili.com/x/player/') ? player : CDN_BODY));
+}
+
+function requestedUrls(fetchMock: ReturnType<typeof stubFetch>): string[] {
   return fetchMock.mock.calls.map(([input]) => String(input));
 }
 
@@ -138,5 +142,112 @@ describe('fetchSubtitle', () => {
 
     expect(result).toEqual({ status: 'ok', rows: ROWS, source: 'official' });
     expect(requestedUrls(fetchMock)[1]).toBe(cdnUrl);
+  });
+
+  it('warns when tracks are withheld from an anonymous request, and still reports no_subtitle', async () => {
+    // Shape of the anonymous wbi/v2 answer for a video that does have subtitles (docs/29 §9.1).
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const fetchMock = stubBilibili({
+      code: 0,
+      message: '0',
+      data: { aid: REQUEST.aid, cid: REQUEST.cid, need_login_subtitle: true, subtitle: { subtitles: [] } },
+    });
+
+    const result = await fetchSubtitle(REQUEST.bvid, REQUEST.cid);
+
+    expect(result).toEqual({ status: 'no_subtitle', rows: [] });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(consoleWarn).toHaveBeenCalledWith(expect.stringContaining(REQUEST.bvid));
+  });
+});
+
+/**
+ * Every Bilibili request carries the browser's own cookie jar and nothing
+ * hand-built (docs/29 Step 4). docs/29 E2 showed a Service Worker fetch is
+ * already logged in with no init at all, so a hand-written `Cookie` header only
+ * ever duplicated the jar — and bet on Chromium letting an extension set a
+ * forbidden header.
+ */
+describe('Bilibili request credentials', () => {
+  /**
+   * Header names as the caller wrote them, in any of the three `HeadersInit`
+   * shapes — `Object.keys` alone reads `['0']` off a tuple array and nothing off a
+   * `Headers`. `fetchWithDeadline` spreads the caller's init, so this is the
+   * caller's own object (the test env's `Headers` keeps a `Cookie` entry).
+   */
+  function writtenHeaderNames(init: RequestInit | undefined): string[] {
+    const headers = init?.headers;
+    if (!headers) return [];
+    const names =
+      headers instanceof Headers
+        ? [...headers.keys()]
+        : Array.isArray(headers)
+          ? headers.map(([name]) => name)
+          : Object.keys(headers);
+    return names.map((name) => name.toLowerCase());
+  }
+
+  it.each([
+    {
+      label: 'fetchFavFolders',
+      body: { code: 0, message: '0', data: { count: 0, list: [] } },
+      call: () => fetchFavFolders({ sessdata: 'SESSION', mid: '1' }),
+      requests: 1,
+    },
+    {
+      label: 'fetchFavVideos',
+      body: { code: 0, message: '0', data: { has_more: false, medias: [], info: { id: 42, title: 'F', media_count: 0 } } },
+      call: () => fetchFavVideos(42),
+      requests: 1,
+    },
+    {
+      label: 'fetchSubtitle (player API and CDN)',
+      body: undefined,
+      call: () => fetchSubtitle(REQUEST.bvid, REQUEST.cid),
+      requests: 2,
+    },
+    {
+      label: 'fetchCidByPageList',
+      body: { code: 0, message: '0', data: [{ cid: REQUEST.cid, page: 1 }] },
+      call: () => fetchCidByPageList(REQUEST.bvid),
+      requests: 1,
+    },
+  ])('$label sends credentials:include and no Cookie header', async ({ body, call, requests }) => {
+    const fetchMock =
+      body === undefined ? stubBilibili(playerResponse(REQUEST.aid, REQUEST.cid, OWN_URL)) : stubFetch(() => body);
+
+    await call();
+
+    expect(fetchMock).toHaveBeenCalledTimes(requests);
+    for (const [, init] of fetchMock.mock.calls) {
+      expect(init?.credentials).toBe('include');
+      expect(writtenHeaderNames(init)).not.toContain('cookie');
+    }
+  });
+});
+
+/**
+ * favbase covers public favorites folders only (user decision 2026-09-22,
+ * docs/29 §8 Q5). `attr` bit 0 marks a private folder. Fixture sources
+ * (docs/29 §9.5):
+ * - attr 0 / 2 / 22 — the only values the dev account's 39 folders carry; a
+ *   folder of each value is anonymously readable through `fav/folder/info`,
+ *   i.e. public.
+ * - attr 1 — a real `list-all` response posted on CSDN (2024-02): the private
+ *   default folder.
+ * - attr 23 — synthetic, 22 | 1: an ordinary folder turned private.
+ */
+describe('fetchFavFolders', () => {
+  function folder(id: number, attr: number): BiliFavFolder {
+    return { id, fid: id, mid: 1, title: `folder ${id}`, media_count: 1, cover: '', intro: '', ctime: 0, mtime: 0, attr, fav_state: 0 };
+  }
+
+  it('returns public folders only', async () => {
+    const list = [folder(1, 0), folder(2, 2), folder(3, 22), folder(4, 1), folder(5, 23)];
+    stubFetch(() => ({ code: 0, message: '0', data: { count: list.length, list } }));
+
+    const folders = await fetchFavFolders({ sessdata: 'SESSION', mid: '1' });
+
+    expect(folders.map((f) => f.id)).toEqual([1, 2, 3]);
   });
 });

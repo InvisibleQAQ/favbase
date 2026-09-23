@@ -55,6 +55,12 @@ export interface SyncVideosResult {
 // Public API
 // ---------------------------------------------------------------------------
 
+/**
+ * No-network login gate: "logged out" becomes BiliAuthError before any request.
+ * Only `fetchAndSyncFolders` uses the result (`fetchFavFolders` needs `auth.mid`);
+ * the other callers keep the call for the gate itself — the requests authenticate
+ * with the browser's cookie jar.
+ */
 export async function checkAuth() {
   const auth = await getBiliAuth();
   if (!auth) throw new BiliAuthError('Not logged in');
@@ -82,8 +88,8 @@ export async function fetchFavoriteVideosPage(
   order: BiliFavOrder = 'mtime',
   keyword: string = '',
 ): Promise<SyncVideosResult> {
-  const auth = await checkAuth();
-  const data = await fetchFavVideos(auth, mediaId, page, PAGE_SIZE, order, keyword);
+  await checkAuth();
+  const data = await fetchFavVideos(mediaId, page, PAGE_SIZE, order, keyword);
   const videos = data.medias ?? [];
 
   return {
@@ -100,7 +106,7 @@ export async function syncAllFavoriteVideos(
   control?: CooperativeCheckpoint,
   onItemsPersisted?: BiliFavoritesItemsPersistedCallback,
 ): Promise<FavoriteVideosSyncResult> {
-  const auth = await checkAuth();
+  await checkAuth();
   const db = getDb();
 
   return runFavoriteVideosSync(
@@ -110,7 +116,7 @@ export async function syncAllFavoriteVideos(
         return getFavoriteVideoSyncBaseline(db, String(folder.id));
       },
       async fetchPage(folder, page) {
-        const data = await fetchFavVideos(auth, folder.id, page, PAGE_SIZE, 'mtime', '');
+        const data = await fetchFavVideos(folder.id, page, PAGE_SIZE, 'mtime', '');
         return {
           videos: data.medias ?? [],
           totalPages: Math.max(1, Math.ceil(data.info.media_count / PAGE_SIZE)),
