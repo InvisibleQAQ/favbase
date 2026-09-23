@@ -1,12 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { fetchCidByPageList, fetchFavFolders, fetchFavVideos, fetchSubtitle } from './bilibili-api';
-import type { BiliFavFolder } from './types';
+import type { BiliFavFolder, SubtitleTrack } from './types';
 
 /**
  * `fetchSubtitle` must never hand back another video's subtitle (docs/29 C1/C4):
  * the non-wbi `x/player/v2` serves logged-in requests tracks that belong to
- * other videos, and B站 names every AI subtitle file `{aid}{cid}{md5}`.
+ * other videos, and B站 names a video's original AI subtitle file `{aid}{cid}{md5}`
+ * (its machine translations carry a bare md5 and name no owner, see below).
  *
  * Fixtures are real, not invented. Collected with their sources in
  * `.trellis/tasks/09-17-bilibili-transcripts-land-on-the-wrong-items/research/ai-subtitle-url-ownership-evidence.md`:
@@ -18,6 +19,18 @@ import type { BiliFavFolder } from './types';
  * - UPLOADER_CC_URL is synthetic: uploader CC file names carry no owner at all.
  * - PREFIX_OF_OWNER is a synthetic request whose `{aid}{cid}` is a strict prefix
  *   of OWN_URL's owner: the md5 tail, not a bare startsWith, is what rejects it.
+ *
+ * Machine-translated tracks (docs/29 Step 1b) are a composite of two real sources:
+ * - E1_TRANSLATIONS — docs/29 E1, run by the user on their own account
+ *   (2026-09-23): `x/player/wbi/v2`'s ai-en/ja/es/ar/pt tracks of one Chinese
+ *   video. Their file names are a bare md5 with no `{aid}{cid}`, unchanged over
+ *   16 requests. E1 logged `lan` and file name only: the `auth_key` is synthetic
+ *   (real format) and every translation `lan_doc` is synthetic.
+ * - They sit beside REQUEST's real tracks above. EN_ORIGINAL / FOREIGN_ORIGINAL
+ *   relabel OWN_URL / FOREIGN_URL as an English original; ZH_TRANSLATION borrows
+ *   E1's ai-es name, since E1's Chinese video had no zh translation to observe.
+ *   Neither an English original's nor a zh translation's `lan_doc` was ever
+ *   observed; the code only asks whether `lan_doc` includes '中文'.
  *
  * `fetch` is stubbed at the global boundary, so the real `fetchWithDeadline` runs.
  */
@@ -36,21 +49,40 @@ const DIGIT_LED = {
 const UPLOADER_CC_URL = '//i0.hdslb.com/bfs/subtitle/5f3c9e1a2b7d4c6e8f0a1b2c3d4e5f6a.json';
 const PREFIX_OF_OWNER = { aid: 1134707039319, cid: 9026731938 };
 
+/** FOREIGN_URL's file name: whose track it is, without the signed query. */
+const FOREIGN_NAME = '113384720701738265043985411da261a20ff661ad1742661f045442eb';
+
+const SYNTHETIC_AUTH_KEY = `1790000000-${'a'.repeat(32)}-0-${'b'.repeat(32)}`;
+
+function translationUrl(md5: string): string {
+  return `//aisubtitle.hdslb.com/bfs/ai_subtitle/prod/${md5}?auth_key=${SYNTHETIC_AUTH_KEY}`;
+}
+
+const E1_TRANSLATIONS: SubtitleTrack[] = [
+  { lan: 'ai-en', lan_doc: '英语（自动翻译）', subtitle_url: translationUrl('0b4ca2ed012f2b3fbb9261cd124e0db9') },
+  { lan: 'ai-ja', lan_doc: '日语（自动翻译）', subtitle_url: translationUrl('205c37a4087f2971fffbdaae6c6497f5') },
+  { lan: 'ai-es', lan_doc: '西班牙语（自动翻译）', subtitle_url: translationUrl('e27202f848d7f1f531cdc7b541b0376a') },
+  { lan: 'ai-ar', lan_doc: '阿拉伯语（自动翻译）', subtitle_url: translationUrl('e83b8ddad2cafc8b598ab08dfd519482') },
+  { lan: 'ai-pt', lan_doc: '葡萄牙语（自动翻译）', subtitle_url: translationUrl('11076f660a26f319a610c88a237db52c') },
+];
+const ZH_ORIGINAL: SubtitleTrack = { lan: 'ai-zh', lan_doc: '中文（自动生成）', subtitle_url: OWN_URL };
+const EN_ORIGINAL: SubtitleTrack = { lan: 'ai-en', lan_doc: '英语（自动生成）', subtitle_url: OWN_URL };
+const FOREIGN_ORIGINAL: SubtitleTrack = { lan: 'ai-en', lan_doc: '英语（自动生成）', subtitle_url: FOREIGN_URL };
+const ZH_TRANSLATION: SubtitleTrack = {
+  lan: 'ai-zh',
+  lan_doc: '中文（自动翻译）',
+  subtitle_url: translationUrl('e27202f848d7f1f531cdc7b541b0376a'),
+};
+
 const CDN_BODY = { body: [{ from: 0, to: 1.5, content: 'first caption' }] };
 const ROWS = [{ start: 0, end: 1.5, text: 'first caption' }];
 
 function playerResponse(aid: number | undefined, cid: number, subtitleUrl: string) {
-  return {
-    code: 0,
-    message: '0',
-    data: {
-      aid,
-      cid,
-      subtitle: {
-        subtitles: [{ lan: 'ai-zh', lan_doc: '中文（自动生成）', subtitle_url: subtitleUrl }],
-      },
-    },
-  };
+  return playerResponseWithTracks(aid, cid, [{ ...ZH_ORIGINAL, subtitle_url: subtitleUrl }]);
+}
+
+function playerResponseWithTracks(aid: number | undefined, cid: number, subtitles: SubtitleTrack[]) {
+  return { code: 0, message: '0', data: { aid, cid, subtitle: { subtitles } } };
 }
 
 function stubFetch(bodyFor: (url: string) => unknown) {
@@ -158,6 +190,51 @@ describe('fetchSubtitle', () => {
     expect(result).toEqual({ status: 'no_subtitle', rows: [] });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(consoleWarn).toHaveBeenCalledWith(expect.stringContaining(REQUEST.bvid));
+  });
+
+  /**
+   * A bare md5 file name is a machine translation of the video's original AI
+   * track and claims no owner; ownership is judged over every track, so a
+   * foreign original still sinks a list whose chosen track claims nothing
+   * (docs/29 Step 1b).
+   */
+  describe('with machine-translated tracks', () => {
+    it('accepts a chosen zh translation named by a bare md5 beside an owned original', async () => {
+      const fetchMock = stubBilibili(playerResponseWithTracks(REQUEST.aid, REQUEST.cid, [EN_ORIGINAL, ZH_TRANSLATION]));
+
+      const result = await fetchSubtitle(REQUEST.bvid, REQUEST.cid);
+
+      expect(result).toEqual({ status: 'ok', rows: ROWS, source: 'official' });
+      expect(requestedUrls(fetchMock)[1]).toBe(`https:${ZH_TRANSLATION.subtitle_url}`);
+    });
+
+    it("accepts E1's shape: an owned zh original beside five bare-named translations", async () => {
+      const fetchMock = stubBilibili(
+        playerResponseWithTracks(REQUEST.aid, REQUEST.cid, [ZH_ORIGINAL, ...E1_TRANSLATIONS]),
+      );
+
+      const result = await fetchSubtitle(REQUEST.bvid, REQUEST.cid);
+
+      expect(result).toEqual({ status: 'ok', rows: ROWS, source: 'official' });
+      expect(requestedUrls(fetchMock)[1]).toBe(`https:${OWN_URL}`);
+    });
+
+    it('refuses the list when another track names another video, though the chosen one names none', async () => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const fetchMock = stubBilibili(
+        playerResponseWithTracks(REQUEST.aid, REQUEST.cid, [FOREIGN_ORIGINAL, ZH_TRANSLATION]),
+      );
+
+      const result = await fetchSubtitle(REQUEST.bvid, REQUEST.cid);
+
+      expect(result).toEqual({ status: 'error', rows: [], error: expect.any(String) });
+      expect(fetchMock).toHaveBeenCalledTimes(1); // the player API only
+      expect(consoleError).toHaveBeenCalledTimes(1);
+      const message = String(consoleError.mock.calls[0][0]);
+      expect(message).toContain(REQUEST.bvid);
+      expect(message).toContain(FOREIGN_NAME);
+      expect(message).not.toContain('auth_key');
+    });
   });
 });
 

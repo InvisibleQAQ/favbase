@@ -164,20 +164,28 @@ export async function fetchFavVideos(
 // ---------------------------------------------------------------------------
 
 const AI_SUBTITLE_NAME = /\/bfs\/ai_subtitle\/prod\/([^/?]+)/;
-/** What follows `{aid}{cid}` in an AI subtitle file name. */
+/** A whole machine-translation file name, or what follows `{aid}{cid}` in an original's. */
 const MD5_HEX = /^[0-9a-f]{32}$/i;
 
-/** AI subtitle files are named `{aid}{cid}{md5}`; any other prefix is another video's track. */
+/**
+ * An original AI track is named `{aid}{cid}{md5}`; any other prefix is another video's.
+ * Two kinds name no owner and pass: uploader CC (/bfs/subtitle/<hash>.json) and B站's
+ * machine translations of the original, whose name is a bare md5 (docs/29 Step 1b).
+ */
 function ownsSubtitleUrl(url: string, aid: unknown, cid: number): boolean {
   const name = AI_SUBTITLE_NAME.exec(url)?.[1];
-  if (!name) return true; // uploader CC lives at /bfs/subtitle/<hash>.json and names no owner
+  if (!name || MD5_HEX.test(name)) return true;
   const owner = `${aid}${cid}`;
   return name.startsWith(owner) && MD5_HEX.test(name.slice(owner.length));
 }
 
 /**
  * Fetch bilibili AI subtitles via player API + CDN.
- * Refuses a track whose file name belongs to another video (status 'error', CDN never requested).
+ * Refuses the whole response (status 'error', CDN never requested) when any track's file
+ * name belongs to another video, not only the chosen one: a foreign response can hand us
+ * a translation that names no owner beside an original that names someone else.
+ * A list in which no track names an owner (only bare names or uploader CC) passes, foreign
+ * or not: the cost of passing bare names (docs/29 Step 1b「残留」).
  */
 export async function fetchSubtitle(
   bvid: string,
@@ -209,6 +217,17 @@ export async function fetchSubtitle(
     return { status: 'no_subtitle', rows: [] };
   }
 
+  const aid = playerData?.data?.aid;
+  const foreignUrl = subtitles
+    .map((s) => s.subtitle_url?.trim())
+    .find((url) => url && !ownsSubtitleUrl(url, aid, cid));
+  if (foreignUrl) {
+    console.error(
+      `[bilibili-api] Refusing subtitle for ${bvid}: requested aid ${aid} cid ${cid}, track is ${foreignUrl.split('?')[0]}`,
+    );
+    return { status: 'error', rows: [], error: 'Subtitle track belongs to another video' };
+  }
+
   const zhTrack = subtitles.find((s) => s.lan_doc.includes('中文')) ?? subtitles[0];
   const rawUrl = zhTrack.subtitle_url?.trim();
 
@@ -217,14 +236,6 @@ export async function fetchSubtitle(
   }
 
   const subtitleUrl = rawUrl.startsWith('//') ? `https:${rawUrl}` : rawUrl;
-  const aid = playerData?.data?.aid;
-  if (!ownsSubtitleUrl(subtitleUrl, aid, cid)) {
-    console.error(
-      `[bilibili-api] Refusing subtitle for ${bvid}: requested aid ${aid} cid ${cid}, track is ${subtitleUrl.split('?')[0]}`,
-    );
-    return { status: 'error', rows: [], error: 'Subtitle track belongs to another video' };
-  }
-
   const subRes = await fetchWithDeadline(subtitleUrl, { credentials: 'include' });
 
   if (!subRes.ok) {

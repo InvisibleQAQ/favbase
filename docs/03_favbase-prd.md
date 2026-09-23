@@ -169,7 +169,7 @@ Cookie-based B站 API 封装。`chrome.cookies.get()` 获取 SESSDATA/bili_jct/D
 
 注意：不是所有视频都有 AI 字幕。无字幕视频需走降级路径（见 Ingestion Pipeline）。
 
-> **2026-09-22 勘误**：上面「已验证」的 `/x/player/v2` 对已登录请求会返回别的视频的 AI 字幕（外部已知问题；本仓库 B 站正文实测约一半错配，诊断为同一原因，本账号的运行时复核待 docs/29 E1）；实现已改为不签名的 `x/player/wbi/v2` + 归属校验。真实的 AI 字幕文件名是 `{aid}{cid}{md5}`，没有 `.json` 后缀。见 docs/29。
+> **2026-09-22 勘误**：上面「已验证」的 `/x/player/v2` 对已登录请求会返回别的视频的 AI 字幕（外部已知问题；本仓库 B 站正文实测约一半错配，诊断为同一原因，2026-09-23 已由 docs/29 E1 在本账号复现）；实现已改为不签名的 `x/player/wbi/v2` + 归属校验。视频原始语言的 AI 字幕文件名是 `{aid}{cid}{md5}`，B 站的机器翻译轨是裸 md5（不声明归属；目前只在一个中文视频上观测过），都没有 `.json` 后缀。见 docs/29（Step 1b）。
 
 技术参考：Bilitato `content.js` 的 `fetchSubtitleByPlayerApi()` 函数实现了完整的主动 API 调用路径；`inject.js` 实现了 fetch/XHR 拦截的被动捕获方案。favbase 采用主动 API 调用方案（不需要用户停留在视频页面）。
 
