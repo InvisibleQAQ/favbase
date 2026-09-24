@@ -37,3 +37,6 @@
   - `rpc-server.ts` 的 `DAEMON_NAME` 从 `'favbase-cli'` 改为 `'favbase'`。它是 `/health` 的自我识别串，供 `daemon-client.ts` 判断端口占用者是否为自己人；不属于 `lib/agent-bridge/protocol.ts` 的 v1 wire envelope，故扩展侧契约未变。
   - **不向后兼容的唯一后果**：改名前启动的 daemon 自称 `favbase-cli`，改名后的 CLI 会把它判为「非 favbase 程序占用端口」而拒绝杀它（退出码 2）。因为包从未发布 npm，受影响的只有开发机上已在运行的进程；处理办法是先 `favbase daemon stop`（或结束进程）再升级。
   - 前置事实：2026-09-07 `npm view favbase` 与 `npm view favbase-cli` 均 404，两名皆未被占用。
+- **2026-09-08 —— 第四个 Knowledge Tool 与 `coverage` 别名**。本 ADR 的决策一条未变：别名表仍是 `packages/favbase/commands.ts` 的单一常量，由 `tests/agent-bridge-cli-aliases.test.ts` 用 `describeTools()` 对账；`favbase call` / `favbase tools` 仍是零知识通道。
+  - `e6a3231` 把 `getProcessingCoverage` 加为第四个 Knowledge Tool（Chat 与 Agent Bridge 同时获得），别名表随之加一行 `coverage`。`packages/favbase` 的源码只改了 `commands.ts` 这一条别名，`call` / `tools` 未动。
+  - 因此 Decision 一节的「三个 Knowledge Tool」与「`search` / `tags` / `get`」描述的是 2026-08-28 的工具面，此后是四个工具、四个别名（`search` / `tags` / `get` / `coverage`）。正文保留原样，作为当日记录。
