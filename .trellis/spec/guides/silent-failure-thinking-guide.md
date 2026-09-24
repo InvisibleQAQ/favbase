@@ -263,3 +263,59 @@ waits for `getaddrinfo`, which measured 12.2 s.
       returns) and decide on it. Moving the query to a detached child is the
       only full fix, and that changes when the result can be shown
 - [ ] Owners: `packages/favbase/CLAUDE.md` (`cli.ts`, `update-check.ts`)
+
+---
+
+## Gotcha 7: The value that only reached a log line
+
+**Symptom**: A triage question has an obvious query ("were all mismatched
+transcripts official?"), and the query cannot run: the database has no such
+column. The value was present at the write site the whole time.
+
+**Cause**: Four shapes met in docs/29 Step 5 (defect C6):
+
+- **Logged, not stored.** `persistContentChunks(bvid, rows, source)` received
+  `'official' | 'asr'` and passed it only to `console.info`. The write seam
+  had no parameter for it, so the value went to the log and never reached the
+  row.
+- **Optional slot.** When you add the slot, an optional parameter that
+  defaults to NULL brings C6 back for every caller that forgets it, and `tsc`
+  says nothing.
+- **Stale sibling.** A column that describes another column (provenance, hash,
+  language) and is written only on insert, or by only one of the text's
+  writers, survives a later overwrite of that text. The row then carries an
+  `'asr'` label on text that came from somewhere else.
+- **Name only in the entity.** A CHECK written inline in migration SQL gets
+  a name PG generates itself (`items_content_state_check`). The name in
+  Drizzle's `check()` is read by nothing, because this repo has no drizzle-kit.
+  A later `DROP CONSTRAINT IF EXISTS chk_content_state` is a silent no-op, and
+  the old constraint keeps rejecting (PGlite, measured).
+
+**Trigger — ask this whenever**:
+
+- a write function receives a value that it only logs
+- you add a column that describes another column
+- you add a parameter to a shared write seam
+- a migration creates, drops or replaces a constraint
+
+**Prevention checklist**:
+
+- [ ] If a value is worth logging at the write site, ask whether the triage
+      you will run later needs it in the row
+- [ ] Make the new slot required and nullable (`T | null`), with no default:
+      `tsc` then lists every caller, and `null` has to be written on purpose.
+      Pattern: `persistExistingItemContent`; owner `lib/ingest/CLAUDE.md`
+- [ ] Write the describing column in the same upsert as the text, in both
+      `values` and `onConflictDoUpdate.set`, and in every writer of that text.
+      A writer with nothing to say writes `null`. Guard it with one
+      overwrite-then-read test per writer. Pattern: the subtitle source cases
+      in `lib/ingest/ingest.test.ts`
+- [ ] Red-first on a schema change makes every new test red for one reason
+      (`column … does not exist`), so it proves the column and nothing else.
+      Mutate each write site on its own and watch exactly one test go red.
+      docs/29 Step 5 had four cases that could not be told apart until this
+      was done
+- [ ] Name every constraint in the migration SQL (`CONSTRAINT <name>`) with the
+      entity's name, and assert that name in the rejection test. Owner:
+      `lib/database/migrations/CLAUDE.md` (v001's `content_state` is the known
+      residual)

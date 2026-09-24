@@ -16,4 +16,5 @@
 ## 约定
 
 - 数据库迁移: 自定义迁移系统（非 drizzle-kit），`_migrations` 表追踪版本。迁移脚本直接写 SQL（不用 Drizzle 内部 Symbol 反射）。`runMigrations(pg)` 在 `initDbMain()` 内自动执行。新增迁移：在 `lib/database/migrations/` 添加 `vNNN-*.ts`，在 `index.ts` 的 `migrations` 数组追加条目
+- 约束一律在迁移 SQL 里用 `CONSTRAINT <name>` 具名，名字与 entity 的 `check()` 相同（docs/29 Step 5）。本仓库不用 drizzle-kit，entity 里的约束名不会被任何东西读到；行内匿名写法由 PG 自动命名为 `<table>_<column>_check`。按 entity 的名字写的 `ALTER TABLE … DROP CONSTRAINT IF EXISTS <name>` 会静默跳过，旧约束照样生效（PGlite 实测）。所以将来放宽取值的迁移看起来跑通了，新取值却仍被旧约束拒绝。守卫：写入非法值，并断言报错里的约束名（`lib/ingest/ingest.test.ts` 的 `/chk_subtitle_source/`）。已知残留：v001 的 `items.content_state`，库里叫 `items_content_state_check`，entity 写的是 `chk_content_state`，改它之前先按库里的真名 DROP
 - embedding 列维度不归迁移系统管：v001 建列为 vector(1536) 只是初始值，运行时由 `lib/embedding/vector-store.ts` 的惰性维度切换（`ALTER ... TYPE vector(N) USING NULL::vector(N)`）跟随当前模型改动，v002 的 HNSW 索引在 ALTER 时被 PostgreSQL 自动重建（opclass 保留）。当前维度真相在 pg catalog（`atttypmod`），迁移脚本不感知
