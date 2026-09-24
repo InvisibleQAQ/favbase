@@ -32,10 +32,11 @@ import {
 import {
   canonicalSkillContent,
   inspectSkills,
+  installAgentSkills,
   installSkill,
   parseSkillAgents,
-  skillRoot,
   SKILL_AGENTS,
+  type SkillAgent,
   type SkillCopy,
 } from './skill-install';
 import {
@@ -253,10 +254,11 @@ function parseCall(parsed: ParsedArgv): { tool: string; args: JsonObject } {
  * every copy is missing. One missing side is taken as deliberate. `stale` only
  * says "differs from what this CLI ships" -- the copy may be newer (installed
  * from GitHub main) -- so an outdated CLI is upgraded first, or install-skill
- * would roll the copy back to an older skill.
+ * would roll the copy back to an older skill. Codex can have two copies (its
+ * legacy root); the hint names an agent once.
  */
 function skillHint(skills: readonly SkillCopy[], cli: CliCurrency): string | null {
-  const stale = skills.filter((copy) => copy.state === 'stale').map((copy) => copy.agent);
+  const stale = [...new Set(skills.filter((copy) => copy.state === 'stale').map((copy) => copy.agent))];
   const allMissing = skills.every((copy) => copy.state === 'missing');
   if (stale.length === 0 && !allMissing) return null;
   const run = cli.state === 'outdated'
@@ -278,7 +280,7 @@ function printSkillHint(io: CliIo, skills: readonly SkillCopy[], cli: CliCurrenc
  * not. Neither depends on the config, so the config-error path reports both.
  */
 async function runDoctor(io: CliIo, currency: Promise<CliCurrency>): Promise<number> {
-  const skills = await inspectSkills(io.skillContent, io.homeDir);
+  const skills = await inspectSkills(io.skillContent, io.homeDir, io.env);
   let config: ResolvedConfig;
   try {
     config = await resolveConfig(io.env);
@@ -379,17 +381,27 @@ async function runDaemonCommand(io: CliIo, parsed: ParsedArgv): Promise<number> 
   }
 }
 
-function parseInstallSkill(io: CliIo, parsed: ParsedArgv): string[] {
+interface InstallSkillRequest {
+  agents: SkillAgent[];
+  /** `--dir`: that directory only; otherwise the personal roots of `agents`. */
+  dir: string | undefined;
+}
+
+function parseInstallSkill(parsed: ParsedArgv): InstallSkillRequest {
   if (parsed.positionals.length > 0) {
     throw new UsageError('favbase install-skill takes no positional arguments');
   }
-  const agents = parseSkillAgents(requireValue(parsed.flags, 'agent'));
-  const dir = requireValue(parsed.flags, 'dir');
-  return dir ? [dir] : agents.map((agent) => skillRoot(agent, io.homeDir));
+  return {
+    agents: parseSkillAgents(requireValue(parsed.flags, 'agent')),
+    dir: requireValue(parsed.flags, 'dir'),
+  };
 }
 
-async function runInstallSkill(io: CliIo, roots: readonly string[]): Promise<number> {
-  printJson(io, { installed: await installSkill(io.skillContent, roots) });
+async function runInstallSkill(io: CliIo, request: InstallSkillRequest): Promise<number> {
+  const installed = request.dir
+    ? await installSkill(io.skillContent, [request.dir])
+    : await installAgentSkills(io.skillContent, request.agents, io.homeDir, io.env);
+  printJson(io, { installed });
   return EXIT_OK;
 }
 
@@ -416,7 +428,7 @@ async function runSetup(io: CliIo, request: SetupRequest): Promise<number> {
 
   const path = await writeConfigFile(io.env, { token: request.token, port });
   const skills = request.skill
-    ? await installSkill(io.skillContent, SKILL_AGENTS.map((agent) => skillRoot(agent, io.homeDir)))
+    ? await installAgentSkills(io.skillContent, SKILL_AGENTS, io.homeDir, io.env)
     : [];
   printJson(io, { configPath: path, port, skills });
   io.stderr('[favbase] next: run favbase doctor with Chrome open to verify the connection\n');
@@ -482,8 +494,8 @@ function plan(io: CliIo, parsed: ParsedArgv): PlannedCommand {
       return daily(() => runSetup(io, request));
     }
     case 'install-skill': {
-      const roots = parseInstallSkill(io, parsed);
-      return daily(() => runInstallSkill(io, roots));
+      const request = parseInstallSkill(parsed);
+      return daily(() => runInstallSkill(io, request));
     }
     default:
       throw new UsageError(`Unknown command "${parsed.command}"`);

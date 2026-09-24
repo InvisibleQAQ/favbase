@@ -182,6 +182,81 @@ describe('favbase CLI dispatch', () => {
     expect(result.stderr).toContain('Unknown agent');
   });
 
+  // Codex still scans its deprecated `$CODEX_HOME/skills` (default `~/.codex`)
+  // besides `~/.agents/skills`; cc-switch links a copy in there. install-skill
+  // and setup refresh a copy they find there, after the `.agents` one, and
+  // never create one.
+  describe('with a copy in the legacy Codex root', () => {
+    const OLD = '---\nname: favbase\n---\nolder\n';
+
+    async function userHome(): Promise<string> {
+      const root = await mkdtemp(join(tmpdir(), 'favbase-legacy-'));
+      temps.push(root);
+      return join(root, 'user');
+    }
+
+    async function seedLegacy(codexHome: string): Promise<string> {
+      const dir = join(codexHome, 'skills', 'favbase');
+      await mkdir(dir, { recursive: true });
+      await writeFile(join(dir, 'SKILL.md'), OLD);
+      return join(dir, 'SKILL.md');
+    }
+
+    const claudeCopy = (homeDir: string) => join(homeDir, '.claude', 'skills', 'favbase', 'SKILL.md');
+    const agentsCopy = (homeDir: string) => join(homeDir, '.agents', 'skills', 'favbase', 'SKILL.md');
+
+    it.each([
+      [['install-skill', '--agent', 'codex'], false],
+      [['install-skill'], true],
+      [['setup', '--token', 'abc'], true],
+    ])('%j rewrites it and reports it after the .agents copy', async (argv, withClaude) => {
+      const homeDir = await userHome();
+      const legacy = await seedLegacy(join(homeDir, '.codex'));
+      const result = await run(argv, {}, { homeDir });
+      expect(result.code).toBe(EXIT_OK);
+
+      const output = JSON.parse(result.stdout) as { installed?: string[]; skills?: string[] };
+      expect(output.installed ?? output.skills).toEqual([
+        ...(withClaude ? [claudeCopy(homeDir)] : []),
+        agentsCopy(homeDir),
+        legacy,
+      ]);
+      await expect(readFile(legacy, 'utf8')).resolves.toBe(SKILL);
+    });
+
+    it('leaves it alone for --agent claude and for --dir', async () => {
+      const homeDir = await userHome();
+      const legacy = await seedLegacy(join(homeDir, '.codex'));
+
+      const claude = await run(['install-skill', '--agent', 'claude'], {}, { homeDir });
+      expect(JSON.parse(claude.stdout)).toEqual({ installed: [claudeCopy(homeDir)] });
+      const dir = join(homeDir, 'custom');
+      const custom = await run(['install-skill', '--dir', dir], {}, { homeDir });
+      expect(JSON.parse(custom.stdout)).toEqual({ installed: [join(dir, 'favbase', 'SKILL.md')] });
+
+      await expect(readFile(legacy, 'utf8')).resolves.toBe(OLD);
+    });
+
+    it('follows CODEX_HOME instead of <home>/.codex', async () => {
+      const homeDir = await userHome();
+      const codexHome = join(homeDir, '..', 'codex-home');
+      const legacy = await seedLegacy(codexHome);
+      const decoy = await seedLegacy(join(homeDir, '.codex'));
+
+      const result = await run(['install-skill', '--agent', 'codex'], { CODEX_HOME: codexHome }, { homeDir });
+      expect(JSON.parse(result.stdout)).toEqual({ installed: [agentsCopy(homeDir), legacy] });
+      await expect(readFile(legacy, 'utf8')).resolves.toBe(SKILL);
+      await expect(readFile(decoy, 'utf8')).resolves.toBe(OLD);
+    });
+
+    it('does not create one when there is none', async () => {
+      const homeDir = await userHome();
+      const result = await run(['install-skill', '--agent', 'codex'], {}, { homeDir });
+      expect(JSON.parse(result.stdout)).toEqual({ installed: [agentsCopy(homeDir)] });
+      expect(existsSync(join(homeDir, '.codex'))).toBe(false);
+    });
+  });
+
   // A release built from a CRLF checkout would bundle a CRLF SKILL.md. `main`
   // canonicalizes it, so what lands on disk is the LF text GitHub also serves.
   it('install-skill writes LF even when the bundled skill is CRLF', async () => {

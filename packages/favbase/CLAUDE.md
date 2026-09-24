@@ -56,12 +56,14 @@ provides no MCP server.
   still parsed (measured). No stdin form: PS 5.1 pipes text to native programs
   in `$OutputEncoding`, ASCII by default. `doctor` also reports
   `cli` (current / outdated / unknown, with a `reason` when unknown) and
-  `skills` (per agent root: current / stale / missing) on **both** its output
-  paths, the config-error one included; neither changes `ok` or the exit code
-  (docs/27 D11). Its stderr skill line appears only when a copy is stale (it
-  names those agents: `install-skill --agent claude,codex`, never a bare
-  `install-skill`) or every copy is missing (it mentions `--dir`); an outdated
-  CLI is told to upgrade first, because `stale` has no direction.
+  `skills` (per agent root: current / stale / missing, plus Codex's legacy
+  root only while it holds a copy) on **both** its output paths, the
+  config-error one included; neither changes `ok` or the exit code (docs/27
+  D11). Its stderr skill line appears only when a copy is stale (it names
+  those agents, each once however many of its copies are stale:
+  `install-skill --agent claude,codex`, never a bare `install-skill`) or every
+  listed copy is missing (it mentions `--dir`); an outdated CLI is told to
+  upgrade first, because `stale` has no direction.
 - `version.ts` is the one version primitive: `compareVersions` understands
   plain `MAJOR.MINOR.PATCH` only and returns `null` for anything else
   (`0.0.0-dev`, `test`, prereleases, empty). Every caller treats `null` as "do
@@ -140,6 +142,23 @@ provides no MCP server.
   or attach to the daemon's server.
 - `skill-install.ts` writes SKILL.md to `~/.claude/skills/favbase/` and
   `~/.agents/skills/favbase/` (Codex user scope), or an explicit `--dir`.
+  Codex also still scans its deprecated `$CODEX_HOME/skills` (Codex's rule:
+  unset or empty `CODEX_HOME` means `~/.codex`) and shows a same-name skill
+  from both, so a copy there that favbase ignored went stale unseen (cc-switch
+  links one in). `personalRoots` is the one list of roots, in write and report
+  order; the legacy root follows `.agents`. For codex (`--agent codex`, `all`,
+  `setup`) `installAgentSkills` overwrites the legacy copy **only if it
+  exists** -- `stat` follows links, so a copy behind a directory link is
+  written through it and a dangling link is absent -- and never creates it or
+  its directory. Only ENOENT/ENOTDIR skip it; any other error propagates, as
+  for the other roots (doctor calls that copy `stale`, and install-skill then
+  names the error). `inspectSkills` lists it only when present, so a machine
+  without one sees one entry per agent. Paths are neither resolved nor
+  deduplicated: cc-switch's two links to one real file get written twice,
+  harmlessly. `CODEX_HOME` arrives as a required `env` argument (`CliIo.env`);
+  the module never reads `process.env` itself, so no unit test sees the real
+  one (the spawned `doctor` runs in `integration.test.ts` read the real home
+  and env, read-only, and assert nothing about `skills`).
   `inspectSkills` is its read-only twin for doctor: byte-for-byte comparison
   with the bundled SKILL.md, no version field, no line-ending normalization of
   the installed copy (a CRLF re-save is `stale`; reinstalling fixes it). Missing file (ENOENT or

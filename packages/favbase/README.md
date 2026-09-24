@@ -20,13 +20,13 @@ In the extension open **Settings > Connections > Agent Skills**, switch it on, a
 favbase setup --token <pairing token> --port <port>
 ```
 
-That writes `~/.favbase/config.json` and installs the Agent Skill for Claude Code (`~/.claude/skills/favbase/`) and Codex (`~/.agents/skills/favbase/`), so an agent learns the commands on its own. Pass `--no-skill` to skip that, or install only the skill later with `favbase install-skill`.
+That writes `~/.favbase/config.json` and installs the Agent Skill for Claude Code (`~/.claude/skills/favbase/`) and Codex (`~/.agents/skills/favbase/`), so an agent learns the commands on its own. Codex still reads its older skill folder too (`~/.codex/skills/favbase/`, or `$CODEX_HOME/skills/favbase/` if you set `CODEX_HOME`): a copy already there is refreshed as well, and none is ever created. Pass `--no-skill` to skip that, or install only the skill later with `favbase install-skill`.
 
 ```bash
 favbase doctor
 ```
 
-`doctor` checks the config, the background daemon and the link to the extension. It also reports whether this CLI is the latest release (`cli`) and whether each installed copy of the Agent Skill matches the one this CLI ships (`skills`: `current`, `stale` or `missing`); neither changes its exit code. A copy installed with `install-skill --dir` is outside the two default locations and invisible to it. Chrome must be running with the extension loaded for queries to work.
+`doctor` checks the config, the background daemon and the link to the extension. It also reports whether this CLI is the latest release (`cli`) and whether each installed copy of the Agent Skill matches the one this CLI ships (`skills`: `current`, `stale` or `missing`); neither changes its exit code. It lists a copy in Codex's older folder only when one is there. A copy installed with `install-skill --dir` is outside these locations and invisible to it. Chrome must be running with the extension loaded for queries to work.
 
 ## Commands
 

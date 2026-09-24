@@ -71,6 +71,10 @@ afterEach(async () => {
 interface DoctorOptions {
   /** Skill copies to lay down before doctor runs: agent -> file content. */
   skills?: Partial<Record<SkillAgent, string>>;
+  /** A copy in Codex's legacy root, `<codex home>/skills/favbase/SKILL.md`. */
+  legacyCodex?: string;
+  /** Set CODEX_HOME to `<home>/codex-home` instead of leaving the default `<home>/.codex`. */
+  codexHome?: boolean;
   withToken?: boolean;
   /** The SKILL.md bundled into the CLI; defaults to `SHIPPED_SKILL`. */
   skillContent?: string;
@@ -80,11 +84,15 @@ interface DoctorOptions {
 
 async function runDoctor(
   options: DoctorOptions = {},
-): Promise<{ code: number; stdout: string; stderr: string }> {
+): Promise<{ code: number; stdout: string; stderr: string; home: string }> {
   const home = await mkdtemp(join(tmpdir(), 'favbase-doctor-'));
   temps.push(home);
   for (const [agent, content] of Object.entries(options.skills ?? {})) {
     await installSkill(content, [skillRoot(agent as SkillAgent, home)]);
+  }
+  const codexHome = options.codexHome ? { CODEX_HOME: join(home, 'codex-home') } : {};
+  if (options.legacyCodex !== undefined) {
+    await installSkill(options.legacyCodex, [legacyRoot(home, options.codexHome === true)]);
   }
   let stdout = '';
   let stderr = '';
@@ -93,6 +101,7 @@ async function runDoctor(
       FAVBASE_HOME: join(home, 'favbase'),
       ...(options.withToken === false ? {} : { FAVBASE_TOKEN: TOKEN }),
       FAVBASE_BRIDGE_PORT: '17836',
+      ...codexHome,
     },
     cliPath: join(home, 'cli.js'),
     homeDir: home,
@@ -102,7 +111,12 @@ async function runDoctor(
     stderr: text => { stderr += text; },
     fetchLatestVersion: options.fetchLatestVersion,
   };
-  return { code: await main(['doctor'], io), stdout, stderr };
+  return { code: await main(['doctor'], io), stdout, stderr, home };
+}
+
+/** Spelled out here rather than taken from skill-install.ts, so the test pins the location. */
+function legacyRoot(home: string, codexHome: boolean): string {
+  return join(home, codexHome ? 'codex-home' : '.codex', 'skills');
 }
 
 interface DoctorJson {
@@ -260,5 +274,50 @@ describe('favbase doctor skill copies', () => {
 
     const stale = await runDoctor({ skills: { claude: 'old\n' } });
     expect(stale.code).toBe(EXIT_OK);
+  });
+});
+
+// Codex still scans its deprecated `$CODEX_HOME/skills` (default `~/.codex`)
+// besides `~/.agents/skills`. Doctor lists a copy there as one more codex copy,
+// only when it exists, so a machine without one sees exactly the two entries
+// the tests above pin.
+describe('favbase doctor and the legacy Codex root', () => {
+  const current = { claude: SHIPPED_SKILL, codex: SHIPPED_SKILL };
+  const legacyCopy = (home: string, codexHome = false) =>
+    join(legacyRoot(home, codexHome), 'favbase', 'SKILL.md');
+
+  it('lists a stale legacy copy as codex and names codex in the hint', async () => {
+    const result = await runDoctor({ skills: current, legacyCodex: 'old\n' });
+    const output = JSON.parse(result.stdout) as DoctorJson;
+
+    expect(output.skills).toHaveLength(3);
+    expect(output.skills[2]).toEqual({ agent: 'codex', path: legacyCopy(result.home), state: 'stale' });
+    expect(skillLines(result.stderr)).toEqual([
+      expect.stringMatching(/the installed skill for codex differs.*favbase install-skill --agent codex$/),
+    ]);
+  });
+
+  it('names codex once when both of its copies are stale', async () => {
+    const result = await runDoctor({ skills: { claude: 'old\n', codex: 'old\n' }, legacyCodex: 'old\n' });
+    expect(skillLines(result.stderr)).toEqual([
+      expect.stringMatching(/for claude and codex differs.*favbase install-skill --agent claude,codex$/),
+    ]);
+  });
+
+  it('lists a current legacy copy and stays quiet about it', async () => {
+    const result = await runDoctor({ skills: current, legacyCodex: SHIPPED_SKILL });
+    const output = JSON.parse(result.stdout) as DoctorJson;
+    expect(output.skills.map(copy => copy.state)).toEqual(['current', 'current', 'current']);
+    expect(skillLines(result.stderr)).toEqual([]);
+  });
+
+  it('looks under CODEX_HOME when it is set', async () => {
+    const result = await runDoctor({ skills: current, legacyCodex: 'old\n', codexHome: true });
+    const output = JSON.parse(result.stdout) as DoctorJson;
+    expect(output.skills[2]).toEqual({
+      agent: 'codex',
+      path: legacyCopy(result.home, true),
+      state: 'stale',
+    });
   });
 });

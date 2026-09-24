@@ -1,8 +1,9 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import { UsageError } from './args';
+import type { ConfigEnv } from './config';
 
 export const SKILL_AGENTS = ['claude', 'codex'] as const;
 export type SkillAgent = typeof SKILL_AGENTS[number];
@@ -10,14 +11,44 @@ export const SKILL_DIR_NAME = 'favbase';
 export const SKILL_FILE_NAME = 'SKILL.md';
 
 /**
- * Personal skill roots. Claude Code reads `~/.claude/skills/<name>/SKILL.md`;
- * Codex reads the agentskills.io user scope `~/.agents/skills` (its legacy
- * `~/.codex/skills` still works but is not written here).
+ * Personal skill roots favbase creates. Claude Code reads
+ * `~/.claude/skills/<name>/SKILL.md`; Codex reads the agentskills.io user scope
+ * `~/.agents/skills`, and still scans its legacy root too
+ * (`legacyCodexSkillRoot`), which favbase refreshes but never creates.
  */
 export function skillRoot(agent: SkillAgent, home: string = homedir()): string {
   return agent === 'claude'
     ? join(home, '.claude', 'skills')
     : join(home, '.agents', 'skills');
+}
+
+/**
+ * Codex's deprecated user root, `$CODEX_HOME/skills`, kept by Codex for
+ * backward compatibility; it shows a same-name skill from both roots. Codex's
+ * own rule for `CODEX_HOME`: unset or empty means `~/.codex`, anything else is
+ * used as given.
+ */
+export function legacyCodexSkillRoot(home: string, env: ConfigEnv): string {
+  return join(env.CODEX_HOME || join(home, '.codex'), 'skills');
+}
+
+interface PersonalRoot {
+  agent: SkillAgent;
+  root: string;
+  /** Written and reported only over a copy that is already there; never created. */
+  legacy: boolean;
+}
+
+/** Every personal root of `agents`, in the order they are written and reported. */
+function personalRoots(
+  agents: readonly SkillAgent[],
+  home: string,
+  env: ConfigEnv,
+): PersonalRoot[] {
+  return agents.flatMap((agent) => [
+    { agent, root: skillRoot(agent, home), legacy: false },
+    ...(agent === 'codex' ? [{ agent, root: legacyCodexSkillRoot(home, env), legacy: true }] : []),
+  ]);
 }
 
 /**
@@ -69,6 +100,46 @@ export async function installSkill(
   return written;
 }
 
+/**
+ * Overwrites `<root>/favbase/SKILL.md` only where it already exists and creates
+ * nothing. `stat` follows links, so a copy behind a directory link (cc-switch)
+ * is written through it, and a dangling link reads as absent.
+ */
+async function refreshSkill(content: string, roots: readonly string[]): Promise<string[]> {
+  const written: string[] = [];
+  for (const root of roots) {
+    const path = skillPath(root);
+    try {
+      await stat(path);
+    } catch (error) {
+      if (isMissing(error)) continue;
+      throw error;
+    }
+    await writeFile(path, content, 'utf8');
+    written.push(path);
+  }
+  return written;
+}
+
+/**
+ * install-skill and setup for named agents: writes every agent's root, and for
+ * codex also refreshes a copy already in its legacy root. The written paths
+ * come back in `personalRoots` order: agents as given, codex's legacy copy
+ * right after its `.agents` one (doctor walks `SKILL_AGENTS` the same way).
+ */
+export async function installAgentSkills(
+  content: string,
+  agents: readonly SkillAgent[],
+  home: string,
+  env: ConfigEnv,
+): Promise<string[]> {
+  const written: string[] = [];
+  for (const { root, legacy } of personalRoots(agents, home, env)) {
+    written.push(...await (legacy ? refreshSkill : installSkill)(content, [root]));
+  }
+  return written;
+}
+
 /** `stale` means "differs from the SKILL.md this CLI ships" -- it has no direction. */
 export type SkillCopyState = 'current' | 'stale' | 'missing';
 
@@ -84,23 +155,36 @@ function isMissing(error: unknown): boolean {
     && (error.code === 'ENOENT' || error.code === 'ENOTDIR');
 }
 
+async function copyState(path: string, expected: Buffer): Promise<SkillCopyState> {
+  try {
+    return (await readFile(path)).equals(expected) ? 'current' : 'stale';
+  } catch (error) {
+    return isMissing(error) ? 'missing' : 'stale';
+  }
+}
+
 /**
  * Read-only: compares each personal skill root's copy byte for byte with
  * `content` (the SKILL.md bundled into this CLI, already LF through
  * `canonicalSkillContent`; the copy is read as is). A copy installed with
  * `--dir` lives outside these roots and is invisible here. An unreadable copy
  * is reported `stale`: it is not current, and reinstalling is the one fix
- * doctor can name (install-skill then reports the real error).
+ * doctor can name (install-skill then reports the real error). The legacy
+ * Codex root is listed only when it holds a copy, so a machine without one
+ * sees exactly one entry per agent.
  */
-export async function inspectSkills(content: string, home: string): Promise<SkillCopy[]> {
+export async function inspectSkills(
+  content: string,
+  home: string,
+  env: ConfigEnv,
+): Promise<SkillCopy[]> {
   const expected = Buffer.from(content, 'utf8');
-  return Promise.all(SKILL_AGENTS.map(async (agent): Promise<SkillCopy> => {
-    const path = skillPath(skillRoot(agent, home));
-    try {
-      const actual = await readFile(path);
-      return { agent, path, state: actual.equals(expected) ? 'current' : 'stale' };
-    } catch (error) {
-      return { agent, path, state: isMissing(error) ? 'missing' : 'stale' };
-    }
-  }));
+  const copies = await Promise.all(
+    personalRoots(SKILL_AGENTS, home, env).map(async ({ agent, root, legacy }) => {
+      const path = skillPath(root);
+      const state = await copyState(path, expected);
+      return legacy && state === 'missing' ? [] : [{ agent, path, state }];
+    }),
+  );
+  return copies.flat();
 }
