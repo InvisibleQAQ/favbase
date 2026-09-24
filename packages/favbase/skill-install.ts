@@ -11,10 +11,10 @@ export const SKILL_DIR_NAME = 'favbase';
 export const SKILL_FILE_NAME = 'SKILL.md';
 
 /**
- * Personal skill roots favbase creates. Claude Code reads
- * `~/.claude/skills/<name>/SKILL.md`; Codex reads the agentskills.io user scope
- * `~/.agents/skills`, and still scans its legacy root too
- * (`legacyCodexSkillRoot`), which favbase refreshes but never creates.
+ * The personal skill root favbase creates a copy in, for an agent that has
+ * none yet. Claude Code reads `~/.claude/skills/<name>/SKILL.md`; Codex reads
+ * the agentskills.io user scope `~/.agents/skills`, and still scans its legacy
+ * root too (`legacyCodexSkillRoot`), which favbase refreshes but never creates.
  */
 export function skillRoot(agent: SkillAgent, home: string = homedir()): string {
   return agent === 'claude'
@@ -35,7 +35,10 @@ export function legacyCodexSkillRoot(home: string, env: ConfigEnv): string {
 interface PersonalRoot {
   agent: SkillAgent;
   root: string;
-  /** Written and reported only over a copy that is already there; never created. */
+  /**
+   * Reported only when a copy is there. Never created: `installAgentSkills`
+   * creates only in `skillRoot`, and it refreshes a copy here like any other.
+   */
   legacy: boolean;
 }
 
@@ -122,10 +125,13 @@ async function refreshSkill(content: string, roots: readonly string[]): Promise<
 }
 
 /**
- * install-skill and setup for named agents: writes every agent's root, and for
- * codex also refreshes a copy already in its legacy root. The written paths
- * come back in `personalRoots` order: agents as given, codex's legacy copy
- * right after its `.agents` one (doctor walks `SKILL_AGENTS` the same way).
+ * install-skill and setup for named agents: refreshes every copy an agent
+ * already has, in any of its roots, and only an agent with no copy at all
+ * gets one created in `skillRoot`. Codex lists a same-name skill from both of
+ * its roots, so a `.agents` copy created beside a legacy one (cc-switch)
+ * would show favbase twice. The written paths come back in `personalRoots`
+ * order: agents as given, codex's legacy copy right after its `.agents` one
+ * (doctor walks `SKILL_AGENTS` the same way).
  */
 export async function installAgentSkills(
   content: string,
@@ -134,8 +140,10 @@ export async function installAgentSkills(
   env: ConfigEnv,
 ): Promise<string[]> {
   const written: string[] = [];
-  for (const { root, legacy } of personalRoots(agents, home, env)) {
-    written.push(...await (legacy ? refreshSkill : installSkill)(content, [root]));
+  for (const agent of agents) {
+    const roots = personalRoots([agent], home, env).map(({ root }) => root);
+    const refreshed = await refreshSkill(content, roots);
+    written.push(...refreshed.length > 0 ? refreshed : await installSkill(content, [skillRoot(agent, home)]));
   }
   return written;
 }

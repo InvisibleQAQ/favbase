@@ -311,6 +311,20 @@ describe('favbase doctor and the legacy Codex root', () => {
     expect(skillLines(result.stderr)).toEqual([]);
   });
 
+  // What install-skill leaves on a cc-switch machine: it creates no `.agents`
+  // copy beside a legacy one, so that row stays missing for good. A hint about
+  // it would send the user to an install-skill that never clears it.
+  it('stays quiet about a missing .agents copy when the legacy copy is current', async () => {
+    const result = await runDoctor({ skills: { claude: SHIPPED_SKILL }, legacyCodex: SHIPPED_SKILL });
+    const output = JSON.parse(result.stdout) as DoctorJson;
+    expect(output.skills.map(({ agent, state }) => ({ agent, state }))).toEqual([
+      { agent: 'claude', state: 'current' },
+      { agent: 'codex', state: 'missing' },
+      { agent: 'codex', state: 'current' },
+    ]);
+    expect(skillLines(result.stderr)).toEqual([]);
+  });
+
   it('looks under CODEX_HOME when it is set', async () => {
     const result = await runDoctor({ skills: current, legacyCodex: 'old\n', codexHome: true });
     const output = JSON.parse(result.stdout) as DoctorJson;

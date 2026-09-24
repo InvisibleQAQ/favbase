@@ -88,10 +88,12 @@ describe('inspectSkills', () => {
 
 // Codex still scans its deprecated `$CODEX_HOME/skills` besides
 // `~/.agents/skills` and shows a same-name skill from both. favbase refreshes
-// and reports a copy it finds there, and never creates one.
+// and reports a copy it finds there, never creates one, and creates no
+// `.agents` copy beside it either.
 describe('the legacy Codex root', () => {
   const OLDER = '---\nname: favbase\n---\nolder body\n';
   const copyIn = (root: string) => join(root, 'favbase', 'SKILL.md');
+  const agentsDir = (home: string) => join(home, '.agents');
 
   it('is $CODEX_HOME/skills, or <home>/.codex/skills when CODEX_HOME is unset or empty', () => {
     const home = join(tmpdir(), 'home');
@@ -129,13 +131,22 @@ describe('the legacy Codex root', () => {
     ]);
 
     await expect(installAgentSkills(SHIPPED, ['codex'], home, env)).resolves.toEqual([
-      copyIn(skillRoot('codex', home)),
       copyIn(join(home, 'codex-home', 'skills')),
     ]);
     await expect(readFile(copyIn(legacyCodexSkillRoot(home, {})), 'utf8')).resolves.toBe(OLDER);
+    expect(existsSync(agentsDir(home))).toBe(false);
+
+    // The copy under <home>/.codex is not codex's while CODEX_HOME points
+    // elsewhere, so it does not stand in for the .agents copy.
+    await rm(join(home, 'codex-home'), { recursive: true });
+    await expect(installAgentSkills(SHIPPED, ['codex'], home, env)).resolves.toEqual([
+      copyIn(skillRoot('codex', home)),
+    ]);
   });
 
-  it('is refreshed for codex, after the .agents copy, and left alone for claude', async () => {
+  // The cc-switch layout: a legacy copy and no .agents one. Creating .agents
+  // would make Codex list favbase twice.
+  it('is refreshed for codex instead of creating an .agents copy, and left alone for claude', async () => {
     const home = await tempHome();
     const legacy = legacyCodexSkillRoot(home, {});
     await installSkill(OLDER, [legacy]);
@@ -147,9 +158,22 @@ describe('the legacy Codex root', () => {
 
     await expect(installAgentSkills(SHIPPED, [...SKILL_AGENTS], home, {})).resolves.toEqual([
       copyIn(skillRoot('claude', home)),
+      copyIn(legacy),
+    ]);
+    await expect(readFile(copyIn(legacy), 'utf8')).resolves.toBe(SHIPPED);
+    expect(existsSync(agentsDir(home))).toBe(false);
+  });
+
+  it('is refreshed after the .agents copy when both are there', async () => {
+    const home = await tempHome();
+    const legacy = legacyCodexSkillRoot(home, {});
+    await installSkill(OLDER, [skillRoot('codex', home), legacy]);
+
+    await expect(installAgentSkills(SHIPPED, ['codex'], home, {})).resolves.toEqual([
       copyIn(skillRoot('codex', home)),
       copyIn(legacy),
     ]);
+    await expect(readFile(copyIn(skillRoot('codex', home)), 'utf8')).resolves.toBe(SHIPPED);
     await expect(readFile(copyIn(legacy), 'utf8')).resolves.toBe(SHIPPED);
   });
 
@@ -178,11 +202,12 @@ describe('the legacy Codex root', () => {
       { agent: 'codex', path: copyIn(legacy), state: 'stale' },
     );
     await expect(installAgentSkills(SHIPPED, ['codex'], home, {})).resolves.toEqual([
-      copyIn(skillRoot('codex', home)),
       copyIn(legacy),
     ]);
     await expect(readFile(join(real, 'SKILL.md'), 'utf8')).resolves.toBe(SHIPPED);
+    expect(existsSync(agentsDir(home))).toBe(false);
 
+    // Dangling, the link is no copy, so codex has none and gets its .agents one.
     await rm(real, { recursive: true });
     await expect(inspectSkills(SHIPPED, home, {})).resolves.toHaveLength(2);
     await expect(installAgentSkills(SHIPPED, ['codex'], home, {})).resolves.toEqual([

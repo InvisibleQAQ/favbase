@@ -146,16 +146,22 @@ provides no MCP server.
   unset or empty `CODEX_HOME` means `~/.codex`) and shows a same-name skill
   from both, so a copy there that favbase ignored went stale unseen (cc-switch
   links one in). `personalRoots` is the one list of roots, in write and report
-  order; the legacy root follows `.agents`. For codex (`--agent codex`, `all`,
-  `setup`) `installAgentSkills` overwrites the legacy copy **only if it
-  exists** -- `stat` follows links, so a copy behind a directory link is
-  written through it and a dangling link is absent -- and never creates it or
-  its directory. Only ENOENT/ENOTDIR skip it; any other error propagates, as
-  for the other roots (doctor calls that copy `stale`, and install-skill then
-  names the error). `inspectSkills` lists it only when present, so a machine
-  without one sees one entry per agent. Paths are neither resolved nor
-  deduplicated: cc-switch's two links to one real file get written twice,
-  harmlessly. `CODEX_HOME` arrives as a required `env` argument (`CliIo.env`);
+  order; the legacy root follows `.agents`. For each agent (`--agent`, `all`,
+  `setup`) `installAgentSkills` overwrites every copy the agent already has,
+  in any of its roots, and creates one in `skillRoot` **only when it has
+  none**. So a legacy copy never gets a `.agents` twin: Codex does not merge
+  same-name skills and would list favbase twice (following doctor's stale hint
+  created one on a cc-switch machine, 2026-09-24), and the legacy root itself,
+  directory included, is never created. A copy exists when `stat` finds it --
+  links are followed, so a copy behind a directory link is written through it
+  and a dangling link is absent. Only ENOENT/ENOTDIR mean absent; any other
+  error propagates (doctor calls that copy `stale`, and install-skill then
+  names the error). On such a machine doctor's `.agents` row stays `missing`
+  for good; the hint must keep ignoring it, since not every copy is missing
+  (`cli-main-doctor.test.ts` holds that). `inspectSkills` lists the legacy
+  copy only when present, so a machine without one sees one entry per agent.
+  Paths are neither resolved nor deduplicated: cc-switch's two links to one
+  real file get written twice, harmlessly. `CODEX_HOME` arrives as a required `env` argument (`CliIo.env`);
   the module never reads `process.env` itself, so no unit test sees the real
   one (the spawned `doctor` runs in `integration.test.ts` read the real home
   and env, read-only, and assert nothing about `skills`).

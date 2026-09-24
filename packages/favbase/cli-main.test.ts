@@ -183,9 +183,10 @@ describe('favbase CLI dispatch', () => {
   });
 
   // Codex still scans its deprecated `$CODEX_HOME/skills` (default `~/.codex`)
-  // besides `~/.agents/skills`; cc-switch links a copy in there. install-skill
-  // and setup refresh a copy they find there, after the `.agents` one, and
-  // never create one.
+  // besides `~/.agents/skills` and lists a same-name skill from both; cc-switch
+  // links a copy in there. install-skill and setup refresh a copy they find
+  // there, after the `.agents` one, and never create one. With a copy there
+  // and none in `.agents`, they create no `.agents` copy either.
   describe('with a copy in the legacy Codex root', () => {
     const OLD = '---\nname: favbase\n---\nolder\n';
 
@@ -195,8 +196,9 @@ describe('favbase CLI dispatch', () => {
       return join(root, 'user');
     }
 
-    async function seedLegacy(codexHome: string): Promise<string> {
-      const dir = join(codexHome, 'skills', 'favbase');
+    /** An OLD copy at `<parent>/skills/favbase/SKILL.md`: a Codex home's shape, and `.agents`'. */
+    async function seedCopy(parent: string): Promise<string> {
+      const dir = join(parent, 'skills', 'favbase');
       await mkdir(dir, { recursive: true });
       await writeFile(join(dir, 'SKILL.md'), OLD);
       return join(dir, 'SKILL.md');
@@ -207,26 +209,38 @@ describe('favbase CLI dispatch', () => {
 
     it.each([
       [['install-skill', '--agent', 'codex'], false],
+      [['install-skill', '--agent', 'all'], true],
       [['install-skill'], true],
       [['setup', '--token', 'abc'], true],
-    ])('%j rewrites it and reports it after the .agents copy', async (argv, withClaude) => {
+    ])('%j rewrites it and creates no .agents copy beside it', async (argv, withClaude) => {
       const homeDir = await userHome();
-      const legacy = await seedLegacy(join(homeDir, '.codex'));
+      const legacy = await seedCopy(join(homeDir, '.codex'));
       const result = await run(argv, {}, { homeDir });
       expect(result.code).toBe(EXIT_OK);
 
       const output = JSON.parse(result.stdout) as { installed?: string[]; skills?: string[] };
       expect(output.installed ?? output.skills).toEqual([
         ...(withClaude ? [claudeCopy(homeDir)] : []),
-        agentsCopy(homeDir),
         legacy,
       ]);
+      await expect(readFile(legacy, 'utf8')).resolves.toBe(SKILL);
+      expect(existsSync(join(homeDir, '.agents'))).toBe(false);
+    });
+
+    it('rewrites it after the .agents copy when both are there', async () => {
+      const homeDir = await userHome();
+      const legacy = await seedCopy(join(homeDir, '.codex'));
+      const agents = await seedCopy(join(homeDir, '.agents'));
+
+      const result = await run(['install-skill', '--agent', 'codex'], {}, { homeDir });
+      expect(JSON.parse(result.stdout)).toEqual({ installed: [agentsCopy(homeDir), legacy] });
+      await expect(readFile(agents, 'utf8')).resolves.toBe(SKILL);
       await expect(readFile(legacy, 'utf8')).resolves.toBe(SKILL);
     });
 
     it('leaves it alone for --agent claude and for --dir', async () => {
       const homeDir = await userHome();
-      const legacy = await seedLegacy(join(homeDir, '.codex'));
+      const legacy = await seedCopy(join(homeDir, '.codex'));
 
       const claude = await run(['install-skill', '--agent', 'claude'], {}, { homeDir });
       expect(JSON.parse(claude.stdout)).toEqual({ installed: [claudeCopy(homeDir)] });
@@ -240,13 +254,14 @@ describe('favbase CLI dispatch', () => {
     it('follows CODEX_HOME instead of <home>/.codex', async () => {
       const homeDir = await userHome();
       const codexHome = join(homeDir, '..', 'codex-home');
-      const legacy = await seedLegacy(codexHome);
-      const decoy = await seedLegacy(join(homeDir, '.codex'));
+      const legacy = await seedCopy(codexHome);
+      const decoy = await seedCopy(join(homeDir, '.codex'));
 
       const result = await run(['install-skill', '--agent', 'codex'], { CODEX_HOME: codexHome }, { homeDir });
-      expect(JSON.parse(result.stdout)).toEqual({ installed: [agentsCopy(homeDir), legacy] });
+      expect(JSON.parse(result.stdout)).toEqual({ installed: [legacy] });
       await expect(readFile(legacy, 'utf8')).resolves.toBe(SKILL);
       await expect(readFile(decoy, 'utf8')).resolves.toBe(OLD);
+      expect(existsSync(join(homeDir, '.agents'))).toBe(false);
     });
 
     it('does not create one when there is none', async () => {
