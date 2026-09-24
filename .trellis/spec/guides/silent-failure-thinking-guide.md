@@ -177,6 +177,13 @@ docs/27 Step 6 turned up two more, again found only by trellis-check:
       split on `。` and search only the sentence that introduces the state), then
       delete the instruction and watch it go red. Pattern: the "next step"
       cases in `lib/chat/tools.test.ts`
+- [ ] When the code under test swallows every failure (an advisory check that
+      returns `null`), a "make the call fail" guard is vacuous: the test stays
+      green because the rejection gets swallowed. Record the calls instead and
+      assert that there are none. Pattern: the fetch recorder in
+      `packages/favbase/test-setup.ts` (docs/27 Step 2). A temporary test that
+      wired in the real `fetch` passed its own assertions, and only the
+      recorder turned it red
 - [ ] Before treating a field or string as a copy someone reads, grep for its
       *reads*, not its definition, and run the surface that supposedly shows it
       (`favbase --help`). An unread copy gets deleted, not guarded (docs/27 D9)
@@ -218,3 +225,41 @@ No test checks what the table *tells the agent to do*.
       test, rather than a hand-typed copy. Pattern: the `--limit 0` case in
       `packages/favbase/cli-main.test.ts`
 - [ ] Owners: `skills/favbase/CLAUDE.md`, `packages/favbase/CLAUDE.md`
+
+---
+
+## Gotcha 6: The promise times out, but the process does not exit
+
+**Symptom**: The code has a 1.5 s budget, the promise resolves on time and the
+tests pass. But once in a while a `favbase search` takes 8-10 s from spawn to
+exit, and nothing reproduces it on demand.
+
+**Cause**: `AbortSignal.timeout` only makes `fetch` reject. The TCP connect or
+TLS handshake it has already started is not cancelled. That socket keeps the
+event loop alive until undici's own 10 s connect timeout expires. An agent
+waits for the process to **exit**, not for stdout, so it gets the full 10 s.
+docs/27 Step 2 measured this with a local TLS tarpit: `main` resolved at
+1.57 s and the process lived 10.1-10.8 s. On this machine Clash fake-ip
+answers DNS instantly, so the hang happens at the handshake. A stalled DNS
+lookup is worse: libuv joins its threadpool on exit, so even `process.exit`
+waits for `getaddrinfo`, which measured 12.2 s.
+
+**Trigger — ask this whenever**:
+
+- a CLI or a short-lived process gains a network call that has a timeout
+- a "budget" is asserted on a promise instead of on the process
+
+**Prevention checklist**:
+
+- [ ] Measure **process lifetime from spawn to exit**, against an endpoint that
+      accepts TCP and then never answers (a tarpit), not just an unroutable
+      one. Pattern: the "exits within the update-check budget" case in
+      `packages/favbase/integration.test.ts`. It redirects `fetch` with an
+      `--import` preload, so production gets no test hook
+- [ ] Exit explicitly once work is done, but flush stdout and stderr first.
+      Unflushed, `process.exit` truncated an 8 MB piped stdout to 65536 bytes.
+      Pattern: `packages/favbase/cli.ts`
+- [ ] Name the residual you cannot fix in-process (a DNS lookup that never
+      returns) and decide on it. Moving the query to a detached child is the
+      only full fix, and that changes when the result can be shown
+- [ ] Owners: `packages/favbase/CLAUDE.md` (`cli.ts`, `update-check.ts`)
