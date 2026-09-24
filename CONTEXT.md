@@ -148,6 +148,9 @@ _Avoid_: API key, provider key, password
 - A **Bridge Daemon** remains alive while an authenticated **Agent Bridge** peer is connected; its idle deadline starts only after that peer disconnects
 - The **favbase CLI** reaches the **Agent Bridge** only through the **Bridge Daemon** on loopback and presents the same **Bridge Token**; a request carrying a browser Origin is never a favbase CLI request
 - A Skill installed for an agent describes the **favbase CLI**; it never opens the **Agent Bridge** or reads Collection Items itself
+- An installed Skill is current only when it matches the Skill that the installed **favbase CLI** ships. The CLI must be current before the Skill is refreshed: a Skill that is newer than the CLI still describes the wrong program
+- A **Bridge Daemon** older than the **favbase CLI** that reaches it is replaced. A newer one is kept, so two installed CLI versions never take turns restarting it
+- The **favbase CLI** may contact the public npm registry, at most once a day unless the user asks `favbase doctor`, only to learn whether a newer **favbase CLI** exists. It never sends Collection Items, a **Bridge Token**, or the user's query. Upgrading stays the user's action: an agent relays the notice and does not install anything
 - The **Agent Setup Guide** leads an agent to the **favbase CLI**; pairing still passes through the user, because the **Bridge Token** exists only inside the running extension
 
 ## Example dialogue

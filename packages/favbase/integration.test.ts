@@ -1,11 +1,12 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
-import { readFileSync } from 'node:fs';
-import { mkdtemp, rm, symlink } from 'node:fs/promises';
+import { existsSync, readFileSync } from 'node:fs';
+import { mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { createServer, request } from 'node:http';
+import { createServer as createTcpServer, type AddressInfo, type Socket } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { WebSocket, type RawData } from 'ws';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -18,6 +19,7 @@ import {
   type AgentBridgeToolDescriptor,
   type JsonObject,
 } from '../../lib/agent-bridge/protocol';
+import { UPDATE_CHECK_BUDGET_MS } from './update-check';
 
 const CLI_PATH = fileURLToPath(new URL('./dist/cli.js', import.meta.url));
 const PACKAGE_VERSION = (JSON.parse(
@@ -54,11 +56,16 @@ afterEach(async () => {
   for (const child of children.splice(0)) {
     if (child.exitCode === null) child.kill();
   }
-  await Promise.all(homes.splice(0).map(home => rm(home, { recursive: true, force: true })));
+  const used = homes.splice(0);
+  // A CLI that checked for updates leaves update-check.json behind, even when
+  // the registries did not answer -- so this is the trace of a spawn that went
+  // online. Every spawn here must carry FAVBASE_NO_UPDATE_CHECK (docs/27 D12).
+  const wentOnline = used.filter(home => existsSync(join(home, 'update-check.json')));
+  await Promise.all(used.map(home => rm(home, { recursive: true, force: true })));
+  expect(wentOnline, 'a spawned CLI checked the npm registry').toEqual([]);
 });
 
 async function freePort(): Promise<number> {
-  const { createServer: createTcpServer } = await import('node:net');
   const server = createTcpServer();
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -83,6 +90,8 @@ function cliEnv(port: number, home: string, extra: Record<string, string> = {}):
     FAVBASE_TOKEN: TOKEN,
     FAVBASE_HOME: home,
     FAVBASE_DAEMON_IDLE_MINUTES: '0',
+    // dist/cli.js wires the real registry query; no test may reach it.
+    FAVBASE_NO_UPDATE_CHECK: '1',
     ...extra,
   };
 }
@@ -415,8 +424,10 @@ describe('favbase CLI process integration', () => {
       ctx.skip(`cannot create a symlink here: ${(error as Error).message}`);
       return;
     }
+    // `--version` never checks for updates; the opt-out keeps it that way if it
+    // ever did, since this spawn has no scratch FAVBASE_HOME of its own.
     const child = spawn(process.execPath, [join(linkDir, 'cli.js'), '--version'], {
-      env: process.env,
+      env: { ...process.env, FAVBASE_NO_UPDATE_CHECK: '1' },
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
     });
@@ -425,4 +436,63 @@ describe('favbase CLI process integration', () => {
     expect(result.stdout.trim()).toBe(PACKAGE_VERSION);
     expect(result.code).toBe(0);
   });
+
+  // Aborting the registry query rejects fetch at the budget, but the TLS
+  // handshake it started is not cancelled: it held the process open until
+  // undici's own 10 s connect timeout, and an agent waits for the exit, not for
+  // stdout (docs/27 Step 2). A preload routes the CLI's fetch to a local tarpit
+  // that accepts and never answers, so this is the one spawn that runs the
+  // check -- without going online. Its home stays out of `homes`, whose guard
+  // forbids a check.
+  it('exits within the update-check budget when a registry never answers', async () => {
+    const held = new Set<Socket>();
+    const tarpit = createTcpServer((socket) => {
+      held.add(socket);
+      socket.on('error', () => undefined);
+    });
+    tarpit.listen(0, '127.0.0.1');
+    await once(tarpit, 'listening');
+    const { port } = tarpit.address() as AddressInfo;
+    const home = await mkdtemp(join(tmpdir(), 'favbase-lifetime-'));
+    try {
+      const preload = join(home, 'tarpit-fetch.mjs');
+      await writeFile(preload, [
+        'const target = process.env.FAVBASE_TEST_TARPIT_URL;',
+        'const realFetch = globalThis.fetch;',
+        'globalThis.fetch = (_input, init) => realFetch(target, init);',
+        '',
+      ].join('\n'));
+      const env: NodeJS.ProcessEnv = {
+        ...process.env,
+        FAVBASE_HOME: home,
+        FAVBASE_TEST_TARPIT_URL: `https://127.0.0.1:${port}/favbase/latest`,
+      };
+      delete env.FAVBASE_NO_UPDATE_CHECK;
+
+      const started = Date.now();
+      const child = spawn(
+        process.execPath,
+        ['--import', pathToFileURL(preload).href, CLI_PATH, 'install-skill', '--dir', join(home, 'skills')],
+        { env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true },
+      );
+      children.push(child);
+      const result = await collect(child);
+      const lifetime = Date.now() - started;
+
+      expect(result.code).toBe(0);
+      expect(JSON.parse(result.stdout)).toEqual({
+        installed: [join(home, 'skills', 'favbase', 'SKILL.md')],
+      });
+      // The check ran, and it ran into the tarpit rather than a registry.
+      expect(held.size).toBeGreaterThan(0);
+      expect(JSON.parse(readFileSync(join(home, 'update-check.json'), 'utf8'))).toMatchObject({
+        latest: null,
+      });
+      expect(lifetime).toBeLessThan(UPDATE_CHECK_BUDGET_MS + 2_500);
+    } finally {
+      for (const socket of held) socket.destroy();
+      await new Promise<void>((resolve) => tarpit.close(() => resolve()));
+      await rm(home, { recursive: true, force: true });
+    }
+  }, 30_000);
 });

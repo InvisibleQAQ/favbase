@@ -16,6 +16,7 @@ import {
   type HealthResponse,
   type RpcResponse,
 } from './rpc-server';
+import { compareVersions } from './version';
 
 const HEALTH_TIMEOUT_MS = 2_000;
 const SPAWN_WAIT_MS = 10_000;
@@ -123,13 +124,35 @@ function foreignPort(port: number): DaemonError {
   );
 }
 
+function hasErrno(error: unknown, ...codes: string[]): boolean {
+  return error instanceof DaemonError && error.errno !== undefined && codes.includes(error.errno);
+}
+
+/**
+ * A daemon that is shutting down resets the connections it had accepted. That
+ * is routine once a newer CLI replaces an older daemon (docs/27 D14): parallel
+ * commands after an upgrade probe it mid-shutdown. One pause and a second look
+ * turns the reset into the real answer -- gone, or the new daemon -- instead
+ * of reporting the port as foreign.
+ */
+async function requestHealth(port: number): Promise<HttpResult> {
+  const probe = () => requestJson(port, 'GET', RPC_ROUTES.health, { timeoutMs: HEALTH_TIMEOUT_MS });
+  try {
+    return await probe();
+  } catch (error) {
+    if (!hasErrno(error, 'ECONNRESET')) throw error;
+    await sleep(SPAWN_POLL_MS);
+    return probe();
+  }
+}
+
 /** `null` when nothing listens on the port; throws `foreign` when something else does. */
 export async function fetchHealth(port: number): Promise<HealthResponse | null> {
   let result: HttpResult;
   try {
-    result = await requestJson(port, 'GET', RPC_ROUTES.health, { timeoutMs: HEALTH_TIMEOUT_MS });
+    result = await requestHealth(port);
   } catch (error) {
-    if (error instanceof DaemonError && error.errno === 'ECONNREFUSED') return null;
+    if (hasErrno(error, 'ECONNREFUSED')) return null;
     throw error instanceof DaemonError && error.code === 'unreachable' ? foreignPort(port) : error;
   }
   if (result.status !== 200 || !isHealth(result.body)) throw foreignPort(port);
@@ -139,7 +162,21 @@ export async function fetchHealth(port: number): Promise<HealthResponse | null> 
 export interface EnsureDaemonOptions {
   cliPath: string;
   env: ConfigEnv;
+  /** This CLI's version; a running daemon older than it is replaced. */
+  cliVersion: string;
   log(message: string): void;
+}
+
+export interface DaemonReplacement {
+  from: string;
+  to: string;
+}
+
+export interface EnsureDaemonResult {
+  health: HealthResponse;
+  spawned: boolean;
+  /** Set when an older daemon was stopped to make room for this CLI's. */
+  replaced: DaemonReplacement | null;
 }
 
 async function spawnDaemon(config: ResolvedConfig, options: EnsureDaemonOptions): Promise<string> {
@@ -173,19 +210,53 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Stops a daemon that is older than this CLI. Without this an upgraded CLI
+ * would keep talking to the old daemon's code indefinitely: a connected
+ * extension keeps a daemon from idling out (docs/24). A newer daemon, or one
+ * whose version is not a comparable release, is kept -- the newest version
+ * wins, so two installed CLIs never take turns restarting it. A failed stop is
+ * surfaced, never swallowed: falling back to the old daemon would hide it.
+ */
+async function replaceOlderDaemon(
+  config: ResolvedConfig,
+  existing: HealthResponse,
+  options: EnsureDaemonOptions,
+): Promise<DaemonReplacement> {
+  const replaced = { from: existing.version, to: options.cliVersion };
+  options.log(
+    `[favbase] replacing daemon ${replaced.from} (pid ${existing.pid}) with this CLI's ${replaced.to}`,
+  );
+  try {
+    // Only the daemon found above: a parallel command of this version may
+    // already have replaced it, and its fresh daemon must not be stopped.
+    await stopDaemon(config, existing.pid);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new DaemonError(
+      error instanceof DaemonError ? error.code : 'unreachable',
+      `could not stop the older favbase daemon ${replaced.from} (pid ${existing.pid}) to replace it with ${replaced.to}: ${message}`,
+    );
+  }
+  return replaced;
+}
+
 export async function ensureDaemon(
   config: ResolvedConfig,
   options: EnsureDaemonOptions,
-): Promise<{ health: HealthResponse; spawned: boolean }> {
+): Promise<EnsureDaemonResult> {
   const existing = await fetchHealth(config.port);
-  if (existing) return { health: existing, spawned: false };
+  if (existing && compareVersions(existing.version, options.cliVersion) !== -1) {
+    return { health: existing, spawned: false, replaced: null };
+  }
+  const replaced = existing ? await replaceOlderDaemon(config, existing, options) : null;
 
   const logPath = await spawnDaemon(config, options);
   const deadline = Date.now() + SPAWN_WAIT_MS;
   while (Date.now() < deadline) {
     await sleep(SPAWN_POLL_MS);
     const health = await fetchHealth(config.port);
-    if (health) return { health, spawned: true };
+    if (health) return { health, spawned: true, replaced };
   }
   throw new DaemonError(
     'spawn-failed',
@@ -287,17 +358,29 @@ export async function fetchStatus(config: ResolvedConfig, wait: boolean): Promis
 /**
  * Asks the daemon to exit; falls back to killing the pid it reported when the
  * token no longer matches. Only a process that identified itself as the
- * favbase daemon over `/health` is ever signalled.
+ * favbase daemon over `/health` is ever signalled. With `onlyPid`, a daemon
+ * reporting any other pid is left alone and reads as `not-running`: the one
+ * the caller meant to stop is gone.
  */
-export async function stopDaemon(config: ResolvedConfig): Promise<'stopped' | 'not-running'> {
+export async function stopDaemon(
+  config: ResolvedConfig,
+  onlyPid?: number,
+): Promise<'stopped' | 'not-running'> {
   const health = await fetchHealth(config.port);
-  if (!health) return 'not-running';
+  if (!health || (onlyPid !== undefined && health.pid !== onlyPid)) return 'not-running';
 
-  const result = await requestJson(config.port, 'POST', RPC_ROUTES.shutdown, {
-    token: config.token,
-    timeoutMs: HEALTH_TIMEOUT_MS,
-  });
-  if (result.status === 401) process.kill(health.pid);
+  let result: HttpResult | null = null;
+  try {
+    result = await requestJson(config.port, 'POST', RPC_ROUTES.shutdown, {
+      token: config.token,
+      timeoutMs: HEALTH_TIMEOUT_MS,
+    });
+  } catch (error) {
+    // Already on its way out (another CLI's shutdown got there first), so it
+    // reset or refused this one. The wait below still tells gone from stuck.
+    if (!hasErrno(error, 'ECONNRESET', 'ECONNREFUSED')) throw error;
+  }
+  if (result?.status === 401) process.kill(health.pid);
 
   const deadline = Date.now() + STOP_WAIT_MS;
   while (Date.now() < deadline) {

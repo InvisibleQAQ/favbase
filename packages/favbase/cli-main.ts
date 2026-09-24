@@ -28,11 +28,20 @@ import {
   stopDaemon,
 } from './daemon-client';
 import {
+  canonicalSkillContent,
+  inspectSkills,
   installSkill,
   parseSkillAgents,
   skillRoot,
   SKILL_AGENTS,
+  type SkillCopy,
 } from './skill-install';
+import {
+  checkCliCurrency,
+  updateNotice,
+  type CliCurrency,
+  type UpdatePolicy,
+} from './update-check';
 
 export const EXIT_OK = 0;
 export const EXIT_USAGE = 1;
@@ -57,6 +66,12 @@ export interface CliIo {
   stderr(text: string): void;
   /** Registers the handler that stops a foreground daemon (SIGINT/SIGTERM). */
   onSignal?(handler: () => void): void;
+  /**
+   * Latest published CLI version, `null` when no registry answered; never
+   * throws. Only cli.ts wires the real one. Without it no command goes online,
+   * which is what keeps every test off the network.
+   */
+  fetchLatestVersion?(): Promise<string | null>;
 }
 
 class CliExit extends Error {
@@ -83,7 +98,7 @@ ${aliases}
 Setup and daemon:
   ${'setup --token <token> [--port <port>] [--no-skill]'.padEnd(USAGE_COLUMN)} pair with the extension, install the skill
   ${`install-skill [--agent ${SKILL_AGENTS.join('|')}|all] [--dir <path>]`.padEnd(USAGE_COLUMN)} install only the skill
-  ${'doctor'.padEnd(USAGE_COLUMN)} check config, daemon and extension
+  ${'doctor'.padEnd(USAGE_COLUMN)} check config, daemon, extension, and whether CLI and skill are current
   ${'daemon [run|start|stop|restart]'.padEnd(USAGE_COLUMN)} run in foreground, or control the background daemon
 
 Config: FAVBASE_TOKEN / FAVBASE_BRIDGE_PORT, else ${configPath(env)} (default port ${DEFAULT_AGENT_BRIDGE_PORT}).
@@ -131,7 +146,12 @@ function idleMinutes(env: ConfigEnv): number {
 }
 
 function daemonOptions(io: CliIo) {
-  return { cliPath: io.cliPath, env: io.env, log: (line: string) => io.stderr(`${line}\n`) };
+  return {
+    cliPath: io.cliPath,
+    env: io.env,
+    cliVersion: io.version,
+    log: (line: string) => io.stderr(`${line}\n`),
+  };
 }
 
 async function connectedConfig(io: CliIo): Promise<ResolvedConfig> {
@@ -166,55 +186,93 @@ async function runTools(io: CliIo): Promise<number> {
   return EXIT_OK;
 }
 
-async function runCall(io: CliIo, parsed: ParsedArgv): Promise<number> {
+function parseCall(parsed: ParsedArgv): { tool: string; args: JsonObject } {
   const [tool, ...rest] = parsed.positionals;
   if (!tool || rest.length > 0) throw new UsageError('favbase call expects exactly one <tool>');
   for (const name of Object.keys(parsed.flags)) {
     if (name !== 'args') throw new UsageError(`Unknown option --${name} for favbase call`);
   }
   const rawArgs = requireValue(parsed.flags, 'args');
-  let args: JsonObject = {};
-  if (rawArgs !== undefined) {
-    let value: unknown;
-    try {
-      value = JSON.parse(rawArgs);
-    } catch {
-      throw new UsageError('--args must be a JSON object');
-    }
-    if (!value || typeof value !== 'object' || Array.isArray(value)) {
-      throw new UsageError('--args must be a JSON object');
-    }
-    args = value as JsonObject;
+  if (rawArgs === undefined) return { tool, args: {} };
+  let value: unknown;
+  try {
+    value = JSON.parse(rawArgs);
+  } catch {
+    throw new UsageError('--args must be a JSON object');
   }
-  return runTool(io, tool, args);
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new UsageError('--args must be a JSON object');
+  }
+  return { tool, args: value as JsonObject };
 }
 
-async function runDoctor(io: CliIo): Promise<number> {
+/**
+ * The stderr line for skill copies (docs/27 D11): only when a copy is stale or
+ * every copy is missing. One missing side is taken as deliberate. `stale` only
+ * says "differs from what this CLI ships" -- the copy may be newer (installed
+ * from GitHub main) -- so an outdated CLI is upgraded first, or install-skill
+ * would roll the copy back to an older skill.
+ */
+function skillHint(skills: readonly SkillCopy[], cli: CliCurrency): string | null {
+  const stale = skills.filter((copy) => copy.state === 'stale').map((copy) => copy.agent);
+  const allMissing = skills.every((copy) => copy.state === 'missing');
+  if (stale.length === 0 && !allMissing) return null;
+  const run = cli.state === 'outdated'
+    ? 'upgrade this CLI first (npm install -g favbase@latest), then run'
+    : 'run';
+  return stale.length > 0
+    ? `[favbase] the installed skill for ${stale.join(' and ')} differs from the one favbase ${cli.version} ships; ${run} favbase install-skill --agent ${stale.join(',')}`
+    : `[favbase] no favbase skill is installed for ${SKILL_AGENTS.join(' or ')} (a copy installed with --dir is invisible to doctor); ${run} favbase install-skill`;
+}
+
+function printSkillHint(io: CliIo, skills: readonly SkillCopy[], cli: CliCurrency): void {
+  const hint = skillHint(skills, cli);
+  if (hint) io.stderr(`${hint}\n`);
+}
+
+/**
+ * `skills` and `cli` are advisory: they never change `ok` or the exit code,
+ * because exit 2 means "unreachable" in SKILL.md's table and a stale skill is
+ * not. Neither depends on the config, so the config-error path reports both.
+ */
+async function runDoctor(io: CliIo, currency: Promise<CliCurrency>): Promise<number> {
+  const skills = await inspectSkills(io.skillContent, io.homeDir);
   let config: ResolvedConfig;
   try {
     config = await resolveConfig(io.env);
   } catch (error) {
     if (!(error instanceof ConfigError)) throw error;
-    printJson(io, { ok: false, config: { path: configPath(io.env), problem: error.message } });
+    const cli = await currency;
+    printJson(io, {
+      ok: false,
+      cli,
+      config: { path: configPath(io.env), problem: error.message },
+      skills,
+    });
+    printSkillHint(io, skills, cli);
     return EXIT_USAGE;
   }
-  const { spawned } = await ensureDaemon(config, daemonOptions(io));
+  const { spawned, replaced } = await ensureDaemon(config, daemonOptions(io));
   const status = await fetchStatus(config, true);
+  const cli = await currency;
   const troubleshooting = status.extension.connected
     ? []
     : extensionTroubleshooting(config, io.env, status.extension);
   printJson(io, {
     ok: status.extension.connected,
+    cli,
     config: {
       path: config.configPath,
       port: config.port,
       tokenSource: config.tokenSource,
       portSource: config.portSource,
     },
-    daemon: { ...status.daemon, spawned },
+    daemon: { ...status.daemon, spawned, replaced },
     extension: status.extension,
+    skills,
     troubleshooting,
   });
+  printSkillHint(io, skills, cli);
   if (status.extension.connected) return EXIT_OK;
   io.stderr(
     `favbase: extension-unavailable: ${troubleshooting.join(' ')} ${EXTENSION_LATENCY_HINT}\n`,
@@ -279,96 +337,170 @@ async function runDaemonCommand(io: CliIo, parsed: ParsedArgv): Promise<number> 
   }
 }
 
-async function runInstallSkill(io: CliIo, parsed: ParsedArgv): Promise<number> {
+function parseInstallSkill(io: CliIo, parsed: ParsedArgv): string[] {
   if (parsed.positionals.length > 0) {
     throw new UsageError('favbase install-skill takes no positional arguments');
   }
   const agents = parseSkillAgents(requireValue(parsed.flags, 'agent'));
   const dir = requireValue(parsed.flags, 'dir');
-  const roots = dir ? [dir] : agents.map((agent) => skillRoot(agent, io.homeDir));
+  return dir ? [dir] : agents.map((agent) => skillRoot(agent, io.homeDir));
+}
+
+async function runInstallSkill(io: CliIo, roots: readonly string[]): Promise<number> {
   printJson(io, { installed: await installSkill(io.skillContent, roots) });
   return EXIT_OK;
 }
 
-async function runSetup(io: CliIo, parsed: ParsedArgv): Promise<number> {
+interface SetupRequest {
+  token: string;
+  port: number | null;
+  skill: boolean;
+}
+
+function parseSetup(parsed: ParsedArgv): SetupRequest {
   if (parsed.positionals.length > 0) throw new UsageError('favbase setup takes no positional arguments');
   const token = parseToken(requireValue(parsed.flags, 'token'), '--token');
   if (!token) throw new UsageError(`favbase setup requires --token; ${SETUP_HINT}`);
-  const existing = await readConfigFile(io.env);
-  const port = parsePort(requireValue(parsed.flags, 'port'), '--port')
-    ?? existing.port
-    ?? DEFAULT_AGENT_BRIDGE_PORT;
+  return {
+    token,
+    port: parsePort(requireValue(parsed.flags, 'port'), '--port'),
+    skill: parsed.flags['no-skill'] !== true,
+  };
+}
 
-  const path = await writeConfigFile(io.env, { token, port });
-  const skills = parsed.flags['no-skill'] === true
-    ? []
-    : await installSkill(io.skillContent, SKILL_AGENTS.map((agent) => skillRoot(agent, io.homeDir)));
+async function runSetup(io: CliIo, request: SetupRequest): Promise<number> {
+  const existing = await readConfigFile(io.env);
+  const port = request.port ?? existing.port ?? DEFAULT_AGENT_BRIDGE_PORT;
+
+  const path = await writeConfigFile(io.env, { token: request.token, port });
+  const skills = request.skill
+    ? await installSkill(io.skillContent, SKILL_AGENTS.map((agent) => skillRoot(agent, io.homeDir)))
+    : [];
   printJson(io, { configPath: path, port, skills });
   io.stderr('[favbase] next: run favbase doctor with Chrome open to verify the connection\n');
   return EXIT_OK;
 }
 
-async function dispatch(io: CliIo, parsed: ParsedArgv): Promise<number> {
+/**
+ * A command whose arguments already parsed. Parsing happens before any update
+ * check starts, so an argument failure never goes online or prints the notice.
+ */
+interface PlannedCommand {
+  update: UpdatePolicy;
+  run(cli: Promise<CliCurrency>): Promise<number>;
+}
+
+function offline(run: () => Promise<number>): PlannedCommand {
+  return { update: 'none', run };
+}
+
+function daily(run: () => Promise<number>): PlannedCommand {
+  return { update: 'daily', run };
+}
+
+/**
+ * Which commands check for a newer CLI (docs/27 D12): every data and setup
+ * command, daily through the cache; doctor always, ignoring it. Never
+ * `--version`, usage, or `daemon *` -- `daemon run` is the long-lived process.
+ */
+function plan(io: CliIo, parsed: ParsedArgv): PlannedCommand {
   if (parsed.flags.version === true) {
-    io.stdout(`${io.version}\n`);
-    return EXIT_OK;
+    return offline(async () => {
+      io.stdout(`${io.version}\n`);
+      return EXIT_OK;
+    });
   }
   if (parsed.flags.help === true || parsed.command === null || parsed.command === 'help') {
-    io.stdout(usage(io.version, io.env));
-    return parsed.command === null && parsed.flags.help !== true ? EXIT_USAGE : EXIT_OK;
+    const code = parsed.command === null && parsed.flags.help !== true ? EXIT_USAGE : EXIT_OK;
+    return offline(async () => {
+      io.stdout(usage(io.version, io.env));
+      return code;
+    });
   }
 
   const alias = findAlias(parsed.command);
-  if (alias) return runTool(io, alias.tool, buildAliasArgs(alias, parsed.positionals, parsed.flags));
+  if (alias) {
+    const args = buildAliasArgs(alias, parsed.positionals, parsed.flags);
+    return daily(() => runTool(io, alias.tool, args));
+  }
 
   switch (parsed.command) {
     case 'tools':
-      return runTools(io);
-    case 'call':
-      return runCall(io, parsed);
+      return daily(() => runTools(io));
+    case 'call': {
+      const call = parseCall(parsed);
+      return daily(() => runTool(io, call.tool, call.args));
+    }
     case 'doctor':
-      return runDoctor(io);
+      return { update: 'always', run: (cli) => runDoctor(io, cli) };
     case 'daemon':
-      return runDaemonCommand(io, parsed);
-    case 'setup':
-      return runSetup(io, parsed);
-    case 'install-skill':
-      return runInstallSkill(io, parsed);
+      return offline(() => runDaemonCommand(io, parsed));
+    case 'setup': {
+      const request = parseSetup(parsed);
+      return daily(() => runSetup(io, request));
+    }
+    case 'install-skill': {
+      const roots = parseInstallSkill(io, parsed);
+      return daily(() => runInstallSkill(io, roots));
+    }
     default:
       throw new UsageError(`Unknown command "${parsed.command}"`);
   }
 }
 
-/** Runs one CLI invocation and returns the process exit code. Never throws. */
-export async function main(argv: readonly string[], io: CliIo): Promise<number> {
-  const reportError = (message: string): void => {
+function reportFailure(io: CliIo, argv: readonly string[], error: unknown): number {
+  const report = (message: string): void => {
     const daemonRun = argv[0] === 'daemon' && (argv[1] === undefined || argv[1] === 'run');
     const output = daemonRun
       ? message.split('\n').map(line => formatDaemonLogLine(line)).join('\n')
       : message;
     io.stderr(`${output}\n`);
   };
-  try {
-    return await dispatch(io, parseArgv(argv));
-  } catch (error) {
-    if (error instanceof UsageError) {
-      reportError(`favbase: ${error.message}\nRun favbase --help for usage.`);
-      return EXIT_USAGE;
-    }
-    if (error instanceof ConfigError) {
-      reportError(`favbase: ${error.message}`);
-      return EXIT_USAGE;
-    }
-    if (error instanceof CliExit) {
-      reportError(`favbase: ${error.message}`);
-      return error.code;
-    }
-    if (error instanceof DaemonError) {
-      reportError(`favbase: ${error.code}: ${error.message}`);
-      return EXIT_UNAVAILABLE;
-    }
-    const message = error instanceof Error ? error.message : String(error);
-    reportError(`favbase: ${message}`);
+  if (error instanceof UsageError) {
+    report(`favbase: ${error.message}\nRun favbase --help for usage.`);
+    return EXIT_USAGE;
+  }
+  if (error instanceof ConfigError) {
+    report(`favbase: ${error.message}`);
+    return EXIT_USAGE;
+  }
+  if (error instanceof CliExit) {
+    report(`favbase: ${error.message}`);
+    return error.code;
+  }
+  if (error instanceof DaemonError) {
+    report(`favbase: ${error.code}: ${error.message}`);
     return EXIT_UNAVAILABLE;
   }
+  const message = error instanceof Error ? error.message : String(error);
+  report(`favbase: ${message}`);
+  return EXIT_UNAVAILABLE;
+}
+
+/**
+ * Runs one CLI invocation and returns the process exit code. Never throws.
+ * The update check runs alongside the command and is awaited at the end, so
+ * the notice is the last stderr line and never touches stdout or the code.
+ * The bundled skill is canonicalized to LF here, the one boundary every
+ * command that writes or compares it passes through.
+ */
+export async function main(argv: readonly string[], rawIo: CliIo): Promise<number> {
+  const io: CliIo = { ...rawIo, skillContent: canonicalSkillContent(rawIo.skillContent) };
+  let cli: Promise<CliCurrency> | null = null;
+  let code: number;
+  try {
+    const command = plan(io, parseArgv(argv));
+    cli = checkCliCurrency({
+      env: io.env,
+      version: io.version,
+      policy: command.update,
+      fetchLatestVersion: io.fetchLatestVersion,
+    });
+    code = await command.run(cli);
+  } catch (error) {
+    code = reportFailure(io, argv, error);
+  }
+  const notice = cli ? updateNotice(await cli) : null;
+  if (notice) io.stderr(`${notice}\n`);
+  return code;
 }

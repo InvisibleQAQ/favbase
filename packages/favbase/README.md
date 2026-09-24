@@ -26,7 +26,7 @@ That writes `~/.favbase/config.json` and installs the Agent Skill for Claude Cod
 favbase doctor
 ```
 
-`doctor` checks the config, the background daemon and the link to the extension. Chrome must be running with the extension loaded for queries to work.
+`doctor` checks the config, the background daemon and the link to the extension. It also reports whether this CLI is the latest release (`cli`) and whether each installed copy of the Agent Skill matches the one this CLI ships (`skills`: `current`, `stale` or `missing`); neither changes its exit code. A copy installed with `install-skill --dir` is outside the two default locations and invisible to it. Chrome must be running with the extension loaded for queries to work.
 
 ## Commands
 
@@ -70,6 +70,20 @@ Exit code 2 usually means Chrome is closed or Agent Skills is switched off. The 
 
 The first data command starts a background daemon automatically (detached, logging to `~/.favbase/daemon.log`). It serves the extension's WebSocket and the CLI's HTTP routes on one loopback port, and exits on its own once no authenticated extension is connected and no CLI request has arrived for a while. `favbase daemon run|start|stop|restart` controls it explicitly.
 
+After an upgrade, the first command that talks to the daemon replaces one still running the older version (it says so on stderr). A daemon newer than the CLI that reaches it is kept, so two installed versions never take turns restarting it.
+
+## Update check
+
+Chrome updates the extension on its own; a global npm install never updates itself. So the CLI checks whether a newer `favbase` has been published and, if so, ends its stderr with one line:
+
+```
+[favbase] favbase <latest> is available (installed <version>). Upgrade with npm install -g favbase@latest, then run favbase doctor.
+```
+
+It never changes stdout or the exit code, and nothing is installed for you. After upgrading, `favbase doctor` tells you which skill copies to refresh with `favbase install-skill --agent <agent>`.
+
+This is the only request the CLI sends off your machine; everything else stays on loopback between the CLI, its daemon and the extension. It sends a plain `GET /favbase/latest` to `registry.npmjs.org` and `registry.npmmirror.com` at the same time and takes the highest version either reports; the mirror is there because the official registry is often unreachable from mainland China. The request carries no pairing token, no query and nothing from your library. It uses Node's built-in `fetch`, which by default does not read `HTTP(S)_PROXY`. The answer (or the failure to get one) is cached in `~/.favbase/update-check.json` for 24 hours, and the check gives up after 1.5 seconds. Data commands, `setup` and `install-skill` use the cache; `doctor` always asks. `--version`, `--help` and `daemon` commands never check. Set `FAVBASE_NO_UPDATE_CHECK=1` to turn it off entirely.
+
 CLI requests must carry the pairing token as a bearer token, and any request arriving with an `Origin` header is rejected before authentication — so a web page cannot reach the daemon by fetching `127.0.0.1`.
 
 ## Configuration
@@ -80,6 +94,7 @@ CLI requests must carry the pairing token as a bearer token, and any request arr
 | `FAVBASE_BRIDGE_PORT` | port, overrides the config file |
 | `FAVBASE_HOME` | config/log root, default `~/.favbase` |
 | `FAVBASE_DAEMON_IDLE_MINUTES` | idle timeout, default `120`; `0` never exits |
+| `FAVBASE_NO_UPDATE_CHECK` | any value but `0` turns off the update check and its cache |
 
 Resolution order is environment variable, then `~/.favbase/config.json`, then the shared default port.
 

@@ -32,6 +32,18 @@ or 60 seconds on Chrome 116-119; longer failures run `favbase doctor`. Never
 promise `~35 s`, claim every browser reconnects within 30 seconds, or include a
 real token.
 
+The **Update notices** section quotes the CLI's update notice with `<latest>` /
+`<version>` placeholders; `packages/favbase/cli-main.test.ts` checks that quote
+(and the npm README's) against the line the CLI really prints, so reword the
+code and both quotes together (docs/27 Step 2). It tells the agent to finish
+the request, then relay the notice and doctor's skill-copy lines, and never to
+run `npm install` or `install-skill` itself (docs/27 D13): upgrading is the
+user's action, a bare `install-skill` would write every agent's copy (D11 treats
+one missing side as deliberate), and the skill already loaded for the session
+would not change anyway. Mind the self-reference: an agent holding an **older**
+copy of this file cannot read an instruction added now; a new instruction here
+only helps once the next release has made this version stale.
+
 Both files here are read by a user or an agent, so they follow the CLI's
 user-facing vocabulary (`packages/favbase/CLAUDE.md`, Boundaries): **Agent
 Skills** for the settings section, **pairing token** for the secret. The domain

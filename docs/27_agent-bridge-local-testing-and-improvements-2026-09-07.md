@@ -1,6 +1,6 @@
 # Agent Bridge 本地测试路径与改进汇总手册（2026-09-07）
 
-> **状态（2026-09-23）**：Step 0 / 0.5 / 1 / 6 已落地；Step 2-5 待实施（Step 3 大半已被 `getProcessingCoverage` 绕过，见该节回写）。D1「暂不发布 npm」已于 2026-09-08 作废，`favbase@0.1.0` 已在 npm 上——下方「尚未发布」是 2026-09-07 的历史表述。
+> **状态（2026-09-23）**：Step 0 / 0.5 / 1 / 2 / 6 已落地（Step 2 范围扩大为 skill 副本、daemon、CLI 三层新旧检测，见该节落地记录）；Step 3-5 待实施（Step 3 大半已被 `getProcessingCoverage` 绕过，见该节回写）。D1「暂不发布 npm」已于 2026-09-08 作废，`favbase@0.1.0` 已在 npm 上——下方「尚未发布」是 2026-09-07 的历史表述。
 
 ## 目的
 
@@ -31,6 +31,10 @@
 | D8 | Step 0 连带做 Step 0.5a：删掉入口守卫而非取 realpath 比较 | 用户 2026-09-07 | 已定，已落地 |
 | D9 | `top_k` 范围与默认值单源 + 守卫：`lib/chat/tools.ts` 三常量拼出 zod 链与模型面 describe 串；CLI 不持有任何副本（从未被渲染的 `AliasFlag.help` 已删）；SKILL.md 的 `--limit <1-20>` 是唯一手写副本，由根契约测试对账 | 用户 2026-09-23（Q2 派生 + 守卫；Q3 删 CLI help） | 已定，已落地（Step 6 第 1 条） |
 | D10 | `getItemContent` 纯追加 `item_exists`，`found` 不改义 | 用户 2026-09-23（Q1） | 已定，已落地（Step 6 第 2 条） |
+| D11 | doctor 的 stderr skill 提示只在「任一副本 `stale`」或「**全部**副本 `missing`」时出现；只缺一侧视为有意为之，不提示。JSON 始终带两个根的完整三态（含 config 错误早退路径） | 用户 2026-09-23（Step 2 Q1） | 已定，已落地（Step 2） |
+| D12 | CLI 是否最新（L3）用**每日缓存**的联网检查：并发问 npmjs 与 npmmirror 两个源、取最高版本、1.5 s 预算；数据命令 / `setup` / `install-skill` 读 24 h 缓存，`doctor` 总是现查；`--version`、usage、`daemon *` 与参数解析失败从不检查；`FAVBASE_NO_UPDATE_CHECK` 整体关闭 | 用户 2026-09-23（Step 2 Q2） | 已定，已落地（Step 2） |
+| D13 | agent 只转述、不安装：CLI 过期与 skill 过期都交给用户。SKILL.md 让 agent 先完成请求再转述提示，不自行跑 `npm install` / `install-skill` | 主会话 2026-09-23（由 D5 + D11 派生） | 已定，已落地（Step 2） |
+| D14 | daemon 比 CLI 旧就替换；比 CLI 新、相同或版本不可比就保留——最新者胜，两个已装版本不会轮流重启它 | 主会话 2026-09-23 派生，已告知用户 | 已定，已落地（Step 2） |
 
 ---
 
@@ -340,7 +344,7 @@ POSIX 忽略该 type，退化成普通目录符号链接。**本机实测未走 
 
 ---
 
-## Step 2 — skill 漂移检测
+## Step 2 — skill 漂移检测 —— **已落地 2026-09-23**
 
 **目标** 让「已安装的 SKILL.md 落后于仓库」变成 `doctor` 能报出来的事实，而不是靠人 diff（证据 4）。
 
@@ -371,6 +375,54 @@ doctor 输出新增
 **回滚** 输出字段是新增的，删掉即回到旧行为；`daemon-client.ts` 的解码不受影响（纯 CLI 侧本地检查，不走 RPC）。
 
 **判据** 本机那份陈旧副本能被机器发现。
+
+**2026-09-23 落地（范围扩大为三层）** 用户追加要求「skill 用的 favbase CLI 必须是最新的」。「最新」有三层，本 Step 三层都做：
+
+| 层 | 比什么 | 需要联网 | 落点 |
+|---|---|---|---|
+| L1 | 已装 SKILL.md vs 本 CLI 打包的 SKILL.md（原 Step 2） | 否 | `skill-install.ts` `inspectSkills` + doctor `skills` |
+| L2 | 正在运行的 daemon vs 磁盘上的 CLI | 否 | `daemon-client.ts` `ensureDaemon` |
+| L3 | 磁盘上的 CLI vs npm 上最新发布版 | 是 | `update-check.ts` + doctor `cli` + stderr 提示 |
+
+**L1。** 只读的 `inspectSkills` 逐字节比对，不加版本字段（附录 A），不归一化已装副本的换行（用 CRLF 另存的副本报 `stale`，重装即好；打包进 CLI 的那份在 `main` 入口统一成 LF，见下方 trellis-check 第 3 条）。读不到但不是 ENOENT / ENOTDIR 的副本也报 `stale`，因为重装是 doctor 唯一能给的办法。doctor 的两条输出路径都带 `skills`：正常路径和 config 错误早退路径，因为 skill 检查不依赖 config 和 daemon。stderr 提示按 D11（Q1）处理：
+- 有副本 `stale` 时，点名这些 agent（`favbase install-skill --agent claude,codex`），绝不给裸 `install-skill`，因为裸命令会写所有 agent 的目录。
+- 全部 `missing` 时，建议 `favbase install-skill`，并注明用 `--dir` 装的副本 doctor 看不见。
+- 只缺一侧时不提示。
+
+**新发现：`stale` 没有方向。** 经 `npx skills add InvisibleQAQ/favbase`（根 `README.md`）装的 skill 来自 GitHub main，可能**比 CLI 新**，这时跑 install-skill 等于回滚。所以 L3 判定 CLI 过期时，提示改成「先升级 CLI，再 install-skill」。doctor 的 `ok` 与退出码不变：exit 2 在 SKILL.md 退出码表里的意思是「不可达」，skill 过期不属于这种情况（silent-failure guide Gotcha 5）。
+
+**L2。** 原来的 `ensureDaemon` 只要看到健康的 daemon 就直接复用，不比较 `health.version`。所以 `npm i -g favbase@新版` 之后旧 daemon 继续服务；docs/24 又让「有已认证 peer 时不 idle 退出」，于是只要 Chrome 开着并保持连接，**旧 daemon 永远不会被换掉**，新 CLI 一直在跟旧的 bridge-server / rpc-server 代码通信。现在的做法是：daemon 版本比 CLI 旧，就复用 `stopDaemon` 停掉它，再重新 spawn；stderr 记下两边的版本，返回值带 `replaced: { from, to }`，doctor 的 `daemon` 字段能看到它。版本更新、相同或不可比时保留原 daemon（D14）。停不掉就抛出 `DaemonError`（exit 2），报错里写明两个版本，不退回去用旧 daemon。
+
+**PRD 勘误**：PRD 举例说 `stopDaemon` 会「因 token 不同而 `unauthorized` 失败」，这不对。`stopDaemon` 在 `/shutdown` 收到 401 时，会直接 `process.kill` 该 daemon 经 `/health` 自报的 pid。所以 token 不同的旧 daemon 同样会被停掉并替换，和 `daemon restart` 的行为一致。它真正的失败方式是：`process.kill` 抛错（EPERM / ESRCH），`/shutdown` 请求本身失败，5 秒内没退出，或者端口已被别的程序占用。
+
+**L3。** 由 `update-check.ts` 负责。
+- `queryRegistries` 并发请求 `registry.npmjs.org/favbase/latest` 和 `registry.npmmirror.com/favbase/latest`，两者共用一个 1.5 s 的 `AbortSignal.timeout`，取能解析成正式版的最高版本号，全程不抛错，也不新增依赖（Node 20 自带 `fetch`）。
+- 同时问镜像，是因为产品用户大多在中国大陆，那里的 npmjs 常常在预算内答不上来；本机 npm registry 也是 npmmirror（附录 B 第 3 条）。取最高值意味着镜像落后只会让答案变旧，不会让它出错。
+- 2026-09-23 的 curl 实测：两个源都返回 `{"version":"0.1.0", …}`，HTTP 200。npmjs 约 0.47 s（curl 走了 `https_proxy`），npmmirror 约 0.14 s。Node 的 `fetch` 默认**不读** `HTTP(S)_PROXY`：把 `https_proxy` 设成不存在的端口，Node 20.10 与 22.22 依旧直连成功。两个源并发实测共 633 ms（Node 20.10）。Node 20.10 调 `fetch` 也不会打出 ExperimentalWarning。
+- 缓存放在 `<FAVBASE_HOME>/update-check.json`，形如 `{ checkedAt, latest }`。年龄落在 `[0, 24 h)` 内才算新鲜，未来时间戳不算。查询失败同样写入 `checkedAt`，所以网络不通每天只付一次预算。
+- 实现上，`plan` 先解析参数，再由 `main` 启动检查。因此参数失败从不联网，也不打印提示，这一点靠结构保证，不靠条件分支。
+- 提示只写 stderr，一行，位于输出末尾。它不改 stdout 和退出码。
+- 提示文案**偏离 PRD 示例**：结尾是 `then run favbase doctor`，不是 `then: favbase install-skill`。原因是裸 `install-skill` 会写所有 agent 的目录，与 D11「只缺一侧是有意为之」冲突；而 doctor 会点名具体该刷新的副本。
+- `FAVBASE_NO_UPDATE_CHECK` 为非空且不是 `0` 时，整体跳过检查，缓存也不读写。此时 doctor 的 `cli` 为 `unknown`，并在 `reason` 里说明原因。
+
+**D13（只转述）。** SKILL.md 新增「Update notices」一节，要求 agent 先完成用户的请求，再转述这行提示和 doctor 的 skill 提示，不要自己跑 `npm install` 或 `install-skill`。这里有一个**自指问题**：拿着旧副本的 agent 读不到这条新指令，所以它要等**下一次**发版让这一版过期之后才会生效。
+
+**守卫**（每条都按 Gotcha 4 故意改坏过，确认会红，再逐字节还原，`sha256sum -c` 全部 OK）：
+- daemon 比较方向：`!== -1` 改成 `!== 1` 后，「旧 daemon 被替换」「新 daemon 保留」「停止失败要上报」三例红。
+- Q1：`every` 改成 `some` 后，「一侧 current、一侧 missing 时不提示」一例红。
+- TTL：`<` 改成 `>` 后三例红；「永远新鲜」时两例红；去掉 `age >= 0` 时「未来时间戳」一例红。
+- 提示引文：只改 SKILL.md、只改 CLI 文案、只改 README 这三种情况，各自都会让引文例红。
+- 其余：命令门控（`daemon` 改成 daily）、「参数解析之前就启动检查」（11 例红）、doctor 读缓存、开关失效、「先升级」缺失、吞掉停止失败、逐字节比较被换掉，各有例子变红。
+- 联网守卫有两层：进程内由 `test-setup.ts` 把全局 `fetch` 换成记录器。一例临时测试按 cli.ts 的方式接真实 `fetch`，这例自己的断言**是绿的**，因为查询吞掉了拒绝，只有 afterEach 的记录器把它抓出来，这正是「光让 fetch 拒绝还不够」的证据。子进程这层，从 `cliEnv` 删掉开关后，该集成例因 `update-check.json` 出现而红（此次反向验证真实发出了两个只读 GET）。
+
+**trellis-check 复核补的三处（2026-09-23）**：
+- **进程寿命超出预算。** 实现时有一次带过期缓存的真实查询总耗时 7810 ms。复核用 `--import` 预加载把真实 `dist/cli.js` 的 `fetch` 改道到本地可控端点，稳定复现：`main` 在约 1.57 s resolve，但进程要等 `AbortSignal.timeout` 没能取消的 TCP 连接 / TLS 握手自行结束，TLS tarpit 下活到 10.1–10.8 s（undici 默认 10 s connect timeout），黑洞地址下活到 5.1 s，Node 20.10 与 22.22 一致。agent 等的是进程退出，不是 stdout。修法是 `cli.ts` 在 `main` resolve 后先 flush stdout/stderr（空写回调），再 `process.exit`；修后四种网络情形一律约 1.67 s 退出。flush 不能省：WSL Linux + Node 22 实测，不 flush 直接 exit 会把管道里 8 MB 的 stdout 截成 64 KB。另一个候选（后台 detached 子进程刷新缓存、数据命令只读缓存）被否决，因为 doctor 总是现查，它照样要在进程内联网，这个问题还在，而且多出一条隐藏命令和一次进程 spawn。`integration.test.ts` 新增一例：把 `fetch` 改道到本地 tarpit 后，断言进程寿命小于预算加 2.5 s。去掉修复时这例是红的（10846 ms），恢复后是绿的。**残留问题：DNS 卡住的情况没有覆盖。** libuv 在退出时会等线程池里的线程结束，所以 `process.exit` 本身也要等 `getaddrinfo` 返回。用一个没人应答的 `.local` 主机名实测，进程活到 12.2 s。本机走 Clash fake-ip，DNS 是即时的，所以 7.8 s 那次不属于这一类。因为失败结果会写进缓存，DNS 坏掉但网络还连着的机器每天只会慢一条命令，另外每次 `doctor` 都会慢。要彻底把它限制在预算内，只能把查询挪出进程，像 update-notifier 那样用 detached 子进程查，结果下一次运行才显示。这会改变 R3「命令开始时发起、结尾等待」的约定，需要另行决策，本次没有做。
+- **并行命令替换同一个旧 daemon。** 用 0.0.9 的 daemon 加 4–8 个并行的 0.1.0 `daemon start` 实测：修复前 64 条命令里有 5 条 exit 2。一种错误是关闭中的 daemon 重置了 `/health` 探测，被报成 `foreign`，还提示用户「换端口并重跑 setup」，这是误导。另一种是 `/shutdown` 被别的命令抢先关掉的 daemon 重置，报成「could not stop the older daemon」。修法有三条：`fetchHealth` 遇到 ECONNRESET 时隔一个轮询间隔再看一次；`stopDaemon` 把被重置或被拒绝的 `/shutdown` 当作 daemon 已经在退出，交给退出等待去判定；替换时带上探测到的 pid，`stopDaemon` 不去停别的命令刚起的新 daemon。修后 72 条命令零失败。四例单测各自对应一种变异，改坏后都会变红。
+- **打包的 SKILL.md 可能是 CRLF。** CLI 打进去的是发布者 checkout 里的原字节；仓库没有 `.gitattributes`，本机 `core.autocrlf=true`，哪次从 CRLF checkout 发版，逐字节比对的 `inspectSkills` 就会把所有 LF 副本（包括 `npx skills add` 从 GitHub 拿到的 LF blob）永远报成 `stale`。已发布的 0.1.0 是 LF，所以目前是潜伏问题。修法是只在一个边界归一化：`main` 入口用 `skill-install.ts` 的 `canonicalSkillContent` 把 `io.skillContent` 的 `\r\n` 与单独的 `\r` 换成 `\n`，之后 `install-skill` / `setup` 写出 LF，`inspectSkills` 也拿 LF 比。已装副本照旧不归一化（CRLF 另存仍报 `stale`），也不加 `.gitattributes`。测试故意喂 CRLF，所以在 LF checkout 上也能红：去掉 `main` 里的调用后，「`install-skill --dir` 写出的文件不含 `\r`」与「预置的 LF 副本报 `current`」两例都红（后者实际报 `stale`），逐字节还原后绿；函数本身的单测在正则丢掉单独 `\r` 时红。
+
+**本机样本**：两处已装副本（`~/.claude/skills/favbase/`、`~/.agents/skills/favbase/`，各 3685 字节）与 `d27f06c`（2026-09-08 改名那次）的 SKILL.md 相同，不是 PRD 说的「自 `71899a3` 落后一轮」：此后又有 `b5f8040`、`e6a3231`、`aad6c16`、`83203fa`、`71899a3` 五次修改，本次再加一次。本 Step 没有动这两份副本，它们留给用户升级后跑 `favbase doctor` 做人工验收。
+
+**未做**：`--dir` 装的副本检测（有意限制，已写进提示和 README）；数据命令检查 skill（只有 doctor 检查）；CLI 自我升级；设置卡显示 CLI 版本；升版本号与发布 npm。
 
 ---
 
@@ -584,6 +636,8 @@ Step 5 落地时填入实测值。`预期`列现在就写死，`实测`留空。
 | 4 | Chrome 关闭 | exit 2 + 明确提示 | |
 | 5 | 端口被非 favbase 进程占用 | exit 1，且**不**杀占用者 | |
 | 6 | Windows 首个数据命令 | daemon 自启（detached），日志落 `~/.favbase/daemon.log` | |
-| 7 | 陈旧 skill 副本（Step 2 后） | doctor 报 `stale` | |
+| 7 | 陈旧 skill 副本（Step 2 后） | doctor 的 `skills` 报 `stale`，stderr 点名对应 agent（`install-skill --agent …`）；只缺一侧时不提示 | |
 | 8 | 关闭 embedding（Step 3 后） | doctor 报 `embedding: 'off'` | |
 | 9 | 经符号链接／junction 调用（Step 0.5 后） | `favbase --version` 输出版本号，不是空输出 | |
+| 10 | 升级 CLI 后旧 daemon 仍在运行，且 Chrome 保持连接（L2，Step 2 后） | 下一条命令的 stderr 出现 `replacing daemon <旧> … with this CLI's <新>`，doctor 的 `daemon.replaced` 为 `{ from, to }`；扩展在一个 alarm 周期内重连到新 daemon | |
+| 11 | 本机 CLI 落后于 npm 最新版（L3，Step 2 后） | 数据命令 stderr 的最后一行是更新提示，stdout 与退出码不变；24 h 内只联网一次（看 `~/.favbase/update-check.json` 的 `checkedAt`）；设置 `FAVBASE_NO_UPDATE_CHECK=1` 时不联网，doctor 的 `cli.state` 为 `unknown` 并给出 `reason`；断网或 registry 不应答时，命令在约 1.5 s 预算内退出（看进程结束时间，不是 stdout 出现的时间） | |

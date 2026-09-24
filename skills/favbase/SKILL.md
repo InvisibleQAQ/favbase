@@ -29,7 +29,8 @@ nothing is ever written to the library.
   permitted.
 - One-time pairing (the user does this once, values come from that settings
   card): `favbase setup --token <pairing token> --port <port>`.
-- `favbase doctor` verifies config, background daemon and extension link.
+- `favbase doctor` verifies config, background daemon and extension link, and
+  reports whether this CLI and the installed copies of this skill are current.
 
 ## Commands
 
@@ -42,7 +43,7 @@ favbase get <item-id>
 favbase coverage [--platform <platform>]
 favbase tools                       # Knowledge Tools the extension advertises, with JSON Schemas
 favbase call <tool> --args '<json>' # call any advertised tool directly
-favbase doctor                      # config + daemon + extension status
+favbase doctor                      # config, daemon, extension, CLI and skill status
 ```
 
 `<platform>` is one of `bilibili`, `github`, `bookmarks`, `x`, `zhihu`,
@@ -108,4 +109,21 @@ longer, run `favbase doctor`.
 
 The background daemon starts automatically on the first data command. Once no
 extension is connected, it exits after two hours without a CLI request;
-`favbase daemon stop` ends it early.
+`favbase daemon stop` ends it early. A daemon left running by an older CLI is
+replaced automatically on the next command.
+
+## Update notices
+
+Any command may end its stderr with this line (the versions vary):
+
+```
+[favbase] favbase <latest> is available (installed <version>). Upgrade with npm install -g favbase@latest, then run favbase doctor.
+```
+
+It never changes stdout or the exit code. Finish the user's request first,
+then pass the line on to the user. `favbase doctor` may also say that an
+installed copy of this skill differs from the one the CLI ships, or that none
+is installed; pass that on the same way. Do not run `npm install` or
+`favbase install-skill` yourself: upgrading is the user's decision, and this
+skill is already loaded for the session, so reinstalling it changes nothing
+now.

@@ -89,9 +89,11 @@ install the skill; `favbase install-skill` can do it later on its own.
 favbase doctor
 ```
 
-`doctor` checks three things separately: the config file, the background daemon
-and the link to the extension. Read its output rather than assuming success
-from a zero exit code.
+`doctor` checks the config file, the background daemon and the link to the
+extension separately. It also reports whether the CLI is the latest release and
+whether the skill copies it just installed match it; neither of those changes
+the exit code. Read its output rather than assuming success from a zero exit
+code.
 
 Then try one real query:
 
