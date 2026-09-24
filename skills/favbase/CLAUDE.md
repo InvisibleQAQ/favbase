@@ -24,7 +24,9 @@ schema (`packages/favbase/CLAUDE.md`, Boundaries). Workflow step 4's
 row tells an agent to recognise a usage error by the CLI's closing line
 `Run favbase --help for usage.` (fix the command, don't send the user to
 `favbase setup`); `packages/favbase/cli-main.test.ts` checks that line is quoted
-here. Reconnect
+here. The same file checks that this file and the npm README both carry
+`--args-file <path>`, the form the CLI's failed-`--args` error points at
+(Windows PowerShell 5.1 strips the JSON's double quotes). Reconnect
 copy must use the CLI's canonical wording, verbatim -- `cli-main-doctor.test.ts`
 compares this file against `EXTENSION_LATENCY_HINT`: an already connected
 extension skips alarm waiting; cold reconnect is about 30 seconds on Chrome 120+

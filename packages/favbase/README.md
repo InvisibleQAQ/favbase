@@ -40,6 +40,7 @@ favbase coverage [--platform <platform>]
 
 favbase tools                            # the Knowledge Tools the extension advertises, with JSON Schemas
 favbase call <tool> [--args '<json>']    # call any advertised tool directly
+favbase call <tool> --args-file <path>   # the same, with the JSON object in a UTF-8 file
 
 favbase setup --token <token> [--port <port>] [--no-skill]
 favbase install-skill [--agent claude|codex|all] [--dir <path>]
@@ -54,6 +55,8 @@ favbase daemon [run|start|stop|restart]
 For the accepted `--platform` values run `favbase tools` — the tool schemas are generated from whatever the installed extension actually supports, so they are always current. `favbase --help` is authoritative if this file and the CLI ever disagree.
 
 `search`, `tags`, `get` and `coverage` are ergonomic aliases over the extension's Knowledge Tools. `tools` and `call` are the zero-knowledge channel: anything the extension advertises is reachable without a CLI update.
+
+`call` takes the tool's arguments as one JSON object, inline with `--args` or from a file with `--args-file`. Windows PowerShell 5.1 strips the double quotes out of an inline argument, so use the file there; a path survives every shell. The file must be UTF-8 (a byte order mark is fine): PowerShell 5.1's `>` writes UTF-16, so save it with `Set-Content -Encoding utf8` instead.
 
 ## Exit codes
 

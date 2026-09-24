@@ -1,7 +1,10 @@
+import { once } from 'node:events';
 import { existsSync, readFileSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { createServer, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -13,6 +16,7 @@ const SKILL = '---\nname: favbase\n---\nbody\n';
 const VERSION = '9.9.9';
 const NEWER = '10.0.0';
 const temps: string[] = [];
+const servers: Server[] = [];
 
 interface Run {
   code: number;
@@ -44,6 +48,10 @@ async function run(
 }
 
 afterEach(async () => {
+  for (const server of servers.splice(0)) {
+    server.close();
+    server.closeAllConnections();
+  }
   await Promise.all(temps.splice(0).map(dir => rm(dir, { recursive: true, force: true })));
 });
 
@@ -186,6 +194,155 @@ describe('favbase CLI dispatch', () => {
     const written = await readFile(join(dir, 'favbase', 'SKILL.md'), 'utf8');
     expect(written).not.toContain('\r');
     expect(written).toBe(SKILL);
+  });
+});
+
+// Windows PowerShell 5.1 does not escape embedded double quotes when it builds
+// a native command line, so `call --args '{"platform":"zhihu"}'` reaches node
+// as `{platform:zhihu}`. A path survives every shell; `--args-file` carries one.
+describe('favbase call arguments', () => {
+  // A space, a number and non-ASCII text: the three things a quote-stripped
+  // `--args` cannot carry, and the last one what a non-UTF-8 read would mangle.
+  const ARGS = { query: 'rust async \u5f02\u6b65', top_k: 3 };
+  const FILE_FORM = '--args-file <path>';
+
+  /**
+   * A loopback stand-in for the daemon. `/health` answers as this CLI's own
+   * version, so `ensureDaemon` keeps it, and `/rpc` records the call. Every
+   * request is logged, so a usage error can show it never got this far.
+   */
+  async function fakeDaemon(): Promise<{ env: Record<string, string>; requests: string[]; calls: unknown[] }> {
+    const requests: string[] = [];
+    const calls: unknown[] = [];
+    const server = createServer((request, response) => {
+      requests.push(`${request.method} ${request.url}`);
+      const chunks: Buffer[] = [];
+      request.on('data', (chunk: Buffer) => chunks.push(chunk));
+      request.on('end', () => {
+        response.writeHead(request.url === '/health' || request.url === '/rpc' ? 200 : 404, {
+          'content-type': 'application/json',
+        });
+        if (request.url === '/health') {
+          // Never signalled: equal versions are kept, and nothing asks /shutdown.
+          response.end(JSON.stringify({ name: 'favbase', version: VERSION, pid: 2_147_483_000 }));
+          return;
+        }
+        if (request.url === '/rpc') {
+          calls.push(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+          response.end(JSON.stringify({ ok: true, result: { answered: true } }));
+          return;
+        }
+        response.end();
+      });
+    });
+    servers.push(server);
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    const { port } = server.address() as AddressInfo;
+    return { env: { FAVBASE_TOKEN: 'abc', FAVBASE_BRIDGE_PORT: String(port) }, requests, calls };
+  }
+
+  async function scratchDir(): Promise<string> {
+    const dir = await mkdtemp(join(tmpdir(), 'favbase-args-'));
+    temps.push(dir);
+    return dir;
+  }
+
+  async function argsFile(content: string | Buffer): Promise<string> {
+    const file = join(await scratchDir(), 'args.json');
+    await writeFile(file, content);
+    return file;
+  }
+
+  it.each([
+    ['inline --args', async () => ['--args', JSON.stringify(ARGS)]],
+    ['--args-file', async () => ['--args-file', await argsFile(JSON.stringify(ARGS))]],
+    [
+      '--args-file relative to the working directory',
+      async () => ['--args-file', relative(process.cwd(), await argsFile(JSON.stringify(ARGS)))],
+    ],
+    // What Windows PowerShell 5.1's `Set-Content -Encoding utf8` writes.
+    ['--args-file with a UTF-8 BOM', async () => ['--args-file', await argsFile(`\uFEFF${JSON.stringify(ARGS)}`)]],
+  ])('hands the tool the same object from %s', async (_name, flags) => {
+    const daemon = await fakeDaemon();
+    const result = await run(['call', 'searchKnowledgeBase', ...(await flags())], daemon.env);
+    expect(result.stderr).toBe('');
+    expect(result.code).toBe(EXIT_OK);
+    expect(daemon.calls).toEqual([{ tool: 'searchKnowledgeBase', args: ARGS }]);
+    expect(JSON.parse(result.stdout)).toEqual({ answered: true });
+  });
+
+  it.each([
+    ['an array', '[1]'],
+    ['null', 'null'],
+    ['JSON that lost its quotes', '{platform:zhihu}'],
+    ['nothing', ''],
+  ])('refuses a file holding %s before touching the daemon', async (_name, content) => {
+    const daemon = await fakeDaemon();
+    const result = await run(['call', 'getProcessingCoverage', '--args-file', await argsFile(content)], daemon.env);
+    expect(result.code).toBe(EXIT_USAGE);
+    expect(result.stderr).toContain('--args-file must contain a JSON object');
+    // The quotes were not the problem here, so no PowerShell advice.
+    expect(result.stderr).not.toContain('PowerShell');
+    expect(daemon.requests).toEqual([]);
+  });
+
+  // UTF-16 is what Windows PowerShell 5.1's `>` and `Out-File` write by
+  // default, and `Set-Content` writes the ANSI code page (GBK where that is
+  // code page 936). Read leniently, UTF-16 is blamed on the JSON, and the GBK
+  // bytes for the query decode to U+FFFD plus a Hangul syllable and still
+  // parse -- the search would run on noise.
+  it.each([
+    ['a missing file', async () => join(await scratchDir(), 'missing.json'), 'ENOENT'],
+    ['a UTF-16 file', async () => argsFile(Buffer.from(`\uFEFF${JSON.stringify(ARGS)}`, 'utf16le')), 'utf-8'],
+    [
+      'a GBK file',
+      async () => argsFile(Buffer.concat([
+        Buffer.from('{"query":"'),
+        Buffer.from([0xd2, 0xec, 0xb2, 0xbd]),
+        Buffer.from('"}'),
+      ])),
+      'utf-8',
+    ],
+  ])('refuses %s, naming it, before touching the daemon', async (_name, makePath, detail) => {
+    const daemon = await fakeDaemon();
+    const path = await makePath();
+    const result = await run(['call', 'searchKnowledgeBase', '--args-file', path], daemon.env);
+    expect(result.code).toBe(EXIT_USAGE);
+    expect(result.stderr).toContain(`cannot read --args-file ${path}`);
+    expect(result.stderr).toContain(detail);
+    expect(daemon.requests).toEqual([]);
+  });
+
+  it('refuses --args together with --args-file', async () => {
+    const daemon = await fakeDaemon();
+    const file = await argsFile(JSON.stringify(ARGS));
+    const result = await run(
+      ['call', 'searchKnowledgeBase', '--args', JSON.stringify(ARGS), '--args-file', file],
+      daemon.env,
+    );
+    expect(result.code).toBe(EXIT_USAGE);
+    expect(result.stderr).toContain('--args or --args-file, not both');
+    expect(daemon.requests).toEqual([]);
+  });
+
+  // `{platform:zhihu}` is exactly what node receives from Windows PowerShell
+  // 5.1 for `--args '{"platform":"zhihu"}'`. The error is where a user or an
+  // agent learns the way around it, so it has to name the form the docs teach.
+  it('points a failed --args at --args-file, the form SKILL.md and the README teach', async () => {
+    const daemon = await fakeDaemon();
+    const result = await run(['call', 'getProcessingCoverage', '--args', '{platform:zhihu}'], daemon.env);
+    expect(result.code).toBe(EXIT_USAGE);
+    const [line] = result.stderr.split('\n');
+    expect(line).toContain('--args must be a JSON object');
+    expect(line).toContain('Windows PowerShell 5.1');
+    expect(line).toContain(FILE_FORM);
+    expect(daemon.requests).toEqual([]);
+
+    for (const doc of ['../../skills/favbase/SKILL.md', './README.md']) {
+      const text = readFileSync(new URL(doc, import.meta.url), 'utf8');
+      expect(text, `${doc} no longer teaches ${FILE_FORM}`).toContain(FILE_FORM);
+    }
   });
 });
 
@@ -350,6 +507,7 @@ describe('favbase update check', () => {
     [['search', 'q', '--limit', '0']],
     [['call']],
     [['call', 'listTags', '--args', '[1]']],
+    [['call', 'listTags', '--args-file', 'no-such-args-file.json']],
     [['setup']],
     [['setup', '--token', 'abc', '--port', 'not-a-port']],
     [['install-skill', '--agent', 'cursor']],

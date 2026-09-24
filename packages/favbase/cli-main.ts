@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import { DEFAULT_AGENT_BRIDGE_PORT, type JsonObject } from '../../lib/agent-bridge/protocol';
 import { parseArgv, requireValue, UsageError, type ParsedArgv } from './args';
 import {
@@ -93,7 +95,7 @@ Usage: favbase <command> [options]
 Data commands (stdout is JSON, diagnostics go to stderr):
 ${aliases}
   ${'tools'.padEnd(USAGE_COLUMN)} list the Knowledge Tools the extension advertises
-  ${'call <tool> [--args <json-object>]'.padEnd(USAGE_COLUMN)} call any Knowledge Tool by name
+  ${'call <tool> [--args <json-object> | --args-file <path>]'.padEnd(USAGE_COLUMN)} call any Knowledge Tool by name
 
 Setup and daemon:
   ${'setup --token <token> [--port <port>] [--no-skill]'.padEnd(USAGE_COLUMN)} pair with the extension, install the skill
@@ -186,24 +188,64 @@ async function runTools(io: CliIo): Promise<number> {
   return EXIT_OK;
 }
 
+function parseJsonObject(text: string, problem: string): JsonObject {
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    throw new UsageError(problem);
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new UsageError(problem);
+  return value as JsonObject;
+}
+
+/**
+ * Strict UTF-8, relative to the working directory. The decoder drops the one
+ * BOM that Windows PowerShell 5.1's `-Encoding utf8` writes. `fatal` refuses
+ * what it writes by default: UTF-16 from `>`/`Out-File`, and from `Set-Content`
+ * the ANSI code page -- GBK for non-ASCII text on a code page 936 system, which
+ * a lenient read turns into U+FFFD noise that still parses as JSON.
+ */
+function readArgsFile(path: string): string {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(readFileSync(path));
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new UsageError(`cannot read --args-file ${path}: ${reason}`);
+  }
+}
+
+/**
+ * Windows PowerShell 5.1 does not escape embedded `"` when it builds a native
+ * command line, so an inline `--args` object arrives without its quotes; a
+ * path survives every shell. The file is read here, in the parse phase, so a
+ * bad one never starts the daemon or the update check.
+ */
+function callArgs(flags: ParsedArgv['flags']): JsonObject {
+  const inline = requireValue(flags, 'args');
+  const file = requireValue(flags, 'args-file');
+  if (inline !== undefined && file !== undefined) {
+    throw new UsageError('favbase call takes --args or --args-file, not both');
+  }
+  if (file !== undefined) {
+    return parseJsonObject(readArgsFile(file), '--args-file must contain a JSON object');
+  }
+  if (inline === undefined) return {};
+  return parseJsonObject(
+    inline,
+    '--args must be a JSON object; Windows PowerShell 5.1 strips its double quotes, so write the JSON to a file and pass --args-file <path>',
+  );
+}
+
 function parseCall(parsed: ParsedArgv): { tool: string; args: JsonObject } {
   const [tool, ...rest] = parsed.positionals;
   if (!tool || rest.length > 0) throw new UsageError('favbase call expects exactly one <tool>');
   for (const name of Object.keys(parsed.flags)) {
-    if (name !== 'args') throw new UsageError(`Unknown option --${name} for favbase call`);
+    if (name !== 'args' && name !== 'args-file') {
+      throw new UsageError(`Unknown option --${name} for favbase call`);
+    }
   }
-  const rawArgs = requireValue(parsed.flags, 'args');
-  if (rawArgs === undefined) return { tool, args: {} };
-  let value: unknown;
-  try {
-    value = JSON.parse(rawArgs);
-  } catch {
-    throw new UsageError('--args must be a JSON object');
-  }
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new UsageError('--args must be a JSON object');
-  }
-  return { tool, args: value as JsonObject };
+  return { tool, args: callArgs(parsed.flags) };
 }
 
 /**

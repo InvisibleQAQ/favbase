@@ -41,14 +41,19 @@ favbase tags [--platform <platform>]
 favbase search "<query>" [--platform <platform>] [--tag <tag-id>] [--limit <1-20>]
 favbase get <item-id>
 favbase coverage [--platform <platform>]
-favbase tools                       # Knowledge Tools the extension advertises, with JSON Schemas
-favbase call <tool> --args '<json>' # call any advertised tool directly
-favbase doctor                      # config, daemon, extension, CLI and skill status
+favbase tools                          # Knowledge Tools the extension advertises, with JSON Schemas
+favbase call <tool> --args '<json>'    # call any advertised tool directly
+favbase call <tool> --args-file <path> # same, with the JSON object in a UTF-8 file
+favbase doctor                         # config, daemon, extension, CLI and skill status
 ```
 
 `<platform>` is one of `bilibili`, `github`, `bookmarks`, `x`, `zhihu`,
 `youtube`. Omit it to search everything. `favbase --help` is authoritative if
 this file and the CLI disagree.
+
+Windows PowerShell 5.1 strips the double quotes out of `--args '<json>'`, so
+there write the JSON to a file and use `--args-file <path>`, which works in
+every shell.
 
 ## Workflow
 

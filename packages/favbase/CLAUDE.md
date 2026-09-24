@@ -43,7 +43,18 @@ provides no MCP server.
   for the rest), then `main` starts the update check and runs the command
   alongside it, awaiting it last. An argument failure is thrown by `plan`, so
   it never goes online and never prints the notice -- keep new argument
-  validation in the `parse*` half, not the `run*` half. `doctor` also reports
+  validation in the `parse*` half, not the `run*` half. `call` takes its JSON
+  object from `--args` or `--args-file <path>` (not both), both through one
+  `parseJsonObject`. The file exists because Windows PowerShell 5.1 does not
+  escape embedded `"` in native arguments, so `--args '{"a":1}'` arrives as
+  `{a:1}`; only the inline error carries that hint. `parseCall` reads the file
+  synchronously (`plan` is synchronous, and `CliIo` has no fs seam -- tests use
+  real temp files) as strict UTF-8: `TextDecoder` drops one BOM (PS 5.1's
+  `-Encoding utf8` writes one) and `fatal` refuses PS 5.1's defaults -- UTF-16
+  from `>`, and from `Set-Content` the ANSI code page. Under code page 936 a
+  lenient read turned a GBK query into U+FFFD plus a Hangul syllable that
+  still parsed (measured). No stdin form: PS 5.1 pipes text to native programs
+  in `$OutputEncoding`, ASCII by default. `doctor` also reports
   `cli` (current / outdated / unknown, with a `reason` when unknown) and
   `skills` (per agent root: current / stale / missing) on **both** its output
   paths, the config-error one included; neither changes `ok` or the exit code
