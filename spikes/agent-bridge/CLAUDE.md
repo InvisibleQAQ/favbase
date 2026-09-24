@@ -8,12 +8,16 @@ Agent Bridge implementation.
 
 - `background-spike.ts` runs only when `VITE_AGENT_BRIDGE_SPIKE=1`. It
   proves the real Background SW can create the Offscreen document, obtain a DB
-  proxy, run `hybridRetrieve`, convert all three Knowledge Tool input schemas
-  with `z.toJSONSchema`, and invoke `searchKnowledgeBase.execute` with the
-  real DB context.
+  proxy, run `hybridRetrieve`, convert every Knowledge Tool input schema in
+  `chatTools` with `z.toJSONSchema`, and invoke `searchKnowledgeBase.execute`
+  with the real DB context. There were three tools at the Phase 0 run, which
+  `phase-0-result.json` records under the old summary key
+  `jsonSchemaThreeTools`.
 - `ws-peer.py` listens only on `127.0.0.1`, sends an application-level ping
   every 20 seconds, records pongs and the SW instance identity, and emits the
-  machine-readable verdict.
+  machine-readable verdict. Its schema check (`jsonSchemaAllTools`) pins no
+  tool count: it requires every `chatTools` schema to convert, with
+  `toolCount` equal to the number of descriptors.
 - `run-phase-0.ps1` builds the extension, copies the build to a temporary
   directory, removes `<all_urls>` and loopback host patterns from only that
   derived manifest, launches an isolated Chrome profile, loads the extension

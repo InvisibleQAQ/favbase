@@ -38,6 +38,21 @@ def has_loopback_host_permission(patterns: list[str]) -> bool:
     )
 
 
+def every_tool_schema_converted(result: dict[str, Any]) -> bool:
+    # background-spike.ts converts every chatTools entry and reports ok=False on
+    # the first failure, so no fixed tool count is pinned here. `type(...) is
+    # int` keeps a JSON boolean from passing as a count.
+    tool_count = result.get('toolCount')
+    descriptors = result.get('descriptors')
+    return (
+        result.get('ok') is True
+        and type(tool_count) is int
+        and tool_count > 0
+        and isinstance(descriptors, list)
+        and tool_count == len(descriptors)
+    )
+
+
 async def run(args: argparse.Namespace) -> dict[str, Any]:
     report: dict[str, Any] = {
         'startedAt': utc_now(),
@@ -163,10 +178,7 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
     ].startswith('chrome-extension://')
     checks = spike_result.get('checks', {}) if spike_result else {}
     db_proxy_ok = checks.get('dbProxy', {}).get('ok') is True
-    schemas_ok = (
-        checks.get('jsonSchemas', {}).get('ok') is True
-        and checks.get('jsonSchemas', {}).get('toolCount') == 3
-    )
+    schemas_ok = every_tool_schema_converted(checks.get('jsonSchemas', {}))
     execute_ok = checks.get('execute', {}).get('ok') is True
     host_permission_not_required = (
         connected is not None and no_loopback_permission and origin_is_extension
@@ -184,7 +196,7 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
     report['finishedAt'] = utc_now()
     report['summary'] = {
         'dbProxyHybridRetrieve': db_proxy_ok,
-        'jsonSchemaThreeTools': schemas_ok,
+        'jsonSchemaAllTools': schemas_ok,
         'toolExecute': execute_ok,
         'serviceWorkerAliveOverFiveMinutes': sw_alive,
         'hostPermissionNotRequired': host_permission_not_required,
