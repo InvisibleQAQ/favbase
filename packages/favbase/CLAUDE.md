@@ -69,7 +69,10 @@ provides no MCP server.
   and fails any test that called it: the update check swallows failures by
   design, so a merely rejecting stub would let a test go online in silence.
 - `args.ts` is the argv parser (`--flag value`, `--flag=value`, boolean set,
-  `--`); `commands.ts` is the alias table (`search`/`tags`/`get`/`coverage` → Knowledge
+  `--`). A value flag given twice, in either spelling, is a usage error (exit
+  1, before `plan`, so before the daemon); last-wins used to turn `--agent
+  claude --agent codex` into codex alone. Boolean flags may repeat.
+  `commands.ts` is the alias table (`search`/`tags`/`get`/`coverage` → Knowledge
   Tool + argument names) and the only place tool names appear. A
   `positive-integer` flag (only `--limit`) refuses anything below 1 in
   `buildAliasArgs`, so `--limit 0`, `--limit -5` and `--limit=` are exit 1

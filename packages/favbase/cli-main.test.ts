@@ -92,6 +92,22 @@ describe('favbase CLI dispatch', () => {
     expect(skill).toContain(result.stderr.trim().split('\n').at(-1));
   });
 
+  // Last-wins turned the install into codex alone, exit 0, and the search into
+  // `--limit 5` -- which with a token configured sits on a spawn of the
+  // never-spawnable `cliPath`. The parser refuses both before `plan`, so
+  // nothing is installed under the user home and no daemon or registry is asked.
+  it.each([
+    [['install-skill', '--agent', 'claude', '--agent', 'codex'], 'agent'],
+    [['search', 'q', '--limit=3', '--limit', '5'], 'limit'],
+  ])('refuses %j as a usage error before doing anything', async (argv, name) => {
+    const fetchLatestVersion = vi.fn(async () => NEWER);
+    const result = await run(argv, { FAVBASE_TOKEN: 'abc', FAVBASE_BRIDGE_PORT: '1' }, { fetchLatestVersion });
+    expect(result.code).toBe(EXIT_USAGE);
+    expect(result.stderr).toContain(`Option --${name} given more than once`);
+    expect(fetchLatestVersion).not.toHaveBeenCalled();
+    expect(existsSync(result.io.homeDir)).toBe(false);
+  });
+
   it('setup writes the config file and installs the skill for every agent', async () => {
     const result = await run(['setup', '--token', 'abc', '--port', '2222']);
     expect(result.code).toBe(EXIT_OK);

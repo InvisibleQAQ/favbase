@@ -11,7 +11,10 @@ export class UsageError extends Error {
   }
 }
 
-/** Flags that never take a value. Every other `--flag` consumes the next token. */
+/**
+ * Flags that never take a value and may repeat. Every other `--flag` consumes
+ * the next token and may appear once.
+ */
 export const BOOLEAN_FLAGS: ReadonlySet<string> = new Set(['help', 'version', 'no-skill']);
 
 const SHORT_FLAGS: Readonly<Record<string, string>> = { h: 'help', v: 'version' };
@@ -45,6 +48,10 @@ export function parseArgv(
     const separator = body.indexOf('=');
     const name = separator === -1 ? body : body.slice(0, separator);
     if (!name) throw new UsageError(`Unknown option ${arg}`);
+    // Last-wins would drop the first value in silence; a boolean may repeat.
+    if (!booleanFlags.has(name) && Object.hasOwn(result.flags, name)) {
+      throw new UsageError(`Option --${name} given more than once`);
+    }
     if (separator !== -1) {
       result.flags[name] = body.slice(separator + 1);
       continue;

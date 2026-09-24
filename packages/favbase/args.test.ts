@@ -34,6 +34,25 @@ describe('parseArgv', () => {
     expect(() => parseArgv(['--'])).not.toThrow();
   });
 
+  // Last-wins dropped the first value in silence: `--agent claude --agent
+  // codex` installed codex alone. Every pairing of the two spellings counts.
+  it.each([
+    [['install-skill', '--agent', 'claude', '--agent', 'codex'], 'agent'],
+    [['search', 'q', '--limit=3', '--limit', '5'], 'limit'],
+    [['search', 'q', '--limit', '3', '--limit=5'], 'limit'],
+    [['search', 'q', '--platform=a', '--platform=b'], 'platform'],
+  ])('rejects a value flag given twice in %j', (argv, name) => {
+    expect(() => parseArgv(argv)).toThrow(new UsageError(`Option --${name} given more than once`));
+  });
+
+  it('lets a boolean flag repeat', () => {
+    expect(parseArgv(['setup', '--no-skill', '--no-skill', '-h', '--help']).flags).toEqual({
+      'no-skill': true,
+      help: true,
+    });
+    expect(parseArgv(['--version', '-v', '-v']).flags).toEqual({ version: true });
+  });
+
   it('requireValue rejects boolean-only usage of a valued flag', () => {
     expect(requireValue({ token: 'abc' }, 'token')).toBe('abc');
     expect(requireValue({}, 'token')).toBeUndefined();
