@@ -8,7 +8,7 @@ Per-table Drizzle schema 定义（entity-per-file）。
 - `sources.ts` — sources 表（收藏夹/播放列表）
 - `items.ts` — items 表（核心条目，content_state 6 态 CHECK 约束，FK → authors）
 - `item-sources.ts` — item_sources 关联表（复合主键 item_id + source_id）
-- `item-contents.ts` — item_contents 表（1:1，PK = item_id FK → items）
+- `item-contents.ts` — item_contents 表（1:1，PK = item_id FK → items）；可空 `subtitle_source` 列（v006，docs/29 Step 5）：`$type<SubtitleSource>()`（`@/lib/subtitle/types` type-only import），`check('chk_subtitle_source')` 只许 `'official'|'asr'`，与迁移 SQL 的具名约束同名；无默认值。只有转录正文有值，NULL 有两种含义——不是转录（其余五个平台的正文），或 v006 之前写入的 B 站行（不回填）。「B 站 + NULL」只可能是后者，因为 B 站正文全是转录。它是字幕来源，不是 `sources` 表那个 **Source**（`CONTEXT.md`）；写入不变量归 `lib/ingest/CLAUDE.md`
 - `tags.ts` — tags 表（name 全局唯一，无 userId——单用户扁平命名空间，无 updated_at——行不可变，重命名 out of scope）
 - `item-tags.ts` — item_tags 关联表（复合主键 item_id + tag_id，双 FK cascade，tag_id 索引供按标签筛选）
 - `chat-conversations.ts` — chat_conversations 表（Chat 多会话历史：`title` NOT NULL 可空串 + `model_messages` jsonb `$type<ModelMessage[]>` **全量**存整个模型态对话（滑窗在喂模型处，不在存储）；`ModelMessage` 从 `ai` 包 type-only import，编译期擦除保持零运行时依赖；updated_at 由 v001 触发器函数刷新。唯一写入方 `lib/chat/history.ts`）

@@ -11,6 +11,7 @@ const boundary = vi.hoisted(() => ({
   syncFavFoldersToDb: vi.fn(),
   syncFavVideosToDb: vi.fn(),
   getDb: vi.fn(),
+  persistExistingItemContent: vi.fn(),
 }));
 
 vi.mock('./bilibili-api', () => ({
@@ -40,10 +41,15 @@ vi.mock('@/lib/embedding', () => ({
 }));
 
 vi.mock('@/lib/ingest/ingest', () => ({
-  persistExistingItemContent: vi.fn(),
+  persistExistingItemContent: boundary.persistExistingItemContent,
 }));
 
-import { fetchAndSyncFolders, fetchFavoriteVideosPage, syncAllFavoriteVideos } from './bili-sync-service';
+import {
+  fetchAndSyncFolders,
+  fetchFavoriteVideosPage,
+  persistContentChunks,
+  syncAllFavoriteVideos,
+} from './bili-sync-service';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -202,4 +208,32 @@ describe('syncAllFavoriteVideos', () => {
 
     expect(boundary.fetchFavVideos).not.toHaveBeenCalled();
   });
+});
+
+describe('persistContentChunks', () => {
+  // Both values, so a subtitle source hard-coded to either one still goes red.
+  it.each(['official', 'asr'] as const)(
+    'hands the %s subtitle source to the content write',
+    async (source) => {
+      vi.clearAllMocks();
+      const db = { marker: 'db' };
+      boundary.getDb.mockReturnValue(db);
+      boundary.persistExistingItemContent.mockResolvedValue('chunked');
+      const rows = [
+        { start: 0, end: 1.5, text: 'first' },
+        { start: 1.5, end: 3, text: 'second' },
+      ];
+
+      await expect(persistContentChunks('BV-SOURCE', rows, source)).resolves.toBe('chunked');
+
+      expect(boundary.persistExistingItemContent).toHaveBeenCalledWith(
+        db,
+        'bilibili',
+        'BV-SOURCE',
+        'first\nsecond',
+        expect.any(Array),
+        source,
+      );
+    },
+  );
 });

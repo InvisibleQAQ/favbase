@@ -1,6 +1,6 @@
 # B 站转录字幕串行：诊断与修复方案（2026-09-21）
 
-状态：诊断完成；**2026-09-23 运行时复核（§9.6）：修复后串行已消失**——E1 在本账号复现 C1（`v2` 外来 5/8、`wbi/v2` 原始轨自有 8/8），全库导出里修复后落库的 123 条 B 站正文零扇入、零超时长、标题正文 123/123 吻合；同时暴露 Step 1 规则把本视频的机器翻译轨（裸 32 位 hex 文件名）误判为外来，**Step 1b 已落地 2026-09-23**（裸名放行 + 整表校验，否决了 E1 预案的「降为仅日志」）；**Step 0 的 E2 / E4 已由用户跑完 2026-09-22**（§9.5：E2 = 分支 L，SW 默认就带 jar cookie；E4 本账号 39 个夹全公开、无私密样本），E1 已跑（2026-09-23），E3 未判读即随 Step 3 清空（清掉 1228 条）；**Step 1 已落地 2026-09-22**（代码与单测；运行时复核五步中 1/2/4 已过，2026-09-23 第 3 条只跑了 1 个视频、第 5 条的 app.html 半边由全库导出代替抽样，面板半边未回报，见 Step 1「2026-09-23 追加」）；**Step 4 已落地 2026-09-22**（代码与单测；2026-09-23 运行时复核：临时私密夹 `attr: 3` 证实 bit0 规则，app.html 是否真把它隐藏了 `[UNKNOWN]`；手动转录失败，用户指示不追查）；**Step 3 已改为一次性手工清理、Step 6 已取消**（用户 2026-09-21：扩展尚未上线，库里全是测试数据，见 §8 Q1）；Step 5 不在本任务；**§8 Q5 已答（用户 2026-09-22）：收藏夹 API 并入 Step 4，且 favbase 只做公开收藏夹**；**2026-09-22 勘误**：C5「SW 路径未登录」由结论降级为 `[UNKNOWN]`，E2 裁决（§1 F21–F25、§3 C5）——同日 E2 裁决为分支 L（F26）
+状态：诊断完成；**2026-09-23 运行时复核（§9.6）：修复后串行已消失**——E1 在本账号复现 C1（`v2` 外来 5/8、`wbi/v2` 原始轨自有 8/8），全库导出里修复后落库的 123 条 B 站正文零扇入、零超时长、标题正文 123/123 吻合；同时暴露 Step 1 规则把本视频的机器翻译轨（裸 32 位 hex 文件名）误判为外来，**Step 1b 已落地 2026-09-23**（裸名放行 + 整表校验，否决了 E1 预案的「降为仅日志」）；**Step 0 的 E2 / E4 已由用户跑完 2026-09-22**（§9.5：E2 = 分支 L，SW 默认就带 jar cookie；E4 本账号 39 个夹全公开、无私密样本），E1 已跑（2026-09-23），E3 未判读即随 Step 3 清空（清掉 1228 条）；**Step 1 已落地 2026-09-22**（代码与单测；运行时复核五步中 1/2/4 已过，2026-09-23 第 3 条只跑了 1 个视频、第 5 条的 app.html 半边由全库导出代替抽样，面板半边未回报，见 Step 1「2026-09-23 追加」）；**Step 4 已落地 2026-09-22**（代码与单测；2026-09-23 运行时复核：临时私密夹 `attr: 3` 证实 bit0 规则，app.html 是否真把它隐藏了 `[UNKNOWN]`；手动转录失败，用户指示不追查）；**Step 3 已改为一次性手工清理、Step 6 已取消**（用户 2026-09-21：扩展尚未上线，库里全是测试数据，见 §8 Q1）；**Step 5 已落地 2026-09-24**（由独立任务 `09-24-transcript-origin-column` 完成：`item_contents.subtitle_source` + 迁移 v006，修 C6；代码与单测，运行时复核待用户，见 Step 5）；**§8 Q5 已答（用户 2026-09-22）：收藏夹 API 并入 Step 4，且 favbase 只做公开收藏夹**；**2026-09-22 勘误**：C5「SW 路径未登录」由结论降级为 `[UNKNOWN]`，E2 裁决（§1 F21–F25、§3 C5）——同日 E2 裁决为分支 L（F26）
 范围：`lib/bilibili/bilibili-api.ts`、`lib/bilibili/bilibili-transcription-adapter.ts`、`lib/cache/`、`entrypoints/bilibili-video.content/hooks/`
 前置：`.trellis/tasks/09-17-bilibili-transcripts-land-on-the-wrong-items/prd.md`（及其 `research/` 四份材料）、commit `4dad4df`
 
@@ -14,7 +14,7 @@ PRD 的 H4 **找对了毒源，找错了入口**。
 |---|---|
 | B 站非 wbi 的 `x/player/v2` 会返回别的视频的 AI 字幕 | **外部证实**（yt-dlp #11708、bilibili-api #841 原文已核对），本仓库确实在调这个端点（`bilibili-api.ts:18-19`）。今天对本账号是否仍成立 `[UNKNOWN]`，见 Step 0 / E1 |
 | 收藏页批量转录（SW 路径）很可能未登录，「正是错乱最严重的场景」 | **两半都不成立**。未登录拿到的是**空列表，不是随机字幕**（本次实测，§9.1），「未登录 = 错乱最严重」的因果是反的；而 SW 路径**是登录态**——E2（2026-09-22，§9.5）显示 SW 连 init 都不传就已带上 jar cookie（F26）。**所以 Step 1 之前 SW 批量转录就是 H4 的第二个入口**，本文初稿断言「不可能是入口」是过度推断（2026-09-22 勘误，E2 已裁决为分支 L）。Step 1 覆盖两个入口：它们走同一个 `fetchSubtitle` |
-| 用落库的 `source` 字段确认错配是否全为 official | **无法执行**。`item_contents` 只有四列，**没有 `source`**（`lib/database/entities/item-contents.ts`）。`source` 只进了一行 `console.info`（`bili-sync-service.ts:169-171`） |
+| 用落库的 `source` 字段确认错配是否全为 official | **无法执行**。`item_contents` 只有四列，**没有 `source`**（`lib/database/entities/item-contents.ts`）。`source` 只进了一行 `console.info`（`bili-sync-service.ts:169-171`）。（2026-09-24：Step 5 已加 `subtitle_source` 列，此后的转录正文可以这样查；这里说的旧正文仍是 NULL，不回填） |
 | 09-17「ASR 路径也在错配」 | 仅凭「无标点」判读，**站不住**。09-21 有两条错配正文逐字相同（3074 字）——两段不同音频不可能转出逐字相同的文本。该冲突大概率不存在 |
 | `♪ 音乐 ♪` 是独立问题（H3，转录截断） | **大概率是同一个 bug**。同一个视频 09-17 是 `♪ 音乐 ♪`、09-21 变成 LOL 采访/兴趣快问快答——它只是随机池里的又一条外来字幕（一个纯音乐视频的 AI 字幕），不是截断 |
 
@@ -62,7 +62,7 @@ PRD 的 H4 **找对了毒源，找错了入口**。
 | F14 | pipeline 第一步就是 `cacheGet`，命中即返回，不再请求任何东西 | 源码 | `lib/transcription/pipeline.ts:88-92` |
 | F15 | `fetchSubtitle` 全部调用方只有两个：SW adapter（带 auth）与 CS `useSubtitle`（不带） | 源码 | `bilibili-transcription-adapter.ts:25`、`useSubtitle.ts:135` |
 | F16 | 拦截通道抓的是**页面自己**发起的 CDN 请求（由 `triggerCC()` 主动点开字幕触发），并有 generation / 页面元数据一致性 / URL 漂移 / reemit 四层守卫 | 源码 | `lib/bilibili/inject/state.ts:118-161`、`interceptors.ts` |
-| F17 | `item_contents` 无 `source` 列 | 源码 | `lib/database/entities/item-contents.ts` |
+| F17 | `item_contents` 无 `source` 列（2026-09-24 起不再成立：Step 5 加了 `subtitle_source`，迁移 v006） | 源码 | `lib/database/entities/item-contents.ts` |
 | F18 | 同仓库 zhihu 从扩展上下文用 `credentials:'include'` + host permission 打登录态 API，且 PRD 实测其正文全部正确 | 源码 + PRD | `lib/zhihu/zhihu-api.ts:412` |
 | F19 | `lib/bilibili/bilibili-api.ts` 与 `lib/cache/video-cache.ts` **均无单测文件** | 源码 | `lib/bilibili/*.test.ts` 九个文件里没有 api；`lib/cache/` 零测试 |
 | F20 | AI 总结读的是同一份字幕缓存，总结缓存按字幕 `rawHash` 寻址 | 源码 | `lib/summary/summary-service.ts:41`、`:91` |
@@ -180,6 +180,8 @@ F3 只塞 header 不设 `credentials`。它是否让 SW 请求带上登录态，
 
 F17。`persistContentChunks` 的第三个参数 `source` 是个摆设。库里无法区分 official / asr，也就无法圈定受影响范围。PRD 的排查步骤正是栽在这里。
 
+（2026-09-24：**已由 Step 5 修复**。`source` 经 `persistExistingItemContent` 的必填第 6 参落进 `item_contents.subtitle_source`。上面描述的是修复前的事实；v006 之前写入的行不回填，仍是 NULL。）
+
 ### 连带影响
 
 - **AI 总结也在总结别人的视频**（F20）。好在总结缓存按字幕 `rawHash` 寻址，字幕缓存一旦被 Step 3 失效并重取，hash 变了，旧总结自然不再命中，无需单独清理。
@@ -200,7 +202,7 @@ F17。`persistContentChunks` 的第三个参数 `source` 是个摆设。库里�
 | 整体换 cache 命名空间（丢弃全部旧缓存） | 会把花了 ASR 额度换来的 `source:'asr'` 条目一起扔掉，而它们没有嫌疑 |
 | 把收藏夹请求改成 `credentials:'omit'`，让服务端替我们只回公开夹 | §9.1 追加实测：未登录 `list-all` 对 7 个账号全返回空列表——大概率**根本不回任何夹**。「只做公开夹」只能在客户端按 `attr` 过滤（Step 4 第 3 条），收藏夹请求必须保持登录态 |
 | 给缓存条目加 `rev` 字段 + 读时失效旧 official 条目（**本文初稿的 Step 3**） | 它保护的是「已上线用户浏览器里的脏缓存」。**扩展尚未上线，这类用户数为零**（用户 2026-09-21 确认）。初稿默认存在存量用户而未核实，是给零个人写的迁移机制。Step 1 之后不再产生新毒，存量脏条目只在开发机上，一行 Console 命令即可清掉 |
-| 用 `source` 列圈定脏数据 | 没有这一列（C6） |
+| 用 `source` 列圈定脏数据 | 没有这一列（C6）。2026-09-24 Step 5 加了 `subtitle_source`，但 v006 之前写入的行是 NULL、不回填，这批脏数据依然圈不出来 |
 
 ---
 
@@ -210,7 +212,7 @@ F17。`persistContentChunks` 的第三个参数 `source` 是个摆设。库里�
 |---|---|---|
 | A 止血（必做） | Step 1 换端点 + 归属校验（唯一的代码改动）；Step 3 开发机手工清一次缓存（零代码） | 修 C1/C2/C4，满足 PRD 全部 Acceptance Criteria |
 | B 还债（强烈建议，独立 PR） | Step 4 登录态显式化（字幕/pagelist/收藏夹四个函数）+ 「只做公开收藏夹」过滤 | E2 = 分支 L ⇒ C5 的显式化（非修复）；落实用户 2026-09-22 的产品决定；E2 + E4 已过（§9.5） |
-| C 不在本任务 | Step 5 正文来源落库 | 留作独立小任务，见 §8 Q3 |
+| C 独立任务（**已落地 2026-09-24**） | Step 5 正文来源落库 | 不在本任务范围，后由独立任务 `09-24-transcript-origin-column` 落地，修 C6；见 Step 5 与 §8 Q3 |
 
 **顺序约束**：先合 Step 1，**再**清缓存，然后才验证。先清后合没用——下次打开视频页缓存立刻被旧代码重新下毒；合了不清也没用——脏条目在 `pipeline.ts:88` 永远先命中。
 
@@ -486,9 +488,51 @@ C3 之所以有害，是因为两个通道给的内容不一样、而错的那�
 - **运行时复核（待用户）**：建一个临时私密夹 → B 站收藏页重新同步 → 它不出现（这是「确实拦住私密夹」这一侧唯一的本机证据，§7）；app.html 手动转录一个有 AI 字幕的视频 → Console 出现 `[bili-sync] Persisted … (source=official)`。
 - **运行时复核结果（用户 2026-09-23，§9.6）**：用户建了临时私密夹「测试私密文件夹」，登录态 `list-all` 返回它的 `attr: 3`，也就是 bit0（私密）+ bit1（非默认夹），与 bilibili-API-collect 的位表一致。这是 `attr & 1` 规则在本账号上的**第一份私密样本**，它成立。app.html 收藏夹页里这个夹是否真的被隐藏，用户的回报（「成功检测到了」）无法区分，记为 `[UNKNOWN]`；按上面的规则与 `isPublicFolder` 的单测，它应当被滤掉。手动转录那一条没有做成：用户回报 B 站页面上的插件转录失败，并指示不追查（不在本任务范围）。如果当时 Console 里出现针对非中文视频的 `Refusing subtitle`，那就是 Step 1b 修掉的误拒，否则是另一个问题。
 
-### Step 5 — 正文来源落库（不在本任务）
+### Step 5 — 正文来源落库（修 C6；**2026-09-24 已落地**，独立任务 `09-24-transcript-origin-column`）
 
-给 `item_contents` 加来源列需要一个迁移。它能让下次排查不再栽在 C6 上，但对本次修复不是必需。见 §8 Q3。
+原文（当时不在本任务）：给 `item_contents` 加来源列需要一个迁移。它能让下次排查不再栽在 C6 上，但对本次修复不是必需。见 §8 Q3。
+
+任务：`.trellis/tasks/09-24-transcript-origin-column/prd.md`。任务 slug 里的 origin 是被否决的叫法（见下面第 2 条），目录归档后不改名。
+
+**改法**：
+- 新建迁移 `lib/database/migrations/v006-subtitle-source.ts`：给 `item_contents` 加可空列 `subtitle_source TEXT` 和具名约束 `CONSTRAINT chk_subtitle_source CHECK (... IN ('official','asr'))`。`IF NOT EXISTS` 保证幂等。
+- `lib/database/entities/item-contents.ts`：加 `subtitleSource: text('subtitle_source').$type<SubtitleSource>()`，并用 `check('chk_subtitle_source', …)` 再声明一次。
+- `lib/ingest/ingest.ts`：`persistExistingItemContent` 加必填第 6 参 `subtitleSource: SubtitleSource | null`，insert 与 `onConflictDoUpdate.set` 都写它。`persistItemContent` 的 insert 与 set 都显式写 `subtitleSource: null`。
+- `lib/bilibili/bili-sync-service.ts`：`persistContentChunks` 把已有的 `source` 参数透传为第 6 参。原来的 `console.info` 保留。
+
+**从代码里看不出来的决策**（用户 2026-09-24）：
+1. **只覆盖转录正文。** 其余五个平台各自只有一种正文来源（README、推文、知乎正文、YouTube 简介、网页提取），平台本身就能推出来，存进库里就是冗余数据。所以这一列可空，NULL 表示「不是转录」。否决的方案：六个平台都用 NOT NULL 声明来源，那要改 `IngestInput` 和六个 sync-service。
+2. **列名沿用 source，否决 origin。** 代码里这个概念已经有 20 多处叫 source：类型、缓存字段、消息协议、i18n 的 `source.*`、卡片的 `sourceCC`/`sourceASR`。如果库里叫 origin，同一个概念就在库里和 TS 里用两个词。它和收藏夹、播放列表那种 **Source** 不是一回事，`CONTEXT.md` 的 Flagged ambiguities 已加一条说明。
+3. **seam 必填、可为 null、无默认值。** 如果是可选参数，漏传的调用方只会静默写 NULL，而 C6 本身就是一个被静默丢掉的来源。如果类型不允许 null，这个通用 seam 就只能给转录用。
+4. **不变量：每次写 `plain_text` 都同时写 `subtitle_source`。** 三条写入路径都遵守：B 站转录，以及经 `persistItemContent` 的 ingest phase 5、ghost sweep、bookmarks 提取。所以旧的来源活不过它所描述的正文。
+5. **旧行不回填**（沿用 §8 Q1）。B 站正文全是转录，所以「B 站 + NULL」只可能是 v6 之前写入的行，不会和「不是转录」混淆。要干净数据就重建库。
+6. **读取方只有数据库导出。** 导出的列由 schema 派生，加列后自动带上。卡片 CC/ASR 徽标改读 DB、Knowledge Tool 暴露这一列，都记为后续，不在本任务。
+7. **不记录缓存命中**（`cached: true`）。Step 1 之后两个入口走同一个 `fetchSubtitle`，缓存是谁写的已经没有诊断价值。
+
+**红态**（实现回到 HEAD，测试不动）：`ingest.test.ts` `5 failed | 10 passed (15)`，`bili-sync-service.test.ts` `2 failed | 5 passed (7)`，`export-schema-sync.test.ts` `1 failed | 3 passed (4)`，合计 `8 failed | 18 passed (26)`。红因逐条核对过：
+- ingest 前四例（记录 asr、再写替换、写 null、`persistItemContent` 清空）：旧实现照样写入成功（JS 忽略多出的实参），四例都红在回读上，PG 报 `42703 column "subtitle_source" does not exist`。这说明它们在旧代码上只能证明「列不存在」，分不开彼此；分开它们靠下面的变异检查。
+- CHECK 一例：报错是 `column "subtitle_source" of relation "item_contents" does not exist`，不匹配 `/chk_subtitle_source/`，红的理由是对的。
+- bili-sync 的 `it.each` 两例：mock 只收到 5 个实参，缺第 6 个。
+- export 一例：表头是 `[itemId, plainText, createdAt, updatedAt]`，没有 `subtitleSource`。
+
+恢复实现后 26/26。
+
+**变异检查**（每次只改一处，跑完还原）：
+- 删掉 `persistExistingItemContent` 的 `set` 里的 `subtitleSource`：`1 failed | 25 passed`，只有「replaces the subtitle source together with the text」红。
+- 删掉 `persistItemContent` 的 `set` 里的 `subtitleSource: null`：`1 failed | 25 passed`，只有「persistItemContent clears a subtitle source」红。
+- 删掉 `persistItemContent` insert `values` 里的 `subtitleSource: null`：26/26 绿，符合预期。它和列的默认值 NULL 等价，保留它只是为了把不变量写明，不为它加测试。
+- `persistContentChunks` 固定传 `null`：`2 failed | 24 passed`，`'official'`、`'asr'` 两例都红。
+
+**验证**：
+- `pnpm compile` 通过（exit 0）。
+- `pnpm test`：200 文件 / 1568 例，加上 `packages/favbase` 14 / 140，首次全量即全绿。1568 的来历：Step 1b 时是 1555；docs/27 Step 6（`71899a3`）在主仓库测试里净增 5 例（按新增、删除的 `it(` 行数算，与 1568 对得上），所以 HEAD 是 1560；本任务 +8。`packages/favbase` 从 10 / 56 变成 14 / 140 来自 docs/27 Step 6 与 Step 2（`b0072c0`），与本任务无关。
+- `pnpm build`：background graph 13 modules / 947103 bytes，无 PGlite marker。entity 经 `lib/chat/tools.ts` 的 schema leaf 进了 SW 引用的 `chunks/protocol-*.js`。`SubtitleSource` 是 type-only import，编译后擦除；`check`/`sql` 在 `items.ts` 里本来就在用。
+- v006 的 SQL 在 PGlite 里连跑两次，仍只有一个 `chk_subtitle_source` 约束；写入 `'foo'` 会被这个具名约束拒绝。
+- 顺带发现：v001 的 `content_state` CHECK 是行内匿名写法，库里实际叫 `items_content_state_check`，和 entity 声明的 `chk_content_state` 对不上。任务 PRD 决策 6 说 v006「按它的先例」写，实际 v006 在 SQL 里具名，两边同名，没有沿用这一点。v001 不改。
+
+**运行时复核（待用户）**：重新加载扩展，确认 `_migrations` 里有 version 6。然后在 app.html 手动转录一个视频，导出数据库，看那一行的 `subtitleSource`。
+
+**回滚**：代码可以单 commit revert，但迁移只要在开发机上跑过一次，revert 就撤不掉它，见 §7 末行。
 
 ### Step 6 — ~~修复已落库的脏正文~~（已取消）
 
@@ -509,8 +553,9 @@ C3 之所以有害，是因为两个通道给的内容不一样、而错的那�
 | 将来上线后才发现又有一类脏缓存 | 届时才有真实用户需要保护 | 到那时再写失效机制。现在写是给零个人写的 |
 | 私密夹的 `attr` 位规则来自社区记忆，未经本机验证 | 过滤漏掉私密夹或误删公开夹 | E4 用你自己的夹对照后再写夹具，夹具注释记下观察到的取值。**2026-09-22**：「误删公开夹」一侧已排除（44 个公开样本 bit0 全 0：本账号实测 39 个 + bilibili-API-collect `list-all` 样例 5 个）；「漏掉私密夹」一侧本账号无样本，靠 8 个独立实现 + 1 份真实私密样本（§9.5），落空时退回今天的行为。Step 4 运行时验证请用户建一个临时私密夹复核。**2026-09-23**：用户建的临时私密夹 `attr: 3`，bit0 置位，「漏掉私密夹」一侧有了本机样本；app.html 是否真把它隐藏了仍 `[UNKNOWN]`（§9.6） |
 | 分支 L 下 Step 4 的字幕半边是零行为改动 | 无风险，但 commit message 不得写「修复」 | E2 结果决定措辞——**已定：分支 L** |
+| Step 5 的代码被 revert，但迁移 v006 已在开发机上跑过（2026-09-24 追加） | 列和约束留在库里。它们无害：Drizzle 按 entity 的显式列名 select，导出也由 entity 派生，都看不见这一列。但 `_migrations` 仍记着 version 6，而 runner 只按版本号跳过（`lib/database/migrations/index.ts` 的 `applied.has(m.version)`）。之后如果另写一个不同的 v6，在这台机器上会被静默跳过 | 扩展未上线，只影响开发机：重建 DB 即可。不写 down 迁移 |
 
-全部代码步骤都是单 PR revert 可回滚；没有迁移，没有不可逆的数据写入。
+Step 1–4 的代码步骤都是单 PR revert 可回滚，没有迁移，也没有不可逆的数据写入。Step 5（2026-09-24）是例外：它带迁移 v006，revert 代码撤不掉已经执行过的迁移，见上表末行。
 
 ---
 
@@ -523,6 +568,7 @@ Decision 1 维持，Step 6 取消。这个回答的影响超出 Q1 本身：**�
 证据指向它就是本 bug 的一种表现（§0 表格末行），大概率随 Step 1 自动消失，不需要单独的工作量。E1 里若看到非 wbi 端点发出只含 `♪ 音乐 ♪` 的字幕，即告证实。修复后若仍出现，再另立任务。
 
 **Q3 — Step 5（来源落库）做不做？** 按推荐处理：**本任务不做。** 它的用途是圈定脏数据范围，而脏数据已决定不管。「下次排查不再栽在 C6 上」是真实价值，但不属于本任务，留作独立小任务。
+（2026-09-24：后续由独立任务 `09-24-transcript-origin-column` 落地，见 Step 5。）
 
 **Q4 — 未登录时要不要在 UI 上提示？** 按推荐处理：本任务不做，只打 `console.warn`。
 
@@ -656,6 +702,7 @@ Decision 1 维持，Step 6 取消。这个回答的影响超出 Q1 本身：**�
 - 任务 `prd.md`：H5 取代 H4；更正 `source` 列那条；Decision 1/2 按 §8 的答复更新。
 - `CONTEXT.md`：**已于 2026-09-22 追加**一条 Flagged ambiguity——Bilibili 的 Source 只含公开收藏夹，私密夹不是 Source（zhihu 已按 `is_public` 过滤，是先例）。Step 4 落地后，其中「代码尚未承载」改为「`fetchFavFolders` 在取夹列表处就丢掉私密夹」（**已于同日随 Step 4 改写**）。错配本身涉及的字幕缓存/端点/来源都是实现层概念，不进术语表。
 - ADR：**不需要**。三条改动都易于回退，不满足「难以反悔」。
+- Step 5（2026-09-24，独立任务 `09-24-transcript-origin-column`）同步了：`lib/database/migrations/CLAUDE.md`（v006 条目）、`lib/database/entities/CLAUDE.md`（item-contents 的新列、CHECK、NULL 的两种含义）、`lib/ingest/CLAUDE.md`（`persistExistingItemContent` 必填第 6 参，以及「`plain_text` 与 `subtitle_source` 总是一起写」的不变量）、`lib/bilibili/CLAUDE.md`（`persistContentChunks` 的 `source` 现在落库）、根 `CLAUDE.md` 的 docs/29 条目。`CONTEXT.md` 追加了一条 Flagged ambiguity：字幕语境里的 source 不是 **Source**。它不进术语表，上一条「来源是实现层概念」的判断不变；这一条只是为了区分两个同名的词。`lib/export/CLAUDE.md` 不用改：导出的表和列都由 schema 派生，新列自动带上，由 `tests/export-schema-sync.test.ts` 锁住。仍然不需要 ADR：扩展未上线，加列可以回退（代价见 §7 末行）。
 
 ## 11. 参考
 

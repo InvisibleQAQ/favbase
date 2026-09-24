@@ -8,7 +8,7 @@ import { asc, eq } from 'drizzle-orm';
 import * as schema from '@/lib/database/schema';
 import { runMigrations } from '@/lib/database/migrations';
 import type { FavbaseDb } from '@/lib/database';
-import { ingestCollection, persistExistingItemContent } from './ingest';
+import { ingestCollection, persistExistingItemContent, persistItemContent } from './ingest';
 
 describe('ingest module', () => {
   let pg: PGlite;
@@ -60,6 +60,7 @@ describe('ingest module', () => {
         { text: 'first line', startSec: 1.25, endSec: 2.5 },
         { text: 'second line', startSec: 3, endSec: 4.75 },
       ],
+      'official',
     );
 
     expect(result).toBe('chunked');
@@ -95,6 +96,7 @@ describe('ingest module', () => {
         'BV-CONTENT',
         'replacement line',
         [{ text: 'replacement line', startSec: 8, endSec: 9.5 }],
+        'official',
       ),
     ).resolves.toBe('chunked');
     await expect(
@@ -132,6 +134,7 @@ describe('ingest module', () => {
         'BV-CHUNK-FAIL',
         'replacement that could not be chunked',
         [{ text: null as unknown as string, startSec: 0, endSec: 1 }],
+        'official',
       ),
     ).rejects.toThrow();
 
@@ -158,6 +161,7 @@ describe('ingest module', () => {
       'BV-NO-CHUNKS',
       'text without chunks',
       [],
+      'official',
     );
 
     expect(result).toBeNull();
@@ -183,6 +187,7 @@ describe('ingest module', () => {
         'BV-MISSING',
         'missing item content',
         [{ text: 'missing item content', startSec: 0, endSec: 1 }],
+        'official',
       ),
     ).resolves.toBeNull();
   });
@@ -197,6 +202,7 @@ describe('ingest module', () => {
         'BV-BLANK',
         '  \n  ',
         [{ text: 'should not be written', startSec: 0, endSec: 1 }],
+        'official',
       ),
     ).resolves.toBeNull();
     await expect(
@@ -211,6 +217,110 @@ describe('ingest module', () => {
         .from(schema.items)
         .where(eq(schema.items.id, item.id)),
     ).resolves.toEqual([{ state: 'pending' }]);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Subtitle source (docs/29 Step 5): a transcript records how it was obtained,
+  // and every write of plain_text also writes subtitle_source. Read with raw SQL
+  // so the assertion sees the physical column the database export reads.
+  // ---------------------------------------------------------------------------
+
+  async function contentRowOf(itemId: string) {
+    const { rows } = await pg.query<{ plain_text: string; subtitle_source: string | null }>(
+      'SELECT plain_text, subtitle_source FROM item_contents WHERE item_id = $1',
+      [itemId],
+    );
+    return rows;
+  }
+
+  it('records the subtitle source of a transcript', async () => {
+    const item = await seedItem('BV-SOURCE-ASR');
+
+    await persistExistingItemContent(
+      db,
+      'bilibili',
+      'BV-SOURCE-ASR',
+      'asr text',
+      [{ text: 'asr text', startSec: 0, endSec: 1 }],
+      'asr',
+    );
+
+    await expect(contentRowOf(item.id)).resolves.toEqual([
+      { plain_text: 'asr text', subtitle_source: 'asr' },
+    ]);
+  });
+
+  it('replaces the subtitle source together with the text on re-transcription', async () => {
+    const item = await seedItem('BV-SOURCE-REPLACE');
+    await persistExistingItemContent(
+      db,
+      'bilibili',
+      'BV-SOURCE-REPLACE',
+      'asr text',
+      [{ text: 'asr text', startSec: 0, endSec: 1 }],
+      'asr',
+    );
+
+    await persistExistingItemContent(
+      db,
+      'bilibili',
+      'BV-SOURCE-REPLACE',
+      'official text',
+      [{ text: 'official text', startSec: 0, endSec: 1 }],
+      'official',
+    );
+
+    await expect(contentRowOf(item.id)).resolves.toEqual([
+      { plain_text: 'official text', subtitle_source: 'official' },
+    ]);
+  });
+
+  it('stores NULL when the caller says the content is not a transcript', async () => {
+    const item = await seedItem('BV-SOURCE-NULL');
+
+    await persistExistingItemContent(
+      db,
+      'bilibili',
+      'BV-SOURCE-NULL',
+      'not a transcript',
+      [{ text: 'not a transcript' }],
+      null,
+    );
+
+    await expect(contentRowOf(item.id)).resolves.toEqual([
+      { plain_text: 'not a transcript', subtitle_source: null },
+    ]);
+  });
+
+  it('persistItemContent clears a subtitle source when it overwrites the text', async () => {
+    const item = await seedItem('BV-SOURCE-OVERWRITE');
+    await persistExistingItemContent(
+      db,
+      'bilibili',
+      'BV-SOURCE-OVERWRITE',
+      'asr text',
+      [{ text: 'asr text', startSec: 0, endSec: 1 }],
+      'asr',
+    );
+
+    await expect(
+      persistItemContent(db, item.id, 'extracted text', (text) => [{ text }]),
+    ).resolves.toBe(true);
+
+    await expect(contentRowOf(item.id)).resolves.toEqual([
+      { plain_text: 'extracted text', subtitle_source: null },
+    ]);
+  });
+
+  it('rejects a subtitle source other than official or asr', async () => {
+    const item = await seedItem('BV-SOURCE-CHECK');
+
+    await expect(
+      pg.query(
+        `INSERT INTO item_contents (item_id, plain_text, subtitle_source) VALUES ($1, 'text', 'foo')`,
+        [item.id],
+      ),
+    ).rejects.toThrow(/chk_subtitle_source/);
   });
 
   // ---------------------------------------------------------------------------

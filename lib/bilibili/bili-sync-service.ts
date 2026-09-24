@@ -155,7 +155,8 @@ export type PersistContentResult = 'embedded' | 'chunked' | null;
 
 /**
  * Persist transcription content and timestamped chunks, stopping at the
- * durable seam shared by independent post-processors.
+ * durable seam shared by independent post-processors. `source` is stored as
+ * `item_contents.subtitle_source` (docs/29 Step 5), not only logged.
  */
 export async function persistContentChunks(
   bvid: string,
@@ -170,6 +171,7 @@ export async function persistContentChunks(
       bvid,
       rows.map((row) => row.text).join('\n'),
       chunkSubtitleRows(rows),
+      source,
     );
     if (result) {
       console.info(

@@ -11,6 +11,7 @@
 
 - `v004-tags.ts` — v4 AI 标签：`CREATE TABLE IF NOT EXISTS tags`（name 唯一）+ `item_tags`（复合 PK + 双 FK cascade + tag_id 索引）。平台无关 M:N，未来文章/仓库 item 直接复用。`IF NOT EXISTS` 保证幂等
 - `v005-chat-conversations.ts` — v5 Chat 会话历史：`CREATE TABLE IF NOT EXISTS chat_conversations`（整会话 jsonb 行：title + model_messages 全量 + created_at/updated_at）。复用 v001 的 `update_updated_at_column()` 触发器函数；触发器用 `DROP TRIGGER IF EXISTS` + `CREATE TRIGGER` 保证幂等（PG 无 `CREATE TRIGGER IF NOT EXISTS`）
+- `v006-subtitle-source.ts` — v6 转录正文来源（docs/29 Step 5，缺陷 C6）：`ALTER TABLE item_contents ADD COLUMN IF NOT EXISTS subtitle_source TEXT CONSTRAINT chk_subtitle_source CHECK (... IN ('official','asr'))`。可空、无默认值、**不回填**（扩展未上线，旧行留 NULL）；NULL 能过 CHECK，正好表示「不是转录」。约束在 SQL 里**具名**，与 entity 的 `check('chk_subtitle_source')` 同名——v001 的 `content_state` CHECK 是行内匿名写法，库里实际叫 `items_content_state_check`，与 entity 声明的 `chk_content_state` 对不上，v006 不照抄这一点。`IF NOT EXISTS` 保证幂等，列已存在时约束随之跳过（PGlite 实测连跑两次仍只有一个约束）
 
 ## 约定
 

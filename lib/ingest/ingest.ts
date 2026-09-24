@@ -49,6 +49,7 @@ import { itemContents } from '@/lib/database/entities/item-contents';
 import { itemChunks } from '@/lib/database/entities/item-chunks';
 import { replaceItemChunks } from '@/lib/embedding/vector-store';
 import type { ChunkInput } from '@/lib/embedding/types';
+import type { SubtitleSource } from '@/lib/subtitle/types';
 
 /** Rows per INSERT batch — keeps bind-param count well under the PG 65535 limit. */
 const INSERT_CHUNK_SIZE = 500;
@@ -157,6 +158,10 @@ export function ghostItemCondition(db: FavbaseDb) {
  * an empty chunk set (the ghost-sweep convergence guarantee). Shared by the
  * ingest content step below and the bookmarks extraction pipeline
  * (`saveBookmarkContent` in lib/bookmarks/bookmarks-sync-service.ts).
+ *
+ * The text it writes is never a transcript, so `subtitle_source` is written
+ * as NULL in the same statement — every write of `plain_text` also writes
+ * `subtitle_source`, so a stale 'asr'/'official' can never outlive its text.
  */
 export async function persistItemContent(
   db: FavbaseDb,
@@ -168,10 +173,10 @@ export async function persistItemContent(
   if (!plainText) return false;
   await db
     .insert(itemContents)
-    .values({ itemId, plainText })
+    .values({ itemId, plainText, subtitleSource: null })
     .onConflictDoUpdate({
       target: itemContents.itemId,
-      set: { plainText, updatedAt: new Date() },
+      set: { plainText, subtitleSource: null, updatedAt: new Date() },
     });
   const inserted = await replaceItemChunks(db, itemId, chunkText(plainText));
   return inserted.length > 0;
@@ -184,6 +189,11 @@ export async function persistItemContent(
  * inside the ingest module. Content and `has_content` commit before chunk
  * replacement, so a replacement failure never leaves stale `embedded` state
  * over new text. Missing items and blank text are explicit no-ops.
+ *
+ * `subtitleSource` says how a transcript was obtained ('official' / 'asr');
+ * `null` = the content is not a transcript. Required with no default: a
+ * transcript whose subtitle source is silently dropped is exactly docs/29 C6.
+ * It replaces the stored value together with the text, in the same upsert.
  */
 export async function persistExistingItemContent(
   db: FavbaseDb,
@@ -191,6 +201,7 @@ export async function persistExistingItemContent(
   platformItemId: string,
   text: string,
   preparedChunks: ChunkInput[],
+  subtitleSource: SubtitleSource | null,
 ): Promise<'chunked' | null> {
   const plainText = text.trim();
   if (!plainText || preparedChunks.length === 0) return null;
@@ -207,10 +218,10 @@ export async function persistExistingItemContent(
   await db.transaction(async (tx) => {
     await tx
       .insert(itemContents)
-      .values({ itemId, plainText })
+      .values({ itemId, plainText, subtitleSource })
       .onConflictDoUpdate({
         target: itemContents.itemId,
-        set: { plainText, updatedAt },
+        set: { plainText, subtitleSource, updatedAt },
       });
     await tx
       .update(items)

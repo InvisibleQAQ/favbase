@@ -32,6 +32,12 @@ describe('export stays in sync with schema', () => {
     expect(tagHeader).toEqual(expect.arrayContaining(['id', 'name', 'createdAt']));
   });
 
+  it('item_contents csv carries the subtitle source column (docs/29 Step 5)', () => {
+    const files = unzipSync(toExportCsvZip(emptyData));
+    const header = strFromU8(files['item_contents.csv']).split('\n')[0].split(',');
+    expect(header).toEqual(expect.arrayContaining(['plainText', 'subtitleSource']));
+  });
+
   it('JSON export includes every schema table key', () => {
     const parsed = JSON.parse(toExportJson(emptyData)) as {
       tables: Record<string, unknown>;
