@@ -133,6 +133,31 @@ describe('favbase CLI dispatch', () => {
     expect((await run(['install-skill', '--agent', 'cursor'])).stderr).toContain('Unknown agent');
   });
 
+  // Doctor prints `install-skill --agent claude,codex` for two stale copies.
+  // In Windows PowerShell, npm's `favbase.ps1` shim re-splats that unquoted
+  // list joined by a space, so node receives `claude codex` (both flag forms);
+  // see `skill-install.ts` in packages/favbase/CLAUDE.md.
+  it.each([
+    [['install-skill', '--agent', 'claude codex']],
+    [['install-skill', '--agent=claude codex']],
+    [['install-skill', '--agent', 'claude,codex']],
+  ])('install-skill installs both agents for %j', async (argv) => {
+    const result = await run(argv);
+    expect(result.code).toBe(EXIT_OK);
+    expect(JSON.parse(result.stdout)).toEqual({
+      installed: [
+        join(result.io.homeDir, '.claude', 'skills', 'favbase', 'SKILL.md'),
+        join(result.io.homeDir, '.agents', 'skills', 'favbase', 'SKILL.md'),
+      ],
+    });
+  });
+
+  it.each([[','], [' ']])('install-skill refuses an agent list of separators only (%j)', async (value) => {
+    const result = await run(['install-skill', '--agent', value]);
+    expect(result.code).toBe(EXIT_USAGE);
+    expect(result.stderr).toContain('Unknown agent');
+  });
+
   // A release built from a CRLF checkout would bundle a CRLF SKILL.md. `main`
   // canonicalizes it, so what lands on disk is the LF text GitHub also serves.
   it('install-skill writes LF even when the bundled skill is CRLF', async () => {

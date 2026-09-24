@@ -20,11 +20,17 @@ export function skillRoot(agent: SkillAgent, home: string = homedir()): string {
     : join(home, '.agents', 'skills');
 }
 
+/**
+ * `--agent`: absent, empty or `all` means every agent; otherwise names split on
+ * commas **or whitespace** -- Windows PowerShell's npm `.ps1` shim delivers an
+ * unquoted `claude,codex` as `claude codex`. A value of separators only is
+ * checked whole, so it still fails as an unknown agent.
+ */
 export function parseSkillAgents(value: string | undefined): SkillAgent[] {
   if (!value || value === 'all') return [...SKILL_AGENTS];
+  const names = value.split(/[\s,]+/).filter(Boolean);
   const agents = new Set<SkillAgent>();
-  for (const raw of value.split(',')) {
-    const name = raw.trim();
+  for (const name of names.length > 0 ? names : [value]) {
     if (!(SKILL_AGENTS as readonly string[]).includes(name)) {
       throw new UsageError(`Unknown agent "${name}"; use ${SKILL_AGENTS.join(', ')} or all`);
     }

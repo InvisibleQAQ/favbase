@@ -131,6 +131,10 @@ provides no MCP server.
   the installed copy (a CRLF re-save is `stale`; reinstalling fixes it). Missing file (ENOENT or
   ENOTDIR) is `missing`; any other read error is `stale`, since reinstalling is
   the one fix doctor can name. `--dir` copies are invisible to it by design.
+  `parseSkillAgents` splits `--agent` on commas **or whitespace**: Windows
+  PowerShell's npm `.ps1` shim delivers an unquoted `claude,codex` as
+  `claude codex`. The parser absorbs that, so doctor's hint keeps printing the
+  unquoted comma form (`cli-main.test.ts` holds both shapes).
 - `README.md` and `LICENSE` exist for the npm page and for GPL-3.0 conveyance:
   `files: ["dist"]` does not list them, but npm always ships a package
   directory's README and LICENSE, so `npm pack` carries 5 files, not 3.
