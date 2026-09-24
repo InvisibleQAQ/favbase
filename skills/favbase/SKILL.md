@@ -103,7 +103,7 @@ every shell.
 | Exit | Meaning | What to do |
 | --- | --- | --- |
 | 0 | success | use the JSON on stdout |
-| 1 | usage or missing config | a usage error ends with `Run favbase --help for usage.` — fix your command and retry; otherwise show the stderr message: the user must run `favbase setup` |
+| 1 | usage, config or local file problem | a usage error ends with `Run favbase --help for usage.` — fix your command and retry; otherwise show the stderr message to the user: it names what to fix (run `favbase setup`, or a path it could not write) |
 | 2 | daemon or extension unreachable | run `favbase doctor`; fix the reported Chrome, Agent Skills, port, or pairing token check |
 | 3 | Knowledge Tool error (bad argument, tool failure) | read the stderr message and adjust the arguments |
 

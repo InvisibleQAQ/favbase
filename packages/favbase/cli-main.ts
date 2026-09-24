@@ -12,6 +12,7 @@ import {
   ConfigError,
   configPath,
   daemonLogPath,
+  LocalFileError,
   parsePort,
   parseToken,
   readConfigFile,
@@ -105,7 +106,7 @@ Setup and daemon:
   ${'daemon [run|start|stop|restart]'.padEnd(USAGE_COLUMN)} run in foreground, or control the background daemon
 
 Config: FAVBASE_TOKEN / FAVBASE_BRIDGE_PORT, else ${configPath(env)} (default port ${DEFAULT_AGENT_BRIDGE_PORT}).
-Exit codes: ${EXIT_OK} ok, ${EXIT_USAGE} usage or config, ${EXIT_UNAVAILABLE} daemon or extension unreachable, ${EXIT_TOOL} Knowledge Tool error.
+Exit codes: ${EXIT_OK} ok, ${EXIT_USAGE} usage/config/local file problem, ${EXIT_UNAVAILABLE} daemon or extension unreachable, ${EXIT_TOOL} Knowledge Tool error.
 `;
 }
 
@@ -514,7 +515,9 @@ function reportFailure(io: CliIo, argv: readonly string[], error: unknown): numb
     report(`favbase: ${error.message}\nRun favbase --help for usage.`);
     return EXIT_USAGE;
   }
-  if (error instanceof ConfigError) {
+  // No usage line: SKILL.md's exit-1 row reads its absence as "show the user
+  // the message", which names what to fix -- `favbase setup`, or a path.
+  if (error instanceof ConfigError || error instanceof LocalFileError) {
     report(`favbase: ${error.message}`);
     return EXIT_USAGE;
   }

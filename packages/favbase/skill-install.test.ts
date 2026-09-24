@@ -5,6 +5,7 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { LocalFileError } from './config';
 import {
   canonicalSkillContent,
   inspectSkills,
@@ -239,7 +240,8 @@ describe('the legacy Codex root', () => {
   });
 
   // Only "not there" skips the copy. Anything else is what doctor calls stale,
-  // and install-skill has to report it rather than skip the copy in silence.
+  // and install-skill has to report it rather than skip the copy in silence:
+  // as a LocalFileError naming the path, which the CLI reports as exit 1.
   it('surfaces an error other than a missing copy, naming the path', async () => {
     const home = await tempHome();
     const legacy = legacyCodexSkillRoot(home, {});
@@ -250,9 +252,12 @@ describe('the legacy Codex root', () => {
     await expect(inspectSkills(SHIPPED, home, {})).resolves.toContainEqual(
       { agent: 'codex', path: copyIn(legacy), state: 'stale' },
     );
-    await expect(installAgentSkills(SHIPPED, ['codex'], home, {})).rejects.toMatchObject({
-      code: 'ELOOP',
-      path: copyIn(legacy),
+    const error = await installAgentSkills(SHIPPED, ['codex'], home, {}).catch((reason: unknown) => reason);
+    expect(error).toBeInstanceOf(LocalFileError);
+    expect(error).toMatchObject({
+      message: expect.stringMatching(/^cannot write .+: ELOOP: /),
+      cause: { code: 'ELOOP', path: copyIn(legacy) },
     });
+    expect((error as Error).message.startsWith(`cannot write ${copyIn(legacy)}: `)).toBe(true);
   });
 });

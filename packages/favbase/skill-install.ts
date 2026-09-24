@@ -3,7 +3,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import { UsageError } from './args';
-import type { ConfigEnv } from './config';
+import { writingFile, type ConfigEnv } from './config';
 
 export const SKILL_AGENTS = ['claude', 'codex'] as const;
 export type SkillAgent = typeof SKILL_AGENTS[number];
@@ -88,16 +88,21 @@ export function canonicalSkillContent(content: string): string {
   return content.replace(/\r\n?/g, '\n');
 }
 
-/** Writes `<root>/favbase/SKILL.md` under every root; returns the written paths. */
+/**
+ * Writes `<root>/favbase/SKILL.md` under every root; returns the written paths.
+ * A failure is a `LocalFileError` naming the copy.
+ */
 export async function installSkill(
   content: string,
   roots: readonly string[],
 ): Promise<string[]> {
   const written: string[] = [];
   for (const root of roots) {
-    await mkdir(join(root, SKILL_DIR_NAME), { recursive: true });
     const path = skillPath(root);
-    await writeFile(path, content, 'utf8');
+    await writingFile(path, async () => {
+      await mkdir(join(root, SKILL_DIR_NAME), { recursive: true });
+      await writeFile(path, content, 'utf8');
+    });
     written.push(path);
   }
   return written;
@@ -106,22 +111,28 @@ export async function installSkill(
 /**
  * Overwrites `<root>/favbase/SKILL.md` only where it already exists and creates
  * nothing. `stat` follows links, so a copy behind a directory link (cc-switch)
- * is written through it, and a dangling link reads as absent.
+ * is written through it, and a dangling link reads as absent. Any other
+ * failure, of the `stat` or the write, is a `LocalFileError` naming the copy.
  */
 async function refreshSkill(content: string, roots: readonly string[]): Promise<string[]> {
   const written: string[] = [];
   for (const root of roots) {
     const path = skillPath(root);
-    try {
-      await stat(path);
-    } catch (error) {
-      if (isMissing(error)) continue;
-      throw error;
-    }
-    await writeFile(path, content, 'utf8');
-    written.push(path);
+    if (await writingFile(path, () => overwriteIfPresent(path, content))) written.push(path);
   }
   return written;
+}
+
+/** `false` when there is no copy at `path` to overwrite. */
+async function overwriteIfPresent(path: string, content: string): Promise<boolean> {
+  try {
+    await stat(path);
+  } catch (error) {
+    if (isMissing(error)) return false;
+    throw error;
+  }
+  await writeFile(path, content, 'utf8');
+  return true;
 }
 
 /**

@@ -30,6 +30,34 @@ export class ConfigError extends Error {
   }
 }
 
+/**
+ * A local file favbase cannot write: the config (`setup`) or a skill copy
+ * (`setup`, `install-skill`). Exit 1 like `ConfigError`, printed the same way;
+ * the message names the path, since the user is the one who can fix it. Not a
+ * `ConfigError`: that one means the configuration itself is missing or
+ * invalid, and doctor reports it as `config.problem`.
+ */
+export class LocalFileError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = 'LocalFileError';
+  }
+}
+
+/**
+ * Runs the filesystem steps that write `path`. Any failure, including a
+ * failed look before the write, becomes a `LocalFileError` naming `path` and
+ * the OS reason (whose own path may be a parent directory).
+ */
+export async function writingFile<T>(path: string, steps: () => Promise<T>): Promise<T> {
+  try {
+    return await steps();
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new LocalFileError(`cannot write ${path}: ${reason}`, { cause: error });
+  }
+}
+
 export const SETUP_HINT =
   'copy the pairing token from favbase Settings > Connections > Agent Skills and run: favbase setup --token <token> [--port <port>]';
 
@@ -105,8 +133,10 @@ export async function writeConfigFile(
   config: { token: string; port: number },
 ): Promise<string> {
   const path = configPath(env);
-  await mkdir(favbaseHome(env), { recursive: true, mode: 0o700 });
-  await writeFile(path, `${JSON.stringify(config, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+  await writingFile(path, async () => {
+    await mkdir(favbaseHome(env), { recursive: true, mode: 0o700 });
+    await writeFile(path, `${JSON.stringify(config, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+  });
   return path;
 }
 

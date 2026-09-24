@@ -31,13 +31,19 @@ provides no MCP server.
   name). Because a failed check is cached, that costs a broken-DNS machine one
   slow command a day, plus every `doctor`. Only moving the query out of the
   process (a detached child, as update-notifier does) would bound it.
-- `cli-main.ts` owns dispatch, usage text, exit codes (0 ok, 1 usage/config,
-  2 daemon or extension unreachable, 3 Knowledge Tool error) and every command:
+- `cli-main.ts` owns dispatch, usage text, exit codes (0 ok, 1 usage/config/local
+  file, 2 daemon or extension unreachable, 3 Knowledge Tool error) and every command:
   alias commands, `tools`, `call`, `doctor`, `daemon run|start|stop|restart`,
   `setup`, `install-skill`. `doctor` adds structured troubleshooting checks and
   the canonical Chrome 120+ 30-second / Chrome 116-119 60-second cold-start
   wording. Foreground daemon logs receive one ISO-8601 prefix here. Data results
-  go to stdout as JSON only. Dispatch is two phases (docs/27 Step 2): `plan`
+  go to stdout as JSON only. Exit 1 holds three error types, and SKILL.md's
+  exit-1 row tells them apart by output: a `UsageError` ends with `Run favbase
+  --help for usage.` (the agent fixes its command); a `ConfigError` or
+  `LocalFileError` prints only `favbase: <message>`, which names the fix (run
+  setup, or a path). Only an unclassified error falls back to exit 2, whose row
+  says "run doctor" -- so a new local failure gets a type at its source, not
+  the fallback (silent-failure guide, Gotcha 5). Dispatch is two phases (docs/27 Step 2): `plan`
   parses and validates every argument and picks the command's update policy
   (`none` for `--version`, usage and `daemon *`; `always` for `doctor`; `daily`
   for the rest), then `main` starts the update check and runs the command
@@ -100,7 +106,15 @@ provides no MCP server.
   back without also rendering it in `aliasUsageLine`.
 - `config.ts` resolves token/port: env `FAVBASE_TOKEN`/`FAVBASE_BRIDGE_PORT`,
   then `~/.favbase/config.json` (`FAVBASE_HOME` overrides the root), then
-  `DEFAULT_AGENT_BRIDGE_PORT`.
+  `DEFAULT_AGENT_BRIDGE_PORT`. It also owns `LocalFileError`, a config or skill
+  file favbase cannot write, and `writingFile(path, steps)`, which turns any
+  failure of one write's filesystem steps (a `stat` before it included) into
+  one naming `path` and the OS reason (`cannot write <path>: EACCES: ...`). It
+  wraps only the write sites -- `writeConfigFile`, `installSkill`,
+  `refreshSkill` -- so doctor's read-only inspection is unaffected. Not a
+  `ConfigError` on purpose: doctor turns that into `config.problem`, and a file
+  it cannot write is no invalid config. Before it, these failures reached the
+  exit-2 fallback.
 - `daemon.ts` builds one `http.Server`, attaches `BridgeServer` to it for
   `/bridge`, mounts `createRpcHandler`, and owns listen/EADDRINUSE, idle exit
   (`FAVBASE_DAEMON_IDLE_MINUTES`, default 120, 0 disables) and shutdown. The
@@ -155,8 +169,9 @@ provides no MCP server.
   directory included, is never created. A copy exists when `stat` finds it --
   links are followed, so a copy behind a directory link is written through it
   and a dangling link is absent. Only ENOENT/ENOTDIR mean absent; any other
-  error propagates (doctor calls that copy `stale`, and install-skill then
-  names the error). On such a machine doctor's `.agents` row stays `missing`
+  error, like every failed write, is a `LocalFileError` naming the copy
+  (doctor calls that copy `stale`, and install-skill then names the error,
+  exit 1). On such a machine doctor's `.agents` row stays `missing`
   for good; the hint must keep ignoring it, since not every copy is missing
   (`cli-main-doctor.test.ts` holds that). `inspectSkills` lists the legacy
   copy only when present, so a machine without one sees one entry per agent.

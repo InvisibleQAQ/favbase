@@ -63,7 +63,7 @@ For the accepted `--platform` values run `favbase tools` — the tool schemas ar
 | Code | Meaning |
 |---|---|
 | 0 | success |
-| 1 | usage error, or missing/invalid configuration |
+| 1 | usage error, missing/invalid configuration, or a local file favbase could not write (the message names it) |
 | 2 | the daemon or the extension is unreachable |
 | 3 | the Knowledge Tool itself returned an error |
 

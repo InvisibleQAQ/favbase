@@ -1,6 +1,6 @@
 import { once } from 'node:events';
-import { existsSync, readFileSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { constants, existsSync, readFileSync } from 'node:fs';
+import { access, chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -45,6 +45,49 @@ async function run(
     ...overrides,
   };
   return { code: await main(argv, io), stdout, stderr, io };
+}
+
+/** A user home under a fresh temp root; nothing exists at it yet. */
+async function userHome(): Promise<string> {
+  const root = await mkdtemp(join(tmpdir(), 'favbase-user-'));
+  temps.push(root);
+  return join(root, 'user');
+}
+
+/**
+ * A loopback stand-in for the daemon. `/health` answers as this CLI's own
+ * version, so `ensureDaemon` keeps it, and `/rpc` records the call. Every
+ * request is logged, so a usage error can show it never got this far.
+ */
+async function fakeDaemon(): Promise<{ env: Record<string, string>; requests: string[]; calls: unknown[] }> {
+  const requests: string[] = [];
+  const calls: unknown[] = [];
+  const server = createServer((request, response) => {
+    requests.push(`${request.method} ${request.url}`);
+    const chunks: Buffer[] = [];
+    request.on('data', (chunk: Buffer) => chunks.push(chunk));
+    request.on('end', () => {
+      response.writeHead(request.url === '/health' || request.url === '/rpc' ? 200 : 404, {
+        'content-type': 'application/json',
+      });
+      if (request.url === '/health') {
+        // Never signalled: equal versions are kept, and nothing asks /shutdown.
+        response.end(JSON.stringify({ name: 'favbase', version: VERSION, pid: 2_147_483_000 }));
+        return;
+      }
+      if (request.url === '/rpc') {
+        calls.push(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+        response.end(JSON.stringify({ ok: true, result: { answered: true } }));
+        return;
+      }
+      response.end();
+    });
+  });
+  servers.push(server);
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const { port } = server.address() as AddressInfo;
+  return { env: { FAVBASE_TOKEN: 'abc', FAVBASE_BRIDGE_PORT: String(port) }, requests, calls };
 }
 
 afterEach(async () => {
@@ -190,12 +233,6 @@ describe('favbase CLI dispatch', () => {
   describe('with a copy in the legacy Codex root', () => {
     const OLD = '---\nname: favbase\n---\nolder\n';
 
-    async function userHome(): Promise<string> {
-      const root = await mkdtemp(join(tmpdir(), 'favbase-legacy-'));
-      temps.push(root);
-      return join(root, 'user');
-    }
-
     /** An OLD copy at `<parent>/skills/favbase/SKILL.md`: a Codex home's shape, and `.agents`'. */
     async function seedCopy(parent: string): Promise<string> {
       const dir = join(parent, 'skills', 'favbase');
@@ -287,6 +324,85 @@ describe('favbase CLI dispatch', () => {
   });
 });
 
+// SKILL.md's exit table is the agent's error handling (silent-failure guide,
+// Gotcha 5). A file favbase could not write used to fall through to exit 2,
+// "run favbase doctor", and doctor checks no file favbase writes. Exit 1
+// without the usage line tells the agent to show the user the message, and the
+// message names the path. The fake daemon sits where a data command would
+// look for one: none of these commands may reach it.
+describe('a local file favbase cannot write', () => {
+  const claudeCopy = (homeDir: string) => join(homeDir, '.claude', 'skills', 'favbase', 'SKILL.md');
+
+  // A file where the skill directory goes fails `installSkill`'s mkdir; a
+  // directory where SKILL.md goes passes `refreshSkill`'s stat, then fails its
+  // write. Both portable, no permissions involved.
+  const blockers: [string, (homeDir: string) => Promise<void>][] = [
+    ['a file where the skill directory goes', async (homeDir) => {
+      await mkdir(join(homeDir, '.claude', 'skills'), { recursive: true });
+      await writeFile(join(homeDir, '.claude', 'skills', 'favbase'), 'not a directory');
+    }],
+    ['a directory where SKILL.md goes', async (homeDir) => {
+      await mkdir(claudeCopy(homeDir), { recursive: true });
+    }],
+  ];
+
+  /** One stderr line naming `path` and the OS reason; nothing on stdout. */
+  function expectCannotWrite(result: Run, path: string): void {
+    expect(result.code).toBe(EXIT_USAGE);
+    expect(result.stdout).toBe('');
+    const lines = result.stderr.split('\n');
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toMatch(/^favbase: cannot write .+: E[A-Z]+: /);
+    expect(lines[0].startsWith(`favbase: cannot write ${path}: `)).toBe(true);
+    expect(result.stderr).not.toContain('Run favbase --help');
+  }
+
+  it.each(blockers)('install-skill names the skill copy: %s', async (_name, block) => {
+    const homeDir = await userHome();
+    await block(homeDir);
+    const daemon = await fakeDaemon();
+
+    const result = await run(['install-skill', '--agent', 'claude'], daemon.env, { homeDir });
+
+    expectCannotWrite(result, claudeCopy(homeDir));
+    expect(daemon.requests).toEqual([]);
+  });
+
+  it.each(blockers)('setup writes the config, then names the skill copy: %s', async (_name, block) => {
+    const homeDir = await userHome();
+    await block(homeDir);
+    const daemon = await fakeDaemon();
+    const port = Number(daemon.env.FAVBASE_BRIDGE_PORT);
+
+    const result = await run(['setup', '--token', 'abc', '--port', String(port)], {}, { homeDir });
+
+    expectCannotWrite(result, claudeCopy(homeDir));
+    expect(JSON.parse(await readFile(configPath(result.io.env), 'utf8'))).toEqual({ token: 'abc', port });
+    expect(daemon.requests).toEqual([]);
+  });
+
+  // Read-only, so `readConfigFile` still succeeds and the failure is the write
+  // itself (a FAVBASE_HOME that is a file fails the read first on POSIX).
+  it('setup names a config file it cannot write', async (ctx) => {
+    const homeDir = await userHome();
+    const env = { FAVBASE_HOME: join(homeDir, '..', 'favbase') };
+    const path = configPath(env);
+    await mkdir(favbaseHome(env), { recursive: true });
+    await writeFile(path, JSON.stringify({ token: 'old', port: 2222 }));
+    await chmod(path, 0o444);
+    if (await access(path, constants.W_OK).then(() => true, () => false)) {
+      ctx.skip('a read-only file is still writable here (running as root?)');
+    }
+    const daemon = await fakeDaemon();
+
+    const result = await run(['setup', '--token', 'abc', '--no-skill'], { ...daemon.env, ...env }, { homeDir });
+
+    expectCannotWrite(result, path);
+    expect(JSON.parse(await readFile(path, 'utf8'))).toEqual({ token: 'old', port: 2222 });
+    expect(daemon.requests).toEqual([]);
+  });
+});
+
 // Windows PowerShell 5.1 does not escape embedded double quotes when it builds
 // a native command line, so `call --args '{"platform":"zhihu"}'` reaches node
 // as `{platform:zhihu}`. A path survives every shell; `--args-file` carries one.
@@ -295,42 +411,6 @@ describe('favbase call arguments', () => {
   // `--args` cannot carry, and the last one what a non-UTF-8 read would mangle.
   const ARGS = { query: 'rust async \u5f02\u6b65', top_k: 3 };
   const FILE_FORM = '--args-file <path>';
-
-  /**
-   * A loopback stand-in for the daemon. `/health` answers as this CLI's own
-   * version, so `ensureDaemon` keeps it, and `/rpc` records the call. Every
-   * request is logged, so a usage error can show it never got this far.
-   */
-  async function fakeDaemon(): Promise<{ env: Record<string, string>; requests: string[]; calls: unknown[] }> {
-    const requests: string[] = [];
-    const calls: unknown[] = [];
-    const server = createServer((request, response) => {
-      requests.push(`${request.method} ${request.url}`);
-      const chunks: Buffer[] = [];
-      request.on('data', (chunk: Buffer) => chunks.push(chunk));
-      request.on('end', () => {
-        response.writeHead(request.url === '/health' || request.url === '/rpc' ? 200 : 404, {
-          'content-type': 'application/json',
-        });
-        if (request.url === '/health') {
-          // Never signalled: equal versions are kept, and nothing asks /shutdown.
-          response.end(JSON.stringify({ name: 'favbase', version: VERSION, pid: 2_147_483_000 }));
-          return;
-        }
-        if (request.url === '/rpc') {
-          calls.push(JSON.parse(Buffer.concat(chunks).toString('utf8')));
-          response.end(JSON.stringify({ ok: true, result: { answered: true } }));
-          return;
-        }
-        response.end();
-      });
-    });
-    servers.push(server);
-    server.listen(0, '127.0.0.1');
-    await once(server, 'listening');
-    const { port } = server.address() as AddressInfo;
-    return { env: { FAVBASE_TOKEN: 'abc', FAVBASE_BRIDGE_PORT: String(port) }, requests, calls };
-  }
 
   async function scratchDir(): Promise<string> {
     const dir = await mkdtemp(join(tmpdir(), 'favbase-args-'));
