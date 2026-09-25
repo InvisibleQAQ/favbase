@@ -398,12 +398,23 @@ function parseInstallSkill(parsed: ParsedArgv): InstallSkillRequest {
   };
 }
 
+/**
+ * One `favbase: <message>` line per skill copy that could not be written, the
+ * way `reportFailure` prints a single `LocalFileError`. The copies that were
+ * written are already on stdout; exit 1 if any failed.
+ */
+function reportSkillFailures(io: CliIo, failures: readonly LocalFileError[]): number {
+  for (const failure of failures) io.stderr(`favbase: ${failure.message}\n`);
+  return failures.length > 0 ? EXIT_USAGE : EXIT_OK;
+}
+
+/** `--dir` is one copy: its failure throws, and nothing reaches stdout. */
 async function runInstallSkill(io: CliIo, request: InstallSkillRequest): Promise<number> {
-  const installed = request.dir
-    ? await installSkill(io.skillContent, [request.dir])
+  const result = request.dir
+    ? { written: await installSkill(io.skillContent, [request.dir]), failures: [] }
     : await installAgentSkills(io.skillContent, request.agents, io.homeDir, io.env);
-  printJson(io, { installed });
-  return EXIT_OK;
+  printJson(io, { installed: result.written });
+  return reportSkillFailures(io, result.failures);
 }
 
 interface SetupRequest {
@@ -430,10 +441,12 @@ async function runSetup(io: CliIo, request: SetupRequest): Promise<number> {
   const path = await writeConfigFile(io.env, { token: request.token, port });
   const skills = request.skill
     ? await installAgentSkills(io.skillContent, SKILL_AGENTS, io.homeDir, io.env)
-    : [];
-  printJson(io, { configPath: path, port, skills });
+    : { written: [], failures: [] };
+  printJson(io, { configPath: path, port, skills: skills.written });
+  // The config is written either way, so the next step stands.
+  const code = reportSkillFailures(io, skills.failures);
   io.stderr('[favbase] next: run favbase doctor with Chrome open to verify the connection\n');
-  return EXIT_OK;
+  return code;
 }
 
 /**

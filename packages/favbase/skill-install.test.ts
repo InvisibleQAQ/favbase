@@ -29,6 +29,11 @@ async function listTree(root: string): Promise<string[]> {
   return (await readdir(root, { recursive: true })).map(String).sort();
 }
 
+/** `installAgentSkills`' result when every copy it tried was written. */
+function wrote(...written: string[]): { written: string[]; failures: never[] } {
+  return { written, failures: [] };
+}
+
 afterEach(async () => {
   await Promise.all(temps.splice(0).map(dir => rm(dir, { recursive: true, force: true })));
 });
@@ -131,18 +136,18 @@ describe('the legacy Codex root', () => {
       { agent: 'codex', path: copyIn(join(home, 'codex-home', 'skills')), state: 'current' },
     ]);
 
-    await expect(installAgentSkills(SHIPPED, ['codex'], home, env)).resolves.toEqual([
+    await expect(installAgentSkills(SHIPPED, ['codex'], home, env)).resolves.toEqual(wrote(
       copyIn(join(home, 'codex-home', 'skills')),
-    ]);
+    ));
     await expect(readFile(copyIn(legacyCodexSkillRoot(home, {})), 'utf8')).resolves.toBe(OLDER);
     expect(existsSync(agentsDir(home))).toBe(false);
 
     // The copy under <home>/.codex is not codex's while CODEX_HOME points
     // elsewhere, so it does not stand in for the .agents copy.
     await rm(join(home, 'codex-home'), { recursive: true });
-    await expect(installAgentSkills(SHIPPED, ['codex'], home, env)).resolves.toEqual([
+    await expect(installAgentSkills(SHIPPED, ['codex'], home, env)).resolves.toEqual(wrote(
       copyIn(skillRoot('codex', home)),
-    ]);
+    ));
   });
 
   // The cc-switch layout: a legacy copy and no .agents one. Creating .agents
@@ -152,15 +157,15 @@ describe('the legacy Codex root', () => {
     const legacy = legacyCodexSkillRoot(home, {});
     await installSkill(OLDER, [legacy]);
 
-    await expect(installAgentSkills(SHIPPED, ['claude'], home, {})).resolves.toEqual([
+    await expect(installAgentSkills(SHIPPED, ['claude'], home, {})).resolves.toEqual(wrote(
       copyIn(skillRoot('claude', home)),
-    ]);
+    ));
     await expect(readFile(copyIn(legacy), 'utf8')).resolves.toBe(OLDER);
 
-    await expect(installAgentSkills(SHIPPED, [...SKILL_AGENTS], home, {})).resolves.toEqual([
+    await expect(installAgentSkills(SHIPPED, [...SKILL_AGENTS], home, {})).resolves.toEqual(wrote(
       copyIn(skillRoot('claude', home)),
       copyIn(legacy),
-    ]);
+    ));
     await expect(readFile(copyIn(legacy), 'utf8')).resolves.toBe(SHIPPED);
     expect(existsSync(agentsDir(home))).toBe(false);
   });
@@ -170,20 +175,20 @@ describe('the legacy Codex root', () => {
     const legacy = legacyCodexSkillRoot(home, {});
     await installSkill(OLDER, [skillRoot('codex', home), legacy]);
 
-    await expect(installAgentSkills(SHIPPED, ['codex'], home, {})).resolves.toEqual([
+    await expect(installAgentSkills(SHIPPED, ['codex'], home, {})).resolves.toEqual(wrote(
       copyIn(skillRoot('codex', home)),
       copyIn(legacy),
-    ]);
+    ));
     await expect(readFile(copyIn(skillRoot('codex', home)), 'utf8')).resolves.toBe(SHIPPED);
     await expect(readFile(copyIn(legacy), 'utf8')).resolves.toBe(SHIPPED);
   });
 
   it('is never created, not even its directory', async () => {
     const home = await tempHome();
-    await expect(installAgentSkills(SHIPPED, [...SKILL_AGENTS], home, {})).resolves.toEqual([
+    await expect(installAgentSkills(SHIPPED, [...SKILL_AGENTS], home, {})).resolves.toEqual(wrote(
       copyIn(skillRoot('claude', home)),
       copyIn(skillRoot('codex', home)),
-    ]);
+    ));
     expect(existsSync(join(home, '.codex'))).toBe(false);
   });
 
@@ -202,18 +207,18 @@ describe('the legacy Codex root', () => {
     await expect(inspectSkills(SHIPPED, home, {})).resolves.toContainEqual(
       { agent: 'codex', path: copyIn(legacy), state: 'stale' },
     );
-    await expect(installAgentSkills(SHIPPED, ['codex'], home, {})).resolves.toEqual([
+    await expect(installAgentSkills(SHIPPED, ['codex'], home, {})).resolves.toEqual(wrote(
       copyIn(legacy),
-    ]);
+    ));
     await expect(readFile(join(real, 'SKILL.md'), 'utf8')).resolves.toBe(SHIPPED);
     expect(existsSync(agentsDir(home))).toBe(false);
 
     // Dangling, the link is no copy, so codex has none and gets its .agents one.
     await rm(real, { recursive: true });
     await expect(inspectSkills(SHIPPED, home, {})).resolves.toHaveLength(2);
-    await expect(installAgentSkills(SHIPPED, ['codex'], home, {})).resolves.toEqual([
+    await expect(installAgentSkills(SHIPPED, ['codex'], home, {})).resolves.toEqual(wrote(
       copyIn(skillRoot('codex', home)),
-    ]);
+    ));
     expect(existsSync(real)).toBe(false);
   });
 
@@ -233,15 +238,17 @@ describe('the legacy Codex root', () => {
     }
 
     await expect(inspectSkills(SHIPPED, home, {})).resolves.toHaveLength(2);
-    await expect(installAgentSkills(SHIPPED, ['codex'], home, {})).resolves.toEqual([
+    await expect(installAgentSkills(SHIPPED, ['codex'], home, {})).resolves.toEqual(wrote(
       copyIn(skillRoot('codex', home)),
-    ]);
+    ));
     expect(existsSync(target)).toBe(false);
   });
 
   // Only "not there" skips the copy. Anything else is what doctor calls stale,
   // and install-skill has to report it rather than skip the copy in silence:
   // as a LocalFileError naming the path, which the CLI reports as exit 1.
+  // Something is there, so it also counts as codex's copy: none is created
+  // in .agents beside it.
   it('surfaces an error other than a missing copy, naming the path', async () => {
     const home = await tempHome();
     const legacy = legacyCodexSkillRoot(home, {});
@@ -252,12 +259,53 @@ describe('the legacy Codex root', () => {
     await expect(inspectSkills(SHIPPED, home, {})).resolves.toContainEqual(
       { agent: 'codex', path: copyIn(legacy), state: 'stale' },
     );
-    const error = await installAgentSkills(SHIPPED, ['codex'], home, {}).catch((reason: unknown) => reason);
+    const { written, failures } = await installAgentSkills(SHIPPED, ['codex'], home, {});
+    expect(written).toEqual([]);
+    expect(failures).toHaveLength(1);
+    const [error] = failures;
     expect(error).toBeInstanceOf(LocalFileError);
     expect(error).toMatchObject({
       message: expect.stringMatching(/^cannot write .+: ELOOP: /),
       cause: { code: 'ELOOP', path: copyIn(legacy) },
     });
-    expect((error as Error).message.startsWith(`cannot write ${copyIn(legacy)}: `)).toBe(true);
+    expect(error.message.startsWith(`cannot write ${copyIn(legacy)}: `)).toBe(true);
+    expect(existsSync(agentsDir(home))).toBe(false);
+  });
+
+  // Copy by copy, not agent by agent: the .agents copy fails its write, and
+  // the legacy copy after it is still refreshed and still reported.
+  it('still refreshes the copy after one that fails', async () => {
+    const home = await tempHome();
+    const legacy = legacyCodexSkillRoot(home, {});
+    await installSkill(OLDER, [legacy]);
+    // A directory where SKILL.md goes: stat finds it, the write fails.
+    await mkdir(copyIn(skillRoot('codex', home)), { recursive: true });
+
+    const { written, failures } = await installAgentSkills(SHIPPED, ['codex'], home, {});
+    expect(written).toEqual([copyIn(legacy)]);
+    await expect(readFile(copyIn(legacy), 'utf8')).resolves.toBe(SHIPPED);
+    expect(failures.map((failure) => failure.message.startsWith(`cannot write ${copyIn(skillRoot('codex', home))}: `)))
+      .toEqual([true]);
+  });
+});
+
+// A root that links to a directory that exists is followed, as before: the new
+// copy lands in the link's target. (A dangling one is cli-main.test.ts'.)
+describe('creating a copy through a linked skill root', () => {
+  it('writes into the target of a root that links to an existing directory', async (ctx) => {
+    const home = await tempHome();
+    const real = join(home, 'shared-skills');
+    await mkdir(real);
+    await mkdir(join(home, '.agents'));
+    try {
+      await symlink(real, skillRoot('codex', home), 'junction');
+    } catch (error) {
+      ctx.skip(`cannot create a directory link here: ${(error as Error).message}`);
+    }
+
+    await expect(installAgentSkills(SHIPPED, ['codex'], home, {})).resolves.toEqual(wrote(
+      join(skillRoot('codex', home), 'favbase', 'SKILL.md'),
+    ));
+    await expect(readFile(join(real, 'favbase', 'SKILL.md'), 'utf8')).resolves.toBe(SHIPPED);
   });
 });

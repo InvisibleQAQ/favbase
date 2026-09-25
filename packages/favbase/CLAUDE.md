@@ -111,7 +111,8 @@ provides no MCP server.
   failure of one write's filesystem steps (a `stat` before it included) into
   one naming `path` and the OS reason (`cannot write <path>: EACCES: ...`). It
   wraps only the write sites -- `writeConfigFile`, `installSkill`,
-  `refreshSkill` -- so doctor's read-only inspection is unaffected. Not a
+  `refreshSkill`, and `createSkill`'s dangling-link look -- so doctor's
+  read-only inspection is unaffected. Not a
   `ConfigError` on purpose: doctor turns that into `config.problem`, and a file
   it cannot write is no invalid config. Before it, these failures reached the
   exit-2 fallback.
@@ -176,7 +177,24 @@ provides no MCP server.
   (`cli-main-doctor.test.ts` holds that). `inspectSkills` lists the legacy
   copy only when present, so a machine without one sees one entry per agent.
   Paths are neither resolved nor deduplicated: cc-switch's two links to one
-  real file get written twice, harmlessly. `CODEX_HOME` arrives as a required `env` argument (`CliIo.env`);
+  real file get written twice, harmlessly. Failures are collected copy by
+  copy, not thrown (`SkillInstallResult`): every other copy is still tried,
+  and a copy whose refresh failed still counts as the agent's, so none is
+  created beside it. install-skill and setup then print what was written on
+  stdout in their usual shape (`installed` / `skills`), one `favbase:
+  <message>` stderr line per failure, and exit 1; setup has already written
+  the config and still prints its `next:` line. `--dir` is one copy and still
+  throws (no stdout). Creating a copy first looks at three paths, `skillRoot`,
+  `<root>/favbase` and `<root>/favbase/SKILL.md`: a link there whose target
+  does not exist is named with its target and the fix, and left alone --
+  favbase never removes or rewrites it and never creates its target. Before,
+  a dangling directory link (`~/.agents/skills` left by a removed tool) failed
+  `mkdir` with a bare ENOTDIR, and a dangling SKILL.md file link was followed
+  by `writeFile`, which created the file it pointed at. The look runs inside
+  `writingFile`, so its own errors name the copy; the refusal is thrown
+  outside it, so `writingFile` stays a plain OS-error wrapper and the message
+  gets no second path. Ancestors above `skillRoot` are not looked at. Doctor
+  is unchanged: a dangling root reads `missing`. `CODEX_HOME` arrives as a required `env` argument (`CliIo.env`);
   the module never reads `process.env` itself, so no unit test sees the real
   one (the spawned `doctor` runs in `integration.test.ts` read the real home
   and env, read-only, and assert nothing about `skills`).

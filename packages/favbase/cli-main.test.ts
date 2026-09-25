@@ -1,12 +1,12 @@
 import { once } from 'node:events';
 import { constants, existsSync, readFileSync } from 'node:fs';
-import { access, chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, chmod, lstat, mkdir, mkdtemp, readFile, readlink, rm, symlink, writeFile } from 'node:fs/promises';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
-import { join, relative } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi, type TestContext } from 'vitest';
 
 import { EXIT_OK, EXIT_USAGE, main, type CliIo } from './cli-main';
 import { configPath, favbaseHome } from './config';
@@ -53,6 +53,9 @@ async function userHome(): Promise<string> {
   temps.push(root);
   return join(root, 'user');
 }
+
+const claudeCopy = (homeDir: string) => join(homeDir, '.claude', 'skills', 'favbase', 'SKILL.md');
+const agentsCopy = (homeDir: string) => join(homeDir, '.agents', 'skills', 'favbase', 'SKILL.md');
 
 /**
  * A loopback stand-in for the daemon. `/health` answers as this CLI's own
@@ -241,9 +244,6 @@ describe('favbase CLI dispatch', () => {
       return join(dir, 'SKILL.md');
     }
 
-    const claudeCopy = (homeDir: string) => join(homeDir, '.claude', 'skills', 'favbase', 'SKILL.md');
-    const agentsCopy = (homeDir: string) => join(homeDir, '.agents', 'skills', 'favbase', 'SKILL.md');
-
     it.each([
       [['install-skill', '--agent', 'codex'], false],
       [['install-skill', '--agent', 'all'], true],
@@ -331,8 +331,6 @@ describe('favbase CLI dispatch', () => {
 // message names the path. The fake daemon sits where a data command would
 // look for one: none of these commands may reach it.
 describe('a local file favbase cannot write', () => {
-  const claudeCopy = (homeDir: string) => join(homeDir, '.claude', 'skills', 'favbase', 'SKILL.md');
-
   // A file where the skill directory goes fails `installSkill`'s mkdir; a
   // directory where SKILL.md goes passes `refreshSkill`'s stat, then fails its
   // write. Both portable, no permissions involved.
@@ -346,17 +344,17 @@ describe('a local file favbase cannot write', () => {
     }],
   ];
 
-  /** One stderr line naming `path` and the OS reason; nothing on stdout. */
+  /** Exit 1, and a first stderr line naming `path` and the OS reason; no usage line. */
   function expectCannotWrite(result: Run, path: string): void {
     expect(result.code).toBe(EXIT_USAGE);
-    expect(result.stdout).toBe('');
-    const lines = result.stderr.split('\n');
-    expect(lines).toHaveLength(2);
-    expect(lines[0]).toMatch(/^favbase: cannot write .+: E[A-Z]+: /);
-    expect(lines[0].startsWith(`favbase: cannot write ${path}: `)).toBe(true);
+    const [line] = result.stderr.split('\n');
+    expect(line).toMatch(/^favbase: cannot write .+: E[A-Z]+: /);
+    expect(line.startsWith(`favbase: cannot write ${path}: `)).toBe(true);
     expect(result.stderr).not.toContain('Run favbase --help');
   }
 
+  // stdout still lists what was written -- here nothing -- and the failure is
+  // the one stderr line.
   it.each(blockers)('install-skill names the skill copy: %s', async (_name, block) => {
     const homeDir = await userHome();
     await block(homeDir);
@@ -365,10 +363,13 @@ describe('a local file favbase cannot write', () => {
     const result = await run(['install-skill', '--agent', 'claude'], daemon.env, { homeDir });
 
     expectCannotWrite(result, claudeCopy(homeDir));
+    expect(JSON.parse(result.stdout)).toEqual({ installed: [] });
+    expect(result.stderr.split('\n')).toHaveLength(2);
     expect(daemon.requests).toEqual([]);
   });
 
-  it.each(blockers)('setup writes the config, then names the skill copy: %s', async (_name, block) => {
+  // One copy's failure does not stop the others: codex still gets its copy.
+  it.each(blockers)('setup writes the config and the other copy, then names the skill copy: %s', async (_name, block) => {
     const homeDir = await userHome();
     await block(homeDir);
     const daemon = await fakeDaemon();
@@ -377,7 +378,12 @@ describe('a local file favbase cannot write', () => {
     const result = await run(['setup', '--token', 'abc', '--port', String(port)], {}, { homeDir });
 
     expectCannotWrite(result, claudeCopy(homeDir));
-    expect(JSON.parse(await readFile(configPath(result.io.env), 'utf8'))).toEqual({ token: 'abc', port });
+    // The failure, then setup's `next:` line: one line per failed copy.
+    expect(result.stderr.split('\n')).toHaveLength(3);
+    const path = configPath(result.io.env);
+    expect(JSON.parse(result.stdout)).toEqual({ configPath: path, port, skills: [agentsCopy(homeDir)] });
+    expect(JSON.parse(await readFile(path, 'utf8'))).toEqual({ token: 'abc', port });
+    await expect(readFile(agentsCopy(homeDir), 'utf8')).resolves.toBe(SKILL);
     expect(daemon.requests).toEqual([]);
   });
 
@@ -398,8 +404,138 @@ describe('a local file favbase cannot write', () => {
     const result = await run(['setup', '--token', 'abc', '--no-skill'], { ...daemon.env, ...env }, { homeDir });
 
     expectCannotWrite(result, path);
+    expect(result.stdout).toBe('');
+    expect(result.stderr.split('\n')).toHaveLength(2);
     expect(JSON.parse(await readFile(path, 'utf8'))).toEqual({ token: 'old', port: 2222 });
     expect(daemon.requests).toEqual([]);
+  });
+});
+
+// A skill root that is a link to a deleted directory (`~/.agents/skills` left
+// behind by a removed tool) used to fail inside `mkdir` with a bare ENOTDIR or
+// ENOENT, and to stop the agents after it. The link is the user's to remove or
+// restore: favbase names it and its target, writes nothing through it, creates
+// neither, and still installs every other agent's copy. Only the create path
+// looks: a refresh already reads a dangling link as no copy.
+describe('a dangling link where a skill copy would be created', () => {
+  /**
+   * Links `link` to a directory beside the home, then deletes that directory.
+   * A junction needs no privilege on Windows; elsewhere it is a plain directory
+   * symlink. Returns the target the link still names.
+   */
+  async function danglingLink(ctx: TestContext, homeDir: string, link: string): Promise<string> {
+    const removed = join(homeDir, '..', 'removed-tool');
+    const target = join(removed, 'skills');
+    await mkdir(target, { recursive: true });
+    await mkdir(dirname(link), { recursive: true });
+    try {
+      await symlink(target, link, 'junction');
+    } catch (error) {
+      ctx.skip(`cannot create a directory link here: ${(error as Error).message}`);
+    }
+    await rm(removed, { recursive: true });
+    return target;
+  }
+
+  /** The one line naming the agent, the link, its missing target and the fix; no usage line. */
+  function expectNamed(line: string, agent: string, link: string, target: string): void {
+    expect(line).toBe(
+      `favbase: cannot install the ${agent} skill: ${link} is a link to ${target}, which does not exist; `
+      + `remove the link or restore its target, then run favbase install-skill --agent ${agent}`,
+    );
+  }
+
+  /** The link is still there and still names `target`, and nothing created the target. */
+  async function expectUntouched(link: string, target: string): Promise<void> {
+    expect((await lstat(link)).isSymbolicLink()).toBe(true);
+    expect(await readlink(link)).toBe(target);
+    expect(existsSync(target)).toBe(false);
+  }
+
+  it.for([
+    ['the skill root', (homeDir: string) => join(homeDir, '.agents', 'skills'), 'codex', claudeCopy],
+    ['<root>/favbase', (homeDir: string) => join(homeDir, '.claude', 'skills', 'favbase'), 'claude', agentsCopy],
+  ] as const)('install-skill names a dangling link at %s and installs the other agent', async (
+    [, linkIn, agent, otherCopy],
+    ctx,
+  ) => {
+    const homeDir = await userHome();
+    const link = linkIn(homeDir);
+    const target = await danglingLink(ctx, homeDir, link);
+
+    const result = await run(['install-skill', '--agent', 'claude,codex'], {}, { homeDir });
+
+    expect(result.code).toBe(EXIT_USAGE);
+    expect(JSON.parse(result.stdout)).toEqual({ installed: [otherCopy(homeDir)] });
+    await expect(readFile(otherCopy(homeDir), 'utf8')).resolves.toBe(SKILL);
+    const lines = result.stderr.split('\n');
+    expect(lines).toHaveLength(2);
+    expectNamed(lines[0], agent, link, target);
+    await expectUntouched(link, target);
+  });
+
+  // The third level: SKILL.md itself linked to a file that is gone. The
+  // target's directory is kept, so a write that followed the link would
+  // succeed and create the file there.
+  it('install-skill names a dangling SKILL.md file link and creates nothing at its target', async (ctx) => {
+    const homeDir = await userHome();
+    const link = claudeCopy(homeDir);
+    const target = join(homeDir, '..', 'removed-tool', 'SKILL.md');
+    await mkdir(dirname(target), { recursive: true });
+    await mkdir(dirname(link), { recursive: true });
+    try {
+      await symlink(target, link, 'file');
+    } catch (error) {
+      // Windows needs Developer Mode or elevation for a file symlink.
+      ctx.skip(`cannot create a file symlink here: ${(error as Error).message}`);
+    }
+
+    const result = await run(['install-skill', '--agent', 'claude,codex'], {}, { homeDir });
+
+    expect(result.code).toBe(EXIT_USAGE);
+    expect(JSON.parse(result.stdout)).toEqual({ installed: [agentsCopy(homeDir)] });
+    const lines = result.stderr.split('\n');
+    expect(lines).toHaveLength(2);
+    expectNamed(lines[0], 'claude', link, target);
+    await expectUntouched(link, target);
+  });
+
+  it('setup writes the config and the other copy, then names the link', async (ctx) => {
+    const homeDir = await userHome();
+    const link = join(homeDir, '.agents', 'skills');
+    const target = await danglingLink(ctx, homeDir, link);
+
+    const result = await run(['setup', '--token', 'abc', '--port', '2222'], {}, { homeDir });
+
+    expect(result.code).toBe(EXIT_USAGE);
+    const path = configPath(result.io.env);
+    expect(JSON.parse(result.stdout)).toEqual({ configPath: path, port: 2222, skills: [claudeCopy(homeDir)] });
+    expect(JSON.parse(await readFile(path, 'utf8'))).toEqual({ token: 'abc', port: 2222 });
+    await expect(readFile(claudeCopy(homeDir), 'utf8')).resolves.toBe(SKILL);
+    const lines = result.stderr.split('\n');
+    expect(lines).toHaveLength(3);
+    expectNamed(lines[0], 'codex', link, target);
+    expect(lines[1]).toContain('favbase doctor');
+    await expectUntouched(link, target);
+  });
+
+  // With a legacy copy there, codex needs no new copy, so the dangling root is
+  // never looked at: the refresh succeeds and the command exits 0.
+  it('leaves a dangling .agents root unmentioned when codex already has a legacy copy', async (ctx) => {
+    const homeDir = await userHome();
+    const link = join(homeDir, '.agents', 'skills');
+    const target = await danglingLink(ctx, homeDir, link);
+    const legacy = join(homeDir, '.codex', 'skills', 'favbase', 'SKILL.md');
+    await mkdir(dirname(legacy), { recursive: true });
+    await writeFile(legacy, 'older');
+
+    const result = await run(['install-skill', '--agent', 'codex'], {}, { homeDir });
+
+    expect(result.code).toBe(EXIT_OK);
+    expect(JSON.parse(result.stdout)).toEqual({ installed: [legacy] });
+    expect(result.stderr).toBe('');
+    await expect(readFile(legacy, 'utf8')).resolves.toBe(SKILL);
+    await expectUntouched(link, target);
   });
 });
 
