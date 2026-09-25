@@ -208,16 +208,28 @@ errors and missing config. Exit 1's row only knew about missing config ("the
 user must run `favbase setup`"), so the moved error picked up that advice.
 No test checks what the table *tells the agent to do*.
 
+It happened twice more on 2026-09-24. A skill file `setup` could not write had
+no error type, fell into `reportFailure`'s catch-all and exited 2 ("daemon
+unreachable — run doctor"). Typing it as exit 1 (5ffe0b8) then reached a
+**second** table: `skills/favbase/INSTALL.md` read every exit 1 as "re-run
+step 4", so an agent would rerun `setup` forever with the same result.
+
 **Trigger — ask this whenever**:
 
 - an error moves to a different exit code, or a new error lands in a code that
   already has a meaning
 - a code starts to cover more than one kind of error
+- a new failure has no error type of its own: it inherits the catch-all's code
+  (exit 2) and that row's advice
 
 **Prevention checklist**:
 
-- [ ] Reread the destination row in `skills/favbase/SKILL.md` as the agent
-      would: does its action fit the error that just arrived?
+- [ ] Reread the destination row as the agent would, in **both** tables:
+      `skills/favbase/SKILL.md` (an agent using favbase) and
+      `skills/favbase/INSTALL.md` (an agent installing it). Does its action fit
+      the error that just arrived? Only exit 1 is reconciled between them
+      (`tests/agent-bridge-cli-aliases.test.ts`, "reads exit code 1 the way
+      SKILL.md does"); the other rows drift unseen
 - [ ] If a code covers several kinds of error, give the row a way to tell them
       apart using something the agent can see in the output (usage errors end
       with `Run favbase --help for usage.`)
