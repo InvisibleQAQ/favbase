@@ -14,7 +14,10 @@ the Bridge Token exists only inside the running extension. Its published URL
 into their own prompts, so this path and the `main` branch cannot move.
 `tests/agent-bridge-cli-aliases.test.ts` reconciles the file's path, settings
 section name, package name, setup command shape and default port, and fails on
-a runnable setup command.
+a runnable setup command. It also holds its exit-1 row to SKILL.md's (below):
+both must quote the usage line and send any other exit-1 message to the user.
+Before that guard this row said "re-run step 4" for every exit 1, which loops
+an agent on a path or dangling link setup cannot fix.
 
 Keep exit codes and prerequisites aligned with `packages/favbase`. The
 `--limit <min-max>` synopsis is contract-checked against the live `top_k`

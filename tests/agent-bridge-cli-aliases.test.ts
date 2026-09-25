@@ -214,6 +214,31 @@ describe('favbase INSTALL.md stays reconciled with what it installs', () => {
       'the token must stay a placeholder: only the extension can produce a real one',
     ).toEqual([]);
   });
+
+  // An exit-code table is the reading agent's error handling (silent-failure
+  // guide, Gotcha 5), and this file keeps its own copy of SKILL.md's for the
+  // agent that has no skill yet. Exit 1 also means a file favbase cannot write
+  // (5ffe0b8) and a dangling skill link (a8e2d44); this row still said "re-run
+  // step 4" for all of it, which loops an agent on an error setup cannot fix.
+  // cli-main.test.ts pins SKILL.md's usage line to the CLI's real output; this
+  // pins INSTALL.md's row to SKILL.md's.
+  it('reads exit code 1 the way SKILL.md does', () => {
+    const SKILL_MD = path.resolve(__dirname, '..', 'skills', 'favbase', 'SKILL.md');
+    const rows = {
+      'SKILL.md': readFileSync(SKILL_MD, 'utf8').split('\n').find((line) => line.startsWith('| 1 |')),
+      'INSTALL.md': read().split('\n').find((line) => line.startsWith('| exit code 1 |')),
+    };
+    const usageLine = rows['SKILL.md']?.match(/`(Run favbase --help[^`]*)`/)?.[1];
+    expect(usageLine, "SKILL.md's exit-1 row no longer quotes the CLI's usage line").toBeDefined();
+
+    for (const [file, row] of Object.entries(rows)) {
+      expect(row, `${file} no longer has the exit-1 row this contract reads`).toBeDefined();
+      expect(row, `${file}: a usage error is recognised by its closing line`).toContain(`\`${usageLine}\``);
+      expect(row, `${file}: any other exit 1 names its own fix, so it goes to the user`).toContain(
+        'show the stderr message to the user',
+      );
+    }
+  });
 });
 
 /**

@@ -108,7 +108,7 @@ matches that word.
 
 | Symptom | What it means |
 |---|---|
-| exit code 1 | usage error, or the config is missing/invalid — re-run step 4 |
+| exit code 1 | a usage, config or local file problem. A usage error ends with `Run favbase --help for usage.` — fix your command and retry; for the setup command that means running the pasted line exactly as given, then asking for a fresh one if it still fails. Otherwise show the stderr message to the user: it names what to fix — if it says to run `favbase setup`, ask for a fresh setup command; if it names a path favbase could not write, the user fixes that path before you retry |
 | exit code 2 | the daemon or the extension is unreachable — Chrome closed, or Agent Skills switched off |
 | exit code 3 | the query itself failed inside the extension |
 | a token mismatch | the extension's token was reset after pairing; ask for a fresh setup command, then run `favbase daemon restart` |
