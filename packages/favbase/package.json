@@ -1,6 +1,6 @@
 {
   "name": "favbase",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Local CLI and daemon that let AI agents (Claude Code, Codex) search the favbase browser extension through an Agent Skill",
   "license": "GPL-3.0-only",
   "repository": {
