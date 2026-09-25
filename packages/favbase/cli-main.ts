@@ -101,7 +101,7 @@ ${aliases}
 
 Setup and daemon:
   ${'setup --token <token> [--port <port>] [--no-skill]'.padEnd(USAGE_COLUMN)} pair with the extension, install the skill
-  ${`install-skill [--agent ${SKILL_AGENTS.join('|')}|all] [--dir <path>]`.padEnd(USAGE_COLUMN)} install only the skill
+  ${`install-skill [--agent <${SKILL_AGENTS.join(',')}>|all] [--dir <path>]`.padEnd(USAGE_COLUMN)} install only the skill (one agent, or a comma list)
   ${'doctor'.padEnd(USAGE_COLUMN)} check config, daemon, extension, and whether CLI and skill are current
   ${'daemon [run|start|stop|restart]'.padEnd(USAGE_COLUMN)} run in foreground, or control the background daemon
 
