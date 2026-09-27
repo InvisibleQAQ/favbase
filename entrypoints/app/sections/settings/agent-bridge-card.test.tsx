@@ -19,8 +19,6 @@ const mocks = vi.hoisted(() => ({
     state: 'disabled',
     lastConnectedAt: null,
     lastError: null,
-    authFailureCount: 0,
-    nextRetryAt: null,
     lastAuthFailureAt: null,
   } satisfies AgentBridgeStatus,
   getConfig: vi.fn(),
@@ -34,15 +32,7 @@ const mocks = vi.hoisted(() => ({
   writeText: vi.fn(),
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
-  t: (key: string, params?: Record<string, string | number>) => {
-    let value = key === 'settings.agentBridge.retryIn'
-      ? `${key}:{{time}}`
-      : key;
-    for (const [name, param] of Object.entries(params ?? {})) {
-      value = value.replace(`{{${name}}}`, String(param));
-    }
-    return value;
-  },
+  t: (key: string) => key,
 }));
 
 const DEFAULT_CONFIG = mocks.defaultConfig;
@@ -90,7 +80,6 @@ import {
   AgentBridgeCard,
   buildSetupCommand,
   encodeAgentBridgeToken,
-  formatRetryCountdown,
   parseAgentBridgePort,
 } from './agent-bridge-card';
 import { ThemeProvider } from '../../theme/theme-provider';
@@ -127,13 +116,6 @@ describe('AgentBridgeCard helpers', () => {
     expect(buildSetupCommand('bridge_token', 17_836)).toBe(
       'favbase setup --token bridge_token --port 17836',
     );
-  });
-
-  it('formats retry deadlines as a stable non-negative mm:ss countdown', () => {
-    expect(formatRetryCountdown(62_000, 1_000)).toBe('01:01');
-    expect(formatRetryCountdown(61_001, 1_000)).toBe('01:01');
-    expect(formatRetryCountdown(61_000, 1_000)).toBe('01:00');
-    expect(formatRetryCountdown(1_000, 1_001)).toBe('00:00');
   });
 });
 
@@ -177,7 +159,6 @@ describe('AgentBridgeCard', () => {
   afterEach(() => {
     if (mounted) act(() => root.unmount());
     container.remove();
-    vi.useRealTimers();
   });
 
   it('generates and persists a token atomically when enabling an unpaired bridge', async () => {
@@ -268,8 +249,6 @@ describe('AgentBridgeCard', () => {
         state: 'connected',
         lastConnectedAt: 123,
         lastError: null,
-        authFailureCount: 0,
-        nextRetryAt: null,
         lastAuthFailureAt: null,
       });
     });
@@ -278,9 +257,7 @@ describe('AgentBridgeCard', () => {
     expect(container.textContent).toContain('time:123');
   });
 
-  it('counts down bad-token retry time and reuses the setup copy action', async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(1_000);
+  it('shows the bad-token repair action and reuses the setup copy action', async () => {
     await render({
       ...DEFAULT_CONFIG,
       enabled: true,
@@ -293,19 +270,24 @@ describe('AgentBridgeCard', () => {
         state: 'disconnected',
         lastConnectedAt: null,
         lastError: 'bad-token',
-        authFailureCount: 2,
-        nextRetryAt: 62_000,
         lastAuthFailureAt: 500,
       });
     });
 
     expect(container.textContent).toContain('settings.agentBridge.errorBadToken');
-    expect(container.textContent).toContain('settings.agentBridge.retryIn:01:01');
     expect(container.textContent).toContain('settings.agentBridge.lastAuthFailure');
     expect(container.textContent).toContain('time:500');
 
-    await act(async () => vi.advanceTimersByTimeAsync(1_000));
-    expect(container.textContent).toContain('settings.agentBridge.retryIn:01:00');
+    // Retrying keeps the error, so the repair button stays put (docs/30 #1).
+    act(() => {
+      mocks.statusListener?.({
+        state: 'connecting',
+        lastConnectedAt: null,
+        lastError: 'bad-token',
+        lastAuthFailureAt: 500,
+      });
+    });
+    expect(container.textContent).toContain('settings.agentBridge.errorBadToken');
 
     await act(async () => {
       findButton(container, 'settings.agentBridge.copySetupToFix').click();
@@ -313,10 +295,6 @@ describe('AgentBridgeCard', () => {
     expect(mocks.writeText).toHaveBeenLastCalledWith(
       buildSetupCommand('existing-token', 17_836),
     );
-
-    act(() => root.unmount());
-    mounted = false;
-    expect(vi.getTimerCount()).toBe(0);
   });
 
   it('unsubscribes both storage watchers on unmount', async () => {

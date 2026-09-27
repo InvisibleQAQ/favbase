@@ -3,10 +3,7 @@ import {
   watchAgentBridgeConfig,
   type AgentBridgeConfig,
 } from '@/lib/storage/agent-bridge';
-import type {
-  AgentBridgeCloseReason,
-  AgentBridgeConnectTrigger,
-} from './client';
+import type { AgentBridgeCloseReason } from './client';
 
 export const AGENT_BRIDGE_ALARM = 'agent-bridge-poll';
 // Chrome 116-119 clamps 0.5 minutes to a 60-second alarm; the daemon's
@@ -14,7 +11,7 @@ export const AGENT_BRIDGE_ALARM = 'agent-bridge-poll';
 export const AGENT_BRIDGE_POLL_MINUTES = 0.5;
 
 export interface AgentBridgeSchedulerClient {
-  tryConnect(trigger?: AgentBridgeConnectTrigger): Promise<void>;
+  tryConnect(): Promise<void>;
   close(reason: AgentBridgeCloseReason): Promise<void>;
 }
 
@@ -34,6 +31,7 @@ interface AgentBridgeSchedulerDependencies {
 }
 
 export interface AgentBridgeScheduler {
+  /** Connects without waiting for the next alarm (app.html load, a settings write). */
   connectNow(): Promise<void>;
 }
 
@@ -48,20 +46,14 @@ export function initAgentBridgeScheduler(
 ): AgentBridgeScheduler {
   let queue = Promise.resolve();
 
-  const enqueueRefresh = (
-    reconfigure: boolean,
-    trigger: AgentBridgeConnectTrigger,
-  ): Promise<void> => {
+  const enqueueRefresh = (reconfigure: boolean): Promise<void> => {
     queue = queue
-      .then(() => refresh(reconfigure, trigger))
+      .then(() => refresh(reconfigure))
       .catch((error) => console.error('[agent-bridge] scheduler refresh failed', error));
     return queue;
   };
 
-  const refresh = async (
-    reconfigure: boolean,
-    trigger: AgentBridgeConnectTrigger,
-  ): Promise<void> => {
+  const refresh = async (reconfigure: boolean): Promise<void> => {
     const config = await dependencies.getConfig();
     if (!config.enabled) {
       await client.close('disabled');
@@ -73,21 +65,21 @@ export function initAgentBridgeScheduler(
     await dependencies.alarms.create(AGENT_BRIDGE_ALARM, {
       periodInMinutes: AGENT_BRIDGE_POLL_MINUTES,
     });
-    await client.tryConnect(trigger);
+    await client.tryConnect();
   };
 
   dependencies.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === AGENT_BRIDGE_ALARM) {
-      void client.tryConnect('schedule').catch((error) =>
+      void client.tryConnect().catch((error) =>
         console.error('[agent-bridge] alarm connection failed', error),
       );
     }
   });
-  dependencies.startup.addListener(() => void enqueueRefresh(false, 'schedule'));
-  dependencies.watchConfig(() => void enqueueRefresh(true, 'schedule'));
-  void enqueueRefresh(false, 'schedule');
+  dependencies.startup.addListener(() => void enqueueRefresh(false));
+  dependencies.watchConfig(() => void enqueueRefresh(true));
+  void enqueueRefresh(false);
 
   return {
-    connectNow: () => enqueueRefresh(false, 'user'),
+    connectNow: () => enqueueRefresh(false),
   };
 }

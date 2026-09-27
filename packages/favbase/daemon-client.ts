@@ -179,7 +179,10 @@ export interface EnsureDaemonResult {
   replaced: DaemonReplacement | null;
 }
 
-async function spawnDaemon(config: ResolvedConfig, options: EnsureDaemonOptions): Promise<string> {
+/** Where a daemon listens and the pairing token it holds; all a spawn or a stop needs. */
+export type DaemonTarget = Pick<ResolvedConfig, 'token' | 'port'>;
+
+async function spawnDaemon(config: DaemonTarget, options: EnsureDaemonOptions): Promise<string> {
   const home = favbaseHome(options.env);
   await mkdir(home, { recursive: true });
   const logPath = daemonLogPath(options.env);
@@ -210,37 +213,50 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function startDaemon(config: DaemonTarget, options: EnsureDaemonOptions): Promise<HealthResponse> {
+  const logPath = await spawnDaemon(config, options);
+  const deadline = Date.now() + SPAWN_WAIT_MS;
+  while (Date.now() < deadline) {
+    await sleep(SPAWN_POLL_MS);
+    const health = await fetchHealth(config.port);
+    if (health) return health;
+  }
+  throw new DaemonError(
+    'spawn-failed',
+    `favbase daemon did not answer within ${SPAWN_WAIT_MS / 1000}s; see ${logPath}`,
+  );
+}
+
 /**
- * Stops a daemon that is older than this CLI. Without this an upgraded CLI
- * would keep talking to the old daemon's code indefinitely: a connected
- * extension keeps a daemon from idling out (docs/24). A newer daemon, or one
- * whose version is not a comparable release, is kept -- the newest version
- * wins, so two installed CLIs never take turns restarting it. A failed stop is
+ * Stops the daemon found on the port so that a new one can take it: the two
+ * reasons are an older version (`ensureDaemon`) and another pairing token
+ * (`adoptSetupToken`). Only the pid found: a parallel command may already
+ * have replaced it, and its fresh daemon must not be stopped. A failed stop is
  * surfaced, never swallowed: falling back to the old daemon would hide it.
  */
-async function replaceOlderDaemon(
-  config: ResolvedConfig,
+async function stopToReplace(
+  config: DaemonTarget,
   existing: HealthResponse,
-  options: EnsureDaemonOptions,
-): Promise<DaemonReplacement> {
-  const replaced = { from: existing.version, to: options.cliVersion };
-  options.log(
-    `[favbase] replacing daemon ${replaced.from} (pid ${existing.pid}) with this CLI's ${replaced.to}`,
-  );
+  failure: string,
+): Promise<void> {
   try {
-    // Only the daemon found above: a parallel command of this version may
-    // already have replaced it, and its fresh daemon must not be stopped.
     await stopDaemon(config, existing.pid);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new DaemonError(
       error instanceof DaemonError ? error.code : 'unreachable',
-      `could not stop the older favbase daemon ${replaced.from} (pid ${existing.pid}) to replace it with ${replaced.to}: ${message}`,
+      `${failure}: ${message}`,
     );
   }
-  return replaced;
 }
 
+/**
+ * Replaces a daemon that is older than this CLI. Without this an upgraded CLI
+ * would keep talking to the old daemon's code indefinitely: a connected
+ * extension keeps a daemon from idling out (docs/24). A newer daemon, or one
+ * whose version is not a comparable release, is kept -- the newest version
+ * wins, so two installed CLIs never take turns restarting it.
+ */
 export async function ensureDaemon(
   config: ResolvedConfig,
   options: EnsureDaemonOptions,
@@ -249,25 +265,77 @@ export async function ensureDaemon(
   if (existing && compareVersions(existing.version, options.cliVersion) !== -1) {
     return { health: existing, spawned: false, replaced: null };
   }
-  const replaced = existing ? await replaceOlderDaemon(config, existing, options) : null;
-
-  const logPath = await spawnDaemon(config, options);
-  const deadline = Date.now() + SPAWN_WAIT_MS;
-  while (Date.now() < deadline) {
-    await sleep(SPAWN_POLL_MS);
-    const health = await fetchHealth(config.port);
-    if (health) return { health, spawned: true, replaced };
+  let replaced: DaemonReplacement | null = null;
+  if (existing) {
+    replaced = { from: existing.version, to: options.cliVersion };
+    options.log(
+      `[favbase] replacing daemon ${replaced.from} (pid ${existing.pid}) with this CLI's ${replaced.to}`,
+    );
+    await stopToReplace(
+      config,
+      existing,
+      `could not stop the older favbase daemon ${replaced.from} (pid ${existing.pid}) to replace it with ${replaced.to}`,
+    );
   }
-  throw new DaemonError(
-    'spawn-failed',
-    `favbase daemon did not answer within ${SPAWN_WAIT_MS / 1000}s; see ${logPath}`,
-  );
+  return { health: await startDaemon(config, options), spawned: true, replaced };
 }
 
-function unauthorized(port: number): DaemonError {
+/** One non-waiting `/status`: the cheapest authenticated route. */
+async function acceptsToken(config: DaemonTarget): Promise<boolean> {
+  const result = await requestJson(config.port, 'GET', RPC_ROUTES.status, {
+    token: config.token,
+    timeoutMs: HEALTH_TIMEOUT_MS,
+  });
+  if (result.status === 401) return false;
+  if (result.status === 200) return true;
+  throw new DaemonError('protocol', `unexpected daemon response (HTTP ${result.status})`);
+}
+
+export type SetupTokenOutcome = 'no-daemon' | 'kept' | 'replaced';
+
+/**
+ * Makes a running daemon hold the pairing token `favbase setup` just saved
+ * (docs/30 #1). A daemon keeps the token it was spawned with, so after a token
+ * reset in the extension it would go on refusing the extension's hello and
+ * every CLI request under the new token. One that refuses the token is
+ * replaced; one that accepts it, or an empty port, is left alone -- setup does
+ * not start a daemon doctor would start anyway. Only setup does this: every
+ * other command keeps whatever daemon answers, or two shells whose tokens come
+ * from different places (`FAVBASE_TOKEN` and the config file) would take
+ * turns replacing each other's daemon -- the same ping-pong the version rule
+ * avoids by letting the newest win.
+ */
+export async function adoptSetupToken(
+  config: DaemonTarget,
+  options: EnsureDaemonOptions,
+): Promise<SetupTokenOutcome> {
+  const existing = await fetchHealth(config.port);
+  if (!existing) return 'no-daemon';
+  if (await acceptsToken(config)) return 'kept';
+  options.log(
+    `[favbase] replacing daemon ${existing.version} (pid ${existing.pid}): it holds a different pairing token`,
+  );
+  await stopToReplace(
+    config,
+    existing,
+    `could not stop the favbase daemon ${existing.version} (pid ${existing.pid}) that holds a different pairing token`,
+  );
+  await startDaemon(config, options);
+  return 'replaced';
+}
+
+/**
+ * A daemon that refuses this command's token. Rerunning the settings card's
+ * setup command replaces it (`adoptSetupToken`), unless `FAVBASE_TOKEN` is
+ * what this command sent: the variable outranks the config file setup writes.
+ */
+function unauthorized(config: ResolvedConfig): DaemonError {
+  const fix = config.tokenSource === 'env'
+    ? `FAVBASE_TOKEN is set here and overrides ${config.configPath}; unset it so the config file applies`
+    : 'copy the setup command from favbase Settings > Connections > Agent Skills and run it again';
   return new DaemonError(
     'unauthorized',
-    `the favbase daemon on port ${port} uses a different pairing token; run favbase daemon restart`,
+    `the favbase daemon on port ${config.port} holds a different pairing token; ${fix}`,
   );
 }
 
@@ -290,7 +358,7 @@ export async function rpcCall(
     body: { tool, args },
     timeoutMs: REQUEST_TIMEOUT_MS,
   });
-  if (result.status === 401) throw unauthorized(config.port);
+  if (result.status === 401) throw unauthorized(config);
   if (result.status !== 200 || !isRpcResponse(result.body)) {
     throw new DaemonError('protocol', `unexpected daemon response (HTTP ${result.status})`);
   }
@@ -347,7 +415,7 @@ export async function fetchStatus(config: ResolvedConfig, wait: boolean): Promis
     token: config.token,
     timeoutMs: REQUEST_TIMEOUT_MS,
   });
-  if (result.status === 401) throw unauthorized(config.port);
+  if (result.status === 401) throw unauthorized(config);
   const status = normalizeStatus(result.body);
   if (result.status !== 200 || !status) {
     throw new DaemonError('protocol', `unexpected daemon response (HTTP ${result.status})`);
@@ -363,7 +431,7 @@ export async function fetchStatus(config: ResolvedConfig, wait: boolean): Promis
  * the caller meant to stop is gone.
  */
 export async function stopDaemon(
-  config: ResolvedConfig,
+  config: DaemonTarget,
   onlyPid?: number,
 ): Promise<'stopped' | 'not-running'> {
   const health = await fetchHealth(config.port);

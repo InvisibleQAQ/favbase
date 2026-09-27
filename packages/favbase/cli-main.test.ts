@@ -58,9 +58,25 @@ const claudeCopy = (homeDir: string) => join(homeDir, '.claude', 'skills', 'favb
 const agentsCopy = (homeDir: string) => join(homeDir, '.agents', 'skills', 'favbase', 'SKILL.md');
 
 /**
+ * A free loopback port. `setup` looks at the daemon on the port it writes,
+ * which comes from `--port` or the config file, never `FAVBASE_BRIDGE_PORT`:
+ * without one, a setup test would reach the default port -- the developer's
+ * own daemon, which it would stop for holding another token.
+ */
+async function freePort(): Promise<number> {
+  const server = createServer();
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const { port } = server.address() as AddressInfo;
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+  return port;
+}
+
+/**
  * A loopback stand-in for the daemon. `/health` answers as this CLI's own
- * version, so `ensureDaemon` keeps it, and `/rpc` records the call. Every
- * request is logged, so a usage error can show it never got this far.
+ * version, so `ensureDaemon` keeps it, `/status` accepts the token `abc`, and
+ * `/rpc` records the call. Every request is logged, so a usage error can show
+ * it never got this far.
  */
 async function fakeDaemon(): Promise<{ env: Record<string, string>; requests: string[]; calls: unknown[] }> {
   const requests: string[] = [];
@@ -70,6 +86,12 @@ async function fakeDaemon(): Promise<{ env: Record<string, string>; requests: st
     const chunks: Buffer[] = [];
     request.on('data', (chunk: Buffer) => chunks.push(chunk));
     request.on('end', () => {
+      if (request.url === '/status') {
+        const authorized = request.headers.authorization === 'Bearer abc';
+        response.writeHead(authorized ? 200 : 401, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ ok: authorized }));
+        return;
+      }
       response.writeHead(request.url === '/health' || request.url === '/rpc' ? 200 : 404, {
         'content-type': 'application/json',
       });
@@ -163,13 +185,14 @@ describe('favbase CLI dispatch', () => {
   });
 
   it('setup writes the config file and installs the skill for every agent', async () => {
-    const result = await run(['setup', '--token', 'abc', '--port', '2222']);
+    const port = await freePort();
+    const result = await run(['setup', '--token', 'abc', '--port', String(port)]);
     expect(result.code).toBe(EXIT_OK);
 
     const path = configPath(result.io.env);
-    expect(JSON.parse(await readFile(path, 'utf8'))).toEqual({ token: 'abc', port: 2222 });
+    expect(JSON.parse(await readFile(path, 'utf8'))).toEqual({ token: 'abc', port });
     const output = JSON.parse(result.stdout) as { configPath: string; port: number; skills: string[] };
-    expect(output).toMatchObject({ configPath: path, port: 2222 });
+    expect(output).toMatchObject({ configPath: path, port });
     expect(output.skills).toEqual([
       join(result.io.homeDir, '.claude', 'skills', 'favbase', 'SKILL.md'),
       join(result.io.homeDir, '.agents', 'skills', 'favbase', 'SKILL.md'),
@@ -179,11 +202,12 @@ describe('favbase CLI dispatch', () => {
   });
 
   it('setup keeps the previous port, honours --no-skill and requires --token', async () => {
-    const first = await run(['setup', '--token', 'abc', '--port', '2222']);
+    const port = await freePort();
+    const first = await run(['setup', '--token', 'abc', '--port', String(port)]);
     const env = first.io.env as Record<string, string>;
     const second = await run(['setup', '--token', 'def', '--no-skill'], env);
-    expect(JSON.parse(second.stdout)).toMatchObject({ port: 2222, skills: [] });
-    expect(JSON.parse(await readFile(configPath(env), 'utf8'))).toEqual({ token: 'def', port: 2222 });
+    expect(JSON.parse(second.stdout)).toMatchObject({ port, skills: [] });
+    expect(JSON.parse(await readFile(configPath(env), 'utf8'))).toEqual({ token: 'def', port });
 
     const missing = await run(['setup']);
     expect(missing.code).toBe(EXIT_USAGE);
@@ -244,6 +268,7 @@ describe('favbase CLI dispatch', () => {
       return join(dir, 'SKILL.md');
     }
 
+    // `setup` also gets `--port <free port>` in the body, away from the default.
     it.each([
       [['install-skill', '--agent', 'codex'], false],
       [['install-skill', '--agent', 'all'], true],
@@ -252,7 +277,8 @@ describe('favbase CLI dispatch', () => {
     ])('%j rewrites it and creates no .agents copy beside it', async (argv, withClaude) => {
       const homeDir = await userHome();
       const legacy = await seedCopy(join(homeDir, '.codex'));
-      const result = await run(argv, {}, { homeDir });
+      const port = argv[0] === 'setup' ? ['--port', String(await freePort())] : [];
+      const result = await run([...argv, ...port], {}, { homeDir });
       expect(result.code).toBe(EXIT_OK);
 
       const output = JSON.parse(result.stdout) as { installed?: string[]; skills?: string[] };
@@ -384,7 +410,8 @@ describe('a local file favbase cannot write', () => {
     expect(JSON.parse(result.stdout)).toEqual({ configPath: path, port, skills: [agentsCopy(homeDir)] });
     expect(JSON.parse(await readFile(path, 'utf8'))).toEqual({ token: 'abc', port });
     await expect(readFile(agentsCopy(homeDir), 'utf8')).resolves.toBe(SKILL);
-    expect(daemon.requests).toEqual([]);
+    // Setup looks at the daemon last; this one already holds the token.
+    expect(daemon.requests).toEqual(['GET /health', 'GET /status']);
   });
 
   // Read-only, so `readConfigFile` still succeeds and the failure is the write
@@ -504,13 +531,14 @@ describe('a dangling link where a skill copy would be created', () => {
     const homeDir = await userHome();
     const link = join(homeDir, '.agents', 'skills');
     const target = await danglingLink(ctx, homeDir, link);
+    const port = await freePort();
 
-    const result = await run(['setup', '--token', 'abc', '--port', '2222'], {}, { homeDir });
+    const result = await run(['setup', '--token', 'abc', '--port', String(port)], {}, { homeDir });
 
     expect(result.code).toBe(EXIT_USAGE);
     const path = configPath(result.io.env);
-    expect(JSON.parse(result.stdout)).toEqual({ configPath: path, port: 2222, skills: [claudeCopy(homeDir)] });
-    expect(JSON.parse(await readFile(path, 'utf8'))).toEqual({ token: 'abc', port: 2222 });
+    expect(JSON.parse(result.stdout)).toEqual({ configPath: path, port, skills: [claudeCopy(homeDir)] });
+    expect(JSON.parse(await readFile(path, 'utf8'))).toEqual({ token: 'abc', port });
     await expect(readFile(claudeCopy(homeDir), 'utf8')).resolves.toBe(SKILL);
     const lines = result.stderr.split('\n');
     expect(lines).toHaveLength(3);

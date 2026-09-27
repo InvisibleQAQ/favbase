@@ -21,10 +21,6 @@ export interface AgentBridgeStatus {
   state: AgentBridgeConnectionState;
   lastConnectedAt: number | null;
   lastError: string | null;
-  /** Consecutive authentication failures, reset only by a valid welcome. */
-  authFailureCount: number;
-  /** Epoch ms before which the client must not retry authentication. */
-  nextRetryAt: number | null;
   /** Last bad-token failure, retained after a later successful welcome. */
   lastAuthFailureAt: number | null;
 }
@@ -40,8 +36,6 @@ export const DEFAULT_AGENT_BRIDGE_STATUS: Readonly<AgentBridgeStatus> = Object.f
   state: 'disabled',
   lastConnectedAt: null,
   lastError: null,
-  authFailureCount: 0,
-  nextRetryAt: null,
   lastAuthFailureAt: null,
 });
 

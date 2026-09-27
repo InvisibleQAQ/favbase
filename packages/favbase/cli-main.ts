@@ -24,6 +24,7 @@ import {
 } from './config';
 import { Daemon } from './daemon';
 import {
+  adoptSetupToken,
   DaemonError,
   ensureDaemon,
   fetchStatus,
@@ -128,7 +129,7 @@ function extensionTroubleshooting(
       extension.lastRejectedHelloAt === null
         ? ''
         : ` at ${new Date(extension.lastRejectedHelloAt).toISOString()}`
-    } (rejected hellos this daemon run: ${extension.rejectedHelloCount}).`
+    } (rejected hellos this daemon run: ${extension.rejectedHelloCount}). Copy the setup command from Settings > Connections > Agent Skills and run it again.`
     : 'Confirm the pairing token matches the token copied from Settings > Connections > Agent Skills.';
   return [
     tokenCheck,
@@ -434,6 +435,13 @@ function parseSetup(parsed: ParsedArgv): SetupRequest {
   };
 }
 
+/**
+ * The daemon comes last: config and skills are written and reported before
+ * anything that can fail on the port, so a daemon problem (exit 2) never
+ * costs the user the pairing itself. It is reconciled to the token and port
+ * written here, not to `resolveConfig`: `FAVBASE_TOKEN` in this shell would
+ * outrank the file.
+ */
 async function runSetup(io: CliIo, request: SetupRequest): Promise<number> {
   const existing = await readConfigFile(io.env);
   const port = request.port ?? existing.port ?? DEFAULT_AGENT_BRIDGE_PORT;
@@ -443,8 +451,9 @@ async function runSetup(io: CliIo, request: SetupRequest): Promise<number> {
     ? await installAgentSkills(io.skillContent, SKILL_AGENTS, io.homeDir, io.env)
     : { written: [], failures: [] };
   printJson(io, { configPath: path, port, skills: skills.written });
-  // The config is written either way, so the next step stands.
   const code = reportSkillFailures(io, skills.failures);
+  await adoptSetupToken({ token: request.token, port }, daemonOptions(io));
+  // The config is written either way, so the next step stands.
   io.stderr('[favbase] next: run favbase doctor with Chrome open to verify the connection\n');
   return code;
 }

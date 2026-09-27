@@ -219,4 +219,37 @@ describe('BridgeServer bounded waits', () => {
       lastRejectedHelloReason: 'bad-token',
     });
   });
+
+  // The extension retries a refused token on every alarm (docs/30 #1): one
+  // log line per run of same-reason rejections, every one of them counted.
+  it('logs a run of same-reason rejections once, and again after an accepted hello', async () => {
+    const logError = vi.fn();
+    const server = await startServer(5_000, { logger: { error: logError } });
+    const rejectedHello = async (): Promise<void> => {
+      const socket = new WebSocket(`ws://127.0.0.1:${server.listeningPort}/bridge`, {
+        origin: `chrome-extension://${EXTENSION_ID}`,
+      });
+      sockets.push(socket);
+      await once(socket, 'open');
+      const closed = once(socket, 'close');
+      send(socket, {
+        id: 'rejected-hello',
+        type: 'hello',
+        payload: { token: 'wrong-token', extensionId: EXTENSION_ID, extensionVersion: '0.0.5', tools: [TOOL] },
+      });
+      await closed;
+    };
+    const rejectionLines = () => logError.mock.calls.filter(([line]) => String(line).includes('hello rejected'));
+
+    await rejectedHello();
+    await rejectedHello();
+    await rejectedHello();
+    expect(rejectionLines()).toHaveLength(1);
+    expect(server.peerSnapshot()).toMatchObject({ rejectedHelloCount: 3 });
+
+    (await helloFromFakeExtension(server)).terminate();
+    await rejectedHello();
+    expect(rejectionLines()).toHaveLength(2);
+    expect(rejectionLines()[1][0]).toContain('rejected hello count: 4');
+  });
 });

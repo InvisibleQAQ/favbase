@@ -90,8 +90,6 @@ describe('Agent Bridge client', () => {
       state: 'disconnected',
       lastConnectedAt: null,
       lastError: null,
-      authFailureCount: 0,
-      nextRetryAt: null,
       lastAuthFailureAt: null,
     };
     now = 1_000;
@@ -155,8 +153,6 @@ describe('Agent Bridge client', () => {
       state: 'connected',
       lastConnectedAt: 1_000,
       lastError: null,
-      authFailureCount: 0,
-      nextRetryAt: null,
       lastAuthFailureAt: null,
     });
 
@@ -226,7 +222,10 @@ describe('Agent Bridge client', () => {
     });
   });
 
-  it('persists bad-token exponential backoff across client instances', async () => {
+  // No backoff (docs/30 #1): the fix for a bad token is `favbase setup`
+  // replacing the daemon, which this client cannot observe, so the next alarm
+  // tries again like after any other failure.
+  it('retries a rejected token on the next attempt and timestamps every rejection', async () => {
     let client = createClient();
     await client.tryConnect();
     await transports[0].open();
@@ -236,31 +235,49 @@ describe('Agent Bridge client', () => {
     expect(status).toMatchObject({
       state: 'disconnected',
       lastError: 'bad-token',
-      authFailureCount: 1,
-      nextRetryAt: 31_000,
       lastAuthFailureAt: 1_000,
     });
 
+    // A fresh instance, as after a service worker restart.
     client = createClient();
-    now = 30_999;
+    now = 1_001;
     await client.tryConnect();
-    expect(transports).toHaveLength(1);
+    expect(transports).toHaveLength(2);
+    // The error stays up while retrying, so the settings card does not blink.
+    expect(status).toMatchObject({ state: 'connecting', lastError: 'bad-token' });
 
-    now = 31_000;
-    await client.tryConnect();
     await transports[1].open();
     await transports[1].message(wire('reject', { reason: 'bad-token' }));
-    expect(status).toMatchObject({
-      authFailureCount: 2,
-      nextRetryAt: 91_000,
-      lastAuthFailureAt: 31_000,
-    });
+    expect(status).toMatchObject({ lastError: 'bad-token', lastAuthFailureAt: 1_001 });
+  });
+
+  it('treats a welcome that echoes another token as a rejected token', async () => {
+    const client = createClient();
+    await client.tryConnect();
+    await transports[0].open();
+    await transports[0].message(wire('welcome', { token: 'other-token', serverVersion: '0.0.5' }));
+
+    expect(transports[0].closed).toBe(true);
+    expect(status).toMatchObject({ state: 'disconnected', lastError: 'bad-token', lastAuthFailureAt: 1_000 });
+  });
+
+  // The daemon sends `reject` and closes right after; the close event can
+  // arrive while the rejection is still being written (docs/30 #7).
+  it('keeps bad-token when the close event arrives during the rejection write', async () => {
+    const client = createClient();
+    await client.tryConnect();
+    await transports[0].open();
+
+    const rejecting = transports[0].message(wire('reject', { reason: 'bad-token' }));
+    await transports[0].remoteClose();
+    await rejecting;
+
+    expect(status).toMatchObject({ state: 'disconnected', lastError: 'bad-token', lastAuthFailureAt: 1_000 });
   });
 
   it('retains the last authentication failure timestamp after a valid welcome', async () => {
     status.lastAuthFailureAt = 500;
-    status.authFailureCount = 2;
-    status.nextRetryAt = 900;
+    status.lastError = 'bad-token';
     const client = createClient();
 
     await client.tryConnect();
@@ -272,40 +289,8 @@ describe('Agent Bridge client', () => {
 
     expect(status).toMatchObject({
       state: 'connected',
-      authFailureCount: 0,
-      nextRetryAt: null,
+      lastError: null,
       lastAuthFailureAt: 500,
-    });
-  });
-
-  it('lets an explicit user reconnect pierce the backoff and restart it at the base delay', async () => {
-    let client = createClient();
-    await client.tryConnect();
-    await transports[0].open();
-    await transports[0].message(wire('reject', { reason: 'bad-token' }));
-    expect(status).toMatchObject({ authFailureCount: 1, nextRetryAt: 31_000 });
-
-    client = createClient();
-    now = 5_000;
-    await client.tryConnect('schedule');
-    expect(transports).toHaveLength(1);
-
-    client = createClient();
-    await client.tryConnect('user');
-    expect(transports).toHaveLength(2);
-    expect(status).toMatchObject({
-      state: 'connecting',
-      authFailureCount: 0,
-      nextRetryAt: null,
-    });
-
-    await transports[1].open();
-    await transports[1].message(wire('reject', { reason: 'bad-token' }));
-    expect(status).toMatchObject({
-      lastError: 'bad-token',
-      authFailureCount: 1,
-      nextRetryAt: 35_000,
-      lastAuthFailureAt: 5_000,
     });
   });
 

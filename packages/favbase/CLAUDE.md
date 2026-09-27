@@ -34,9 +34,13 @@ provides no MCP server.
 - `cli-main.ts` owns dispatch, usage text, exit codes (0 ok, 1 usage/config/local
   file, 2 daemon or extension unreachable, 3 Knowledge Tool error) and every command:
   alias commands, `tools`, `call`, `doctor`, `daemon run|start|stop|restart`,
-  `setup`, `install-skill`. `doctor` adds structured troubleshooting checks and
+  `setup`, `install-skill`. `setup` writes the config and the skills and
+  prints them before it looks at the daemon (`adoptSetupToken`, see
+  `daemon-client.ts`), so a daemon failure there (exit 2) never costs the user
+  the pairing. `doctor` adds structured troubleshooting checks and
   the canonical Chrome 120+ 30-second / Chrome 116-119 60-second cold-start
-  wording. Foreground daemon logs receive one ISO-8601 prefix here. Data results
+  wording; its bad-token line names the fix, rerunning the settings card's
+  setup command. Foreground daemon logs receive one ISO-8601 prefix here. Data results
   go to stdout as JSON only. Exit 1 holds three error types, and SKILL.md's
   exit-1 row tells them apart by output: a `UsageError` ends with `Run favbase
   --help for usage.` (the agent fixes its command); a `ConfigError` or
@@ -148,13 +152,35 @@ provides no MCP server.
   reset or refused `/shutdown` as "already on its way out" and lets its exit
   wait decide; and the replacement passes the pid it found, so `stopDaemon`
   never stops a fresh daemon another command started in between.
+  `adoptSetupToken` is the token half of the same question, "is the daemon on
+  this port usable?" (docs/30 #1). A daemon keeps the token it was spawned
+  with, so after a token reset in the extension it refuses the extension's
+  hello and every request under the new token. `setup` calls it with the
+  token and port it just wrote (never `resolveConfig`: `FAVBASE_TOKEN` would
+  outrank the file): an empty port and a daemon that accepts the token (one
+  non-waiting `/status`) are left alone -- setup does not start a daemon
+  doctor would start anyway -- and a 401 takes the version rule's own path,
+  `stopToReplace` then `startDaemon` (stop that pid, spawn, poll `/health`).
+  Only setup does this (D1): if every command replaced a daemon holding
+  another token, a shell with `FAVBASE_TOKEN` and one reading the file would
+  take turns replacing each other's daemon, the ping-pong the version rule
+  avoids by letting the newest win. The `unauthorized` error (a 401 anywhere
+  else) therefore names the fix per `tokenSource`: `env` says `FAVBASE_TOKEN`
+  overrides the config file, `file` says to rerun the settings card's setup
+  command -- never `daemon restart`, which under `FAVBASE_TOKEN` would start
+  exactly that ping-pong by hand. Windows: the kill-then-respawn on the same
+  port is covered by `integration.test.ts` on real processes, against a
+  detached daemon started by `daemon start` -- the kind setup has to kill.
 - `bridge-server.ts` owns `/bridge` Origin + Bridge Token hello authentication,
   descriptor state, heartbeat, pending calls, the 75-second bounded hello wait
   (covering the extension alarm's 60-second effective period on Chrome 116–119),
   peer activity and disconnect callbacks, cleanup, and daemon-lifetime rejected
   hello evidence (`count`/last reason/time). A rejection wakes peer waiters and
-  logs reason/count only, never either token. It can listen itself (unit tests)
-  or attach to the daemon's server.
+  logs reason/count only, never either token. The extension retries a refused
+  token on every alarm (no backoff since docs/30 #1), so a run of same-reason
+  rejections is logged once; an accepted hello ends the run, and `/status`
+  still counts every rejection. It can listen itself (unit tests) or attach to
+  the daemon's server.
 - `skill-install.ts` writes SKILL.md to `~/.claude/skills/favbase/` and
   `~/.agents/skills/favbase/` (Codex user scope), or an explicit `--dir`.
   Codex also still scans its deprecated `$CODEX_HOME/skills` (Codex's rule:
@@ -292,9 +318,14 @@ provides no MCP server.
   daemon-client/daemon/cli-main/bridge-server, including doctor diagnostics,
   plus version/skill-install/update-check and `daemon-client-ensure`, whose
   fake loopback daemons exercise the real `fetchHealth`/`stopDaemon` with only
-  `spawn` mocked) and the process integration suite (real CLI
+  `spawn` mocked, plus `process.kill` for a daemon holding another token) and
+  the process integration suite (real CLI
   child processes, foreground and auto-spawned daemons, `ws` fake extension,
-  and the CLI's wall-clock lifetime against a registry that never answers).
+  setup replacing a daemon that holds the old token, and the CLI's wall-clock
+  lifetime against a registry that never answers). A `setup` test must name a
+  free port (`--port`, or a config file): setup looks at the daemon on the port
+  it writes, and the default is the developer's own daemon, which it would
+  stop for holding another token.
 
 ## Release
 

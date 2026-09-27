@@ -22,6 +22,8 @@ favbase setup --token <pairing token> --port <port>
 
 That writes `~/.favbase/config.json` and installs the Agent Skill for Claude Code (`~/.claude/skills/favbase/`) and Codex (`~/.agents/skills/favbase/`), so an agent learns the commands on its own. Codex still reads its older skill folder too (`~/.codex/skills/favbase/`, or `$CODEX_HOME/skills/favbase/` if you set `CODEX_HOME`). A copy already there is refreshed, and none is ever created there; while it exists, no copy is added in `~/.agents/skills/favbase/` either, because Codex would list the skill twice. Pass `--no-skill` to skip that, or install only the skill later with `favbase install-skill`.
 
+Reset the pairing token in the extension later? Copy the new setup command and run it again: `setup` also replaces a running daemon that still holds the old token, so that one command is the whole fix.
+
 ```bash
 favbase doctor
 ```

@@ -18,16 +18,19 @@ vi.mock('node:child_process', async (importOriginal) => ({
   spawn: spawnMock,
 }));
 
-import { ensureDaemon, type EnsureDaemonOptions } from './daemon-client';
+import { adoptSetupToken, ensureDaemon, type EnsureDaemonOptions } from './daemon-client';
 
 const TOKEN = 'ensure-daemon-test-token';
-// Only signalled after a 401 from /shutdown, which no fake here returns.
+// Only signalled after a 401 from /shutdown, which only a fake holding
+// another token returns; those tests replace `process.kill`.
 const FAKE_PID = 2_147_483_000;
 
 interface FakeDaemon {
   server: Server;
   port: number;
   shutdowns: number;
+  /** What a signal does to the real daemon: it stops answering. */
+  close(): void;
 }
 
 const servers: Server[] = [];
@@ -45,6 +48,8 @@ interface FakeBehaviour {
   resetHealthProbes?: number;
   /** Report this after the first /health answer: someone replaced it meanwhile. */
   laterHealth?: { version: string; pid: number };
+  /** The pairing token it holds: /status and /shutdown answer 401 to any other. */
+  token?: string;
 }
 
 async function fakeDaemon(
@@ -52,7 +57,7 @@ async function fakeDaemon(
   version: string,
   behaviour: FakeBehaviour = {},
 ): Promise<FakeDaemon> {
-  const { onShutdown = 'exit', laterHealth } = behaviour;
+  const { onShutdown = 'exit', laterHealth, token = TOKEN } = behaviour;
   let resets = behaviour.resetHealthProbes ?? 0;
   let answered = 0;
   const fake = { shutdowns: 0 } as FakeDaemon;
@@ -61,6 +66,18 @@ async function fakeDaemon(
     server.closeAllConnections();
   };
   const server = createServer((request, response) => {
+    const authorized = request.headers.authorization === `Bearer ${token}`;
+    if (!authorized && (request.url === '/status' || request.url === '/shutdown')) {
+      if (request.url === '/shutdown') fake.shutdowns += 1;
+      response.writeHead(401, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ ok: false, code: 'unauthorized' }));
+      return;
+    }
+    if (request.url === '/status') {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ ok: true }));
+      return;
+    }
     if (request.url === '/health') {
       if (resets > 0) {
         resets -= 1;
@@ -92,7 +109,7 @@ async function fakeDaemon(
   await once(server, 'listening');
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('fake daemon did not listen');
-  return Object.assign(fake, { server, port: address.port });
+  return Object.assign(fake, { server, port: address.port, close });
 }
 
 async function freePort(): Promise<number> {
@@ -235,5 +252,78 @@ describe('ensureDaemon while another CLI is replacing the same daemon', () => {
 
     expect(daemon.shutdowns).toBe(0);
     expect(result.health).toEqual({ name: 'favbase', ...replacedMeanwhile });
+  });
+});
+
+// After a token reset in the extension, the running daemon still holds the
+// token it was spawned with and refuses the extension's hello. `setup` is the
+// user saying "use this token from now on", so it replaces that daemon
+// (docs/30 #1, D1); `/shutdown` under the new token gets a 401, and the stop
+// falls back to signalling the pid the daemon reported.
+describe('adoptSetupToken', () => {
+  let kill: ReturnType<typeof vi.spyOn>;
+
+  afterEach(() => kill?.mockRestore());
+
+  it('leaves an empty port alone: doctor starts the daemon, not setup', async () => {
+    const port = await freePort();
+
+    await expect(adoptSetupToken(config(port), await options('0.2.0'))).resolves.toBe('no-daemon');
+    expect(spawnMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps a daemon that already holds the token, extension link and all', async () => {
+    const daemon = await fakeDaemon(0, '0.2.0');
+
+    await expect(adoptSetupToken(config(daemon.port), await options('0.2.0'))).resolves.toBe('kept');
+    expect(daemon.shutdowns).toBe(0);
+    expect(spawnMock).not.toHaveBeenCalled();
+  });
+
+  it('replaces a daemon holding another token with one holding the new token', async () => {
+    const old = await fakeDaemon(0, '0.2.0', { token: 'the-old-token' });
+    nextDaemon = { port: old.port, version: '0.2.0' };
+    kill = vi.spyOn(process, 'kill').mockImplementation(() => {
+      old.close();
+      return true;
+    });
+    const logs: string[] = [];
+
+    await expect(adoptSetupToken(config(old.port), await options('0.2.0', logs))).resolves.toBe('replaced');
+
+    expect(old.shutdowns).toBe(1);
+    expect(kill).toHaveBeenCalledWith(FAKE_PID);
+    expect(spawnMock).toHaveBeenCalledTimes(1);
+    const [, , spawnOptions] = spawnMock.mock.calls[0] as [string, string[], { env: Record<string, string> }];
+    expect(spawnOptions.env).toMatchObject({ FAVBASE_TOKEN: TOKEN, FAVBASE_BRIDGE_PORT: String(old.port) });
+    expect(logs.find(line => line.includes('replacing daemon'))).toContain('different pairing token');
+    expect(logs.join('\n')).not.toContain(TOKEN);
+  });
+
+  // Another OS user's daemon on the port: the signal fails with EPERM.
+  it('surfaces a daemon it cannot stop instead of keeping it', async () => {
+    const old = await fakeDaemon(0, '0.2.0', { token: 'the-old-token' });
+    kill = vi.spyOn(process, 'kill').mockImplementation(() => {
+      throw Object.assign(new Error('kill EPERM'), { code: 'EPERM' });
+    });
+
+    await expect(adoptSetupToken(config(old.port), await options('0.2.0'))).rejects.toMatchObject({
+      name: 'DaemonError',
+      code: 'unreachable',
+      message: expect.stringMatching(/could not stop the favbase daemon 0\.2\.0 .*different pairing token: kill EPERM/),
+    });
+    expect(spawnMock).not.toHaveBeenCalled();
+  });
+
+  it('refuses a port served by something that is not the favbase daemon', async () => {
+    const server = createServer((_request, response) => response.writeHead(200).end('hello'));
+    servers.push(server);
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    const { port } = server.address() as { port: number };
+
+    await expect(adoptSetupToken(config(port), await options('0.2.0')))
+      .rejects.toMatchObject({ code: 'foreign' });
+    expect(spawnMock).not.toHaveBeenCalled();
   });
 });

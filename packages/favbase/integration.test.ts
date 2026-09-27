@@ -47,12 +47,13 @@ interface CliRun {
 const sockets: WebSocket[] = [];
 const children: ChildProcess[] = [];
 const homes: string[] = [];
-const daemonPorts: number[] = [];
+/** Daemons to stop after each test, with the token each one holds. */
+const daemons: Array<{ port: number; token: string }> = [];
 
 afterEach(async () => {
   for (const socket of sockets.splice(0)) socket.terminate();
   // Detached daemons outlive the test process; ask each one to exit.
-  await Promise.all(daemonPorts.splice(0).map(port => shutdownDaemon(port)));
+  await Promise.all(daemons.splice(0).map(({ port, token }) => shutdownDaemon(port, token)));
   for (const child of children.splice(0)) {
     if (child.exitCode === null) child.kill();
   }
@@ -126,7 +127,7 @@ function runCli(args: string[], env: NodeJS.ProcessEnv): Promise<CliRun> {
 
 async function startDaemonProcess(port: number, home: string): Promise<ChildProcess> {
   const child = spawnCli(['daemon', 'run'], cliEnv(port, home));
-  daemonPorts.push(port);
+  daemons.push({ port, token: TOKEN });
   const stderr: string[] = [];
   child.stderr?.on('data', chunk => stderr.push(String(chunk)));
   const deadline = Date.now() + 10_000;
@@ -138,7 +139,7 @@ async function startDaemonProcess(port: number, home: string): Promise<ChildProc
   return child;
 }
 
-function shutdownDaemon(port: number): Promise<void> {
+function shutdownDaemon(port: number, token = TOKEN): Promise<void> {
   return new Promise((resolve) => {
     const clientRequest = request(
       {
@@ -146,7 +147,7 @@ function shutdownDaemon(port: number): Promise<void> {
         port,
         method: 'POST',
         path: '/shutdown',
-        headers: { authorization: `Bearer ${TOKEN}` },
+        headers: { authorization: `Bearer ${token}` },
         timeout: 2_000,
       },
       (response) => {
@@ -299,7 +300,7 @@ describe('favbase CLI process integration', () => {
   it('starts a background daemon on first use and stops it on request', async () => {
     const port = await freePort();
     const home = await tempHome();
-    daemonPorts.push(port);
+    daemons.push({ port, token: TOKEN });
 
     const tags = collect(spawnCli(['tags'], cliEnv(port, home)));
     const extension = await connectExtension(port, 100);
@@ -367,6 +368,43 @@ describe('favbase CLI process integration', () => {
       /\[\d{4}-\d{2}-\d{2}T[^\]]+Z\] \[favbase\] Agent Bridge hello rejected \(bad-token\)/,
     );
     expect(stopped.stderr).not.toContain('wrong-token');
+  });
+
+  // docs/30 #1: a daemon keeps the token it was spawned with, so after a token
+  // reset in the extension it refused both the extension and the CLI until
+  // someone also ran `daemon restart`. setup now replaces it.
+  it('replaces the daemon holding the old token when setup saves a new one', async () => {
+    const port = await freePort();
+    const home = await tempHome();
+    const newToken = 'integration-test-token-after-reset';
+    // Detached and hidden, as every CLI command spawns it: that is the process
+    // setup has to kill, and the port it has to see released, on Windows too.
+    daemons.push({ port, token: TOKEN }, { port, token: newToken });
+    await expect(runCli(['daemon', 'start'], cliEnv(port, home))).resolves.toMatchObject({ code: 0 });
+    const beforeSetup = await connectExtension(port);
+    await expect(helloAsExtension(beforeSetup, newToken)).resolves.toMatchObject({
+      type: 'reject',
+      payload: { reason: 'bad-token' },
+    });
+
+    // Without FAVBASE_TOKEN, so doctor reads the token setup writes.
+    const { FAVBASE_TOKEN: _envToken, ...fileEnv } = cliEnv(port, home);
+    const setup = await runCli(['setup', '--token', newToken, '--port', String(port), '--no-skill'], fileEnv);
+    expect(setup.code).toBe(0);
+    expect(setup.stderr).toContain('holds a different pairing token');
+    expect(setup.stderr).not.toContain(newToken);
+
+    const extension = await connectExtension(port, 100);
+    await expect(helloAsExtension(extension, newToken)).resolves.toMatchObject({ type: 'welcome' });
+
+    const doctor = await runCli(['doctor'], fileEnv);
+    expect(doctor.code).toBe(0);
+    expect(JSON.parse(doctor.stdout)).toMatchObject({
+      ok: true,
+      config: { port, tokenSource: 'file' },
+      daemon: { spawned: false },
+      extension: { connected: true, extensionId: EXTENSION_ID },
+    });
   });
 
   it('rejects WebSocket upgrades outside the bridge path and from non-extension origins', async () => {

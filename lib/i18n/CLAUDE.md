@@ -8,7 +8,7 @@ Collection provider 阻塞统一使用 `configurationBlocker.*`。ASR 只在视�
 
 WebDAV Settings 拒绝使用结构化 `invalid-settings` / `incompatible-version`，对应 `settings.sync.err.*` 双语键；文案必须明确本地 Settings 未被覆盖或需要升级，raw validation detail 只作 debug，不进入翻译键。
 
-Agent Bridge 设置页使用 `settings.agentBridge.*`；连接状态只消费 `AgentBridgeStatus` 的稳定 state/error code，未知或 runtime 原始错误统一映射为可恢复的本地连接提示，不把 raw transport message 暴露给用户。`retryIn` 的 `{{time}}` 是 UI 格式化后的 `mm:ss`，`lastAuthFailure` 是成功恢复后仍保留的历史痕迹；bad-token 文案必须给出 setup 修复动作。配对密钥在**用户可见文案**里固定称为「配对 Token」/ "pairing token"（域术语与代码里仍是 Bridge Token），不得写成 API key/provider key；同理 UI 文案不出现 "Bridge"/"daemon" 这类实现词，只有用户要照敲的字面命令（如 `favbase daemon restart`）例外；轮询文案必须同时说明 Chrome 120+ 约 30 秒与 116–119 约 60 秒，不得笼统承诺 30 秒。
+Agent Bridge 设置页使用 `settings.agentBridge.*`；连接状态只消费 `AgentBridgeStatus` 的稳定 state/error code，未知或 runtime 原始错误统一映射为可恢复的本地连接提示，不把 raw transport message 暴露给用户。`lastAuthFailure` 是成功恢复后仍保留的历史痕迹（`retryIn` 倒计时键随退避于 docs/30 #1 删除）；bad-token 文案必须给出 setup 修复动作，且只给这一步——`favbase setup` 自己会替换持旧 token 的 daemon，不再追加 `daemon restart`。配对密钥在**用户可见文案**里固定称为「配对 Token」/ "pairing token"（域术语与代码里仍是 Bridge Token），不得写成 API key/provider key；同理 UI 文案不出现 "Bridge"/"daemon" 这类实现词，只有用户要照敲的字面命令（如 `favbase doctor`）例外；轮询文案必须同时说明 Chrome 120+ 约 30 秒与 116–119 约 60 秒，不得笼统承诺 30 秒。
 
 ## 平台命名
 

@@ -19,7 +19,7 @@ export default function App() {
   useEffect(() => {
     if (requestedAgentBridgeConnection.current) return;
     requestedAgentBridgeConnection.current = true;
-    // Background owns enablement, backoff, and the socket. Opening app.html only
+    // Background owns enablement, retries, and the socket. Opening app.html only
     // asks it to skip the next 30-second poll when a connection is eligible.
     void sendBackgroundMessage({ type: 'AGENT_BRIDGE_CONNECT_NOW' }).catch((error) => {
       console.error('[Agent Bridge] Immediate connection request failed', error);

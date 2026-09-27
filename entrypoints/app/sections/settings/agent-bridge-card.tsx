@@ -15,7 +15,6 @@ import Typography from '@mui/material/Typography';
 import { varAlpha } from 'minimal-shared/utils';
 
 import { sendBackgroundMessage } from '@/lib/background/client';
-import { formatClock } from '@/lib/format';
 import { formatDateTime, type LocaleKeys } from '@/lib/i18n';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import {
@@ -75,11 +74,6 @@ export function buildSetupCommand(token: string, port: number): string {
   return `favbase setup --token ${token} --port ${port}`;
 }
 
-export function formatRetryCountdown(retryAt: number, now: number): string {
-  const remainingSeconds = Math.ceil(Math.max(0, retryAt - now) / 1_000);
-  return formatClock(remainingSeconds).padStart(5, '0');
-}
-
 function stateColor(state: DisplayState): 'default' | 'warning' | 'info' | 'success' {
   switch (state) {
     case 'disconnected':
@@ -121,7 +115,6 @@ export function AgentBridgeCard() {
   const [saving, setSaving] = useState(false);
   const [showToken, setShowToken] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
-  const [clockNow, setClockNow] = useState(() => Date.now());
   const configRef = useRef(config);
   const portDirtyRef = useRef(false);
 
@@ -170,20 +163,6 @@ export function AgentBridgeCard() {
       unwatchStatus();
     };
   }, [applyConfig, t]);
-
-  useEffect(() => {
-    const retryAt = status.nextRetryAt;
-    const initialNow = Date.now();
-    setClockNow(initialNow);
-    if (!config.enabled || retryAt === null || retryAt <= initialNow) return;
-
-    const interval = setInterval(() => {
-      const nextNow = Date.now();
-      setClockNow(nextNow);
-      if (nextNow >= retryAt) clearInterval(interval);
-    }, 1_000);
-    return () => clearInterval(interval);
-  }, [config.enabled, status.nextRetryAt]);
 
   const persistConfig = useCallback(async (next: AgentBridgeConfig) => {
     const previous = configRef.current;
@@ -262,11 +241,6 @@ export function AgentBridgeCard() {
     ? t(statusErrorKey(status.lastError))
     : null;
   const badToken = config.enabled && status.lastError === 'bad-token';
-  const retryCountdown = config.enabled
-    && status.nextRetryAt !== null
-    && status.nextRetryAt > clockNow
-      ? formatRetryCountdown(status.nextRetryAt, clockNow)
-      : null;
   const controlsDisabled = !ready || saving;
   const tokenActionLabel = config.token
     ? t('settings.agentBridge.resetToken')
@@ -431,11 +405,6 @@ export function AgentBridgeCard() {
                   <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                     {t('settings.agentBridge.lastAuthFailure')}:{' '}
                     {formatDateTime(status.lastAuthFailureAt)}
-                  </Typography>
-                )}
-                {retryCountdown && (
-                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                    {t('settings.agentBridge.retryIn', { time: retryCountdown })}
                   </Typography>
                 )}
                 {statusError && !badToken && (

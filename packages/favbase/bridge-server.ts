@@ -162,6 +162,12 @@ export class BridgeServer {
   private heartbeatTimer?: NodeJS.Timeout;
   private lastRejectedHelloAt: number | null = null;
   private lastRejectedHelloReason: BridgeHelloRejectReason | null = null;
+  /**
+   * The rejection last written to the log since the last accepted hello. The
+   * extension retries a refused token on every alarm (docs/30 #1), so a run
+   * of same-reason rejections is logged once and counted in `/status`.
+   */
+  private loggedRejectReason: BridgeHelloRejectReason | null = null;
   private peer?: AuthenticatedPeer;
   private rejectedHelloCount = 0;
   private webSocketServer?: WebSocketServer;
@@ -397,6 +403,7 @@ export class BridgeServer {
   ): void {
     clearTimeout(candidate.handshakeTimer);
     candidate.authenticated = true;
+    this.loggedRejectReason = null;
 
     const previousPeer = this.peer;
     if (previousPeer && previousPeer.socket !== candidate.socket) {
@@ -558,9 +565,12 @@ export class BridgeServer {
     this.rejectedHelloCount += 1;
     this.lastRejectedHelloAt = Date.now();
     this.lastRejectedHelloReason = reason;
-    this.logger.error(
-      `[favbase] Agent Bridge hello rejected (${reason}); rejected hello count: ${this.rejectedHelloCount}`,
-    );
+    if (reason !== this.loggedRejectReason) {
+      this.loggedRejectReason = reason;
+      this.logger.error(
+        `[favbase] Agent Bridge hello rejected (${reason}); rejected hello count: ${this.rejectedHelloCount} (repeats are counted in favbase doctor, not logged, until a hello is accepted)`,
+      );
+    }
     this.rejectPeerWaiters(new BridgeCallError(
       'extension-unavailable',
       `favbase extension hello rejected: ${reason}`,

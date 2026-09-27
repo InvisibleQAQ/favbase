@@ -34,8 +34,6 @@ describe('Agent Bridge storage contract', () => {
       state: 'disabled',
       lastConnectedAt: null,
       lastError: null,
-      authFailureCount: 0,
-      nextRetryAt: null,
       lastAuthFailureAt: null,
     });
   });

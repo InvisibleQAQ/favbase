@@ -21,9 +21,6 @@ import {
   describeTools,
 } from './tool-registry';
 
-const AUTH_BACKOFF_BASE_MS = 30_000;
-const AUTH_BACKOFF_MAX_MS = 5 * 60_000;
-
 export interface BridgeTransportCloseEvent {
   code: number;
   reason: string;
@@ -109,13 +106,6 @@ interface ActiveConnection {
 
 export type AgentBridgeCloseReason = 'disabled' | 'config-changed';
 
-/**
- * Why a connect attempt is being made. `user` is an explicit human action
- * (settings button, opening app.html) and carries new information, so it
- * pierces the bad-token backoff and resets it to the 30-second base.
- */
-export type AgentBridgeConnectTrigger = 'schedule' | 'user';
-
 export class AgentBridgeClient {
   private readonly options: Required<AgentBridgeClientOptions>;
   private connection: ActiveConnection | null = null;
@@ -140,10 +130,10 @@ export class AgentBridgeClient {
     };
   }
 
-  async tryConnect(trigger: AgentBridgeConnectTrigger = 'schedule'): Promise<void> {
+  async tryConnect(): Promise<void> {
     if (this.connection || this.connectAttempt) return this.connectAttempt ?? undefined;
     const generation = this.generation;
-    this.connectAttempt = this.openConnection(generation, trigger);
+    this.connectAttempt = this.openConnection(generation);
     try {
       await this.connectAttempt;
     } finally {
@@ -166,15 +156,10 @@ export class AgentBridgeClient {
     await this.patchStatus({
       state: reason === 'disabled' ? 'disabled' : 'disconnected',
       lastError: null,
-      authFailureCount: 0,
-      nextRetryAt: null,
     });
   }
 
-  private async openConnection(
-    generation: number,
-    trigger: AgentBridgeConnectTrigger,
-  ): Promise<void> {
+  private async openConnection(generation: number): Promise<void> {
     const config = await this.options.getConfig();
     if (generation !== this.generation || this.connection) return;
     if (!config.enabled) {
@@ -189,17 +174,12 @@ export class AgentBridgeClient {
       return;
     }
 
+    // `lastError` stays until this attempt ends: a failure is retried on every
+    // alarm, and clearing it here would blink the settings card's error (and
+    // its repair button) off and on each time. Reconfiguring clears it (`close`).
     const status = await this.options.getStatus();
     if (generation !== this.generation || this.connection) return;
-    const explicit = trigger === 'user';
-    if (!explicit && status.nextRetryAt !== null && status.nextRetryAt > this.options.now()) return;
-
-    await this.options.setStatus({
-      ...status,
-      state: 'connecting',
-      lastError: null,
-      ...(explicit ? { authFailureCount: 0, nextRetryAt: null } : {}),
-    });
+    await this.options.setStatus({ ...status, state: 'connecting' });
     if (generation !== this.generation || this.connection) return;
 
     const connection = {
@@ -270,7 +250,7 @@ export class AgentBridgeClient {
         await this.handleToolCall(connection, message);
         return;
       case 'reject':
-        await this.handleReject(connection, message.payload.reason);
+        await this.disconnect(connection, message.payload.reason);
         return;
       default:
         await this.disconnect(connection, 'protocol-error');
@@ -282,7 +262,7 @@ export class AgentBridgeClient {
     message: AgentBridgeMessage,
   ): Promise<void> {
     if (message.type === 'reject') {
-      await this.handleReject(connection, message.payload.reason);
+      await this.disconnect(connection, message.payload.reason);
       return;
     }
     if (message.type !== 'welcome') {
@@ -290,7 +270,7 @@ export class AgentBridgeClient {
       return;
     }
     if (message.payload.token !== connection.config.token) {
-      await this.applyAuthBackoff(connection, 'bad-token');
+      await this.disconnect(connection, 'bad-token');
       return;
     }
 
@@ -299,44 +279,7 @@ export class AgentBridgeClient {
       state: 'connected',
       lastConnectedAt: this.options.now(),
       lastError: null,
-      authFailureCount: 0,
-      nextRetryAt: null,
     });
-  }
-
-  private async handleReject(
-    connection: ActiveConnection,
-    reason: 'bad-token' | 'bad-origin' | 'version',
-  ): Promise<void> {
-    if (reason === 'bad-token') {
-      await this.applyAuthBackoff(connection, reason);
-      return;
-    }
-    await this.disconnect(connection, reason);
-  }
-
-  private async applyAuthBackoff(
-    connection: ActiveConnection,
-    error: 'bad-token',
-  ): Promise<void> {
-    if (!this.isCurrent(connection)) return;
-    const status = await this.options.getStatus();
-    if (!this.isCurrent(connection)) return;
-    const authFailureCount = status.authFailureCount + 1;
-    const delay = Math.min(
-      AUTH_BACKOFF_BASE_MS * 2 ** (authFailureCount - 1),
-      AUTH_BACKOFF_MAX_MS,
-    );
-    const failedAt = this.options.now();
-    await this.options.setStatus({
-      ...status,
-      state: 'disconnected',
-      lastError: error,
-      authFailureCount,
-      nextRetryAt: failedAt + delay,
-      lastAuthFailureAt: failedAt,
-    });
-    this.dropConnection(connection);
   }
 
   private async handleToolCall(
@@ -402,17 +345,24 @@ export class AgentBridgeClient {
     await this.disconnect(connection, 'connection-error');
   }
 
+  /**
+   * Every way a connection ends, `bad-token` included: a rejected token is
+   * retried on the next alarm like any other failure (docs/30 #1), because
+   * the fix -- `favbase setup` replacing the daemon -- happens where this
+   * client cannot see it. The connection is dropped before the storage await,
+   * so the close event that follows a reject finds it gone and cannot
+   * overwrite the reason. A bad token is also timestamped, and a later valid
+   * welcome keeps that timestamp.
+   */
   private async disconnect(connection: ActiveConnection, lastError: string): Promise<void> {
     if (!this.isCurrent(connection)) return;
     this.connection = null;
     connection.transport.close();
-    await this.patchStatus({ state: 'disconnected', lastError });
-  }
-
-  private dropConnection(connection: ActiveConnection): void {
-    if (!this.isCurrent(connection)) return;
-    this.connection = null;
-    connection.transport.close();
+    await this.patchStatus({
+      state: 'disconnected',
+      lastError,
+      ...(lastError === 'bad-token' ? { lastAuthFailureAt: this.options.now() } : {}),
+    });
   }
 
   private sendInput(connection: ActiveConnection, input: AgentBridgeMessageInput): boolean {

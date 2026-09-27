@@ -1,6 +1,7 @@
 # Agent Bridge 重连延迟整改方案（2026-09-01）
 
 状态：Step 0 已执行（2026-09-01，结论见 §9：§2 成立，可按方案执行）；**Step 1 已落地（2026-09-01，见 §6 Step 1 的「实施记录」）**；**Step 2 已落地（2026-09-01，见 §6 Step 2 的「实施记录」）**；**Step 3 已落地（2026-09-01，见 §6 Step 3 的「实施记录」）**；**Step 4 已落地（2026-09-01，见 §6 Step 4 的「实施记录」）**；Step 5-6 待实施
+**后续（2026-09-27）**：Step 1 保留并修补的 bad-token 指数退避已被 `docs/30_agent-bridge-architecture-review-2026-09-27.md` #1 整体删除（用户决定 D2-b）——bad-token 改为下一个 alarm 照常重试，`'user'` 穿透、`authFailureCount`/`nextRetryAt` 与设置卡倒计时随之消失，`lastAuthFailureAt` 保留；token 轮换改由 `favbase setup` 替换持旧 token 的 daemon 收敛。下文 Step 1 / Step 4 的退避相关内容仅存历史。
 范围：`lib/agent-bridge/`、`lib/storage/agent-bridge.ts`、`packages/favbase/`、`skills/favbase/SKILL.md`、`entrypoints/app/sections/settings/agent-bridge-card.tsx`
 前置：ADR 0002（扩展出站 WebSocket）、ADR 0003（Skill-first CLI + Daemon）、`docs/21_agent-bridge-analysis-2026-08-22.md`
 

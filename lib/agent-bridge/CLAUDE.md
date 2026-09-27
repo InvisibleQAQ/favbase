@@ -30,8 +30,8 @@ CLI package (`packages/favbase`) consumes only the protocol leaf; extension stor
   Chrome 116–119 clamp it to 60 seconds), config watch, startup compensation, and
   `connectNow()`. Disable clears the alarm and closes the client. The daemon's
   hello wait must cover the older browser's 60-second effective period.
-  Alarm/startup/config-watch connect with trigger `'schedule'`; `connectNow()` is
-  the only `'user'` caller, because its two entry points are human actions.
+  `connectNow()` only saves the wait for the next alarm; every path calls the
+  same `tryConnect()`.
 
 ## Contracts
 
@@ -57,27 +57,35 @@ CLI package (`packages/favbase`) consumes only the protocol leaf; extension stor
   must load without a `chrome` global or mocks.
 - The Node package imports `protocol.ts` through the reviewed relative path and
   must never import `tool-registry.ts`; Knowledge Tool facts stay extension-owned.
-- Authentication backoff is persisted in `local:agent-bridge-status`, capped at
-  five minutes, and reset by a valid welcome, deliberate reconfiguration, or an
-  explicit user connect-now. An in-memory-only counter is invalid because MV3
-  suspension would erase it.
-- Every bad-token failure also persists `lastAuthFailureAt`. A valid welcome
-  clears the consecutive count/deadline but preserves that incident timestamp;
-  otherwise successful recovery would erase the only extension-side evidence.
-- `tryConnect(trigger)` has exactly two triggers and no parallel `forceConnect()`.
-  `'user'` skips the `nextRetryAt` gate and clears `authFailureCount`/`nextRetryAt`
-  in the same write that sets `connecting`, so a later failure restarts at the
-  30-second base instead of continuing the exponent. Backoff exists to protect the
-  daemon from automatic retries; a human action is new information and must pierce
-  it — otherwise toggling the feature off and on is the user's only escape.
+- **No authentication backoff** (docs/30 #1, user decision 2026-09-27). A
+  refused token is retried on the next alarm like any other failure. The fix
+  for it -- `favbase setup` replacing the daemon that holds the old token --
+  happens where the client cannot see it, so an exponential backoff (docs/24
+  Step 1-4 had one, 30 s doubling to 5 min) only kept the repaired pairing
+  locked out past doctor's 75-second wait. A hello costs the loopback daemon
+  one rejection, and it logs a run of same-reason rejections once. Don't add a
+  backoff back without also giving `setup` a way to lift it.
+- Every bad-token failure persists `lastAuthFailureAt`, and a valid welcome
+  preserves it: otherwise a successful recovery would erase the only
+  extension-side evidence. A welcome echoing another token counts as a
+  rejected token.
+- Every way a connection ends goes through `disconnect()`, bad-token included,
+  and it drops the connection **before** the storage await. The daemon sends
+  `reject` and closes at once, so the close event can arrive while the
+  rejection is still being written; it then finds no current connection and
+  cannot overwrite `bad-token` with `connection-closed` (docs/30 #7, fixed by
+  this shape rather than separately).
+- The `connecting` write keeps `lastError`: a failure is retried on every
+  alarm, and clearing it would blink the settings card's error and its repair
+  button each time. `close()` (disable, reconfigure) clears it.
 - Port/token changes close the old transport before reconnecting. Connection
   identity guards prevent late callbacks from changing replacement state.
 - Explicit close waits for an in-flight connect attempt to settle before writing
   the final disabled/disconnected status; a delayed storage write cannot restore
   stale `connecting` state after the socket is gone.
-- `AGENT_BRIDGE_CONNECT_NOW` only asks the scheduler to reuse `tryConnect('user')`;
+- `AGENT_BRIDGE_CONNECT_NOW` only asks the scheduler to run `tryConnect()` now;
   extension pages never open the WebSocket themselves.
-- Remote close and transport error both route through `disconnect()`, so every
+- Remote close and transport error also route through `disconnect()`, so every
   path that abandons a connection also closes its transport.
 
 ## Tests
@@ -89,8 +97,8 @@ CLI package (`packages/favbase`) consumes only the protocol leaf; extension stor
   cannot slip past the names), JSON Schema Draft 2020-12, validated rejection,
   and DB context forwarding.
 - `client.test.ts` — fake transport hello/welcome/call/ping/close, stable error
-  mapping, malformed frames, persistent backoff, user-triggered backoff pierce and
-  base-delay restart, retained authentication-failure history, and reconfiguration race.
-- `scheduler.test.ts` — enable/disable, alarm/startup/connect-now routing,
-  `'schedule'` vs `'user'` trigger assignment, and disabled means zero Agent Bridge
-  alarms.
+  mapping, malformed frames, bad-token retried on the next attempt (error kept
+  while `connecting`), welcome token mismatch, the reject-then-close race,
+  retained authentication-failure history, and reconfiguration race.
+- `scheduler.test.ts` — enable/disable, alarm/startup/connect-now routing, and
+  disabled means zero Agent Bridge alarms.
