@@ -67,11 +67,11 @@ For the accepted `--platform` values run `favbase tools` — the tool schemas ar
 | Code | Meaning |
 |---|---|
 | 0 | success |
-| 1 | usage error, missing/invalid configuration, or a local file favbase could not write (the message names it) |
-| 2 | the daemon or the extension is unreachable |
+| 1 | usage error, missing/invalid configuration, or another local problem such as a file favbase could not write (the message names it) |
+| 2 | the daemon or the extension did not answer, or not in time |
 | 3 | the Knowledge Tool itself returned an error |
 
-Exit code 2 usually means Chrome is closed or Agent Skills is switched off. The extension reconnects on a periodic alarm, so the first call after Chrome starts can wait roughly 30 seconds on Chrome 120+, or 60 seconds on Chrome 116–119. `favbase doctor` reports which half of the link is missing.
+For exit code 2, run `favbase doctor`: it reports which half of the link is missing, and if it finds nothing wrong, the command is worth one retry. The extension reconnects on a periodic alarm, so the first call after Chrome starts can wait roughly 30 seconds on Chrome 120+, or 60 seconds on Chrome 116–119. `favbase doctor` reports which half of the link is missing.
 
 ## The daemon
 

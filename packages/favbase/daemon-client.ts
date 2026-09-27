@@ -8,7 +8,15 @@ import {
   type JsonObject,
 } from '../../lib/agent-bridge/protocol';
 import { LOOPBACK_HOST } from './bridge-server';
-import { daemonLogPath, favbaseHome, type ConfigEnv, type ResolvedConfig } from './config';
+import {
+  CHANGE_PORT_HINT,
+  daemonIdleMinutes,
+  daemonLogPath,
+  favbaseHome,
+  writingFile,
+  type ConfigEnv,
+  type ResolvedConfig,
+} from './config';
 import {
   DAEMON_NAME,
   RPC_ROUTES,
@@ -120,7 +128,7 @@ function isStatusDaemon(value: unknown): value is StatusResponse['daemon'] {
 function foreignPort(port: number): DaemonError {
   return new DaemonError(
     'foreign',
-    `127.0.0.1:${port} is served by something that is not the favbase daemon; pick another port in favbase Settings > Connections > Agent Skills and run favbase setup --port <port>`,
+    `127.0.0.1:${port} is served by something that is not the favbase daemon; ${CHANGE_PORT_HINT}`,
   );
 }
 
@@ -182,11 +190,20 @@ export interface EnsureDaemonResult {
 /** Where a daemon listens and the pairing token it holds; all a spawn or a stop needs. */
 export type DaemonTarget = Pick<ResolvedConfig, 'token' | 'port'>;
 
+/**
+ * Both local failures get a type here, so they exit 1 naming the fix
+ * (docs/30 #2): a bad idle setting used to reach only the child's daemon.log,
+ * leaving a bare `spawn-failed` after the whole spawn wait, and a log that
+ * cannot be opened was an untyped OS error sent to doctor, which hit it again.
+ */
 async function spawnDaemon(config: DaemonTarget, options: EnsureDaemonOptions): Promise<string> {
+  daemonIdleMinutes(options.env);
   const home = favbaseHome(options.env);
-  await mkdir(home, { recursive: true });
   const logPath = daemonLogPath(options.env);
-  const logFd = openSync(logPath, 'a');
+  const logFd = await writingFile(logPath, async () => {
+    await mkdir(home, { recursive: true });
+    return openSync(logPath, 'a');
+  });
   try {
     const child = spawn(process.execPath, [options.cliPath, 'daemon', 'run'], {
       detached: true,
@@ -233,6 +250,9 @@ async function startDaemon(config: DaemonTarget, options: EnsureDaemonOptions): 
  * (`adoptSetupToken`). Only the pid found: a parallel command may already
  * have replaced it, and its fresh daemon must not be stopped. A failed stop is
  * surfaced, never swallowed: falling back to the old daemon would hide it.
+ * The message names both ways out, since doctor would find the same daemon:
+ * one stuck on exit can be ended by hand, one owned by another OS user
+ * (`EPERM`) cannot, and then only another port helps.
  */
 async function stopToReplace(
   config: DaemonTarget,
@@ -245,7 +265,7 @@ async function stopToReplace(
     const message = error instanceof Error ? error.message : String(error);
     throw new DaemonError(
       error instanceof DaemonError ? error.code : 'unreachable',
-      `${failure}: ${message}`,
+      `${failure}: ${message}; end process ${existing.pid} yourself, or ${CHANGE_PORT_HINT}`,
     );
   }
 }

@@ -16,15 +16,8 @@ vi.mock('./daemon-client', async (importOriginal) => ({
   fetchStatus: daemonMocks.fetchStatus,
 }));
 
-import {
-  EXIT_OK,
-  EXIT_UNAVAILABLE,
-  EXIT_USAGE,
-  EXTENSION_LATENCY_HINT,
-  formatDaemonLogLine,
-  main,
-  type CliIo,
-} from './cli-main';
+import { formatDaemonLogLine, main, type CliIo } from './cli-main';
+import { EXIT_OK, EXIT_UNAVAILABLE, EXIT_USAGE, EXTENSION_LATENCY_HINT } from './exit-codes';
 import { installSkill, skillRoot, type SkillAgent } from './skill-install';
 
 const TOKEN = 'doctor-test-token';
@@ -245,6 +238,10 @@ describe('favbase doctor skill copies', () => {
       expect.stringContaining('favbase install-skill --agent codex'),
     ]);
     expect(daemonMocks.ensureDaemon).not.toHaveBeenCalled();
+    // docs/30 #2: the exit-1 row tells an agent to show the user the stderr
+    // message, and the fix (`favbase setup`) used to be only in stdout.
+    expect(result.stderr.split('\n').at(-2)).toBe(`favbase: ${output.config.problem}`);
+    expect(output.config.problem).toContain('favbase setup --token');
   });
 
   // `stale` has no direction: a copy from GitHub main can be newer than this

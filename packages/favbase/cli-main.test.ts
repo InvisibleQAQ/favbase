@@ -8,8 +8,9 @@ import { dirname, join, relative } from 'node:path';
 
 import { afterEach, describe, expect, it, vi, type TestContext } from 'vitest';
 
-import { EXIT_OK, EXIT_USAGE, main, type CliIo } from './cli-main';
+import { main, type CliIo } from './cli-main';
 import { configPath, favbaseHome } from './config';
+import { EXIT_OK, EXIT_USAGE } from './exit-codes';
 import { UPDATE_CHECK_TTL_MS, updateCheckPath } from './update-check';
 
 const SKILL = '---\nname: favbase\n---\nbody\n';
@@ -75,10 +76,12 @@ async function freePort(): Promise<number> {
 /**
  * A loopback stand-in for the daemon. `/health` answers as this CLI's own
  * version, so `ensureDaemon` keeps it, `/status` accepts the token `abc`, and
- * `/rpc` records the call. Every request is logged, so a usage error can show
- * it never got this far.
+ * `/rpc` records the call and answers `rpcAnswer`. Every request is logged, so
+ * a usage error can show it never got this far.
  */
-async function fakeDaemon(): Promise<{ env: Record<string, string>; requests: string[]; calls: unknown[] }> {
+async function fakeDaemon(
+  rpcAnswer: unknown = { ok: true, result: { answered: true } },
+): Promise<{ env: Record<string, string>; requests: string[]; calls: unknown[] }> {
   const requests: string[] = [];
   const calls: unknown[] = [];
   const server = createServer((request, response) => {
@@ -102,7 +105,7 @@ async function fakeDaemon(): Promise<{ env: Record<string, string>; requests: st
       }
       if (request.url === '/rpc') {
         calls.push(JSON.parse(Buffer.concat(chunks).toString('utf8')));
-        response.end(JSON.stringify({ ok: true, result: { answered: true } }));
+        response.end(JSON.stringify(rpcAnswer));
         return;
       }
       response.end();
@@ -435,6 +438,73 @@ describe('a local file favbase cannot write', () => {
     expect(result.stderr.split('\n')).toHaveLength(2);
     expect(JSON.parse(await readFile(path, 'utf8'))).toEqual({ token: 'old', port: 2222 });
     expect(daemon.requests).toEqual([]);
+  });
+});
+
+// docs/30 #2: each of these used to exit 2, whose row sends the agent to
+// `favbase doctor` -- which failed on the same thing, or had nothing to find.
+// exit-codes.test.ts holds the classification; these hold the wiring.
+describe('failures that exit 2 only when doctor has something to find', () => {
+  // A token and a free port: nothing answers there, so a data command goes on
+  // to spawn a daemon (of the never-spawnable `cliPath`).
+  async function spawningEnv(): Promise<Record<string, string>> {
+    return { FAVBASE_TOKEN: 'abc', FAVBASE_BRIDGE_PORT: String(await freePort()) };
+  }
+
+  // Doctor spawns the same way and used to fail the same way: a loop.
+  it.for([['tags'], ['doctor']])('%j names a daemon log it cannot open (exit 1)', async (argv, ctx) => {
+    const root = await mkdtemp(join(tmpdir(), 'favbase-log-'));
+    temps.push(root);
+    const env = { ...(await spawningEnv()), FAVBASE_HOME: join(root, 'favbase') };
+    const log = join(env.FAVBASE_HOME, 'daemon.log');
+    await mkdir(env.FAVBASE_HOME, { recursive: true });
+    await writeFile(log, '');
+    await chmod(log, 0o444);
+    if (await access(log, constants.W_OK).then(() => true, () => false)) {
+      ctx.skip('a read-only file is still writable here (running as root?)');
+    }
+
+    const result = await run(argv, env);
+
+    expect(result.code).toBe(EXIT_USAGE);
+    const [line] = result.stderr.split('\n').filter(text => text.startsWith('favbase: '));
+    expect(line.startsWith(`favbase: cannot write ${log}: E`)).toBe(true);
+    expect(result.stderr).not.toContain('Run favbase --help');
+  });
+
+  // Checked before the spawn: in the child it only reached daemon.log, and
+  // this call waited out the 10 s spawn deadline (past this test's timeout).
+  it('refuses a bad FAVBASE_DAEMON_IDLE_MINUTES before spawning a daemon (exit 1)', async () => {
+    const result = await run(['tags'], { ...(await spawningEnv()), FAVBASE_DAEMON_IDLE_MINUTES: 'soon' });
+
+    expect(result.code).toBe(EXIT_USAGE);
+    expect(result.stderr).toBe('favbase: FAVBASE_DAEMON_IDLE_MINUTES must be a non-negative number\n');
+    expect(existsSync(join(result.io.env.FAVBASE_HOME!, 'daemon.log'))).toBe(false);
+  });
+
+  it('reports a failure without a type of its own as exit 1, for the user to read', async () => {
+    const result = await run(['--version'], {}, {
+      stdout: () => { throw new Error('EPIPE: broken pipe, write'); },
+    });
+    expect(result.code).toBe(EXIT_USAGE);
+    expect(result.stderr).toBe('favbase: EPIPE: broken pipe, write\n');
+  });
+
+  it.each([
+    // D4-a: not the agent's arguments; doctor, then one retry.
+    ['timeout', 2, 'favbase: the extension did not answer in time; run favbase doctor, and if it reports ok, retry once'],
+    ['invalid-args', 3, expect.stringContaining('favbase tools')],
+    ['db-unavailable', 3, undefined],
+  ])('turns a %s answer into exit %i', async (code, exitCode, advice) => {
+    const daemon = await fakeDaemon({ ok: false, code, message: 'Knowledge Tool listTags failed' });
+
+    const result = await run(['tags'], daemon.env);
+
+    expect(result.code).toBe(exitCode);
+    const lines = result.stderr.trimEnd().split('\n');
+    expect(lines[0]).toBe(`favbase: ${code}: Knowledge Tool listTags failed`);
+    expect(lines[1]).toEqual(advice);
+    expect(daemon.calls).toHaveLength(1);
   });
 });
 

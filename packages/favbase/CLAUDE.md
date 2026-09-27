@@ -31,8 +31,7 @@ provides no MCP server.
   name). Because a failed check is cached, that costs a broken-DNS machine one
   slow command a day, plus every `doctor`. Only moving the query out of the
   process (a detached child, as update-notifier does) would bound it.
-- `cli-main.ts` owns dispatch, usage text, exit codes (0 ok, 1 usage/config/local
-  file, 2 daemon or extension unreachable, 3 Knowledge Tool error) and every command:
+- `cli-main.ts` owns dispatch, usage text and every command:
   alias commands, `tools`, `call`, `doctor`, `daemon run|start|stop|restart`,
   `setup`, `install-skill`. `setup` writes the config and the skills and
   prints them before it looks at the daemon (`adoptSetupToken`, see
@@ -41,13 +40,9 @@ provides no MCP server.
   the canonical Chrome 120+ 30-second / Chrome 116-119 60-second cold-start
   wording; its bad-token line names the fix, rerunning the settings card's
   setup command. Foreground daemon logs receive one ISO-8601 prefix here. Data results
-  go to stdout as JSON only. Exit 1 holds three error types, and SKILL.md's
-  exit-1 row tells them apart by output: a `UsageError` ends with `Run favbase
-  --help for usage.` (the agent fixes its command); a `ConfigError` or
-  `LocalFileError` prints only `favbase: <message>`, which names the fix (run
-  setup, or a path). Only an unclassified error falls back to exit 2, whose row
-  says "run doctor" -- so a new local failure gets a type at its source, not
-  the fallback (silent-failure guide, Gotcha 5). Dispatch is two phases (docs/27 Step 2): `plan`
+  go to stdout as JSON only. No command picks its own exit code: every failure
+  goes through `exit-codes.ts` and is printed by `printFailure`;
+  `reportFailure` only adds the daemon log's timestamps. Dispatch is two phases (docs/27 Step 2): `plan`
   parses and validates every argument and picks the command's update policy
   (`none` for `--version`, usage and `daemon *`; `always` for `doctor`; `daily`
   for the rest), then `main` starts the update check and runs the command
@@ -74,6 +69,28 @@ provides no MCP server.
   `install-skill --agent claude,codex`, never a bare `install-skill`) or every
   listed copy is missing (it mentions `--dir`); an outdated CLI is told to
   upgrade first, because `stale` has no direction.
+- `exit-codes.ts` is the one place a failure becomes an exit code and its
+  stderr lines (docs/30 #2): 0 ok, 1 usage/config/local problem, 2 daemon or
+  extension did not answer, 3 Knowledge Tool error. `describeError` classifies
+  what a command throws, `describeToolError` what the daemon answers for a
+  Knowledge Tool. The default is **exit 1** (D3): a failure with no type of its
+  own prints `favbase: <message>`, which every table reads as "show the user".
+  Only a `UsageError` ends with `Run favbase --help for usage.` (the agent
+  fixes its command); `ConfigError`, `LocalFileError` and the untyped name
+  their fix or at least what went wrong. Exit 2 is only `DaemonError` and the
+  tool codes `extension-unavailable` / `extension-disconnected` / `timeout`
+  (D4: a timeout is not the agent's arguments; doctor, then one retry): the
+  failures `favbase doctor` can look into. Until docs/30 #2 the default was
+  exit 2, and each untyped failure sent the agent to a doctor that failed on
+  the same error. `TOOL_ERRORS` is a `Record` over `BridgeCallErrorCode`, so a
+  new code does not compile until it has an exit code; a code only a newer
+  daemon knows is exit 3 with the message for the user. Every fix a message
+  names must run as written: a port problem says `CHANGE_PORT_HINT` (the
+  settings card's setup command), never `favbase setup --port`, which is a
+  usage error without `--token`. `exit-codes.test.ts` reconciles every row of
+  the three markdown tables (SKILL.md, INSTALL.md, the npm README) with this
+  module; INSTALL.md is read from `main` by agents installing the published
+  CLI, so its rows must hold for the last release too.
 - `version.ts` is the one version primitive: `compareVersions` understands
   plain `MAJOR.MINOR.PATCH` only and returns `null` for anything else
   (`0.0.0-dev`, `test`, prereleases, empty). Every caller treats `null` as "do
@@ -116,10 +133,13 @@ provides no MCP server.
   one naming `path` and the OS reason (`cannot write <path>: EACCES: ...`). It
   wraps only the write sites -- `writeConfigFile`, `installSkill`,
   `refreshSkill`, and `createSkill`'s dangling-link look -- so doctor's
-  read-only inspection is unaffected. Not a
+  read-only inspection is unaffected, and `spawnDaemon`'s open of
+  `daemon.log`. Not a
   `ConfigError` on purpose: doctor turns that into `config.problem`, and a file
   it cannot write is no invalid config. Before it, these failures reached the
-  exit-2 fallback.
+  exit-2 fallback. `daemonIdleMinutes` parses `FAVBASE_DAEMON_IDLE_MINUTES`
+  for the daemon and, before a spawn, for the CLI spawning it. `SETUP_HINT` and
+  `CHANGE_PORT_HINT` are the two fixes that name the settings card.
 - `daemon.ts` builds one `http.Server`, attaches `BridgeServer` to it for
   `/bridge`, mounts `createRpcHandler`, and owns listen/EADDRINUSE, idle exit
   (`FAVBASE_DAEMON_IDLE_MINUTES`, default 120, 0 disables) and shutdown. The
@@ -131,7 +151,10 @@ provides no MCP server.
   bad-token rejection makes waited status return immediately; an unchanged
   pairing cannot recover by waiting another hello deadline.
 - `daemon-client.ts` is the CLI side: health probe, detached auto-spawn
-  (`node cli.js daemon run`, stdio to `~/.favbase/daemon.log`), bounded wait,
+  (`node cli.js daemon run`, stdio to `~/.favbase/daemon.log`; before it, a
+  bad idle setting is refused here rather than only in the child, where it
+  left a bare `spawn-failed` after the 10 s spawn wait, and a log it cannot
+  open is a `LocalFileError` -- both exit 1, naming the fix), bounded wait,
   `rpcCall`, `fetchStatus`, `stopDaemon` (shutdown route, pid kill only for a
   process that identified itself as favbase over `/health`). Status decoding
   validates the peer shape and supplies null/zero diagnostics for older daemons.
@@ -142,7 +165,9 @@ provides no MCP server.
   never take turns restarting it. Without this an upgraded CLI would talk to
   old daemon code forever, since a connected extension stops the idle exit. A
   failed stop is rethrown as a `DaemonError` naming both versions (exit 2), not
-  swallowed; note `stopDaemon` answers a token mismatch by killing the pid the
+  swallowed, and names both ways out -- end the pid by hand, or
+  `CHANGE_PORT_HINT` -- since doctor would find the same daemon and another OS
+  user's (`EPERM`) cannot be ended; note `stopDaemon` answers a token mismatch by killing the pid the
   daemon reported, exactly as `daemon restart` does. Parallel commands right
   after an upgrade all find the same older daemon, and the first shutdown pulls
   it from under the rest; measured on real processes, that failed some of them
@@ -317,7 +342,8 @@ provides no MCP server.
 - `pnpm build` - produce `dist/cli.js`.
 - `pnpm test` - build, then run unit tests (args/commands/config/rpc-server/
   daemon-client/daemon/cli-main/bridge-server, including doctor diagnostics,
-  plus version/skill-install/update-check and `daemon-client-ensure`, whose
+  plus version/skill-install/update-check, `exit-codes` (the classification
+  table-driven, and the three markdown tables row by row) and `daemon-client-ensure`, whose
   fake loopback daemons exercise the real `fetchHealth`/`stopDaemon` with only
   `spawn` mocked, plus `process.kill` for a daemon holding another token) and
   the process integration suite (real CLI

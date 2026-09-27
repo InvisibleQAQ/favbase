@@ -14,10 +14,13 @@ the Bridge Token exists only inside the running extension. Its published URL
 into their own prompts, so this path and the `main` branch cannot move.
 `tests/agent-bridge-cli-aliases.test.ts` reconciles the file's path, settings
 section name, package name, setup command shape and default port, and fails on
-a runnable setup command. It also holds its exit-1 row to SKILL.md's (below):
-both must quote the usage line and send any other exit-1 message to the user.
-Before that guard this row said "re-run step 4" for every exit 1, which loops
-an agent on a path or dangling link setup cannot fix.
+a runnable setup command. Its exit-code table is reconciled row by row with
+the CLI's classification (below). Before the exit-1 guard that row said
+"re-run step 4" for every exit 1, which loops an agent on a path or dangling
+link setup cannot fix. Because this file is read from `main` while `npm install
+-g favbase` installs the last release, each row must hold for **both** (docs/30
+#2 checked every row against 0.2.1: there an untyped failure is exit 2 and a
+timeout exit 3, and the rows still send the agent somewhere useful).
 
 `SKILL.md`'s frontmatter carries `metadata.version`, the `favbase` release it
 ships in (the Agent Skills spec has no top-level `version` field; `metadata`
@@ -31,13 +34,24 @@ Keep exit codes and prerequisites aligned with `packages/favbase`. The
 `--limit <min-max>` synopsis is contract-checked against the live `top_k`
 schema (`packages/favbase/CLAUDE.md`, Boundaries). Workflow step 4's
 `item_exists` / `found` meanings mirror `getItemContent`'s description in
-`lib/chat/tools.ts` and have **no** guard: change both or neither. The exit-1
-row tells an agent to recognise a usage error by the CLI's closing line
+`lib/chat/tools.ts` and have **no** guard: change both or neither.
+
+The exit-code table is the agent's error handling (silent-failure guide,
+Gotcha 5), and `packages/favbase/exit-codes.ts` is the one place that decides
+which failure lands in which row (docs/30 #2).
+`packages/favbase/exit-codes.test.ts` reconciles every row of this table,
+INSTALL.md's and the npm README's with it: the same codes, and each agent
+row's action. Exit 1 recognises a usage error by the CLI's closing line
 `Run favbase --help for usage.` (fix the command, don't send the user to
-`favbase setup`); `packages/favbase/cli-main.test.ts` checks that line is quoted
-here. Any other exit-1 message goes to the user as is, because it names the
-fix: `favbase setup`, or a path favbase could not write (a config or skill
-file). The same test file checks that those messages carry no usage line. The same file checks that this file and the npm README both carry
+`favbase setup`); any other exit-1 message goes to the user as is, because it
+names the fix -- `favbase setup`, a path favbase could not write -- or at
+least what went wrong (exit 1 is also where a failure without a type lands).
+Exit 2 runs `favbase doctor` and acts on its report, or on its stderr when a
+daemon failure leaves it without one, and retries once when it reports ok (a
+timeout). Exit 3 names exactly the codes the agent fixes itself
+(`invalid-args`, `unknown-tool`); every other goes to the user.
+`packages/favbase/cli-main.test.ts` checks the usage line quoted here is the
+one the CLI prints. The same file checks that this file and the npm README both carry
 `--args-file <path>`, the form the CLI's failed-`--args` error points at
 (Windows PowerShell 5.1 strips the JSON's double quotes). Reconnect
 copy must use the CLI's canonical wording, verbatim -- `cli-main-doctor.test.ts`

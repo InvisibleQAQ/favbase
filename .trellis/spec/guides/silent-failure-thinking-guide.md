@@ -214,29 +214,43 @@ unreachable — run doctor"). Typing it as exit 1 (5ffe0b8) then reached a
 **second** table: `skills/favbase/INSTALL.md` read every exit 1 as "re-run
 step 4", so an agent would rerun `setup` forever with the same result.
 
+Each fix gave one failure a type and left the catch-all at exit 2, so the next
+untyped failure (an unwritable `daemon.log`, a bad
+`FAVBASE_DAEMON_IDLE_MINUTES`) still sent the agent to a doctor that failed on
+the same error. docs/30 #2 moved the decision into one module,
+`packages/favbase/exit-codes.ts`, and flipped the default to exit 1: an untyped
+failure is now shown to the user instead of looping through doctor.
+
 **Trigger — ask this whenever**:
 
 - an error moves to a different exit code, or a new error lands in a code that
   already has a meaning
 - a code starts to cover more than one kind of error
-- a new failure has no error type of its own: it inherits the catch-all's code
-  (exit 2) and that row's advice
+- a new failure has no error type of its own: it inherits the default (exit 1,
+  "show the user"). Safe, but if doctor could diagnose it, or the agent could
+  fix it, classify it in `exit-codes.ts`
+- a message names a fix: can it run as written? (`favbase setup --port` alone
+  is a usage error; the fix is the settings card's setup command)
 
 **Prevention checklist**:
 
 - [ ] Reread the destination row as the agent would, in **both** tables:
       `skills/favbase/SKILL.md` (an agent using favbase) and
       `skills/favbase/INSTALL.md` (an agent installing it). Does its action fit
-      the error that just arrived? Only exit 1 is reconciled between them
-      (`tests/agent-bridge-cli-aliases.test.ts`, "reads exit code 1 the way
-      SKILL.md does"); the other rows drift unseen
+      the error that just arrived? `packages/favbase/exit-codes.test.ts`
+      reconciles every row of both (and the npm README's) with the module, but
+      only through the anchors it checks: it cannot read a row the way an
+      agent does
+- [ ] INSTALL.md is read from `main` by an agent that installs the **published**
+      CLI. Check each row you change against the last release's behaviour too
 - [ ] If a code covers several kinds of error, give the row a way to tell them
       apart using something the agent can see in the output (usage errors end
       with `Run favbase --help for usage.`)
 - [ ] Lock that marker by quoting the CLI's *actual* output into SKILL.md in a
       test, rather than a hand-typed copy. Pattern: the `--limit 0` case in
       `packages/favbase/cli-main.test.ts`
-- [ ] Owners: `skills/favbase/CLAUDE.md`, `packages/favbase/CLAUDE.md`
+- [ ] Owners: `packages/favbase/exit-codes.ts` (the classification),
+      `skills/favbase/CLAUDE.md`, `packages/favbase/CLAUDE.md`
 
 ---
 

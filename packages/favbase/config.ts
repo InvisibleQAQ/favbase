@@ -61,6 +61,33 @@ export async function writingFile<T>(path: string, steps: () => Promise<T>): Pro
 export const SETUP_HINT =
   'copy the pairing token from favbase Settings > Connections > Agent Skills and run: favbase setup --token <token> [--port <port>]';
 
+/**
+ * The fix for a port favbase cannot use. The settings card's setup command
+ * carries the new port together with the token; a bare `favbase setup --port`
+ * is a usage error without `--token`.
+ */
+export const CHANGE_PORT_HINT =
+  'pick another port in favbase Settings > Connections > Agent Skills, then copy the setup command there and run it';
+
+const DEFAULT_DAEMON_IDLE_MINUTES = 120;
+
+/**
+ * `FAVBASE_DAEMON_IDLE_MINUTES`: minutes without a CLI request before a daemon
+ * with no extension connected exits; 0 never. Read by the daemon, and by the
+ * CLI before it spawns one: a bad value found only in the child reaches
+ * nothing but daemon.log, and the CLI waits out the spawn deadline for a
+ * `spawn-failed` that does not say why.
+ */
+export function daemonIdleMinutes(env: ConfigEnv): number {
+  const raw = env.FAVBASE_DAEMON_IDLE_MINUTES?.trim();
+  if (!raw) return DEFAULT_DAEMON_IDLE_MINUTES;
+  const minutes = Number(raw);
+  if (!Number.isFinite(minutes) || minutes < 0) {
+    throw new ConfigError('FAVBASE_DAEMON_IDLE_MINUTES must be a non-negative number');
+  }
+  return minutes;
+}
+
 /** Root for the config file and daemon log; `FAVBASE_HOME` overrides `~/.favbase`. */
 export function favbaseHome(env: ConfigEnv = process.env): string {
   const override = env.FAVBASE_HOME?.trim();

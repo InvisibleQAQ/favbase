@@ -108,9 +108,9 @@ matches that word.
 
 | Symptom | What it means |
 |---|---|
-| exit code 1 | a usage, config or local file problem. A usage error ends with `Run favbase --help for usage.` — fix your command and retry; for the setup command that means running the pasted line exactly as given, then asking for a fresh one if it still fails. Otherwise show the stderr message to the user: it names what to fix — if it says to run `favbase setup`, ask for a fresh setup command; if it names a path favbase could not write, the user fixes that path before you retry |
-| exit code 2 | the daemon or the extension is unreachable — Chrome closed, or Agent Skills switched off |
-| exit code 3 | the query itself failed inside the extension |
+| exit code 1 | a usage, config or other local problem. A usage error ends with `Run favbase --help for usage.` — fix your command and retry; for the setup command that means running the pasted line exactly as given, then asking for a fresh one if it still fails. Otherwise show the stderr message to the user: it names what to fix — if it says to run `favbase setup`, ask for a fresh setup command; if it names a path favbase could not write, the user fixes that path before you retry |
+| exit code 2 | the daemon or the extension did not answer. Run `favbase doctor` and act on what it reports: the Chrome, Agent Skills, port or pairing token fix in its `troubleshooting` list, or its stderr message when it prints no report; if it reports `ok: true`, retry the command once |
+| exit code 3 | the query itself failed inside the extension. For `invalid-args` or `unknown-tool`, fix your command (`favbase tools` lists what the extension accepts); for any other code, show the stderr message to the user |
 | a token mismatch | the extension's token was reset after pairing; ask for a fresh setup command, then run `favbase daemon restart` |
 
 The extension reconnects on a periodic alarm, so the **first** call after Chrome

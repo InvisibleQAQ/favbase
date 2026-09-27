@@ -1,6 +1,6 @@
 # 30 — Agent Bridge 全链路架构体检：扩展 × favbase CLI × Skill（2026-09-27）
 
-**状态**：#1 已落地（2026-09-27，D1-a / D2-b，见 §1「实施记录」；#7 随之消失）。其余条目未动。
+**状态**：#1 已落地（2026-09-27，D1-a / D2-b，见 §1「实施记录」；#7 随之消失）。#2 已落地（2026-09-27，D3-a / D4-a，见 §2「实施记录」；顺带做了 #10 里「RPC 错误 code → 退出码」那一片）。**favbase 0.2.1 已于 2026-09-27T09:57Z 发布到 npm**（等价于 `2fbcc16`，含 #1 与 SKILL.md 的 `metadata.version`；本机全局安装与 registry tarball 的 `dist/cli.js` 逐字节一致），所以执行顺序第 2 步（#4 止血）已完成，#4 的结构修复（D6/D7）仍待做。其余条目未动。
 
 **范围**：把 Agent Bridge 当成**一个系统**来审，三端一起看：
 
@@ -13,7 +13,7 @@
 **基线**：
 
 - `main` @ `edb33f7`。
-- `packages/favbase/package.json` 写的是 `0.2.1`，但 **npm 上最新只有 `0.2.0`**。2026-09-26 在本机跑 `npm view favbase time`（registry 为 `https://registry.npmjs.org/`），结果只有 `0.1.0`（2026-09-08）与 `0.2.0`（2026-09-24T22:35Z）两个版本。两个 release commit（`3ac6e23` 0.2.0、`49fbe8d` 0.2.1）的正文都写着 "Not published."。0.2.0 是事后手工发布的，0.2.1 至今未发布。
+- `packages/favbase/package.json` 写的是 `0.2.1`，但 **npm 上最新只有 `0.2.0`**。2026-09-26 在本机跑 `npm view favbase time`（registry 为 `https://registry.npmjs.org/`），结果只有 `0.1.0`（2026-09-08）与 `0.2.0`（2026-09-24T22:35Z）两个版本。两个 release commit（`3ac6e23` 0.2.0、`49fbe8d` 0.2.1）的正文都写着 "Not published."。0.2.0 是事后手工发布的，0.2.1 至今未发布。（**2026-09-27 更新**：0.2.1 已发布，见文首状态；下文以「npm 最新是 0.2.0」为前提的叙述，都是撰写时的快照。）
 - 扩展尚未上架 Chrome Web Store，没有真实用户（与用户 2026-09-21 的说明一致）。
 
 **关于旧 docs/30**：本次开写时，`docs/30_favbase-cli-architecture-review-2026-09-26.md` 已不在工作区。那份文档只审了 CLI 一端，它的 7 条已逐条复核并**全部并入本文**，编号重排。它的基线写的是「favbase@0.2.1 已发布 npm」，这一句是错的，以本文为准。
@@ -67,12 +67,12 @@
 |---|---|---|---|---|
 | D1（**已定 a**，2026-09-27） | #1 | daemon 的 token 收敛在哪里做 | a. 只在 `setup` 里做<br>b. 在 `ensureDaemon` 里对每条命令做 | **a**。`setup` 是用户显式说「以后用这个 token」。放进 `ensureDaemon`，两个 shell（一个用 `FAVBASE_TOKEN` 覆盖、一个读文件）会轮流替换对方的 daemon。这正是 D14 在版本维度上刻意避免的 ping-pong |
 | D2（**已定 b**，2026-09-27） | #1 #11 | 扩展的 bad-token 指数退避（30 s 起、封顶 5 min）留还是删 | a. 保留，另加设置卡「立即重连」按钮，`setup` 的 `next:` 提示改成「刷新 favbase 标签页再跑 doctor」<br>b. 删除指数退避：bad-token 照普通 alarm 节奏重试；daemon 对重复的同因拒绝去重记日志；`lastAuthFailureAt` 证据保留 | **b**，但这**推翻 docs/24 Step 1-4 已落地的设计**，需要用户拍板。理由：对 loopback daemon，一次 hello 的成本是 daemon.log 里多一行，而退避的代价是 `setup → doctor` 这条主流程被锁在门外最长 5 分钟。删掉后，`authFailureCount`、`nextRetryAt`、`'user'`/`'schedule'` 的穿透逻辑和倒计时 UI 这一整类特殊情况一起消失。`connectNow`（省掉等下一个 alarm）照留 |
-| D3 | #2 | 未分类错误默认给哪个码 | a. exit 1<br>b. 新开一个码 | **a**。已发布的 SKILL.md 对 exit 1 的处置是「不以 `Run favbase --help` 结尾，就把 stderr 给用户看」，对未分类错误恰好正确。新开码则两张表都要改，而且已发布的 SKILL 不认识它 |
-| D4 | #2 | `timeout` / `db-unavailable` / `execution-failed` 归哪个码，exit 3 的处置文字怎么写 | a. `timeout` 归 exit 2，exit 2 那一行补「doctor 正常就重试一次」；exit 3 那一行按 stderr 里的 code 分支：`invalid-args`/`unknown-tool` 修命令（`unknown-tool` 也可能是版本漂移，见 #5），其余把消息给用户看<br>b. 全部保持 exit 3，只改文字 | **a**。今天 exit 3 一律写「adjust the arguments」，对这三种 code 都没用。stderr 形状本来就是 `favbase: <code>: <message>`，agent 读得到 code |
+| D3（**已定 a**，2026-09-27） | #2 | 未分类错误默认给哪个码 | a. exit 1<br>b. 新开一个码 | **a**。已发布的 SKILL.md 对 exit 1 的处置是「不以 `Run favbase --help` 结尾，就把 stderr 给用户看」，对未分类错误恰好正确。新开码则两张表都要改，而且已发布的 SKILL 不认识它 |
+| D4（**已定 a**，2026-09-27） | #2 | `timeout` / `db-unavailable` / `execution-failed` 归哪个码，exit 3 的处置文字怎么写 | a. `timeout` 归 exit 2，exit 2 那一行补「doctor 正常就重试一次」；exit 3 那一行按 stderr 里的 code 分支：`invalid-args`/`unknown-tool` 修命令（`unknown-tool` 也可能是版本漂移，见 #5），其余把消息给用户看<br>b. 全部保持 exit 3，只改文字 | **a**。今天 exit 3 一律写「adjust the arguments」，对这三种 code 都没用。stderr 形状本来就是 `favbase: <code>: <message>`，agent 读得到 code |
 | D5 | #3 | daemon 探针失败时，doctor 还读不读扩展状态 | a. 不读，`extension` 写「未检查（daemon 不可用）」<br>b. 读 | **a**。没有 daemon 就没有扩展状态可读，也避免给出「确认 Chrome 在运行」这类与根因无关的建议 |
 | D6 | #4 | `main` 上给 agent 读的 markdown 怎样才能不描述未发布的行为 | a. **删掉 INSTALL.md 的退出码表**，INSTALL 只保留跨版本稳定的步骤，排障交给版本一致的来源（`favbase --help`、CLI 自己的 stderr、setup 装下的 SKILL.md）；发布流程改成「版本号递增与 `npm publish` 同一步，并用 `npm view` 核验」<br>b. INSTALL 写死 `npm install -g favbase@X.Y.Z`，由测试对账 `package.json`<br>c. 维持现状，靠流程纪律 | **a**。INSTALL 的退出码表是 SKILL 那张表的第二份拷贝，也是唯一一份不随 CLI 版本走的拷贝（按 deletion test，删掉它复杂度只会消失）。b 挡不住「行为改了、版本号还没改」的那段窗口 |
 | D7 | #4 | `npx skills add InvisibleQAQ/favbase` 这条安装路线留不留 | a. 从根 README 与 ADR 0003 删掉<br>b. 保留，doctor 容忍 `main` 版 | **a**（与 ADR 0003 Decision 第 6 条冲突，但值得重开）。它装的是 `main` 上的 SKILL，与已装 CLI 捆绑的逐字节比对永远是 `stale`；照 doctor 的提示跑 `install-skill` 会把它回滚，下次 `npx skills add` 又翻回去 |
-| D8 | #5 | 跨版本兼容由哪一端负责 | a. **扩展负责**兼容所有已发布的 daemon：daemon 从下个版本起对未知字段宽松、对不支持的 `protocolVersion` 显式回 `reject: version`，扩展按 `welcome.serverVersion` 选择能力；Knowledge Tool 的名字、参数名和 SKILL.md 描述的结果字段只增不删，用一份「已发布契约」黄金文件守住<br>b. 冻结 v1，另起 v2 并行 | **a**。扩展会自动更新而 CLI 不会，只有扩展有能力适配对方。已发布的 0.1.0/0.2.0 daemon 是严格解码的，所以**首个上架的扩展仍必须对它们讲精确的 v1**，这一点改不了 |
+| D8 | #5 | 跨版本兼容由哪一端负责 | a. **扩展负责**兼容所有已发布的 daemon：daemon 从下个版本起对未知字段宽松、对不支持的 `protocolVersion` 显式回 `reject: version`，扩展按 `welcome.serverVersion` 选择能力；Knowledge Tool 的名字、参数名和 SKILL.md 描述的结果字段只增不删，用一份「已发布契约」黄金文件守住<br>b. 冻结 v1，另起 v2 并行 | **a**。扩展会自动更新而 CLI 不会，只有扩展有能力适配对方。已发布的 0.1.0/0.2.0/0.2.1 daemon 是严格解码的，所以**首个上架的扩展仍必须对它们讲精确的 v1**，这一点改不了 |
 | D9 | #6 | 「同机另一个 OS 用户或受限进程抢占 loopback 端口」算不算威胁 | a. 算：WS 与 HTTP 两条线都改成 challenge-response（交换 nonce、传 HMAC，token 本身不上线），随 #5 的协议改动一起做<br>b. 不算：订正 `CONTEXT.md` 的「verify each other」、删掉自欺的 welcome token 校验，并写 ADR 记录接受的风险 | **a**。单独做很贵，但和 #5 一起做的边际成本低；产品承诺是 "nothing leaves the machine"，而多用户机器上 loopback 端口是全机共享的。选 b 也必须把文档改成实话 |
 | D10 | #10 | daemon HTTP 线协议的 schema 放哪 | a. `packages/favbase` 内<br>b. `lib/agent-bridge/` | **a**。这条线两端都在本包，扩展不参与；`lib/agent-bridge/protocol.ts` 只多导出一个拒绝原因常量 |
 | D11 | #11 | CLI 的 HTTP 超时怎么定 | a. 由 daemon 的两段期限**取和**再加余量派生（约 150 s），同时让 embedding 请求超时严格小于工具期限<br>b. daemon 两段共享一个 deadline | **a**。daemon 行为不变；b 会把冷启动后的工具时间压到二十几秒，低于 embedding 自己的超时 |
@@ -83,9 +83,9 @@
 ## 执行顺序
 
 1. **先拍板 D1–D12**。其中 D6 必须最先定：后面每一步都要改 CLI 行为和 agent 读的 markdown，不先定发布规则，改完就会再造一个 #4。
-2. **止血 #4 的活实例**（用户动作）：发布 0.2.1，或者撤回 `1df12e6` 对 INSTALL.md exit-1 那一行的改动。二选一，与后续结构修复无关。
-3. **CLI 的失败链（#2 → #3 → #1）**（#1 已先行落地，2026-09-27；它新增的失败来源与 doctor 无报告路径留给 #2/#3，见 §1「实施记录」的残留）：
-   - #2 先做。退出码分类收成一个 module。#3 的 `ok` 与退出码、#1 新增的失败都要在这个分类里有归属。
+2. ~~**止血 #4 的活实例**（用户动作）：发布 0.2.1，或者撤回 `1df12e6` 对 INSTALL.md exit-1 那一行的改动。二选一，与后续结构修复无关。~~ **已完成**：0.2.1 于 2026-09-27 发布。
+3. **CLI 的失败链（#2 → #3 → #1）**（#1 已先行落地，2026-09-27；它新增的失败来源与 doctor 无报告路径留给 #2/#3，见 §1「实施记录」的残留。#2 已落地，2026-09-27，见 §2「实施记录」；下一步是 #3）：
+   - #2 先做（**已完成**）。退出码分类收成一个 module。#3 的 `ok` 与退出码、#1 新增的失败都要在这个分类里有归属。
    - #3 再做。它是 #1 的验收手段：修完 #1 后，「setup → doctor」必须输出完整 JSON。
    - #1 最后。CLI 半边复用 `stopDaemon` 的 401 → 按 pid 结束进程路径，以及 `ensureDaemon` 的替换路径；扩展半边按 D2 改。
    - #10 的「哪些 RPC 错误 code 表示扩展不可达」与 #2 有交集，宜在 #2 同一批完成。#11 的常量收拢可以顺带做。
@@ -156,16 +156,16 @@
 - `client.ts`：删 `AUTH_BACKOFF_*`、`applyAuthBackoff`、`dropConnection`、`handleReject`、`AgentBridgeConnectTrigger`；`tryConnect()` 无参。bad-token（daemon 的 `reject` 与 welcome 回显别的 token 两种来源）与其他失败一样走 `disconnect()`，后者在 storage await **之前**同步摘掉连接，并在 `lastError === 'bad-token'` 时写 `lastAuthFailureAt`。这正是 #7 方案的「前者」，所以 #7 随本条消失，不再单独做。
 - `connecting` 那一次写入**不再清 `lastError`**。没有退避后 bad-token 每个 alarm 都重试，清掉会让设置卡的 bad-token Alert 与「复制修复命令」按钮每 30/60 s 闪一次（`connection-error` 早就有这个闪烁）。`close()`（关闭开关、改端口/token）照旧清。
 - `scheduler.ts` 的 trigger 参数、`lib/storage/agent-bridge.ts` 的 `authFailureCount`/`nextRetryAt`、设置卡的倒计时（`formatRetryCountdown`、`clockNow` effect）与 `settings.agentBridge.retryIn`（zh/en）全部删除。旧 storage 记录里残留的两个键无人读取，按「扩展未上线」不做迁移。
-- `errorBadToken`（zh/en）删掉「然后执行 `favbase daemon restart`」半句。**它的正确性依赖 0.2.1 在扩展上架前发布到 npm**：0.2.0 的 `setup` 不替换 daemon。
+- `errorBadToken`（zh/en）删掉「然后执行 `favbase daemon restart`」半句。**它的正确性依赖 0.2.1 在扩展上架前发布到 npm**：0.2.0 的 `setup` 不替换 daemon。（已满足：0.2.1 于 2026-09-27 发布。）
 
 **刻意没改**
 
-- `INSTALL.md` 的 token mismatch 行（「ask for a fresh setup command, then run `favbase daemon restart`」）。它经 `main` 的 raw URL 被读，而读者 `npm install -g` 装到的是 0.2.0，那里 setup 不碰 daemon；现有措辞对 0.2.0 与新版都正确（对新版只是多一次无害的重启）。删掉它就是再造一个 #4 的活实例。等 #4 按 D6 删掉整张表时一起走。
+- `INSTALL.md` 的 token mismatch 行（「ask for a fresh setup command, then run `favbase daemon restart`」）。它经 `main` 的 raw URL 被读，而读者 `npm install -g` 装到的是 0.2.0，那里 setup 不碰 daemon；现有措辞对 0.2.0 与新版都正确（对新版只是多一次无害的重启）。删掉它就是再造一个 #4 的活实例。等 #4 按 D6 删掉整张表时一起走。（0.2.1 发布后，这半句对 `npm install -g favbase` 装到的版本只是多余、不再必要，仍留给 D6 一起处理。）
 - `setup` 的 stdout 形状不变，替换只体现在 stderr 的 `[favbase] replacing daemon <version> (pid <pid>): it holds a different pairing token` 一行。
 
 **残留（属于 #2 / #3，未在本条修）**
 
-- `setup` 新增的失败来源（端口被非 favbase 程序占用 → `foreign`；旧 daemon 停不掉，例如跨用户 `EPERM`）经 `reportFailure` 落成 exit 2（此前 setup 根本不看端口，这两种情况都是 exit 0，要到 doctor 才暴露）。`foreign` 的提示仍是跑不通的 `favbase setup --port <port>`（#2 表中那一行）。
+- `setup` 新增的失败来源（端口被非 favbase 程序占用 → `foreign`；旧 daemon 停不掉，例如跨用户 `EPERM`）经 `reportFailure` 落成 exit 2（此前 setup 根本不看端口，这两种情况都是 exit 0，要到 doctor 才暴露）。`foreign` 的提示仍是跑不通的 `favbase setup --port <port>`（#2 表中那一行）。（**#2 已修**：两者的消息都改成能直接照做的修法，见 §2「实施记录」；退出码仍是 exit 2。）
 - doctor 在 daemon 半边失败时仍不出 JSON（#3）。本条修完后，「setup → doctor」的主路径不再走那条分支。
 
 **测试**
@@ -228,7 +228,54 @@
 
 已发布的 0.2.0 捆绑的 SKILL.md，对 exit 1 的处置是「stderr 不以 `Run favbase --help` 结尾，就把它给用户看」。未分类错误的 stderr 本来就是 `favbase: <message>`、没有 usage 行，所以**翻到 exit 1 对已发布的那张表仍然给出正确处置**。反过来，今天的 exit 2 对这些错误给的处置（run doctor）是错的。`timeout` 挪到 exit 2 后，已发布 SKILL 的处置从「改参数」变成「跑 doctor」，比现状好，但仍不完整（doctor 正常时无事可修），所以 exit 2 那一行要补「doctor 报告正常就重试一次」。
 
-**待决策**：D3、D4。
+**决策**：D3-a、D4-a（用户 2026-09-27）。
+
+### 实施记录（2026-09-27）
+
+**分类 module**：新建 `packages/favbase/exit-codes.ts`，是唯一把失败映射成「退出码 + stderr 行」的地方。`describeError(error)` 管命令抛出的错误，`describeToolError(code, message, advice?)` 管 daemon 回答的 Knowledge Tool 错误；`EXIT_*`、`EXIT_CODES`（`--help` 的退出码摘要由它生成）、`USAGE_LINE`、`EXTENSION_LATENCY_HINT` 都从 `cli-main.ts` 搬到这里。`cli-main.ts` 不再有任何命令自己选退出码：`runTool`、`runTools`、`runDoctor`（配置错误路径与未连接路径）、`reportSkillFailures`、`reportFailure` 都经 `printFailure(io, describe*(...))`；`reportFailure` 只剩给 `daemon run` 加时间戳这一件事。`CliExit` 删除：`BridgePortInUseError` 直接在分类里处理。
+
+- **默认值翻转（D3-a）**：未分类错误 → exit 1，stderr 只有 `favbase: <message>`，没有 usage 行。`ConfigError`、`LocalFileError` 不再单列分支，它们本来就走这条默认路径。只有 `UsageError` 以 `Run favbase --help for usage.` 结尾（表驱动测试钉住「只有它」）。
+- **exit 2 只留给 doctor 查得了的失败**：`DaemonError`（五种 code），以及工具错误 `extension-unavailable` / `extension-disconnected` / `timeout`（D4-a）。
+- **工具错误表 `TOOL_ERRORS` 是 `Record<BridgeCallErrorCode, …>`**：扩展或 daemon 新增一个 code，不给它定退出码就编译不过（这是 #10「哪些 RPC code 表示不可达」那一片，字符串字面量从 `cli-main.ts` 消失）。daemon 回来的 code 仍按 `string` 处理：更新的 daemon 发来本 CLI 不认识的 code，一律 exit 3、消息给用户看。建议行：`extension-*` 沿用原 `EXTENSION_HINT`；`timeout` 是「run favbase doctor, and if it reports ok, retry once」；`invalid-args` / `unknown-tool` 指向 `favbase tools`；`db-unavailable` / `execution-failed` / `cancelled` 不加建议行。
+- **stderr 形状统一成两行**：`favbase: <code>: <message>`，再加一行建议（若有）。`tools` 与 doctor 的「扩展未连接」原来各自拼成一行，现在也是这两行；doctor 用 `advice` 参数把自己的 troubleshooting + 冷启动延迟文案放在第二行。只改 stderr，stdout 的 JSON 不变。
+
+**表中死路逐行处理**
+
+| 失败 | 现在 |
+|---|---|
+| `daemon.log` / `~/.favbase` 不可写 | `spawnDaemon` 的 `mkdir` + `openSync` 包进 `writingFile(daemonLogPath)`，exit 1，`favbase: cannot write <daemon.log>: <OS 原因>`。数据命令与 doctor 都是这一行，不再循环。`spawn` 本身没包（坏的 `execPath` 不是「文件写不了」） |
+| `FAVBASE_DAEMON_IDLE_MINUTES` 非法 | 解析函数从 `cli-main.ts` 搬到 `config.ts`（`daemonIdleMinutes`），`spawnDaemon` 在 spawn 前先调一次：`ConfigError`，exit 1，立即返回（原来要等满 10 s 的 `spawn-failed`）。只在要 spawn 时检查：已有 daemon 在跑时，这个变量对本次命令没有意义 |
+| 旧 daemon 停不掉（跨用户 `EPERM`，或 5 s 内没退出） | 仍是 `DaemonError`、exit 2（doctor 会撞上同一个 daemon，而且在 #3 之前没有报告），但 `stopToReplace` 的消息补上两条能照做的出路：`end process <pid> yourself, or <CHANGE_PORT_HINT>`。没有按 errno 分支：跨用户的进程结束不了，换端口那一条总是成立 |
+| 端口被非 favbase 程序占用（`foreign`） | 消息改用 `config.ts` 新增的 `CHANGE_PORT_HINT`：「pick another port in favbase Settings > Connections > Agent Skills, then copy the setup command there and run it」。设置卡的 setup 命令同时带 `--token` 与 `--port`，所以能直接跑。`daemon run` 端口被占的提示（`BridgePortInUseError`）同样改用它，退出码保持 exit 1 |
+| `timeout` | exit 2（D4-a），建议行见上 |
+| `db-unavailable` / `execution-failed` | exit 3 不变；exit 3 那一行改成按 code 分支，这两个落在「把消息给用户看」 |
+| 版本漂移的 `unknown-tool` / `invalid-args` | exit 3，建议行指向 `favbase tools`：工具改了名，agent 在那里看得到；彻底的跨版本处理仍是 #5 |
+| doctor 的配置错误路径 | JSON 之后（skill 提示行之后）打一行 `favbase: <config.problem>`，与其他命令对同一错误打的那行相同；exit 1 那一行「把 stderr 给用户看」从此有东西可看，修复动作（`favbase setup --token …`）也在 stderr 上 |
+| INSTALL.md 的 exit 2 行 | 重写，见下 |
+
+**三张 markdown 表**：SKILL.md「Errors and exit codes」、INSTALL.md「When something is wrong」、npm README「Exit codes」。
+
+- exit 1：意思从「local file problem」放宽为「other local problem」（未分类错误也落在这里），处置不变。
+- exit 2：「run `favbase doctor` and act on what it reports: the Chrome, Agent Skills, port or pairing token fix in its `troubleshooting` list, or its stderr message when it prints no report; if it reports `ok: true`, retry the command once」。后半句覆盖 timeout；「its stderr message when it prints no report」覆盖 #3 修完之前 doctor 在 daemon 失败时只打一行的情况。
+- exit 3：「For `invalid-args` or `unknown-tool`, fix your command (`favbase tools` lists …); for any other code, show the stderr message to the user」。
+- README 的「Exit code 2 usually means Chrome is closed」改成先跑 doctor、它没查出问题就值得重试一次。
+- **跨版本核对（#4 的教训）**：INSTALL.md 从 `main` 被读，而读者 `npm install -g favbase` 装到的是已发布的 0.2.1，所以每一行都按两个版本核对过。0.2.1 上未分类错误是 exit 2、`timeout` 是 exit 3：未分类错误走新 exit 2 行 → doctor 撞上同一错误、没有报告 → 「its stderr message」→ 把消息转述给用户，仍然有出路；`timeout` 走新 exit 3 行 → 不在修命令的两个 code 里 → 给用户看，比旧文字「adjust the arguments」对。新文字对两个版本都成立，所以本条不依赖 D6 先拍板，也不产生新的 #4 活实例。SKILL.md 捆绑进 CLI，npm README 随发布快照，这两份本来就跟版本走。
+- 未改：INSTALL.md 的 token mismatch 行（留给 D6，理由同 §1）；三处「Chrome 116–119」措辞（#11）。
+- ADR 0003 的 Decision 一节写着旧的退出码语义（「1 用法或配置 / 2 不可达」），补了 2026-09-27 的 Amendment，正文照惯例不改（Trellis check 发现）。
+
+**测试**
+
+- 新增 `exit-codes.test.ts`：`describeError` 覆盖 `UsageError` / `ConfigError` / `LocalFileError` / 未分类 `Error` / 非 Error 值 / 五种 `DaemonError` / `BridgePortInUseError`；`describeToolError` 覆盖八个已知 code 加一个未知 code，并断言 `AGENT_BRIDGE_TOOL_ERROR_CODES` 每一个都有期望值。markdown 对账：三张表的行恰好是 CLI 会用的码（INSTALL 只列非零码）；SKILL 与 INSTALL 的 exit 1 行引用 usage 行并「show the stderr message to the user」；exit 2 行点名 `favbase doctor`、「no report」时读 stderr、`ok: true` 时重试一次；exit 3 行里反引号括起的工具 code **集合相等于**分类里「exit 3 且带修命令建议」的那些 code。根测试 `tests/agent-bridge-cli-aliases.test.ts` 原有的「reads exit code 1 the way SKILL.md does」并入这里（它只对账 exit 1）。
+- `cli-main.test.ts` 新增一组端到端：`tags` 与 `doctor` 遇到只读 `daemon.log` → exit 1 且点名路径（只读文件而不是目录：Windows 上 `openSync(目录, 'a')` 会成功，本机实测）；非法 `FAVBASE_DAEMON_IDLE_MINUTES` → exit 1 且 `daemon.log` 不存在（没 spawn）；未分类异常 → exit 1、无 usage 行；fake daemon 回 `timeout` / `invalid-args` / `db-unavailable` → 2 / 3 / 3 与对应建议行。`fakeDaemon` 加了 `rpcAnswer` 参数。`cli-main-doctor.test.ts` 的配置错误用例补断言 stderr 倒数第二行是 `favbase: <config.problem>`；`daemon-client-ensure.test.ts` 的 `EPERM` 用例补断言消息里的出路。
+- 变异验证（改回旧行为逐一跑）：去掉 spawn 前的 idle 检查 → idle 用例 10 s 超时变红；`daemon.log` 不包 `writingFile` → 两个日志用例红；默认值改回 exit 2 → 分类表与既有 exit-1 用例红；`timeout` 改回 exit 3 → 三例红；doctor 配置路径不打 stderr → 一例红；SKILL exit 3 行删掉 `unknown-tool`、INSTALL exit 2 行改回「Chrome closed」→ 对应两例红。
+- `pnpm test`（`packages/favbase`，含真进程集成）247 通过；根 `tests/agent-bridge-cli-aliases.test.ts` 18 通过。
+
+**残留**
+
+- doctor 在 daemon 半边失败时仍不出 JSON（#3，下一步）。exit 2 行已经写成对这种情况也有出路。
+- #10 只做了 RPC code 分类这一片；daemon HTTP 线协议的 schema、拒绝原因三处字面量、token 上限两处，都未动。
+- #11 的期限常量、15b 的 `reportFailure` 回头嗅探 argv，都未动。
+- SKILL.md 改了，已装的 0.2.1 副本对 `main` 构建的 CLI 会报 `stale`（仅开发机）。下次发布照 Release 流程递增两处版本号。
 
 ---
 
@@ -300,7 +347,7 @@ doctor 的 JSON 在 daemon 失败时多出字段形状，属于纯追加。退�
 - **删掉 INSTALL.md 的退出码表**。它是 SKILL 那张表的第二份拷贝，也是唯一一份不随 CLI 版本走的拷贝。INSTALL 只保留跨版本稳定的内容：Node 版本、安装命令、停下来要配对命令、运行配对命令、跑 doctor。另外只写一条通用规则：「命令失败时，把它的 stderr 给用户看；排障以 `favbase --help` 与刚装好的 skill 为准」。这两者都随已装 CLI 的版本走。
 - **发布纪律进流程**：版本号递增与 `npm publish` 是同一步；Release 步骤加一条 `npm view favbase version` 必须等于 `package.json`。「改了版本号但不发布」的 commit 不再存在。可选：每次发布打 `favbase-vX.Y.Z` tag，让将来的守卫可以对「上一个发布版」做 diff（今天仓库一个 tag 都没有）。
 - **`npx skills add` 路线**：从根 README 与 ADR 0003 删掉（D7）。只保留 CLI 自己安装 skill 这一条路，doctor 的逐字节比对才有意义。
-- **止血**（用户动作，见执行顺序第 2 步）：发布 0.2.1，或者撤回 INSTALL.md 那一行。
+- ~~**止血**（用户动作，见执行顺序第 2 步）：发布 0.2.1，或者撤回 INSTALL.md 那一行。~~ 已完成：0.2.1 于 2026-09-27 发布。
 
 **收益**
 
@@ -312,7 +359,7 @@ doctor 的 JSON 在 daemon 失败时多出字段形状，属于纯追加。退�
 
 - ADR 0005 的 URL 契约不受影响：路径与分支不动，只是内容变短。
 - ADR 0003 的一条 Decision 要写 Amendment。
-- `tests/agent-bridge-cli-aliases.test.ts` 里 INSTALL 的 exit-1 对账用例随表删除；路径、设置区名、包名、setup 命令形状、默认端口这几项对账保留。
+- `tests/agent-bridge-cli-aliases.test.ts` 里 INSTALL 的 exit-1 对账用例随表删除；路径、设置区名、包名、setup 命令形状、默认端口这几项对账保留。（#2 起该对账已移到 `packages/favbase/exit-codes.test.ts` 并扩到全部行；按 D6-a 删表时，删掉那里 INSTALL 的一半。）
 - `skills/favbase/CLAUDE.md` 里「INSTALL 的 exit-1 行必须与 SKILL 对齐」那一段要同步改写。
 
 **待决策**：D6、D7。
@@ -339,7 +386,7 @@ doctor 的 JSON 在 daemon 失败时多出字段形状，属于纯追加。退�
 
 用户看到的症状全部被误诊：设置卡显示 `errorConnectionClosed`（「下一次 favbase 命令会自动重新拉起」，而下一次只会复现同样的失败）或 `errorConnection`（「运行任意 favbase 命令并确认端口一致」）；CLI 等 75 s 后提示「confirm Chrome is running … pairing token match」；doctor 的 troubleshooting 全是 token/Chrome 方向。
 
-根 `CLAUDE.md` 写着「外部 Agent Bridge 没有 legacy userspace」。**这一前提在 CLI 这一侧已经不成立**：npm 上已有 0.1.0 与 0.2.0，它们的 daemon 就是严格解码的 legacy userspace。
+根 `CLAUDE.md` 写着「外部 Agent Bridge 没有 legacy userspace」。**这一前提在 CLI 这一侧已经不成立**：npm 上已有 0.1.0、0.2.0 与 0.2.1（2026-09-27），它们的 daemon 就是严格解码的 legacy userspace。
 
 **方案**（按 D8）
 
@@ -357,7 +404,7 @@ doctor 的 JSON 在 daemon 失败时多出字段形状，属于纯追加。退�
 
 **会破坏什么**
 
-- 已发布的 0.1.0/0.2.0 daemon 仍然严格解码，**改不了**。所以首个上架的扩展对它们必须讲精确的 v1：新能力只能在 `serverVersion` 表明对端支持时启用。这是本条必须在扩展上架前完成的原因：上架之后，两端都有 legacy userspace。
+- 已发布的 0.1.0/0.2.0/0.2.1 daemon 仍然严格解码，**改不了**（0.2.1 没有改线协议）。所以首个上架的扩展对它们必须讲精确的 v1：新能力只能在 `serverVersion` 表明对端支持时启用。这是本条必须在扩展上架前完成的原因：上架之后，两端都有 legacy userspace。
 - `lib/agent-bridge/CLAUDE.md` 的「Strict means no field is additive」一节要改写。
 
 **待决策**：D8。

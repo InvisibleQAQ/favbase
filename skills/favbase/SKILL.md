@@ -105,9 +105,9 @@ every shell.
 | Exit | Meaning | What to do |
 | --- | --- | --- |
 | 0 | success | use the JSON on stdout |
-| 1 | usage, config or local file problem | a usage error ends with `Run favbase --help for usage.` — fix your command and retry; otherwise show the stderr message to the user: it names what to fix (run `favbase setup`, or a path it could not write) |
-| 2 | daemon or extension unreachable | run `favbase doctor`; fix the reported Chrome, Agent Skills, port, or pairing token check |
-| 3 | Knowledge Tool error (bad argument, tool failure) | read the stderr message and adjust the arguments |
+| 1 | usage, config or other local problem | a usage error ends with `Run favbase --help for usage.` — fix your command and retry; otherwise show the stderr message to the user: it names what to fix (run `favbase setup`, or a path it could not write) |
+| 2 | daemon or extension did not answer (unreachable, or not in time) | run `favbase doctor` and act on what it reports: the Chrome, Agent Skills, port or pairing token fix in its `troubleshooting` list, or its stderr message when it prints no report; if it reports `ok: true`, retry the command once |
+| 3 | Knowledge Tool error | stderr reads `favbase: <code>: <message>`. For `invalid-args` or `unknown-tool`, fix your command (`favbase tools` lists the tools and argument schemas the extension accepts); for any other code, show the stderr message to the user — rewording the query will not fix it |
 
 An already connected extension has no alarm wait and uses local RPC. After
 Chrome or the daemon starts, reconnection can take one alarm period: about 30

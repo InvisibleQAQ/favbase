@@ -2,15 +2,12 @@ import { readFileSync } from 'node:fs';
 
 import { DEFAULT_AGENT_BRIDGE_PORT, type JsonObject } from '../../lib/agent-bridge/protocol';
 import { parseArgv, requireValue, UsageError, type ParsedArgv } from './args';
-import {
-  BridgePortInUseError,
-  type BridgeLogger,
-  type BridgePeerSnapshot,
-} from './bridge-server';
+import type { BridgeLogger, BridgePeerSnapshot } from './bridge-server';
 import { aliasUsageLine, buildAliasArgs, findAlias, TOOL_ALIASES, USAGE_COLUMN } from './commands';
 import {
   ConfigError,
   configPath,
+  daemonIdleMinutes,
   daemonLogPath,
   LocalFileError,
   parsePort,
@@ -25,12 +22,20 @@ import {
 import { Daemon } from './daemon';
 import {
   adoptSetupToken,
-  DaemonError,
   ensureDaemon,
   fetchStatus,
   rpcCall,
   stopDaemon,
 } from './daemon-client';
+import {
+  describeError,
+  describeToolError,
+  EXIT_CODES,
+  EXIT_OK,
+  EXIT_USAGE,
+  EXTENSION_LATENCY_HINT,
+  type Failure,
+} from './exit-codes';
 import {
   canonicalSkillContent,
   inspectSkills,
@@ -48,16 +53,8 @@ import {
   type UpdatePolicy,
 } from './update-check';
 
-export const EXIT_OK = 0;
-export const EXIT_USAGE = 1;
-export const EXIT_UNAVAILABLE = 2;
-export const EXIT_TOOL = 3;
-
-const DEFAULT_IDLE_MINUTES = 120;
-export const EXTENSION_LATENCY_HINT =
-  'An already connected extension has no alarm wait and uses local RPC. After Chrome or the daemon starts, reconnection can take one alarm period: about 30 seconds on Chrome 120+ or about 60 seconds on Chrome 116-119. If it takes longer, run favbase doctor.';
-const EXTENSION_HINT =
-  `confirm Chrome is running, Agent Skills is enabled, and the port and pairing token match. ${EXTENSION_LATENCY_HINT}`;
+/** The `message` of an `extension-unavailable` found by a status check, not by a tool call. */
+const NOT_CONNECTED = 'no favbase extension is connected to the daemon';
 
 export interface CliIo {
   env: ConfigEnv;
@@ -79,16 +76,6 @@ export interface CliIo {
   fetchLatestVersion?(): Promise<string | null>;
 }
 
-class CliExit extends Error {
-  constructor(
-    readonly code: number,
-    message: string,
-  ) {
-    super(message);
-    this.name = 'CliExit';
-  }
-}
-
 export function usage(version: string, env: ConfigEnv): string {
   const aliases = TOOL_ALIASES.map(aliasUsageLine).join('\n');
   return `favbase ${version} - read-only access to the favbase browser extension
@@ -107,12 +94,18 @@ Setup and daemon:
   ${'daemon [run|start|stop|restart]'.padEnd(USAGE_COLUMN)} run in foreground, or control the background daemon
 
 Config: FAVBASE_TOKEN / FAVBASE_BRIDGE_PORT, else ${configPath(env)} (default port ${DEFAULT_AGENT_BRIDGE_PORT}).
-Exit codes: ${EXIT_OK} ok, ${EXIT_USAGE} usage/config/local file problem, ${EXIT_UNAVAILABLE} daemon or extension unreachable, ${EXIT_TOOL} Knowledge Tool error.
+Exit codes: ${EXIT_CODES.map(([code, meaning]) => `${code} ${meaning}`).join(', ')}.
 `;
 }
 
 function printJson(io: CliIo, value: unknown): void {
   io.stdout(`${JSON.stringify(value, null, 2)}\n`);
+}
+
+/** Prints a classified failure and returns its exit code. */
+function printFailure(io: CliIo, failure: Failure): number {
+  for (const line of failure.lines) io.stderr(`${line}\n`);
+  return failure.exitCode;
 }
 
 export function formatDaemonLogLine(message: string, at = Date.now()): string {
@@ -140,16 +133,6 @@ function extensionTroubleshooting(
   ];
 }
 
-function idleMinutes(env: ConfigEnv): number {
-  const raw = env.FAVBASE_DAEMON_IDLE_MINUTES?.trim();
-  if (!raw) return DEFAULT_IDLE_MINUTES;
-  const minutes = Number(raw);
-  if (!Number.isFinite(minutes) || minutes < 0) {
-    throw new ConfigError('FAVBASE_DAEMON_IDLE_MINUTES must be a non-negative number');
-  }
-  return minutes;
-}
-
 function daemonOptions(io: CliIo) {
   return {
     cliPath: io.cliPath,
@@ -172,20 +155,14 @@ async function runTool(io: CliIo, tool: string, args: JsonObject): Promise<numbe
     printJson(io, response.result);
     return EXIT_OK;
   }
-  io.stderr(`favbase: ${response.code}: ${response.message}\n`);
-  if (response.code === 'extension-unavailable' || response.code === 'extension-disconnected') {
-    io.stderr(`favbase: ${EXTENSION_HINT}\n`);
-    return EXIT_UNAVAILABLE;
-  }
-  return EXIT_TOOL;
+  return printFailure(io, describeToolError(response.code, response.message));
 }
 
 async function runTools(io: CliIo): Promise<number> {
   const config = await connectedConfig(io);
   const status = await fetchStatus(config, true);
   if (!status.extension.connected) {
-    io.stderr(`favbase: extension-unavailable: ${EXTENSION_HINT}\n`);
-    return EXIT_UNAVAILABLE;
+    return printFailure(io, describeToolError('extension-unavailable', NOT_CONNECTED));
   }
   printJson(io, status.extension.tools);
   return EXIT_OK;
@@ -296,7 +273,9 @@ async function runDoctor(io: CliIo, currency: Promise<CliCurrency>): Promise<num
       skills,
     });
     printSkillHint(io, skills, cli);
-    return EXIT_USAGE;
+    // The same line any other command prints for this error: the exit-1 row
+    // sends it to the user, and it names the fix (`favbase setup`).
+    return printFailure(io, describeError(error));
   }
   const { spawned, replaced } = await ensureDaemon(config, daemonOptions(io));
   const status = await fetchStatus(config, true);
@@ -320,10 +299,11 @@ async function runDoctor(io: CliIo, currency: Promise<CliCurrency>): Promise<num
   });
   printSkillHint(io, skills, cli);
   if (status.extension.connected) return EXIT_OK;
-  io.stderr(
-    `favbase: extension-unavailable: ${troubleshooting.join(' ')} ${EXTENSION_LATENCY_HINT}\n`,
-  );
-  return EXIT_UNAVAILABLE;
+  return printFailure(io, describeToolError(
+    'extension-unavailable',
+    NOT_CONNECTED,
+    `${troubleshooting.join(' ')} ${EXTENSION_LATENCY_HINT}`,
+  ));
 }
 
 async function runDaemonForeground(io: CliIo): Promise<number> {
@@ -334,20 +314,10 @@ async function runDaemonForeground(io: CliIo): Promise<number> {
     port: config.port,
     token: config.token,
     version: io.version,
-    idleMinutes: idleMinutes(io.env),
+    idleMinutes: daemonIdleMinutes(io.env),
     logger,
   });
-  try {
-    await daemon.start();
-  } catch (error) {
-    if (error instanceof BridgePortInUseError) {
-      throw new CliExit(
-        EXIT_USAGE,
-        `port ${config.port} is already in use; stop the other favbase daemon (favbase daemon stop) or change both the extension port and favbase setup --port`,
-      );
-    }
-    throw error;
-  }
+  await daemon.start();
   log(`[favbase] daemon ${io.version} listening on 127.0.0.1:${config.port} (pid ${process.pid})`);
   io.onSignal?.(() => void daemon.close());
   await daemon.whenClosed();
@@ -405,8 +375,9 @@ function parseInstallSkill(parsed: ParsedArgv): InstallSkillRequest {
  * written are already on stdout; exit 1 if any failed.
  */
 function reportSkillFailures(io: CliIo, failures: readonly LocalFileError[]): number {
-  for (const failure of failures) io.stderr(`favbase: ${failure.message}\n`);
-  return failures.length > 0 ? EXIT_USAGE : EXIT_OK;
+  let code = EXIT_OK;
+  for (const failure of failures) code = printFailure(io, describeError(failure));
+  return code;
 }
 
 /** `--dir` is one copy: its failure throws, and nothing reaches stdout. */
@@ -525,35 +496,14 @@ function plan(io: CliIo, parsed: ParsedArgv): PlannedCommand {
   }
 }
 
+/** `exit-codes.ts` classifies; this only adds the daemon log's timestamps. */
 function reportFailure(io: CliIo, argv: readonly string[], error: unknown): number {
-  const report = (message: string): void => {
-    const daemonRun = argv[0] === 'daemon' && (argv[1] === undefined || argv[1] === 'run');
-    const output = daemonRun
-      ? message.split('\n').map(line => formatDaemonLogLine(line)).join('\n')
-      : message;
-    io.stderr(`${output}\n`);
-  };
-  if (error instanceof UsageError) {
-    report(`favbase: ${error.message}\nRun favbase --help for usage.`);
-    return EXIT_USAGE;
-  }
-  // No usage line: SKILL.md's exit-1 row reads its absence as "show the user
-  // the message", which names what to fix -- `favbase setup`, or a path.
-  if (error instanceof ConfigError || error instanceof LocalFileError) {
-    report(`favbase: ${error.message}`);
-    return EXIT_USAGE;
-  }
-  if (error instanceof CliExit) {
-    report(`favbase: ${error.message}`);
-    return error.code;
-  }
-  if (error instanceof DaemonError) {
-    report(`favbase: ${error.code}: ${error.message}`);
-    return EXIT_UNAVAILABLE;
-  }
-  const message = error instanceof Error ? error.message : String(error);
-  report(`favbase: ${message}`);
-  return EXIT_UNAVAILABLE;
+  const { exitCode, lines } = describeError(error);
+  const daemonRun = argv[0] === 'daemon' && (argv[1] === undefined || argv[1] === 'run');
+  const output = daemonRun
+    ? lines.flatMap(line => line.split('\n')).map(line => formatDaemonLogLine(line))
+    : lines;
+  return printFailure(io, { exitCode, lines: output });
 }
 
 /**

@@ -6,7 +6,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { ResolvedConfig } from './config';
+import { CHANGE_PORT_HINT, type ResolvedConfig } from './config';
 
 // ensureDaemon calls fetchHealth/stopDaemon inside its own module, where
 // vi.mock cannot reach. So both run for real against loopback fake daemons,
@@ -300,18 +300,23 @@ describe('adoptSetupToken', () => {
     expect(logs.join('\n')).not.toContain(TOKEN);
   });
 
-  // Another OS user's daemon on the port: the signal fails with EPERM.
+  // Another OS user's daemon on the port: the signal fails with EPERM. Doctor
+  // would find the same daemon, so the message names the way out (docs/30
+  // #2): that process cannot be ended by hand either, so another port.
   it('surfaces a daemon it cannot stop instead of keeping it', async () => {
     const old = await fakeDaemon(0, '0.2.0', { token: 'the-old-token' });
     kill = vi.spyOn(process, 'kill').mockImplementation(() => {
       throw Object.assign(new Error('kill EPERM'), { code: 'EPERM' });
     });
 
-    await expect(adoptSetupToken(config(old.port), await options('0.2.0'))).rejects.toMatchObject({
+    const error = await adoptSetupToken(config(old.port), await options('0.2.0')).catch((caught: unknown) => caught);
+
+    expect(error).toMatchObject({
       name: 'DaemonError',
       code: 'unreachable',
       message: expect.stringMatching(/could not stop the favbase daemon 0\.2\.0 .*different pairing token: kill EPERM/),
     });
+    expect((error as Error).message).toContain(`; end process ${FAKE_PID} yourself, or ${CHANGE_PORT_HINT}`);
     expect(spawnMock).not.toHaveBeenCalled();
   });
 

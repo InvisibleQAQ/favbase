@@ -40,3 +40,7 @@
 - **2026-09-08 —— 第四个 Knowledge Tool 与 `coverage` 别名**。本 ADR 的决策一条未变：别名表仍是 `packages/favbase/commands.ts` 的单一常量，由 `tests/agent-bridge-cli-aliases.test.ts` 用 `describeTools()` 对账；`favbase call` / `favbase tools` 仍是零知识通道。
   - `e6a3231` 把 `getProcessingCoverage` 加为第四个 Knowledge Tool（Chat 与 Agent Bridge 同时获得），别名表随之加一行 `coverage`。`packages/favbase` 的源码只改了 `commands.ts` 这一条别名，`call` / `tools` 未动。
   - 因此 Decision 一节的「三个 Knowledge Tool」与「`search` / `tags` / `get`」描述的是 2026-08-28 的工具面，此后是四个工具、四个别名（`search` / `tags` / `get` / `coverage`）。正文保留原样，作为当日记录。
+- **2026-09-27 —— 退出码的归类规则**（docs/30 #2，D3-a / D4-a，用户决定）。四个码与「stdout 只出 JSON」都没变；变的是哪些失败落进哪个码，归类收进 `packages/favbase/exit-codes.ts` 一处。
+  - exit 1 从「用法或配置」扩成「用法、配置或其他本机问题」，并且是**默认档**：没有专属类型的失败打 `favbase: <message>`（无 usage 行）落 exit 1，交给用户读。此前默认是 exit 2，每个未分类失败都把 agent 送去跑一个会撞上同一错误的 doctor。
+  - exit 2 只留给 doctor 查得了的失败：`DaemonError`，以及工具错误 `extension-unavailable` / `extension-disconnected` / `timeout`。`timeout` 从 exit 3 挪来：扩展没按时回答不是参数问题，处置是跑 doctor、正常就重试一次。
+  - Decision 一节「第二个 `daemon run` 遇端口占用退出码 1」「端口被非 favbase 程序占用时退出码 2 并指引换端口」仍成立；换端口的指引改为设置卡给出的 setup 命令（它同时带 token 与端口），不再是跑不通的 `favbase setup --port`。正文保留原样。
