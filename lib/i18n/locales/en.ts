@@ -788,7 +788,8 @@ const en: Record<LocaleKeys, string> = {
   'welcome.picker.footnote':
     'Every saved item, body and vector lives in this browser. No account, no server.',
 
-  'welcome.request.heading': "Don't see your platform?",
+  'welcome.request.heading': "Don't see your",
+  'welcome.request.headingTail': 'platform?',
   'welcome.request.desc':
     'Six platforms are just the start. Tell us which one to collect next — open an issue on the repo.',
   'welcome.request.cta': 'Request it on GitHub',

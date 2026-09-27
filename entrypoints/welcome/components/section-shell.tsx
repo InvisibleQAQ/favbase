@@ -97,10 +97,27 @@ export function Eyebrow({ children, icon }: { children: ReactNode; icon?: Iconif
 }
 
 /**
- * Oversized display headline with the page's brand gradient. `hero` is the
- * first-screen size; `section` is every band below it.
+ * Which ink a `Headline` is painted in. The union is what keeps `tail` off the
+ * brand form: the tail fades white into 40% white, which only reads on a dark
+ * surface and vanishes on the light page.
+ */
+type HeadlineInk =
+  | { ink?: 'brand'; tail?: never }
+  | { ink: 'white'; tail?: ReactNode };
+
+/**
+ * Oversized display headline. `hero` is the first-screen size; `section` is
+ * every band below it.
  *
- * The gradient comes from `headlineGradient` above.
+ * `ink="brand"` (the default) paints `headlineGradient` above. `ink="white"` is
+ * solid `common.white` for the grey.900 CTA card at the end of the page
+ * (`platform-request.tsx`, Minimal's `home-advertisement`): the brand gradient
+ * starts at grey.800, which disappears into that card in light mode. The white
+ * form alone takes a `tail`, the closing word(s) faded white -> 40% white
+ * exactly as Minimal's advertisement title does. Head and tail are joined here,
+ * by locale: a space in latin scripts, nothing in CJK, so neither translated
+ * half carries the separator. It is a text node rather than Minimal's `ml: 1`:
+ * a line break between the halves then leaves no indent, and CJK gets no gap.
  *
  * Sizes stay on `clamp()` and do NOT switch to `variant="h1"/"h2"`: this app's
  * typography scale was deliberately compressed when `theme/core` was ported
@@ -122,12 +139,14 @@ export function Headline({
   size = 'section',
   component = 'h2',
   sx,
+  ink = 'brand',
+  tail,
 }: {
   children: ReactNode;
   size?: 'hero' | 'section';
   component?: ElementType;
   sx?: BoxProps['sx'];
-}) {
+} & HeadlineInk) {
   const { locale } = useTranslation();
   const isCjk = locale === 'zh-CN';
 
@@ -137,9 +156,11 @@ export function Headline({
       sx={[
         (theme) => ({
           m: 0,
-          // `background-clip: text` has to sit on the element that paints the
-          // glyphs, which is this one.
-          ...headlineGradient(theme),
+          // The brand gradient's `background-clip: text` has to sit on the
+          // element that paints the glyphs, which is this one.
+          ...(ink === 'white'
+            ? { color: theme.vars.palette.common.white }
+            : headlineGradient(theme)),
           fontFamily: theme.typography.fontSecondaryFamily,
           fontWeight: 800,
           lineHeight: isCjk ? 1.12 : 0.98,
@@ -154,6 +175,21 @@ export function Headline({
       ]}
     >
       {children}
+      {tail != null && (
+        <>
+          {!isCjk && ' '}
+          <Box
+            component="span"
+            sx={(theme) =>
+              theme.mixins.textGradient(
+                `to right, ${theme.vars.palette.common.white}, ${varAlpha(theme.vars.palette.common.whiteChannel, 0.4)}`
+              )
+            }
+          >
+            {tail}
+          </Box>
+        </>
+      )}
     </Box>
   );
 }

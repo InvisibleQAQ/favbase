@@ -2,7 +2,7 @@
 
 - 分支：`feat/minimal-ui-polish`（worktree `.claude/worktrees/minimal-ui-polish`，原因见 §6）
 - 参考：app.html ↔ <https://minimals.cc/dashboard>，welcome.html ↔ <https://minimals.cc/>；源码 `$MIN` = `C:\Users\18368\Desktop\00_myCode\35_minimal\minimal-dashboard\minimal-dashboard v7.7.0\Vite.js (JavaScript，TypeScript)\minimal-vite-ts-main\src`
-- 状态：**Step 1 已落地并补验完毕**（四处实现缺陷；首轮未验证的三项已于同日补验，见 §2「验证」）；Step 2–5 是设计项，**待用户决定**，未开始
+- 状态：**Step 1 已落地并补验完毕**（四处实现缺陷；首轮未验证的三项已于同日补验，见 §2「验证」）；**Step 2 已落地（2026-09-27）**——用户决定按 Minimal 原样移植深色 CTA 卡，替换点见 §4 Step 2，截图验收待按 §1 补；Step 3–5 是设计项，**待用户决定**，未开始
 
 ## §0 结论
 
@@ -47,17 +47,25 @@ BrowserOS neo 的 MCP 工具驱动不了扩展页：`tabs new` 打开 `chrome-ex
 - **[UNKNOWN] 书签卡片的站点图标空白**（`localhost`、`github.com` 等行）。`bookmark-card.tsx` 用 MV3 `_favicon` 端点，它对未知站点也返回 200 的默认图，所以 `Avatar` 的兜底图标不会出现。这张默认图在真 Chrome 里是灰色地球还是空白，没有核实；BrowserOS 里是空白。核实前不算缺陷，也不算正常。
 - **暗色下品牌图标是一块白底方块**（2026-09-27 补验暗色时看到）。app.html 有四处用 `/icon/128.png`（`nav-vertical.tsx`、`nav-mobile.tsx`、`chat-header.tsx`、`chat-message-list.tsx`），welcome 的 `BrandMark` 与 `bilibili-showcase.tsx` 用 `/icon/48.png`。`public/icon/` 下五张 PNG 都是 color type 2（RGB、无 alpha 通道、无 `tRNS`），128.png 四角实测 `rgba(255, 255, 255, 255)`。亮色下白底融进背景看不出来，暗色下就露出一块白方块（截图里看到的是侧栏与 Chat 标题两处；welcome 暗色没截，按文件格式推断相同）。这不是移植缺陷（资源本来就这样，Minimal 的 logo 是透明 SVG），而是缺一份应用内用的透明底 logo。修它要新资源，或决定暗色下给 logo 加底，所以不属于 Step 1，只记在这里。
 
-## §4 待决步骤（需用户决定，未开始）
+## §4 待决步骤（Step 2 已落地；Step 3–5 需用户决定，未开始）
 
-每一条都会推翻或扩展一条已记录的决定，所以不自作主张。
+每一条都会推翻或扩展一条已记录的决定，所以不自作主张。Step 2 的两条冲突已由用户 2026-09-27 决定推翻。
 
-### Step 2 — welcome 结尾改成 Minimal 的深色 CTA 大卡
+### Step 2 — welcome 结尾改成 Minimal 的深色 CTA 大卡（已落地 2026-09-27）
 
 - **Minimal**：`$MIN/sections/home/home-advertisement.tsx`（179 行）：`grey.900` 底 + 36px 网格底纹 + `borderRadius: 3` + 插图 + 两个按钮，标题后半句是白色淡出渐变。
-- **favbase 现状**：`entrypoints/welcome/sections/platform-request.tsx`，居中标题 + 描述 + outlined 按钮。
-- **冲突**：① docs/28 §3.4 **明确拒绝过** `Advertisement`（与 Pricing/Testimonials 等一起，理由是「销售页段落」）；② `platform-request.tsx` 的注释写明该段「刻意低调（outlined、无光晕），不和上方 picker 的『进入 favbase』主 CTA 抢」。深色大卡正好会跟主 CTA 抢。
-- **如果要做**：只借外壳（深底 + 网格底纹 + 圆角），文案和按钮不变；需先推翻上面两条，并决定主 CTA 与它的主次关系。
-- **验收**：滚动截图里主 CTA 仍是视觉第一；亮暗两种配色都看。
+- **favbase 原状**：`entrypoints/welcome/sections/platform-request.tsx`，居中标题 + 描述 + outlined 按钮。
+- **冲突**（已推翻）：① docs/28 §3.4 **明确拒绝过** `Advertisement`（与 Pricing/Testimonials 等一起，理由是「销售页段落」）；② `platform-request.tsx` 的注释写明该段「刻意低调（outlined、无光晕），不和上方 picker 的『进入 favbase』主 CTA 抢」。深色大卡正好会跟主 CTA 抢。
+- **用户决定（2026-09-27）**：**按 Minimal 原样移植**，只在 Minimal 的内容 favbase 没有对应物的地方替换。本节原先的建议「只借外壳，文案和按钮不变」作废（用户先选过它，随即更正为按 Minimal）。docs/28 §3.4 的 Advertisement 行已改注（划掉并注明移植日期，不删行），`platform-request.tsx` 的头注释改写为移植说明。
+- **照搬**：外壳全部同值（grey.900 底且两种配色都是、`bgGradient` 两条 `grey.500` 4% 的 1px 线织成 36px 网格、`py 8 / px 5`、`borderRadius 3`、grey.800 边框、`overflow hidden`、md 起图左文右并左对齐 / xs 纵排居中）；右上光斑（`opacity 0.4`、`maxWidth 420`、`zIndex 7`）；火箭（宽 360、`aspectRatio 1/1`、`y [-20, 0, -20]` 4s 无限漂浮）；标题白字 + 尾词白 → 40% 白淡出；`Stack spacing 5`；动画方向与距离（图 inUp 120 即 `varFade` 默认距离、标题 inDown 24、按钮 inRight 24），用 `FadeIn` 表达（docs/28 D6：本页有意节奏走 `FadeIn`，没有另建 `MotionViewport`）。本段 `pt: 0` 与原 `pb` 不变——Minimal 的这段自身也不带纵向 padding，靠前一段的底部留白。
+- **替换点**：
+  - **描述段**：Minimal 没有。保留在标题下，固定 `grey.500`（#919EAB on #141A21 ≈ 6.4:1）；不用 `text.secondary`，它随配色变，卡片不变。
+  - **按钮**：一个，不是两个。issue 外链改 `contained primary size large`（Minimal「Purchase now」的形），保留 `eva:diagonal-arrow-right-up-fill` 外链图标（Minimal 那个按钮没图标，但它也不是外链），不加 `ctaGlowShadow`（Minimal 没有）。本段只有这一个动作，docs/28 D9 也定了本页零新外链。
+  - **标题**：字号仍由 `Headline` 的 clamp 出，不换 `variant h1/h2`（docs/28 E2）。`section-shell.tsx` 的 `Headline` 新增 `ink="white"` 形态（纯 `common.white`，品牌渐变从 grey.800 起笔，亮色下落在 grey.900 上看不见）与只有该形态收的 `tail`（尾词淡出）。i18n 拆成 `welcome.request.heading`（zh「没找到你的」/ en「Don't see your」）+ 新增 `welcome.request.headingTail`（「平台？」/「platform?」）；两段之间 en 一个空格、zh 不加，拼接归 `Headline`、两个翻译都不带分隔符。没用 Minimal 的 `ml: 1`：中文里它多出一道缝，英文换行落在两段之间时行首会留 8px 缩进。
+  - **火箭**：`$MIN` 同级的 `public/assets/illustrations/illustration-rocket-large.webp` 原字节拷到本仓库 `public/assets/illustrations/`（9372 字节，`cmp` 一致；保留 Minimal 路径便于溯源），是仓库第一张 Minimal 位图资源。Minimal 是付费模板、本仓库 GPL-3.0 公开，这张图的再分发许可 **[UNKNOWN]**，已向用户说明，用户接受。纯装饰，`alt=""`，不出英文硬编码 alt。`MotionBox` 的类型是 div、收不了 `src`/`alt`，所以 `<img>` 嵌在漂浮层里，而不是像 Minimal 那样自己就是 `m.img`。漂浮是声明式 `animate`，由全页 `MotionConfig reducedMotion="user"` 管。
+  - **未抄**：Minimal 卡片 `sx` 里的 `spacing: 5`——写在 Box 的 `sx` 里，输出的是无效 CSS，在 Minimal 里本来就不生效；`renderLines`（`FloatLine` / `FloatPlusIcon`）归 Step 4。
+- **验收**：原验收「滚动截图里主 CTA 仍是视觉第一」**随用户决定作废**——按 Minimal 移植后，这张深色大卡的视觉分量不再让位于上方 picker 的主 CTA，这是选「按 Minimal」的直接后果。现验收：亮暗两种配色、1440 宽与 md 以下各截图，与 minimals.cc 首页 advertisement 同形（外壳、横排、标题尾部淡出、按钮形态）；深底上标题、描述、按钮在两种配色下都可读。
+- **验证**：新增 `entrypoints/welcome/components/section-shell.test.tsx` 锁首尾拼接（en 有空格 / zh 无；把条件反过来两例都红，已验证）。`pnpm compile` 通过；`pnpm test`：主仓库 201 个文件 / 1570 例，`packages/*` 15 个文件 / 267 例，全部通过。主仓库前两次整跑各有一例 5 s 超时（`lib-import-smoke` 的 bilibili 冷导入，单跑即过），本改动之前的 HEAD 整跑同样有一例超时（`lib/database/db.test.ts`），是本机 CPU 争用下的既有抖动，第三次整跑全绿。`pnpm build` 后火箭落在 `.output/chrome-mv3/assets/illustrations/`（`cmp` 一致），与 Vite 自己产出的 `assets/` 同目录并存、不冲突。截图待按 §1 流程补。
 
 ### Step 3 — section 标题换成 Minimal 的样式
 

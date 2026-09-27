@@ -770,7 +770,10 @@ const zhCN = {
   'welcome.picker.footnote':
     '所有收藏、正文与向量都存在这台浏览器里。没有账号，没有服务器。',
 
-  'welcome.request.heading': '没找到你的平台？',
+  // One title in two halves: `Headline` joins them (a space in en, none in zh)
+  // and fades the tail to 40% white. Neither half carries the separator.
+  'welcome.request.heading': '没找到你的',
+  'welcome.request.headingTail': '平台？',
   'welcome.request.desc':
     '六个平台只是起点。告诉我们下一个该收录谁——去仓库开一个 issue，说不定下个版本就有。',
   'welcome.request.cta': '去 GitHub 提需求',
