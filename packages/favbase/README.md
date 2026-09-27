@@ -108,7 +108,7 @@ Resolution order is environment variable, then `~/.favbase/config.json`, then th
 ## Links
 
 - Extension, source and issues: [github.com/InvisibleQAQ/favbase](https://github.com/InvisibleQAQ/favbase)
-- The Agent Skill as the latest release ships it: [`skills/favbase/SKILL.md`](https://github.com/InvisibleQAQ/favbase/blob/favbase-latest/skills/favbase/SKILL.md) (the `favbase-latest` branch is the commit the latest release was published from; `main` may already describe the next one)
+- The Agent Skill this package installs: [`skills/favbase/SKILL.md`](https://github.com/InvisibleQAQ/favbase/blob/main/skills/favbase/SKILL.md)
 
 ## License
 

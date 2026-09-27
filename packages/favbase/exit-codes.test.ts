@@ -119,8 +119,9 @@ describe('describeToolError', () => {
  * unwritable log.
  *
  * Both tables ship with the CLI they describe: SKILL.md is bundled into it (and
- * `npx skills add` is pointed at the `favbase-latest` branch, the last release
- * commit), the README is the npm page of that version. INSTALL.md, read from
+ * `npx skills add` copies `main`'s, which the release rule keeps equal to the
+ * latest release's -- packages/favbase/CLAUDE.md, Release), the README is the
+ * npm page of that version. INSTALL.md, read from
  * `main` by agents about to install the last release, carries no table at all
  * (docs/30 #4, D6-a); `tests/agent-bridge-cli-aliases.test.ts` keeps it that way.
  */

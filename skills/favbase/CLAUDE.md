@@ -3,13 +3,15 @@
 `SKILL.md` is the single source bundled into `favbase` and installed for
 Claude Code/Codex. It documents commands and recovery behavior; it never reads
 the collection itself. The one other way out is `npx skills add
-InvisibleQAQ/favbase#favbase-latest -g` (root README; `docs/adr/0003`
-amendment 2026-09-27): that branch is the commit the latest npm release was
-published from, so the copy it installs is the one that CLI bundles, byte for
-byte -- which is why the root `.gitattributes` pins this file to LF (a ref makes
-the skills tool git-clone, and a clone under `core.autocrlf=true` would be CRLF,
-i.e. `stale`). `main`'s copy leads the release and is never what a user should
-install. The skills tool copies this whole directory, so this file and
+InvisibleQAQ/favbase -g` (root README; `docs/adr/0003` amendment 2026-09-27),
+which copies **this file as it stands on `main`**. So `main`'s SKILL.md must
+always be the one the latest npm release bundles: **edit it only in a release
+commit, published in the same sitting** (`packages/favbase/CLAUDE.md`,
+Release, which owns the rule). An edit that lands ahead of npm gives every npx
+user a copy doctor calls `stale`, describing a CLI they do not have. The root
+`.gitattributes` pins this file to LF for the same reason: the skills tool
+git-clones this repository, and a clone under `core.autocrlf=true` would be
+CRLF, i.e. `stale`. It copies this whole directory, so this file and
 INSTALL.md land in the user's skill folder too.
 
 `INSTALL.md` is the **Agent Setup Guide** (CONTEXT.md; `docs/adr/0005`) and is
@@ -61,9 +63,9 @@ Exit 2 runs `favbase doctor` and acts on its `troubleshooting` list -- there
 whatever fails since docs/30 #3, with the failed step's problem first -- and
 retries once when it reports ok (a timeout). The row used to add "or its
 stderr message when it prints no report" for 0.2.1's doctor, which printed one
-line on a daemon failure; docs/30 #4 dropped it, because this copy now only
-reaches the CLI it ships with (bundled, or through `favbase-latest`), and the
-test refuses it back. Exit 3 names exactly the codes the agent fixes itself
+line on a daemon failure; docs/30 #4 dropped it, because this copy reaches
+users only as the latest release ships it (bundled, or `main`'s copy under the
+release rule above), and the test refuses it back. Exit 3 names exactly the codes the agent fixes itself
 (`invalid-args`, `unknown-tool`); every other goes to the user.
 `packages/favbase/cli-main.test.ts` checks the usage line quoted here is the
 one the CLI prints. The same file checks that this file and the npm README both carry

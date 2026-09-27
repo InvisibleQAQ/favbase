@@ -89,7 +89,7 @@ favbase ships an [Agent Skill](https://agentskills.io) and a small CLI, `favbase
 https://raw.githubusercontent.com/InvisibleQAQ/favbase/main/skills/favbase/INSTALL.md
 ```
 
-The CLI's commands, exit codes and configuration are on its [npm page](https://www.npmjs.com/package/favbase). Setup installs the skill for Claude Code and Codex; for any other agent, `npx skills add InvisibleQAQ/favbase#favbase-latest -g` installs the copy that ships with the latest CLI release.
+The CLI's commands, exit codes and configuration are on its [npm page](https://www.npmjs.com/package/favbase). Setup installs the skill for Claude Code and Codex; for any other agent, `npx skills add InvisibleQAQ/favbase -g` installs the copy that ships with the latest CLI release.
 
 ## Development
 

@@ -325,21 +325,23 @@ describe('hand-written top_k bounds match the live search schema', () => {
 
 /**
  * `npx skills add` (vercel-labs/skills) is the one route that installs the
- * skill without the CLI, and it copies whatever the named ref holds. From
- * `main` that is a SKILL.md written for the next release, and doctor --
- * comparing byte for byte with the copy the installed CLI bundles -- calls it
- * stale; following that advice overwrites the copy the skills tool manages
- * (docs/30 #4). So the route is kept (D7-b) but pointed at `favbase-latest`,
- * the branch each npm publish fast-forwards to its release commit
- * (packages/favbase/CLAUDE.md, Release): what it installs is what the latest
- * CLI ships. A ref makes that tool git-clone instead of fetching raw bytes,
- * and a clone under core.autocrlf=true checks the file out as CRLF (measured,
- * Git for Windows' default), hence the `.gitattributes` line.
+ * skill without the CLI, and it copies `main`'s SKILL.md. doctor compares
+ * every copy byte for byte with the one the installed CLI bundles, so the
+ * route is only sound because `main`'s SKILL.md is kept equal to the one the
+ * latest npm release bundles (packages/favbase/CLAUDE.md, Release; docs/30 #4,
+ * D7-b). That rule is release discipline and has no guard here; what is
+ * guarded is the rest of the route:
+ * - `-g`. Without it the tool installs into the current project
+ *   (`./.agents/skills/`, `./.claude/skills/`), where doctor never looks.
+ * - No `#ref`. `main` is the one ref the release rule pins.
+ * - LF. For a repository outside its raw-download allowlist the tool always
+ *   git-clones, and a clone under core.autocrlf=true -- Git for Windows'
+ *   default -- checks the file out as CRLF (measured), hence `.gitattributes`.
  */
-describe('npx skills add installs the skill the latest release ships', () => {
+describe('npx skills add installs main, globally, with LF endings', () => {
   const ROOT = path.resolve(__dirname, '..');
-  const SKILL_RELEASE_BRANCH = 'favbase-latest';
   const slug = REPO_URL.replace(/^https:\/\/github\.com\//, '');
+  const command = `npx skills add ${slug} -g`;
   const read = (file: string) => readFileSync(path.resolve(ROOT, file), 'utf8');
   // Every markdown a user or an agent reads outside the extension.
   const PUBLIC_MARKDOWN = [
@@ -350,27 +352,19 @@ describe('npx skills add installs the skill the latest release ships', () => {
     'skills/favbase/SKILL.md',
   ];
 
-  it('the root README keeps the route, pointed at the release branch', () => {
-    expect(read('README.md')).toContain(`npx skills add ${slug}#${SKILL_RELEASE_BRANCH} -g`);
+  it('the root README keeps the route', () => {
+    expect(read('README.md')).toContain(command);
   });
 
-  it('no public markdown points `npx skills add` at another ref', () => {
+  it('every public `npx skills add` is exactly that command', () => {
     const offenders = PUBLIC_MARKDOWN.flatMap((file) =>
       read(file)
         .split('\n')
         .map((line, index) => [index + 1, line] as const)
-        .filter(([, line]) => /npx skills add/.test(line) && !line.includes(`${slug}#${SKILL_RELEASE_BRANCH}`))
+        .filter(([, line]) => /npx skills add/.test(line) && !line.includes(command))
         .map(([line, text]) => `${file}:${line} ${text.trim()}`),
     );
-    expect(offenders, `\`npx skills add\` must name ${slug}#${SKILL_RELEASE_BRANCH}`).toEqual([]);
-  });
-
-  // The npm page shows the latest version's README; a link into `main` there
-  // presents the next release's skill as the one the package installs.
-  it('the npm README links the skill at the release branch, not main', () => {
-    const readme = read('packages/favbase/README.md');
-    expect(readme).not.toContain('/blob/main/skills/favbase/SKILL.md');
-    expect(readme).toContain(`/blob/${SKILL_RELEASE_BRANCH}/skills/favbase/SKILL.md`);
+    expect(offenders, `\`npx skills add\` must read \`${command}\`: global, no ref`).toEqual([]);
   });
 
   it('.gitattributes checks SKILL.md out with LF endings', () => {

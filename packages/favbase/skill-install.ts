@@ -83,8 +83,8 @@ function skillPath(root: string): string {
  * resave it as CRLF, and a CRLF bundle would turn every LF copy stale.
  * `main` passes it through here once, so install-skill and setup always write
  * LF and `inspectSkills` compares against LF -- the same bytes `npx skills add
- * InvisibleQAQ/favbase#favbase-latest` clones (docs/30 #4). Installed copies
- * are never normalized.
+ * InvisibleQAQ/favbase` clones (docs/30 #4). Installed copies are never
+ * normalized.
  */
 export function canonicalSkillContent(content: string): string {
   return content.replace(/\r\n?/g, '\n');

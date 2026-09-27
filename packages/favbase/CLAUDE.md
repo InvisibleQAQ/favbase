@@ -361,9 +361,10 @@ provides no MCP server.
   at `main`'s entry (`canonicalSkillContent`): tsup bundles the working-tree
   file, and a CRLF bundle would make every LF copy `stale` forever. And the
   root `.gitattributes` checks `skills/favbase/SKILL.md` out as LF (docs/30
-  #4): `npx skills add InvisibleQAQ/favbase#favbase-latest` git-clones it, and
-  a clone under `core.autocrlf=true` -- Git for Windows' default -- is CRLF
-  (measured). Don't normalize anywhere else, and never the installed copy.
+  #4): `npx skills add InvisibleQAQ/favbase` git-clones it (the skills tool
+  fetches raw bytes only for an allowlist of owners), and a clone under
+  `core.autocrlf=true` -- Git for Windows' default -- is CRLF (measured). Don't
+  normalize anywhere else, and never the installed copy.
 
 ## Commands
 
@@ -391,13 +392,29 @@ Published to npm as the unscoped package `favbase`. Its version line is
 **independent of the root `package.json`**, which versions the Chrome extension
 and never reaches npm (the root is `private: true`).
 
-A version bump **is** a release: bump, publish and move `favbase-latest` in
-one sitting, and never merge a bump you do not publish. The 0.2.0 and 0.2.1
-release commits both said "Not published.", and for days `main` carried a
-version and agent-facing markdown that npm did not (docs/30 #4). That
-discipline does not stop `main`'s markdown from leading the release between
-publishes -- nothing can -- which is why INSTALL.md describes no CLI behaviour
-and `npx skills add` is pointed at `favbase-latest`, not `main`.
+**`main`'s `skills/favbase/SKILL.md` is always the one the latest npm release
+bundles** (user decision, 2026-09-27; docs/30 #4, D7-b). `npx skills add
+InvisibleQAQ/favbase -g` (root README) copies `main`'s SKILL.md, and doctor
+compares every copy byte for byte with the one the installed CLI bundles. A
+`main` copy that runs ahead of npm reads `stale`, and it describes a CLI the
+user does not have (docs/30 #4 found one: an exit-2 row that dropped advice
+0.2.1's doctor still needs). So:
+
+- A commit that changes SKILL.md is a release commit: it bumps the version
+  (step 1) and is published in the same sitting. A CLI change that needs a
+  SKILL.md edit ships in that release, not before it.
+- A bump is a release: never merge a bump you do not publish. The 0.2.0 and
+  0.2.1 release commits both said "Not published.", and for days `main`
+  carried a version and agent-facing markdown that npm did not.
+- Nothing guards this -- whether `main` matches npm is a network question --
+  so step 6 is the check. No release branch or tag stands in for `main`: a
+  `favbase-latest` branch that each publish would move was proposed and
+  declined, so this rule is all that keeps the route sound.
+- The rule was broken when it was written: `4dc0e01` and `cba7921` changed
+  SKILL.md after 0.2.1. The next publish restores it.
+
+The rest of `main` -- CLI code, INSTALL.md -- may still lead the release, which
+is why INSTALL.md describes no CLI behaviour.
 
 1. Bump `version` here **and** `metadata.version` in `skills/favbase/SKILL.md`
    (`tests/agent-bridge-cli-aliases.test.ts` fails when they differ). Never
@@ -418,16 +435,9 @@ and `npx skills add` is pointed at `favbase-latest`, not `main`.
    `npm i -g favbase && favbase --version`. The global install is the
    regression check for the entry-point guard removed in docs/27 Step 0.5: a
    symlinked `bin` used to exit 0 with empty output.
-6. `git push origin <bump commit>:refs/heads/favbase-latest` -- the commit you
-   published from, as a fast-forward (never `--force`). `npx skills add
-   InvisibleQAQ/favbase#favbase-latest` installs from it, so it must hold the
-   SKILL.md the release bundles: `favbase install-skill --dir <tmp>` must write
-   a file identical to `git show favbase-latest:skills/favbase/SKILL.md`.
-   0.2.1 predates this step: its branch goes at `2fbcc16`, whose SKILL.md
-   matches the 0.2.1 bundle byte for byte (checked 2026-09-27 against the
-   registry tarball). That commit predates `.gitattributes`, so until the next
-   release moves the branch, a Windows clone of it is CRLF and doctor calls it
-   `stale` once.
+6. Push the bump commit to `main`, then check the rule above:
+   `favbase install-skill --dir <tmp>` (the CLI you just installed from npm)
+   must write a file identical to `git show origin/main:skills/favbase/SKILL.md`.
 
 Use `npm publish`, not `pnpm publish`: pnpm wants the OTP passed as `--otp`,
 while the interactive 2FA prompt is the whole point. Nothing here depends on
