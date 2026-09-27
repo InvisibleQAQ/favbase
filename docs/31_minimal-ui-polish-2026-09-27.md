@@ -2,7 +2,7 @@
 
 - 分支：`feat/minimal-ui-polish`（worktree `.claude/worktrees/minimal-ui-polish`，原因见 §6）
 - 参考：app.html ↔ <https://minimals.cc/dashboard>，welcome.html ↔ <https://minimals.cc/>；源码 `$MIN` = `C:\Users\18368\Desktop\00_myCode\35_minimal\minimal-dashboard\minimal-dashboard v7.7.0\Vite.js (JavaScript，TypeScript)\minimal-vite-ts-main\src`
-- 状态：**Step 1 已落地**（四处实现缺陷）；Step 2–5 是设计项，**待用户决定**，未开始
+- 状态：**Step 1 已落地并补验完毕**（四处实现缺陷；首轮未验证的三项已于同日补验，见 §2「验证」）；Step 2–5 是设计项，**待用户决定**，未开始
 
 ## §0 结论
 
@@ -14,9 +14,9 @@ BrowserOS neo 的 MCP 工具驱动不了扩展页：`tabs new` 打开 `chrome-ex
 
 1. **CDP 端口**：`%LOCALAPPDATA%\BrowserClaw\User Data\.browseros\config.json` 的 `ports.cdp`（本次为 `9110`）。`GET /json/list` 列目标，`PUT /json/new?<url>` 开标签，`GET /json/close/<id>` 关标签。
 2. **截图脚本**：Node 22 自带 `WebSocket`，发 `Emulation.setDeviceMetricsOverride`（1440×900）→ `Page.navigate` → `Page.captureScreenshot` 即可，零依赖。
-3. **截图前必须 `Page.bringToFront`**：后台标签没有 rAF，welcome.html 的 `motion` hero 与 whileInView 淡入永远停在初始帧，整页看起来是空白。
+3. **截图前必须 `Page.bringToFront`**：后台标签没有 rAF，welcome.html 的 `motion` hero 与 whileInView 淡入永远停在初始帧，整页看起来是空白。CSS 过渡同理：只发 `Runtime.evaluate` 不会把标签提到前台（可能是 `visibilityState: hidden`），折叠 Chat rail 后立刻量宽度，读到的仍是 320。量尺寸前先截一张图（截图会顺带提到前台），再量。
 4. **welcome.html 不能整页截图**：它是滚动驱动的（hero 钉住层、叠卡、淡入），整页截图只得到大片空白。改为 `window.scrollTo` 逐屏截（本次 12 个等距位置）。
-5. **暗色模式**：`Emulation.setEmulatedMedia prefers-color-scheme` 对 app.html 无效——模式来自 storage（`public/theme-init.js`），要点 Header 的 `ThemeModeButton`。本次**没看暗色**。
+5. **暗色模式**：`Emulation.setEmulatedMedia prefers-color-scheme` 对 app.html 无效——模式存在页面 `localStorage` 的 `favbase-color-mode`（`public/theme-init.js`），要点 Header 的 `ThemeModeButton`。这个 key 是所有扩展页共用的，按 MUI 的实现，用户开着的扩展页大概率会经 `storage` 事件跟着变暗（[UNKNOWN] 本次未实测），所以先记下原值、截完立刻点回去。
 6. **装载分支构建**：扩展从主 checkout 的 `.output/chrome-mv3` 以 unpacked 方式加载。在 worktree 里 `pnpm build`，把主 checkout 的 `.output/chrome-mv3` 改名为 `chrome-mv3.main-backup`，再把 worktree 的 `.output/chrome-mv3` 拷过去。
 7. **重载扩展**：在任一 app.html 目标里 `Runtime.evaluate` `chrome.runtime.reload()`。它会关掉**所有**扩展页（包括用户自己开着的），之后要重新 `/json/list` 找目标、并把用户的标签重新打开。
 8. **Minimal 对照截图**：在自己新开的标签里截 `/dashboard`、`/dashboard/analytics`、`/dashboard/chat`、`/dashboard/user/account`、`/dashboard/job` 与首页滚动序列；不碰用户开着的 minimals.cc 标签。
@@ -36,11 +36,16 @@ BrowserOS neo 的 MCP 工具驱动不了扩展页：`tabs new` 打开 `chrome-ex
 
 - 分支构建装进 BrowserOS 后截图对照：按钮是完整圆（与 Minimal 同形）；rail 右边框贯通卡片全高；Settings 两个按钮与输入框垂直居中；叠卡保持内容高度，后一张盖住前一张，无大片空白。
 - `pnpm compile` 通过；`pnpm test`：主仓库 200 个文件 / 1568 例，`packages/*` 15 个文件 / 267 例，全部通过。
-- **未验证**：rail 在会话很多时能否滚动（本次只有「No conversations yet」）；侧栏折叠到 88px 后按钮的样子（修的是绘制顺序，两种形态同理，但没截图）；暗色模式。
+- **补验（2026-09-27，同一构建，1440×900）**：首轮留下的三项未验证，全部用可量化判据补完，没有验出问题，代码未再改动。
+  - **会话很多时 rail 能滚动**：库里没有会话，所以往 `[data-slot=chat-nav] .simplebar-content` 追加 40 个 72px 的假行（纯 DOM，不写 PGlite，刷新即消失）。展开态（320）：`.simplebar-content-wrapper` 的 `scrollHeight 2922 > clientHeight 692`，`scrollTop = 500` 读回 500，竖向滚动条可见；折叠态（96）：`2892 > 704`，`scrollTop = 700` 读回 700。两种形态下 nav 与卡片 `section` 都仍是高 800、底边 880，卡片没有被撑高，列表也没有溢出到被 `overflow: hidden` 裁掉。
+  - **侧栏两种形态的按钮都完整**：按钮与 rail 都是 `position: fixed`、`z-index: 1201`，按钮的前一个兄弟节点就是 rail。在按钮左边缘内 3px、1/4、中心、3/4 四个点做 `document.elementFromPoint`，展开态（rail 右缘 300，按钮 287–313）与折叠态（rail 右缘 88，按钮 75–101）四个点都命中按钮本身——这是绘制顺序修复的直接证据，截图只是旁证。
+  - **暗色模式**：rail 去掉 neutral 底后是透明的，落在卡片底色 `rgb(28, 37, 46)` 上；右边框 `1px solid rgba(145, 158, 171, 0.2)` 在暗色下仍贯通卡片全高（nav 与卡片都是 800）。按钮四点命中测试在暗色下同样全部命中按钮。Settings 按钮对齐与 welcome 叠卡跟配色无关，没有重截。
+  - 顺带发现一个与 Step 1 无关的暗色问题，记在 §3。
 
 ## §3 未定性项
 
 - **[UNKNOWN] 书签卡片的站点图标空白**（`localhost`、`github.com` 等行）。`bookmark-card.tsx` 用 MV3 `_favicon` 端点，它对未知站点也返回 200 的默认图，所以 `Avatar` 的兜底图标不会出现。这张默认图在真 Chrome 里是灰色地球还是空白，没有核实；BrowserOS 里是空白。核实前不算缺陷，也不算正常。
+- **暗色下品牌图标是一块白底方块**（2026-09-27 补验暗色时看到）。app.html 有四处用 `/icon/128.png`（`nav-vertical.tsx`、`nav-mobile.tsx`、`chat-header.tsx`、`chat-message-list.tsx`），welcome 的 `BrandMark` 与 `bilibili-showcase.tsx` 用 `/icon/48.png`。`public/icon/` 下五张 PNG 都是 color type 2（RGB、无 alpha 通道、无 `tRNS`），128.png 四角实测 `rgba(255, 255, 255, 255)`。亮色下白底融进背景看不出来，暗色下就露出一块白方块（截图里看到的是侧栏与 Chat 标题两处；welcome 暗色没截，按文件格式推断相同）。这不是移植缺陷（资源本来就这样，Minimal 的 logo 是透明 SVG），而是缺一份应用内用的透明底 logo。修它要新资源，或决定暗色下给 logo 加底，所以不属于 Step 1，只记在这里。
 
 ## §4 待决步骤（需用户决定，未开始）
 
