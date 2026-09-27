@@ -28,3 +28,11 @@
 - **第 4 份手写安装说明**（前三份：设置卡 `settings.agentBridge.commandsStep1..3`、`SKILL.md` Prerequisites、`packages/favbase/README.md`）。四份会漂——e462948 重命名后 `SKILL.md:25` 与 `README.md:21` 立刻就漂了，无人发现，因为零守卫。所以 `tests/agent-bridge-cli-aliases.test.ts` 扩为对账包名、`setup` 命令形状与设置页路径；它原本就是 SKILL.md 那两份平台清单的对账处，同一类问题并进同一个文件，不另起。
 - **welcome → GitHub 的外链多了一处**。`entrypoints/welcome/CLAUDE.md` 原记「footer 刻意零新外链，repo 链接本页已两处」；现在是三处，但第三处是**可复制文本**不是 `<a>`，用户不会误点离开引导流。
 - `CONTEXT.md` 增术语 **Agent Setup Guide** 与一条 Flagged ambiguity：仓库里那份装 CLI 的 markdown 不是 Skill。Skill 的定义一个字没改。
+
+## Amendments
+
+- **2026-09-27 —— Guide 只写跨版本稳定的内容，不再有退出码表**（docs/30 #4，D6-a，用户决定）。URL、路径、分支、「中途必须停一次」全部不变；变的是 Guide 可以写什么。
+  - 这条 URL 从 `main` 被读，而 Guide 让 agent 执行的 `npm install -g favbase` 装的是**已发布的最新版**。从 `main` 上第一个改动 CLI 行为的 commit 起，到下一次发布为止，Guide 里凡是描述 CLI 行为的句子，描述的都是读者装不到的版本。它的退出码表就是这样：0.2.0 时代的一行把「写不了 skill 文件」说成「Chrome 关了」；docs/30 #2、#3 期间每一行都得手工对「0.2.1 + `main`」两个版本核对，还要为 0.2.1 留一句对新 CLI 已经不可达的话。
+  - 所以 Guide 只保留跨版本稳定的步骤：Node 版本、安装、停下来要配对命令、原样执行、`favbase doctor`、第一次调用可能要等一个 alarm 周期（这是扩展侧行为）。失败时只给一条通用规则：stderr 给用户看，以随已装 CLI 一起来的东西为准，也就是第 4 步写到磁盘上的 SKILL.md（里面的退出码表就是为这个版本写的）、`favbase doctor`、`favbase --help`。
+  - 考虑过的另两条路：在 Guide 里钉死 `favbase@X.Y.Z` 并用测试对账 `package.json`，挡不住「行为已改、版本号还没 bump」这段窗口，还会和 CLI 的更新提示互相打架；维持双版本手工核对，则无法测试。删表之后，这个问题就不存在了。
+  - 守卫：`tests/agent-bridge-cli-aliases.test.ts` 拒绝 Guide 里任何 `exit <n>` / `exit code <n>`。发布流程同时改成「bump 与 `npm publish` 同一步」（`packages/favbase/CLAUDE.md` 的 Release 一节），不再出现「版本号改了、没发布」的 commit。这条纪律本身关不上窗口，关窗口靠的是删表。

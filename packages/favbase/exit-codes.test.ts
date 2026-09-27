@@ -11,7 +11,6 @@ import {
   describeError,
   describeToolError,
   EXIT_CODES,
-  EXIT_OK,
   EXIT_TOOL,
   EXIT_UNAVAILABLE,
   EXIT_USAGE,
@@ -113,24 +112,23 @@ describe('describeToolError', () => {
 
 /**
  * The exit-code tables are the agent's error handling (silent-failure guide,
- * Gotcha 5): SKILL.md for an agent using favbase, INSTALL.md for one
- * installing it, the npm README for a person. Each row has to fit every
- * failure the module above puts in its code. Before docs/30 #2 only exit 1
- * was reconciled, and the other rows told an agent to "adjust the arguments"
- * after a timeout and "Chrome closed" after an unwritable log.
+ * Gotcha 5): SKILL.md for an agent using favbase, the npm README for a person.
+ * Each row has to fit every failure the module above puts in its code. Before
+ * docs/30 #2 only exit 1 was reconciled, and the other rows told an agent to
+ * "adjust the arguments" after a timeout and "Chrome closed" after an
+ * unwritable log.
  *
- * INSTALL.md is read from `main` by agents that install the published CLI, so
- * its rows must stay true for the last release too; these anchors are chosen
- * to hold for both (the 实施记录 of docs/30 #2 checks each row).
+ * Both tables ship with the CLI they describe: SKILL.md is bundled into it (and
+ * `npx skills add` is pointed at the `favbase-latest` branch, the last release
+ * commit), the README is the npm page of that version. INSTALL.md, read from
+ * `main` by agents about to install the last release, carries no table at all
+ * (docs/30 #4, D6-a); `tests/agent-bridge-cli-aliases.test.ts` keeps it that way.
  */
 describe('the exit-code tables in the markdown', () => {
   const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8').split(/\r?\n/);
-  const failing = EXIT_CODES.map(([code]) => code).filter((code) => code !== EXIT_OK);
 
   const TABLES = {
     'skills/favbase/SKILL.md': { lines: read('../../skills/favbase/SKILL.md'), row: /^\| (\d+) \|/, codes: EXIT_CODES.map(([code]) => code) },
-    // "When something is wrong": failures only.
-    'skills/favbase/INSTALL.md': { lines: read('../../skills/favbase/INSTALL.md'), row: /^\| exit code (\d+) \|/, codes: failing },
     'packages/favbase/README.md': { lines: read('./README.md'), row: /^\| (\d+) \|/, codes: EXIT_CODES.map(([code]) => code) },
   };
 
@@ -149,27 +147,30 @@ describe('the exit-code tables in the markdown', () => {
     expect(codes).toEqual(table.codes);
   });
 
-  const AGENT_TABLES = ['skills/favbase/SKILL.md', 'skills/favbase/INSTALL.md'] as const;
+  const AGENT_TABLE = 'skills/favbase/SKILL.md';
 
-  describe.each(AGENT_TABLES)('%s', (file) => {
+  describe(AGENT_TABLE, () => {
+    const file = AGENT_TABLE;
+
     it('exit 1: recognises a usage error by its closing line, and sends any other to the user', () => {
       const row = rowFor(file, EXIT_USAGE);
       expect(row).toContain(`\`${USAGE_LINE}\``);
       expect(row).toContain('show the stderr message to the user');
     });
 
-    // A DaemonError and a timeout land here (in 0.2.1, an untyped failure
-    // too). Doctor reports ok on a slow tool, hence the retry. Since docs/30 #3
-    // this CLI's doctor prints its report whatever fails, but the published
-    // 0.2.1 prints one stderr line for a DaemonError -- and INSTALL.md is read
-    // from `main` by agents installing 0.2.1, while `npx skills add` pairs
-    // `main`'s SKILL.md with it. So the "no report" clause stays until those
-    // readers are gone (docs/30 #4, D6/D7).
-    it('exit 2: runs doctor, acts on its report or its stderr, and retries once when it is ok', () => {
+    // A DaemonError and a timeout land here. Doctor reports ok on a slow tool,
+    // hence the retry. Since docs/30 #3 doctor prints its report whatever
+    // fails, with the failed step's problem in `troubleshooting`; the published
+    // 0.2.1 printed one stderr line instead, and this row carried a "when it
+    // prints no report" clause for it until docs/30 #4 stopped pairing `main`'s
+    // SKILL.md with a released CLI (D6-a, D7-b). The CLI this copy ships in
+    // always reports, so the clause must not come back.
+    it('exit 2: runs doctor, acts on its troubleshooting list, and retries once when it is ok', () => {
       const row = rowFor(file, EXIT_UNAVAILABLE);
       expect(row).toContain('`favbase doctor`');
-      expect(row).toContain('its stderr message when it prints no report');
+      expect(row).toContain('`troubleshooting` list');
       expect(row).toContain('if it reports `ok: true`, retry the command once');
+      expect(row).not.toContain('no report');
     });
 
     // The codes the row tells the agent to fix itself are exactly the exit-3

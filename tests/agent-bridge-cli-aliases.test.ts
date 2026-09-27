@@ -8,7 +8,7 @@ import { DEFAULT_AGENT_BRIDGE_PORT } from '@/lib/agent-bridge/protocol';
 import { describeTools } from '@/lib/agent-bridge/tool-registry';
 import { COLLECTION_PLATFORMS } from '@/lib/collections/platforms';
 import en from '@/lib/i18n/locales/en';
-import { AGENT_SETUP_GUIDE_URL } from '@/lib/repo';
+import { AGENT_SETUP_GUIDE_URL, REPO_URL } from '@/lib/repo';
 import { TOOL_ALIASES } from '../packages/favbase/commands';
 
 /**
@@ -236,9 +236,25 @@ describe('favbase INSTALL.md stays reconciled with what it installs', () => {
     ).toEqual([]);
   });
 
-  // Its exit-code table -- every row, not only exit 1 -- is reconciled with
-  // the CLI's classification in packages/favbase/exit-codes.test.ts, next to
-  // the module that owns it (docs/30 #2).
+  // This file is read from `main`, but `npm install -g favbase` installs the
+  // last release, so anything it says about the CLI's behaviour describes a
+  // version the reader may not have. Its exit-code table did (docs/30 #4): the
+  // rows had to be checked by hand against two versions, and the day they were
+  // not, an agent told its user "Chrome is closed" about an unwritable file.
+  // The table was deleted (D6-a); failures are read from what ships with the
+  // installed CLI -- the skill step 4 writes, `favbase doctor`, `--help`.
+  // Exit codes are the first thing to creep back, so they are refused outright.
+  it('interprets no exit code: the installed CLI and its skill do that', () => {
+    const offenders = read()
+      .split('\n')
+      .map((line, index) => [index + 1, line] as const)
+      .filter(([, line]) => /\bexit(?:\s+code)?\s+\d/i.test(line));
+
+    expect(
+      offenders.map(([line, text]) => `INSTALL.md:${line} ${text.trim()}`),
+      'INSTALL.md is read from `main` by agents installing the last release; exit-code advice belongs in SKILL.md',
+    ).toEqual([]);
+  });
 });
 
 /**
@@ -304,5 +320,106 @@ describe('hand-written top_k bounds match the live search schema', () => {
 
     expect(clause, `${copy} no longer documents top_k`).toBeDefined();
     expect(clause, `${copy}: range differs from what the zod chain enforces`).toContain(range);
+  });
+});
+
+/**
+ * `npx skills add` (vercel-labs/skills) is the one route that installs the
+ * skill without the CLI, and it copies whatever the named ref holds. From
+ * `main` that is a SKILL.md written for the next release, and doctor --
+ * comparing byte for byte with the copy the installed CLI bundles -- calls it
+ * stale; following that advice overwrites the copy the skills tool manages
+ * (docs/30 #4). So the route is kept (D7-b) but pointed at `favbase-latest`,
+ * the branch each npm publish fast-forwards to its release commit
+ * (packages/favbase/CLAUDE.md, Release): what it installs is what the latest
+ * CLI ships. A ref makes that tool git-clone instead of fetching raw bytes,
+ * and a clone under core.autocrlf=true checks the file out as CRLF (measured,
+ * Git for Windows' default), hence the `.gitattributes` line.
+ */
+describe('npx skills add installs the skill the latest release ships', () => {
+  const ROOT = path.resolve(__dirname, '..');
+  const SKILL_RELEASE_BRANCH = 'favbase-latest';
+  const slug = REPO_URL.replace(/^https:\/\/github\.com\//, '');
+  const read = (file: string) => readFileSync(path.resolve(ROOT, file), 'utf8');
+  // Every markdown a user or an agent reads outside the extension.
+  const PUBLIC_MARKDOWN = [
+    'README.md',
+    'README_zh_CN.md',
+    'packages/favbase/README.md',
+    'skills/favbase/INSTALL.md',
+    'skills/favbase/SKILL.md',
+  ];
+
+  it('the root README keeps the route, pointed at the release branch', () => {
+    expect(read('README.md')).toContain(`npx skills add ${slug}#${SKILL_RELEASE_BRANCH} -g`);
+  });
+
+  it('no public markdown points `npx skills add` at another ref', () => {
+    const offenders = PUBLIC_MARKDOWN.flatMap((file) =>
+      read(file)
+        .split('\n')
+        .map((line, index) => [index + 1, line] as const)
+        .filter(([, line]) => /npx skills add/.test(line) && !line.includes(`${slug}#${SKILL_RELEASE_BRANCH}`))
+        .map(([line, text]) => `${file}:${line} ${text.trim()}`),
+    );
+    expect(offenders, `\`npx skills add\` must name ${slug}#${SKILL_RELEASE_BRANCH}`).toEqual([]);
+  });
+
+  // The npm page shows the latest version's README; a link into `main` there
+  // presents the next release's skill as the one the package installs.
+  it('the npm README links the skill at the release branch, not main', () => {
+    const readme = read('packages/favbase/README.md');
+    expect(readme).not.toContain('/blob/main/skills/favbase/SKILL.md');
+    expect(readme).toContain(`/blob/${SKILL_RELEASE_BRANCH}/skills/favbase/SKILL.md`);
+  });
+
+  it('.gitattributes checks SKILL.md out with LF endings', () => {
+    expect(read('.gitattributes')).toMatch(/^skills\/favbase\/SKILL\.md\s+text\s+eol=lf\s*$/m);
+  });
+});
+
+/**
+ * The root README used to carry a fifth hand-written install guide (after the
+ * settings card, SKILL.md's prerequisites, the npm README and INSTALL.md), and
+ * nothing guarded it: it still named the settings section "Agent Bridge",
+ * showed `<Bridge Token>` to users and listed three of the four commands
+ * (docs/30 #13). It now hands out the Agent Setup Guide and nothing more.
+ */
+describe('the root README points at the setup guide instead of repeating it', () => {
+  const README = path.resolve(__dirname, '..', 'README.md');
+
+  it('hands out the Agent Setup Guide URL', () => {
+    expect(readFileSync(README, 'utf8')).toContain(AGENT_SETUP_GUIDE_URL);
+  });
+
+  it('carries no install or pairing command of its own', () => {
+    const readme = readFileSync(README, 'utf8');
+    expect(readme).not.toMatch(/npm install -g favbase/);
+    expect(readme).not.toMatch(/favbase setup/);
+  });
+});
+
+/**
+ * SKILL.md and the npm README each spell the four alias synopses by hand. Only
+ * `--limit`'s range was reconciled (above); a flag renamed in `commands.ts`
+ * left both teaching an option the CLI refuses as a usage error (docs/30 #13).
+ * Each synopsis line must name exactly the alias's flags, and a positional
+ * placeholder exactly when the alias takes one.
+ */
+describe('hand-written alias synopses match the alias table', () => {
+  const DOCS = ['skills/favbase/SKILL.md', 'packages/favbase/README.md'];
+  const cases = DOCS.flatMap((doc) => TOOL_ALIASES.map((alias) => [doc, alias.command, alias] as const));
+
+  it.each(cases)('%s: favbase %s', (doc, command, alias) => {
+    const lines = readFileSync(path.resolve(__dirname, '..', doc), 'utf8').split(/\r?\n/);
+    const synopses = lines.filter((line) => new RegExp(`^favbase ${command}(?: |$)`).test(line));
+    expect(synopses, `${doc} has no single \`favbase ${command}\` synopsis line`).toHaveLength(1);
+
+    const [synopsis] = synopses;
+    const flags = [...synopsis.matchAll(/--([a-z][a-z-]*)/g)].map((match) => match[1]);
+    expect(flags.sort(), `${doc}: \`${synopsis}\``).toEqual(Object.keys(alias.flags).sort());
+
+    const beforeOptions = synopsis.split('[')[0];
+    expect(/<[^>]+>/.test(beforeOptions), `${doc}: \`${synopsis}\` positional`).toBe(alias.positional !== null);
   });
 });

@@ -71,7 +71,7 @@ For the accepted `--platform` values run `favbase tools` — the tool schemas ar
 | 2 | the daemon or the extension did not answer, or not in time |
 | 3 | the Knowledge Tool itself returned an error |
 
-For exit code 2, run `favbase doctor`: it reports which half of the link is missing, and if it finds nothing wrong, the command is worth one retry. The extension reconnects on a periodic alarm, so the first call after Chrome starts can wait roughly 30 seconds on Chrome 120+, or 60 seconds on Chrome 116–119. `favbase doctor` reports which half of the link is missing.
+For exit code 2, run `favbase doctor`: it reports which half of the link is missing, and if it finds nothing wrong, the command is worth one retry. The extension reconnects on a periodic alarm, so the first call after Chrome starts can wait roughly 30 seconds on Chrome 120+, or 60 seconds on Chrome 116–119.
 
 ## The daemon
 
@@ -108,7 +108,7 @@ Resolution order is environment variable, then `~/.favbase/config.json`, then th
 ## Links
 
 - Extension, source and issues: [github.com/InvisibleQAQ/favbase](https://github.com/InvisibleQAQ/favbase)
-- The Agent Skill this package installs: [`skills/favbase/SKILL.md`](https://github.com/InvisibleQAQ/favbase/blob/main/skills/favbase/SKILL.md)
+- The Agent Skill as the latest release ships it: [`skills/favbase/SKILL.md`](https://github.com/InvisibleQAQ/favbase/blob/favbase-latest/skills/favbase/SKILL.md) (the `favbase-latest` branch is the commit the latest release was published from; `main` may already describe the next one)
 
 ## License
 

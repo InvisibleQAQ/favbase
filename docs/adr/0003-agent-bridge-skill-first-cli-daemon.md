@@ -44,3 +44,9 @@
   - exit 1 从「用法或配置」扩成「用法、配置或其他本机问题」，并且是**默认档**：没有专属类型的失败打 `favbase: <message>`（无 usage 行）落 exit 1，交给用户读。此前默认是 exit 2，每个未分类失败都把 agent 送去跑一个会撞上同一错误的 doctor。
   - exit 2 只留给 doctor 查得了的失败：`DaemonError`，以及工具错误 `extension-unavailable` / `extension-disconnected` / `timeout`。`timeout` 从 exit 3 挪来：扩展没按时回答不是参数问题，处置是跑 doctor、正常就重试一次。
   - Decision 一节「第二个 `daemon run` 遇端口占用退出码 1」「端口被非 favbase 程序占用时退出码 2 并指引换端口」仍成立；换端口的指引改为设置卡给出的 setup 命令（它同时带 token 与端口），不再是跑不通的 `favbase setup --port`。正文保留原样。
+- **2026-09-27 —— `npx skills add` 改指发布分支**（docs/30 #4，D7-b，用户决定保留这条路线）。Decision 一节「也可 `npx skills add InvisibleQAQ/favbase`」的命令改为 `npx skills add InvisibleQAQ/favbase#favbase-latest -g`；「SKILL.md 单源、打进 CLI」不变。
+  - 不带 ref 时，vercel-labs/skills 装的是 `main` 上的 SKILL.md，它描述的是**下一个**发布版；doctor 拿它逐字节比对已装 CLI 捆绑的那份，只要 `main` 在发布后改过 SKILL.md 就判 `stale`。照提示跑 `install-skill`，会顺着符号链接覆盖 skills 工具管理的副本，下次重新拉取又翻回去。0.2.1 发布后的 `4dc0e01`、`99cd013` 改了 SKILL.md 的退出码表，所以这在撰写时就有活实例。
+  - `favbase-latest` 是一个分支，每次 `npm publish` 之后快进到这次发布的 commit（`packages/favbase/CLAUDE.md` 的 Release 一节）。skills 工具从它装到的副本，与最新 CLI 捆绑的副本逐字节一致，doctor 不用改（考虑过让 doctor 按 `metadata.version` 放行 `main` 版，已否决：`main` 的版本号等于上一个发布版、内容却已领先，按版本比对会把它判成 current）。
+  - 带 ref 时 skills 工具走 `git clone` 而不是抓 raw 字节；Git for Windows 默认 `core.autocrlf=true`，clone 出来是 CRLF（2026-09-27 本机实测），doctor 同样判 `stale`。所以新增根 `.gitattributes`，只一行 `skills/favbase/SKILL.md text eol=lf`。docs/27 当时决定「不加 `.gitattributes`」，理由只针对打包（`canonicalSkillContent` 在一处归一化就够）；第三方 clone 是新的理由，那处归一化保留。
+  - `-g` 是必要的：不带它，skills 工具默认装到当前工作目录的 `./.agents/skills/`、`./.claude/skills/`，doctor 看不到，还可能被提交进用户自己的仓库。
+  - 拦不住的部分：skills 工具会自动发现任何公开仓库的 `skills/` 目录，所以裸命令仍然能装到 `main` 版，doctor 照旧判 `stale`。只是不再为它背书。`tests/agent-bridge-cli-aliases.test.ts` 守住公开 markdown 里的每一条 `npx skills add` 都带 `#favbase-latest`，以及 `.gitattributes` 那一行。

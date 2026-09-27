@@ -1,6 +1,6 @@
 # 30 — Agent Bridge 全链路架构体检：扩展 × favbase CLI × Skill（2026-09-27）
 
-**状态**：#1 已落地（2026-09-27，D1-a / D2-b，见 §1「实施记录」；#7 随之消失）。#2 已落地（2026-09-27，D3-a / D4-a，见 §2「实施记录」；顺带做了 #10 里「RPC 错误 code → 退出码」那一片）。#3 已落地（2026-09-27，D5-a，见 §3「实施记录」：doctor 无论哪一步失败都输出完整 JSON）。**favbase 0.2.1 已于 2026-09-27T09:57Z 发布到 npm**（等价于 `2fbcc16`，含 #1 与 SKILL.md 的 `metadata.version`；本机全局安装与 registry tarball 的 `dist/cli.js` 逐字节一致），所以执行顺序第 2 步（#4 止血）已完成，#4 的结构修复（D6/D7）仍待做。其余条目未动。
+**状态**：#1 已落地（2026-09-27，D1-a / D2-b，见 §1「实施记录」；#7 随之消失）。#2 已落地（2026-09-27，D3-a / D4-a，见 §2「实施记录」；顺带做了 #10 里「RPC 错误 code → 退出码」那一片）。#3 已落地（2026-09-27，D5-a，见 §3「实施记录」：doctor 无论哪一步失败都输出完整 JSON）。**favbase 0.2.1 已于 2026-09-27T09:57Z 发布到 npm**（等价于 `2fbcc16`，含 #1 与 SKILL.md 的 `metadata.version`；本机全局安装与 registry tarball 的 `dist/cli.js` 逐字节一致），所以执行顺序第 2 步（#4 止血）已完成。#4 的结构修复与 #13 已落地（2026-09-27，D6-a / D7-b，见 §4、§13「实施记录」；执行顺序第 4 步完成，`favbase-latest` 分支待用户首次推送）。其余条目未动。
 
 **范围**：把 Agent Bridge 当成**一个系统**来审，三端一起看：
 
@@ -70,8 +70,8 @@
 | D3（**已定 a**，2026-09-27） | #2 | 未分类错误默认给哪个码 | a. exit 1<br>b. 新开一个码 | **a**。已发布的 SKILL.md 对 exit 1 的处置是「不以 `Run favbase --help` 结尾，就把 stderr 给用户看」，对未分类错误恰好正确。新开码则两张表都要改，而且已发布的 SKILL 不认识它 |
 | D4（**已定 a**，2026-09-27） | #2 | `timeout` / `db-unavailable` / `execution-failed` 归哪个码，exit 3 的处置文字怎么写 | a. `timeout` 归 exit 2，exit 2 那一行补「doctor 正常就重试一次」；exit 3 那一行按 stderr 里的 code 分支：`invalid-args`/`unknown-tool` 修命令（`unknown-tool` 也可能是版本漂移，见 #5），其余把消息给用户看<br>b. 全部保持 exit 3，只改文字 | **a**。今天 exit 3 一律写「adjust the arguments」，对这三种 code 都没用。stderr 形状本来就是 `favbase: <code>: <message>`，agent 读得到 code |
 | D5（**已定 a**，2026-09-27） | #3 | daemon 探针失败时，doctor 还读不读扩展状态 | a. 不读，`extension` 写「未检查（daemon 不可用）」<br>b. 读 | **a**。没有 daemon 就没有扩展状态可读，也避免给出「确认 Chrome 在运行」这类与根因无关的建议。用户拍板时补了一条：要**提醒用户**这件事——`troubleshooting` 在根因的修法之后加一行，说明扩展连接（配置失败时连 daemon 一起）没有检查，修好上面的问题再跑一次 `favbase doctor` |
-| D6 | #4 | `main` 上给 agent 读的 markdown 怎样才能不描述未发布的行为 | a. **删掉 INSTALL.md 的退出码表**，INSTALL 只保留跨版本稳定的步骤，排障交给版本一致的来源（`favbase --help`、CLI 自己的 stderr、setup 装下的 SKILL.md）；发布流程改成「版本号递增与 `npm publish` 同一步，并用 `npm view` 核验」<br>b. INSTALL 写死 `npm install -g favbase@X.Y.Z`，由测试对账 `package.json`<br>c. 维持现状，靠流程纪律 | **a**。INSTALL 的退出码表是 SKILL 那张表的第二份拷贝，也是唯一一份不随 CLI 版本走的拷贝（按 deletion test，删掉它复杂度只会消失）。b 挡不住「行为改了、版本号还没改」的那段窗口 |
-| D7 | #4 | `npx skills add InvisibleQAQ/favbase` 这条安装路线留不留 | a. 从根 README 与 ADR 0003 删掉<br>b. 保留，doctor 容忍 `main` 版 | **a**（与 ADR 0003 Decision 第 6 条冲突，但值得重开）。它装的是 `main` 上的 SKILL，与已装 CLI 捆绑的逐字节比对永远是 `stale`；照 doctor 的提示跑 `install-skill` 会把它回滚，下次 `npx skills add` 又翻回去 |
+| D6（**已定 a**，2026-09-27） | #4 | `main` 上给 agent 读的 markdown 怎样才能不描述未发布的行为 | a. **删掉 INSTALL.md 的退出码表**，INSTALL 只保留跨版本稳定的步骤，排障交给版本一致的来源（`favbase --help`、CLI 自己的 stderr、setup 装下的 SKILL.md）；发布流程改成「版本号递增与 `npm publish` 同一步，并用 `npm view` 核验」<br>b. INSTALL 写死 `npm install -g favbase@X.Y.Z`，由测试对账 `package.json`<br>c. 维持现状，靠流程纪律 | **a**。INSTALL 的退出码表是 SKILL 那张表的第二份拷贝，也是唯一一份不随 CLI 版本走的拷贝（按 deletion test，删掉它复杂度只会消失）。b 挡不住「行为改了、版本号还没改」的那段窗口 |
+| D7（**已定 b**，2026-09-27，形式为 b2：改指发布分支，见 §4 实施记录） | #4 | `npx skills add InvisibleQAQ/favbase` 这条安装路线留不留 | a. 从根 README 与 ADR 0003 删掉<br>b. 保留，doctor 容忍 `main` 版 | **a**（与 ADR 0003 Decision 第 6 条冲突，但值得重开）。它装的是 `main` 上的 SKILL，与已装 CLI 捆绑的逐字节比对永远是 `stale`；照 doctor 的提示跑 `install-skill` 会把它回滚，下次 `npx skills add` 又翻回去 |
 | D8 | #5 | 跨版本兼容由哪一端负责 | a. **扩展负责**兼容所有已发布的 daemon：daemon 从下个版本起对未知字段宽松、对不支持的 `protocolVersion` 显式回 `reject: version`，扩展按 `welcome.serverVersion` 选择能力；Knowledge Tool 的名字、参数名和 SKILL.md 描述的结果字段只增不删，用一份「已发布契约」黄金文件守住<br>b. 冻结 v1，另起 v2 并行 | **a**。扩展会自动更新而 CLI 不会，只有扩展有能力适配对方。已发布的 0.1.0/0.2.0/0.2.1 daemon 是严格解码的，所以**首个上架的扩展仍必须对它们讲精确的 v1**，这一点改不了 |
 | D9 | #6 | 「同机另一个 OS 用户或受限进程抢占 loopback 端口」算不算威胁 | a. 算：WS 与 HTTP 两条线都改成 challenge-response（交换 nonce、传 HMAC，token 本身不上线），随 #5 的协议改动一起做<br>b. 不算：订正 `CONTEXT.md` 的「verify each other」、删掉自欺的 welcome token 校验，并写 ADR 记录接受的风险 | **a**。单独做很贵，但和 #5 一起做的边际成本低；产品承诺是 "nothing leaves the machine"，而多用户机器上 loopback 端口是全机共享的。选 b 也必须把文档改成实话 |
 | D10 | #10 | daemon HTTP 线协议的 schema 放哪 | a. `packages/favbase` 内<br>b. `lib/agent-bridge/` | **a**。这条线两端都在本包，扩展不参与；`lib/agent-bridge/protocol.ts` 只多导出一个拒绝原因常量 |
@@ -89,7 +89,7 @@
    - #3 再做（**已完成**）。它是 #1 的验收手段：修完 #1 后，「setup → doctor」必须输出完整 JSON。
    - #1 最后。CLI 半边复用 `stopDaemon` 的 401 → 按 pid 结束进程路径，以及 `ensureDaemon` 的替换路径；扩展半边按 D2 改。
    - #10 的「哪些 RPC 错误 code 表示扩展不可达」与 #2 有交集，宜在 #2 同一批完成。#11 的常量收拢可以顺带做。
-4. **下一次 `npm publish` 前**：#4 的结构修复（按 D6/D7）与 #13 的文档漂移一起清掉，然后按新流程发布。
+4. **下一次 `npm publish` 前**：#4 的结构修复（按 D6/D7）与 #13 的文档漂移一起清掉，然后按新流程发布。（**已完成**，2026-09-27，见 §4、§13「实施记录」；剩 `favbase-latest` 分支的首次推送，是用户动作。）
 5. **扩展上架前**：#5 与 #6 一起做（都是协议改动）；#9 依赖 #5 对 close code 的决定，随后做。#7 与 #8 是小修，随时可做，但也必须在上架前完成。
 6. **随时可做**：#12、#14、#15、#16、#17。
 
@@ -355,7 +355,7 @@ stderr 是 skill 提示一行，然后 `favbase: foreign: 127.0.0.1:56811 is ser
 
 **markdown 刻意没改**
 
-- 三张退出码表（SKILL.md、INSTALL.md、npm README）exit 2 行的「or its stderr message when it prints no report」。对当前 CLI 这半句已不可达，但 INSTALL.md 由 `main` 的 raw URL 被读、读者装到的是 0.2.1；`npx skills add` 也会把 `main` 的 SKILL.md 配给 0.2.1（D7 未定）。0.2.1 在 daemon 失败时仍只打一行 stderr，所以这半句对两个版本都成立，删掉就是再造一个 #4 的活实例。`exit-codes.test.ts` 的锚点不变，只改写了它上方已经失实的注释（原文写「Doctor prints no report for a DaemonError」），说明为什么保留。
+- 三张退出码表（SKILL.md、INSTALL.md、npm README）exit 2 行的「or its stderr message when it prints no report」。对当前 CLI 这半句已不可达，但 INSTALL.md 由 `main` 的 raw URL 被读、读者装到的是 0.2.1；`npx skills add` 也会把 `main` 的 SKILL.md 配给 0.2.1（D7 未定）。0.2.1 在 daemon 失败时仍只打一行 stderr，所以这半句对两个版本都成立，删掉就是再造一个 #4 的活实例。`exit-codes.test.ts` 的锚点不变，只改写了它上方已经失实的注释（原文写「Doctor prints no report for a DaemonError」），说明为什么保留。（**#4 落地后已删**：INSTALL.md 的表整个删除，SKILL.md 只配给它随附的 CLI，见 §4 实施记录。npm README 那一行本来就没有这半句，「三张」是误记。）
 - INSTALL.md Step 5 承诺 doctor「checks the config file, the background daemon and the link to the extension separately」，不改字就成了真的。SKILL.md 与 npm README 对 doctor 的描述今天不假，未动。
 - 包 `CLAUDE.md`：新增 `doctor.ts` 条目；「cli / skills reported on **both** its output paths」那条规则随多余的路径一起删除。
 - `skills/favbase/CLAUDE.md`（维护者读的 SKILL.md 说明）：exit 2 那句原本把「daemon 失败时 doctor 没有报告」当成现状，补一句「只有已发布的 0.2.1 如此，这半句为它的读者保留」（trellis-check 补）。
@@ -428,6 +428,8 @@ stderr 是 skill 提示一行，然后 `favbase: foreign: 127.0.0.1:56811 is ser
 - **`npx skills add` 路线**：从根 README 与 ADR 0003 删掉（D7）。只保留 CLI 自己安装 skill 这一条路，doctor 的逐字节比对才有意义。
 - ~~**止血**（用户动作，见执行顺序第 2 步）：发布 0.2.1，或者撤回 INSTALL.md 那一行。~~ 已完成：0.2.1 于 2026-09-27 发布。
 
+> **D7 已定 b，上面「`npx skills add` 路线」那条未照做**：路线保留、改指 `favbase-latest` 分支，见「实施记录」。「可选：打 tag」也由该分支取代。
+
 **收益**
 
 - Locality：「这段文字描述的是哪个版本」对每份 markdown 都有唯一答案。
@@ -442,6 +444,43 @@ stderr 是 skill 提示一行，然后 `favbase: foreign: 127.0.0.1:56811 is ser
 - `skills/favbase/CLAUDE.md` 里「INSTALL 的 exit-1 行必须与 SKILL 对齐」那一段要同步改写。
 
 **待决策**：D6、D7。
+
+### 实施记录（2026-09-27）
+
+用户决定 **D6-a**、**D7-b**，并同意按执行顺序第 4 步把 #13 一起做（见 §13 实施记录）。D7-b 的「doctor 容忍 `main` 版」在落地前拆成两种形式，用户选了 **b2**。
+
+**D7-b 为什么没有按字面做**（2026-09-27 读 `skills@1.7.0` 源码核实）：
+
+- 根 README 原来的写法 `npx skills add InvisibleQAQ/favbase` 不带 `-g`，装的是**项目级**：当前工作目录的 `./.agents/skills/favbase/`（真实目录）加 `./.claude/skills/favbase` 符号链接。doctor 只查个人级路径，看不到它；它还可能被提交进用户自己的仓库。这回答了 §4 与附录 B 的 `[UNKNOWN]`「实际落盘位置」。
+- 带 `-g` 时正好写进 favbase 的两个根：`~/.agents/skills/favbase/` 是真实目录，`~/.claude/skills/favbase` 是指向它的符号链接。skills 的 README 表格写 Codex 全局路径是 `~/.codex/skills/`，但 1.7.0 的代码把 codex 当作 universal agent（`skillsDir === '.agents/skills'`），实际写的是 `~/.agents/skills`。README 与代码不一致，以代码为准。
+- b1（字面意思，路线仍指 `main`）：doctor 在字节不同但 `metadata.version` 相同时报一个新状态、不给 `install-skill` 提示。它会把 D6-a 刚从 INSTALL 拿掉的「对上一个发布版也成立」这条纪律转移到 SKILL.md 上，而且测不了。它还给 doctor 加了一个靠版本号字符串的弱判据：`main` 的 `metadata.version` 等于上一个发布版，内容却已领先。
+- **b2（实际落地）**：路线保留，但改成 `npx skills add InvisibleQAQ/favbase#favbase-latest -g`。`favbase-latest` 是一个分支，每次 publish 后快进到这次发布的 commit。skills 工具支持 `owner/repo#ref`（`parseFragmentRef`，`git clone --depth 1 --branch <ref>`），ref 记进 lock，之后 `update` 也沿用它。装到的副本与 CLI 捆绑的逐字节一致，doctor 一行没改。已核实：npm registry 上 0.2.1 tarball 里捆绑的 SKILL.md 与 `2fbcc16` 的 blob 逐字节相同，与 HEAD 不同。
+
+**实施中发现并由用户拍板的一处**：带 ref 时 skills 工具跳过 raw 下载（`tryBlobInstall` 遇到 `ref` 直接返回 `null`），改用 `git clone`。它的 git 客户端不覆盖 `core.autocrlf`，而本机（Git for Windows 默认）是 `true`。实测 clone 本仓库得到的 SKILL.md 是 CRLF，逐字节比对的 doctor 会判 `stale`；给测试仓库加 `.gitattributes`（`eol=lf`）后 clone 出来是 LF。用户选择加 `.gitattributes`，不改 doctor。于是根目录新增 `.gitattributes`，只一行 `skills/favbase/SKILL.md text eol=lf`。这推翻了 docs/27「不加 `.gitattributes`」的记录：那条的理由只针对打包，`canonicalSkillContent` 仍然保留。
+
+**改动**
+
+- `skills/favbase/INSTALL.md`：删掉「When something is wrong」的表（连同 token mismatch 那一行及其 `favbase daemon restart`，#1 早就不该推荐它）。改成一条通用规则：stderr 给用户看，以第 4 步写到磁盘上的 SKILL.md（为这个版本写的退出码表）、`favbase doctor`、`favbase --help` 为准；粘贴来的 setup 命令失败时不要改写它。第一次调用要等一个 alarm 周期那一段保留，它说的是扩展侧行为。
+- `skills/favbase/SKILL.md`：exit 2 行删掉「or its stderr message when it prints no report」，改为「act on its `troubleshooting` list」。这份文件从此只会配给它随附的 CLI（捆绑，或经 `favbase-latest`），而那个 CLI 的 doctor 无论什么失败都会出报告（#3）。
+- `packages/favbase/exit-codes.test.ts`：表格对账从三张降到两张（SKILL.md、npm README）。exit 2 的锚点改成 `` `troubleshooting` list ``，并断言不含 `no report`，防止这半句回来。
+- `tests/agent-bridge-cli-aliases.test.ts`：
+  - INSTALL.md 不得出现任何 `exit <n>` / `exit code <n>`。
+  - 根 README 必须含 `npx skills add InvisibleQAQ/favbase#favbase-latest -g`。
+  - 五份公开 markdown 里每条 `npx skills add` 都必须带 `#favbase-latest`。
+  - npm README 链接 skill 时指向 `favbase-latest`、不指向 `main`（§4 问题段列出的那条「The Agent Skill this package installs」）。
+  - `.gitattributes` 必须有那一行。
+- `packages/favbase/CLAUDE.md` 的 Release 一节：
+  - 增加「bump 即发布」一段，写明它关不上窗口、关窗口靠的是删表和改指分支。
+  - 第 1 步改为「从 bump commit 的干净 checkout 发布」。
+  - 第 5 步改为「`npm view` 必须等于 `version`」。
+  - 新增第 6 步：推 `favbase-latest`（快进、不 `--force`），并用 `install-skill --dir` 与 `git show favbase-latest:skills/favbase/SKILL.md` 做逐字节核验。
+  - Boundaries 里的 LF 一条改写为两个边界：打包时 `canonicalSkillContent`、第三方 clone 时 `.gitattributes`。
+- `docs/adr/0003` 新增 Amendment（路线改指发布分支）；`docs/adr/0005` 首次新增 Amendments 一节（Guide 只写跨版本稳定的内容）。
+- 没有写 tag。§4 方案里「可选：每次发布打 tag」由 `favbase-latest` 分支取代：将来的守卫要对「上一个发布版」做 diff，用它就够了。
+
+**用户动作（未代做）**：`git push origin 2fbcc16:refs/heads/favbase-latest`，并且要在推含本改动的 `main` 之前或同时推（否则根 README 里的命令指向一个不存在的 ref）。`2fbcc16` 早于 `.gitattributes`，所以在下一次发布把分支快进之前，Windows 上经 npx 装的副本仍会被判 `stale` 一次，照 doctor 提示跑一次 `install-skill` 即可修好。
+
+**拦不住的部分**：skills 工具会自动发现任何公开仓库的 `skills/` 目录，所以不带 ref 的裸命令仍然能装到 `main` 版，doctor 照旧判 `stale`。这条路只是不再被背书。另外，skills 工具会拷贝整个 `skills/favbase/` 目录，所以 `CLAUDE.md`（开发笔记）和 `INSTALL.md` 也会进用户的 skill 目录。这对 doctor 无影响，本次未处理，记在 `skills/favbase/CLAUDE.md`。
 
 ---
 
@@ -706,6 +745,16 @@ ADR 0005 数过「四份手写安装说明」，漏了第五份：根 README 的
 
 **收益**：手写副本从五份降到三份，而且剩下的全部有守卫。
 
+### 实施记录（2026-09-27）
+
+随 #4 一起落地（执行顺序第 4 步），做了方案里的四项中的三项，另顺手修了一处：
+
+- **根 README**：agent 段落缩成两句话加一个 Agent Setup Guide 的 raw URL，外加 npm 页面链接和 `npx skills add …#favbase-latest -g` 一句（D7-b）。三处漂移随之消失：「Agent Bridge」旧名、`<Bridge Token>` 占位符、只列三个命令。守卫（`tests/agent-bridge-cli-aliases.test.ts`）要求它含 `AGENT_SETUP_GUIDE_URL`，并拒绝 `npm install -g favbase` 与 `favbase setup`，不让它再长回第五份安装说明。`README_zh_CN.md` 本来就没有 agent 段落，未新增。
+- **别名概要对账**：SKILL.md 与 npm README 里每个 `favbase <alias>` 概要行，必须恰好列出 `commands.ts` 里该别名的 flag，并且只在别名有位置参数时出现 `<…>` 占位。方案原文只提 SKILL.md；npm README 是同一类未守卫副本，一并纳入。今天两份都对，所以没有文案改动。
+- **`CONTEXT.md`**：Bridge Token 定义补上「用户与 agent 读到的一律叫 pairing token」。CLI 联系的 registry 订正为 `registry.npmjs.org` 与 `registry.npmmirror.com` 两个。
+- **npm README**：exit 2 段落末尾重复的「`favbase doctor` reports which half of the link is missing.」删掉。
+- **留给 #5**：SKILL.md 对 `search` / `coverage` / `get` 结果形状的描述，照方案并入 #5 的「已发布契约」黄金文件，本次未动。「设置区路径各写一遍」「`favbase tools` 中文描述」两条是备查项，方案没有给改法，未动。
+
 ---
 
 ## 14. 【低】`BridgeServer` 的独立监听形态与 `onPeerReady` 只有测试在用
@@ -785,7 +834,7 @@ ADR 0005 数过「四份手写安装说明」，漏了第五份：根 README 的
 
 ## 附录 B：本次没有覆盖或没有验证的部分
 
-- **未实机复现**：#7 的竞态（代码可见；docs/24 §9.4 的实验说明它不是必现）、#8 的冷启动是否真会超过 30 s、#1 里 Windows 上 `process.kill` 之后端口释放的时序、#4 里 `npx skills add` 的实际落盘位置。
+- **未实机复现**：#7 的竞态（代码可见；docs/24 §9.4 的实验说明它不是必现）、#8 的冷启动是否真会超过 30 s、#1 里 Windows 上 `process.kill` 之后端口释放的时序、#4 里 `npx skills add` 的实际落盘位置（2026-09-27 已由读 `skills@1.7.0` 源码回答，见 §4 实施记录；仍未实机跑过一次 `npx skills add`）。
 - **扩展端**：`client.ts` 除了 reject/close 与退避之外的状态机细节、`scheduler.ts` 的 alarm 钳制行为与 SW 保活，都需要真 Chrome 才能确认。docs/27 Step 5 的实机 E2E checklist 仍未执行，本文所有跨端场景都是按代码路径推导的。最容易实机验证的是 #1：重置 token → setup → doctor。
 - **Knowledge Tool 本身**：检索质量、打标与 coverage 的计算不在范围内；#12 只讨论失败语义。
 - **行号**：本文亲自读过的行写了 `:NNN`；只来自探索 agent 的位置，一律按符号名引用。代码改动后，以符号名为准。

@@ -78,11 +78,13 @@ function skillPath(root: string): string {
 }
 
 /**
- * The bundled SKILL.md is whatever the publisher's checkout held, and a
- * CRLF checkout (`core.autocrlf=true`, no `.gitattributes`) would bundle CRLF.
+ * The bundled SKILL.md is whatever the publisher's working tree held. The root
+ * `.gitattributes` makes git check it out as LF, but an editor can still
+ * resave it as CRLF, and a CRLF bundle would turn every LF copy stale.
  * `main` passes it through here once, so install-skill and setup always write
- * LF and `inspectSkills` compares against LF -- the same bytes GitHub serves
- * to `npx skills add`. Installed copies are never normalized.
+ * LF and `inspectSkills` compares against LF -- the same bytes `npx skills add
+ * InvisibleQAQ/favbase#favbase-latest` clones (docs/30 #4). Installed copies
+ * are never normalized.
  */
 export function canonicalSkillContent(content: string): string {
   return content.replace(/\r\n?/g, '\n');

@@ -1,0 +1,5 @@
+# skills/favbase/SKILL.md is compared byte for byte: the favbase CLI bundles it
+# with LF endings, and `npx skills add InvisibleQAQ/favbase#favbase-latest`
+# git-clones it. Under core.autocrlf=true (Git for Windows' default) that clone
+# checks it out as CRLF, and `favbase doctor` calls the copy stale (docs/30 #4).
+skills/favbase/SKILL.md text eol=lf

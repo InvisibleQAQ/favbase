@@ -83,20 +83,13 @@ After installation, open favbase, select a source, and run its first sync. Confi
 
 ## Use with Claude Code, Codex and other agents
 
-favbase ships an [Agent Skill](https://agentskills.io) plus a small CLI so a coding agent on the same machine can search your library. Nothing leaves the machine: the CLI talks to a loopback daemon, and the daemon talks to the running extension.
+favbase ships an [Agent Skill](https://agentskills.io) and a small CLI, `favbase`, so a coding agent on the same machine can search your library, read-only; nothing leaves the machine. To set it up, give your agent this guide. It installs the CLI, then asks you for the pairing command that only the extension's settings can give you:
 
-1. In favbase open **Settings > Connections > Agent Bridge**, switch it on and copy the setup command.
-2. Install the CLI and pair it once (requires Node.js 20+):
+```
+https://raw.githubusercontent.com/InvisibleQAQ/favbase/main/skills/favbase/INSTALL.md
+```
 
-   ```bash
-   npm install -g favbase
-   favbase setup --token <Bridge Token> --port 17836
-   ```
-
-   This writes `~/.favbase/config.json` and installs the `favbase` skill for Claude Code (`~/.claude/skills/favbase/`) and Codex (`~/.agents/skills/favbase/`). Any agent that reads `SKILL.md` can also install it with `npx skills add InvisibleQAQ/favbase`.
-3. `favbase doctor` confirms the daemon and the extension are connected. Chrome must be running for queries to work.
-
-Agents then run `favbase search "<query>"`, `favbase tags` and `favbase get <item-id>`; every command is read-only and prints JSON. See [`skills/favbase/SKILL.md`](./skills/favbase/SKILL.md) and [`packages/favbase/CLAUDE.md`](./packages/favbase/CLAUDE.md).
+The CLI's commands, exit codes and configuration are on its [npm page](https://www.npmjs.com/package/favbase). Setup installs the skill for Claude Code and Codex; for any other agent, `npx skills add InvisibleQAQ/favbase#favbase-latest -g` installs the copy that ships with the latest CLI release.
 
 ## Development
 

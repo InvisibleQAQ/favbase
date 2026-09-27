@@ -115,9 +115,9 @@ provides no MCP server.
   names must run as written: a port problem says `CHANGE_PORT_HINT` (the
   settings card's setup command), never `favbase setup --port`, which is a
   usage error without `--token`. `exit-codes.test.ts` reconciles every row of
-  the three markdown tables (SKILL.md, INSTALL.md, the npm README) with this
-  module; INSTALL.md is read from `main` by agents installing the published
-  CLI, so its rows must hold for the last release too.
+  the two markdown tables (SKILL.md, the npm README) with this module; both
+  ship with the CLI they describe. INSTALL.md, read from `main` by agents
+  installing the last release, carries no table since docs/30 #4 (D6-a).
 - `version.ts` is the one version primitive: `compareVersions` understands
   plain `MAJOR.MINOR.PATCH` only and returns `null` for anything else
   (`0.0.0-dev`, `test`, prereleases, empty). Every caller treats `null` as "do
@@ -356,12 +356,14 @@ provides no MCP server.
 - Never kill a port occupant that did not answer `/health` as `favbase`.
 - tsup bundles the protocol leaf and `skills/favbase/SKILL.md` into
   `dist/cli.js`; the published CLI cannot depend on repository-relative paths.
-- The bundled SKILL.md is canonicalized to LF once, at `main`'s entry
-  (`canonicalSkillContent`). The repo has no `.gitattributes`, so a release
-  built from a `core.autocrlf=true` checkout would bundle CRLF, and the
-  byte-exact `inspectSkills` would then call every LF copy -- including the one
-  `npx skills add` fetches from GitHub -- `stale` forever. Don't normalize
-  anywhere else, and never the installed copy.
+- SKILL.md's line endings are pinned at two boundaries, because
+  `inspectSkills` compares bytes. The bundled copy is canonicalized to LF once,
+  at `main`'s entry (`canonicalSkillContent`): tsup bundles the working-tree
+  file, and a CRLF bundle would make every LF copy `stale` forever. And the
+  root `.gitattributes` checks `skills/favbase/SKILL.md` out as LF (docs/30
+  #4): `npx skills add InvisibleQAQ/favbase#favbase-latest` git-clones it, and
+  a clone under `core.autocrlf=true` -- Git for Windows' default -- is CRLF
+  (measured). Don't normalize anywhere else, and never the installed copy.
 
 ## Commands
 
@@ -372,7 +374,7 @@ provides no MCP server.
   assembly as a pure function, table-driven over every daemon-step failure,
   and `foreign`/`unauthorized` through `main` against real loopback servers;
   plus version/skill-install/update-check, `exit-codes` (the classification
-  table-driven, and the three markdown tables row by row) and `daemon-client-ensure`, whose
+  table-driven, and the two markdown tables row by row) and `daemon-client-ensure`, whose
   fake loopback daemons exercise the real `fetchHealth`/`stopDaemon` with only
   `spawn` mocked, plus `process.kill` for a daemon holding another token) and
   the process integration suite (real CLI
@@ -389,10 +391,19 @@ Published to npm as the unscoped package `favbase`. Its version line is
 **independent of the root `package.json`**, which versions the Chrome extension
 and never reaches npm (the root is `private: true`).
 
+A version bump **is** a release: bump, publish and move `favbase-latest` in
+one sitting, and never merge a bump you do not publish. The 0.2.0 and 0.2.1
+release commits both said "Not published.", and for days `main` carried a
+version and agent-facing markdown that npm did not (docs/30 #4). That
+discipline does not stop `main`'s markdown from leading the release between
+publishes -- nothing can -- which is why INSTALL.md describes no CLI behaviour
+and `npx skills add` is pointed at `favbase-latest`, not `main`.
+
 1. Bump `version` here **and** `metadata.version` in `skills/favbase/SKILL.md`
    (`tests/agent-bridge-cli-aliases.test.ts` fails when they differ). Never
    reuse a published version - npm keeps a tombstone
    even after an unpublish, and the 72-hour unpublish window is the only escape.
+   Publish from a clean checkout of that bump commit.
 2. `pnpm compile && pnpm test` - the gate is manual on purpose; a
    `prepublishOnly` hook would drag every publish through a suite that flakes on
    local CPU contention.
@@ -403,9 +414,20 @@ and never reaches npm (the root is `private: true`).
    build first. Unscoped packages default to public access; `--access public` is
    noise. A 2FA challenge is expected - npm requires it for every publish, and
    there is no token that skips it here.
-5. `npm view favbase version` then `npm i -g favbase && favbase --version`. The
-   global install is the regression check for the entry-point guard removed in
-   docs/27 Step 0.5: a symlinked `bin` used to exit 0 with empty output.
+5. `npm view favbase version` must print the `version` here; then
+   `npm i -g favbase && favbase --version`. The global install is the
+   regression check for the entry-point guard removed in docs/27 Step 0.5: a
+   symlinked `bin` used to exit 0 with empty output.
+6. `git push origin <bump commit>:refs/heads/favbase-latest` -- the commit you
+   published from, as a fast-forward (never `--force`). `npx skills add
+   InvisibleQAQ/favbase#favbase-latest` installs from it, so it must hold the
+   SKILL.md the release bundles: `favbase install-skill --dir <tmp>` must write
+   a file identical to `git show favbase-latest:skills/favbase/SKILL.md`.
+   0.2.1 predates this step: its branch goes at `2fbcc16`, whose SKILL.md
+   matches the 0.2.1 bundle byte for byte (checked 2026-09-27 against the
+   registry tarball). That commit predates `.gitattributes`, so until the next
+   release moves the branch, a Windows clone of it is CRLF and doctor calls it
+   `stale` once.
 
 Use `npm publish`, not `pnpm publish`: pnpm wants the OTP passed as `--otp`,
 while the interactive 2FA prompt is the whole point. Nothing here depends on

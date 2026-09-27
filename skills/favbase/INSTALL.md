@@ -106,12 +106,20 @@ matches that word.
 
 ## When something is wrong
 
-| Symptom | What it means |
-|---|---|
-| exit code 1 | a usage, config or other local problem. A usage error ends with `Run favbase --help for usage.` — fix your command and retry; for the setup command that means running the pasted line exactly as given, then asking for a fresh one if it still fails. Otherwise show the stderr message to the user: it names what to fix — if it says to run `favbase setup`, ask for a fresh setup command; if it names a path favbase could not write, the user fixes that path before you retry |
-| exit code 2 | the daemon or the extension did not answer. Run `favbase doctor` and act on what it reports: the Chrome, Agent Skills, port or pairing token fix in its `troubleshooting` list, or its stderr message when it prints no report; if it reports `ok: true`, retry the command once |
-| exit code 3 | the query itself failed inside the extension. For `invalid-args` or `unknown-tool`, fix your command (`favbase tools` lists what the extension accepts); for any other code, show the stderr message to the user |
-| a token mismatch | the extension's token was reset after pairing; ask for a fresh setup command, then run `favbase daemon restart` |
+Every favbase command that fails prints the reason on stderr. This guide does
+not interpret exit codes on purpose: you are reading the project's latest
+source, while step 2 installed the latest release, and the two can differ. Use
+what ships with the CLI you installed instead:
+
+- The skill step 4 installed (`~/.claude/skills/favbase/SKILL.md` or
+  `~/.agents/skills/favbase/SKILL.md`) carries an exit-code table written for
+  that exact release. Read it when a command fails.
+- `favbase doctor` checks each part of the link and lists what to fix.
+- `favbase --help` is authoritative for commands and flags.
+
+If the pasted setup command fails, do not retype or repair it: show its stderr
+message to the user. When the message names a fix of its own, such as a path to
+make writable, that comes first; otherwise ask for a fresh setup command.
 
 The extension reconnects on a periodic alarm, so the **first** call after Chrome
 starts can wait roughly 30 seconds on Chrome 120+, or 60 seconds on Chrome
