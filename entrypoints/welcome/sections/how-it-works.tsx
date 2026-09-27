@@ -192,6 +192,9 @@ function StickyStep({
       sx={{
         display: 'flex',
         justifyContent: 'center',
+        // The 84vh slot is scroll runway for the stack; the card keeps its
+        // content height instead of stretching into a mostly empty panel.
+        alignItems: 'flex-start',
         mb: { xs: 3, md: 0 },
         height: { md: '84vh' },
         position: { md: 'sticky' },

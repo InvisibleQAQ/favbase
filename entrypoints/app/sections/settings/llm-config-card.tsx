@@ -199,21 +199,19 @@ export function LlmConfigCard({ settings, saveLlm }: LlmConfigCardProps) {
             />
           </Grid>
 
-          <Grid size={{ xs: 12, md: 6 }}>
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              {currentProviderDef.regUrl && (
-                <Button
-                  variant="outlined"
-                  size="small"
-                  href={currentProviderDef.regUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  sx={{ whiteSpace: 'nowrap', alignSelf: 'center' }}
-                >
-                  {t('settings.getKey')}
-                </Button>
-              )}
-            </Box>
+          <Grid size={{ xs: 12, md: 6 }} sx={{ display: 'flex', alignItems: 'center' }}>
+            {currentProviderDef.regUrl && (
+              <Button
+                variant="outlined"
+                size="small"
+                href={currentProviderDef.regUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                sx={{ whiteSpace: 'nowrap' }}
+              >
+                {t('settings.getKey')}
+              </Button>
+            )}
           </Grid>
 
           {/* Model with Autocomplete */}
@@ -233,7 +231,7 @@ export function LlmConfigCard({ settings, saveLlm }: LlmConfigCardProps) {
             />
           </Grid>
 
-          <Grid size={{ xs: 12, md: 6 }}>
+          <Grid size={{ xs: 12, md: 6 }} sx={{ display: 'flex', alignItems: 'center' }}>
             <Button
               variant="outlined"
               onClick={handleFetchModels}
