@@ -145,6 +145,27 @@ describe('favbase SKILL.md only teaches the invocation its allowed-tools permit'
 });
 
 /**
+ * SKILL.md names the CLI release it ships in, so a copy on disk says which
+ * `favbase` it was written for. The Agent Skills spec has no top-level
+ * `version` field; it goes under `metadata`, as a string. Markdown cannot read
+ * package.json, so a release that bumps one without the other is red here.
+ */
+describe('favbase SKILL.md states the CLI version it ships with', () => {
+  const SKILL_MD = path.resolve(__dirname, '..', 'skills', 'favbase', 'SKILL.md');
+  const PACKAGE_JSON = path.resolve(__dirname, '..', 'packages', 'favbase', 'package.json');
+
+  it('carries packages/favbase/package.json version as metadata.version', () => {
+    const skill = readFileSync(SKILL_MD, 'utf8').replace(/\r\n/g, '\n');
+    const frontmatter = /^---\n([\s\S]*?)\n---\n/.exec(skill)?.[1] ?? '';
+    const metadata = /^metadata:\n((?:[ \t]+.*\n?)*)/m.exec(frontmatter)?.[1] ?? '';
+    const version = /^[ \t]+version: "([^"]+)"$/m.exec(metadata)?.[1];
+    const { version: cliVersion } = JSON.parse(readFileSync(PACKAGE_JSON, 'utf8')) as { version: string };
+
+    expect(version, 'SKILL.md frontmatter needs `metadata:` with `  version: "<cli version>"`').toBe(cliVersion);
+  });
+});
+
+/**
  * INSTALL.md (the Agent Setup Guide, docs/adr/0005) is the fourth hand-written
  * copy of "how to install favbase" -- after the settings card's
  * `settings.agentBridge.commands*`, SKILL.md's prerequisites and the npm

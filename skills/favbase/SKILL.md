@@ -2,6 +2,8 @@
 name: favbase
 description: Search the user's own saved collections (Bilibili favorites, GitHub stars, browser bookmarks, X bookmarks, Zhihu favorites, YouTube playlists) through the local favbase browser extension. Use whenever the user asks what they saved, bookmarked, starred or favorited, or wants an answer grounded in their own collection. Read-only; runs the `favbase` CLI.
 allowed-tools: Bash(favbase:*)
+metadata:
+  version: "0.2.1"
 ---
 
 # favbase

@@ -225,7 +225,8 @@ provides no MCP server.
   one (the spawned `doctor` runs in `integration.test.ts` read the real home
   and env, read-only, and assert nothing about `skills`).
   `inspectSkills` is its read-only twin for doctor: byte-for-byte comparison
-  with the bundled SKILL.md, no version field, no line-ending normalization of
+  with the bundled SKILL.md -- it does not parse the copy's `metadata.version`
+  (the version is for the agent and the user reading the file), no line-ending normalization of
   the installed copy (a CRLF re-save is `stale`; reinstalling fixes it). Missing file (ENOENT or
   ENOTDIR) is `missing`; any other read error is `stale`, since reinstalling is
   the one fix doctor can name. `--dir` copies are invisible to it by design.
@@ -333,7 +334,9 @@ Published to npm as the unscoped package `favbase`. Its version line is
 **independent of the root `package.json`**, which versions the Chrome extension
 and never reaches npm (the root is `private: true`).
 
-1. Bump `version` here. Never reuse a published version - npm keeps a tombstone
+1. Bump `version` here **and** `metadata.version` in `skills/favbase/SKILL.md`
+   (`tests/agent-bridge-cli-aliases.test.ts` fails when they differ). Never
+   reuse a published version - npm keeps a tombstone
    even after an unpublish, and the 72-hour unpublish window is the only escape.
 2. `pnpm compile && pnpm test` - the gate is manual on purpose; a
    `prepublishOnly` hook would drag every publish through a suite that flakes on

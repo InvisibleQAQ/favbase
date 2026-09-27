@@ -19,6 +19,14 @@ both must quote the usage line and send any other exit-1 message to the user.
 Before that guard this row said "re-run step 4" for every exit 1, which loops
 an agent on a path or dangling link setup cannot fix.
 
+`SKILL.md`'s frontmatter carries `metadata.version`, the `favbase` release it
+ships in (the Agent Skills spec has no top-level `version` field; `metadata`
+values are strings, so it is quoted). It must equal
+`packages/favbase/package.json`'s `version`, and
+`tests/agent-bridge-cli-aliases.test.ts` fails when it does not: bump both in
+the same release commit. doctor still compares copies byte for byte; it does
+not read this field.
+
 Keep exit codes and prerequisites aligned with `packages/favbase`. The
 `--limit <min-max>` synopsis is contract-checked against the live `top_k`
 schema (`packages/favbase/CLAUDE.md`, Boundaries). Workflow step 4's
