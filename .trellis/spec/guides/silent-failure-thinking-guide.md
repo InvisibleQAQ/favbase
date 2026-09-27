@@ -184,6 +184,11 @@ docs/27 Step 6 turned up two more, again found only by trellis-check:
       `packages/favbase/test-setup.ts` (docs/27 Step 2). A temporary test that
       wired in the real `fetch` passed its own assertions, and only the
       recorder turned it red
+- [ ] When the contract is what gets **printed**, assert on the printed shape.
+      `Object.keys` counts a key whose value is `undefined`; `JSON.stringify`
+      drops it. docs/30 #3's "every doctor report has seven keys" test stayed
+      green with `extension: undefined` until it counted keys after a JSON round
+      trip. Pattern: `printedKeys` in `packages/favbase/cli-main-doctor.test.ts`
 - [ ] Before treating a field or string as a copy someone reads, grep for its
       *reads*, not its definition, and run the surface that supposedly shows it
       (`favbase --help`). An unread copy gets deleted, not guarded (docs/27 D9)
@@ -231,6 +236,13 @@ failure is now shown to the user instead of looping through doctor.
   fix it, classify it in `exit-codes.ts`
 - a message names a fix: can it run as written? (`favbase setup --port` alone
   is a usage error; the fix is the settings card's setup command)
+- a row sends the agent to a diagnostic command: does that command still
+  report under the very failure that sent the agent there? Until docs/30 #3,
+  exit 2 said "run `favbase doctor`", and a daemon failure made doctor print
+  one stderr line and no report. A rule like "report X on **both** output
+  paths" is the symptom: the next path forgets it. Doctor now has one output
+  path; a new check returns its failure as a value (owner: the `doctor.ts`
+  entry in `packages/favbase/CLAUDE.md`)
 
 **Prevention checklist**:
 
