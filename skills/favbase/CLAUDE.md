@@ -48,7 +48,10 @@ names the fix -- `favbase setup`, a path favbase could not write -- or at
 least what went wrong (exit 1 is also where a failure without a type lands).
 Exit 2 runs `favbase doctor` and acts on its report, or on its stderr when a
 daemon failure leaves it without one, and retries once when it reports ok (a
-timeout). Exit 3 names exactly the codes the agent fixes itself
+timeout). Only the published 0.2.1 leaves it without one: since docs/30 #3
+doctor prints its full report whatever fails. The clause stays while `main`'s
+markdown still reaches 0.2.1 installs (INSTALL.md, `npx skills add`; docs/30
+#4, D6/D7). Exit 3 names exactly the codes the agent fixes itself
 (`invalid-args`, `unknown-tool`); every other goes to the user.
 `packages/favbase/cli-main.test.ts` checks the usage line quoted here is the
 one the CLI prints. The same file checks that this file and the npm README both carry

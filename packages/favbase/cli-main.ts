@@ -2,13 +2,11 @@ import { readFileSync } from 'node:fs';
 
 import { DEFAULT_AGENT_BRIDGE_PORT, type JsonObject } from '../../lib/agent-bridge/protocol';
 import { parseArgv, requireValue, UsageError, type ParsedArgv } from './args';
-import type { BridgeLogger, BridgePeerSnapshot } from './bridge-server';
+import type { BridgeLogger } from './bridge-server';
 import { aliasUsageLine, buildAliasArgs, findAlias, TOOL_ALIASES, USAGE_COLUMN } from './commands';
 import {
-  ConfigError,
   configPath,
   daemonIdleMinutes,
-  daemonLogPath,
   LocalFileError,
   parsePort,
   parseToken,
@@ -27,24 +25,22 @@ import {
   rpcCall,
   stopDaemon,
 } from './daemon-client';
+import { assembleDoctorReport, NOT_CONNECTED, probeDoctor } from './doctor';
 import {
   describeError,
   describeToolError,
   EXIT_CODES,
   EXIT_OK,
   EXIT_USAGE,
-  EXTENSION_LATENCY_HINT,
   type Failure,
 } from './exit-codes';
 import {
   canonicalSkillContent,
-  inspectSkills,
   installAgentSkills,
   installSkill,
   parseSkillAgents,
   SKILL_AGENTS,
   type SkillAgent,
-  type SkillCopy,
 } from './skill-install';
 import {
   checkCliCurrency,
@@ -52,9 +48,6 @@ import {
   type CliCurrency,
   type UpdatePolicy,
 } from './update-check';
-
-/** The `message` of an `extension-unavailable` found by a status check, not by a tool call. */
-const NOT_CONNECTED = 'no favbase extension is connected to the daemon';
 
 export interface CliIo {
   env: ConfigEnv;
@@ -110,27 +103,6 @@ function printFailure(io: CliIo, failure: Failure): number {
 
 export function formatDaemonLogLine(message: string, at = Date.now()): string {
   return `[${new Date(at).toISOString()}] ${message}`;
-}
-
-function extensionTroubleshooting(
-  config: ResolvedConfig,
-  env: ConfigEnv,
-  extension: BridgePeerSnapshot,
-): string[] {
-  const tokenCheck = extension.lastRejectedHelloReason === 'bad-token'
-    ? `The last extension hello was rejected because its pairing token did not match this daemon${
-      extension.lastRejectedHelloAt === null
-        ? ''
-        : ` at ${new Date(extension.lastRejectedHelloAt).toISOString()}`
-    } (rejected hellos this daemon run: ${extension.rejectedHelloCount}). Copy the setup command from Settings > Connections > Agent Skills and run it again.`
-    : 'Confirm the pairing token matches the token copied from Settings > Connections > Agent Skills.';
-  return [
-    tokenCheck,
-    'Confirm Agent Skills is enabled in Settings > Connections.',
-    'Confirm Chrome is running with favbase installed.',
-    `Confirm the extension port is ${config.port}.`,
-    `Inspect the daemon log at ${daemonLogPath(env)}.`,
-  ];
 }
 
 function daemonOptions(io: CliIo) {
@@ -228,82 +200,15 @@ function parseCall(parsed: ParsedArgv): { tool: string; args: JsonObject } {
   return { tool, args: callArgs(parsed.flags) };
 }
 
-/**
- * The stderr line for skill copies (docs/27 D11): only when a copy is stale or
- * every copy is missing. One missing side is taken as deliberate. `stale` only
- * says "differs from what this CLI ships" -- the copy may be newer (installed
- * from GitHub main) -- so an outdated CLI is upgraded first, or install-skill
- * would roll the copy back to an older skill. Codex can have two copies (its
- * legacy root); the hint names an agent once.
- */
-function skillHint(skills: readonly SkillCopy[], cli: CliCurrency): string | null {
-  const stale = [...new Set(skills.filter((copy) => copy.state === 'stale').map((copy) => copy.agent))];
-  const allMissing = skills.every((copy) => copy.state === 'missing');
-  if (stale.length === 0 && !allMissing) return null;
-  const run = cli.state === 'outdated'
-    ? 'upgrade this CLI first (npm install -g favbase@latest), then run'
-    : 'run';
-  return stale.length > 0
-    ? `[favbase] the installed skill for ${stale.join(' and ')} differs from the one favbase ${cli.version} ships; ${run} favbase install-skill --agent ${stale.join(',')}`
-    : `[favbase] no favbase skill is installed for ${SKILL_AGENTS.join(' or ')} (a copy installed with --dir is invisible to doctor); ${run} favbase install-skill`;
-}
-
-function printSkillHint(io: CliIo, skills: readonly SkillCopy[], cli: CliCurrency): void {
-  const hint = skillHint(skills, cli);
-  if (hint) io.stderr(`${hint}\n`);
-}
-
-/**
- * `skills` and `cli` are advisory: they never change `ok` or the exit code,
- * because exit 2 means "unreachable" in SKILL.md's table and a stale skill is
- * not. Neither depends on the config, so the config-error path reports both.
- */
+/** Probe, assemble, print: the one output path, whatever failed (docs/30 #3; see doctor.ts). */
 async function runDoctor(io: CliIo, currency: Promise<CliCurrency>): Promise<number> {
-  const skills = await inspectSkills(io.skillContent, io.homeDir, io.env);
-  let config: ResolvedConfig;
-  try {
-    config = await resolveConfig(io.env);
-  } catch (error) {
-    if (!(error instanceof ConfigError)) throw error;
-    const cli = await currency;
-    printJson(io, {
-      ok: false,
-      cli,
-      config: { path: configPath(io.env), problem: error.message },
-      skills,
-    });
-    printSkillHint(io, skills, cli);
-    // The same line any other command prints for this error: the exit-1 row
-    // sends it to the user, and it names the fix (`favbase setup`).
-    return printFailure(io, describeError(error));
-  }
-  const { spawned, replaced } = await ensureDaemon(config, daemonOptions(io));
-  const status = await fetchStatus(config, true);
-  const cli = await currency;
-  const troubleshooting = status.extension.connected
-    ? []
-    : extensionTroubleshooting(config, io.env, status.extension);
-  printJson(io, {
-    ok: status.extension.connected,
-    cli,
-    config: {
-      path: config.configPath,
-      port: config.port,
-      tokenSource: config.tokenSource,
-      portSource: config.portSource,
-    },
-    daemon: { ...status.daemon, spawned, replaced },
-    extension: status.extension,
-    skills,
-    troubleshooting,
-  });
-  printSkillHint(io, skills, cli);
-  if (status.extension.connected) return EXIT_OK;
-  return printFailure(io, describeToolError(
-    'extension-unavailable',
-    NOT_CONNECTED,
-    `${troubleshooting.join(' ')} ${EXTENSION_LATENCY_HINT}`,
+  const report = assembleDoctorReport(await probeDoctor(
+    { ...daemonOptions(io), homeDir: io.homeDir, skillContent: io.skillContent },
+    currency,
   ));
+  printJson(io, report.json);
+  if (report.skillHint) io.stderr(`${report.skillHint}\n`);
+  return report.failure ? printFailure(io, report.failure) : EXIT_OK;
 }
 
 async function runDaemonForeground(io: CliIo): Promise<number> {

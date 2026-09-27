@@ -35,7 +35,8 @@ export class ConfigError extends Error {
  * (`setup`, `install-skill`). Exit 1 like `ConfigError`, printed the same way;
  * the message names the path, since the user is the one who can fix it. Not a
  * `ConfigError`: that one means the configuration itself is missing or
- * invalid, and doctor reports it as `config.problem`.
+ * invalid. (Doctor reports either under the step that threw it, whatever its
+ * type: `spawnDaemon`'s `daemon.log` is the daemon's `problem`.)
  */
 export class LocalFileError extends Error {
   constructor(message: string, options?: ErrorOptions) {

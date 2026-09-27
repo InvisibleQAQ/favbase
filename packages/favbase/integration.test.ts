@@ -420,9 +420,22 @@ describe('favbase CLI process integration', () => {
     foreign.listen(port, '127.0.0.1');
     await once(foreign, 'listening');
     try {
-      const result = await runCli(['tags'], cliEnv(port, await tempHome()));
+      const home = await tempHome();
+      const result = await runCli(['tags'], cliEnv(port, home));
       expect(result.code).toBe(2);
       expect(result.stderr).toContain('not the favbase daemon');
+
+      // docs/30 #3: doctor, which the exit-2 row sends the agent to, used to
+      // fail here with the same single line. The built CLI prints its report.
+      const doctor = await runCli(['doctor'], cliEnv(port, home));
+      expect(doctor.code).toBe(2);
+      expect(JSON.parse(doctor.stdout)).toMatchObject({
+        ok: false,
+        config: { port },
+        daemon: { problem: expect.stringContaining('not the favbase daemon') },
+        extension: { problem: expect.stringContaining('not checked') },
+      });
+      expect(doctor.stderr.trimEnd().split('\n').at(-1)).toMatch(/^favbase: foreign: /);
     } finally {
       await new Promise<void>((resolve) => foreign.close(() => resolve()));
     }

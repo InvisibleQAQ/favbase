@@ -451,8 +451,16 @@ describe('failures that exit 2 only when doctor has something to find', () => {
     return { FAVBASE_TOKEN: 'abc', FAVBASE_BRIDGE_PORT: String(await freePort()) };
   }
 
-  // Doctor spawns the same way and used to fail the same way: a loop.
-  it.for([['tags'], ['doctor']])('%j names a daemon log it cannot open (exit 1)', async (argv, ctx) => {
+  // Doctor spawns the same way and used to fail the same way: a loop. Since
+  // docs/30 #3 it also prints its report, with the failure as the daemon's.
+  it.for([
+    [['tags'], (stdout: string) => expect(stdout).toBe('')],
+    [['doctor'], (stdout: string) => expect(JSON.parse(stdout)).toMatchObject({
+      ok: false,
+      daemon: { problem: expect.stringMatching(/^cannot write .+daemon\.log: E/) },
+      extension: { problem: expect.stringContaining('not checked') },
+    })],
+  ] as const)('%j names a daemon log it cannot open (exit 1)', async ([argv, expectStdout], ctx) => {
     const root = await mkdtemp(join(tmpdir(), 'favbase-log-'));
     temps.push(root);
     const env = { ...(await spawningEnv()), FAVBASE_HOME: join(root, 'favbase') };
@@ -464,12 +472,13 @@ describe('failures that exit 2 only when doctor has something to find', () => {
       ctx.skip('a read-only file is still writable here (running as root?)');
     }
 
-    const result = await run(argv, env);
+    const result = await run([...argv], env);
 
     expect(result.code).toBe(EXIT_USAGE);
     const [line] = result.stderr.split('\n').filter(text => text.startsWith('favbase: '));
     expect(line.startsWith(`favbase: cannot write ${log}: E`)).toBe(true);
     expect(result.stderr).not.toContain('Run favbase --help');
+    expectStdout(result.stdout);
   });
 
   // Checked before the spawn: in the child it only reached daemon.log, and

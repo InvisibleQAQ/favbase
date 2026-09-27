@@ -36,10 +36,8 @@ provides no MCP server.
   `setup`, `install-skill`. `setup` writes the config and the skills and
   prints them before it looks at the daemon (`adoptSetupToken`, see
   `daemon-client.ts`), so a daemon failure there (exit 2) never costs the user
-  the pairing. `doctor` adds structured troubleshooting checks and
-  the canonical Chrome 120+ 30-second / Chrome 116-119 60-second cold-start
-  wording; its bad-token line names the fix, rerunning the settings card's
-  setup command. Foreground daemon logs receive one ISO-8601 prefix here. Data results
+  the pairing. `runDoctor` only probes, assembles and prints (see
+  `doctor.ts`). Foreground daemon logs receive one ISO-8601 prefix here. Data results
   go to stdout as JSON only. No command picks its own exit code: every failure
   goes through `exit-codes.ts` and is printed by `printFailure`;
   `reportFailure` only adds the daemon log's timestamps. Dispatch is two phases (docs/27 Step 2): `plan`
@@ -59,16 +57,45 @@ provides no MCP server.
   from `>`, and from `Set-Content` the ANSI code page. Under code page 936 a
   lenient read turned a GBK query into U+FFFD plus a Hangul syllable that
   still parsed (measured). No stdin form: PS 5.1 pipes text to native programs
-  in `$OutputEncoding`, ASCII by default. `doctor` also reports
-  `cli` (current / outdated / unknown, with a `reason` when unknown) and
-  `skills` (per agent root: current / stale / missing, plus Codex's legacy
-  root only while it holds a copy) on **both** its output paths, the
-  config-error one included; neither changes `ok` or the exit code (docs/27
-  D11). Its stderr skill line appears only when a copy is stale (it names
-  those agents, each once however many of its copies are stale:
-  `install-skill --agent claude,codex`, never a bare `install-skill`) or every
-  listed copy is missing (it mentions `--dir`); an outdated CLI is told to
-  upgrade first, because `stale` has no direction.
+  in `$OutputEncoding`, ASCII by default.
+- `doctor.ts` is `favbase doctor` (docs/30 #3): one output path, whatever
+  fails. `probeDoctor` runs the probes and never throws -- `inspectSkills` and
+  the currency check never do, and `DoctorLink` walks config -> daemon
+  (`ensureDaemon`, then a waiting `/status`) -> extension, stopping at the
+  first failure with its **raw** error. `assembleDoctorReport` is pure: probe
+  results -> the JSON, the `Failure` (or `null`) and the skill hint; `runDoctor`
+  prints them in that order (JSON on stdout, then the hint, then the failure
+  lines; `cli-main-doctor.test.ts` pins the order). Every report has the same
+  seven keys, in order: `ok`, `cli`, `config`, `daemon`, `extension`,
+  `skills`, `troubleshooting`. A section that failed carries `problem` (its
+  error's message); the sections after it carry `not checked, because ...`
+  (D5-a: without a daemon there is no extension state to read, so doctor
+  never asks). A daemon whose `/status` failed keeps what `ensureDaemon` found
+  (health, `spawned`, `replaced`) beside `problem`. A failed step's exit code
+  and stderr lines are `describeError`'s, exactly what any other command
+  prints: a `LocalFileError` or the idle `ConfigError` from the daemon step is
+  exit 1 *with* the report, and a failure is reported under the step it came
+  from, whatever its type. A daemon that answered without a connected
+  extension is `extension-unavailable` (exit 2), its advice the troubleshooting
+  list plus `EXTENSION_LATENCY_HINT`. `troubleshooting` is `[]` when ok; the
+  five extension checks when not connected (the bad-token one names the fix,
+  rerunning the settings card's setup command); on a failed step, its message
+  and one reminder that the rest was not checked, then "run favbase doctor
+  again" -- no Chrome advice unrelated to the cause. `config` is projected
+  field by field because `ResolvedConfig` holds the token. `cli` (current /
+  outdated / unknown, with a `reason` when unknown) and `skills` (per agent
+  root: current / stale / missing, plus Codex's legacy root only while it holds
+  a copy) never change `ok` or the exit code (docs/27 D11). The skill hint
+  appears only when a copy is stale (it names those agents, each once however
+  many of its copies are stale: `install-skill --agent claude,codex`, never a
+  bare `install-skill`) or every listed copy is missing (it mentions `--dir`);
+  an outdated CLI is told to upgrade first, because `stale` has no direction.
+  `NOT_CONNECTED` lives here; `tools` uses it too. Its tests feed the assembly
+  real `inspectSkills` output (temp homes) and synthetic probe results, and run
+  `main(['doctor'])` only where no daemon is reached (no token) or against
+  loopback servers on free ports: with the module mock gone, a token plus the
+  default port would reach the developer's own daemon, and a token plus an
+  empty port would spawn and wait out the 10 s spawn deadline.
 - `exit-codes.ts` is the one place a failure becomes an exit code and its
   stderr lines (docs/30 #2): 0 ok, 1 usage/config/local problem, 2 daemon or
   extension did not answer, 3 Knowledge Tool error. `describeError` classifies
@@ -135,8 +162,8 @@ provides no MCP server.
   `refreshSkill`, and `createSkill`'s dangling-link look -- so doctor's
   read-only inspection is unaffected, and `spawnDaemon`'s open of
   `daemon.log`. Not a
-  `ConfigError` on purpose: doctor turns that into `config.problem`, and a file
-  it cannot write is no invalid config. Before it, these failures reached the
+  `ConfigError` on purpose: that one means the configuration itself is missing
+  or invalid, and a file favbase cannot write is no invalid config. Before it, these failures reached the
   exit-2 fallback. `daemonIdleMinutes` parses `FAVBASE_DAEMON_IDLE_MINUTES`
   for the daemon and, before a spawn, for the CLI spawning it. `SETUP_HINT` and
   `CHANGE_PORT_HINT` are the two fixes that name the settings card.
@@ -341,7 +368,9 @@ provides no MCP server.
 - `pnpm compile` - package type-check.
 - `pnpm build` - produce `dist/cli.js`.
 - `pnpm test` - build, then run unit tests (args/commands/config/rpc-server/
-  daemon-client/daemon/cli-main/bridge-server, including doctor diagnostics,
+  daemon-client/daemon/cli-main/bridge-server, plus doctor: the report
+  assembly as a pure function, table-driven over every daemon-step failure,
+  and `foreign`/`unauthorized` through `main` against real loopback servers;
   plus version/skill-install/update-check, `exit-codes` (the classification
   table-driven, and the three markdown tables row by row) and `daemon-client-ensure`, whose
   fake loopback daemons exercise the real `fetchHealth`/`stopDaemon` with only

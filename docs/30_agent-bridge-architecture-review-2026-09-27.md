@@ -1,6 +1,6 @@
 # 30 — Agent Bridge 全链路架构体检：扩展 × favbase CLI × Skill（2026-09-27）
 
-**状态**：#1 已落地（2026-09-27，D1-a / D2-b，见 §1「实施记录」；#7 随之消失）。#2 已落地（2026-09-27，D3-a / D4-a，见 §2「实施记录」；顺带做了 #10 里「RPC 错误 code → 退出码」那一片）。**favbase 0.2.1 已于 2026-09-27T09:57Z 发布到 npm**（等价于 `2fbcc16`，含 #1 与 SKILL.md 的 `metadata.version`；本机全局安装与 registry tarball 的 `dist/cli.js` 逐字节一致），所以执行顺序第 2 步（#4 止血）已完成，#4 的结构修复（D6/D7）仍待做。其余条目未动。
+**状态**：#1 已落地（2026-09-27，D1-a / D2-b，见 §1「实施记录」；#7 随之消失）。#2 已落地（2026-09-27，D3-a / D4-a，见 §2「实施记录」；顺带做了 #10 里「RPC 错误 code → 退出码」那一片）。#3 已落地（2026-09-27，D5-a，见 §3「实施记录」：doctor 无论哪一步失败都输出完整 JSON）。**favbase 0.2.1 已于 2026-09-27T09:57Z 发布到 npm**（等价于 `2fbcc16`，含 #1 与 SKILL.md 的 `metadata.version`；本机全局安装与 registry tarball 的 `dist/cli.js` 逐字节一致），所以执行顺序第 2 步（#4 止血）已完成，#4 的结构修复（D6/D7）仍待做。其余条目未动。
 
 **范围**：把 Agent Bridge 当成**一个系统**来审，三端一起看：
 
@@ -69,7 +69,7 @@
 | D2（**已定 b**，2026-09-27） | #1 #11 | 扩展的 bad-token 指数退避（30 s 起、封顶 5 min）留还是删 | a. 保留，另加设置卡「立即重连」按钮，`setup` 的 `next:` 提示改成「刷新 favbase 标签页再跑 doctor」<br>b. 删除指数退避：bad-token 照普通 alarm 节奏重试；daemon 对重复的同因拒绝去重记日志；`lastAuthFailureAt` 证据保留 | **b**，但这**推翻 docs/24 Step 1-4 已落地的设计**，需要用户拍板。理由：对 loopback daemon，一次 hello 的成本是 daemon.log 里多一行，而退避的代价是 `setup → doctor` 这条主流程被锁在门外最长 5 分钟。删掉后，`authFailureCount`、`nextRetryAt`、`'user'`/`'schedule'` 的穿透逻辑和倒计时 UI 这一整类特殊情况一起消失。`connectNow`（省掉等下一个 alarm）照留 |
 | D3（**已定 a**，2026-09-27） | #2 | 未分类错误默认给哪个码 | a. exit 1<br>b. 新开一个码 | **a**。已发布的 SKILL.md 对 exit 1 的处置是「不以 `Run favbase --help` 结尾，就把 stderr 给用户看」，对未分类错误恰好正确。新开码则两张表都要改，而且已发布的 SKILL 不认识它 |
 | D4（**已定 a**，2026-09-27） | #2 | `timeout` / `db-unavailable` / `execution-failed` 归哪个码，exit 3 的处置文字怎么写 | a. `timeout` 归 exit 2，exit 2 那一行补「doctor 正常就重试一次」；exit 3 那一行按 stderr 里的 code 分支：`invalid-args`/`unknown-tool` 修命令（`unknown-tool` 也可能是版本漂移，见 #5），其余把消息给用户看<br>b. 全部保持 exit 3，只改文字 | **a**。今天 exit 3 一律写「adjust the arguments」，对这三种 code 都没用。stderr 形状本来就是 `favbase: <code>: <message>`，agent 读得到 code |
-| D5 | #3 | daemon 探针失败时，doctor 还读不读扩展状态 | a. 不读，`extension` 写「未检查（daemon 不可用）」<br>b. 读 | **a**。没有 daemon 就没有扩展状态可读，也避免给出「确认 Chrome 在运行」这类与根因无关的建议 |
+| D5（**已定 a**，2026-09-27） | #3 | daemon 探针失败时，doctor 还读不读扩展状态 | a. 不读，`extension` 写「未检查（daemon 不可用）」<br>b. 读 | **a**。没有 daemon 就没有扩展状态可读，也避免给出「确认 Chrome 在运行」这类与根因无关的建议。用户拍板时补了一条：要**提醒用户**这件事——`troubleshooting` 在根因的修法之后加一行，说明扩展连接（配置失败时连 daemon 一起）没有检查，修好上面的问题再跑一次 `favbase doctor` |
 | D6 | #4 | `main` 上给 agent 读的 markdown 怎样才能不描述未发布的行为 | a. **删掉 INSTALL.md 的退出码表**，INSTALL 只保留跨版本稳定的步骤，排障交给版本一致的来源（`favbase --help`、CLI 自己的 stderr、setup 装下的 SKILL.md）；发布流程改成「版本号递增与 `npm publish` 同一步，并用 `npm view` 核验」<br>b. INSTALL 写死 `npm install -g favbase@X.Y.Z`，由测试对账 `package.json`<br>c. 维持现状，靠流程纪律 | **a**。INSTALL 的退出码表是 SKILL 那张表的第二份拷贝，也是唯一一份不随 CLI 版本走的拷贝（按 deletion test，删掉它复杂度只会消失）。b 挡不住「行为改了、版本号还没改」的那段窗口 |
 | D7 | #4 | `npx skills add InvisibleQAQ/favbase` 这条安装路线留不留 | a. 从根 README 与 ADR 0003 删掉<br>b. 保留，doctor 容忍 `main` 版 | **a**（与 ADR 0003 Decision 第 6 条冲突，但值得重开）。它装的是 `main` 上的 SKILL，与已装 CLI 捆绑的逐字节比对永远是 `stale`；照 doctor 的提示跑 `install-skill` 会把它回滚，下次 `npx skills add` 又翻回去 |
 | D8 | #5 | 跨版本兼容由哪一端负责 | a. **扩展负责**兼容所有已发布的 daemon：daemon 从下个版本起对未知字段宽松、对不支持的 `protocolVersion` 显式回 `reject: version`，扩展按 `welcome.serverVersion` 选择能力；Knowledge Tool 的名字、参数名和 SKILL.md 描述的结果字段只增不删，用一份「已发布契约」黄金文件守住<br>b. 冻结 v1，另起 v2 并行 | **a**。扩展会自动更新而 CLI 不会，只有扩展有能力适配对方。已发布的 0.1.0/0.2.0/0.2.1 daemon 是严格解码的，所以**首个上架的扩展仍必须对它们讲精确的 v1**，这一点改不了 |
@@ -84,9 +84,9 @@
 
 1. **先拍板 D1–D12**。其中 D6 必须最先定：后面每一步都要改 CLI 行为和 agent 读的 markdown，不先定发布规则，改完就会再造一个 #4。
 2. ~~**止血 #4 的活实例**（用户动作）：发布 0.2.1，或者撤回 `1df12e6` 对 INSTALL.md exit-1 那一行的改动。二选一，与后续结构修复无关。~~ **已完成**：0.2.1 于 2026-09-27 发布。
-3. **CLI 的失败链（#2 → #3 → #1）**（#1 已先行落地，2026-09-27；它新增的失败来源与 doctor 无报告路径留给 #2/#3，见 §1「实施记录」的残留。#2 已落地，2026-09-27，见 §2「实施记录」；下一步是 #3）：
+3. **CLI 的失败链（#2 → #3 → #1）**（#1 已先行落地，2026-09-27；它新增的失败来源与 doctor 无报告路径留给 #2/#3，见 §1「实施记录」的残留。#2 已落地，2026-09-27，见 §2「实施记录」；#3 已落地，2026-09-27，见 §3「实施记录」）：
    - #2 先做（**已完成**）。退出码分类收成一个 module。#3 的 `ok` 与退出码、#1 新增的失败都要在这个分类里有归属。
-   - #3 再做。它是 #1 的验收手段：修完 #1 后，「setup → doctor」必须输出完整 JSON。
+   - #3 再做（**已完成**）。它是 #1 的验收手段：修完 #1 后，「setup → doctor」必须输出完整 JSON。
    - #1 最后。CLI 半边复用 `stopDaemon` 的 401 → 按 pid 结束进程路径，以及 `ensureDaemon` 的替换路径；扩展半边按 D2 改。
    - #10 的「哪些 RPC 错误 code 表示扩展不可达」与 #2 有交集，宜在 #2 同一批完成。#11 的常量收拢可以顺带做。
 4. **下一次 `npm publish` 前**：#4 的结构修复（按 D6/D7）与 #13 的文档漂移一起清掉，然后按新流程发布。
@@ -166,7 +166,7 @@
 **残留（属于 #2 / #3，未在本条修）**
 
 - `setup` 新增的失败来源（端口被非 favbase 程序占用 → `foreign`；旧 daemon 停不掉，例如跨用户 `EPERM`）经 `reportFailure` 落成 exit 2（此前 setup 根本不看端口，这两种情况都是 exit 0，要到 doctor 才暴露）。`foreign` 的提示仍是跑不通的 `favbase setup --port <port>`（#2 表中那一行）。（**#2 已修**：两者的消息都改成能直接照做的修法，见 §2「实施记录」；退出码仍是 exit 2。）
-- doctor 在 daemon 半边失败时仍不出 JSON（#3）。本条修完后，「setup → doctor」的主路径不再走那条分支。
+- doctor 在 daemon 半边失败时仍不出 JSON（#3）。本条修完后，「setup → doctor」的主路径不再走那条分支。（**#3 已修**：任何一步失败都输出完整 JSON，见 §3「实施记录」。）
 
 **测试**
 
@@ -272,7 +272,7 @@
 
 **残留**
 
-- doctor 在 daemon 半边失败时仍不出 JSON（#3，下一步）。exit 2 行已经写成对这种情况也有出路。
+- doctor 在 daemon 半边失败时仍不出 JSON（#3，下一步）。exit 2 行已经写成对这种情况也有出路。（**#3 已修**，见 §3「实施记录」；exit 2 行里那半句为已发布的 0.2.1 保留。）
 - #10 只做了 RPC code 分类这一片；daemon HTTP 线协议的 schema、拒绝原因三处字面量、token 上限两处，都未动。
 - #11 的期限常量、15b 的 `reportFailure` 回头嗅探 argv，都未动。
 - SKILL.md 改了，已装的 0.2.1 副本对 `main` 构建的 CLI 会报 `stale`（仅开发机）。下次发布照 Release 流程递增两处版本号。
@@ -311,7 +311,86 @@
 
 doctor 的 JSON 在 daemon 失败时多出字段形状，属于纯追加。退出码在 #2 的分类下保持 exit 2（不可达）不变。`cli-main-doctor.test.ts` 的整模块 mock 可以改成对报告组装的直测，旧用例的语义全部保留。
 
-**待决策**：D5。
+**决策**：D5-a（用户 2026-09-27），并要求把「没查」这件事告诉用户。
+
+### 实施记录（2026-09-27）
+
+**module**：新建 `packages/favbase/doctor.ts`，`favbase doctor` 从此只有一条输出路径。
+
+- **探针永不抛出**：`probeDoctor(context, currency)` 先读 skill 副本（`inspectSkills`）、再走链、最后等版本检查（`checkCliCurrency`）；前后两者本来就不抛。配置 → daemon → 扩展是一条链（`DoctorLink`，判别联合 `reached: 'config' | 'daemon' | 'extension'`）：每一步依赖前一步，所以停在第一个失败处，并保留**原始错误**交给 `describeError`，不预先转成字符串。PRD 写的形状是 `{ok, value} | {ok: false, error}`；实现把三个依次依赖的探针折成一个链式联合，约束相同（原始错误），外加消掉两种不可能状态：「配置失败却有 daemon 结果」和「daemon 失败却读了扩展状态」。后者就是 D5-a，由类型保证，不靠分支记得。
+- **组装是纯函数**：`assembleDoctorReport(probes)` → `{ json, failure, skillHint }`。`ok` 取 `failure === null`：skills 与 cli 从不产生 failure，所以它仍等于「扩展已连接」。`cli-main.ts` 的 `runDoctor` 缩成 probe → assemble → `printJson` → skill 提示 → `printFailure`，共 9 行。
+- **从 `cli-main.ts` 搬走**：`extensionTroubleshooting`、`skillHint`（`printSkillHint` 删除）、`NOT_CONNECTED`（`runTools` 改从 `doctor.ts` import，全仓库只此一份）。`exit-codes.ts` 零改动：失败那一步的退出码与 stderr 行，就是 `describeError` 给其他命令的那些。
+
+**JSON 形状**：四种结局都是同样七个顶层键，顺序固定：`ok`、`cli`、`config`、`daemon`、`extension`、`skills`、`troubleshooting`。失败的那一段带 `problem`（错误消息），它之后没查的段带 `not checked, because …`。
+
+| 结局 | `ok` | `config` | `daemon` | `extension` | `troubleshooting` | 退出码 |
+|---|---|---|---|---|---|---|
+| 扩展已连接 | `true` | `path`/`port`/`tokenSource`/`portSource` | `/status` 的 daemon 段 + `spawned`/`replaced` | 连接快照 | `[]` | 0 |
+| daemon 在、扩展未连 | `false` | 同上 | 同上 | 连接快照 | 原来的五条 | 2（`extension-unavailable`，建议行 = 五条 + 冷启动延迟文案） |
+| daemon 这一步失败 | `false` | 同上 | `{ problem }`；`ensureDaemon` 成功而 `/status` 失败时（`unauthorized`、`protocol`、超时），health、`spawned`、`replaced` 留在 `problem` 旁边 | `{ problem: "not checked, because the daemon is unavailable" }` | `[错误消息, 提醒]` | `describeError`：`DaemonError` 2；`LocalFileError`、idle `ConfigError`、未分类 1——**都带报告** |
+| 配置失败 | `false` | `{ path, problem }` | `{ problem: "not checked, because the config is unusable" }` | 同左 | `[problem, 提醒]` | 1 |
+
+- **提醒行（D5-a）**：daemon 失败时是「The link to the extension was not checked, because the daemon is unavailable. Fix the problem above, then run favbase doctor again.」；配置失败时是「The daemon and the link to the extension were not checked, because the config is unusable. Fix the problem above, then run favbase doctor again.」。不再给「确认 Chrome 在运行」这类与根因无关的建议。`foreign`、`unauthorized`（按 `tokenSource` 分两种说法）、`spawn-failed` 与 `stopToReplace` 的消息本身就写了修法；`protocol` / `unreachable` 没有，照实给出。
+- **stderr 顺序不变**：JSON（stdout）→ skill 提示 → 失败行。失败行就是其他命令对同一错误打印的那几行（如 `favbase: foreign: <message>`）。
+- **归属按步骤，不按类型**：`FAVBASE_DAEMON_IDLE_MINUTES` 非法的 `ConfigError` 在 spawn 前抛出，属于 daemon 这一步，报在 `daemon.problem`，`config` 段照常完整。`config.ts` 里 `LocalFileError` 的注释和包 `CLAUDE.md` 原来写「doctor 把 `ConfigError` 报成 `config.problem`」，已按此改正。
+- **兼容性**：配置失败路径纯追加（多了 `daemon`、`extension`、`troubleshooting`）；daemon 失败路径从「stdout 为空」变成完整报告；其余两种结局的字段、顺序与 stderr 行不变（同一份投影、同一次 `describeToolError` 调用）。trellis-check 做了逐字节比对：把 `HEAD` 的 `cli-main.ts` 取出成临时副本，与新 `main` 在同一个 fake daemon（`/status` 回完整 body）、同一套 `io` 下各跑一次 `doctor`，五种组合（已连接 × 无 skill / stale skill + 过期 CLI；未连接 × 带时间的 bad-token + stale skill + 过期 CLI / 不带时间的 bad-token + skill 全 current / 无拒绝记录）的退出码、stdout、stderr（含 skill 提示与末尾的更新提示）全部逐字节相同；比对本身经变异验证（调换 `config` 段两个键的顺序，五例全红）。临时文件已删除，未入库。未覆盖 `spawned`/`replaced` 为真的组合（要真 spawn），它与已连接路径走同一行展开。
+- 真进程样例（`dist/cli.js doctor`，端口被一个回 `hello` 的 HTTP 服务占着；`config.path` 与 skill 副本从略）：
+
+```json
+{
+  "ok": false,
+  "cli": { "version": "0.2.1", "latest": null, "state": "unknown", "reason": "FAVBASE_NO_UPDATE_CHECK is set" },
+  "config": { "path": "…", "port": 56811, "tokenSource": "env", "portSource": "env" },
+  "daemon": { "problem": "127.0.0.1:56811 is served by something that is not the favbase daemon; pick another port in favbase Settings > Connections > Agent Skills, then copy the setup command there and run it" },
+  "extension": { "problem": "not checked, because the daemon is unavailable" },
+  "skills": [ "…" ],
+  "troubleshooting": [
+    "127.0.0.1:56811 is served by something that is not the favbase daemon; pick another port in favbase Settings > Connections > Agent Skills, then copy the setup command there and run it",
+    "The link to the extension was not checked, because the daemon is unavailable. Fix the problem above, then run favbase doctor again."
+  ]
+}
+```
+
+stderr 是 skill 提示一行，然后 `favbase: foreign: 127.0.0.1:56811 is served by …`，exit 2。
+
+**markdown 刻意没改**
+
+- 三张退出码表（SKILL.md、INSTALL.md、npm README）exit 2 行的「or its stderr message when it prints no report」。对当前 CLI 这半句已不可达，但 INSTALL.md 由 `main` 的 raw URL 被读、读者装到的是 0.2.1；`npx skills add` 也会把 `main` 的 SKILL.md 配给 0.2.1（D7 未定）。0.2.1 在 daemon 失败时仍只打一行 stderr，所以这半句对两个版本都成立，删掉就是再造一个 #4 的活实例。`exit-codes.test.ts` 的锚点不变，只改写了它上方已经失实的注释（原文写「Doctor prints no report for a DaemonError」），说明为什么保留。
+- INSTALL.md Step 5 承诺 doctor「checks the config file, the background daemon and the link to the extension separately」，不改字就成了真的。SKILL.md 与 npm README 对 doctor 的描述今天不假，未动。
+- 包 `CLAUDE.md`：新增 `doctor.ts` 条目；「cli / skills reported on **both** its output paths」那条规则随多余的路径一起删除。
+- `skills/favbase/CLAUDE.md`（维护者读的 SKILL.md 说明）：exit 2 那句原本把「daemon 失败时 doctor 没有报告」当成现状，补一句「只有已发布的 0.2.1 如此，这半句为它的读者保留」（trellis-check 补）。
+
+**测试**
+
+- `cli-main-doctor.test.ts`：删掉整模块 `vi.mock('./daemon-client')`。原有用例语义全部保留，改成直测组装：真 `inspectSkills`（临时 home）加合成的探针结果（skill 三态、legacy root、`CODEX_HOME`、过期 CLI 先升级、skills 与 cli 不改变 `ok` 与退出码、bad-token troubleshooting 与冷启动延迟文案、token 不外泄、replaced 显示）。有两例留在 `main` 层，因为它们测的是接线：CRLF 捆绑 skill（规范化发生在 `main`），以及配置错误路径的 stderr 顺序（倒数第二行仍是 `favbase: <problem>`）。两例都不带 token，碰不到 daemon。
+- 新增：四种结局都恰好七个键且顺序固定。这一例经 `JSON.stringify` 往返后再数键，因为值为 `undefined` 的键会被丢掉，而 `Object.keys` 照样数得到（变异验证时发现）。daemon 这一步失败的表驱动十行：`foreign`、`spawn-failed`、`unauthorized` × 两种 `tokenSource`、`protocol`、`unreachable` × 两种来源（停不掉旧 daemon / `/status` 超时）、`LocalFileError`、idle `ConfigError`、未分类 `Error`。每行断言退出码字面量、`failure` 等于 `describeError(error)`、`daemon` 的形状（有无 `ensureDaemon` 结果）、`extension.problem`，以及 troubleshooting 恰为两项且不含 Chrome。另有配置失败的形状一例，和「daemon 失败时 skill 提示与 cli 照常」一例。
+- 真 socket 端到端（进程内 `main`，空闲端口）：`foreign`（回 `hello` 的 HTTP 服务）→ 可解析 JSON、exit 2、stderr 恰两行（skill 提示、`favbase: foreign: …`）。`unauthorized`（`/health` 以 CLI 同版本应答、`/status` 回 401 的 fake；按 pathname 匹配，因为 doctor 请求的是 `/status?wait=1`，现有 fake 按全 URL 比对会落成 `protocol`）× `env` / `file` 两种 `tokenSource` → `daemon` 保留 health、`spawned`、`replaced`，troubleshooting 首项含该来源的修法，exit 2，fake 只收到 `GET /health` 与 `GET /status?wait=1`（没有 `/shutdown`，也没有替换）。不做 `spawn-failed` 端到端（要等 10 s）。
+- `cli-main.test.ts`：只读 `daemon.log` 的 doctor 用例现在还解析 stdout（`ok: false`，`daemon.problem` 以 `cannot write … daemon.log: E` 开头，扩展未检查）；同表的 `tags` 行断言 stdout 为空。
+- `integration.test.ts`：foreign 用例在 `tags` 之后再跑一次构建产物的 `doctor`：exit 2、stdout 可解析、末行 `favbase: foreign: `（`cliEnv` 自带 `FAVBASE_NO_UPDATE_CHECK=1`）。这是唯一验证 `dist/cli.js` 在这条路径上真把 JSON 刷出来的用例。
+- 写给后来者：mock 去掉之后，带 token 又用默认端口的 `main(['doctor'])` 会打到开发者自己的 daemon；带 token 而端口上什么都没有，则会 spawn `cliPath` 并等满 10 s。新的 doctor 用例只能「不带 token」或「空闲端口 + 自己的 fake」。包 `CLAUDE.md` 的 `doctor.ts` 条目也写了这一条。
+
+**变异验证**（逐一改回旧行为或故意弄坏，全部先红，再恢复）
+
+1. daemon 探针改回抛出（旧行为）→ 进程内 foreign、unauthorized × 2 与 `cli-main.test.ts` 只读日志的 doctor 例红（4 例）；重新构建后，`integration.test.ts` 的 foreign 例红（`Unexpected end of JSON input`）。
+2. 删掉 daemon 失败的提醒行 → 表驱动 10 行 + 端到端 3 例红。
+3. daemon 失败一律 exit 2 → `LocalFileError`、idle `ConfigError`、未分类三行 + 只读日志的 doctor 例红。
+4. daemon 失败时丢掉 `ensureDaemon` 的结果 → `unauthorized` × 2、`protocol`、超时四行 + unauthorized 端到端 2 例红；成功路径丢掉 `spawned`/`replaced` → replaced 例与 connected 例红。
+5. 失败行先于 skill 提示打印 → 配置错误路径的 `at(-2)` 例与三个端到端例红。
+6. `daemon-client.ts` 的 `unauthorized()` 不看 `tokenSource`：固定给 file 修法时只有 env 端到端例红，固定给 env 修法时只有 file 端到端例红。这证明端到端读到的是 daemon-client 产生的真实消息，而不是测试自己合成的。
+7. daemon 失败时 `extension` 置为 `undefined` → 表驱动与端到端红；七键例起初仍是绿的（见上），改为 `JSON.stringify` 往返后变红。
+8. 配置失败时 `daemon`/`extension` 置为 `undefined`（旧形状）→ 七键例、配置失败形状例与 `main` 层配置错误例红。
+9. `config` 段展开整个 `ResolvedConfig`（token 外泄）→「不暴露 token」例等 15 例红。
+10. daemon 失败的提醒行换成 Chrome 建议 → 表驱动 10 行红。
+11. 删掉配置失败的提醒行 → 配置失败形状例红。
+
+- `pnpm test`（`packages/favbase`，含真进程集成）267 通过；根 `tests/agent-bridge-cli-aliases.test.ts` 18 通过。
+
+**残留**
+
+- exit 2 行里「when it prints no report」那半句对当前 CLI 已不可达，等 #4（D6/D7）让 0.2.1 的读者退场时一起删，`exit-codes.test.ts` 的锚点同步改。
+- `probeDoctor`「永不抛出」依赖 `inspectSkills` 与 `checkCliCurrency` 不抛；两者的文档都这样承诺（前者把非 ENOENT 的读错误报成 `stale`），但没有守卫。其中一个将来若会抛，doctor 会退回「无报告 + 一行 stderr」。
+- 各段的 `problem` 只有消息，不带 `DaemonError` 的 code（`foreign`、`unauthorized` 等）；code 只在 stderr 那一行。需要时再加字段（纯追加）。
+- `ensureDaemon` 成功而 `/status?wait=1` 迟迟不回时，doctor 最多等 `REQUEST_TIMEOUT_MS`（120 s）才出报告（`unreachable: timed out after 120000ms`），属于 #11 的期限问题。#10、15b 同样未动。
 
 ---
 

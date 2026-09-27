@@ -158,9 +158,13 @@ describe('the exit-code tables in the markdown', () => {
       expect(row).toContain('show the stderr message to the user');
     });
 
-    // An untyped failure, a DaemonError and a timeout all land here. Doctor
-    // prints no report for a DaemonError (docs/30 #3), and reports ok on a
-    // slow tool: the row covers both.
+    // A DaemonError and a timeout land here (in 0.2.1, an untyped failure
+    // too). Doctor reports ok on a slow tool, hence the retry. Since docs/30 #3
+    // this CLI's doctor prints its report whatever fails, but the published
+    // 0.2.1 prints one stderr line for a DaemonError -- and INSTALL.md is read
+    // from `main` by agents installing 0.2.1, while `npx skills add` pairs
+    // `main`'s SKILL.md with it. So the "no report" clause stays until those
+    // readers are gone (docs/30 #4, D6/D7).
     it('exit 2: runs doctor, acts on its report or its stderr, and retries once when it is ok', () => {
       const row = rowFor(file, EXIT_UNAVAILABLE);
       expect(row).toContain('`favbase doctor`');
