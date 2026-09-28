@@ -16,7 +16,7 @@ import { Iconify } from '@/entrypoints/app/components/iconify';
 import { FadeIn } from '../components/fade-in';
 import { MotionBox } from '../components/motion-box';
 import { FeatureList } from '../components/feature-list';
-import { Eyebrow, Headline, WelcomeSection } from '../components/section-shell';
+import { Headline, SectionCaption, WelcomeSection } from '../components/section-shell';
 
 const FEATURES: LocaleKeys[] = [
   'welcome.bilibili.feature1',
@@ -380,11 +380,13 @@ export function BilibiliShowcase() {
 
         <Grid size={{ xs: 12, md: 5 }}>
           <FadeIn y={-12}>
-            <Eyebrow icon="simple-icons:bilibili">{t('welcome.bilibili.eyebrow')}</Eyebrow>
+            <SectionCaption>{t('welcome.bilibili.eyebrow')}</SectionCaption>
           </FadeIn>
 
-          <FadeIn delay={0.08} sx={{ mt: 2.5 }}>
-            <Headline>{t('welcome.bilibili.heading')}</Headline>
+          <FadeIn delay={0.08} sx={{ mt: 3 }}>
+            <Headline tail={t('welcome.bilibili.headingTail')}>
+              {t('welcome.bilibili.heading')}
+            </Headline>
           </FadeIn>
 
           <FadeIn delay={0.16}>

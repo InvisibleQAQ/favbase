@@ -22,7 +22,7 @@ import { Iconify } from '@/entrypoints/app/components/iconify';
 import { FadeIn } from '../components/fade-in';
 import { MotionBox } from '../components/motion-box';
 import { OrbitCore } from '../components/orbit-core';
-import { ctaGlowShadow, Eyebrow, Headline } from '../components/section-shell';
+import { ctaGlowShadow, Headline, SectionCaption } from '../components/section-shell';
 
 /** Two slow-drifting colour blobs behind the fold. Decorative only. */
 function Aurora() {
@@ -192,7 +192,7 @@ export function Hero() {
           <Grid size={{ xs: 12, md: 7 }}>
             <MotionBox style={{ y: y1 }}>
             <FadeIn y={-14} duration={0.6}>
-              <Eyebrow>{t('welcome.hero.eyebrow')}</Eyebrow>
+              <SectionCaption>{t('welcome.hero.eyebrow')}</SectionCaption>
             </FadeIn>
 
             {/* One h1 for the whole title. Each line keeps its own reveal
@@ -206,7 +206,7 @@ export function Hero() {
                 y={38}
                 sx={{ display: 'block', overflow: 'hidden' }}
               >
-                <Headline component="span" size="hero" sx={{ display: 'block' }}>
+                <Headline component="span" size="hero" ink="brand" sx={{ display: 'block' }}>
                   {t('welcome.hero.titleLine1')}
                 </Headline>
               </FadeIn>
@@ -216,7 +216,7 @@ export function Hero() {
                 y={38}
                 sx={{ display: 'block', overflow: 'hidden' }}
               >
-                <Headline component="span" size="hero" sx={{ display: 'block' }}>
+                <Headline component="span" size="hero" ink="brand" sx={{ display: 'block' }}>
                   {t('welcome.hero.titleLine2')}
                 </Headline>
               </FadeIn>

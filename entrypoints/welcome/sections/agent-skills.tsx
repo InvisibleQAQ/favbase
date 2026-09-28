@@ -13,7 +13,7 @@ import { AGENT_SETUP_GUIDE_URL } from '@/lib/repo';
 
 import { FadeIn } from '../components/fade-in';
 import { FeatureList } from '../components/feature-list';
-import { Eyebrow, Headline, WelcomeSection } from '../components/section-shell';
+import { Headline, SectionCaption, WelcomeSection } from '../components/section-shell';
 
 const FEATURES: LocaleKeys[] = [
   'welcome.agentSkills.feature1',
@@ -88,11 +88,13 @@ export function AgentSkills() {
         }}
       >
         <FadeIn>
-          <Eyebrow icon="solar:code-bold-duotone">{t('welcome.agentSkills.eyebrow')}</Eyebrow>
+          <SectionCaption>{t('welcome.agentSkills.eyebrow')}</SectionCaption>
         </FadeIn>
 
-        <FadeIn delay={0.06} y={16} sx={{ mt: 2.5 }}>
-          <Headline>{t('welcome.agentSkills.heading')}</Headline>
+        <FadeIn delay={0.06} y={16} sx={{ mt: 3 }}>
+          <Headline tail={t('welcome.agentSkills.headingTail')}>
+            {t('welcome.agentSkills.heading')}
+          </Headline>
         </FadeIn>
 
         <FadeIn delay={0.12}>

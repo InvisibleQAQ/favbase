@@ -2,7 +2,7 @@
 
 - 分支：`feat/minimal-ui-polish`（worktree `.claude/worktrees/minimal-ui-polish`，原因见 §6）
 - 参考：app.html ↔ <https://minimals.cc/dashboard>，welcome.html ↔ <https://minimals.cc/>；源码 `$MIN` = `C:\Users\18368\Desktop\00_myCode\35_minimal\minimal-dashboard\minimal-dashboard v7.7.0\Vite.js (JavaScript，TypeScript)\minimal-vite-ts-main\src`
-- 状态：**Step 1 已落地并补验完毕**（四处实现缺陷；首轮未验证的三项已于同日补验，见 §2「验证」）；**Step 2 已落地（2026-09-27）**——用户决定按 Minimal 原样移植深色 CTA 卡，替换点见 §4 Step 2，截图验收已按 §1 补完；Step 3–5 是设计项，**待用户决定**，未开始
+- 状态：**Step 1 已落地并补验完毕**（四处实现缺陷；首轮未验证的三项已于同日补验，见 §2「验证」）；**Step 2 已落地（2026-09-27）**——用户决定按 Minimal 原样移植深色 CTA 卡，替换点见 §4 Step 2，截图验收已按 §1 补完；**Step 3 已落地（2026-09-27）**——用户决定推翻 docs/28 D8，五个 section 标题换 Minimal `SectionTitle` 的中性写法、hero 保 coral，替换点见 §4 Step 3，截图验收已按 §1 补完，D-d 于 2026-09-28 按第一轮截图改为 Minimal 的 `inline-block`；Step 4–5 是设计项，**待用户决定**，未开始
 
 ## §0 结论
 
@@ -18,7 +18,7 @@ BrowserOS neo 的 MCP 工具驱动不了扩展页：`tabs new` 打开 `chrome-ex
 4. **welcome.html 不能整页截图**：它是滚动驱动的（hero 钉住层、叠卡、淡入），整页截图只得到大片空白。改为 `window.scrollTo` 逐屏截（本次 12 个等距位置）。
 5. **暗色模式**：`Emulation.setEmulatedMedia prefers-color-scheme` 对 app.html 无效——模式存在页面 `localStorage` 的 `favbase-color-mode`（`public/theme-init.js`），要点 Header 的 `ThemeModeButton`。这个 key 是所有扩展页共用的，按 MUI 的实现，用户开着的扩展页大概率会经 `storage` 事件跟着变暗（[UNKNOWN] 本次未实测），所以先记下原值、截完立刻点回去。
 6. **装载分支构建**：扩展从主 checkout 的 `.output/chrome-mv3` 以 unpacked 方式加载。在 worktree 里 `pnpm build`，把主 checkout 的 `.output/chrome-mv3` 改名为 `chrome-mv3.main-backup`，再把 worktree 的 `.output/chrome-mv3` 拷过去。
-7. **重载扩展**：在任一 app.html 目标里 `Runtime.evaluate` `chrome.runtime.reload()`。它会关掉**所有**扩展页（包括用户自己开着的），之后要重新 `/json/list` 找目标、并把用户的标签重新打开。
+7. **重载扩展**：在任一 app.html 目标里 `Runtime.evaluate` `chrome.runtime.reload()`。它会关掉**所有**扩展页（包括用户自己开着的），之后要重新 `/json/list` 找目标、并把用户的标签重新打开。**只换页面资源时不必重载扩展**（Step 3 截图时实测）：新构建与已装的构建只差页面 chunk 时，把文件同步进 `.output/chrome-mv3`（删掉旧 chunk，保留 Chrome 生成的 `_metadata/`），再对自己那个标签发 `Page.reload`（`ignoreCache: true`），页面就加载新 chunk，用户的扩展页不受影响。manifest 与 background 变了仍要 `chrome.runtime.reload()`。
 8. **Minimal 对照截图**：在自己新开的标签里截 `/dashboard`、`/dashboard/analytics`、`/dashboard/chat`、`/dashboard/user/account`、`/dashboard/job` 与首页滚动序列；不碰用户开着的 minimals.cc 标签。
 
 ## §2 Step 1 — 四处实现缺陷（已落地）
@@ -47,9 +47,9 @@ BrowserOS neo 的 MCP 工具驱动不了扩展页：`tabs new` 打开 `chrome-ex
 - **[UNKNOWN] 书签卡片的站点图标空白**（`localhost`、`github.com` 等行）。`bookmark-card.tsx` 用 MV3 `_favicon` 端点，它对未知站点也返回 200 的默认图，所以 `Avatar` 的兜底图标不会出现。这张默认图在真 Chrome 里是灰色地球还是空白，没有核实；BrowserOS 里是空白。核实前不算缺陷，也不算正常。
 - **暗色下品牌图标是一块白底方块**（2026-09-27 补验暗色时看到）。app.html 有四处用 `/icon/128.png`（`nav-vertical.tsx`、`nav-mobile.tsx`、`chat-header.tsx`、`chat-message-list.tsx`），welcome 的 `BrandMark` 与 `bilibili-showcase.tsx` 用 `/icon/48.png`。`public/icon/` 下五张 PNG 都是 color type 2（RGB、无 alpha 通道、无 `tRNS`），128.png 四角实测 `rgba(255, 255, 255, 255)`。亮色下白底融进背景看不出来，暗色下就露出一块白方块（截图里看到的是侧栏与 Chat 标题两处；welcome 暗色没截，按文件格式推断相同）。这不是移植缺陷（资源本来就这样，Minimal 的 logo 是透明 SVG），而是缺一份应用内用的透明底 logo。修它要新资源，或决定暗色下给 logo 加底，所以不属于 Step 1，只记在这里。
 
-## §4 待决步骤（Step 2 已落地；Step 3–5 需用户决定，未开始）
+## §4 待决步骤（Step 2、3 已落地；Step 4–5 需用户决定，未开始）
 
-每一条都会推翻或扩展一条已记录的决定，所以不自作主张。Step 2 的两条冲突已由用户 2026-09-27 决定推翻。
+每一条都会推翻或扩展一条已记录的决定，所以不自作主张。Step 2 的两条冲突与 Step 3 的 D8 冲突已由用户 2026-09-27 决定推翻。
 
 ### Step 2 — welcome 结尾改成 Minimal 的深色 CTA 大卡（已落地 2026-09-27）
 
@@ -70,12 +70,43 @@ BrowserOS neo 的 MCP 工具驱动不了扩展页：`tabs new` 打开 `chrome-ex
 - **截图验收（2026-09-27，§1 流程，分支构建装进 BrowserOS）**：1440×900 亮暗两种配色、960（md 横排）、390（xs 纵排），en 与 zh-CN 各看一遍，与 minimals.cc 首页 advertisement 同形。量值：本段 `padding` 为 0，卡片顶边紧贴 picker 的底边（间距即 picker 的 160px 底部留白），卡片底边即 footer 顶边（footer `padding-top` 40px）。暗色下卡底与页面同为 #141A21，只靠 grey.800 边框、网格与右上光斑区分——Minimal 暗色本来就是这样，照搬，不算缺陷。xs 下火箭固定 360 宽，窄于约 440px 时被卡片 `overflow: hidden` 裁掉左右一点，与 Minimal 相同。zh 标题「没找到你的平台？」两段之间无缝，en 窄屏折行落在两段之间时第二行行首无缩进。
 - **顺带看到、不在本步范围**：picker 的「进入 favbase」主 CTA 是墨色实心（`MuiButton` 默认 `color: 'inherit'`，docs/25 Step 1 起如此），所以现在全页唯一的 coral 实心按钮是这张卡的。这是「按 Minimal」与既有主题默认叠加的结果，记在这里，不改。
 
-### Step 3 — section 标题换成 Minimal 的样式
+### Step 3 — section 标题换成 Minimal 的样式（已落地 2026-09-27）
 
-- **Minimal**：`$MIN/sections/home/components/section-title.tsx`：`overline` 小号说明文字 + 标题后半截 `text.primary` → 20% alpha 的灰阶淡出（再叠 `opacity: 0.4`）。
-- **favbase 现状**：`Eyebrow` 药丸 + `headlineGradient(theme)` 的珊瑚渐变（`entrypoints/welcome/components/section-shell.tsx`）。
-- **冲突**：docs/28 **D8 是用户决定**：「结构取、颜色留，保 coral 品牌色，`Eyebrow` 药丸保留」。做这一步等于推翻 D8。
-- **如果要做**：改 `headlineGradient` 这一个 owner 即可（`Headline` 与三步叠卡的大号数字共用它），药丸换 `overline` 文字。
+- **Minimal**：`$MIN/sections/home/components/section-title.tsx`：`SectionCaption`（`overline`、`text.disabled`）+ 标题主体实色、`txtGradient` 那半句 `text.primary` → 20% alpha 灰阶淡出（再叠 `opacity: 0.4`，`inline-block`）。hero 另是彩色（`home-hero.tsx:58-106` 品牌词流动渐变）。
+- **favbase 原状**：`Eyebrow` 药丸 + `headlineGradient(theme)` 的珊瑚渐变，hero 与五个 section 标题共用一道（`entrypoints/welcome/components/section-shell.tsx`）。
+- **冲突**（已推翻）：docs/28 **D8 是用户决定**：「结构取、颜色留，保 coral 品牌色，`Eyebrow` 药丸保留」。docs/28 的 D8 行、§2.4 矩阵 eyebrow / 标题渐变两行已改注（划掉被推翻的半句并注明日期，不删行），§4 E3 补一段更新。
+- **用户决定（2026-09-27）**：
+  - **Q1** hero 标题保 coral 渐变，只改五个 section 标题（flow / chat / agentSkills / bilibili / picker）——正是 Minimal 自己「hero 彩色、section 中性」的分法。hero 的 caption 同样换 overline，全页 caption 一致。Minimal hero 余下的首行 24% 淡化 + 流动渐变不在本步。
+  - **Q2** 形照搬，色取可读下限：caption 用 `text.secondary`（Minimal 是 `text.disabled`）；尾词去掉 Minimal 额外的 `opacity: 0.4`，只留 `text.primary` → 20% 的 `to right` 淡出。favbase 的尾词是含义词（「knowledge base」「while you watch」），不是装饰。
+  - **Q3** 五个标题拆 `heading` + `headingTail`，文案一字不改：zh 两半直接相接、en 加一个空格，都等于原句。
+- **默认决定**（最终确认时告知用户）：
+  - **D-a** 步骤大号数字跟 section 语言走，吃与尾词同一个淡出 helper，不再吃 `headlineGradient`。
+  - **D-b** caption 无图标（Minimal 的 `SectionCaption` 没有图标）：chat / agentSkills / bilibili 三个图标随之消失。三个图标在 app.html 仍有消费者，icon 注册表不动。
+  - **D-c** `Eyebrow` 保留，只剩 how-it-works 卡内提示一个消费者，不改名。**勘误**：任务 PRD 写的理由「overline 的大写会把整句英文变全大写」不成立——`Eyebrow` 的 label 自己就是 `textTransform: uppercase`，卡内提示在英文下一直是全大写。它留下只因为卡内提示不是 section caption。
+  - **D-d**（**2026-09-28 用户决定推翻，见下文截图验收**）：中性尾词照 Minimal `SectionTitle` 用 `inline-block`；白色尾词照 Minimal `home-advertisement` 保持 inline（那里是 inline + `ml: 1`，不是 inline-block）。原先的默认决定是中性尾词也用 `inline`，理由是 inline-block 在标题行里是一个原子，en 两三个词的尾词接不上前半句时会整块掉到下一行，而 inline 能逐词折行。第一轮截图表明逐词折行的代价更大：inline 的背景按 `box-decoration-break: slice` 在各行片段间接续铺开，折下去的那一截只分到渐变末段，单独成行、接近 20% 的收笔色。整块掉行反而是 Minimal 想要的形。**勘误**：任务 PRD 写的「只能整块掉行或溢出」后半句不对——inline-block 宽度以容器宽为上限（shrink-to-fit），超过整行时在自身内部折行，不会溢出。
+  - **D-e** caption → 标题间距 `mt: 2.5` → `mt: 3`（= Minimal `SectionTitle` 的 `gap: 3`；caption 从约 30px 高的药丸变成 18px 一行字，2.5 是按药丸调的）。标题 → 描述间距、`FadeIn` 方向与延迟不动（docs/28 D6）。
+  - **D-f**（主会话决定，改 D-c 原定的「API 不变」）：`Eyebrow` 的无图标分支（6px 圆点）原本只服务 section caption，caption 换走后零消费者，直接删掉而不是记成待清理的债；`icon` 改必填。
+- **对比度**（WCAG 相对亮度，记录，不再重问）：
+  - caption `text.secondary` 12px overline：亮 `#637381` on `#FFFFFF` ≈ 4.9:1、暗 `#919EAB` on `#141A21` ≈ 6.4:1；Minimal 原色 `text.disabled` 亮 ≈ 2.7:1、暗 ≈ 3.6:1，都不过 4.5。
+  - 尾词：起笔 `text.primary`（亮 `#1C252E` on 白 ≈ 15.5:1），收笔 20%（亮 ≈ 1.5:1、暗 ≈ 1.9:1）；Minimal 原样（再叠 0.4）起笔 ≈ 2.4:1、收笔 ≈ 1.2:1。步骤数字落在叠卡的 `background.paper` 上（亮同为白、暗 `#1C252E`），收笔同为约 1.9:1。
+- **替换点**（`section-shell.tsx` 是唯一 owner，调用点不用 sx 覆盖）：
+  - **`SectionCaption`**（新增）：`typography: 'overline'` + `text.secondary`，无药丸、无图标、无 motion（入场仍归调用点的 `FadeIn`，docs/28 D6）。渲染成块，不是 Minimal 的 `span`：Minimal 那里它是 flex item、被 blockify；本页它在 `FadeIn` 的块级 div 里，inline span 会吃父级的行高 strut、比自己的 18px 更高，D-e 的间距就不再是 Minimal 的间距。
+  - **`Headline` 的 `ink` 改三态，默认 `neutral`**：`neutral` = `text.primary` 实色 + `tail` 走淡出、`inline-block`（D-d）；`brand` = `headlineGradient`、不收 `tail`（hero 专用：品牌渐变整句铺开，尾词淡出叠在上面没有定义）；`white` = Step 2 原样。三态收成一张 `INKS` 表（每种墨色一对 head / tail 样式），组件里没有墨色分支；`HeadlineInk` 联合在编译期挡住 `brand` + `tail`。首尾拼接两种收 tail 的墨色共用同一段。
+  - **`fadeTextGradient(theme)`**（新增并导出）：`text.primary` → 20% 的 `to right` 淡出，走 palette 变量、暗色无需分支；neutral 尾词与步骤数字共用（docs/28 E3 的教训：两处不许各写一遍）。
+  - **`headlineGradient`** 只剩 `INKS.brand` 一个消费者，改为模块私有、不再导出；注释删掉「favbase 有品牌色，所以保 coral」，改记 hero 彩色 / section 中性是 Minimal 自己的分法。
+  - **调用点**：`hero.tsx` 两行 `Headline` 显式 `ink="brand"`（默认已变）、caption 换 `SectionCaption`；五个 section 的 caption 换 `SectionCaption`、`Headline` 加 `tail`、间距 `mt: 3`；`how-it-works.tsx` 步骤数字换 `fadeTextGradient`，卡内 `<Eyebrow icon="eva:checkmark-fill">` 不动；`platform-request.tsx` 不动。
+  - **i18n**：`welcome.{flow,chat,agentSkills,bilibili,picker}.heading` 改为前半句，新增 `.headingTail`，两半都不带分隔符（拼接归 `Headline`，同 Step 2）。caption 的 key 仍叫 `welcome.*.eyebrow`，不改名。
+- **验证**：`entrypoints/welcome/components/section-shell.test.tsx` 扩到 6 例——默认（neutral）墨色的首尾拼接两例（en 空格 / zh 无，与 white 共用同一段）；一例锁默认墨色就是 `neutral`：默认与 `ink="neutral"` 渲染出同一个 emotion class、与 `ink="brand"` 不同（相对比较，不快照样式；后一半同时防止两个空 class 让前一半空转）；一例 `brand` + `tail` 的 `@ts-expect-error` 编译期断言（`pnpm compile` 覆盖测试文件）。先红后绿三处都验过：把拼接条件反过来，white 与 neutral 四例全红（`expected 'headtail' to be 'head tail'` 及其反向）；把默认墨色改回 `brand`，默认墨色那例红（两个 class 不等）；把 brand 的 `tail?: never` 放宽成 `ReactNode`，`tsc` 报 `TS2578: Unused '@ts-expect-error' directive`。最终（D-f 之后）：focused `pnpm vitest run entrypoints/welcome` 5 个文件 / 29 例通过；`pnpm compile` 通过；`pnpm build` 通过；`git diff --check` 干净；`pnpm test` 首次整跑 1 例 5 s 超时（`lib/database/proxy-db.test.ts` 冷导入，单跑 3/3 通过），第二次整跑全绿：主仓库 201 个文件 / 1574 例，`packages/*` 15 个文件 / 267 例。实现阶段另有四次整跑每次 1–2 例同类超时（`lib/database/db.test.ts`、`proxy-db.test.ts`、`tests/lib-import-smoke.test.ts`），逐个单跑全过，`--testTimeout=15000` 整跑全绿——失败只在时限，是 Step 2 已记录的本机 CPU 争用抖动。D-d 改成 `inline-block` 之后（2026-09-28）：focused 5 个文件 / 29 例通过，`pnpm compile`、`pnpm build` 通过。`pnpm test` 两次整跑分别有 1 例、2 例 5 s 超时（`tests/lib-import-smoke.test.ts` 的 bilibili 冷导入两次，`lib/database/db.test.ts` 一次），同样只在时限：`lib-import-smoke` 单跑 17/17 通过，`vitest run --testTimeout=15000` 整跑 201 个文件 / 1574 例全绿，`pnpm -r test` 15 个文件 / 267 例全绿。这条改动没有加单测：它只改尾词的 `display`，由下面第二轮截图验收量到的 computed style 覆盖。
+- **截图验收（§1 流程，两轮）**：每个标题滚进视口、等 `FadeIn` 播完，再量 computed style，并截 caption + 标题区域。页面实际加载的 chunk 每轮都核对过，与 worktree `.output` 逐文件一致。
+  - **第一轮（2026-09-27，D-f 之后的构建，`welcome-BkSV96Xj.js`，中性尾词 `inline`）**：1440×900 亮暗、zh-CN 1440、960（md 栏宽）、390（xs）。其余各项都符合预期（量值与第二轮相同，见下），唯一的问题在尾词折行：inline 尾词确实逐词折行（1440 的 agentSkills「what ▏you saved」，960 的「what you ▏saved」，390 的「knowledge ▏base」「while you ▏watch」「collect ▏first?」），但 inline 背景按 `box-decoration-break: slice` 在各行片段间接续铺开，折下去的那一截只分到渐变末段，颜色明显更淡。最显眼的是 zh 1440 的 bilibili 标题：「看视频时，右边多 ▏一块」，「一块」单独一行、接近 20% 的收笔色。用户看过后决定（2026-09-28）改回 Minimal 的 `inline-block`（D-d）。
+  - **改动**：`section-shell.tsx` 的 `INKS.neutral.tail` 加 `display: 'inline-block'`，`fadeTextGradient` 本身不带 display（步骤数字是块级元素，不需要）；白色尾词不动。两轮之间只有 welcome 的 chunk 与 `welcome.html` 不同，按 §1 第 7 条只同步文件、刷新自己的标签，没有重载扩展。
+  - **第二轮（2026-09-28，`welcome-WEh1h_5z.js`，中性尾词 `inline-block`）**：1440×900 亮暗、zh-CN 1440、zh-CN 390、960、390，没有验出问题。量值：
+    - **caption**（五个 section）：块级、高 18px、12px / 600 / uppercase、无底色无边框、零 `svg`；色亮 `rgb(99, 115, 129)`、暗 `rgb(145, 158, 171)`；caption 底边到标题顶边六组都是 24px（D-e）。hero 的 caption 只在第一轮亮色 1440 量过，数值相同（色、字号、18px、24px 间距）；暗色 hero 只看了截图。
+    - **尾词**：中性尾词 `display: inline-block`，白色尾词 `inline`；都是 `background-clip: text`、`opacity: 1`。中性尾词的 `background-image` 亮 `linear-gradient(to right, rgb(28, 37, 46), rgba(28, 37, 46, 0.2))`、暗 `rgb(255, 255, 255)` → `rgba(255, 255, 255, 0.2)`。en 首尾之间是一个空格文本节点，zh 没有文本节点。
+    - **D-a 同源**：三个步骤数字的 `background-image` 与尾词逐字相同（六组都是）。
+    - **hero**：两行仍是 `112deg` 品牌渐变，亮以 `rgb(252, 126, 91)`（primary.main）收笔、暗以 `rgb(253, 164, 138)`（primary.light）收笔。
+    - **折行**：接不上前半句的尾词整块换行、渐变完整。1440 下「Chat with your ▏knowledge base」「Let Claude Code search ▏what you saved」「An extra panel ▏while you watch」「看视频时，▏右边多一块」；960 同 1440；390 下另有「What should we ▏collect first?」；zh 390 下「让 Claude Code 查 ▏你的收藏」。没有单独成行的淡色孤字。各宽度下所有标题 `scrollWidth - clientWidth` 都是 0，没有溢出。
+    - 暗色下步骤数字落在叠卡的 `background.paper` 上，白色起笔、淡出可辨；卡内 `Eyebrow` 提示（带 ✓）照旧是药丸。
 
 ### Step 4 — 段落装饰线（虚线 + 「+」标记）
 

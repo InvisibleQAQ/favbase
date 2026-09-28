@@ -784,6 +784,28 @@ no `.MuiAlert-root`). Mock the barrel, never `sonner`.
 - Async actions show loading/disabled feedback.
 - Page horizontal overflow is forbidden.
 
+> **Warning — the reference source is not a contrast authority.** Minimal puts
+> `text.disabled` on text people are meant to read, so a port that keeps its
+> tokens brings in a failure. Found in welcome (outside this spec's scope,
+> same palette; docs/31 Step 3): `SectionCaption` is 12px `overline` in
+> `text.disabled`, which gives 2.7:1 on light `background.default` and 3.6:1
+> on dark. `text.secondary` gives 4.9:1 and 6.4:1.
+>
+> ~~~tsx
+> // Wrong: token copied from $MIN/sections/home/components/section-title.tsx
+> <Box sx={{ typography: 'overline', color: 'text.disabled' }}>{caption}</Box>
+>
+> // Correct: same shape, readable token; the deviation is recorded in the port's doc
+> <Box sx={{ typography: 'overline', color: 'text.secondary' }}>{caption}</Box>
+> ~~~
+>
+> Before porting a component, compute every text colour × ground pair in both
+> schemes, including alpha stacked by `opacity` or a gradient's end stop.
+> Minimal's section-title tail stacks `opacity: 0.4` on `text.primary → 20%` and
+> starts at 2.4:1. Keep a reference token only where it clears the floor above.
+> Anything under it is a user decision, and the ratio goes in the port's doc:
+> welcome's neutral tail, for example, still ends at 1.5:1 by that choice.
+
 ### Temporary Drawer/Dialog Exit Focus
 
 MUI 9 + React 19 transition ordering is protected by the existing contract:

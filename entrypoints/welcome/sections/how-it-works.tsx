@@ -16,7 +16,7 @@ import { Iconify } from '@/entrypoints/app/components/iconify';
 import { FadeIn } from '../components/fade-in';
 import { MotionBox } from '../components/motion-box';
 import { AnimatedText } from '../components/animated-text';
-import { Eyebrow, Headline, headlineGradient } from '../components/section-shell';
+import { Eyebrow, fadeTextGradient, Headline, SectionCaption } from '../components/section-shell';
 
 type StepGlyphVariant = 'rows' | 'grid' | 'bubble';
 
@@ -225,7 +225,7 @@ function StickyStep({
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <Box
                 sx={(theme) => ({
-                  ...headlineGradient(theme),
+                  ...fadeTextGradient(theme),
                   fontFamily: theme.typography.fontSecondaryFamily,
                   fontWeight: 800,
                   lineHeight: 1,
@@ -306,10 +306,10 @@ export function HowItWorks() {
       <Container maxWidth="lg">
         <Box sx={{ maxWidth: 760 }}>
           <FadeIn y={-12}>
-            <Eyebrow>{t('welcome.flow.eyebrow')}</Eyebrow>
+            <SectionCaption>{t('welcome.flow.eyebrow')}</SectionCaption>
           </FadeIn>
-          <FadeIn delay={0.08} sx={{ mt: 2.5 }}>
-            <Headline>{t('welcome.flow.heading')}</Headline>
+          <FadeIn delay={0.08} sx={{ mt: 3 }}>
+            <Headline tail={t('welcome.flow.headingTail')}>{t('welcome.flow.heading')}</Headline>
           </FadeIn>
           <AnimatedText
             text={t('welcome.flow.intro')}

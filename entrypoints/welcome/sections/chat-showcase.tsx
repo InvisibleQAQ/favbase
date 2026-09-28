@@ -18,7 +18,7 @@ import { FadeIn } from '../components/fade-in';
 import { MotionBox } from '../components/motion-box';
 import { FeatureList } from '../components/feature-list';
 import { useTypewriter } from '../hooks/use-typewriter';
-import { Eyebrow, Headline, WelcomeSection } from '../components/section-shell';
+import { Headline, SectionCaption, WelcomeSection } from '../components/section-shell';
 
 const FEATURES: LocaleKeys[] = [
   'welcome.chat.feature1',
@@ -258,13 +258,11 @@ export function ChatShowcase() {
       <Grid container spacing={{ xs: 5, md: 6 }} sx={{ alignItems: 'center' }}>
         <Grid size={{ xs: 12, md: 5 }}>
           <FadeIn y={-12}>
-            <Eyebrow icon="solar:magic-stick-3-bold-duotone">
-              {t('welcome.chat.eyebrow')}
-            </Eyebrow>
+            <SectionCaption>{t('welcome.chat.eyebrow')}</SectionCaption>
           </FadeIn>
 
-          <FadeIn delay={0.08} sx={{ mt: 2.5 }}>
-            <Headline>{t('welcome.chat.heading')}</Headline>
+          <FadeIn delay={0.08} sx={{ mt: 3 }}>
+            <Headline tail={t('welcome.chat.headingTail')}>{t('welcome.chat.heading')}</Headline>
           </FadeIn>
 
           <FadeIn delay={0.16}>

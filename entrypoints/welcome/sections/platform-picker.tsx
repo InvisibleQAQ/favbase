@@ -22,7 +22,12 @@ import { readinessFor } from '../landing';
 import { FadeIn } from '../components/fade-in';
 import { MotionBox, MotionButtonBase } from '../components/motion-box';
 import { useOnboardingExit } from '../use-onboarding-exit';
-import { ctaGlowShadow, Eyebrow, Headline, WelcomeSection } from '../components/section-shell';
+import {
+  ctaGlowShadow,
+  Headline,
+  SectionCaption,
+  WelcomeSection,
+} from '../components/section-shell';
 
 /** What the user has to do before this platform can sync, at a glance. */
 function readiness(platform: CollectionPlatform): { labelKey: LocaleKeys; icon: IconifyName } {
@@ -151,10 +156,10 @@ export function PlatformPicker() {
     <WelcomeSection id="welcome-picker" sx={{ scrollMarginTop: 80 }}>
       <Box sx={{ maxWidth: 720 }}>
         <FadeIn y={-12}>
-          <Eyebrow>{t('welcome.picker.eyebrow')}</Eyebrow>
+          <SectionCaption>{t('welcome.picker.eyebrow')}</SectionCaption>
         </FadeIn>
-        <FadeIn delay={0.08} sx={{ mt: 2.5 }}>
-          <Headline>{t('welcome.picker.heading')}</Headline>
+        <FadeIn delay={0.08} sx={{ mt: 3 }}>
+          <Headline tail={t('welcome.picker.headingTail')}>{t('welcome.picker.heading')}</Headline>
         </FadeIn>
         <FadeIn delay={0.16}>
           <Typography

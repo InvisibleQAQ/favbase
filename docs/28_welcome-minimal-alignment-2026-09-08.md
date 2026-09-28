@@ -21,7 +21,7 @@
 | D5 | Hero 背景**保留 Aurora**，不移植 `HeroBackground` | 用户决定 |
 | D6 | animate 层**按内容分**：`FadeIn` 保签名（57 处调用点不动）内部换实现；同质列表用 `MotionContainer` + `varContainer` 固定 stagger；有意节奏处保手排 delay | 用户决定 |
 | D7 | animate 原语落 `entrypoints/welcome/components/animate/` + `VENDOR_RULES` 加 `motion` 守卫 | 用户决定 |
-| D8 | section 语言**结构取、颜色留**：渐变实现从 CSS class 换成 `theme.mixins.textGradient`，但**保 coral 品牌色**；`Eyebrow` 药丸保留；`py` md 16→20 | 用户决定 |
+| D8 | section 语言**结构取、颜色留**：渐变实现从 CSS class 换成 `theme.mixins.textGradient`，但~~**保 coral 品牌色**；`Eyebrow` 药丸保留~~；`py` md 16→20。**颜色与药丸两半已于 2026-09-27 由 docs/31 Step 3 推翻**（用户决定）：五个 section 标题改 Minimal 的中性写法（主体 `text.primary` 实色 + 尾词淡出），caption 改裸 overline（`SectionCaption`），coral 渐变只留给 hero——Minimal 自己也是 hero 彩色、section 中性。`textGradient` 实现与 `py` 20 不变，明细见 docs/31 §4 Step 3 | 用户决定 |
 | D9 | Footer = 品牌块 + `v{version} · GPL-3.0`，**零新外链**（repo 链接本页已两处：header `GithubButton` + `PlatformRequest` 的 issue 按钮） | 用户决定 |
 | D10 | 一次做完 + 本文精简决策记录，不写八段 Step 手册 | 用户决定 |
 
@@ -77,8 +77,8 @@
 
 | | favbase 现状 | Minimal | 结果 |
 |---|---|---|---|
-| eyebrow | `Eyebrow` 药丸胶囊 | `SectionCaption` 裸 overline | **保留药丸**（D8） |
-| 标题渐变 | `.fb-headline` CSS class + 两套 CSS var + 六个硬编码 hex | 只给 `txtGradient` 那半句上灰阶淡出（`text.primary` → 20% alpha + `opacity: 0.4`） | **实现换成 `theme.mixins.textGradient`，颜色保 coral**（D8） |
+| eyebrow | `Eyebrow` 药丸胶囊 | `SectionCaption` 裸 overline | ~~**保留药丸**（D8）~~ **2026-09-27 由 docs/31 Step 3 推翻**：改移植的 `SectionCaption`，色取 `text.secondary`（Minimal 是 `text.disabled`，对比度不过 4.5）；`Eyebrow` 只剩 how-it-works 卡内提示 |
+| 标题渐变 | `.fb-headline` CSS class + 两套 CSS var + 六个硬编码 hex | 只给 `txtGradient` 那半句上灰阶淡出（`text.primary` → 20% alpha + `opacity: 0.4`） | **实现换成 `theme.mixins.textGradient`**，~~**颜色保 coral**~~（D8）。**颜色一半 2026-09-27 由 docs/31 Step 3 推翻**：section 标题主体 `text.primary` 实色 + 尾词 `text.primary` → 20% 淡出（去掉 Minimal 的 `opacity: 0.4`），coral 渐变只剩 hero |
 | 字号 | `clamp()` 两档 | `variant="h2"` 主题阶梯 | **保 clamp**（§4 E2） |
 | `py` | `{xs:10, md:16}` | `{xs:10, md:20}` | **取 20** |
 
@@ -181,6 +181,8 @@ welcome 当初自造 clamp 正是因为 favbase 的 theme 没有 Minimal 那档�
 `how-it-works.tsx:224` 直接用了 `className="fb-headline"`（三步叠卡的步骤大号数字），**不走 `Headline` 组件**。删 CSS class 会让它静默失去渐变。
 
 **改法**：渐变抽成 `section-shell.tsx` 的 `headlineGradient(theme)`，`Headline` 与步骤数字共用——与该文件既有的 `ctaGlowShadow(theme)` 同一模式（`entrypoints/welcome/CLAUDE.md` 明写「别再手写」）。这比原方案更好：那两处本来就该同源，分开正是它们在 `welcome.css` 时代能漂的原因。
+
+**2026-09-27 更新**（docs/31 Step 3）：步骤数字改吃 `fadeTextGradient(theme)`，与 section 标题的尾词共用；`headlineGradient` 只剩 hero 一个消费者、不再导出。「两处同源」的做法不变，换的是它们共用的 helper。
 
 顺带：`scroll-progress` 裁成单文件后 animate 层实际 314 行，低于 §1 预估的 404。
 
