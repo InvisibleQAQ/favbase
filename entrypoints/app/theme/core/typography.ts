@@ -17,6 +17,10 @@ const secondaryFont = setFont(themeConfig.fontFamily.secondary);
  * (h2/h3); DM Sans carries everything else at three UI sizes — 16 / 14 / 12 —
  * with hierarchy coming from weight and color, not from more sizes. No
  * responsive scaling: the same entry reads the same at every width.
+ * One call site steps outside it: the Dashboard KPI figure follows Minimal's
+ * `h4` (DM Sans 700, 20px, 24px from md) in
+ * `sections/overview/analytics-widget-summary.tsx`; the exception lives
+ * there, not here (docs/31 Step 5).
  */
 export const typography: TypographyVariantsOptions = {
   fontFamily: primaryFont,

@@ -56,8 +56,21 @@ export function AnalyticsWidgetSummary({
         <Typography variant="subtitle2" component="p">
           {title}
         </Typography>
-        {/* A figure, not a heading — tabular numerals come from CssBaseline. */}
-        <Typography data-slot="kpi-value" variant="h3" component="p" sx={{ mt: 1 }}>
+        {/*
+         * A figure, not a heading — tabular numerals come from CssBaseline.
+         * Minimal's `h4` (700 / 1.5 / 20 -> 24 at md) has no step in Favbase's fixed
+         * scale, so it is overridden here; the theme scale is untouched (docs/31 Step 5).
+         */}
+        <Typography
+          data-slot="kpi-value"
+          variant="h4"
+          component="p"
+          sx={(theme) => ({
+            mt: 1,
+            fontWeight: theme.typography.fontWeightBold,
+            fontSize: { xs: theme.typography.pxToRem(20), md: theme.typography.pxToRem(24) },
+          })}
+        >
           {value}
         </Typography>
         {caption && (

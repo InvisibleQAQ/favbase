@@ -209,6 +209,18 @@ Rules:
 - MUI subtitle variants map to `p` so item titles are not false headings.
 - All variants use zero letter spacing; sizes do not scale with the viewport.
 
+One page call site is exempt from the two viewport rules above, and only one:
+the Dashboard KPI figure (`[data-slot="kpi-value"]`) follows Minimal's `h4` —
+DM Sans 700, line height 1.5, 20px, 24px from `md` (docs/31 Step 5, user
+decision 2026-09-28). The override is written at that call site
+(`sections/overview/analytics-widget-summary.tsx`) over `variant="h4"`, which
+already inherits DM Sans, so the call site sets no `fontFamily`; no variant in
+the table changes and the theme does not regain
+`responsiveFontSizes`. It is not a precedent: any other element that wants to
+scale with the viewport needs its own decision. (The theme's input text,
+15px and 16px below `sm` from `core/components/text-field.tsx`, is a
+theme-owned Minimal port from docs/25 Step 1, not a page call site.)
+
 ## 6. Shape And Elevation
 
 `theme.shape.borderRadius = 8` is the base. Page code grades **down** from it
@@ -557,7 +569,12 @@ Implemented state (docs/25 Step 6, 2026-09-03):
   gradient of two 48% brand tints over a `common.white` base (the base is what
   keeps the dark scheme from going muddy), `<color>.darker` ink, a 48px glyph
   pinned top-right, `subtitle2 component="p"` title and an
-  `h3 component="p"` figure carrying `data-slot="kpi-value"`. An optional
+  `h4 component="p"` figure carrying `data-slot="kpi-value"`, whose weight and
+  size are overridden at the call site to Minimal's `h4` values
+  (`fontWeightBold`, 20px, 24px from `md`; the section 5 exception, docs/31
+  Step 5). The loading skeleton's figure row
+  follows the line box: 30px, 36px from `md`, set through `sx` because the
+  `height` prop lands as an inline style that beats `sx`. An optional
   `caption component="p"` carries one honest secondary line (the coverage card's
   `dashboard.noTags` / `dashboard.taggedCount`) and carries **no `opacity`**:
   Minimal dims that line, but on this card's 48% tint over white a 0.72 alpha

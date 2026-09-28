@@ -2,11 +2,11 @@
 
 - 分支：`feat/minimal-ui-polish`（worktree `.claude/worktrees/minimal-ui-polish`，原因见 §6）
 - 参考：app.html ↔ <https://minimals.cc/dashboard>，welcome.html ↔ <https://minimals.cc/>；源码 `$MIN` = `C:\Users\18368\Desktop\00_myCode\35_minimal\minimal-dashboard\minimal-dashboard v7.7.0\Vite.js (JavaScript，TypeScript)\minimal-vite-ts-main\src`
-- 状态：**Step 1 已落地并补验完毕**（四处实现缺陷；首轮未验证的三项已于同日补验，见 §2「验证」）；**Step 2 已落地（2026-09-27）**——用户决定按 Minimal 原样移植深色 CTA 卡，替换点见 §4 Step 2，截图验收已按 §1 补完；**Step 3 已落地（2026-09-27）**——用户决定推翻 docs/28 D8，五个 section 标题换 Minimal `SectionTitle` 的中性写法、hero 保 coral，替换点见 §4 Step 3，截图验收已按 §1 补完，D-d 于 2026-09-28 按第一轮截图改为 Minimal 的 `inline-block`；**Step 4 已落地（2026-09-28）**——用户决定逐段对照 Minimal 源文件移植段落装饰线（`FloatLine` 一族 + `MotionViewport`），映射与替换点见 §4 Step 4，截图验收已按 §1 补完；Step 5 是设计项，**待用户决定**，未开始
+- 状态：**Step 1 已落地并补验完毕**（四处实现缺陷；首轮未验证的三项已于同日补验，见 §2「验证」）；**Step 2 已落地（2026-09-27）**——用户决定按 Minimal 原样移植深色 CTA 卡，替换点见 §4 Step 2，截图验收已按 §1 补完；**Step 3 已落地（2026-09-27）**——用户决定推翻 docs/28 D8，五个 section 标题换 Minimal `SectionTitle` 的中性写法、hero 保 coral，替换点见 §4 Step 3，截图验收已按 §1 补完，D-d 于 2026-09-28 按第一轮截图改为 Minimal 的 `inline-block`；**Step 4 已落地（2026-09-28）**——用户决定逐段对照 Minimal 源文件移植段落装饰线（`FloatLine` 一族 + `MotionViewport`），映射与替换点见 §4 Step 4，截图验收已按 §1 补完；**Step 5 已落地（2026-09-28）**——用户决定 Dashboard KPI 数字整体照搬 Minimal 的 `h4`（字体、字重、行高、字号四项，不只是原写法的放大字号），生成的 CSS 已在测试环境核对，**实机截图验收挂起**（把构建同步进已加载的扩展目录被本会话权限拦下，见 §4 Step 5「验证」）
 
 ## §0 结论
 
-docs/25（app.html，Step 0–10）与 docs/28（welcome.html）已经把 Minimal 的骨架、主题与段落语言移植完。逐页对照后，剩下的差距**不是缺设计，而是移植时引入的实现缺陷**：四处，每处都能指到一行根因（§2）。更大的视觉改动（§4）每一条都会推翻或扩展一条已记录的决定，所以写这份文档时只列出、不动手，逐条等用户决定；Step 2–4 此后已由用户逐条决定并落地，Step 5 仍待决定。
+docs/25（app.html，Step 0–10）与 docs/28（welcome.html）已经把 Minimal 的骨架、主题与段落语言移植完。逐页对照后，剩下的差距**不是缺设计，而是移植时引入的实现缺陷**：四处，每处都能指到一行根因（§2）。更大的视觉改动（§4）每一条都会推翻或扩展一条已记录的决定，所以写这份文档时只列出、不动手，逐条等用户决定；Step 2–5 此后已由用户逐条决定并落地。
 
 ## §1 对照方法（可复现）
 
@@ -47,9 +47,9 @@ BrowserOS neo 的 MCP 工具驱动不了扩展页：`tabs new` 打开 `chrome-ex
 - **[UNKNOWN] 书签卡片的站点图标空白**（`localhost`、`github.com` 等行）。`bookmark-card.tsx` 用 MV3 `_favicon` 端点，它对未知站点也返回 200 的默认图，所以 `Avatar` 的兜底图标不会出现。这张默认图在真 Chrome 里是灰色地球还是空白，没有核实；BrowserOS 里是空白。核实前不算缺陷，也不算正常。
 - **暗色下品牌图标是一块白底方块**（2026-09-27 补验暗色时看到）。app.html 有四处用 `/icon/128.png`（`nav-vertical.tsx`、`nav-mobile.tsx`、`chat-header.tsx`、`chat-message-list.tsx`），welcome 的 `BrandMark` 与 `bilibili-showcase.tsx` 用 `/icon/48.png`。`public/icon/` 下五张 PNG 都是 color type 2（RGB、无 alpha 通道、无 `tRNS`），128.png 四角实测 `rgba(255, 255, 255, 255)`。亮色下白底融进背景看不出来，暗色下就露出一块白方块（截图里看到的是侧栏与 Chat 标题两处；welcome 暗色没截，按文件格式推断相同）。这不是移植缺陷（资源本来就这样，Minimal 的 logo 是透明 SVG），而是缺一份应用内用的透明底 logo。修它要新资源，或决定暗色下给 logo 加底，所以不属于 Step 1，只记在这里。
 
-## §4 待决步骤（Step 2、3、4 已落地；Step 5 需用户决定）
+## §4 设计步骤（Step 2–5 均已落地）
 
-每一条都会推翻或扩展一条已记录的决定，所以不自作主张。Step 2 的两条冲突与 Step 3 的 D8 冲突已由用户 2026-09-27 决定推翻；Step 4 无冲突，用户 2026-09-28 决定了映射方式。
+每一条都会推翻或扩展一条已记录的决定，所以不自作主张。Step 2 的两条冲突与 Step 3 的 D8 冲突已由用户 2026-09-27 决定推翻；Step 4 无冲突，用户 2026-09-28 决定了映射方式；Step 5 与 docs/25 D8 的冲突由用户 2026-09-28 决定只开一处例外（D8 本身是 PRD 默认，主题字阶不变）。
 
 ### Step 2 — welcome 结尾改成 Minimal 的深色 CTA 大卡（已落地 2026-09-27）
 
@@ -156,12 +156,25 @@ BrowserOS neo 的 MCP 工具驱动不了扩展页：`tabs new` 打开 `chrome-ex
   - **minimals.cc 对照**：integrations 段四个圆点量到 `opacity` 0.12 / 0.12 / 0.12 / 0.12，与本页一致（上文「看起来像偏离」那条）。
   - 暗色是点 Header 的 `ThemeModeButton` 切的，原值 `light`，截完立刻切回，`favbase-color-mode` 读回 `light`。
 
-### Step 5 — Analytics KPI 数字字号
+### Step 5 — Analytics KPI 数字照搬 Minimal 的 `h4`（已落地 2026-09-28，实机截图待验）
 
-- **Minimal**：`$MIN/sections/overview/analytics/analytics-widget-summary.tsx` 的数值用 `typography: 'h4'` = 20px，md 起 24px。
-- **favbase 现状**：`entrypoints/app/sections/overview/analytics-widget-summary.tsx` 用 `variant="h3"` = 平 20px。
-- **冲突**：docs/25 Step 1 刻意压小字号并去掉 `responsiveFontSizes`。
-- **如果要做**：只在 `kpi-value` 这一处加 `fontSize: { md: 24 }`，不动主题阶梯。
+- **Minimal**：`$MIN/sections/overview/analytics/analytics-widget-summary.tsx:118` 的数值是 `typography: 'h4'`。`$MIN/theme/core/typography.ts:96-101` 的 h4 有四项：不带 `fontFamily`（继承根上的 primary，Public Sans；Barlow 在 Minimal 里只给 h1–h3）、700、行高 1.5、20px，`md`（900px，`createTheme()` 默认断点）起 24px。线上 minimals.cc `/dashboard/analytics` 实测（2026-09-28，§1 第 8 条，四张卡都量）：1440 宽 `"Public Sans Variable"` 24px / 700 / 行高 36px，800 宽 20px / 行高 30px，与源码一致。
+- **favbase 原状**：`entrypoints/app/sections/overview/analytics-widget-summary.tsx` 用 `variant="h3"`，四项全不同：Barlow、600、行高 1.3、固定 20px。本节初稿只记了字号一项。
+- **冲突**：docs/25 D8「保留 Favbase 固定 type scale（不移植 Minimal 的 responsive font sizes）」。D8 是 PRD 默认，不是用户决定。
+- **用户决定（2026-09-28）**：**整体照搬 Minimal `h4`**——DM Sans（favbase 里对应 Public Sans 的 primary）、700、行高 1.5、20px → md 起 24px。本节初稿的「如果要做：只在 `kpi-value` 这一处加 `fontSize: { md: 24 }`」只照搬了字号，被这条决定取代；它的另一半「不动主题阶梯」保留。docs/25 D8 行不划掉（主题阶梯仍固定），只追加例外说明；docs/25 Step 6 第 1 条的「数值 `h3`」划掉改注。
+- **默认决定**：
+  - **D-a 写法**：favbase 自己的 `variant="h4"` 本来就是 DM Sans / 行高 1.5（16px / 600，同样不带 `fontFamily`），调用点只把字重换成 `fontWeightBold`、字号换成 `pxToRem(20)` → md `pxToRem(24)`。组件里不写 `fontFamily`（spec §5「No component-local font family」仍成立）；`component="p"`（数字不是标题，大纲 `[1, 2, 2, 3, 2]` 不变）与 `data-slot="kpi-value"`（测试与 `docs/ui-baseline/app-runtime-check.mjs` 读它）不变。
+  - **D-b 例外只写在调用点**：主题不加变体、不改任何数值、不恢复 `responsiveFontSizes`。spec §5 加一条只点名 `[data-slot="kpi-value"]` 的窄例外，写明不作先例。**口径**是「页面调用点里唯一随视口变字号的」，两种更宽的说法都不成立：不是「全 app 唯一」——主题层的输入框也随断点变（`core/components/text-field.tsx` 的 `INPUT_TYPOGRAPHY`，15px、`down('sm')` 起 16px，docs/25 Step 1 照搬 Minimal 的主题内部规则）；也不是「唯一越出 28/24/20/16/14/12 字阶的」——nav subheader 11px、mini nav 10px、设置抽屉与 snackbar 13px 都是移植原语自带的字号。
+  - **D-c 加载骨架**：`analytics-loading.tsx` 的数字行原来是 `height={30}`（与 h3 的 26px 行盒本来就对不上），改为跟新行盒走：xs 30 / md 36。`Skeleton` 的 `height` prop 落成内联 style（MUI 源码 `style: { width, height, ...style }`），会压过 `sx`，所以删掉 prop、写进 `sx`。
+  - **D-d 不加单测**：只改样式值、没有逻辑分支，同 Step 3 D-d 与 Step 4 的处理。
+- **替换点**：
+  - `analytics-widget-summary.tsx`：数字 `variant="h4"` + `sx={(theme) => ({ mt: 1, fontWeight: theme.typography.fontWeightBold, fontSize: { xs: theme.typography.pxToRem(20), md: theme.typography.pxToRem(24) } })}`，上方注释写明这是 Minimal 的 `h4`、主题阶梯不动。
+  - `analytics-loading.tsx`：数字骨架 `sx={{ mt: 1, height: { xs: 30, md: 36 } }}`，无 `height` prop。
+  - `theme/core/typography.ts` 只改块注释（数值零 diff）；spec `ui-design-system.md` §5 窄例外 + §10 KPI 描述；`sections/overview/CLAUDE.md`、`theme/CLAUDE.md`；docs/25 D8 行与 Step 6 第 1 条。
+- **顺带看到、不在本步范围**：Minimal 这张卡与 favbase 还有四处不同——图标在左上 48×48、下接 `mb: 3`（favbase 在右上 `absolute`）；数字用 `fShortenNumber` 缩写（714k / 1.35m，favbase 打完整数字）；`shape-square.svg` 底纹；趋势百分比与 sparkline。都是 docs/25 Step 6 记录过的决定（后两项是 D17「不造数据」），不动。
+- **验证**：focused `pnpm vitest run entrypoints/app/sections/overview` 3 个文件 / 15 例通过；`pnpm compile` 通过；`pnpm build` 通过（background 契约 13 个模块 / 946,270 字节，与 Step 4 相同）；`git diff --check` 干净。`pnpm test` 三次整跑：前两次各 1 例 5 s 超时（`tests/lib-import-smoke.test.ts` 5046 ms、`lib/database/proxy-db.test.ts` 6160 ms，都是冷导入，单跑 17/17、3/3 通过；这两次根目录失败挡住了 `pnpm -r test`，单独补跑 15 个文件 / 267 例通过），第三次全绿：主仓库 201 个文件 / 1574 例、`packages/*` 15 个文件 / 267 例。
+- **CSS 核对（测试环境，代替截图的部分证据）**：在 `ThemeProvider` 下用 happy-dom 渲染组件、导出 emotion 生成的规则（探针测试跑完即删）。数字元素是 `<p class="MuiTypography-root MuiTypography-h4 …">`，基础规则 `font-family:"DM Sans Variable",…;font-weight:600;font-size:1rem;line-height:1.5;…;font-weight:700`，其后 `@media (min-width:0px){font-size:1.25rem}`、`@media (min-width:900px){font-size:1.5rem}`——同一规则里 700 在 600 之后生效，`min-width:0px` 排在基础规则之后，盖掉 h4 自带的 16px。骨架的内联 style 只剩 `width: 72px`，高度来自 `@media (min-width:0px){height:30px}` 与 `(min-width:900px){height:36px}`。主题的 `MuiTypography` 覆盖只有 `variantMapping`；MUI 9.4 的 `createTypography` 只在字体是默认 Roboto 时才加字距，所以两边都没有 `letterSpacing`。
+- **实机截图验收：挂起**。worktree 新构建与已装构建只差 `app.html` 与 app 的 chunk（background、manifest、welcome、popup、offscreen 都字节相同），按 §1 第 7 条本该只同步文件、刷新自己的标签。但往主 checkout 的 `.output/chrome-mv3`（BrowserOS 实际加载的扩展目录）拷文件这一步，被本会话的权限规则判为改共享资源、拦下了，没有绕过。待用户放行或自己同步之后补：1440 与小于 900 两档量 `[data-slot="kpi-value"]` 的 computed style（预期 DM Sans 24px / 700 / 36px 与 20px / 30px），并与 minimals.cc 同宽截图对照。
 
 ## §5 拒绝（沿用既有决定，本次不再提）
 
