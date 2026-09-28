@@ -70,8 +70,11 @@
 | `motion-container.tsx` | 29 | `components/animate/` |
 | `scroll-progress/`（137 + 31） | 75 | `components/animate/scroll-progress.tsx`（单文件，见 §4 E3） |
 | `back-to-top-button.tsx` | 57 | `components/animate/` |
+| `motion-viewport.tsx` | 42 | `components/animate/`（**docs/31 Step 4 追加，2026-09-28**，给段落装饰线当触发器；删掉 `disableAnimate` + `useMediaQuery(smDown)` 分支——它在 600px 处把渲染元素在 `m.div` 与 `div` 之间切换，React 会卸载重建整段内容，理由见 docs/31 §4 Step 4 D-b） |
 
 统一改动：`framer-motion` → `motion/react`；`m` → `motion`（D6 配套，理由见 §3）；`Box component={m.div}` → `MotionBox`（本页「一个动画 Box」只有一个定义处）。
+
+上面的「实际 314 行」是 2026-09-08 这一轮的数；docs/31 Step 4 追加 `motion-viewport.tsx`（42 行）并在 `index.ts` 多一条导出（+2 行）后，`components/animate/` 是 358 行。
 
 ### 2.4 section 语言（`$MIN/sections/home/components/section-title.tsx`）
 
@@ -93,6 +96,8 @@
 ### 3.1 `HeroBackground`（619 行 + 360 KB webp）
 
 `$MIN/sections/home/components/hero-background.tsx` + `hero-svg.tsx`（330）+ `svg-elements.tsx`（289），资源 `background-3.webp` 15 KB + dark 专用 `hero-blur.webp` 345 KB。
+
+> **补注（2026-09-28）**：其中 `svg-elements.tsx` 的 `FloatLine` 一族（`FloatLine` / `FloatPlusIcon` / `FloatTriangleLeftIcon` / `FloatTriangleDownIcon` / `FloatDotIcon`）已由 docs/31 Step 4 移植给 hero 以下的段落用（`entrypoints/welcome/components/svg-elements.tsx`，用户决定逐段对照 Minimal 源文件）；`FloatXIcon` 与 `CircleSvg` 未移植，理由见 docs/31 §4 Step 4 D-a。**`HeroBackground` 本身的拒绝不变**，hero 仍然不画线（Minimal 的 `home-hero` 也不画）。下面三条理由针对的是 hero 的铺满式背景，不是段落 gutter 里的线。
 
 拒绝理由，按强度排序：
 

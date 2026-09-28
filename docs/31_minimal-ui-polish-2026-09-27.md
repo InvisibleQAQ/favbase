@@ -2,11 +2,11 @@
 
 - 分支：`feat/minimal-ui-polish`（worktree `.claude/worktrees/minimal-ui-polish`，原因见 §6）
 - 参考：app.html ↔ <https://minimals.cc/dashboard>，welcome.html ↔ <https://minimals.cc/>；源码 `$MIN` = `C:\Users\18368\Desktop\00_myCode\35_minimal\minimal-dashboard\minimal-dashboard v7.7.0\Vite.js (JavaScript，TypeScript)\minimal-vite-ts-main\src`
-- 状态：**Step 1 已落地并补验完毕**（四处实现缺陷；首轮未验证的三项已于同日补验，见 §2「验证」）；**Step 2 已落地（2026-09-27）**——用户决定按 Minimal 原样移植深色 CTA 卡，替换点见 §4 Step 2，截图验收已按 §1 补完；**Step 3 已落地（2026-09-27）**——用户决定推翻 docs/28 D8，五个 section 标题换 Minimal `SectionTitle` 的中性写法、hero 保 coral，替换点见 §4 Step 3，截图验收已按 §1 补完，D-d 于 2026-09-28 按第一轮截图改为 Minimal 的 `inline-block`；Step 4–5 是设计项，**待用户决定**，未开始
+- 状态：**Step 1 已落地并补验完毕**（四处实现缺陷；首轮未验证的三项已于同日补验，见 §2「验证」）；**Step 2 已落地（2026-09-27）**——用户决定按 Minimal 原样移植深色 CTA 卡，替换点见 §4 Step 2，截图验收已按 §1 补完；**Step 3 已落地（2026-09-27）**——用户决定推翻 docs/28 D8，五个 section 标题换 Minimal `SectionTitle` 的中性写法、hero 保 coral，替换点见 §4 Step 3，截图验收已按 §1 补完，D-d 于 2026-09-28 按第一轮截图改为 Minimal 的 `inline-block`；**Step 4 已落地（2026-09-28）**——用户决定逐段对照 Minimal 源文件移植段落装饰线（`FloatLine` 一族 + `MotionViewport`），映射与替换点见 §4 Step 4，截图验收已按 §1 补完；Step 5 是设计项，**待用户决定**，未开始
 
 ## §0 结论
 
-docs/25（app.html，Step 0–10）与 docs/28（welcome.html）已经把 Minimal 的骨架、主题与段落语言移植完。逐页对照后，剩下的差距**不是缺设计，而是移植时引入的实现缺陷**：四处，每处都能指到一行根因（§2）。更大的视觉改动（§4）每一条都会推翻或扩展一条已记录的决定，所以只列出、不动手。
+docs/25（app.html，Step 0–10）与 docs/28（welcome.html）已经把 Minimal 的骨架、主题与段落语言移植完。逐页对照后，剩下的差距**不是缺设计，而是移植时引入的实现缺陷**：四处，每处都能指到一行根因（§2）。更大的视觉改动（§4）每一条都会推翻或扩展一条已记录的决定，所以写这份文档时只列出、不动手，逐条等用户决定；Step 2–4 此后已由用户逐条决定并落地，Step 5 仍待决定。
 
 ## §1 对照方法（可复现）
 
@@ -47,9 +47,9 @@ BrowserOS neo 的 MCP 工具驱动不了扩展页：`tabs new` 打开 `chrome-ex
 - **[UNKNOWN] 书签卡片的站点图标空白**（`localhost`、`github.com` 等行）。`bookmark-card.tsx` 用 MV3 `_favicon` 端点，它对未知站点也返回 200 的默认图，所以 `Avatar` 的兜底图标不会出现。这张默认图在真 Chrome 里是灰色地球还是空白，没有核实；BrowserOS 里是空白。核实前不算缺陷，也不算正常。
 - **暗色下品牌图标是一块白底方块**（2026-09-27 补验暗色时看到）。app.html 有四处用 `/icon/128.png`（`nav-vertical.tsx`、`nav-mobile.tsx`、`chat-header.tsx`、`chat-message-list.tsx`），welcome 的 `BrandMark` 与 `bilibili-showcase.tsx` 用 `/icon/48.png`。`public/icon/` 下五张 PNG 都是 color type 2（RGB、无 alpha 通道、无 `tRNS`），128.png 四角实测 `rgba(255, 255, 255, 255)`。亮色下白底融进背景看不出来，暗色下就露出一块白方块（截图里看到的是侧栏与 Chat 标题两处；welcome 暗色没截，按文件格式推断相同）。这不是移植缺陷（资源本来就这样，Minimal 的 logo 是透明 SVG），而是缺一份应用内用的透明底 logo。修它要新资源，或决定暗色下给 logo 加底，所以不属于 Step 1，只记在这里。
 
-## §4 待决步骤（Step 2、3 已落地；Step 4–5 需用户决定，未开始）
+## §4 待决步骤（Step 2、3、4 已落地；Step 5 需用户决定）
 
-每一条都会推翻或扩展一条已记录的决定，所以不自作主张。Step 2 的两条冲突与 Step 3 的 D8 冲突已由用户 2026-09-27 决定推翻。
+每一条都会推翻或扩展一条已记录的决定，所以不自作主张。Step 2 的两条冲突与 Step 3 的 D8 冲突已由用户 2026-09-27 决定推翻；Step 4 无冲突，用户 2026-09-28 决定了映射方式。
 
 ### Step 2 — welcome 结尾改成 Minimal 的深色 CTA 大卡（已落地 2026-09-27）
 
@@ -57,14 +57,14 @@ BrowserOS neo 的 MCP 工具驱动不了扩展页：`tabs new` 打开 `chrome-ex
 - **favbase 原状**：`entrypoints/welcome/sections/platform-request.tsx`，居中标题 + 描述 + outlined 按钮。
 - **冲突**（已推翻）：① docs/28 §3.4 **明确拒绝过** `Advertisement`（与 Pricing/Testimonials 等一起，理由是「销售页段落」）；② `platform-request.tsx` 的注释写明该段「刻意低调（outlined、无光晕），不和上方 picker 的『进入 favbase』主 CTA 抢」。深色大卡正好会跟主 CTA 抢。
 - **用户决定（2026-09-27）**：**按 Minimal 原样移植**，只在 Minimal 的内容 favbase 没有对应物的地方替换。本节原先的建议「只借外壳，文案和按钮不变」作废（用户先选过它，随即更正为按 Minimal）。docs/28 §3.4 的 Advertisement 行已改注（划掉并注明移植日期，不删行），`platform-request.tsx` 的头注释改写为移植说明。
-- **照搬**：外壳全部同值（grey.900 底且两种配色都是、`bgGradient` 两条 `grey.500` 4% 的 1px 线织成 36px 网格、`py 8 / px 5`、`borderRadius 3`、grey.800 边框、`overflow hidden`、md 起图左文右并左对齐 / xs 纵排居中）；右上光斑（`opacity 0.4`、`maxWidth 420`、`zIndex 7`）；火箭（宽 360、`aspectRatio 1/1`、`y [-20, 0, -20]` 4s 无限漂浮）；标题白字 + 尾词白 → 40% 白淡出；`Stack spacing 5`；动画方向与距离（图 inUp 120 即 `varFade` 默认距离、标题 inDown 24、按钮 inRight 24），用 `FadeIn` 表达（docs/28 D6：本页有意节奏走 `FadeIn`，没有另建 `MotionViewport`）；间距——Minimal 这段是 `section` + `Container`、自身零纵向 padding（上方是前一段的底部留白，下方直接接 footer 的 `py: 5`），本段照此**不再走 `WelcomeSection`**，改成自己的 `section` + `Container maxWidth="lg"`、无 padding，不在页面的纵向节奏里。
+- **照搬**：外壳全部同值（grey.900 底且两种配色都是、`bgGradient` 两条 `grey.500` 4% 的 1px 线织成 36px 网格、`py 8 / px 5`、`borderRadius 3`、grey.800 边框、`overflow hidden`、md 起图左文右并左对齐 / xs 纵排居中）；右上光斑（`opacity 0.4`、`maxWidth 420`、`zIndex 7`）；火箭（宽 360、`aspectRatio 1/1`、`y [-20, 0, -20]` 4s 无限漂浮）；标题白字 + 尾词白 → 40% 白淡出；`Stack spacing 5`；动画方向与距离（图 inUp 120 即 `varFade` 默认距离、标题 inDown 24、按钮 inRight 24），用 `FadeIn` 表达（docs/28 D6：本页有意节奏走 `FadeIn`，没有另建 `MotionViewport`。Step 4 起本页有了 `MotionViewport`，但它只驱动装饰线，本段内容的动画仍归 `FadeIn`）；间距——Minimal 这段是 `section` + `Container`、自身零纵向 padding（上方是前一段的底部留白，下方直接接 footer 的 `py: 5`），本段照此**不再走 `WelcomeSection`**，改成自己的 `section` + `Container maxWidth="lg"`、无 padding，不在页面的纵向节奏里。
 - **间距勘误（截图后，2026-09-27）**：首版以为本段的 `pt: 0` 在生效，只保留它与原 `pb`。1440×900 实测本段 `padding-top` 是 160px：`WelcomeSection` 的 `py: {xs:10, md:20}` 在 md 起是媒体查询规则，调用点的标量 `pt: 0` 只落进 base 规则，被它盖掉——自 99526f5 加这段起在 md 以上就没生效过，picker 的脚注与卡片之间空出 320px。修法是消掉覆盖（离开 `WelcomeSection`），而不是把覆盖改成带 `md` 键的响应式形状；`WelcomeSection` 的 JSDoc 与 `entrypoints/welcome/CLAUDE.md` 随之写明「覆盖 `py`/`pt`/`pb` 必须带 `md` 键」。
 - **替换点**：
   - **描述段**：Minimal 没有。保留在标题下，固定 `grey.500`（#919EAB on #141A21 ≈ 6.4:1）；不用 `text.secondary`，它随配色变，卡片不变。
   - **按钮**：一个，不是两个。issue 外链改 `contained primary size large`（Minimal「Purchase now」的形），保留 `eva:diagonal-arrow-right-up-fill` 外链图标（Minimal 那个按钮没图标，但它也不是外链），不加 `ctaGlowShadow`（Minimal 没有）。本段只有这一个动作，docs/28 D9 也定了本页零新外链。
   - **标题**：字号仍由 `Headline` 的 clamp 出，不换 `variant h1/h2`（docs/28 E2）。`section-shell.tsx` 的 `Headline` 新增 `ink="white"` 形态（纯 `common.white`，品牌渐变从 grey.800 起笔，亮色下落在 grey.900 上看不见）与只有该形态收的 `tail`（尾词淡出）。i18n 拆成 `welcome.request.heading`（zh「没找到你的」/ en「Don't see your」）+ 新增 `welcome.request.headingTail`（「平台？」/「platform?」）；两段之间 en 一个空格、zh 不加，拼接归 `Headline`、两个翻译都不带分隔符。没用 Minimal 的 `ml: 1`：中文里它多出一道缝，英文换行落在两段之间时行首会留 8px 缩进。
   - **火箭**：`$MIN` 同级的 `public/assets/illustrations/illustration-rocket-large.webp` 原字节拷到本仓库 `public/assets/illustrations/`（9372 字节，`cmp` 一致；保留 Minimal 路径便于溯源），是仓库第一张 Minimal 位图资源。Minimal 是付费模板、本仓库 GPL-3.0 公开，这张图的再分发许可 **[UNKNOWN]**，已向用户说明，用户接受。纯装饰，`alt=""`，不出英文硬编码 alt。`MotionBox` 的类型是 div、收不了 `src`/`alt`，所以 `<img>` 嵌在漂浮层里，而不是像 Minimal 那样自己就是 `m.img`。漂浮是声明式 `animate`，由全页 `MotionConfig reducedMotion="user"` 管。
-  - **未抄**：Minimal 卡片 `sx` 里的 `spacing: 5`——写在 Box 的 `sx` 里，输出的是无效 CSS，在 Minimal 里本来就不生效；`renderLines`（`FloatLine` / `FloatPlusIcon`）归 Step 4，Minimal 挂在 `Container` 上的 `position: relative` + `zIndex: 9` 只为让卡片压过这些线，随它们一起归 Step 4。
+  - **未抄**：Minimal 卡片 `sx` 里的 `spacing: 5`——写在 Box 的 `sx` 里，输出的是无效 CSS，在 Minimal 里本来就不生效；`renderLines`（`FloatLine` / `FloatPlusIcon`）归 Step 4，Minimal 挂在 `Container` 上的 `position: relative` + `zIndex: 9` 只为让卡片压过这些线，随它们一起归 Step 4（2026-09-28 已随 Step 4 补上）。
 - **验收**：原验收「滚动截图里主 CTA 仍是视觉第一」**随用户决定作废**——按 Minimal 移植后，这张深色大卡的视觉分量不再让位于上方 picker 的主 CTA，这是选「按 Minimal」的直接后果。现验收：亮暗两种配色、1440 宽与 md 以下各截图，与 minimals.cc 首页 advertisement 同形（外壳、横排、标题尾部淡出、按钮形态）；深底上标题、描述、按钮在两种配色下都可读。
 - **验证**：新增 `entrypoints/welcome/components/section-shell.test.tsx` 锁首尾拼接（en 有空格 / zh 无；把条件反过来两例都红，已验证）。`pnpm compile` 通过；`pnpm test`：主仓库 201 个文件 / 1570 例，`packages/*` 15 个文件 / 267 例，全部通过。主仓库前两次整跑各有一例 5 s 超时（`lib-import-smoke` 的 bilibili 冷导入，单跑即过），本改动之前的 HEAD 整跑同样有一例超时（`lib/database/db.test.ts`），是本机 CPU 争用下的既有抖动，第三次整跑全绿。`pnpm build` 后火箭落在 `.output/chrome-mv3/assets/illustrations/`（`cmp` 一致），与 Vite 自己产出的 `assets/` 同目录并存、不冲突。间距勘误改完后重跑：`pnpm compile` 通过；`pnpm test` 首次整跑 4 例 5 s 超时（`lib/bilibili/transcribe-utils.test.ts` 2 例，第二例是连带失败——第一例超时后它的 `BV-PROCESSING-RUNS` 转录仍在跑，发出的 `item-content-updated` 落进了第二例的监听，失败值正是 `['BV-PROCESSING-RUNS', 'BV-CONTENT-EVENT']`；`lib/database/proxy-db.test.ts`、`tests/lib-import-smoke.test.ts` 各 1 例，都是冷导入），这三个文件单跑 27/27 通过，第二次整跑全绿（主仓库 201 / 1570，`packages/*` 15 / 267）；`pnpm build` 通过，火箭仍 `cmp` 一致。
 - **截图验收（2026-09-27，§1 流程，分支构建装进 BrowserOS）**：1440×900 亮暗两种配色、960（md 横排）、390（xs 纵排），en 与 zh-CN 各看一遍，与 minimals.cc 首页 advertisement 同形。量值：本段 `padding` 为 0，卡片顶边紧贴 picker 的底边（间距即 picker 的 160px 底部留白），卡片底边即 footer 顶边（footer `padding-top` 40px）。暗色下卡底与页面同为 #141A21，只靠 grey.800 边框、网格与右上光斑区分——Minimal 暗色本来就是这样，照搬，不算缺陷。xs 下火箭固定 360 宽，窄于约 440px 时被卡片 `overflow: hidden` 裁掉左右一点，与 Minimal 相同。zh 标题「没找到你的平台？」两段之间无缝，en 窄屏折行落在两段之间时第二行行首无缩进。
@@ -108,12 +108,53 @@ BrowserOS neo 的 MCP 工具驱动不了扩展页：`tabs new` 打开 `chrome-ex
     - **折行**：接不上前半句的尾词整块换行、渐变完整。1440 下「Chat with your ▏knowledge base」「Let Claude Code search ▏what you saved」「An extra panel ▏while you watch」「看视频时，▏右边多一块」；960 同 1440；390 下另有「What should we ▏collect first?」；zh 390 下「让 Claude Code 查 ▏你的收藏」。没有单独成行的淡色孤字。各宽度下所有标题 `scrollWidth - clientWidth` 都是 0，没有溢出。
     - 暗色下步骤数字落在叠卡的 `background.paper` 上，白色起笔、淡出可辨；卡内 `Eyebrow` 提示（带 ✓）照旧是药丸。
 
-### Step 4 — 段落装饰线（虚线 + 「+」标记）
+### Step 4 — 段落装饰线（Minimal `FloatLine` 一族）（已落地 2026-09-28）
 
-- **Minimal**：`$MIN/sections/home/components/svg-elements.tsx`（289 行）的 `FloatLine` / `FloatPlusIcon` 等，`$MIN/sections/home/` 的 11 个段落文件里 9 个用了它们（`home-hero` 与 `home-for-designer` 没用）；它们**只在 ≥1440px 显示**（`baseStyles` 里 `breakpoints.up(1440)`），描边 `grey.500`、`opacity: 0.24`，进入视口时线条从 0 画到 100%。
-- **favbase 现状**：没有。
-- **冲突**：无直接冲突——docs/28 D5 / §3.1 只拒绝了 hero 的 `HeroBackground`（理由是同心圆虚线与 `OrbitCore` 打架），没有对段落装饰线下结论。
-- **如果要做**：移植 `FloatLine` + `FloatPlusIcon` 两个到 `entrypoints/welcome/components/`（`m` 改 `motion`，按 CLAUDE.md 铁律不引 `LazyMotion`）；hero 段不加，避免重新引入 D5 拒绝的那种语汇冲突。给 `platform-request.tsx` 加线时，同时给它的 `Container` 补上 Minimal 的 `position: relative` + `zIndex: 9`（Step 2 刻意没带，见上）。
+- **Minimal**：`$MIN/sections/home/components/svg-elements.tsx`（289 行）的七个组件——`FloatLine` / `FloatPlusIcon` / `FloatXIcon` / `FloatTriangleLeftIcon` / `FloatTriangleDownIcon` / `CircleSvg` / `FloatDotIcon`——由 `$MIN/components/animate/motion-viewport.tsx`（42 行）触发；`$MIN/sections/home/` 的 11 个段落文件里 9 个用了它们（`home-hero` 与 `home-for-designer` 没用）。除 `CircleSvg` 外都**只在 ≥1440px 显示**（`baseStyles` 的 `breakpoints.up(1440)`），色 `grey.500`、虚线 `strokeDasharray: 3`、线 `opacity: 0.24`。视觉上是左侧 gutter `left: 80` 一条逐段首尾相接的竖向脊线，每段段首一个标记（`+` 与横线交叉、三角、圆点列），进入视口时线从 0 画到 100%；结尾 advertisement 卡处脊线在卡片中线收束成一条横线。结构在每个段落文件里都一样：`section（position: relative）> MotionViewport > renderLines() + Container`，线是 Container 的兄弟。
+- **favbase 原状**：没有。
+- **冲突**：无——docs/28 D5 / §3.1 只拒绝了 hero 的 `HeroBackground`（同心圆虚线与 `OrbitCore` 打架），没有对段落装饰线下结论。docs/28 §3.1 已补注（`HeroBackground` 的拒绝不变）。
+- **用户决定（2026-09-28）**：「完成 step4」，映射选**逐段对照 Minimal 源文件**。本节原先的「如果要做」（只移植 `FloatLine` + `FloatPlusIcon`、五段同一种标记）**被这条决定取代**。线照 Minimal 只在 ≥1440px 显示，1366 / 1280 的笔记本上整步不可见，已向用户说明，用户接受。映射（依据：布局——左文右图 / 居中标题 / 标题 + 滚动内容——与**顶部留白**最接近的 Minimal 段。Minimal 的标记偏移是按各段 padding 调的：`py 20`（160px）的段用「top 80 横线 + `+`」（home-minimal / highlight-features），`pt 10`（80px）的段把标记放在 top 64–80、与 caption 齐平。favbase 的 `WelcomeSection` md 起是 160px，how-it-works 是 `pt md 12`（96px）≈ HugePack 的 80px）：
+
+  | favbase 段 | Minimal 源文件 | `renderLines`（逐值照搬） |
+  |---|---|---|
+  | `hero.tsx` | `home-hero` | 无（Minimal 也无） |
+  | `capability-marquee.tsx` | HugePack 的滚动画廊 / ForDesigner 满宽带 | 无：Minimal 不在满宽滚动内容上画线（HugePack / HighlightFeatures 的 `ScrollRoot` 是 `zIndex: 9` + sticky 不透明底，把脊线盖住） |
+  | `how-it-works.tsx` | `home-hugepack-elements` | 左三角 `top 80, left 80, opacity 0.4` + 竖线 `top 0, left 80` |
+  | `chat-showcase.tsx` | `home-minimal` | `+` `top 72 / bottom 72, left 72` + 横线 `top 80 / bottom 80, left 0` + 竖线 |
+  | `agent-skills.tsx` | `home-testimonials` | `Stack spacing 8`（`top 64, left 80, translateX(-50%)`）里两个下三角：`opacity 0.12`、`30×15 opacity 0.24`；+ 竖线 |
+  | `bilibili-showcase.tsx` | `home-integrations` | `Stack spacing 8`（`top 64 … bottom 64, left 80, zIndex 2, translateX(-50%)`，`'& span': { position: static, opacity: 0.12 }`）里圆点 12 / 14 / 弹性空白 / 14 / 12；+ 竖线 |
+  | `platform-picker.tsx` | `home-highlight-features` | `+` `top 72, left 72` + 横线 `top 80, left 0` + 竖线 |
+  | `platform-request.tsx` | `home-advertisement`（唯一真有源文件的一段） | `+` `left 72, top 50%, mt -1` + 竖线 `top 0, left 80, height calc(50% + 64px)` + 横线 `top 50%, left 0`；Container 补 `position: relative` + `zIndex: 9` |
+
+- **默认决定**（最终确认时告知用户）：
+  - **D-a** 只移植有消费者的五个：`FloatLine` / `FloatPlusIcon` / `FloatTriangleLeftIcon` / `FloatTriangleDownIcon` / `FloatDotIcon`（docs/28 §3.4 先例：零消费者不移植）。**`FloatXIcon` 不移植**：只有 `home-pricing`（Plus 套餐四角）用，映射里没有对应段。**`CircleSvg` 不移植**：它**不受 1440 门控**（`display: { xs: 'none', md: 'block' }`，md 起就显示），在 Minimal 里居中于 Container、落在文字栏与**裸图片**之间的空白处；搬进 chat / bilibili 会落在正文段落后面，另一半被不透明的 demo 卡盖住。docs/28 D5 的理由（与 hero 的 `OrbitCore` 同心圆打架）**不适用**于没有 orbit 的段落，不拿它当理由——理由是落点。
+  - **D-b** `MotionViewport` 移植，删掉 `disableAnimate` + `useMediaQuery(smDown)` 分支：那个分支在 600px 处把渲染元素在 `m.div` 与 `div` 之间切换，React 视为不同元素类型、会**卸载并重建整段内容**——picker 会丢掉已选平台、chat demo 会重播。在 favbase 它本来就零效果：线在 1440 以下隐藏，而段落里除了线没有任何带 `variants` 的后代（`FadeIn` 的 `initial` / `whileInView` 是对象不是 variant label，不进 variant 树；motion 12 `VisualElement.mount` 只把「有 `variants` 且不自控」的节点挂到最近的 variant 父上，已读源码核实）。其余照搬：`initial="initial"`、`whileInView="animate"`、`variants={varContainer()}`、`viewport={{ once: true, amount: 0.3, ...viewport }}`，调用方 props 在后、可覆盖。用 `MotionBox`（本页「一个动画 Box」只有一个定义处），落 `components/animate/motion-viewport.tsx`，从 `animate/index.ts` 导出。
+  - **D-c** 线的 `transition` 不重新声明：Minimal `svg-elements.tsx` 模块内的 `transition = { duration: 0.64, ease: [0.43, 0.13, 0.23, 0.96] }` 与 `transitionEnter()` 逐值相同，改为调用后者（docs/28 E1 收掉的就是这份重复）。
+  - **D-d** 结构照 Minimal：`section > MotionViewport > renderLines() + Container`，线是 Container 的兄弟，定位基准是 `position: relative` 的 section（`MotionViewport` 是静态块、`varContainer` 不动画任何值，不建立包含块）。`WelcomeSection` 加 `lines?: ReactNode`，**始终**包 `MotionViewport`（四个消费者都传线，不留「有线 / 无线」两条分支）。`how-it-works.tsx` 照 HugePack：`MotionViewport` 只包线 + 标题 Container，叠卡 Container 留在外面，触发时机是「标题区 30% 可见」而不是「约 2800px 的整段 30% 可见」。`platform-request.tsx` 的 Container 补 `sx={{ position: 'relative', zIndex: 9 }}`。
+  - **D-e** 每个段落文件自己一个模块级 `const renderLines = () => (<>…</>)`，写法与位置同各自的 Minimal 源文件（`platform-request.tsx` 照 `home-advertisement` 放在组件之后，其余放在组件之前）；不抽共享的「线配方」——每段不同，没有重复。
+  - **D-f** 五个 `Float*` 的根元素默认 `aria-hidden`（Minimal 没有）：纯装饰、零视觉差；写在 `{...other}` 之前，是默认值而不是锁死。
+  - **D-g** how-it-works 的脊线一路陪着叠卡：Minimal 两个滚动画廊的 sticky 底不透明、`zIndex: 9`，把脊线盖住；favbase 的 84vh 卡槽是透明的，竖线（`height: 100%` of section）贯穿约 2800px 的整段。接受（问用户时已说明）。
+  - **D-h** 只搬线，不搬它们的「陪衬」：`home-minimal` 的 section `overflow: 'hidden'`（为 720px 宽的图片溢出）与 Grid 上的 `position: relative; zIndex: 9`（为压过 `CircleSvg` 与横线）都不带进 chat——图片不存在、`CircleSvg` 不移植，chat 的两条横线落在 160px 的上下 padding 里，不与内容重叠。**只有 platform-request 需要 `zIndex: 9`**（横线真的穿过卡片）。
+- **照搬**：`baseStyles`（`zIndex 2`、`display none`、`grey.500`、`absolute`、`& line` 虚线 3 + `currentColor` 描边、`& path` 填充与描边 `currentColor`、`up(1440)` 起 `block`）；`FloatLine` 的 `width 1 / height 1px / zIndex 1 / opacity 0.24`（竖直换成 `1px × 1`）与 `x2` / `y2` `0% → 100%` 的 variants；四个标记的尺寸、`viewBox`、`path` 与 `scale` / `scaleX` / `scaleY` `0 → 1`；`sx` 数组合并写法；各段 `renderLines` 的全部偏移、尺寸与透明度（上表）。`baseStyles` 的返回类型照 Minimal 注成 `SxProps<Theme>`，`tsc` 通过，无需改类型。
+- **替换点**：
+  - **新文件** `entrypoints/welcome/components/svg-elements.tsx`（五个组件）。统一改动三条：`framer-motion` → `motion/react`、`m.*` → `motion.*`（不上 `LazyMotion`，docs/28 §3.2）、`transition` → `transitionEnter()`（D-c）；外加根元素 `aria-hidden`（D-f）。`FloatDotIcon` 是 `MotionBox component="span"`，props 类型取 `ComponentProps<typeof MotionBox>`（Minimal 是 `Box component={m.span}` + `BoxProps<'span'> & MotionProps`，本仓库「一个动画 Box」只在 `motion-box.tsx` 定义一次）；Minimal 靠 UMD 全局 `React.ComponentProps` 的写法改为 `import type { ComponentProps } from 'react'`。纯类型写法差异，值不变。
+  - **新文件** `entrypoints/welcome/components/animate/motion-viewport.tsx`（D-b），props 类型 `ComponentProps<typeof MotionBox>`（对应 Minimal 的 `BoxProps & MotionProps`，拿到 `viewport` 做合并）。
+  - **`section-shell.tsx`**：`WelcomeSection` 加 `lines`（D-d）。
+  - **六个段落**：按上表接线；`hero.tsx`、`capability-marquee.tsx` 不动；`FadeIn` 的方向 / 延迟 / 距离一律不动（docs/28 D6）。`platform-request.tsx` 头注释里「`renderLines` 与 `zIndex: 9` 留给 Step 4」那条改写为已移植的说明。
+- **一处看起来像偏离、其实是照搬**：`home-integrations` 的圆点列里，两个 14px 圆点自己写了 `opacity: 0.24`，但 Stack 的 `'& span': { position: 'static', opacity: 0.12 }` 是后代选择器（特异性 0,1,1），压过圆点自己的 emotion class（0,1,0）——所以在 Minimal 里四个圆点**全是 0.12**，那一对只是更大、不更亮（同一条规则也是把它们的 `position: absolute` 改成 `static` 的原因）。照搬，不修：Minimal 源码里是同一条规则，线上 minimals.cc 的 integrations 段也量到四个 0.12（见下面的截图验收）。截图量 `opacity` 时这是预期值，不是回归。
+- **测试**：没有新增单测。线是纯装饰、没有逻辑分支，覆盖由截图验收的 computed style 量值承担（同 Step 3 D-d 的处理）。考虑过给 `WelcomeSection` 加一例「线是 Container 的兄弟」——锁不住任何东西：MUI `Container` 没有 `position`，线放在 Container 里面或旁边，包含块都是 section。兄弟 / 子节点的区别只在 `platform-request.tsx` 成立（它的 Container 是 `position: relative; zIndex: 9`），那由截图验收的「横线被卡片压住」覆盖。
+- **验证**：focused `pnpm vitest run entrypoints/welcome tests/ui-vendor-boundaries.test.ts tests/i18n-no-hardcoded.test.ts` 7 个文件 / 39 例通过（`motion` 仍只在 `entrypoints/welcome/**`，新文件零 CJK）；`pnpm compile` 通过（`styled(motion.svg)`、`baseStyles` 的 `SxProps<Theme>` 展开、SVG `x2` / `y2` variants 都照 Minimal 原样过了类型检查，没有类型层面的偏离）；`pnpm test` 首次整跑即全绿，主仓库 201 个文件 / 1574 例、`packages/*` 15 个文件 / 267 例，本次没有出现 5 s 冷导入超时；`pnpm build` 通过（background 契约 13 个模块 / 946,270 字节，welcome chunk `welcome-DJSuNu2W.js`）；`git diff --check` 干净（两个新文件经 `git add -N` 一并检查后撤回）。
+- **截图验收（2026-09-28，§1 流程，分支构建装进 BrowserOS）**：新构建与已装构建只差 welcome 的 chunk（`welcome-DJSuNu2W.js`）与 `welcome.html`，按 §1 第 7 条只同步文件、在自己新开的 welcome 标签里加载，没有重载扩展；页面实际加载的正是这个 chunk。整页先逐屏滚一遍让每段的 `MotionViewport` 触发，再量 computed style；1440×900 亮色逐段截图、暗色截 chat / bilibili / request 三段，与 minimals.cc 首页同一宽度的截图对照同形，没有验出问题。量值：
+  - **门控**：21 个装饰元素（4 个 `+`、1 个左三角、2 个下三角、4 个圆点、10 条线）在 1439 宽全部 `display: none`，1440 宽全部 `block`。
+  - **线**：`opacity` 0.24、`stroke-dasharray` 3px、色 `rgb(145, 158, 171)`（grey.500，亮暗相同）。
+  - **画线动画确实经 variant 传播触发（两态读数）**：JSX 里 `x2` / `y2` 本来就写着 `100%`，所以只量「滚过之后是 100%」分不清「画进来了」和「variant 没传到、线从第一帧起就是静态的」。改为重载页面、停在顶部不滚，读视口外 request 与 chat 两段：线 `x2` / `y2` 全是 `0%`，`+` 的 `transform` 是 `matrix(0, 0, 0, 0, 0, 0)`（`scale(0)`）；滚到 request 进入视口、等 1.2 s 再读：线全是 `100%`，`+` 是 `none`。chat 这次没停留也画完了，是因为 `welcome.css` 的 `scroll-behavior: smooth` 让 `scrollTo` 平滑滚动、途经了它。
+  - **标记**：偏移与上表逐值相同（段内坐标）——how-it-works 左三角 (80, 80)、10×20、0.4；chat 两个 `+` 在 (72, 72) 与 (72, 段高 − 88)，两条横线在 80 与段高 − 81；agent-skills 下三角 20×10 在 y 64、30×15 在 y 138（= 64 + 10 + 64），`opacity` 0.12 / 0.24；bilibili 圆点列 12 / 14 / 14 / 12，四个都是 0.12；picker `+` (72, 72)、横线 80；request `+` 在 237（= 50% − 8）、横线在 245（= 490 的 50%）、竖线高 309（= 245 + 64）。
+  - **脊线首尾相接**：how-it-works 1097 起、高 2651 → chat 3748 → agent-skills 4525 → bilibili 5405（竖线从 1px 上边框之内起画，止于 1px 下边框）→ picker 6157 → request 7172，逐段下一段的顶边等于上一段竖线的底端，六处接缝没有断口。
+  - **层叠**：六个 `MotionViewport` 都是 `position: static`、`transform: none`、无内联 `style`，不是包含块；request 卡片中线处 `elementFromPoint` 命中的是卡片正文，左右 gutter 命中的是横线——横线在卡片之下、只从两侧露出，同 Minimal。
+  - **`FadeIn` 不受影响**：六个包了 `MotionViewport` 的段里，每个 `h2` 连同祖先的累计 `opacity` 都是 1。
+  - **D-b**：picker 点选两个平台（CTA 变成「Enter favbase」）后，把视口缩到 500 宽再放回 1440，仍是 2 个 `aria-pressed="true"`、CTA 不变——跨 600px 没有重建。
+  - **minimals.cc 对照**：integrations 段四个圆点量到 `opacity` 0.12 / 0.12 / 0.12 / 0.12，与本页一致（上文「看起来像偏离」那条）。
+  - 暗色是点 Header 的 `ThemeModeButton` 切的，原值 `light`，截完立刻切回，`favbase-color-mode` 读回 `light`。
 
 ### Step 5 — Analytics KPI 数字字号
 

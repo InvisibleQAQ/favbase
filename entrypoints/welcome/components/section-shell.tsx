@@ -10,6 +10,8 @@ import { varAlpha } from 'minimal-shared/utils';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify, type IconifyName } from '@/entrypoints/app/components/iconify';
 
+import { MotionViewport } from './animate';
+
 /**
  * Primary-CTA glow. The hero and picker "main action" buttons share the exact
  * same halo — defined once so the two can never drift apart visually.
@@ -69,13 +71,19 @@ export function fadeTextGradient(theme: Theme): CSSObject {
  *
  * A call site overriding `py`/`pt`/`pb` must give the `md` value too: a scalar
  * lands in the base rule only and loses to this component's `md` media rule.
+ *
+ * `lines` is the band's decoration (`components/svg-elements`), laid out as in
+ * each Minimal section: `section > MotionViewport > lines + Container`. The
+ * lines are the Container's siblings, positioned against this `position:
+ * relative` section, and drawn when `MotionViewport` sees the band.
  */
 export function WelcomeSection({
   id,
   children,
+  lines,
   sx,
   ...other
-}: BoxProps & { id?: string; children: ReactNode }) {
+}: BoxProps & { id?: string; children: ReactNode; lines?: ReactNode }) {
   return (
     <Box
       id={id}
@@ -86,7 +94,10 @@ export function WelcomeSection({
       ]}
       {...other}
     >
-      <Container maxWidth="lg">{children}</Container>
+      <MotionViewport>
+        {lines}
+        <Container maxWidth="lg">{children}</Container>
+      </MotionViewport>
     </Box>
   );
 }

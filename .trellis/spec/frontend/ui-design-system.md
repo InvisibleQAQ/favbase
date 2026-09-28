@@ -846,6 +846,34 @@ with `transform` would leave wrapping, Header alignment, and hit geometry
 stale. The duration/easing remain owned by `dashboard/css-vars.ts`; revisit
 only when a real Chrome performance trace demonstrates dropped frames.
 
+> **Warning — picking a wrapper's element type from a breakpoint remounts
+> everything inside it.** React compares element types, not markup: if a
+> wrapper renders `motion.div` on one side of a `useMediaQuery` and a plain
+> `div` on the other (or `mdUp ? A : B` as the component), crossing the
+> breakpoint unmounts and rebuilds the whole subtree. Local state is lost and
+> mount effects run again. Nothing fails at a fixed width, so it only shows on
+> resize, DevTools device toggling, or rotating a tablet.
+>
+> Found in welcome (outside this spec's scope, same React mechanics; docs/31
+> Step 4): Minimal's `MotionViewport` swaps `m.div` for `div` below `sm` when
+> `disableAnimate` is set, and wrapping a band in it would have cleared the
+> platform picker's selection and replayed the chat demo at 600px. The port
+> deletes the branch.
+>
+> ~~~tsx
+> // Wrong: the element type depends on the breakpoint, so the children remount
+> const smDown = useMediaQuery((theme) => theme.breakpoints.down('sm'));
+> return <Box {...(smDown ? {} : { component: m.div, whileInView: 'animate' })}>{children}</Box>;
+>
+> // Correct: one element type at every width; vary props or styles instead
+> return <MotionBox initial="initial" whileInView="animate" variants={varContainer()}>{children}</MotionBox>;
+> ~~~
+>
+> Check any responsive switch around stateful children by changing state,
+> resizing across the breakpoint and back, and reading the state again (the
+> Step 4 check: two picker cards still `aria-pressed="true"` after 1440 → 500
+> → 1440).
+
 ## 14. Sx Pattern
 
 Use composable arrays when a component exposes `sx`:

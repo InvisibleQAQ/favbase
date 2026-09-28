@@ -18,6 +18,7 @@ import { FadeIn } from '../components/fade-in';
 import { MotionBox } from '../components/motion-box';
 import { FeatureList } from '../components/feature-list';
 import { useTypewriter } from '../hooks/use-typewriter';
+import { FloatLine, FloatPlusIcon } from '../components/svg-elements';
 import { Headline, SectionCaption, WelcomeSection } from '../components/section-shell';
 
 const FEATURES: LocaleKeys[] = [
@@ -250,11 +251,31 @@ function ChatDemo() {
   );
 }
 
+/**
+ * Minimal `home-minimal`'s lines, value for value: `+` marks and rules at 80px
+ * from the top and bottom edges, crossing the spine. Both rules fall inside the
+ * band's 160px vertical padding, clear of the content.
+ *
+ * Only the lines come across (docs/31 Step 4, D-h). That band's
+ * `overflow: hidden` exists for its 720px image and the Grid's `zIndex: 9` to
+ * lift content over its `CircleSvg` and rules; there is no image here,
+ * `CircleSvg` is not ported, and nothing overlaps the rules.
+ */
+const renderLines = () => (
+  <>
+    <FloatPlusIcon sx={{ top: 72, left: 72 }} />
+    <FloatPlusIcon sx={{ bottom: 72, left: 72 }} />
+    <FloatLine sx={{ top: 80, left: 0 }} />
+    <FloatLine sx={{ bottom: 80, left: 0 }} />
+    <FloatLine vertical sx={{ top: 0, left: 80 }} />
+  </>
+);
+
 export function ChatShowcase() {
   const { t } = useTranslation();
 
   return (
-    <WelcomeSection id="welcome-chat" sx={{ scrollMarginTop: 80 }}>
+    <WelcomeSection id="welcome-chat" sx={{ scrollMarginTop: 80 }} lines={renderLines()}>
       <Grid container spacing={{ xs: 5, md: 6 }} sx={{ alignItems: 'center' }}>
         <Grid size={{ xs: 12, md: 5 }}>
           <FadeIn y={-12}>

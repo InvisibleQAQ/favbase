@@ -11,7 +11,9 @@ import { PLATFORM_REQUEST_ISSUE_URL } from '@/lib/repo';
 
 import { FadeIn } from '../components/fade-in';
 import { MotionBox } from '../components/motion-box';
+import { MotionViewport } from '../components/animate';
 import { Headline } from '../components/section-shell';
+import { FloatLine, FloatPlusIcon } from '../components/svg-elements';
 
 /** Minimal's rocket, copied byte for byte and kept under Minimal's path. */
 const ROCKET_SRC = '/assets/illustrations/illustration-rocket-large.webp';
@@ -36,9 +38,13 @@ const ROCKET_SRC = '/assets/illustrations/illustration-rocket-large.webp';
  *   (Minimal's white -> 40% white fade), not `variant h1/h2` (docs/28 E2).
  * - Minimal's `spacing: 5` on the card is dropped: it sits in a Box's `sx`,
  *   where it emits no valid CSS.
- * - `renderLines` (FloatLine / FloatPlusIcon) waits for docs/31 Step 4, and
- *   so does Minimal's `zIndex: 9` on the Container: it only lifts the card
- *   above those lines.
+ *
+ * The lines came across in docs/31 Step 4, value for value (`renderLines`
+ * below): the spine runs on from the band above and stops 64px past the card's
+ * midline, where a full-width rule crosses it under a `+`. That rule passes
+ * behind the card, which is what the Container's `position: relative` +
+ * `zIndex: 9` is for. As in Minimal, the lines are the Container's siblings,
+ * so they are placed against this section, not against the lifted Container.
  *
  * Spacing is Minimal's as well: a bare `section` + `Container` with no vertical
  * padding of its own, off `WelcomeSection`'s page rhythm. The picker's bottom
@@ -55,82 +61,94 @@ export function PlatformRequest() {
 
   return (
     <Box component="section" sx={{ position: 'relative' }}>
-      <Container maxWidth="lg">
-        <Box
-          sx={(theme) => ({
-            ...theme.mixins.bgGradient({
-              images: [
-                `linear-gradient(0deg, ${varAlpha(theme.vars.palette.grey['500Channel'], 0.04)} 1px, transparent 1px)`,
-                `linear-gradient(90deg, ${varAlpha(theme.vars.palette.grey['500Channel'], 0.04)} 1px, transparent 1px)`,
-              ],
-              sizes: ['36px 36px'],
-              repeats: ['repeat'],
-            }),
-            py: 8,
-            px: 5,
-            borderRadius: 3,
-            display: 'flex',
-            overflow: 'hidden',
-            bgcolor: 'grey.900',
-            position: 'relative',
-            alignItems: 'center',
-            textAlign: { xs: 'center', md: 'left' },
-            flexDirection: { xs: 'column', md: 'row' },
-            border: `solid 1px ${theme.vars.palette.grey[800]}`,
-          })}
-        >
-          <Rocket />
+      <MotionViewport>
+        {renderLines()}
 
-          <Stack spacing={5} sx={{ zIndex: 9 }}>
-            <FadeIn y={-24} delay={0.05}>
-              <Headline ink="white" tail={t('welcome.request.headingTail')}>
-                {t('welcome.request.heading')}
-              </Headline>
-              <Typography
+        <Container maxWidth="lg" sx={{ position: 'relative', zIndex: 9 }}>
+          <Box
+            sx={(theme) => ({
+              ...theme.mixins.bgGradient({
+                images: [
+                  `linear-gradient(0deg, ${varAlpha(theme.vars.palette.grey['500Channel'], 0.04)} 1px, transparent 1px)`,
+                  `linear-gradient(90deg, ${varAlpha(theme.vars.palette.grey['500Channel'], 0.04)} 1px, transparent 1px)`,
+                ],
+                sizes: ['36px 36px'],
+                repeats: ['repeat'],
+              }),
+              py: 8,
+              px: 5,
+              borderRadius: 3,
+              display: 'flex',
+              overflow: 'hidden',
+              bgcolor: 'grey.900',
+              position: 'relative',
+              alignItems: 'center',
+              textAlign: { xs: 'center', md: 'left' },
+              flexDirection: { xs: 'column', md: 'row' },
+              border: `solid 1px ${theme.vars.palette.grey[800]}`,
+            })}
+          >
+            <Rocket />
+
+            <Stack spacing={5} sx={{ zIndex: 9 }}>
+              <FadeIn y={-24} delay={0.05}>
+                <Headline ink="white" tail={t('welcome.request.headingTail')}>
+                  {t('welcome.request.heading')}
+                </Headline>
+                <Typography
+                  sx={{
+                    mt: 2,
+                    maxWidth: 520,
+                    mx: { xs: 'auto', md: 0 },
+                    color: 'grey.500',
+                    lineHeight: 1.75,
+                    textWrap: 'pretty',
+                  }}
+                >
+                  {t('welcome.request.desc')}
+                </Typography>
+              </FadeIn>
+
+              <Box
                 sx={{
-                  mt: 2,
-                  maxWidth: 520,
-                  mx: { xs: 'auto', md: 0 },
-                  color: 'grey.500',
-                  lineHeight: 1.75,
-                  textWrap: 'pretty',
+                  gap: 2,
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  justifyContent: { xs: 'center', md: 'flex-start' },
                 }}
               >
-                {t('welcome.request.desc')}
-              </Typography>
-            </FadeIn>
+                <FadeIn x={24} y={0} delay={0.1}>
+                  <Button
+                    size="large"
+                    variant="contained"
+                    color="primary"
+                    component="a"
+                    href={PLATFORM_REQUEST_ISSUE_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    endIcon={<Iconify icon="eva:diagonal-arrow-right-up-fill" width={18} />}
+                  >
+                    {t('welcome.request.cta')}
+                  </Button>
+                </FadeIn>
+              </Box>
+            </Stack>
 
-            <Box
-              sx={{
-                gap: 2,
-                display: 'flex',
-                flexWrap: 'wrap',
-                justifyContent: { xs: 'center', md: 'flex-start' },
-              }}
-            >
-              <FadeIn x={24} y={0} delay={0.1}>
-                <Button
-                  size="large"
-                  variant="contained"
-                  color="primary"
-                  component="a"
-                  href={PLATFORM_REQUEST_ISSUE_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  endIcon={<Iconify icon="eva:diagonal-arrow-right-up-fill" width={18} />}
-                >
-                  {t('welcome.request.cta')}
-                </Button>
-              </FadeIn>
-            </Box>
-          </Stack>
-
-          <Blur />
-        </Box>
-      </Container>
+            <Blur />
+          </Box>
+        </Container>
+      </MotionViewport>
     </Box>
   );
 }
+
+const renderLines = () => (
+  <>
+    <FloatPlusIcon sx={{ left: 72, top: '50%', mt: -1 }} />
+    <FloatLine vertical sx={{ top: 0, left: 80, height: 'calc(50% + 64px)' }} />
+    <FloatLine sx={{ top: '50%', left: 0 }} />
+  </>
+);
 
 /**
  * Decorative (`alt=""`), floating on a declarative `animate` loop that the

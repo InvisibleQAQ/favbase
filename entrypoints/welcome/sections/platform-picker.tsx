@@ -22,6 +22,7 @@ import { readinessFor } from '../landing';
 import { FadeIn } from '../components/fade-in';
 import { MotionBox, MotionButtonBase } from '../components/motion-box';
 import { useOnboardingExit } from '../use-onboarding-exit';
+import { FloatLine, FloatPlusIcon } from '../components/svg-elements';
 import {
   ctaGlowShadow,
   Headline,
@@ -144,6 +145,19 @@ function PlatformCard({
   );
 }
 
+/**
+ * Minimal `home-highlight-features`' lines, value for value: a `+` mark and a
+ * rule 80px from the top edge, crossing the spine — inside the band's 160px
+ * top padding, clear of the heading.
+ */
+const renderLines = () => (
+  <>
+    <FloatPlusIcon sx={{ top: 72, left: 72 }} />
+    <FloatLine sx={{ top: 80, left: 0 }} />
+    <FloatLine vertical sx={{ top: 0, left: 80 }} />
+  </>
+);
+
 export function PlatformPicker() {
   const { t } = useTranslation();
   const { exit, leaving } = useOnboardingExit();
@@ -153,7 +167,7 @@ export function PlatformPicker() {
     setPicked((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]));
 
   return (
-    <WelcomeSection id="welcome-picker" sx={{ scrollMarginTop: 80 }}>
+    <WelcomeSection id="welcome-picker" sx={{ scrollMarginTop: 80 }} lines={renderLines()}>
       <Box sx={{ maxWidth: 720 }}>
         <FadeIn y={-12}>
           <SectionCaption>{t('welcome.picker.eyebrow')}</SectionCaption>
