@@ -835,6 +835,32 @@ sx={[
 ]}
 ~~~
 
+> **Warning — a scalar override loses to a responsive default.** Appending the
+> caller's `sx` last only wins per emitted rule. If the component's own value is
+> responsive (`py: { xs: 10, md: 20 }`), MUI emits a base rule plus a
+> `@media (min-width: 900px)` rule; a caller's scalar (`pt: 0`) lands in the
+> base rule only, so from `md` up the component's media rule still applies.
+> Nothing warns: it looks right on a narrow window and wrong on a desktop one.
+>
+> Found in welcome's `WelcomeSection` (outside this spec's scope, same MUI
+> mechanics; docs/31 Step 2): `PlatformRequest` passed `pt: 0`, which never
+> applied at `md`+ from the day it was written (160px measured at 1440).
+>
+> ~~~tsx
+> // Wrong: base rule only; the md media rule of `py` still gives 160px
+> <WelcomeSection sx={{ pt: 0 }} />
+>
+> // Correct when the override is real: same shape as the default
+> <WelcomeSection sx={{ pt: { xs: 0, md: 0 } }} />
+>
+> // Better when the band simply isn't on that rhythm: don't use the wrapper
+> <Box component="section"><Container maxWidth="lg">…</Container></Box>
+> ~~~
+>
+> Verify an override by measuring `getComputedStyle(el)` for the overridden
+> property at a viewport at or above every breakpoint key the default uses, not
+> at whatever width the window happens to have.
+
 ## 15. Forbidden Patterns
 
 | Pattern | Use instead |

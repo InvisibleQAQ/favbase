@@ -2,7 +2,7 @@
 
 - 分支：`feat/minimal-ui-polish`（worktree `.claude/worktrees/minimal-ui-polish`，原因见 §6）
 - 参考：app.html ↔ <https://minimals.cc/dashboard>，welcome.html ↔ <https://minimals.cc/>；源码 `$MIN` = `C:\Users\18368\Desktop\00_myCode\35_minimal\minimal-dashboard\minimal-dashboard v7.7.0\Vite.js (JavaScript，TypeScript)\minimal-vite-ts-main\src`
-- 状态：**Step 1 已落地并补验完毕**（四处实现缺陷；首轮未验证的三项已于同日补验，见 §2「验证」）；**Step 2 已落地（2026-09-27）**——用户决定按 Minimal 原样移植深色 CTA 卡，替换点见 §4 Step 2，截图验收待按 §1 补；Step 3–5 是设计项，**待用户决定**，未开始
+- 状态：**Step 1 已落地并补验完毕**（四处实现缺陷；首轮未验证的三项已于同日补验，见 §2「验证」）；**Step 2 已落地（2026-09-27）**——用户决定按 Minimal 原样移植深色 CTA 卡，替换点见 §4 Step 2，截图验收已按 §1 补完；Step 3–5 是设计项，**待用户决定**，未开始
 
 ## §0 结论
 
@@ -57,15 +57,18 @@ BrowserOS neo 的 MCP 工具驱动不了扩展页：`tabs new` 打开 `chrome-ex
 - **favbase 原状**：`entrypoints/welcome/sections/platform-request.tsx`，居中标题 + 描述 + outlined 按钮。
 - **冲突**（已推翻）：① docs/28 §3.4 **明确拒绝过** `Advertisement`（与 Pricing/Testimonials 等一起，理由是「销售页段落」）；② `platform-request.tsx` 的注释写明该段「刻意低调（outlined、无光晕），不和上方 picker 的『进入 favbase』主 CTA 抢」。深色大卡正好会跟主 CTA 抢。
 - **用户决定（2026-09-27）**：**按 Minimal 原样移植**，只在 Minimal 的内容 favbase 没有对应物的地方替换。本节原先的建议「只借外壳，文案和按钮不变」作废（用户先选过它，随即更正为按 Minimal）。docs/28 §3.4 的 Advertisement 行已改注（划掉并注明移植日期，不删行），`platform-request.tsx` 的头注释改写为移植说明。
-- **照搬**：外壳全部同值（grey.900 底且两种配色都是、`bgGradient` 两条 `grey.500` 4% 的 1px 线织成 36px 网格、`py 8 / px 5`、`borderRadius 3`、grey.800 边框、`overflow hidden`、md 起图左文右并左对齐 / xs 纵排居中）；右上光斑（`opacity 0.4`、`maxWidth 420`、`zIndex 7`）；火箭（宽 360、`aspectRatio 1/1`、`y [-20, 0, -20]` 4s 无限漂浮）；标题白字 + 尾词白 → 40% 白淡出；`Stack spacing 5`；动画方向与距离（图 inUp 120 即 `varFade` 默认距离、标题 inDown 24、按钮 inRight 24），用 `FadeIn` 表达（docs/28 D6：本页有意节奏走 `FadeIn`，没有另建 `MotionViewport`）。本段 `pt: 0` 与原 `pb` 不变——Minimal 的这段自身也不带纵向 padding，靠前一段的底部留白。
+- **照搬**：外壳全部同值（grey.900 底且两种配色都是、`bgGradient` 两条 `grey.500` 4% 的 1px 线织成 36px 网格、`py 8 / px 5`、`borderRadius 3`、grey.800 边框、`overflow hidden`、md 起图左文右并左对齐 / xs 纵排居中）；右上光斑（`opacity 0.4`、`maxWidth 420`、`zIndex 7`）；火箭（宽 360、`aspectRatio 1/1`、`y [-20, 0, -20]` 4s 无限漂浮）；标题白字 + 尾词白 → 40% 白淡出；`Stack spacing 5`；动画方向与距离（图 inUp 120 即 `varFade` 默认距离、标题 inDown 24、按钮 inRight 24），用 `FadeIn` 表达（docs/28 D6：本页有意节奏走 `FadeIn`，没有另建 `MotionViewport`）；间距——Minimal 这段是 `section` + `Container`、自身零纵向 padding（上方是前一段的底部留白，下方直接接 footer 的 `py: 5`），本段照此**不再走 `WelcomeSection`**，改成自己的 `section` + `Container maxWidth="lg"`、无 padding，不在页面的纵向节奏里。
+- **间距勘误（截图后，2026-09-27）**：首版以为本段的 `pt: 0` 在生效，只保留它与原 `pb`。1440×900 实测本段 `padding-top` 是 160px：`WelcomeSection` 的 `py: {xs:10, md:20}` 在 md 起是媒体查询规则，调用点的标量 `pt: 0` 只落进 base 规则，被它盖掉——自 99526f5 加这段起在 md 以上就没生效过，picker 的脚注与卡片之间空出 320px。修法是消掉覆盖（离开 `WelcomeSection`），而不是把覆盖改成带 `md` 键的响应式形状；`WelcomeSection` 的 JSDoc 与 `entrypoints/welcome/CLAUDE.md` 随之写明「覆盖 `py`/`pt`/`pb` 必须带 `md` 键」。
 - **替换点**：
   - **描述段**：Minimal 没有。保留在标题下，固定 `grey.500`（#919EAB on #141A21 ≈ 6.4:1）；不用 `text.secondary`，它随配色变，卡片不变。
   - **按钮**：一个，不是两个。issue 外链改 `contained primary size large`（Minimal「Purchase now」的形），保留 `eva:diagonal-arrow-right-up-fill` 外链图标（Minimal 那个按钮没图标，但它也不是外链），不加 `ctaGlowShadow`（Minimal 没有）。本段只有这一个动作，docs/28 D9 也定了本页零新外链。
   - **标题**：字号仍由 `Headline` 的 clamp 出，不换 `variant h1/h2`（docs/28 E2）。`section-shell.tsx` 的 `Headline` 新增 `ink="white"` 形态（纯 `common.white`，品牌渐变从 grey.800 起笔，亮色下落在 grey.900 上看不见）与只有该形态收的 `tail`（尾词淡出）。i18n 拆成 `welcome.request.heading`（zh「没找到你的」/ en「Don't see your」）+ 新增 `welcome.request.headingTail`（「平台？」/「platform?」）；两段之间 en 一个空格、zh 不加，拼接归 `Headline`、两个翻译都不带分隔符。没用 Minimal 的 `ml: 1`：中文里它多出一道缝，英文换行落在两段之间时行首会留 8px 缩进。
   - **火箭**：`$MIN` 同级的 `public/assets/illustrations/illustration-rocket-large.webp` 原字节拷到本仓库 `public/assets/illustrations/`（9372 字节，`cmp` 一致；保留 Minimal 路径便于溯源），是仓库第一张 Minimal 位图资源。Minimal 是付费模板、本仓库 GPL-3.0 公开，这张图的再分发许可 **[UNKNOWN]**，已向用户说明，用户接受。纯装饰，`alt=""`，不出英文硬编码 alt。`MotionBox` 的类型是 div、收不了 `src`/`alt`，所以 `<img>` 嵌在漂浮层里，而不是像 Minimal 那样自己就是 `m.img`。漂浮是声明式 `animate`，由全页 `MotionConfig reducedMotion="user"` 管。
-  - **未抄**：Minimal 卡片 `sx` 里的 `spacing: 5`——写在 Box 的 `sx` 里，输出的是无效 CSS，在 Minimal 里本来就不生效；`renderLines`（`FloatLine` / `FloatPlusIcon`）归 Step 4。
+  - **未抄**：Minimal 卡片 `sx` 里的 `spacing: 5`——写在 Box 的 `sx` 里，输出的是无效 CSS，在 Minimal 里本来就不生效；`renderLines`（`FloatLine` / `FloatPlusIcon`）归 Step 4，Minimal 挂在 `Container` 上的 `position: relative` + `zIndex: 9` 只为让卡片压过这些线，随它们一起归 Step 4。
 - **验收**：原验收「滚动截图里主 CTA 仍是视觉第一」**随用户决定作废**——按 Minimal 移植后，这张深色大卡的视觉分量不再让位于上方 picker 的主 CTA，这是选「按 Minimal」的直接后果。现验收：亮暗两种配色、1440 宽与 md 以下各截图，与 minimals.cc 首页 advertisement 同形（外壳、横排、标题尾部淡出、按钮形态）；深底上标题、描述、按钮在两种配色下都可读。
-- **验证**：新增 `entrypoints/welcome/components/section-shell.test.tsx` 锁首尾拼接（en 有空格 / zh 无；把条件反过来两例都红，已验证）。`pnpm compile` 通过；`pnpm test`：主仓库 201 个文件 / 1570 例，`packages/*` 15 个文件 / 267 例，全部通过。主仓库前两次整跑各有一例 5 s 超时（`lib-import-smoke` 的 bilibili 冷导入，单跑即过），本改动之前的 HEAD 整跑同样有一例超时（`lib/database/db.test.ts`），是本机 CPU 争用下的既有抖动，第三次整跑全绿。`pnpm build` 后火箭落在 `.output/chrome-mv3/assets/illustrations/`（`cmp` 一致），与 Vite 自己产出的 `assets/` 同目录并存、不冲突。截图待按 §1 流程补。
+- **验证**：新增 `entrypoints/welcome/components/section-shell.test.tsx` 锁首尾拼接（en 有空格 / zh 无；把条件反过来两例都红，已验证）。`pnpm compile` 通过；`pnpm test`：主仓库 201 个文件 / 1570 例，`packages/*` 15 个文件 / 267 例，全部通过。主仓库前两次整跑各有一例 5 s 超时（`lib-import-smoke` 的 bilibili 冷导入，单跑即过），本改动之前的 HEAD 整跑同样有一例超时（`lib/database/db.test.ts`），是本机 CPU 争用下的既有抖动，第三次整跑全绿。`pnpm build` 后火箭落在 `.output/chrome-mv3/assets/illustrations/`（`cmp` 一致），与 Vite 自己产出的 `assets/` 同目录并存、不冲突。间距勘误改完后重跑：`pnpm compile` 通过；`pnpm test` 首次整跑 4 例 5 s 超时（`lib/bilibili/transcribe-utils.test.ts` 2 例，第二例是连带失败——第一例超时后它的 `BV-PROCESSING-RUNS` 转录仍在跑，发出的 `item-content-updated` 落进了第二例的监听，失败值正是 `['BV-PROCESSING-RUNS', 'BV-CONTENT-EVENT']`；`lib/database/proxy-db.test.ts`、`tests/lib-import-smoke.test.ts` 各 1 例，都是冷导入），这三个文件单跑 27/27 通过，第二次整跑全绿（主仓库 201 / 1570，`packages/*` 15 / 267）；`pnpm build` 通过，火箭仍 `cmp` 一致。
+- **截图验收（2026-09-27，§1 流程，分支构建装进 BrowserOS）**：1440×900 亮暗两种配色、960（md 横排）、390（xs 纵排），en 与 zh-CN 各看一遍，与 minimals.cc 首页 advertisement 同形。量值：本段 `padding` 为 0，卡片顶边紧贴 picker 的底边（间距即 picker 的 160px 底部留白），卡片底边即 footer 顶边（footer `padding-top` 40px）。暗色下卡底与页面同为 #141A21，只靠 grey.800 边框、网格与右上光斑区分——Minimal 暗色本来就是这样，照搬，不算缺陷。xs 下火箭固定 360 宽，窄于约 440px 时被卡片 `overflow: hidden` 裁掉左右一点，与 Minimal 相同。zh 标题「没找到你的平台？」两段之间无缝，en 窄屏折行落在两段之间时第二行行首无缩进。
+- **顺带看到、不在本步范围**：picker 的「进入 favbase」主 CTA 是墨色实心（`MuiButton` 默认 `color: 'inherit'`，docs/25 Step 1 起如此），所以现在全页唯一的 coral 实心按钮是这张卡的。这是「按 Minimal」与既有主题默认叠加的结果，记在这里，不改。
 
 ### Step 3 — section 标题换成 Minimal 的样式
 
@@ -79,7 +82,7 @@ BrowserOS neo 的 MCP 工具驱动不了扩展页：`tabs new` 打开 `chrome-ex
 - **Minimal**：`$MIN/sections/home/components/svg-elements.tsx`（289 行）的 `FloatLine` / `FloatPlusIcon` 等，`$MIN/sections/home/` 的 11 个段落文件里 9 个用了它们（`home-hero` 与 `home-for-designer` 没用）；它们**只在 ≥1440px 显示**（`baseStyles` 里 `breakpoints.up(1440)`），描边 `grey.500`、`opacity: 0.24`，进入视口时线条从 0 画到 100%。
 - **favbase 现状**：没有。
 - **冲突**：无直接冲突——docs/28 D5 / §3.1 只拒绝了 hero 的 `HeroBackground`（理由是同心圆虚线与 `OrbitCore` 打架），没有对段落装饰线下结论。
-- **如果要做**：移植 `FloatLine` + `FloatPlusIcon` 两个到 `entrypoints/welcome/components/`（`m` 改 `motion`，按 CLAUDE.md 铁律不引 `LazyMotion`）；hero 段不加，避免重新引入 D5 拒绝的那种语汇冲突。
+- **如果要做**：移植 `FloatLine` + `FloatPlusIcon` 两个到 `entrypoints/welcome/components/`（`m` 改 `motion`，按 CLAUDE.md 铁律不引 `LazyMotion`）；hero 段不加，避免重新引入 D5 拒绝的那种语汇冲突。给 `platform-request.tsx` 加线时，同时给它的 `Container` 补上 Minimal 的 `position: relative` + `zIndex: 9`（Step 2 刻意没带，见上）。
 
 ### Step 5 — Analytics KPI 数字字号
 
