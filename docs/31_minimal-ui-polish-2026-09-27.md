@@ -2,7 +2,7 @@
 
 - 分支：`feat/minimal-ui-polish`（worktree `.claude/worktrees/minimal-ui-polish`，原因见 §6）
 - 参考：app.html ↔ <https://minimals.cc/dashboard>，welcome.html ↔ <https://minimals.cc/>；源码 `$MIN` = `C:\Users\18368\Desktop\00_myCode\35_minimal\minimal-dashboard\minimal-dashboard v7.7.0\Vite.js (JavaScript，TypeScript)\minimal-vite-ts-main\src`
-- 状态：**Step 1 已落地并补验完毕**（四处实现缺陷；首轮未验证的三项已于同日补验，见 §2「验证」）；**Step 2 已落地（2026-09-27）**——用户决定按 Minimal 原样移植深色 CTA 卡，替换点见 §4 Step 2，截图验收已按 §1 补完；**Step 3 已落地（2026-09-27）**——用户决定推翻 docs/28 D8，五个 section 标题换 Minimal `SectionTitle` 的中性写法、hero 保 coral，替换点见 §4 Step 3，截图验收已按 §1 补完，D-d 于 2026-09-28 按第一轮截图改为 Minimal 的 `inline-block`；**Step 4 已落地（2026-09-28）**——用户决定逐段对照 Minimal 源文件移植段落装饰线（`FloatLine` 一族 + `MotionViewport`），映射与替换点见 §4 Step 4，截图验收已按 §1 补完；**Step 5 已落地（2026-09-28）**——用户决定 Dashboard KPI 数字整体照搬 Minimal 的 `h4`（字体、字重、行高、字号四项，不只是原写法的放大字号），生成的 CSS 已在测试环境核对，**实机截图验收挂起**（把构建同步进已加载的扩展目录被本会话权限拦下，见 §4 Step 5「验证」）
+- 状态：**Step 1 已落地并补验完毕**（四处实现缺陷；首轮未验证的三项已于同日补验，见 §2「验证」）；**Step 2 已落地（2026-09-27）**——用户决定按 Minimal 原样移植深色 CTA 卡，替换点见 §4 Step 2，截图验收已按 §1 补完；**Step 3 已落地（2026-09-27）**——用户决定推翻 docs/28 D8，五个 section 标题换 Minimal `SectionTitle` 的中性写法、hero 保 coral，替换点见 §4 Step 3，截图验收已按 §1 补完，D-d 于 2026-09-28 按第一轮截图改为 Minimal 的 `inline-block`；**Step 4 已落地（2026-09-28）**——用户决定逐段对照 Minimal 源文件移植段落装饰线（`FloatLine` 一族 + `MotionViewport`），映射与替换点见 §4 Step 4，截图验收已按 §1 补完；**Step 5 已落地（2026-09-28）**——用户决定 Dashboard KPI 数字整体照搬 Minimal 的 `h4`（字体、字重、行高、字号四项，不只是原写法的放大字号），生成的 CSS 已在测试环境核对，实机截图验收已补完（用户改从 worktree 的 `.output` 加载扩展之后），顺带验出侧栏断点与 Minimal 不同，记在 §3
 
 ## §0 结论
 
@@ -46,6 +46,7 @@ BrowserOS neo 的 MCP 工具驱动不了扩展页：`tabs new` 打开 `chrome-ex
 
 - **[UNKNOWN] 书签卡片的站点图标空白**（`localhost`、`github.com` 等行）。`bookmark-card.tsx` 用 MV3 `_favicon` 端点，它对未知站点也返回 200 的默认图，所以 `Avatar` 的兜底图标不会出现。这张默认图在真 Chrome 里是灰色地球还是空白，没有核实；BrowserOS 里是空白。核实前不算缺陷，也不算正常。
 - **暗色下品牌图标是一块白底方块**（2026-09-27 补验暗色时看到）。app.html 有四处用 `/icon/128.png`（`nav-vertical.tsx`、`nav-mobile.tsx`、`chat-header.tsx`、`chat-message-list.tsx`），welcome 的 `BrandMark` 与 `bilibili-showcase.tsx` 用 `/icon/48.png`。`public/icon/` 下五张 PNG 都是 color type 2（RGB、无 alpha 通道、无 `tRNS`），128.png 四角实测 `rgba(255, 255, 255, 255)`。亮色下白底融进背景看不出来，暗色下就露出一块白方块（截图里看到的是侧栏与 Chat 标题两处；welcome 暗色没截，按文件格式推断相同）。这不是移植缺陷（资源本来就这样，Minimal 的 logo 是透明 SVG），而是缺一份应用内用的透明底 logo。修它要新资源，或决定暗色下给 logo 加底，所以不属于 Step 1，只记在这里。
+- **侧栏在 900px 就展开，Minimal 是 1200px**（2026-09-28 Step 5 截图验收时量到）。favbase `entrypoints/app/layouts/dashboard/layout.tsx:44` 的 `layoutQuery` 默认 `md`；Minimal 的 `nav-vertical.tsx` 默认值虽也是 `md`，但 `$MIN/layouts/dashboard/layout.tsx:59` 把 `lg` 传给 header（`:104`）、nav（`:171`）与 main（`:185`），所以 minimals.cc 在 900–1199 是汉堡菜单 + 满宽内容。favbase 在这一段多出 300px 侧栏，Dashboard 的 `md: 3` KPI 行就被挤扁：900 宽卡宽 118（Minimal 约 191），标题逐词折行、「1 / 6」折三行、卡高 248；1024 宽卡宽 149、仍折两行；1199 宽 193 才正常；≥1200 两边一致（卡宽约 185）。`layouts/CLAUDE.md:11` 只描述了「header 高度在 `layoutQuery`=md 切换」，docs/25 里查不到选 `md` 的理由，所以是移植偏离还是有意为之 **[UNKNOWN]**。改它会同时移动 header 高度切换、`NavToggleButton` 的显隐与 mobile drawer 的出现宽度（三者共用这一个 `layoutQuery`；`layout.test.tsx` 只在 `:229` 的注释里提到它，没有按具体宽度的断言），所以要单独决定，不属于 Step 5，只记在这里。
 
 ## §4 设计步骤（Step 2–5 均已落地）
 
@@ -156,7 +157,7 @@ BrowserOS neo 的 MCP 工具驱动不了扩展页：`tabs new` 打开 `chrome-ex
   - **minimals.cc 对照**：integrations 段四个圆点量到 `opacity` 0.12 / 0.12 / 0.12 / 0.12，与本页一致（上文「看起来像偏离」那条）。
   - 暗色是点 Header 的 `ThemeModeButton` 切的，原值 `light`，截完立刻切回，`favbase-color-mode` 读回 `light`。
 
-### Step 5 — Analytics KPI 数字照搬 Minimal 的 `h4`（已落地 2026-09-28，实机截图待验）
+### Step 5 — Analytics KPI 数字照搬 Minimal 的 `h4`（已落地 2026-09-28）
 
 - **Minimal**：`$MIN/sections/overview/analytics/analytics-widget-summary.tsx:118` 的数值是 `typography: 'h4'`。`$MIN/theme/core/typography.ts:96-101` 的 h4 有四项：不带 `fontFamily`（继承根上的 primary，Public Sans；Barlow 在 Minimal 里只给 h1–h3）、700、行高 1.5、20px，`md`（900px，`createTheme()` 默认断点）起 24px。线上 minimals.cc `/dashboard/analytics` 实测（2026-09-28，§1 第 8 条，四张卡都量）：1440 宽 `"Public Sans Variable"` 24px / 700 / 行高 36px，800 宽 20px / 行高 30px，与源码一致。
 - **favbase 原状**：`entrypoints/app/sections/overview/analytics-widget-summary.tsx` 用 `variant="h3"`，四项全不同：Barlow、600、行高 1.3、固定 20px。本节初稿只记了字号一项。
@@ -174,7 +175,12 @@ BrowserOS neo 的 MCP 工具驱动不了扩展页：`tabs new` 打开 `chrome-ex
 - **顺带看到、不在本步范围**：Minimal 这张卡与 favbase 还有四处不同——图标在左上 48×48、下接 `mb: 3`（favbase 在右上 `absolute`）；数字用 `fShortenNumber` 缩写（714k / 1.35m，favbase 打完整数字）；`shape-square.svg` 底纹；趋势百分比与 sparkline。都是 docs/25 Step 6 记录过的决定（后两项是 D17「不造数据」），不动。
 - **验证**：focused `pnpm vitest run entrypoints/app/sections/overview` 3 个文件 / 15 例通过；`pnpm compile` 通过；`pnpm build` 通过（background 契约 13 个模块 / 946,270 字节，与 Step 4 相同）；`git diff --check` 干净。`pnpm test` 三次整跑：前两次各 1 例 5 s 超时（`tests/lib-import-smoke.test.ts` 5046 ms、`lib/database/proxy-db.test.ts` 6160 ms，都是冷导入，单跑 17/17、3/3 通过；这两次根目录失败挡住了 `pnpm -r test`，单独补跑 15 个文件 / 267 例通过），第三次全绿：主仓库 201 个文件 / 1574 例、`packages/*` 15 个文件 / 267 例。
 - **CSS 核对（测试环境，代替截图的部分证据）**：在 `ThemeProvider` 下用 happy-dom 渲染组件、导出 emotion 生成的规则（探针测试跑完即删）。数字元素是 `<p class="MuiTypography-root MuiTypography-h4 …">`，基础规则 `font-family:"DM Sans Variable",…;font-weight:600;font-size:1rem;line-height:1.5;…;font-weight:700`，其后 `@media (min-width:0px){font-size:1.25rem}`、`@media (min-width:900px){font-size:1.5rem}`——同一规则里 700 在 600 之后生效，`min-width:0px` 排在基础规则之后，盖掉 h4 自带的 16px。骨架的内联 style 只剩 `width: 72px`，高度来自 `@media (min-width:0px){height:30px}` 与 `(min-width:900px){height:36px}`。主题的 `MuiTypography` 覆盖只有 `variantMapping`；MUI 9.4 的 `createTypography` 只在字体是默认 Roboto 时才加字距，所以两边都没有 `letterSpacing`。
-- **实机截图验收：挂起**。worktree 新构建与已装构建只差 `app.html` 与 app 的 chunk（background、manifest、welcome、popup、offscreen 都字节相同），按 §1 第 7 条本该只同步文件、刷新自己的标签。但往主 checkout 的 `.output/chrome-mv3`（BrowserOS 实际加载的扩展目录）拷文件这一步，被本会话的权限规则判为改共享资源、拦下了，没有绕过。待用户放行或自己同步之后补：1440 与小于 900 两档量 `[data-slot="kpi-value"]` 的 computed style（预期 DM Sans 24px / 700 / 36px 与 20px / 30px），并与 minimals.cc 同宽截图对照。
+- **实机截图验收（2026-09-28，§1 流程）**：往主 checkout 的 `.output/chrome-mv3` 拷新构建这一步被本会话的权限规则判为改共享资源、拦下了，没有绕过；之后用户改为直接从 worktree 的 `.output/chrome-mv3` 加载扩展（新扩展 id，见 §6）。先核对页面实际加载的是新入口 `chunks/app-CLu4uzDw.js`，再在自己新开的 `app.html#/` 标签里量 `[data-slot="kpi-value"]`，四张卡都量：
+  - **改动前**（旧构建 `app-BhTim0Ph.js`，1440）：`MuiTypography-h3`、Barlow 20px / 600 / 行高 26px，卡高 126。
+  - **改动后**（1440）：`MuiTypography-h4`、`"DM Sans Variable"` 24px / 700 / 行高 36px，卡高 136（+10，正是行高 26 → 36 的差）；元素仍是 `<p>`。线上 minimals.cc 同宽是 Public Sans 24px / 700 / 36px，字体之外逐项相同。
+  - **断点**：900 宽 24px / 36px，899 与 800 宽 20px / 700 / 30px（minimals.cc 800 宽同为 20px / 30px）。`document.fonts` 里 `DM Sans Variable 100 1000` 已加载，`fonts.check('700 24px "DM Sans Variable"')` 为 true，不是回退字体。
+  - 截图：1440 四卡一行、800 两列，与 minimals.cc 同宽截图对照同形。暗色与 zh-CN 没截：本步只改字形，数字的颜色（`<color>.darker`）与内容不随配色和语言变。加载骨架是瞬态，没截，由上面的 CSS 核对覆盖。
+  - **验出一个不属于本步的问题**：900 宽时卡片高 248。原因是 favbase 在 900 宽就展开 300px 侧栏，四张卡各只剩 118px 宽，扣掉 `p: 3` 与给图标让位的 `pr: 8` 后文本栏只有几像素，标题逐词折行，「1 / 6」折成三行（1024 宽卡宽 149、仍折两行；1199 宽 193 才一行）。这在改动前就存在——文本栏窄到每个空格都断行，与字体无关；本步只是让每行从 26px 变成 36px。Minimal 在 900 宽**没有侧栏**（汉堡菜单），卡宽约 191；1200 宽两边都展开侧栏，卡宽都约 185。根因记在 §3，本步不动。
 
 ## §5 拒绝（沿用既有决定，本次不再提）
 
@@ -187,3 +193,4 @@ BrowserOS neo 的 MCP 工具驱动不了扩展页：`tabs new` 打开 `chrome-ex
 - **worktree**：本次对话进行中，另一个会话往 `main` 提交了两次（`99cd013`、`3d4a6e7`）。如果在主 checkout 里直接切分支，那个会话的下一次提交会落到本分支上，所以用 worktree。worktree 存在期间，主 checkout 里 `git switch feat/minimal-ui-polish` 会被 git 拒绝；本分支的提交在 worktree 目录里做，合并后 `git worktree remove .claude/worktrees/minimal-ui-polish`。
 - **`.env.local`**：拷了一份进 worktree，保证构建环境一致（在 gitignore 里，不进提交）。
 - **已加载的扩展是本分支的构建**：`main` 的原构建在 `.output/chrome-mv3.main-backup`。回退：删掉 `.output/chrome-mv3`，把备份改回原名（或在 `main` 上重新 `pnpm build`），再重载扩展。
+- **2026-09-28 起加载方式变了**（Step 5 截图验收前由用户操作）：BrowserOS 里唯一的 favbase 扩展改为直接从 **worktree** 的 `.output/chrome-mv3` 以 unpacked 方式加载，扩展 id 从 `ifnlocdg…` 变成 `ijhppmon…`，原来从主 checkout 加载的那个已不在扩展列表里。于是 §1 第 6/7 条的「拷进主 checkout」不再需要：worktree 里 `pnpm build` 之后刷新自己的标签即可（manifest 或 background 变了仍要重载扩展）。扩展数据按 id 隔离，新 id 看不到旧 id 的设置与知识库（这次截图时的 778 条书签是新扩展自己同步来的）。回退到 `main` 的构建，要在扩展页把加载目录换回主 checkout 的 `.output/chrome-mv3`。
