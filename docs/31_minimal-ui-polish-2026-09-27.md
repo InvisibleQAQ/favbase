@@ -2,11 +2,11 @@
 
 - 分支：`feat/minimal-ui-polish`（worktree `.claude/worktrees/minimal-ui-polish`，原因见 §6）
 - 参考：app.html ↔ <https://minimals.cc/dashboard>，welcome.html ↔ <https://minimals.cc/>；源码 `$MIN` = `C:\Users\18368\Desktop\00_myCode\35_minimal\minimal-dashboard\minimal-dashboard v7.7.0\Vite.js (JavaScript，TypeScript)\minimal-vite-ts-main\src`
-- 状态：**Step 1 已落地并补验完毕**（四处实现缺陷；首轮未验证的三项已于同日补验，见 §2「验证」）；**Step 2 已落地（2026-09-27）**——用户决定按 Minimal 原样移植深色 CTA 卡，替换点见 §4 Step 2，截图验收已按 §1 补完；**Step 3 已落地（2026-09-27）**——用户决定推翻 docs/28 D8，五个 section 标题换 Minimal `SectionTitle` 的中性写法、hero 保 coral，替换点见 §4 Step 3，截图验收已按 §1 补完，D-d 于 2026-09-28 按第一轮截图改为 Minimal 的 `inline-block`；**Step 4 已落地（2026-09-28）**——用户决定逐段对照 Minimal 源文件移植段落装饰线（`FloatLine` 一族 + `MotionViewport`），映射与替换点见 §4 Step 4，截图验收已按 §1 补完；**Step 5 已落地（2026-09-28）**——用户决定 Dashboard KPI 数字整体照搬 Minimal 的 `h4`（字体、字重、行高、字号四项，不只是原写法的放大字号），生成的 CSS 已在测试环境核对，实机截图验收已补完（用户改从 worktree 的 `.output` 加载扩展之后），顺带验出侧栏断点与 Minimal 不同，记在 §3
+- 状态：**Step 1 已落地并补验完毕**（四处实现缺陷；首轮未验证的三项已于同日补验，见 §2「验证」）；**Step 2 已落地（2026-09-27）**——用户决定按 Minimal 原样移植深色 CTA 卡，替换点见 §4 Step 2，截图验收已按 §1 补完；**Step 3 已落地（2026-09-27）**——用户决定推翻 docs/28 D8，五个 section 标题换 Minimal `SectionTitle` 的中性写法、hero 保 coral，替换点见 §4 Step 3，截图验收已按 §1 补完，D-d 于 2026-09-28 按第一轮截图改为 Minimal 的 `inline-block`；**Step 4 已落地（2026-09-28）**——用户决定逐段对照 Minimal 源文件移植段落装饰线（`FloatLine` 一族 + `MotionViewport`），映射与替换点见 §4 Step 4，截图验收已按 §1 补完；**Step 5 已落地（2026-09-28）**——用户决定 Dashboard KPI 数字整体照搬 Minimal 的 `h4`（字体、字重、行高、字号四项，不只是原写法的放大字号），生成的 CSS 已在测试环境核对，实机截图验收已补完（用户改从 worktree 的 `.output` 加载扩展之后），顺带验出侧栏断点与 Minimal 不同，记在 §3；**Step 6 已落地（2026-09-28）**——本文原本没有 Step 6，用户说「完成 step6」后问过，选定 §3 的侧栏断点一项：dashboard shell 照 Minimal 在 `lg` 而不是 `md` 切换，Chat 卡片高度与历史 Drawer 两处隐藏耦合随之收掉，见 §4 Step 6，实机量值与 minimals.cc 同点一致
 
 ## §0 结论
 
-docs/25（app.html，Step 0–10）与 docs/28（welcome.html）已经把 Minimal 的骨架、主题与段落语言移植完。逐页对照后，剩下的差距**不是缺设计，而是移植时引入的实现缺陷**：四处，每处都能指到一行根因（§2）。更大的视觉改动（§4）每一条都会推翻或扩展一条已记录的决定，所以写这份文档时只列出、不动手，逐条等用户决定；Step 2–5 此后已由用户逐条决定并落地。
+docs/25（app.html，Step 0–10）与 docs/28（welcome.html）已经把 Minimal 的骨架、主题与段落语言移植完。逐页对照后，剩下的差距**不是缺设计，而是移植时引入的实现缺陷**：四处，每处都能指到一行根因（§2）。更大的视觉改动（§4）每一条都会推翻或扩展一条已记录的决定，所以写这份文档时只列出、不动手，逐条等用户决定；Step 2–5 此后已由用户逐条决定并落地，§3 的侧栏断点一项随后被用户定为 Step 6 并落地。
 
 ## §1 对照方法（可复现）
 
@@ -46,11 +46,11 @@ BrowserOS neo 的 MCP 工具驱动不了扩展页：`tabs new` 打开 `chrome-ex
 
 - **[UNKNOWN] 书签卡片的站点图标空白**（`localhost`、`github.com` 等行）。`bookmark-card.tsx` 用 MV3 `_favicon` 端点，它对未知站点也返回 200 的默认图，所以 `Avatar` 的兜底图标不会出现。这张默认图在真 Chrome 里是灰色地球还是空白，没有核实；BrowserOS 里是空白。核实前不算缺陷，也不算正常。
 - **暗色下品牌图标是一块白底方块**（2026-09-27 补验暗色时看到）。app.html 有四处用 `/icon/128.png`（`nav-vertical.tsx`、`nav-mobile.tsx`、`chat-header.tsx`、`chat-message-list.tsx`），welcome 的 `BrandMark` 与 `bilibili-showcase.tsx` 用 `/icon/48.png`。`public/icon/` 下五张 PNG 都是 color type 2（RGB、无 alpha 通道、无 `tRNS`），128.png 四角实测 `rgba(255, 255, 255, 255)`。亮色下白底融进背景看不出来，暗色下就露出一块白方块（截图里看到的是侧栏与 Chat 标题两处；welcome 暗色没截，按文件格式推断相同）。这不是移植缺陷（资源本来就这样，Minimal 的 logo 是透明 SVG），而是缺一份应用内用的透明底 logo。修它要新资源，或决定暗色下给 logo 加底，所以不属于 Step 1，只记在这里。
-- **侧栏在 900px 就展开，Minimal 是 1200px**（2026-09-28 Step 5 截图验收时量到）。favbase `entrypoints/app/layouts/dashboard/layout.tsx:44` 的 `layoutQuery` 默认 `md`；Minimal 的 `nav-vertical.tsx` 默认值虽也是 `md`，但 `$MIN/layouts/dashboard/layout.tsx:59` 把 `lg` 传给 header（`:104`）、nav（`:171`）与 main（`:185`），所以 minimals.cc 在 900–1199 是汉堡菜单 + 满宽内容。favbase 在这一段多出 300px 侧栏，Dashboard 的 `md: 3` KPI 行就被挤扁：900 宽卡宽 118（Minimal 约 191），标题逐词折行、「1 / 6」折三行、卡高 248；1024 宽卡宽 149、仍折两行；1199 宽 193 才正常；≥1200 两边一致（卡宽约 185）。`layouts/CLAUDE.md:11` 只描述了「header 高度在 `layoutQuery`=md 切换」，docs/25 里查不到选 `md` 的理由，所以是移植偏离还是有意为之 **[UNKNOWN]**。改它会同时移动 header 高度切换、`NavToggleButton` 的显隐与 mobile drawer 的出现宽度（三者共用这一个 `layoutQuery`；`layout.test.tsx` 只在 `:229` 的注释里提到它，没有按具体宽度的断言），所以要单独决定，不属于 Step 5，只记在这里。
+- **（已解决，2026-09-28 转为 Step 6 落地，见 §4 Step 6；下文是原记录，只把 [UNKNOWN] 改成查到的来源）侧栏在 900px 就展开，Minimal 是 1200px**（2026-09-28 Step 5 截图验收时量到）。favbase `entrypoints/app/layouts/dashboard/layout.tsx:44` 的 `layoutQuery` 默认 `md`；Minimal 的 `nav-vertical.tsx` 默认值虽也是 `md`，但 `$MIN/layouts/dashboard/layout.tsx:59` 把 `lg` 传给 header（`:104`）、nav（`:171`）与 main（`:185`），所以 minimals.cc 在 900–1199 是汉堡菜单 + 满宽内容。favbase 在这一段多出 300px 侧栏，Dashboard 的 `md: 3` KPI 行就被挤扁：900 宽卡宽 118（Minimal 约 191），标题逐词折行、「1 / 6」折三行、卡高 248；1024 宽卡宽 149、仍折两行；1199 宽 193 才正常；≥1200 两边一致（卡宽约 185）。`layouts/CLAUDE.md:11` 只描述了「header 高度在 `layoutQuery`=md 切换」，docs/25 里查不到选 `md` 的理由，所以是移植偏离还是有意为之 ~~**[UNKNOWN]**~~——**已查明**（Step 6）：有意为之，且早于 Minimal 移植。首个提交 `ba3c942`（2026-06-20，Material Kit 时代）是 `lg`，`defdf00`（2026-07-06）把它降成 `md`，理由只有 commit message 里一句「Lower nav breakpoint lg->md so desktop sidebar shows at 900px」；docs/23 / docs/25 移植 Minimal 时都没有重新审视它，所以 docs/25 里找不到。改它会同时移动 header 高度切换、`NavToggleButton` 的显隐与 mobile drawer 的出现宽度（三者共用这一个 `layoutQuery`；`layout.test.tsx` 只在 `:229` 的注释里提到它，没有按具体宽度的断言），所以要单独决定，不属于 Step 5，只记在这里。
 
-## §4 设计步骤（Step 2–5 均已落地）
+## §4 设计步骤（Step 2–6 均已落地）
 
-每一条都会推翻或扩展一条已记录的决定，所以不自作主张。Step 2 的两条冲突与 Step 3 的 D8 冲突已由用户 2026-09-27 决定推翻；Step 4 无冲突，用户 2026-09-28 决定了映射方式；Step 5 与 docs/25 D8 的冲突由用户 2026-09-28 决定只开一处例外（D8 本身是 PRD 默认，主题字阶不变）。
+每一条都会推翻或扩展一条已记录的决定，所以不自作主张。Step 2 的两条冲突与 Step 3 的 D8 冲突已由用户 2026-09-27 决定推翻；Step 4 无冲突，用户 2026-09-28 决定了映射方式；Step 5 与 docs/25 D8 的冲突由用户 2026-09-28 决定只开一处例外（D8 本身是 PRD 默认，主题字阶不变）；Step 6 不是本节原有的一条，而是 §3 的未定性项，推翻的是 `defdf00` 的 `md`，用户 2026-09-28 决定照 Minimal。
 
 ### Step 2 — welcome 结尾改成 Minimal 的深色 CTA 大卡（已落地 2026-09-27）
 
@@ -181,6 +181,36 @@ BrowserOS neo 的 MCP 工具驱动不了扩展页：`tabs new` 打开 `chrome-ex
   - **断点**：900 宽 24px / 36px，899 与 800 宽 20px / 700 / 30px（minimals.cc 800 宽同为 20px / 30px）。`document.fonts` 里 `DM Sans Variable 100 1000` 已加载，`fonts.check('700 24px "DM Sans Variable"')` 为 true，不是回退字体。
   - 截图：1440 四卡一行、800 两列，与 minimals.cc 同宽截图对照同形。暗色与 zh-CN 没截：本步只改字形，数字的颜色（`<color>.darker`）与内容不随配色和语言变。加载骨架是瞬态，没截，由上面的 CSS 核对覆盖。
   - **验出一个不属于本步的问题**：900 宽时卡片高 248。原因是 favbase 在 900 宽就展开 300px 侧栏，四张卡各只剩 118px 宽，扣掉 `p: 3` 与给图标让位的 `pr: 8` 后文本栏只有几像素，标题逐词折行，「1 / 6」折成三行（1024 宽卡宽 149、仍折两行；1199 宽 193 才一行）。这在改动前就存在——文本栏窄到每个空格都断行，与字体无关；本步只是让每行从 26px 变成 36px。Minimal 在 900 宽**没有侧栏**（汉堡菜单），卡宽约 191；1200 宽两边都展开侧栏，卡宽都约 185。根因记在 §3，本步不动。
+
+### Step 6 — dashboard 侧栏断点 `md` → `lg`（已落地 2026-09-28）
+
+- **来源**：本文原本没有 Step 6。用户说「完成 step6」后问过，从 §3 三个未定性项里选定侧栏断点一项（另两项——书签站点图标、暗色品牌图标白底——不在本步）。
+- **Minimal**：`$MIN/layouts/dashboard/layout.tsx:59` `layoutQuery = 'lg'`，传给汉堡按钮的隐藏规则（`:114`）、header（`:171`）、nav（`:185`）与 `sidebarContainer` 的 `pl`（`:222`）。原语 `core/header-section.tsx:40`、`dashboard/nav-vertical.tsx:39` 的默认值是 `md`，被它覆盖；Minimal 的 `LayoutSection` 没有这个 prop。`MainLayout`（`layouts/main/layout.tsx:47`）是 `md`，所以 welcome 不在本步。Chat 历史 Drawer（`sections/chat/chat-nav.tsx:287-296`）的 paper 只设 `width`，没有 `left`。
+- **favbase 原状**：`DashboardLayout` 默认 `md`；来源见 §3 该条（`defdf00` 有意降的，早于 Minimal 移植）。
+- **冲突**：推翻 `defdf00` 的「侧栏在 900 就显示」。那条决定只有 commit message 里的一句话，没有写进任何文档或规范。
+- **用户决定（2026-09-28）**：照 Minimal 改 `lg`。
+- **默认决定**（最终确认时告知用户）：
+  - **D-a 命名常量 `DASHBOARD_LAYOUT_QUERY`**：`layouts/dashboard/layout.tsx` 导出 `'lg'`，作 `layoutQuery` 默认值。理由不是品味：§3 预言的「改它会同时移动……」之外，还有一处**隐藏耦合真实存在**——`sections/chat/chat-view.tsx` 的卡片高度 `calc(100dvh - header)` 用字面量 `md` 判断 header 何时是 72。只改默认值，900–1199 的 Chat 卡片就会按 72 扣而 header 实为 64，底部多出 8px。常量把耦合变成编译期可见的依赖。它与 `DASHBOARD_CONTENT_QUERY`（内容 40px gutter）同为 `lg`，但是两个概念——Minimal 里也是两个独立的字面量默认值——不合并。`layoutQuery` prop 保留（Minimal 有，零调用方传）。
+  - **D-b Chat 高度键**：`chat-view.tsx` 的 `md` 键改 `[DASHBOARD_LAYOUT_QUERY]`；同一 `sx` 里的 `pb: { xs, md }` 是内容留白、不跟 shell，不动。
+  - **D-c 删 Chat 历史 Drawer 的 `left`**：`chat-nav-drawer.tsx` 的 `left: { xs: 0, md: 'var(--layout-nav-vertical-width)' }` 是为 900–1199「dashboard rail 在、chat rail 不在」写的。改后两者都在 `lg` 切换，Drawer 存在的宽度里没有 dashboard rail，偏移在任何宽度都不生效；Minimal 的 paper 本来也没有 `left`——这是照搬，不只是清死代码。
+  - **D-d 原语默认值不动**：`HeaderSection` / `LayoutSection` / `NavVertical` 仍默认 `md`（前两者与 Minimal 原语一致，`LayoutSection` 的 prop 是本仓库为 `scroll-padding-top` 加的），welcome 也在用它们。
+  - **D-e 一例守卫**：`layout.test.tsx` 把 `useMediaQuery` mock 成布尔值，吞掉了查询串，断点值零守卫（§3 原记录「没有按具体宽度的断言」）。mock 改为记录参数，新增一例断言整棵 shell 树只发出 `'@media (min-width:1200px)'`。只加这一条：rail / 收展按钮 / header 高度的 CSS `display` 规则在 happy-dom 里不可观测，而它们与汉堡的 JS 查询都从同一个 `layoutQuery` 派生，JS 查询是唯一能钉住它的点。先红后绿：改代码前跑，红态正是 `"@media (min-width:900px)"`，且集合里没有别的查询混入。
+  - **D-f runtime check 不改**：`docs/ui-baseline/app-runtime-check.mjs` 的 `1024-dark-zh` 组（`mobile: false`）今后截到的是汉堡形态。它没有断言 rail 存在，不会红，只是截图的含义变了；侧栏收展的交互检查跑在 1440 组，不受影响。
+- **替换点**：
+  - `entrypoints/app/layouts/dashboard/layout.tsx`：新增并导出 `DASHBOARD_LAYOUT_QUERY`（JSDoc 写明 Minimal 默认值、为何导出、与 `DASHBOARD_CONTENT_QUERY` 的区别），默认值改用它。`dashboard/index.ts` 已 `export *`，不用改。
+  - `entrypoints/app/sections/chat/chat-view.tsx`：经 `../../layouts/dashboard` barrel 导入常量，高度键改用它。
+  - `entrypoints/app/sections/chat/chat-nav-drawer.tsx`：删 paper 的 `left`。
+  - `entrypoints/app/layouts/dashboard/layout.test.tsx`：mock 记录查询串 + 一例断言。
+  - 文档：`entrypoints/app/layouts/CLAUDE.md`（header 高度表的 md → lg、新增「Shell 断点」一条、Pin/Unpin 约定的「md 以下」、`layout.test.tsx` 锁的内容）、`entrypoints/app/sections/chat/CLAUDE.md`（高度按常量切换、Drawer 从 x=0 滑出）、spec `ui-design-system.md` §8（断点一段）与 §11 Chat（Drawer 从 x=0）、本文与根 `CLAUDE.md` 的 docs/31 条目。
+- **验证**：focused `pnpm vitest run entrypoints/app/layouts entrypoints/app/sections/chat` 9 个文件 / 50 例通过；`pnpm compile` 通过；`pnpm test` 首次整跑即全绿，主仓库 201 个文件 / 1575 例（+1 为 D-e）、`packages/*` 15 个文件 / 267 例；`pnpm build` 通过，background 契约 13 个模块 / 946,270 字节与 Step 4/5 相同，只变了页面 chunk（`app-BhpBw8Kv.js`、`chat-AQLWqivh.js`）；`git diff --check` 干净。
+- **实机验收（2026-09-28，§1 流程）**：扩展仍从 worktree 的 `.output/chrome-mv3` 加载（`chrome.developerPrivate.getExtensionsInfo()` 读回的 `prettifiedPath` 核对过），只变页面 chunk，按 §6 在自己新开的 `app.html` 标签里刷新，没有重载扩展；页面加载的入口是 `app-BhpBw8Kv.js`，它引用的 chat chunk 是 `chat-AQLWqivh.js`。视口高 900：
+  - **切换点**：899 / 900 / 1024 / 1199 宽——rail `display: none`、有汉堡、收展按钮 `display: none`、header 64、`html` `scroll-padding-top` 64px、`sidebarContainer` `padding-left` 0；1200 / 1440 宽——rail `flex` 且宽 300、无汉堡、收展按钮显示、header 72、`scroll-padding-top` 72px、`padding-left` 300px。收展按钮 JSX 写的是 `inline-flex`，读回 `flex`，是 `position: fixed` 的块级化，不是错。
+  - **minimals.cc 同点对照**（自己新开的标签，量完即关）：`/dashboard/analytics` 1199 宽 header 64、无 rail，1200 宽 header 72、rail 300，与本页逐项一致；Minimal 的 `html` 没有 `scroll-padding-top`（`auto`），那是本仓库自加的。
+  - **Dashboard KPI 卡**（宽 × 高）：900 宽 193 × 176（改前 118 × 248，见 §3）、1024 宽 224 × 154、1199 宽 268 × 136、1200 宽 185 × 176、1440 宽 245 × 136；899 宽起两列 410。900 宽四个数字都是一行，「2 / 6」不再折行。标题在 185–193 宽时折成两行，是 favbase 图标在右上 `absolute` + 文本栏 `pr: 8` 的既有布局（Step 5「顺带看到」那条，docs/25 Step 6 的决定），1200 宽改前改后一样，不属于本步。
+  - **Chat 卡片高度**：1024 / 1199 / 1200 / 1440 四个宽度，卡片 `section` 底边都是 880 = 900 − 20（`DashboardContent` 的 `pb`），差值 0，文档不出现滚动。1024 与 1199 是 D-a 说的那段宽度：若只改默认值、不改高度键，按 `calc` 推算这里会多出 8px（推算，未构建那个中间态实测）。
+  - **Chat 历史 Drawer**：1024 宽点开，paper `left` 0、宽 320，从视口左缘滑出，与 Minimal 同。截图里 paper 右缘那道 2px 红褐色竖线是 `:focus-visible` 轮廓：CDP 里用 JS `.click()` 打开、没有指针事件，浏览器按键盘交互给 paper 画焦点环，与本步无关。
+  - 截图：Dashboard 900 / 1024 / 1199 / 1200、Chat 1024 / 1200 / 1024 开 Drawer，亮色 en。暗色与 zh-CN 没截：本步只动断点，不动颜色与文案。
+- **顺带看到、不在本步范围**：welcome 的 `WelcomeLayout` 仍是 `md`，与 Minimal `MainLayout` 一致，不是遗漏；Chat 自己的 rail / Drawer 断点 `lg` 是 docs/25 Step 9 的决定，本来就与新的 shell 断点相同。
 
 ## §5 拒绝（沿用既有决定，本次不再提）
 

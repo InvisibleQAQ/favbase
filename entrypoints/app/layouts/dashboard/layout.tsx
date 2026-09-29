@@ -29,6 +29,16 @@ import { LayoutSection } from '../core/layout-section';
 
 import type { LayoutSectionProps } from '../core/layout-section';
 
+/**
+ * Breakpoint from which the rail, its collapse button and the 72px Header
+ * replace the hamburger, the mobile Drawer and the 64px Header — Minimal's
+ * `DashboardLayout` default. Exported because the Chat page sizes its card
+ * against the Header height and must switch at the same width. Not the same
+ * concept as `DASHBOARD_CONTENT_QUERY` (the content gutter), though both are
+ * `lg`, as in Minimal.
+ */
+export const DASHBOARD_LAYOUT_QUERY: Breakpoint = 'lg';
+
 type LayoutBaseProps = Pick<LayoutSectionProps, 'sx' | 'children' | 'cssVars'>;
 
 export type DashboardLayoutProps = LayoutBaseProps & {
@@ -41,7 +51,7 @@ export function DashboardLayout({
   cssVars,
   children,
   navigation,
-  layoutQuery = 'md',
+  layoutQuery = DASHBOARD_LAYOUT_QUERY,
 }: DashboardLayoutProps) {
   const theme = useTheme();
   const { t } = useTranslation();

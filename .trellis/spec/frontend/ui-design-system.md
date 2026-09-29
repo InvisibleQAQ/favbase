@@ -354,6 +354,15 @@ Header height. The document is the only page scroll owner; the fixed rail
 scrolls its own list (`Scrollbar` when vertical, a `hideScrollY` column when
 mini, because a flyout must not be clipped). The Header container uses the same
 content gutter from `DASHBOARD_CONTENT_QUERY` (`lg`).
+The shell itself switches at `DASHBOARD_LAYOUT_QUERY` (`lg`, Minimal's
+`DashboardLayout` default, exported from `layouts/dashboard/layout.tsx`): from
+it up, the rail, `NavToggleButton`, the 72px Header and a 72px
+`scroll-padding-top`; below it, the hamburger, `NavMobile` and the 64px Header.
+It is not the same constant as `DASHBOARD_CONTENT_QUERY`, although both are
+`lg`. Anything sized against the Header height (the Chat card's
+`calc(100dvh - header)`) keys on the constant, never on a literal breakpoint —
+a literal leaves a band of widths where the two disagree. The value was `md`
+from 2026-07-06 until docs/31 Step 6; `layout.test.tsx` pins it.
 `layouts/dashboard/css-vars.test.ts` locks the shell values and asserts the
 retired names stay gone; `components/nav-section/css-vars.test.ts` locks the
 nav values. Primary Grid spacing is 3 theme units (24px).
@@ -693,8 +702,10 @@ in `section-title-bar.test.tsx`; page tests that mock the title bar assert the
   `CHAT_NAV_COLLAPSE_WIDTH`, owned by `layout.tsx`); message, error, and
   composer share a 760px maximum reading track (`CHAT_READING_WIDTH`). Every
   grid/flex child on that path keeps `minWidth: 0`.
-- The history Drawer paper uses `min(320px, calc(100vw - 32px))` and preserves
-  the exit-focus contract in section 12.
+- The history Drawer paper uses `min(320px, calc(100vw - 32px))`, slides in
+  from x = 0 (Minimal sets only `width`; the Drawer exists only below `lg`,
+  where the dashboard rail does not), and preserves the exit-focus contract in
+  section 12.
 - The user question takes Minimal's bubble (`p 1.5`, `maxWidth 320`,
   `borderRadius 1`, 16% brand wash); the assistant answer stays frameless
   across the full track. A 320px answer cannot hold a markdown table, and

@@ -8,7 +8,7 @@ CSS 变量是 shell 的唯一 owner，页面只消费变量名，不复制数值
 
 | 变量 | 值 | owner |
 | --- | --- | --- |
-| `--layout-header-mobile-height` / `-desktop-height` | 64px / 72px（`layoutQuery`=md 切换） | `core/css-vars.ts` |
+| `--layout-header-mobile-height` / `-desktop-height` | 64px / 72px（`layoutQuery`=lg 切换） | `core/css-vars.ts` |
 | `--layout-header-blur` | 8px，仅滚动后启用 | `core/css-vars.ts` |
 | `--layout-nav-mobile-width` | 288px | `core/css-vars.ts` |
 | `--layout-nav-vertical-width` | 300px vertical / 88px mini（`NAV_VERTICAL_WIDTH`） | `dashboard/css-vars.ts` |
@@ -20,6 +20,7 @@ CSS 变量是 shell 的唯一 owner，页面只消费变量名，不复制数值
 - 变量挂在 `:root`（非 `body`），因此 `html { scroll-padding-top: var(--layout-header-*-height) }` 能读到 Header 高度：焦点/锚点滚动不会被 sticky Header 遮挡。
 - Scroll owner 唯一：document 滚动页面；侧栏 `position: fixed` 自己滚（vertical 用 `Scrollbar`，mini 用 `hideScrollY` 列）；Header `position: sticky`；`<main>` 只是流式布局。`LayoutSidebarContainer` 设 `minWidth: 0`，宽内容缩容器而不是撑出水平滚动。
 - Content gutter：`DASHBOARD_CONTENT_QUERY`（`lg`）起 40px；以下走 MUI Container 默认 24px（sm+）/16px（xs）。Header 容器经 `slotProps.container` 在同一断点用同一变量。
+- Shell 断点：`DASHBOARD_LAYOUT_QUERY`（`lg`，`dashboard/layout.tsx` 导出，Minimal `DashboardLayout` 的默认值）起 rail + 收展按钮 + 72px Header + `scroll-padding-top` 72；以下是汉堡 + `NavMobile` + 64px Header。它是 `DashboardLayout` 的 `layoutQuery` 默认值，经 prop 传给 `HeaderSection` / `LayoutSection` / `NavVertical`——这三个原语自己的默认值仍是 `md`（`HeaderSection` / `NavVertical` 同 Minimal 原语；Minimal 的 `LayoutSection` 没有这个 prop，是本仓库为 `scroll-padding-top` 加的；welcome 的 `WelcomeLayout` 也是 `md`，同 Minimal `MainLayout`），**不要改原语默认值**。导出它是因为 `sections/chat/chat-view.tsx` 按 Header 高度算卡片高，必须在同一宽度切换，所以不写字面量。与 `DASHBOARD_CONTENT_QUERY` 同为 `lg` 但是两个概念（Minimal 也是两个独立默认值），不合并。2026-07-06（`defdf00`）起曾是 `md`，docs/31 Step 6（2026-09-28）照 Minimal 改回 `lg`；`layout.test.tsx` 断言汉堡的媒体查询是 `min-width:1200px`
 
 ## 模块结构
 
@@ -35,7 +36,7 @@ CSS 变量是 shell 的唯一 owner，页面只消费变量名，不复制数值
 
 - `dashboard/css-vars.ts` — rail 宽度 + content padding + transition；`NAV_VERTICAL_WIDTH = { vertical: '300px', mini: '88px' }`
 - `dashboard/content.tsx` — DashboardContent：Container maxWidth + padding 变量；导出 `DASHBOARD_CONTENT_QUERY`。**Step 4 起消费 `compactLayout`**：经 leaf `SettingsContext` 可选读取（无 provider 时视为 off），on 时把内容列收窄到 `lg`，off 时用调用方自己传的 cap。Minimal 是 `compact ? 'lg' : false`，但本仓库每个页面都显式传了 `maxWidth`（多为 `xl`），照抄既会推翻页面的决定、又因为是默认参数值而永不生效
-- `dashboard/layout.tsx` — DashboardLayout：必填 `navigation: NavGroup[]`（app composition root 解析好的不可变导航），经 `useTranslatedNav` 翻一次后同一份数据给 `NavVertical` + `NavMobile`；读 `sidebarPinnedStorage` 得 `pinned`，`isNavMini = !pinned`。Header 左侧**只有移动端汉堡**（`header.menuAria` + Tooltip，其 ref 作为 `NavMobile.onExited` 的焦点归位目标）——桌面 toggle 已搬到 rail 边缘。Header `rightArea` = `BackgroundJobsIndicator` → `ThemeModeButton` → `LanguagePopover` → `SettingsButton` → `GithubButton`（一个 `minWidth: 0` 的 flex Box，390px 下 chip 先收缩；不做窄屏特判）。**常驻挂载 `useJobsBadge()`**。`layout.test.tsx` 锁：toggle 的 aria 翻转 + storage 写入 + toggle 不在 header 内、五控件顺序（header 内的 DOM 序，jobs 指示器由 stub 渲染成 `data-testid` 标记参与断言——它是 Chip，只扫 `MuiIconButton-root` 会漏；light 下主题按钮是 `header.themeToDark`）、移动 Drawer 路由关闭 + 焦点回菜单按钮
+- `dashboard/layout.tsx` — DashboardLayout：必填 `navigation: NavGroup[]`（app composition root 解析好的不可变导航），经 `useTranslatedNav` 翻一次后同一份数据给 `NavVertical` + `NavMobile`；读 `sidebarPinnedStorage` 得 `pinned`，`isNavMini = !pinned`。Header 左侧**只有移动端汉堡**（`header.menuAria` + Tooltip，其 ref 作为 `NavMobile.onExited` 的焦点归位目标）——桌面 toggle 已搬到 rail 边缘。Header `rightArea` = `BackgroundJobsIndicator` → `ThemeModeButton` → `LanguagePopover` → `SettingsButton` → `GithubButton`（一个 `minWidth: 0` 的 flex Box，390px 下 chip 先收缩；不做窄屏特判）。**常驻挂载 `useJobsBadge()`**。`layout.test.tsx` 锁：shell 断点（汉堡的媒体查询 = `lg`）、toggle 的 aria 翻转 + storage 写入 + toggle 不在 header 内、五控件顺序（header 内的 DOM 序，jobs 指示器由 stub 渲染成 `data-testid` 标记参与断言——它是 Chip，只扫 `MuiIconButton-root` 会漏；light 下主题按钮是 `header.themeToDark`）、移动 Drawer 路由关闭 + 焦点回菜单按钮
 - `dashboard/use-translated-nav.ts` — **i18n seam**：`NavGroup[]`（locale key）→ `NavSectionData[]`（显示串），`useMemo` 依赖 `[data, locale]`（`t` 读模块级消息表，所以依赖是 locale）。顺手合成 disclosure 的 `toggleLabel`（`nav.toggleSubmenuAria`）。因此 `components/nav-section/**` 一个 `t()` 都没有
 - `dashboard/nav-vertical.tsx` — 桌面 rail：`position: fixed` + `overflow: hidden` + 宽度变量 + 120ms width transition；顶部品牌行（`/icon/128.png` 36px，vertical 时 `pl: 2.75` 让 logo 中心落在行图标竖轴 40px 上，mini 时居中且不出 wordmark）；`isNavMini` 决定 `NavSectionMini`（`hideScrollY`，flyout 不能被裁）还是 `Scrollbar fillContent` 包 `NavSectionVertical`（`px: 2`）。`NavToggleButton` 是它的**兄弟节点**而非子节点：rail 保留 `overflow: hidden`（88→300 展开时不闪出内容），子节点会被裁掉。**且必须排在 rail 之后**：两者都是 `position: fixed` + 同一个 `--layout-nav-zIndex`，绘制顺序由 DOM 顺序决定，排在前面的按钮左半会被 rail 盖住（2026-09-27 修复前就是半个圆）
 - `dashboard/nav-mobile.tsx` — `layoutQuery` 以下的 temporary Drawer，始终 vertical 形态。**焦点契约与 Chat history drawer 相同且未变**：`disableRestoreFocus` + `ModalProps.onTransitionExited` 先 blur 抽屉内焦点 + `slotProps.transition.onExited` 把焦点交还触发按钮——绝不手动改 `aria-hidden`
@@ -54,7 +55,7 @@ CSS 变量是 shell 的唯一 owner，页面只消费变量名，不复制数值
 
 ## 约定
 
-- 侧边栏 Pin/Unpin: `sidebarPinnedStorage`（`lib/storage/ui-state.ts`，`local:sidebarPinned`，默认 true）。`pinned` → vertical 300px（图标+文字+分组 subheader），`!pinned` → mini 88px（图标 tile + hover/ArrowRight flyout）。Mobile（md 以下）不受影响，始终 Drawer。**存储键与语义不变**，只是 UI 词表由 compact 改叫 mini
+- 侧边栏 Pin/Unpin: `sidebarPinnedStorage`（`lib/storage/ui-state.ts`，`local:sidebarPinned`，默认 true）。`pinned` → vertical 300px（图标+文字+分组 subheader），`!pinned` → mini 88px（图标 tile + hover/ArrowRight flyout）。Mobile（`lg` 以下，<1200px）不受影响，始终 Drawer。**存储键与语义不变**，只是 UI 词表由 compact 改叫 mini
 - 配色模式只有 light/dark 两态，默认亮色，**唯一控件是 Header 的 `components/theme-mode-button.tsx`**（用户 2026-09-06 决定，推翻 2026-09-05 的「二态在 Header / `system` 在抽屉」拆分）。`system` 不再是可选值：抽屉的 Mode 块已删，`ColorModeValue` 缩成二态，`public/theme-init.js` 把存值里非 `light`/`dark` 的一切（含老用户的 `system`）归一化成 `light` 并写回——不写回，MUI 会从 storage 读到 `system` 并绕过 `defaultMode`。View Transition 圆形揭示逻辑在 `theme/mode-transition.ts`，Header 按钮与 welcome 顶栏共用（自此只剩这一个调用方）
 - 拒绝清单（docs/23 §11 仍生效的部分）：Header 不加页面搜索、账号、workspace、通知中心；nav 不做 horizontal 模式、不加 upgrade 卡；app.html 不引入 `motion`
 - nav 嵌套只做**一级**（Collections 父项 → 平台叶），止于平台名，不展开收藏夹；收藏夹列表留在平台页内的过滤器。`Onboarding Platform Preference` 只决定叶子优先级，禁止隐藏平台或反向重排 registry

@@ -47,9 +47,14 @@ vi.mock('@/lib/i18n/use-translation', () => ({
   }),
 }));
 
-const mediaState = vi.hoisted(() => ({ isDesktop: true }));
+const mediaState = vi.hoisted(() => ({ isDesktop: true, queries: [] as string[] }));
 
-vi.mock('@mui/material/useMediaQuery', () => ({ default: () => mediaState.isDesktop }));
+vi.mock('@mui/material/useMediaQuery', () => ({
+  default: (query: string) => {
+    mediaState.queries.push(query);
+    return mediaState.isDesktop;
+  },
+}));
 
 // Both hooks reach the module-level background-jobs store and chrome.action;
 // the shell contract under test is composition, not job tracking. The indicator
@@ -127,6 +132,7 @@ describe('DashboardLayout shell', () => {
   beforeEach(() => {
     storageState.pinned = true;
     storageState.setPinned.mockClear();
+    mediaState.queries = [];
     container = document.createElement('div');
     document.body.append(container);
     root = createRoot(container);
@@ -136,6 +142,17 @@ describe('DashboardLayout shell', () => {
     act(() => root.unmount());
     container.remove();
     vi.useRealTimers();
+  });
+
+  // docs/31 Step 6: Minimal's DashboardLayout switches at `lg`; favbase ran at
+  // `md` from defdf00 until 2026-09-28. The rail, toggle and header-height CSS
+  // rules derive from the same `layoutQuery` but are invisible to happy-dom, so
+  // the hamburger's media query is the one place the value can be pinned.
+  it('switches between the hamburger and the rail at lg', () => {
+    renderShell(root);
+
+    expect(mediaState.queries.length).toBeGreaterThan(0);
+    expect(new Set(mediaState.queries)).toEqual(new Set(['@media (min-width:1200px)']));
   });
 
   it('collapses the rail from the nav toggle and persists pin/unpin', async () => {

@@ -9,7 +9,7 @@ import { useTheme } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
 
 import { useTranslation } from '@/lib/i18n/use-translation';
-import { DashboardContent } from '../../layouts/dashboard';
+import { DASHBOARD_LAYOUT_QUERY, DashboardContent } from '../../layouts/dashboard';
 import { ChatHeader } from './chat-header';
 import { ChatMessageInput } from './chat-message-input';
 import { CHAT_READING_WIDTH, ChatMessageList } from './chat-message-list';
@@ -133,7 +133,7 @@ export function ChatWorkspace({ agent }: ChatWorkspaceProps) {
       sx={{
         height: {
           xs: 'calc(100dvh - var(--layout-header-mobile-height))',
-          md: 'calc(100dvh - var(--layout-header-desktop-height))',
+          [DASHBOARD_LAYOUT_QUERY]: 'calc(100dvh - var(--layout-header-desktop-height))',
         },
         minHeight: 0,
         overflow: 'hidden',
