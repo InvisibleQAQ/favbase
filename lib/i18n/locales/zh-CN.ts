@@ -685,7 +685,8 @@ const zhCN = {
   'welcome.tags.agentSkills': 'Agent Skills',
 
   'welcome.flow.eyebrow': '它怎么工作',
-  'welcome.flow.heading': '三步',
+  'welcome.flow.heading': '三',
+  'welcome.flow.headingTail': '步',
   'welcome.flow.intro':
     '收藏是最诚实的兴趣记录，也是最容易沉底的东西。favbase 把它捞起来，变成能问答的知识库。',
   'welcome.flow.step1.title': '收录收藏',
@@ -702,7 +703,8 @@ const zhCN = {
   'welcome.flow.step3.hint': '这就是主要功能',
 
   'welcome.chat.eyebrow': '主要功能',
-  'welcome.chat.heading': '知识库对话',
+  'welcome.chat.heading': '知识库',
+  'welcome.chat.headingTail': '对话',
   'welcome.chat.desc':
     '它不是一个关键词搜索框，而是一个会自己检索的 agent：向量负责「意思接近」，关键词负责「精确命中」，两路结果融合排序后再作答。',
   'welcome.chat.feature1': '多步 tool-calling，一轮不够就再检一轮',
@@ -719,7 +721,8 @@ const zhCN = {
   'welcome.chat.demoSource3': '为什么你的向量检索召回率上不去',
 
   'welcome.agentSkills.eyebrow': '给你的 coding agent',
-  'welcome.agentSkills.heading': '让 Claude Code 查你的收藏',
+  'welcome.agentSkills.heading': '让 Claude Code 查',
+  'welcome.agentSkills.headingTail': '你的收藏',
   'welcome.agentSkills.desc':
     '同一个本地知识库，除了在这里问，也可以让你的 coding agent 直接查。把下面这句话交给它，它会自己装好命令行、装好 skill，并带你完成配对。',
   'welcome.agentSkills.promptLabel': '把这句话发给你的 agent',
@@ -733,7 +736,8 @@ const zhCN = {
   'welcome.agentSkills.requirement': '需要 Node.js 20+；配对那一步在设置 → 账号连接 → Agent Skills 完成',
 
   'welcome.bilibili.eyebrow': 'B 站视频页',
-  'welcome.bilibili.heading': '看视频时，右边多一块',
+  'welcome.bilibili.heading': '看视频时，',
+  'welcome.bilibili.headingTail': '右边多一块',
   'welcome.bilibili.desc':
     '在 B 站视频页的右侧栏，favbase 直接挂一个面板：有官方字幕就抓下来，没有就走 ASR 转录。再点一下，整段内容压成带时间戳的章节总结，广告段也会被标出来。',
   'welcome.bilibili.feature1': '字幕可搜索，点一行就跳到那一秒',
@@ -750,7 +754,8 @@ const zhCN = {
   'welcome.bilibili.adBadge': '广告',
 
   'welcome.picker.eyebrow': '最后一步',
-  'welcome.picker.heading': '先收录哪些？',
+  'welcome.picker.heading': '先收录',
+  'welcome.picker.headingTail': '哪些？',
   'welcome.picker.desc':
     '选一个或多个。这个选择只决定接下来带你去哪儿——所有平台在插件里始终可用，之后随时能加。',
   'welcome.picker.readyNow': '开箱即用',
@@ -770,7 +775,10 @@ const zhCN = {
   'welcome.picker.footnote':
     '所有收藏、正文与向量都存在这台浏览器里。没有账号，没有服务器。',
 
-  'welcome.request.heading': '没找到你的平台？',
+  // One title in two halves: `Headline` joins them (a space in en, none in zh)
+  // and fades the tail to 40% white. Neither half carries the separator.
+  'welcome.request.heading': '没找到你的',
+  'welcome.request.headingTail': '平台？',
   'welcome.request.desc':
     '六个平台只是起点。告诉我们下一个该收录谁——去仓库开一个 issue，说不定下个版本就有。',
   'welcome.request.cta': '去 GitHub 提需求',

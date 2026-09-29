@@ -69,17 +69,6 @@ export function NavVertical({
 
   return (
     <>
-      <NavToggleButton
-        isNavMini={isNavMini}
-        onClick={onToggleNav}
-        sx={[
-          (theme) => ({
-            display: 'none',
-            [theme.breakpoints.up(layoutQuery)]: { display: 'inline-flex' },
-          }),
-        ]}
-      />
-
       <NavRoot
         layoutQuery={layoutQuery}
         className={mergeClasses([layoutClasses.nav.root, layoutClasses.nav.vertical, className])}
@@ -111,6 +100,20 @@ export function NavVertical({
           </Scrollbar>
         )}
       </NavRoot>
+
+      {/* After the rail, not before: both are fixed at the same z-index, so
+          document order decides paint order, and a button placed first loses
+          its left half under the rail. */}
+      <NavToggleButton
+        isNavMini={isNavMini}
+        onClick={onToggleNav}
+        sx={[
+          (theme) => ({
+            display: 'none',
+            [theme.breakpoints.up(layoutQuery)]: { display: 'inline-flex' },
+          }),
+        ]}
+      />
     </>
   );
 }

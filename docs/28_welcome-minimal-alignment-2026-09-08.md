@@ -21,7 +21,7 @@
 | D5 | Hero 背景**保留 Aurora**，不移植 `HeroBackground` | 用户决定 |
 | D6 | animate 层**按内容分**：`FadeIn` 保签名（57 处调用点不动）内部换实现；同质列表用 `MotionContainer` + `varContainer` 固定 stagger；有意节奏处保手排 delay | 用户决定 |
 | D7 | animate 原语落 `entrypoints/welcome/components/animate/` + `VENDOR_RULES` 加 `motion` 守卫 | 用户决定 |
-| D8 | section 语言**结构取、颜色留**：渐变实现从 CSS class 换成 `theme.mixins.textGradient`，但**保 coral 品牌色**；`Eyebrow` 药丸保留；`py` md 16→20 | 用户决定 |
+| D8 | section 语言**结构取、颜色留**：渐变实现从 CSS class 换成 `theme.mixins.textGradient`，但~~**保 coral 品牌色**；`Eyebrow` 药丸保留~~；`py` md 16→20。**颜色与药丸两半已于 2026-09-27 由 docs/31 Step 3 推翻**（用户决定）：五个 section 标题改 Minimal 的中性写法（主体 `text.primary` 实色 + 尾词淡出），caption 改裸 overline（`SectionCaption`），coral 渐变只留给 hero——Minimal 自己也是 hero 彩色、section 中性。`textGradient` 实现与 `py` 20 不变，明细见 docs/31 §4 Step 3 | 用户决定 |
 | D9 | Footer = 品牌块 + `v{version} · GPL-3.0`，**零新外链**（repo 链接本页已两处：header `GithubButton` + `PlatformRequest` 的 issue 按钮） | 用户决定 |
 | D10 | 一次做完 + 本文精简决策记录，不写八段 Step 手册 | 用户决定 |
 
@@ -70,15 +70,18 @@
 | `motion-container.tsx` | 29 | `components/animate/` |
 | `scroll-progress/`（137 + 31） | 75 | `components/animate/scroll-progress.tsx`（单文件，见 §4 E3） |
 | `back-to-top-button.tsx` | 57 | `components/animate/` |
+| `motion-viewport.tsx` | 42 | `components/animate/`（**docs/31 Step 4 追加，2026-09-28**，给段落装饰线当触发器；删掉 `disableAnimate` + `useMediaQuery(smDown)` 分支——它在 600px 处把渲染元素在 `m.div` 与 `div` 之间切换，React 会卸载重建整段内容，理由见 docs/31 §4 Step 4 D-b） |
 
 统一改动：`framer-motion` → `motion/react`；`m` → `motion`（D6 配套，理由见 §3）；`Box component={m.div}` → `MotionBox`（本页「一个动画 Box」只有一个定义处）。
+
+上面的「实际 314 行」是 2026-09-08 这一轮的数；docs/31 Step 4 追加 `motion-viewport.tsx`（42 行）并在 `index.ts` 多一条导出（+2 行）后，`components/animate/` 是 358 行。
 
 ### 2.4 section 语言（`$MIN/sections/home/components/section-title.tsx`）
 
 | | favbase 现状 | Minimal | 结果 |
 |---|---|---|---|
-| eyebrow | `Eyebrow` 药丸胶囊 | `SectionCaption` 裸 overline | **保留药丸**（D8） |
-| 标题渐变 | `.fb-headline` CSS class + 两套 CSS var + 六个硬编码 hex | 只给 `txtGradient` 那半句上灰阶淡出（`text.primary` → 20% alpha + `opacity: 0.4`） | **实现换成 `theme.mixins.textGradient`，颜色保 coral**（D8） |
+| eyebrow | `Eyebrow` 药丸胶囊 | `SectionCaption` 裸 overline | ~~**保留药丸**（D8）~~ **2026-09-27 由 docs/31 Step 3 推翻**：改移植的 `SectionCaption`，色取 `text.secondary`（Minimal 是 `text.disabled`，对比度不过 4.5）；`Eyebrow` 只剩 how-it-works 卡内提示 |
+| 标题渐变 | `.fb-headline` CSS class + 两套 CSS var + 六个硬编码 hex | 只给 `txtGradient` 那半句上灰阶淡出（`text.primary` → 20% alpha + `opacity: 0.4`） | **实现换成 `theme.mixins.textGradient`**，~~**颜色保 coral**~~（D8）。**颜色一半 2026-09-27 由 docs/31 Step 3 推翻**：section 标题主体 `text.primary` 实色 + 尾词 `text.primary` → 20% 淡出（去掉 Minimal 的 `opacity: 0.4`），coral 渐变只剩 hero |
 | 字号 | `clamp()` 两档 | `variant="h2"` 主题阶梯 | **保 clamp**（§4 E2） |
 | `py` | `{xs:10, md:16}` | `{xs:10, md:20}` | **取 20** |
 
@@ -93,6 +96,8 @@
 ### 3.1 `HeroBackground`（619 行 + 360 KB webp）
 
 `$MIN/sections/home/components/hero-background.tsx` + `hero-svg.tsx`（330）+ `svg-elements.tsx`（289），资源 `background-3.webp` 15 KB + dark 专用 `hero-blur.webp` 345 KB。
+
+> **补注（2026-09-28）**：其中 `svg-elements.tsx` 的 `FloatLine` 一族（`FloatLine` / `FloatPlusIcon` / `FloatTriangleLeftIcon` / `FloatTriangleDownIcon` / `FloatDotIcon`）已由 docs/31 Step 4 移植给 hero 以下的段落用（`entrypoints/welcome/components/svg-elements.tsx`，用户决定逐段对照 Minimal 源文件）；`FloatXIcon` 与 `CircleSvg` 未移植，理由见 docs/31 §4 Step 4 D-a。**`HeroBackground` 本身的拒绝不变**，hero 仍然不画线（Minimal 的 `home-hero` 也不画）。下面三条理由针对的是 hero 的铺满式背景，不是段落 gutter 里的线。
 
 拒绝理由，按强度排序：
 
@@ -129,7 +134,7 @@ favbase `components/animated-text.tsx`（77 行）只切到词层正是为此（
 | `animate-count-up.tsx` | 90 行 | 本页约定禁数字——首装时数据库是空的，任何统计数字都是假的 |
 | `animate-border.tsx` / `animate-logo.tsx` | 271 + 134 行 | 零用例 |
 | 其余 9 个 variants（zoom/flip/scale/rotate/bounce/path/background/actions/slide） | ~658 行 | 零消费者，且每个都是独立概念。`varFade` 的 10 个方向保留全表——那是**一个正交 API**，裁剪会让「为什么只有 inUp 和 inLeft」变成需要解释的特殊情况 |
-| Minimal home 的 Pricing / Testimonials / FAQs / ZoneUI / Advertisement | ~1200 行 | 销售页段落。Testimonials 会逼出编造的用户评价，`renderRatings` 的星级 + AvatarGroup + "160+ Happy customers" 同理 |
+| Minimal home 的 Pricing / Testimonials / FAQs / ZoneUI / ~~Advertisement~~ | ~1200 行 | 销售页段落。Testimonials 会逼出编造的用户评价，`renderRatings` 的星级 + AvatarGroup + "160+ Happy customers" 同理。**Advertisement（179 行）已于 2026-09-27 移植**（docs/31 Step 2，用户决定）：`platform-request.tsx` 改成它的深色 CTA 卡，只替换 favbase 没有对应物的部分（保留描述段、单个按钮、i18n 拆标题），明细见 docs/31 §4 Step 2。与其余四个的区别：它的内容槽装得下 favbase 已有的真动作（Platform Request 的 issue 外链），不逼出编造的内容。其余四个的拒绝不变 |
 | `renderIcons`（"Available For" + 平台图标行） | — | favbase 已有**三处**在列六平台清单：`OrbitCore`（Hero 右侧公转）、`CapabilityMarquee`（`ROW_TOP`/`ROW_BOTTOM` 含全部六个平台名 + 图标）、`PlatformPicker`。再加一处是第四次，且与紧接其后的 marquee 直接重复 |
 | `ScrollProgress` 的 `circular` 变体 / `portal` / RTL 镜像 / 调用方传 `progress` | ~100 行 | 零消费者；仓库无 `direction` 支持（docs/25 Step 2 去掉了 Minimal 的 direction 数据层）；挂点无 transformed 祖先；进度来源只有文档滚动一处 |
 | `BackToTopButton` 的 `renderButton` escape hatch | — | 零消费者 |
@@ -181,6 +186,8 @@ welcome 当初自造 clamp 正是因为 favbase 的 theme 没有 Minimal 那档�
 `how-it-works.tsx:224` 直接用了 `className="fb-headline"`（三步叠卡的步骤大号数字），**不走 `Headline` 组件**。删 CSS class 会让它静默失去渐变。
 
 **改法**：渐变抽成 `section-shell.tsx` 的 `headlineGradient(theme)`，`Headline` 与步骤数字共用——与该文件既有的 `ctaGlowShadow(theme)` 同一模式（`entrypoints/welcome/CLAUDE.md` 明写「别再手写」）。这比原方案更好：那两处本来就该同源，分开正是它们在 `welcome.css` 时代能漂的原因。
+
+**2026-09-27 更新**（docs/31 Step 3）：步骤数字改吃 `fadeTextGradient(theme)`，与 section 标题的尾词共用；`headlineGradient` 只剩 hero 一个消费者、不再导出。「两处同源」的做法不变，换的是它们共用的 helper。
 
 顺带：`scroll-progress` 裁成单文件后 animate 层实际 314 行，低于 §1 预估的 404。
 

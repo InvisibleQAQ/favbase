@@ -700,7 +700,8 @@ const en: Record<LocaleKeys, string> = {
   'welcome.tags.agentSkills': 'Agent Skills',
 
   'welcome.flow.eyebrow': 'How it works',
-  'welcome.flow.heading': 'Three steps',
+  'welcome.flow.heading': 'Three',
+  'welcome.flow.headingTail': 'steps',
   'welcome.flow.intro':
     'Your favorites are the most honest record of what you care about — and the easiest thing to lose track of. favbase digs them back up and turns them into something you can question.',
   'welcome.flow.step1.title': 'Collect what you saved',
@@ -717,7 +718,8 @@ const en: Record<LocaleKeys, string> = {
   'welcome.flow.step3.hint': 'This is the main event',
 
   'welcome.chat.eyebrow': 'The main feature',
-  'welcome.chat.heading': 'Chat with your knowledge base',
+  'welcome.chat.heading': 'Chat with your',
+  'welcome.chat.headingTail': 'knowledge base',
   'welcome.chat.desc':
     'Not a keyword box — an agent that retrieves for itself. Vectors handle "close in meaning", keywords handle "exact hit", and the two result sets are fused before it answers.',
   'welcome.chat.feature1': 'Multi-step tool calling — one round short, it runs another',
@@ -734,7 +736,8 @@ const en: Record<LocaleKeys, string> = {
   'welcome.chat.demoSource3': 'Why your vector recall is stuck',
 
   'welcome.agentSkills.eyebrow': 'For your coding agent',
-  'welcome.agentSkills.heading': 'Let Claude Code search what you saved',
+  'welcome.agentSkills.heading': 'Let Claude Code search',
+  'welcome.agentSkills.headingTail': 'what you saved',
   'welcome.agentSkills.desc':
     'The same local knowledge base, asked from your coding agent instead of from here. Hand it the line below and it installs the CLI, installs the skill, and walks you through pairing.',
   'welcome.agentSkills.promptLabel': 'Send this to your agent',
@@ -749,7 +752,8 @@ const en: Record<LocaleKeys, string> = {
     'Needs Node.js 20+. Pairing happens in Settings > Connections > Agent Skills.',
 
   'welcome.bilibili.eyebrow': 'On bilibili video pages',
-  'welcome.bilibili.heading': 'An extra panel while you watch',
+  'welcome.bilibili.heading': 'An extra panel',
+  'welcome.bilibili.headingTail': 'while you watch',
   'welcome.bilibili.desc':
     'favbase mounts a panel in the bilibili sidebar: it grabs official subtitles when they exist and falls back to ASR transcription when they do not. One more click compresses the whole thing into a timestamped chapter summary — sponsored segments marked.',
   'welcome.bilibili.feature1': 'Searchable subtitles — click a line, jump to that second',
@@ -768,7 +772,8 @@ const en: Record<LocaleKeys, string> = {
   'welcome.bilibili.adBadge': 'Sponsored',
 
   'welcome.picker.eyebrow': 'Last step',
-  'welcome.picker.heading': 'What should we collect first?',
+  'welcome.picker.heading': 'What should we',
+  'welcome.picker.headingTail': 'collect first?',
   'welcome.picker.desc':
     'Pick one or several. This only decides where we drop you next — every platform stays available inside the extension, and you can add more any time.',
   'welcome.picker.readyNow': 'Works right away',
@@ -788,7 +793,8 @@ const en: Record<LocaleKeys, string> = {
   'welcome.picker.footnote':
     'Every saved item, body and vector lives in this browser. No account, no server.',
 
-  'welcome.request.heading': "Don't see your platform?",
+  'welcome.request.heading': "Don't see your",
+  'welcome.request.headingTail': 'platform?',
   'welcome.request.desc':
     'Six platforms are just the start. Tell us which one to collect next — open an issue on the repo.',
   'welcome.request.cta': 'Request it on GitHub',

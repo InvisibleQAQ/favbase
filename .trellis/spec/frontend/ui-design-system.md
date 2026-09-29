@@ -209,6 +209,18 @@ Rules:
 - MUI subtitle variants map to `p` so item titles are not false headings.
 - All variants use zero letter spacing; sizes do not scale with the viewport.
 
+One page call site is exempt from the two viewport rules above, and only one:
+the Dashboard KPI figure (`[data-slot="kpi-value"]`) follows Minimal's `h4` —
+DM Sans 700, line height 1.5, 20px, 24px from `md` (docs/31 Step 5, user
+decision 2026-09-28). The override is written at that call site
+(`sections/overview/analytics-widget-summary.tsx`) over `variant="h4"`, which
+already inherits DM Sans, so the call site sets no `fontFamily`; no variant in
+the table changes and the theme does not regain
+`responsiveFontSizes`. It is not a precedent: any other element that wants to
+scale with the viewport needs its own decision. (The theme's input text,
+15px and 16px below `sm` from `core/components/text-field.tsx`, is a
+theme-owned Minimal port from docs/25 Step 1, not a page call site.)
+
 ## 6. Shape And Elevation
 
 `theme.shape.borderRadius = 8` is the base. Page code grades **down** from it
@@ -342,6 +354,15 @@ Header height. The document is the only page scroll owner; the fixed rail
 scrolls its own list (`Scrollbar` when vertical, a `hideScrollY` column when
 mini, because a flyout must not be clipped). The Header container uses the same
 content gutter from `DASHBOARD_CONTENT_QUERY` (`lg`).
+The shell itself switches at `DASHBOARD_LAYOUT_QUERY` (`lg`, Minimal's
+`DashboardLayout` default, exported from `layouts/dashboard/layout.tsx`): from
+it up, the rail, `NavToggleButton`, the 72px Header and a 72px
+`scroll-padding-top`; below it, the hamburger, `NavMobile` and the 64px Header.
+It is not the same constant as `DASHBOARD_CONTENT_QUERY`, although both are
+`lg`. Anything sized against the Header height (the Chat card's
+`calc(100dvh - header)`) keys on the constant, never on a literal breakpoint —
+a literal leaves a band of widths where the two disagree. The value was `md`
+from 2026-07-06 until docs/31 Step 6; `layout.test.tsx` pins it.
 `layouts/dashboard/css-vars.test.ts` locks the shell values and asserts the
 retired names stay gone; `components/nav-section/css-vars.test.ts` locks the
 nav values. Primary Grid spacing is 3 theme units (24px).
@@ -557,7 +578,12 @@ Implemented state (docs/25 Step 6, 2026-09-03):
   gradient of two 48% brand tints over a `common.white` base (the base is what
   keeps the dark scheme from going muddy), `<color>.darker` ink, a 48px glyph
   pinned top-right, `subtitle2 component="p"` title and an
-  `h3 component="p"` figure carrying `data-slot="kpi-value"`. An optional
+  `h4 component="p"` figure carrying `data-slot="kpi-value"`, whose weight and
+  size are overridden at the call site to Minimal's `h4` values
+  (`fontWeightBold`, 20px, 24px from `md`; the section 5 exception, docs/31
+  Step 5). The loading skeleton's figure row
+  follows the line box: 30px, 36px from `md`, set through `sx` because the
+  `height` prop lands as an inline style that beats `sx`. An optional
   `caption component="p"` carries one honest secondary line (the coverage card's
   `dashboard.noTags` / `dashboard.taggedCount`) and carries **no `opacity`**:
   Minimal dims that line, but on this card's 48% tint over white a 0.72 alpha
@@ -676,8 +702,10 @@ in `section-title-bar.test.tsx`; page tests that mock the title bar assert the
   `CHAT_NAV_COLLAPSE_WIDTH`, owned by `layout.tsx`); message, error, and
   composer share a 760px maximum reading track (`CHAT_READING_WIDTH`). Every
   grid/flex child on that path keeps `minWidth: 0`.
-- The history Drawer paper uses `min(320px, calc(100vw - 32px))` and preserves
-  the exit-focus contract in section 12.
+- The history Drawer paper uses `min(320px, calc(100vw - 32px))`, slides in
+  from x = 0 (Minimal sets only `width`; the Drawer exists only below `lg`,
+  where the dashboard rail does not), and preserves the exit-focus contract in
+  section 12.
 - The user question takes Minimal's bubble (`p 1.5`, `maxWidth 320`,
   `borderRadius 1`, 16% brand wash); the assistant answer stays frameless
   across the full track. A 320px answer cannot hold a markdown table, and
@@ -784,6 +812,28 @@ no `.MuiAlert-root`). Mock the barrel, never `sonner`.
 - Async actions show loading/disabled feedback.
 - Page horizontal overflow is forbidden.
 
+> **Warning — the reference source is not a contrast authority.** Minimal puts
+> `text.disabled` on text people are meant to read, so a port that keeps its
+> tokens brings in a failure. Found in welcome (outside this spec's scope,
+> same palette; docs/31 Step 3): `SectionCaption` is 12px `overline` in
+> `text.disabled`, which gives 2.7:1 on light `background.default` and 3.6:1
+> on dark. `text.secondary` gives 4.9:1 and 6.4:1.
+>
+> ~~~tsx
+> // Wrong: token copied from $MIN/sections/home/components/section-title.tsx
+> <Box sx={{ typography: 'overline', color: 'text.disabled' }}>{caption}</Box>
+>
+> // Correct: same shape, readable token; the deviation is recorded in the port's doc
+> <Box sx={{ typography: 'overline', color: 'text.secondary' }}>{caption}</Box>
+> ~~~
+>
+> Before porting a component, compute every text colour × ground pair in both
+> schemes, including alpha stacked by `opacity` or a gradient's end stop.
+> Minimal's section-title tail stacks `opacity: 0.4` on `text.primary → 20%` and
+> starts at 2.4:1. Keep a reference token only where it clears the floor above.
+> Anything under it is a user decision, and the ratio goes in the port's doc:
+> welcome's neutral tail, for example, still ends at 1.5:1 by that choice.
+
 ### Temporary Drawer/Dialog Exit Focus
 
 MUI 9 + React 19 transition ordering is protected by the existing contract:
@@ -824,6 +874,34 @@ with `transform` would leave wrapping, Header alignment, and hit geometry
 stale. The duration/easing remain owned by `dashboard/css-vars.ts`; revisit
 only when a real Chrome performance trace demonstrates dropped frames.
 
+> **Warning — picking a wrapper's element type from a breakpoint remounts
+> everything inside it.** React compares element types, not markup: if a
+> wrapper renders `motion.div` on one side of a `useMediaQuery` and a plain
+> `div` on the other (or `mdUp ? A : B` as the component), crossing the
+> breakpoint unmounts and rebuilds the whole subtree. Local state is lost and
+> mount effects run again. Nothing fails at a fixed width, so it only shows on
+> resize, DevTools device toggling, or rotating a tablet.
+>
+> Found in welcome (outside this spec's scope, same React mechanics; docs/31
+> Step 4): Minimal's `MotionViewport` swaps `m.div` for `div` below `sm` when
+> `disableAnimate` is set, and wrapping a band in it would have cleared the
+> platform picker's selection and replayed the chat demo at 600px. The port
+> deletes the branch.
+>
+> ~~~tsx
+> // Wrong: the element type depends on the breakpoint, so the children remount
+> const smDown = useMediaQuery((theme) => theme.breakpoints.down('sm'));
+> return <Box {...(smDown ? {} : { component: m.div, whileInView: 'animate' })}>{children}</Box>;
+>
+> // Correct: one element type at every width; vary props or styles instead
+> return <MotionBox initial="initial" whileInView="animate" variants={varContainer()}>{children}</MotionBox>;
+> ~~~
+>
+> Check any responsive switch around stateful children by changing state,
+> resizing across the breakpoint and back, and reading the state again (the
+> Step 4 check: two picker cards still `aria-pressed="true"` after 1440 → 500
+> → 1440).
+
 ## 14. Sx Pattern
 
 Use composable arrays when a component exposes `sx`:
@@ -834,6 +912,32 @@ sx={[
   ...(Array.isArray(sx) ? sx : [sx]),
 ]}
 ~~~
+
+> **Warning — a scalar override loses to a responsive default.** Appending the
+> caller's `sx` last only wins per emitted rule. If the component's own value is
+> responsive (`py: { xs: 10, md: 20 }`), MUI emits a base rule plus a
+> `@media (min-width: 900px)` rule; a caller's scalar (`pt: 0`) lands in the
+> base rule only, so from `md` up the component's media rule still applies.
+> Nothing warns: it looks right on a narrow window and wrong on a desktop one.
+>
+> Found in welcome's `WelcomeSection` (outside this spec's scope, same MUI
+> mechanics; docs/31 Step 2): `PlatformRequest` passed `pt: 0`, which never
+> applied at `md`+ from the day it was written (160px measured at 1440).
+>
+> ~~~tsx
+> // Wrong: base rule only; the md media rule of `py` still gives 160px
+> <WelcomeSection sx={{ pt: 0 }} />
+>
+> // Correct when the override is real: same shape as the default
+> <WelcomeSection sx={{ pt: { xs: 0, md: 0 } }} />
+>
+> // Better when the band simply isn't on that rhythm: don't use the wrapper
+> <Box component="section"><Container maxWidth="lg">…</Container></Box>
+> ~~~
+>
+> Verify an override by measuring `getComputedStyle(el)` for the overridden
+> property at a viewport at or above every breakpoint key the default uses, not
+> at whatever width the window happens to have.
 
 ## 15. Forbidden Patterns
 

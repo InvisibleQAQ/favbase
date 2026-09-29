@@ -13,7 +13,7 @@ export function AnalyticsLoading({ label }: { label: string }) {
           <Grid key={key} size={{ xs: 12, sm: 6, md: 3 }}>
             <Card sx={{ p: 3, height: 1, boxShadow: 'none' }}>
               <Skeleton variant="text" width={112} />
-              <Skeleton variant="text" width={72} height={30} sx={{ mt: 1 }} />
+              <Skeleton variant="text" width={72} sx={{ mt: 1, height: { xs: 30, md: 36 } }} />
             </Card>
           </Grid>
         ))}

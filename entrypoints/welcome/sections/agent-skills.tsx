@@ -3,6 +3,7 @@ import type { LocaleKeys } from '@/lib/i18n';
 import { useEffect, useRef, useState } from 'react';
 
 import Box from '@mui/material/Box';
+import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import { varAlpha } from 'minimal-shared/utils';
@@ -13,7 +14,8 @@ import { AGENT_SETUP_GUIDE_URL } from '@/lib/repo';
 
 import { FadeIn } from '../components/fade-in';
 import { FeatureList } from '../components/feature-list';
-import { Eyebrow, Headline, WelcomeSection } from '../components/section-shell';
+import { FloatLine, FloatTriangleDownIcon } from '../components/svg-elements';
+import { Headline, SectionCaption, WelcomeSection } from '../components/section-shell';
 
 const FEATURES: LocaleKeys[] = [
   'welcome.agentSkills.feature1',
@@ -25,6 +27,37 @@ const FEATURES: LocaleKeys[] = [
 const FEEDBACK_MS = 2000;
 
 type CopyStatus = 'idle' | 'copied' | 'failed';
+
+/**
+ * Minimal `home-testimonials`' lines, value for value: two down-pointing
+ * triangles stacked on the spine at the head of a centred band.
+ */
+const renderLines = () => (
+  <>
+    <Stack
+      spacing={8}
+      sx={{
+        top: 64,
+        left: 80,
+        alignItems: 'center',
+        position: 'absolute',
+        transform: 'translateX(-50%)',
+      }}
+    >
+      <FloatTriangleDownIcon sx={{ position: 'static', opacity: 0.12 }} />
+      <FloatTriangleDownIcon
+        sx={{
+          width: 30,
+          height: 15,
+          opacity: 0.24,
+          position: 'static',
+        }}
+      />
+    </Stack>
+
+    <FloatLine vertical sx={{ top: 0, left: 80 }} />
+  </>
+);
 
 /**
  * Agent Skills: the same local library, asked from the user's coding agent
@@ -76,7 +109,7 @@ export function AgentSkills() {
         : t('welcome.agentSkills.copy');
 
   return (
-    <WelcomeSection>
+    <WelcomeSection lines={renderLines()}>
       <Box
         sx={{
           maxWidth: 760,
@@ -88,11 +121,13 @@ export function AgentSkills() {
         }}
       >
         <FadeIn>
-          <Eyebrow icon="solar:code-bold-duotone">{t('welcome.agentSkills.eyebrow')}</Eyebrow>
+          <SectionCaption>{t('welcome.agentSkills.eyebrow')}</SectionCaption>
         </FadeIn>
 
-        <FadeIn delay={0.06} y={16} sx={{ mt: 2.5 }}>
-          <Headline>{t('welcome.agentSkills.heading')}</Headline>
+        <FadeIn delay={0.06} y={16} sx={{ mt: 3 }}>
+          <Headline tail={t('welcome.agentSkills.headingTail')}>
+            {t('welcome.agentSkills.heading')}
+          </Headline>
         </FadeIn>
 
         <FadeIn delay={0.12}>

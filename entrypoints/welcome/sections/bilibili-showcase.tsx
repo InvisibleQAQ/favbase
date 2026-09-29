@@ -16,7 +16,8 @@ import { Iconify } from '@/entrypoints/app/components/iconify';
 import { FadeIn } from '../components/fade-in';
 import { MotionBox } from '../components/motion-box';
 import { FeatureList } from '../components/feature-list';
-import { Eyebrow, Headline, WelcomeSection } from '../components/section-shell';
+import { FloatDotIcon, FloatLine } from '../components/svg-elements';
+import { Headline, SectionCaption, WelcomeSection } from '../components/section-shell';
 
 const FEATURES: LocaleKeys[] = [
   'welcome.bilibili.feature1',
@@ -344,12 +345,50 @@ function PlayerMock() {
   );
 }
 
+/**
+ * Minimal `home-integrations`' lines, value for value: a column of dots on the
+ * spine, pinned 64px inside the band's top and bottom edges.
+ *
+ * The two 14px dots do not come out brighter than the 12px ones. Their own
+ * `opacity: 0.24` lives on their emotion class (specificity 0,1,0), and the
+ * Stack's `'& span'` rule (0,1,1) sets `opacity: 0.12` on every dot and wins;
+ * the same rule is what turns their `position: absolute` into `static`.
+ * Minimal's source carries the same rule, so the port keeps it — the pair is
+ * bigger, not brighter.
+ */
+const renderLines = () => (
+  <>
+    <Stack
+      spacing={8}
+      sx={{
+        top: 64,
+        left: 80,
+        zIndex: 2,
+        bottom: 64,
+        alignItems: 'center',
+        position: 'absolute',
+        transform: 'translateX(-50%)',
+        '& span': { position: 'static', opacity: 0.12 },
+      }}
+    >
+      <FloatDotIcon />
+      <FloatDotIcon sx={{ opacity: 0.24, width: 14, height: 14 }} />
+      <Box sx={{ flexGrow: 1 }} />
+      <FloatDotIcon sx={{ opacity: 0.24, width: 14, height: 14 }} />
+      <FloatDotIcon />
+    </Stack>
+
+    <FloatLine vertical sx={{ top: 0, left: 80 }} />
+  </>
+);
+
 export function BilibiliShowcase() {
   const { t } = useTranslation();
 
   return (
     <WelcomeSection
       id="welcome-bilibili"
+      lines={renderLines()}
       sx={(theme) => ({
         scrollMarginTop: 80,
         bgcolor: varAlpha(theme.vars.palette.grey['500Channel'], 0.04),
@@ -380,11 +419,13 @@ export function BilibiliShowcase() {
 
         <Grid size={{ xs: 12, md: 5 }}>
           <FadeIn y={-12}>
-            <Eyebrow icon="simple-icons:bilibili">{t('welcome.bilibili.eyebrow')}</Eyebrow>
+            <SectionCaption>{t('welcome.bilibili.eyebrow')}</SectionCaption>
           </FadeIn>
 
-          <FadeIn delay={0.08} sx={{ mt: 2.5 }}>
-            <Headline>{t('welcome.bilibili.heading')}</Headline>
+          <FadeIn delay={0.08} sx={{ mt: 3 }}>
+            <Headline tail={t('welcome.bilibili.headingTail')}>
+              {t('welcome.bilibili.heading')}
+            </Headline>
           </FadeIn>
 
           <FadeIn delay={0.16}>

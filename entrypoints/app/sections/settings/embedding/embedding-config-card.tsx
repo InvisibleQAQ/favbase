@@ -147,7 +147,7 @@ export function EmbeddingConfigCard({ settings, saveEmbedding }: EmbeddingConfig
           </Grid>
 
           {/* Get Key link */}
-          <Grid size={{ xs: 12, md: 6 }}>
+          <Grid size={{ xs: 12, md: 6 }} sx={{ display: 'flex', alignItems: 'center' }}>
             {currentDef.regUrl && (
               <Button
                 variant="outlined"
@@ -155,7 +155,7 @@ export function EmbeddingConfigCard({ settings, saveEmbedding }: EmbeddingConfig
                 href={currentDef.regUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                sx={{ whiteSpace: 'nowrap', alignSelf: 'center' }}
+                sx={{ whiteSpace: 'nowrap' }}
               >
                 {t('settings.getKey')}
               </Button>

@@ -55,7 +55,6 @@ export function ChatNavDrawer({
         paper: {
           ref: paperRef,
           sx: {
-            left: { xs: 0, md: 'var(--layout-nav-vertical-width)' },
             width: `min(${CHAT_NAV_WIDTH}px, calc(100vw - 32px))`,
             p: 0,
           },

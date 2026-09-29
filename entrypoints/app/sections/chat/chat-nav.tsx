@@ -116,10 +116,12 @@ export function ChatNav({
       sx={(theme) => ({
         minHeight: 0,
         flexDirection: 'column',
-        bgcolor: theme.vars.palette.background.neutral,
         ...(rail
           ? {
-              flexShrink: 0,
+              // Minimal's rail sizing. The parent column is vertical, so this is
+              // height: fill the card (the border runs its full height) and
+              // shrink to it (a long history scrolls instead of overflowing).
+              flex: '1 1 auto',
               display: { xs: 'none', lg: 'flex' },
               width: collapsed ? CHAT_NAV_COLLAPSE_WIDTH : CHAT_NAV_WIDTH,
               borderRight: `solid 1px ${theme.vars.palette.divider}`,

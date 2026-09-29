@@ -62,7 +62,7 @@ Step 10 收口（截图基线、规范/CLAUDE.md/docs 同步、index.html 契约
 | D5 | **同时引入** `simplebar-react` 与 `sonner`（我曾建议只引 sonner 或都不引；用户选择两个都引。按此执行，Step 3/5 记录体积与 a11y 代价） | 用户决定 | 3, 5 |
 | D6 | Toast 边界：**方案 A**——toast 只用于一次性动作结果；持久状态（已保存徽标、连接状态 Alert、拉取进度）不进 toast | 用户决定 | 5 |
 | D7 | Chat：**主线内完整移植 chat shell**（不是只换 token） | 用户决定 | 9 |
-| D8 | 保留 Favbase 固定 type scale（不移植 Minimal 的 responsive font sizes） | PRD 默认 | 1 |
+| D8 | 保留 Favbase 固定 type scale（不移植 Minimal 的 responsive font sizes）（2026-09-28 docs/31 Step 5：Dashboard KPI 数字一处照 Minimal `h4` 例外，主题阶梯不变，用户决定） | PRD 默认 | 1 |
 | D9 | `shape.borderRadius` 保持 8；Card/Dialog 16、Popover 10、Skeleton rounded 16 通过 Minimal 的 `×2 / ×1.25` 派生（PRD R3 曾误写 16，已勘误） | PRD 默认 | 1 |
 | D10 | Button `defaultProps.color='inherit'`（Minimal），但保留 Favbase `outlinedPrimary/textPrimary → text.accent` 覆盖 | PRD 默认 | 1 |
 | D11 | 输入框高度随 Minimal `INPUT_PADDING`（outlined medium 56 / small 40），放弃 docs/23 的 48/40 | PRD 默认 | 1 |
@@ -694,7 +694,7 @@ pnpm compile && pnpm test && pnpm build
 - 文档：`sections/overview/CLAUDE.md`、`components/chart/CLAUDE.md`、`.trellis/spec/frontend/ui-design-system.md` §10
 
 **具体改什么**
-1. **KPI 卡**（照 `$MIN/sections/overview/analytics/analytics-widget-summary.tsx` 去掉 ApexCharts 与百分比趋势）：`Card` `p: 3`，135° 渐变 `varAlpha(<color>.lighterChannel, .48) → varAlpha(<color>.lightChannel, .48)`，文字 `<color>.darker`，右上 48px 图标 `absolute`，标题 `subtitle2` `component="p"`，数值 `h3` `component="p"` tabular-nums。四张：总条目（`totalItems`，primary）、有条目平台数（`platforms.filter(p => p.itemCount > 0).length`，info）、已用标签（`usedTags`，warning）、打标覆盖率（`taggedItems/totalItems` 百分比，`totalItems===0` 显示 `—`，success）。**无 sparkline、无趟势箭头**。
+1. **KPI 卡**（照 `$MIN/sections/overview/analytics/analytics-widget-summary.tsx` 去掉 ApexCharts 与百分比趋势）：`Card` `p: 3`，135° 渐变 `varAlpha(<color>.lighterChannel, .48) → varAlpha(<color>.lightChannel, .48)`，文字 `<color>.darker`，右上 48px 图标 `absolute`，标题 `subtitle2` `component="p"`，~~数值 `h3`~~ **2026-09-28 由 docs/31 Step 5 改为 Minimal `h4`**（DM Sans 700、行高 1.5、20px → `md` 起 24px，调用点覆盖、主题阶梯不动） `component="p"` tabular-nums。四张：总条目（`totalItems`，primary）、有条目平台数（`platforms.filter(p => p.itemCount > 0).length`，info）、已用标签（`usedTags`，warning）、打标覆盖率（`taggedItems/totalItems` 百分比，`totalItems===0` 显示 `—`，success）。**无 sparkline、无趟势箭头**。
 2. **平台构成 Card**：`CardHeader` 标题 h2；左 `DonutChart`（SVG `circle` 六段 `stroke-dasharray`，`aria-hidden`，中心显示 `totalItems`）；右 `ChartLegends` 六行，每行是 `Tab`（保留现有六 tabs 语义与 `role="tablist"`），色块用 `platform.*` 色，数值与百分比用文本打印（读屏可读，图不承担信息）。`share===0` 的段不画弧，图例仍显示 0。
 3. **平台细分 Card**：`role="tabpanel"`，现有 `dimensions` 排行列表照搬，`Mui-selected` 底色改 `primary.main@0.08`（Step 2 已改）。
 4. **Top tags Card**：现有 chip 链接列表，chip 变体随 Step 1 soft。
