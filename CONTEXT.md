@@ -60,6 +60,10 @@ One complete act of collecting a Collection Platform's current favorites into th
 It is defined once per platform and is the same act however it starts, whether a person presses the button or the daily automatic run fires; a completed Platform Sync means that run finished, never that the local collection now mirrors the platform.
 _Avoid_: Fetch job, refresh, import, Pipeline Run
 
+**Platform Sync Record**:
+This device's record of a Collection Platform's latest Platform Sync attempt and how it ended, plus its latest successful Platform Sync with how many items that sync fetched and added.
+_Avoid_: Sync run, sync history, job history, Source fetch time
+
 **Pipeline Run**:
 One bounded execution attempt for a Collection pipeline stage; its completion does not claim that local items fully cover the external platform.
 _Avoid_: Processing Coverage, remote sync completeness
@@ -120,6 +124,9 @@ _Avoid_: API key, provider key, password
 - A **Collection Item** belongs to exactly one **Collection Platform**
 - A **Platform Sync** is defined once per **Collection Platform**; the manual trigger and the daily automatic trigger perform that same **Platform Sync**
 - A completed **Platform Sync** does not claim that the local collection covers the **Collection Platform**'s current favorites
+- Every **Platform Sync**, manual or automatic, updates its platform's **Platform Sync Record** whether it succeeds or fails; a **Platform Sync** that finds nothing still succeeds
+- "Last synced" means the latest successful **Platform Sync** in the **Platform Sync Record**; a failed attempt never moves it
+- A **Platform Sync Record** describes this device only; it is not evidence about another device's collection or about what the **Collection Platform** holds
 - A **Platform Request** asks for a service to become a **Collection Platform**; until it does, it has no **Platform Sync** and holds no **Collection Items**
 - A **Collection Item** has one **Creator** or bookmark **Domain**
 - A **Collection Item** belongs to one or more **Sources** when the platform exposes containers
@@ -172,6 +179,7 @@ _Avoid_: API key, provider key, password
 - "Progress" previously meant both a live **Pipeline Run** and idle **Processing Coverage**; these are now distinct, although a platform Collection page may combine them in one compact control.
 - External platforms do not expose a durable remote-total snapshot, so **Processing Coverage** must not be described as remote sync completeness.
 - "Selected platform" in onboarding previously sounded like an availability gate; it is now defined as an **Onboarding Platform Preference**, never a platform enablement setting.
+- "Last synced" was read off the **Sources** a **Platform Sync** touched, so a failed **Platform Sync**, or one that found nothing, left no trace and the platform looked never synced. It now means the latest successful **Platform Sync** in the **Platform Sync Record** (user decision 2026-09-29, docs/32 D1; the code switches over in docs/32 Step 1).
 - "Stuck" previously mixed missing provider configuration with slow, failed, or paused work; only missing configuration with eligible pending work is a **Configuration Blocker**.
 - "Agent Skills" is a UI label, not a term: the Settings section named Agent Skills configures one **Agent Bridge** (enable, port, **Bridge Token**, connection status), not a list of installable skills. A Skill is still only the markdown that teaches an agent to call the **favbase CLI**; when the two readings could be confused, say Agent Bridge.
 - A repository markdown that installs the CLI is an **Agent Setup Guide**, not a Skill; only the markdown that teaches an agent to call the **favbase CLI** (`skills/favbase/SKILL.md`, shipped inside the CLI) is a Skill.
