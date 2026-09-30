@@ -7,6 +7,7 @@ import { varAlpha } from 'minimal-shared/utils';
 
 import type { BiliFavOrder } from '@/lib/bilibili/types';
 import { isProcessableVideo } from '@/lib/bilibili/video-eligibility';
+import { formatDateTime } from '@/lib/i18n';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import {
   CollectionPageScaffold,
@@ -201,7 +202,7 @@ function BilibiliCollectionPage({
   }
   if (lastSyncedAt) {
     captionParts.push(
-      t('collections.lastSynced', { time: lastSyncedAt.toLocaleTimeString() }),
+      t('collections.lastSynced', { time: formatDateTime(lastSyncedAt.getTime()) }),
     );
   }
   const pipeline = <PipelineProgressStrip segments={segments} />;

@@ -32,6 +32,14 @@ vi.mock('./use-bookmark-extraction', () => extractionMocks);
 // Real module pulls the embedding/tagging barrels (chrome.storage at load).
 vi.mock('../../hooks/collection-processing-jobs', () => processingMocks);
 
+// The REAL Platform Sync funnel runs (so the dispatch below is the funnel's);
+// only its record writes are stubbed — the mocked DB proxy is `{}`.
+vi.mock('@/lib/database/platform-sync-record', () => ({
+  recordPlatformSyncAttempt: vi.fn(async () => undefined),
+  recordPlatformSyncSuccess: vi.fn(async () => undefined),
+  recordPlatformSyncFailure: vi.fn(async () => undefined),
+}));
+
 import { useBookmarks, type UseBookmarksReturn } from './use-bookmarks';
 
 async function flush(): Promise<void> {
@@ -63,8 +71,10 @@ describe('useBookmarks sync ownership', () => {
       totalBookmarks: number;
       syncedItems: number;
       folders: number;
+      inserted: number;
     }>();
-    finishSync = () => gate.resolve({ totalBookmarks: 0, syncedItems: 0, folders: 0 });
+    finishSync = () =>
+      gate.resolve({ totalBookmarks: 0, syncedItems: 0, folders: 0, inserted: 0 });
     serviceMocks.syncBookmarks.mockReset().mockReturnValue(gate.promise);
     serviceMocks.getBookmarks.mockReset().mockResolvedValue({ rows: [], total: 0 });
     serviceMocks.getFolders.mockReset().mockResolvedValue([]);

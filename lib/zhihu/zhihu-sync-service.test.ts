@@ -15,14 +15,13 @@ import {
   syncFavoritesToDb,
   getFavorites,
   getCollectionCounts,
-  getLastSyncedAt,
 } from './zhihu-sync-service';
 import type { ZhihuCollection, ZhihuRawFavorite } from './zhihu-api';
 
 // ---------------------------------------------------------------------------
 // Insert-only invariant (first-write-wins) for the `zhihu` platform. Mirrors
-// lib/x/x-sync-service.test.ts — see ADR in
-// .trellis/spec/frontend/database-bridge.md. Re-sync must never update or
+// lib/x/x-sync-service.test.ts — the rule is recorded in
+// lib/ingest/CLAUDE.md. Re-sync must never update or
 // delete rows in items / authors / item_sources. `sources` rows are the
 // allowed upsert exception (title + lastFetchedAt freshness).
 // ---------------------------------------------------------------------------
@@ -195,19 +194,25 @@ describe('zhihu-sync-service (in-memory PGlite)', () => {
     expect(chunks[0].endSec).toBeNull();
   });
 
-  it('empty favorites still upsert collection sources (synced-but-empty state)', async () => {
-    expect(await getLastSyncedAt(db)).toBeNull();
+  it('empty favorites still upsert collection sources (Source freshness)', async () => {
+    expect(await getSource('c1')).toBeUndefined();
 
     const result = await syncFavoritesToDb(db, [makeCollection('c1')], []);
     expect(result).toMatchObject({ total: 0, synced: 0, inserted: 0, collections: 1, newItemIds: [] });
 
-    expect(await getLastSyncedAt(db)).not.toBeNull();
+    // "Last synced" is the Platform Sync Record's job (docs/32 Step 1); the
+    // ingest invariant kept here is that an empty collection is still a Source.
+    expect((await getSource('c1'))?.lastFetchedAt).toBeInstanceOf(Date);
   });
 
-  it('zero collections persists nothing (lastSyncedAt stays null)', async () => {
+  it('zero collections persists nothing (no Source rows)', async () => {
     const result = await syncFavoritesToDb(db, [], []);
     expect(result).toMatchObject({ total: 0, synced: 0, inserted: 0, collections: 0 });
-    expect(await getLastSyncedAt(db)).toBeNull();
+    const rows = await db
+      .select()
+      .from(schema.sources)
+      .where(eq(schema.sources.platform, 'zhihu'));
+    expect(rows).toEqual([]);
   });
 
   // -------------------------------------------------------------------------

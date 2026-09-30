@@ -1,17 +1,14 @@
 import type { CooperativeCheckpoint } from '@/lib/collections';
 import { getDb } from '@/lib/database';
 import { getPlatformLastSyncedAt } from '@/lib/database/collection-queries';
-import { xLastSyncStorage, type XLastSync } from '@/lib/storage';
 import { getXAuth } from '@/lib/x/x-auth';
-import { syncBookmarks } from '@/lib/x/x-sync-service';
+import { syncBookmarks, XAuthError } from '@/lib/x/x-sync-service';
 
-import { jobPlatformForCollection } from '../../hooks/collection-job-platform';
-import { startCollectionProcessingJobs } from '../../hooks/collection-processing-jobs';
+import { runPlatformSync } from '../../hooks/platform-sync';
 import type { AutoSyncPolicy } from '../../hooks/use-daily-auto-sync';
 import { remainingCooldown } from './cooldown';
 
 const ITEM_PLATFORM = 'x';
-const JOB_PLATFORM = jobPlatformForCollection(ITEM_PLATFORM);
 
 /** Progress for the (cursor-paginated) X sync — total is unknowable, so this is
  *  always indeterminate; we surface the running fetched count + page number. */
@@ -22,12 +19,14 @@ export interface XSyncProgress {
 
 /**
  * The X platform Sync Adapter — the single implementation of what an X sync
- * means: captured-session auth resolution, the cursor-paginated domain sync
- * with typed progress, the shared post-sync embed/tag dispatch, and the
- * persisted "N new this run" summary. Both the manual collection page and the
- * daily auto-sync coordinator run this exact function, so an auto-sync updates
- * the page's caption/cooldown just like a manual one. Trigger policy (the
- * daily cooldown-aware readiness probe) stays with the callers.
+ * means: captured-session auth resolution, then the cursor-paginated domain
+ * sync with typed progress run through the Platform Sync funnel (attempt
+ * record + post-sync embed/tag dispatch). The funnel's success record carries
+ * the "N new this run" count and the cooldown anchor, so an auto-sync updates
+ * the page's caption/cooldown just like a manual one. Both the manual
+ * collection page and the daily auto-sync coordinator run this exact
+ * function; trigger policy (the daily cooldown-aware readiness probe) stays
+ * with the callers.
  */
 export async function runXBookmarksSync(
   onProgress: (progress: XSyncProgress) => void,
@@ -36,27 +35,22 @@ export async function runXBookmarksSync(
   onProgress({ fetchedCount: 0, page: 0 });
   // Auth is resolved HERE (app.html is a storage-capable trusted context);
   // syncBookmarks itself never touches storage — it also runs import-safe for
-  // the offscreen document, which has no chrome.storage.
+  // the offscreen document, which has no chrome.storage. A missing captured
+  // session is known from storage alone, so it throws BEFORE the funnel: not
+  // an attempt, no record (docs/32 §5.2). The page's logged-out state still
+  // keys off this same error class.
   const auth = await getXAuth();
-  const result = await syncBookmarks(
-    auth,
-    (fetchedCount, page) => {
-      onProgress({ fetchedCount, page });
-    },
-    control,
-  );
-  // Auto-tag + auto-embed the tweets just persisted, registered as background
-  // jobs so they survive route switches, dedupe across mounts, feed the global
-  // "don't close" reminder, and surface done/total progress captions.
-  startCollectionProcessingJobs({
-    jobPlatform: JOB_PLATFORM,
-    itemPlatform: ITEM_PLATFORM,
-    itemIds: result.newItemIds,
+  if (!auth) throw new XAuthError('Not logged in to x.com', 'no-token');
+  await runPlatformSync(ITEM_PLATFORM, control, async () => {
+    const result = await syncBookmarks(
+      auth,
+      (fetchedCount, page) => {
+        onProgress({ fetchedCount, page });
+      },
+      control,
+    );
+    return { fetched: result.total, inserted: result.inserted, newItemIds: result.newItemIds };
   });
-  // Persist the "N new this run" summary + the cooldown anchor. The page hook
-  // subscribes to this storage item, so both triggers refresh its caption.
-  const summary: XLastSync = { syncedAt: Date.now(), inserted: result.inserted };
-  await xLastSyncStorage.setValue(summary);
 }
 
 /**

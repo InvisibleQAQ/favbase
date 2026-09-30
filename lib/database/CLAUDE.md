@@ -17,7 +17,8 @@ RPC Proxy 架构（参考 memorall 3-hop PortBridge 模式）：Offscreen Docume
 - `migrations/` — 自定义迁移系统
 - `index.ts` — Public API barrel
 - `sql-utils.ts` — 平台无关纯函数（零导入零副作用，offscreen 安全）：`chunk<T>(arr, size)`（INSERT 分批，bind-param < 65535，主要消费方 `lib/ingest/ingest.ts`）、`escapeLike(input)`（LIKE/ILIKE 元字符转义，ILIKE 注入唯一防线，各平台 sync-service 查询共用）。勿再各自拷贝（docs/15 MEDIUM-3）
-- `collection-queries.ts` — 收藏页共享读骨架：`pagedItemsQuery(db, {conditions, orderBy, page, pageSize, mapRow})`（固定 7 列 select + 并行 `count(*)` + 分页 + 行映射，返回 `{rows, total}`）、`getPlatformLastSyncedAt(platform, db)`（`max(lastFetchedAt)` over sources，统一单源/多源两种旧写法）。各平台 getX 只声明 filter 条件 + orderBy + mapRow（docs/15 MEDIUM-3）
+- `collection-queries.ts` — 收藏页共享读骨架：`pagedItemsQuery(db, {conditions, orderBy, page, pageSize, mapRow})`（固定 7 列 select + 并行 `count(*)` + 分页 + 行映射，返回 `{rows, total}`）、`getPlatformLastSyncedAt(platform: CollectionPlatform, db)`（「上次同步」= Platform Sync Record 的 `last_success_at`，从未成功为 null；docs/32 Step 1 起不再是 `max(sources.lastFetchedAt)`——失败与空库同步从不写 source 行，旧读法把它们读成「从未同步」。参数类型收窄为 `CollectionPlatform`：entity 的 `platform` 列是 `$type<CollectionPlatform>()`，全部调用方传的本就是平台字面量）。各平台 getX 只声明 filter 条件 + orderBy + mapRow（docs/15 MEDIUM-3）
+- `platform-sync-record.ts` — **Platform Sync Record** 的全部读写（docs/32 §5.1，术语见 `CONTEXT.md`）：`getPlatformSyncRecord(platform, db)`（读，`db` 在后，同 `getPlatformLastSyncedAt`）+ `recordPlatformSyncAttempt(db, platform, at)`（upsert：盖 `last_attempt_at`、`last_result` 置 NULL，不碰成功时间与计数）/ `recordPlatformSyncSuccess(db, platform, {at, fetched, inserted})` / `recordPlatformSyncFailure(db, platform)`（写，`db` 在前，同 `lib/ingest` 的写 operation；成功/失败是对 attempt 开出的那一行的 UPDATE）。与 `collection-queries.ts` 同档：显式吃 `db`、只 import entity leaf + drizzle，不调 `getDb()`、不值导入 barrel，offscreen 安全。唯一写入方是 app 侧 funnel `entrypoints/app/hooks/platform-sync.ts`；单测 `platform-sync-record.test.ts`（内存 PGlite + 真迁移）
 
 ## 约定
 

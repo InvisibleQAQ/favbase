@@ -7,3 +7,7 @@ export type { ItemChunk, NewItemChunk } from './entities/item-chunks';
 export type { Tag, NewTag } from './entities/tags';
 export type { ItemTag, NewItemTag } from './entities/item-tags';
 export type { ChatConversationRow, NewChatConversationRow } from './entities/chat-conversations';
+export type {
+  PlatformSyncRecordRow,
+  NewPlatformSyncRecordRow,
+} from './entities/platform-sync-records';

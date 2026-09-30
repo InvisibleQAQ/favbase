@@ -3,27 +3,32 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BiliFavFolder } from '@/lib/bilibili/types';
 import type { CooperativeCheckpoint } from '@/lib/collections';
 
+import type { PlatformSyncOutcome } from '../../hooks/platform-sync';
+
 const mocks = vi.hoisted(() => ({
+  checkAuth: vi.fn(),
   fetchAndSyncFolders: vi.fn(),
   runBiliStreamingSync: vi.fn(),
-  startCollectionProcessingJobs: vi.fn(),
+  runPlatformSync: vi.fn(),
+  BiliAuthError: class BiliAuthError extends Error {},
 }));
 
 vi.mock('@/lib/bilibili/bili-sync-service', () => ({
+  checkAuth: mocks.checkAuth,
   fetchAndSyncFolders: mocks.fetchAndSyncFolders,
 }));
 vi.mock('./auto-transcribe-runtime', () => ({
   runBiliStreamingSync: mocks.runBiliStreamingSync,
 }));
-// Real module pulls the embedding/tagging barrels (chrome.storage at load).
-vi.mock('../../hooks/collection-processing-jobs', () => ({
-  startCollectionProcessingJobs: mocks.startCollectionProcessingJobs,
-}));
+// The funnel (record + dispatch) has its own tests; here it is a passthrough
+// that runs the adapter's sync closure and keeps what it reported.
+vi.mock('../../hooks/platform-sync', () => ({ runPlatformSync: mocks.runPlatformSync }));
 
 import { runBilibiliSync } from './bilibili-sync-adapter';
 
 const control: CooperativeCheckpoint = { checkpoint: async () => undefined };
 const noProgress = (): void => undefined;
+let outcome: PlatformSyncOutcome | undefined;
 
 function folder(id: number): BiliFavFolder {
   return {
@@ -43,14 +48,23 @@ function folder(id: number): BiliFavFolder {
 
 describe('bilibili Sync Adapter (shared by manual page + daily auto-sync)', () => {
   beforeEach(() => {
+    outcome = undefined;
+    mocks.checkAuth.mockReset().mockResolvedValue({ SESSDATA: 's', mid: 1 });
     mocks.fetchAndSyncFolders.mockReset().mockResolvedValue([folder(10), folder(20)]);
-    mocks.runBiliStreamingSync.mockReset().mockResolvedValue({ fetchedCount: 0 });
-    mocks.startCollectionProcessingJobs.mockReset();
+    mocks.runBiliStreamingSync
+      .mockReset()
+      .mockResolvedValue({ fetchedCount: 0, syncedCount: 0, insertedCount: 0 });
+    mocks.runPlatformSync
+      .mockReset()
+      .mockImplementation(async (_platform, _control, sync: () => Promise<PlatformSyncOutcome>) => {
+        outcome = await sync();
+      });
   });
 
-  it('runs the natural folder order through the streaming runtime by default', async () => {
+  it('runs the natural folder order through the streaming runtime inside the funnel', async () => {
     await runBilibiliSync(noProgress, control);
 
+    expect(mocks.runPlatformSync).toHaveBeenCalledWith('bilibili', control, expect.any(Function));
     expect(mocks.fetchAndSyncFolders).toHaveBeenCalledWith(control);
     expect(mocks.runBiliStreamingSync).toHaveBeenCalledWith(
       [folder(10), folder(20)],
@@ -83,7 +97,7 @@ describe('bilibili Sync Adapter (shared by manual page + daily auto-sync)', () =
     const seen: number[][] = [];
     mocks.runBiliStreamingSync.mockImplementation(async () => {
       expect(seen).toHaveLength(1);
-      return { fetchedCount: 0 };
+      return { fetchedCount: 0, syncedCount: 0, insertedCount: 0 };
     });
 
     await runBilibiliSync(noProgress, control, {
@@ -93,21 +107,31 @@ describe('bilibili Sync Adapter (shared by manual page + daily auto-sync)', () =
     expect(seen).toEqual([[10, 20]]);
   });
 
-  it('dispatches the backlog embed lane (empty ids) after the streaming run', async () => {
+  it('reports videos paged and inserted; no batch tag ids (transcription processes per item)', async () => {
+    mocks.runBiliStreamingSync.mockResolvedValue({
+      fetchedCount: 40,
+      syncedCount: 38,
+      insertedCount: 5,
+    });
+
     await runBilibiliSync(noProgress, control);
 
-    expect(mocks.startCollectionProcessingJobs).toHaveBeenCalledWith({
-      jobPlatform: 'bilibili',
-      itemPlatform: 'bilibili',
-      itemIds: [],
-    });
+    expect(outcome).toEqual({ fetched: 40, inserted: 5, newItemIds: [] });
   });
 
-  it('starts no streaming and dispatches nothing when the folder sync fails', async () => {
-    mocks.fetchAndSyncFolders.mockRejectedValue(new Error('not logged in'));
+  it('rethrows the logged-out error BEFORE the funnel (no attempt, no request)', async () => {
+    const loggedOut = new mocks.BiliAuthError('Not logged in');
+    mocks.checkAuth.mockRejectedValue(loggedOut);
 
-    await expect(runBilibiliSync(noProgress, control)).rejects.toThrow('not logged in');
+    await expect(runBilibiliSync(noProgress, control)).rejects.toBe(loggedOut);
+    expect(mocks.runPlatformSync).not.toHaveBeenCalled();
+    expect(mocks.fetchAndSyncFolders).not.toHaveBeenCalled();
+  });
+
+  it('starts no streaming when the folder sync fails inside the funnel', async () => {
+    mocks.fetchAndSyncFolders.mockRejectedValue(new Error('HTTP 412'));
+
+    await expect(runBilibiliSync(noProgress, control)).rejects.toThrow('HTTP 412');
     expect(mocks.runBiliStreamingSync).not.toHaveBeenCalled();
-    expect(mocks.startCollectionProcessingJobs).not.toHaveBeenCalled();
   });
 });

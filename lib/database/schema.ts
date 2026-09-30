@@ -7,3 +7,4 @@ export { itemChunks } from './entities/item-chunks';
 export { tags } from './entities/tags';
 export { itemTags } from './entities/item-tags';
 export { chatConversations } from './entities/chat-conversations';
+export { platformSyncRecords } from './entities/platform-sync-records';

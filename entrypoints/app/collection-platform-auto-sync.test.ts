@@ -14,7 +14,10 @@ const mocks = vi.hoisted(() => ({
   remainingCooldown: vi.fn(),
 }));
 
-vi.mock('@/lib/bilibili/bili-sync-service', () => ({ fetchAndSyncFolders: vi.fn() }));
+vi.mock('@/lib/bilibili/bili-sync-service', () => ({
+  checkAuth: vi.fn(),
+  fetchAndSyncFolders: vi.fn(),
+}));
 vi.mock('@/lib/bilibili/bilibili-api', () => ({ getBiliAuth: mocks.getBiliAuth }));
 vi.mock('@/lib/bookmarks/bookmarks-sync-service', () => ({ syncBookmarks: vi.fn() }));
 vi.mock('@/lib/database', () => ({ getDb: vi.fn() }));
@@ -22,21 +25,21 @@ vi.mock('@/lib/database/collection-queries', () => ({
   getPlatformLastSyncedAt: mocks.getPlatformLastSyncedAt,
 }));
 vi.mock('@/lib/github/github-sync-service', () => ({ syncStars: vi.fn() }));
-vi.mock('@/lib/storage', () => ({
-  settingsStorage: { getValue: mocks.getSettings },
-  xLastSyncStorage: { setValue: vi.fn() },
-}));
+vi.mock('@/lib/storage', () => ({ settingsStorage: { getValue: mocks.getSettings } }));
 vi.mock('@/lib/x/x-auth', () => ({ getXAuth: mocks.getXAuth }));
-vi.mock('@/lib/x/x-sync-service', () => ({ syncBookmarks: vi.fn() }));
+vi.mock('@/lib/x/x-sync-service', () => ({
+  syncBookmarks: vi.fn(),
+  XAuthError: class XAuthError extends Error {},
+}));
 vi.mock('@/lib/zhihu/zhihu-sync-service', () => ({
   syncFavorites: vi.fn(),
   ZhihuAuthError: class ZhihuAuthError extends Error {},
 }));
 vi.mock('@/lib/youtube/youtube-sync-service', () => ({ syncYoutubePlaylists: vi.fn() }));
 vi.mock('./sections/x/cooldown', () => ({ remainingCooldown: mocks.remainingCooldown }));
-vi.mock('./hooks/collection-processing-jobs', () => ({
-  startCollectionProcessingJobs: vi.fn(),
-}));
+// The Platform Sync funnel every adapter calls (record + dispatch → DB proxy
+// and the embedding/tagging barrels).
+vi.mock('./hooks/platform-sync', () => ({ runPlatformSync: vi.fn() }));
 
 import { AUTO_SYNC_PLATFORMS } from './collection-platform-auto-sync';
 import { jobPlatformForCollection } from './hooks/collection-job-platform';

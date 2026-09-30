@@ -2,43 +2,51 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CooperativeCheckpoint } from '@/lib/collections';
 
+import type { PlatformSyncOutcome } from '../../hooks/platform-sync';
+
 const mocks = vi.hoisted(() => ({
   syncStars: vi.fn(),
   getSettings: vi.fn(),
-  startCollectionProcessingJobs: vi.fn(),
+  runPlatformSync: vi.fn(),
 }));
 
 vi.mock('@/lib/github/github-sync-service', () => ({ syncStars: mocks.syncStars }));
 // Real module runs storage.defineItem (chrome.storage) at load.
 vi.mock('@/lib/storage', () => ({ settingsStorage: { getValue: mocks.getSettings } }));
-// Real module pulls the embedding/tagging barrels (chrome.storage at load).
-vi.mock('../../hooks/collection-processing-jobs', () => ({
-  startCollectionProcessingJobs: mocks.startCollectionProcessingJobs,
-}));
+// The funnel (record + dispatch) has its own tests; here it is a passthrough
+// that runs the adapter's sync closure and keeps what it reported.
+vi.mock('../../hooks/platform-sync', () => ({ runPlatformSync: mocks.runPlatformSync }));
 
 import { runGithubStarsSync, type SyncProgress } from './github-sync-adapter';
 
 const control: CooperativeCheckpoint = { checkpoint: async () => undefined };
+let outcome: PlatformSyncOutcome | undefined;
 
 describe('github Sync Adapter (shared by manual page + daily auto-sync)', () => {
   beforeEach(() => {
+    outcome = undefined;
     mocks.getSettings.mockReset().mockResolvedValue({ githubToken: 'tok' });
-    mocks.syncStars.mockReset().mockResolvedValue({ newItemIds: [] });
-    mocks.startCollectionProcessingJobs.mockReset();
+    mocks.syncStars.mockReset().mockResolvedValue({ total: 0, inserted: 0, newItemIds: [] });
+    mocks.runPlatformSync
+      .mockReset()
+      .mockImplementation(async (_platform, _control, sync: () => Promise<PlatformSyncOutcome>) => {
+        outcome = await sync();
+      });
   });
 
-  it('is a silent no-op without a token (no domain sync, no dispatch)', async () => {
+  it('is a silent no-op without a token (never reaches the funnel, records nothing)', async () => {
     mocks.getSettings.mockResolvedValue({});
 
     await runGithubStarsSync(() => undefined, control);
 
+    expect(mocks.runPlatformSync).not.toHaveBeenCalled();
     expect(mocks.syncStars).not.toHaveBeenCalled();
-    expect(mocks.startCollectionProcessingJobs).not.toHaveBeenCalled();
   });
 
-  it('resolves the token from settings and passes the checkpoint through', async () => {
+  it('runs the domain sync inside the funnel with the token and the checkpoint', async () => {
     await runGithubStarsSync(() => undefined, control);
 
+    expect(mocks.runPlatformSync).toHaveBeenCalledWith('github', control, expect.any(Function));
     expect(mocks.syncStars).toHaveBeenCalledWith(
       'tok',
       expect.any(Function),
@@ -58,7 +66,7 @@ describe('github Sync Adapter (shared by manual page + daily auto-sync)', () => 
         onStars(1, 2, 30);
         onStars(2, 2, 55);
         onReadme(1, 3);
-        return { newItemIds: [] };
+        return { total: 55, inserted: 0, newItemIds: [] };
       },
     );
 
@@ -72,22 +80,11 @@ describe('github Sync Adapter (shared by manual page + daily auto-sync)', () => 
     ]);
   });
 
-  it('dispatches embed/tag processing with the newly persisted ids', async () => {
-    mocks.syncStars.mockResolvedValue({ newItemIds: ['a', 'b'] });
+  it('reports stars read, repos inserted and the persisted ids to the funnel', async () => {
+    mocks.syncStars.mockResolvedValue({ total: 55, inserted: 2, newItemIds: ['a', 'b'] });
 
     await runGithubStarsSync(() => undefined, control);
 
-    expect(mocks.startCollectionProcessingJobs).toHaveBeenCalledWith({
-      jobPlatform: 'github-stars',
-      itemPlatform: 'github',
-      itemIds: ['a', 'b'],
-    });
-  });
-
-  it('does not dispatch processing when the sync fails', async () => {
-    mocks.syncStars.mockRejectedValue(new Error('rate limited'));
-
-    await expect(runGithubStarsSync(() => undefined, control)).rejects.toThrow('rate limited');
-    expect(mocks.startCollectionProcessingJobs).not.toHaveBeenCalled();
+    expect(outcome).toEqual({ fetched: 55, inserted: 2, newItemIds: ['a', 'b'] });
   });
 });

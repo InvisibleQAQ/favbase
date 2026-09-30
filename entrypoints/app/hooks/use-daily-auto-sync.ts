@@ -2,8 +2,8 @@ import { useEffect, useRef } from 'react';
 
 import type { CooperativeCheckpoint } from '@/lib/collections/cooperative-checkpoint';
 import type { CollectionPlatform } from '@/lib/collections/platforms';
-import { getDb, initDbProxy } from '@/lib/database';
-import { getPlatformLastSyncedAt } from '@/lib/database/collection-queries';
+import { initDbProxy } from '@/lib/database';
+import { getPlatformSyncRecord } from '@/lib/database/platform-sync-record';
 
 import { startJob } from './background-jobs-store';
 import type { CollectionJobPlatform } from './collection-job-platform';
@@ -37,10 +37,12 @@ export interface AutoSyncPolicy {
 export interface AutoSyncDefinition extends AutoSyncPolicy {
   /**
    * The platform's shared Sync Adapter — the SAME function the manual
-   * collection page runs (missing auth/config is a silent no-op). It owns
-   * auth/config resolution, the domain sync with typed progress, platform
-   * persistence side effects, and the post-sync processing dispatch; the
-   * coordinator only adds trigger policy around it.
+   * collection page runs (missing auth/config is a no-op or its original auth
+   * error, before any attempt is recorded). It owns auth/config resolution,
+   * the domain sync with typed progress, and platform persistence side
+   * effects; the Platform Sync funnel inside it records the attempt and
+   * dispatches the processing lanes. The coordinator only adds trigger policy
+   * around it.
    */
   runSync(
     setProgress: (progress: unknown) => void,
@@ -56,14 +58,15 @@ export interface AutoSyncDefinition extends AutoSyncPolicy {
 export interface AutoSyncPlatform extends AutoSyncDefinition {
   /** startJob namespace key (e.g. 'github-stars'), derived via jobPlatformForCollection. */
   jobPlatform: CollectionJobPlatform;
-  /** DB platform discriminator (e.g. 'github'), for the daily gate query. */
+  /** DB platform discriminator (e.g. 'github'), the Platform Sync Record key. */
   itemPlatform: CollectionPlatform;
 }
 
 export interface DailyAutoSyncDeps {
   initDb: () => Promise<unknown>;
   now: () => Date;
-  getLastSynced: (platform: string) => Promise<Date | null>;
+  /** Latest Platform Sync attempt (manual or automatic, any outcome); null = never attempted. */
+  getLastAttempt: (platform: CollectionPlatform) => Promise<Date | null>;
   isPaused: (jobPlatform: string) => boolean;
   startJob: typeof startJob;
 }
@@ -71,7 +74,8 @@ export interface DailyAutoSyncDeps {
 const defaultDeps: DailyAutoSyncDeps = {
   initDb: initDbProxy,
   now: () => new Date(),
-  getLastSynced: (platform) => getPlatformLastSyncedAt(platform, getDb()),
+  getLastAttempt: async (platform) =>
+    (await getPlatformSyncRecord(platform, await initDbProxy()))?.lastAttemptAt ?? null,
   isPaused: isLibraryPaused,
   startJob,
 };
@@ -80,23 +84,26 @@ async function evaluatePlatform(
   platform: AutoSyncPlatform,
   deps: DailyAutoSyncDeps,
 ): Promise<void> {
-  const last = await deps.getLastSynced(platform.itemPlatform);
-  if (!shouldAutoSync(last, deps.now())) return;
+  const lastAttempt = await deps.getLastAttempt(platform.itemPlatform);
+  if (!shouldAutoSync(lastAttempt, deps.now())) return;
   // Gate check BEFORE the probe: a paused platform sends no auth request and
-  // never refreshes sources.lastFetchedAt, so the day's sync still happens on
-  // the first evaluation after the user resumes. (startJob's born-paused path
-  // is the second line of defence; this one just avoids the noise job.)
+  // records no attempt, so the day's sync still happens on the first
+  // evaluation after the user resumes. (startJob's born-paused path is the
+  // second line of defence — the funnel's first checkpoint holds the attempt
+  // record until resume; this one just avoids the noise job.)
   if (deps.isPaused(platform.jobPlatform)) return;
   if (!(await platform.probeReady())) return;
 
   // The shared Sync Adapter owns everything past this point (auth resolution,
-  // domain sync, persistence side effects, processing dispatch) — the runner
-  // only adds the auto trigger's silent-error policy.
+  // domain sync, persistence side effects, and — through the funnel — the
+  // attempt record and processing dispatch). The runner only adds the auto
+  // trigger's silent-error policy; a silenced error is still a 'failure' in
+  // the record, which is what keeps today's slot used.
   deps.startJob(platform.jobPlatform, 'sync', async (setProgress, control) => {
     try {
       await platform.runSync(setProgress, control);
     } catch (err) {
-      // A logged-out / not-ready error is not a failure — complete silently.
+      // A logged-out / not-ready error completes the job silently.
       if (platform.isSilentError?.(err)) return;
       throw err;
     }
@@ -108,8 +115,9 @@ async function evaluatePlatform(
  * (App.tsx, which injects the app-root `AUTO_SYNC_PLATFORMS` registry) so it
  * runs regardless of the active route. On mount and whenever the
  * tab becomes visible again, it re-evaluates every platform's per-day gate and
- * dispatches a sync for each ready platform that hasn't synced today. Manual
- * syncs share `sources.lastFetchedAt`, so a manually-synced platform is skipped.
+ * dispatches a sync for each ready platform with no Platform Sync attempt
+ * today (docs/32 D2). Manual syncs write the same Platform Sync Record, so a
+ * platform attempted manually today — even unsuccessfully — is skipped.
  *
  * StrictMode double-invoke and rapid tab toggling are idempotent: the daily gate
  * + `startJob` dedupe + the throttle below make repeat evaluations harmless.

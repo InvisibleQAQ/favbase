@@ -15,15 +15,14 @@ import {
   syncPlaylistsToDb,
   getPlaylistVideos,
   getPlaylistCounts,
-  getLastSyncedAt,
   type PlaylistBatch,
 } from './youtube-sync-service';
 import type { YoutubePlaylist, YoutubePlaylistVideo, PlaylistEntry } from './youtube-api';
 
 // ---------------------------------------------------------------------------
 // Insert-only invariant (first-write-wins) for the `youtube` platform. Mirrors
-// lib/zhihu/zhihu-sync-service.test.ts — see ADR in
-// .trellis/spec/frontend/database-bridge.md. Re-sync must never update or
+// lib/zhihu/zhihu-sync-service.test.ts — the rule is recorded in
+// lib/ingest/CLAUDE.md. Re-sync must never update or
 // delete rows in items / authors / item_sources. The per-playlist `sources`
 // rows are the allowed upsert exception (title + lastFetchedAt freshness).
 // ---------------------------------------------------------------------------
@@ -257,14 +256,15 @@ describe('youtube-sync-service (in-memory PGlite)', () => {
     expect(content?.plainText).toBe(longDescription);
   });
 
-  it('empty playlist still upserts its sources row (synced-but-empty state)', async () => {
-    expect(await getLastSyncedAt(db)).toBeNull();
+  it('empty playlist still upserts its sources row (Source freshness)', async () => {
+    expect(await getSource('pl-empty')).toBeUndefined();
 
     const result = await syncPlaylistsToDb(db, [makeBatch(makePlaylist('pl-empty'), [])]);
     expect(result).toMatchObject({ playlists: 1, entries: 0, inserted: 0 });
 
-    expect(await getSource('pl-empty')).toBeDefined();
-    expect(await getLastSyncedAt(db)).not.toBeNull();
+    // "Last synced" is the Platform Sync Record's job (docs/32 Step 1); the
+    // ingest invariant kept here is that an empty playlist is still a Source.
+    expect((await getSource('pl-empty'))?.lastFetchedAt).toBeInstanceOf(Date);
   });
 
   // -------------------------------------------------------------------------

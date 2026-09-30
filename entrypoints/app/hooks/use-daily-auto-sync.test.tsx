@@ -14,8 +14,13 @@ import type { CooperativeCheckpoint } from '@/lib/collections';
 vi.mock('./background-jobs-store', () => ({ startJob: vi.fn() }));
 vi.mock('./library-gate', () => ({ isLibraryPaused: () => false }));
 vi.mock('@/lib/database', () => ({ initDbProxy: vi.fn(), getDb: vi.fn() }));
-vi.mock('@/lib/database/collection-queries', () => ({ getPlatformLastSyncedAt: vi.fn() }));
+vi.mock('@/lib/database/platform-sync-record', () => ({ getPlatformSyncRecord: vi.fn() }));
+// The funnel's real dispatcher pulls the embedding/tagging barrels.
+vi.mock('./collection-processing-jobs', () => ({ startCollectionProcessingJobs: vi.fn() }));
 
+import type { CollectionPlatform } from '@/lib/collections/platforms';
+
+import { runPlatformSync, type PlatformSyncDeps } from './platform-sync';
 import {
   EVALUATE_THROTTLE_MS,
   useDailyAutoSync,
@@ -32,13 +37,22 @@ interface StartedJob {
   rejected: boolean;
 }
 
-function makeDeps(overrides: Partial<DailyAutoSyncDeps> = {}): {
+interface Clock {
+  now: () => Date;
+  set: (d: Date) => void;
+}
+
+function createClock(): Clock {
+  let current = new Date(2026, 6, 26, 10, 0, 0);
+  return { now: () => current, set: (d) => { current = d; } };
+}
+
+function makeDeps(overrides: Partial<DailyAutoSyncDeps> = {}, clock: Clock = createClock()): {
   deps: DailyAutoSyncDeps;
   started: StartedJob[];
   setNow: (d: Date) => void;
 } {
   const started: StartedJob[] = [];
-  let current = new Date(2026, 6, 26, 10, 0, 0);
 
   const startJob = vi.fn((jobPlatform: string, _kind: string, runner: StartedJob['runner']) => {
     const record: StartedJob = { jobPlatform, runner, rejected: false };
@@ -53,14 +67,61 @@ function makeDeps(overrides: Partial<DailyAutoSyncDeps> = {}): {
 
   const deps: DailyAutoSyncDeps = {
     initDb: vi.fn(async () => undefined),
-    now: () => current,
-    getLastSynced: vi.fn(async () => null),
+    now: clock.now,
+    getLastAttempt: vi.fn(async () => null),
     isPaused: () => false,
     startJob,
     ...overrides,
   };
 
-  return { deps, started, setNow: (d) => { current = d; } };
+  return { deps, started, setNow: clock.set };
+}
+
+interface MemoryRecord {
+  lastAttemptAt: Date;
+  lastResult: 'success' | 'failure' | null;
+}
+
+/**
+ * An in-memory Platform Sync Record: the real funnel writes it through
+ * injected deps, the coordinator's gate reads the latest attempt from it —
+ * one clock for both, so an attempt lands on the test's day.
+ */
+function recordStore(clock: Clock) {
+  const records = new Map<CollectionPlatform, MemoryRecord>();
+  const funnelDeps: PlatformSyncDeps = {
+    now: clock.now,
+    recordAttempt: async (platform, at) => {
+      records.set(platform, { lastAttemptAt: at, lastResult: null });
+    },
+    recordSuccess: async (platform) => {
+      records.get(platform)!.lastResult = 'success';
+    },
+    recordFailure: async (platform) => {
+      records.get(platform)!.lastResult = 'failure';
+    },
+    dispatch: vi.fn(),
+  };
+  const getLastAttempt = vi.fn(
+    async (platform: CollectionPlatform) => records.get(platform)?.lastAttemptAt ?? null,
+  );
+  return { records, funnelDeps, getLastAttempt };
+}
+
+/** A platform whose Sync Adapter runs the REAL funnel around `sync`. */
+function funnelPlatform(
+  itemPlatform: CollectionPlatform,
+  jobPlatform: string,
+  funnelDeps: PlatformSyncDeps,
+  sync: () => Promise<{ fetched: number; inserted: number; newItemIds: string[] }>,
+  over: Partial<AutoSyncPlatform> = {},
+): AutoSyncPlatform {
+  return platform({
+    jobPlatform: jobPlatform as AutoSyncPlatform['jobPlatform'],
+    itemPlatform,
+    runSync: (_setProgress, control) => runPlatformSync(itemPlatform, control, sync, funnelDeps),
+    ...over,
+  });
 }
 
 function platform(over: Partial<AutoSyncPlatform> & Pick<AutoSyncPlatform, 'jobPlatform' | 'itemPlatform'>): AutoSyncPlatform {
@@ -102,19 +163,19 @@ describe('useDailyAutoSync', () => {
     act(() => root.render(<Probe />));
   }
 
-  it('skips a platform already synced today (gate not hit)', async () => {
+  it('skips a platform already attempted today (gate not hit)', async () => {
     const { deps, started } = makeDeps({
-      getLastSynced: vi.fn(async () => new Date(2026, 6, 26, 2, 0, 0)),
+      getLastAttempt: vi.fn(async () => new Date(2026, 6, 26, 2, 0, 0)),
     });
     render([platform({ jobPlatform: 'github-stars', itemPlatform: 'github' })], deps);
     await flush();
     expect(started).toHaveLength(0);
   });
 
-  it('dispatches the shared Sync Adapter for a ready, not-today platform', async () => {
+  it('dispatches the shared Sync Adapter for a ready platform not attempted today', async () => {
     const runSync = vi.fn(async () => undefined);
     const { deps, started } = makeDeps({
-      getLastSynced: vi.fn(async () => new Date(2026, 6, 25, 10, 0, 0)),
+      getLastAttempt: vi.fn(async () => new Date(2026, 6, 25, 10, 0, 0)),
     });
     render(
       [platform({ jobPlatform: 'github-stars', itemPlatform: 'github', runSync })],
@@ -209,32 +270,144 @@ describe('useDailyAutoSync', () => {
   });
 
   it('re-evaluates when the tab becomes visible again (past the throttle)', async () => {
-    const getLastSynced = vi.fn(async () => null);
-    const { deps, setNow } = makeDeps({ getLastSynced });
+    const getLastAttempt = vi.fn(async () => null);
+    const { deps, setNow } = makeDeps({ getLastAttempt });
     render([platform({ jobPlatform: 'bookmarks', itemPlatform: 'bookmarks' })], deps);
     await flush();
-    expect(getLastSynced).toHaveBeenCalledTimes(1);
+    expect(getLastAttempt).toHaveBeenCalledTimes(1);
 
     setNow(new Date(2026, 6, 26, 10, 1, 0)); // +60s > throttle
     act(() => {
       document.dispatchEvent(new Event('visibilitychange'));
     });
     await flush();
-    expect(getLastSynced).toHaveBeenCalledTimes(2);
+    expect(getLastAttempt).toHaveBeenCalledTimes(2);
   });
 
   it('throttles a second evaluation within the throttle window', async () => {
-    const getLastSynced = vi.fn(async () => null);
-    const { deps, setNow } = makeDeps({ getLastSynced });
+    const getLastAttempt = vi.fn(async () => null);
+    const { deps, setNow } = makeDeps({ getLastAttempt });
     render([platform({ jobPlatform: 'bookmarks', itemPlatform: 'bookmarks' })], deps);
     await flush();
-    expect(getLastSynced).toHaveBeenCalledTimes(1);
+    expect(getLastAttempt).toHaveBeenCalledTimes(1);
 
     setNow(new Date(2026, 6, 26, 10, 0, EVALUATE_THROTTLE_MS / 1000 - 1)); // within window
     act(() => {
       document.dispatchEvent(new Event('visibilitychange'));
     });
     await flush();
-    expect(getLastSynced).toHaveBeenCalledTimes(1);
+    expect(getLastAttempt).toHaveBeenCalledTimes(1);
+  });
+
+  describe('once per local day, judged by the latest attempt (docs/32 D2)', () => {
+    const LATER_TODAY = new Date(2026, 6, 26, 10, 1, 0); // +60s > throttle
+
+    async function returnToTab(setNow: (d: Date) => void, at: Date): Promise<void> {
+      setNow(at);
+      act(() => {
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+      await flush();
+    }
+
+    it('does not retry a platform whose attempt failed earlier today', async () => {
+      const clock = createClock();
+      const store = recordStore(clock);
+      const { deps, started, setNow } = makeDeps({ getLastAttempt: store.getLastAttempt }, clock);
+      render(
+        [
+          funnelPlatform('github', 'github-stars', store.funnelDeps, async () => {
+            throw new Error('rate limited');
+          }),
+        ],
+        deps,
+      );
+      await flush();
+      expect(started).toHaveLength(1);
+      expect(started[0].rejected).toBe(true);
+      expect(store.records.get('github')?.lastResult).toBe('failure');
+
+      await returnToTab(setNow, LATER_TODAY);
+      expect(started).toHaveLength(1);
+    });
+
+    it('does not re-run a platform whose sync found nothing earlier today', async () => {
+      const clock = createClock();
+      const store = recordStore(clock);
+      const { deps, started, setNow } = makeDeps({ getLastAttempt: store.getLastAttempt }, clock);
+      render(
+        [
+          funnelPlatform('youtube', 'youtube-playlists', store.funnelDeps, async () => ({
+            fetched: 0,
+            inserted: 0,
+            newItemIds: [],
+          })),
+        ],
+        deps,
+      );
+      await flush();
+      expect(started).toHaveLength(1);
+      expect(store.records.get('youtube')?.lastResult).toBe('success');
+
+      await returnToTab(setNow, LATER_TODAY);
+      expect(started).toHaveLength(1);
+    });
+
+    it('does not retry a platform whose logged-out error was silenced earlier today', async () => {
+      class LoggedOut extends Error {}
+      const clock = createClock();
+      const store = recordStore(clock);
+      const { deps, started, setNow } = makeDeps({ getLastAttempt: store.getLastAttempt }, clock);
+      render(
+        [
+          funnelPlatform(
+            'zhihu',
+            'zhihu-favorites',
+            store.funnelDeps,
+            async () => {
+              throw new LoggedOut('not logged in');
+            },
+            { isSilentError: (err) => err instanceof LoggedOut },
+          ),
+        ],
+        deps,
+      );
+      await flush();
+      expect(started).toHaveLength(1);
+      // Silent is presentation only: the job completes, the record says failure.
+      expect(started[0].rejected).toBe(false);
+      expect(store.records.get('zhihu')?.lastResult).toBe('failure');
+
+      await returnToTab(setNow, LATER_TODAY);
+      expect(started).toHaveLength(1);
+    });
+
+    it('tries again on the next local day after a failed attempt', async () => {
+      const clock = createClock();
+      const store = recordStore(clock);
+      store.records.set('zhihu', {
+        lastAttemptAt: new Date(2026, 6, 25, 23, 58, 0),
+        lastResult: 'failure',
+      });
+      const { deps, started } = makeDeps({ getLastAttempt: store.getLastAttempt }, clock);
+      render(
+        [
+          funnelPlatform('zhihu', 'zhihu-favorites', store.funnelDeps, async () => ({
+            fetched: 3,
+            inserted: 1,
+            newItemIds: ['z1'],
+          })),
+        ],
+        deps,
+      );
+      await flush();
+
+      expect(started).toHaveLength(1);
+      expect(store.getLastAttempt).toHaveBeenCalledWith('zhihu');
+      expect(store.records.get('zhihu')).toEqual({
+        lastAttemptAt: clock.now(),
+        lastResult: 'success',
+      });
+    });
   });
 });

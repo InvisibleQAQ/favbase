@@ -16,16 +16,16 @@
  * unsafe here. Insert-only dedupe makes the refetch idempotent; the
  * `needsDetails` predicate keeps videos.list calls to genuinely-new ids.
  *
- * Insert-only ADR (.trellis/spec/frontend/database-bridge.md) applies:
+ * The insert-only rule (recorded in lib/ingest/CLAUDE.md) applies:
  * items / authors / item_sources are insert-only (`onConflictDoNothing`,
  * first-write-wins). Removing a video from a playlist never deletes rows.
  *
- * Auto-tag + auto-embed are NOT fired here (ST3): the trigger was moved UP into
- * the app.html hook (`use-youtube-playlists.ts`) so all four collection
- * platforms register embed/tag as `startJob` background jobs from a single seam
- * (the hook layer) with done/total progress. Descriptions are persisted +
- * chunked → `content_state='chunked'`; the settings 「重建向量」batch remains the
- * backlog safety net for embedding. ILIKE search works right after sync either way.
+ * Auto-tag + auto-embed are NOT fired here (ST3): the app-side Sync Adapter
+ * (youtube-sync-adapter.ts) hands `newItemIds` to the Platform Sync funnel,
+ * which registers embed/tag as `startJob` background jobs for every platform
+ * from one seam, with done/total progress. Descriptions are persisted +
+ * chunked → `content_state='chunked'`. ILIKE search works right after sync
+ * either way.
  */
 
 import { desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm';

@@ -7,11 +7,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BiliFavFolder } from '@/lib/bilibili/types';
 
 const serviceMocks = vi.hoisted(() => ({
+  checkAuth: vi.fn(),
   fetchAndSyncFolders: vi.fn(),
 }));
 
 const runtimeMocks = vi.hoisted(() => ({
   runBiliStreamingSync: vi.fn(),
+}));
+
+const recordMocks = vi.hoisted(() => ({
+  getPlatformLastSyncedAt: vi.fn(),
 }));
 
 vi.mock('@/lib/bilibili/bili-sync-service', () => ({
@@ -26,6 +31,16 @@ vi.mock('./auto-transcribe-runtime', () => runtimeMocks);
 vi.mock('../../hooks/collection-processing-jobs', () => ({
   startCollectionProcessingJobs: vi.fn(),
 }));
+
+// The REAL Platform Sync funnel runs; its record writes are stubbed (the DB
+// proxy is a mock), and "last synced" is read from the stubbed record query.
+vi.mock('@/lib/database', () => ({ initDbProxy: vi.fn(async () => ({})) }));
+vi.mock('@/lib/database/platform-sync-record', () => ({
+  recordPlatformSyncAttempt: vi.fn(async () => undefined),
+  recordPlatformSyncSuccess: vi.fn(async () => undefined),
+  recordPlatformSyncFailure: vi.fn(async () => undefined),
+}));
+vi.mock('@/lib/database/collection-queries', () => recordMocks);
 
 import { useBiliFavFolders } from './use-bili-fav-folders';
 
@@ -59,11 +74,14 @@ describe('useBiliFavFolders sync boundary', () => {
   }
 
   beforeEach(() => {
+    serviceMocks.checkAuth.mockReset().mockResolvedValue({ SESSDATA: 's', mid: 1 });
     serviceMocks.fetchAndSyncFolders.mockReset().mockResolvedValue(FOLDERS);
     runtimeMocks.runBiliStreamingSync.mockReset().mockResolvedValue({
       fetchedCount: 20,
       syncedCount: 20,
+      insertedCount: 3,
     });
+    recordMocks.getPlatformLastSyncedAt.mockReset().mockResolvedValue(null);
     routeFolderId = undefined;
     current = null;
     container = document.createElement('div');
@@ -171,8 +189,8 @@ describe('useBiliFavFolders sync boundary', () => {
   it('rejoins an in-flight full sync after remount without starting another worker', async () => {
     let finishSync!: () => void;
     runtimeMocks.runBiliStreamingSync.mockImplementation(
-      () => new Promise<void>((resolve) => {
-        finishSync = resolve;
+      () => new Promise((resolve) => {
+        finishSync = () => resolve({ fetchedCount: 0, syncedCount: 0, insertedCount: 0 });
       }),
     );
 
@@ -207,5 +225,28 @@ describe('useBiliFavFolders sync boundary', () => {
       finishSync();
       await Promise.resolve();
     });
+  });
+
+  it('reads "last synced" from the Platform Sync Record, and again after a sync succeeds', async () => {
+    const earlier = new Date(2026, 8, 29, 9, 0, 0);
+    const later = new Date(2026, 8, 30, 10, 0, 0);
+    recordMocks.getPlatformLastSyncedAt.mockResolvedValue(earlier);
+
+    await act(async () => {
+      root.render(<Probe />);
+    });
+    // The mount-time folder fetch is not a Platform Sync: it never sets the time.
+    expect(current?.lastSyncedAt).toEqual(earlier);
+    expect(recordMocks.getPlatformLastSyncedAt).toHaveBeenCalledWith('bilibili', {});
+
+    recordMocks.getPlatformLastSyncedAt.mockResolvedValue(later);
+    await act(async () => {
+      await current?.sync();
+    });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    expect(current?.lastSyncedAt).toEqual(later);
   });
 });

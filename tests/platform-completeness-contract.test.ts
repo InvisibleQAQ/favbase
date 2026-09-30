@@ -574,4 +574,46 @@ describe('platform completeness contract', () => {
       `Platform completeness contract failed:\n${missing.map((item) => `- ${item}`).join('\n')}`,
     ).toEqual([]);
   });
+
+  it('dispatches the post-sync processing lanes only through the Platform Sync funnel', () => {
+    // A Platform Sync's closing embed/tag dispatch is the funnel's job
+    // (docs/32 Step 1): it runs only after the sync succeeded and before the
+    // Platform Sync Record says so. An adapter calling the dispatcher itself
+    // skips the record — the exact defect that let failed and empty syncs
+    // leave no trace. Per-item streaming paths use
+    // `enqueueCollectionProcessingItem`, which this rule does not touch.
+    const offenders: string[] = [];
+    for (const file of appModules()) {
+      if (DISPATCH_OWNERS.has(file)) continue;
+      const { ast } = sourceModule(file);
+      ast.forEachChild(function visit(node) {
+        if (ts.isIdentifier(node) && node.text === 'startCollectionProcessingJobs') {
+          const { line } = ast.getLineAndCharacterOfPosition(node.getStart(ast));
+          offenders.push(`${file}:${line + 1}`);
+        }
+        node.forEachChild(visit);
+      });
+    }
+
+    expect(
+      offenders,
+      `startCollectionProcessingJobs outside ${[...DISPATCH_OWNERS].join(' / ')}:\n`
+        + offenders.map((item) => `- ${item}`).join('\n'),
+    ).toEqual([]);
+  });
 });
+
+/** The dispatcher's definition and the Platform Sync funnel — nothing else. */
+const DISPATCH_OWNERS = new Set([
+  `${HOOKS_DIR}/collection-processing-jobs.ts`,
+  `${HOOKS_DIR}/platform-sync.ts`,
+]);
+
+/** Every non-test `.ts`/`.tsx` module under `entrypoints/app`, repo-relative. */
+function appModules(directory = 'entrypoints/app'): string[] {
+  return readdirSync(path.join(ROOT, directory), { withFileTypes: true }).flatMap((entry) => {
+    const relative = `${directory}/${entry.name}`;
+    if (entry.isDirectory()) return appModules(relative);
+    return /\.tsx?$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name) ? [relative] : [];
+  });
+}

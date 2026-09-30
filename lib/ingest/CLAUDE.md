@@ -13,12 +13,12 @@
 
 ## 管线持有的不变量
 
-- **事务边界**：sources/authors/items/links 单事务 insert-only；`sources` upsert 是 ADR 唯一例外（title/platformMeta/lastFetchedAt 刷新，重命名经此流入），items 为空也执行（UI 区分「从未同步」与「同步过但为空」）
-- **Insert-only**（`.trellis/spec/frontend/database-bridge.md`）：authors/items/item_sources `onConflictDoNothing`，first-write-wins；items/links 管线内按 first-seen 去重（items 按 platformItemId，links 按 (item, source) 对）
+- **事务边界**：sources/authors/items/links 单事务 insert-only；`sources` upsert 是唯一例外（title/platformMeta/lastFetchedAt 刷新，重命名经此流入），items 为空也执行，好让平台报出的每个 Source 都刷新新鲜度。**「平台上次同步」已不再从这些行读**（docs/32 Step 1）：失败与空库早退的同步根本不写 source 行，这个问题移交给 Platform Sync Record（`platform_sync_records`，`lib/database/platform-sync-record.ts`）
+- **Insert-only**（本文件即此规则的记录处；五个 sync-service、六个测试与四个 `lib/<platform>/CLAUDE.md` 曾引用一份从未进 git 的 ADR 文件，2026-09-30 已全部改指本文件，路径与来龙去脉见 docs/32 附录 B）：authors/items/item_sources `onConflictDoNothing`，first-write-wins；items/links 管线内按 first-seen 去重（items 按 platformItemId，links 按 (item, source) 对）。`platform_sync_records` 与 `sources` 同属状态行，**不适用**本规则，且不由本 Module 写（唯一写入方是 app 侧 Platform Sync funnel）
 - **分批**：所有 INSERT 走 `chunk(500)`（bind-param < PG 65535）
 - **id-map re-select 按 platform 全量**：覆盖本轮之前已存在的行——已知 item 新加入另一 source 仍会得到 link（youtube 全量重拉依赖此语义）
 - **preExisting 差集**：content 对本轮新插入 item 写 + 幽灵自愈（见上方「幽灵消除」，健康的 preExisting 仍绝不重写）
-- **两段式 content 写入**：item_contents upsert + `replaceItemChunks` 在事务**外**逐条执行（`replaceItemChunks` 自开事务，单连接 proxy 嵌套死锁）；声明 `'chunked'` 的 item 事务内先落 `'has_content'`，chunk 行写成后才逐条置 `'chunked'`（空文本 → `'no_content'`）；embedding 不 inline（D3——管线保持零 storage/AI 依赖；同步后由 app.html 侧派发共享 embed lane 排空平台积压，设置页「重建向量」为手动兜底）
+- **两段式 content 写入**：item_contents upsert + `replaceItemChunks` 在事务**外**逐条执行（`replaceItemChunks` 自开事务，单连接 proxy 嵌套死锁）；声明 `'chunked'` 的 item 事务内先落 `'has_content'`，chunk 行写成后才逐条置 `'chunked'`（空文本 → `'no_content'`）；embedding 不 inline（D3——管线保持零 storage/AI 依赖；同步后由 app 侧 Platform Sync funnel 派发共享 embed lane 排空平台积压，设置页「重建向量」为手动兜底）
 - **`plain_text` 与 `subtitle_source` 总是一起写**（docs/29 Step 5）：两个 operation 的 insert 与 `onConflictDoUpdate.set` 都显式写 `subtitleSource`——`persistExistingItemContent` 写调用方给的值，`persistItemContent`（ingest phase 5、ghost sweep、bookmarks 提取）写 `null`，所以旧的 `'asr'`/`'official'` 活不过它所描述的正文。守卫在 `ingest.test.ts`：删掉任一 `set` 里的 `subtitleSource` 各红一例；`persistItemContent` insert `values` 里的 `null` 与列默认 NULL 等价，删它不红，是刻意为之的显式写法
 - **Existing-item replacement**：以 `(platform, platformItemId)` 寻址；prepared chunks 允许 Bilibili 保留 start/end 时间戳；重转录覆盖 plain text、事务重建 chunks，并把 `embedded` 等旧状态回退到 durable `chunked` seam。该 operation 不启动 Embedding/Tagging/Processing Queue
 - **Storage-free 加载图**：零 `@/lib/storage` 触达，`replaceItemChunks` 从 `@/lib/embedding/vector-store` leaf 导入（barrel 有 chrome.storage 模块加载副作用）；`ingest/ingest` 与六个平台 sync-service 一起由 `tests/lib-import-smoke.test.ts` 守卫（docs/20 高-1）
@@ -27,4 +27,4 @@
 
 - 平台差异留在调用方：入库前的去重/归一化（如 zhihu turndown、youtube 首见列表归属）、结果统计形状（各平台 `Sync*Result`）、空输入早退（bookmarks 空树零写入、zhihu 空收藏夹零写入）、author 过滤（x/youtube 剔除空 id）
 - 消费方：6 个平台 Adapter 的 `sync*ToDb`；Bilibili folders/videos 也只传归一化 metadata，转录另走 existing-item operation；各自的 in-memory PGlite 守护测试验证等价性
-- MEDIUM-2 已接线（以数据形式，管线自身零 tagging/embedding/storage 依赖）：content 步骤把实际持久化的 id（新插入 ∪ 自愈）收进 `contentPersisted`，各平台 sync-service 经 `Sync*Result.newItemIds` 透出，触发点在 app.html 侧调用方（zhihu/youtube 的生产入口 wrapper、x 的 `use-x-bookmarks` syncFn、github 的 `use-github-stars` syncFn）`startCollectionProcessingJobs`——tag lane 吃这批 ids（`tagNewItems`），embed lane 无视 ids、恒排空平台 `'chunked'` 积压（`embedPlatformBacklog`，见 `entrypoints/app/hooks/CLAUDE.md`）。x 已单一入口 app.html（07-20 删除 x.com 浮层按钮），旧「浮层 offscreen 路径不打标/不 embed」的欠账随之消失——恒打标恒 embed，见 `lib/x/CLAUDE.md`
+- MEDIUM-2 已接线（以数据形式，管线自身零 tagging/embedding/storage 依赖）：content 步骤把实际持久化的 id（新插入 ∪ 自愈）收进 `contentPersisted`，各平台 sync-service 经 `Sync*Result.newItemIds` 透出，触发点是各 `entrypoints/app/sections/<platform>/<platform>-sync-adapter.ts` 经 `entrypoints/app/hooks/platform-sync.ts` 的 funnel（`runPlatformSync`，docs/32 Step 1；funnel 之外调 `startCollectionProcessingJobs` 由契约测试禁止）——tag lane 吃这批 ids（`tagNewItems`），embed lane 无视 ids、恒排空平台 `'chunked'` 积压（`embedPlatformBacklog`，见 `entrypoints/app/hooks/CLAUDE.md`）。x 已单一入口 app.html（07-20 删除 x.com 浮层按钮），旧「浮层 offscreen 路径不打标/不 embed」的欠账随之消失——恒打标恒 embed，见 `lib/x/CLAUDE.md`

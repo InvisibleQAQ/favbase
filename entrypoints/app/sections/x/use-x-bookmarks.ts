@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 
+import { initDbProxy } from '@/lib/database';
+import { getPlatformSyncRecord } from '@/lib/database/platform-sync-record';
 import {
   getBookmarks,
   getAuthorCounts,
@@ -8,7 +10,6 @@ import {
   type AuthorCount,
 } from '@/lib/x/x-sync-service';
 import { classifyXSyncError, type XSyncError } from '@/lib/x/x-messages';
-import { xLastSyncStorage, type XLastSync } from '@/lib/storage';
 
 import {
   useCollectionLibrary,
@@ -63,7 +64,7 @@ export interface UseXBookmarksReturn {
   embedJob: BackgroundJob | null;
   tagJob: BackgroundJob | null;
 
-  // X-specific: last-sync "N new this run" (persisted) + sync cooldown.
+  // X-specific: last-sync "N new this run" (Platform Sync Record) + sync cooldown.
   lastInserted: number | null;
   /** Ms remaining before the sync button can be pressed again (0 = ready). */
   cooldownRemainingMs: number;
@@ -80,45 +81,40 @@ function queryFn({ filter, search, page, pageSize }: CollectionQueryParams) {
 
 /** Thin adapter over the shared collection-library state machine. */
 export function useXBookmarks(): UseXBookmarksReturn {
-  // Last-sync summary ("N new this run" + cooldown anchor) — the shared Sync
-  // Adapter persists it on every successful sync (manual AND daily auto), so
-  // the hook subscribes to the storage item instead of seeding it itself: an
-  // auto-sync finishing while this page is mounted refreshes the caption and
-  // locks the cooldown just like a manual one.
-  const [lastSync, setLastSync] = useState<XLastSync | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    xLastSyncStorage.getValue().then((v) => {
-      if (!cancelled) setLastSync(v ?? null);
-    });
-    const unwatch = xLastSyncStorage.watch((v) => setLastSync(v ?? null));
-    return () => {
-      cancelled = true;
-      unwatch();
-    };
-  }, []);
-  const lastInserted = lastSync?.inserted ?? null;
-  const syncedAtSeed = lastSync?.syncedAt ?? null;
-
   const lib = useCollectionLibrary<XBookmarkItem, AuthorCount, XSyncProgress, XSyncError>({
     queryFn,
     facetsFn: getAuthorCounts,
     lastSyncedFn: getLastSyncedAt,
     // The shared Sync Adapter (module ref = stable): auth resolution, progress
-    // mapping, the post-sync embed/tag dispatch and the last-sync summary all
-    // live there — the daily auto-sync coordinator runs the exact same function.
+    // mapping and — through the Platform Sync funnel — the post-sync embed/tag
+    // dispatch and the Platform Sync Record all live there; the daily
+    // auto-sync coordinator runs the exact same function.
     syncFn: runXBookmarksSync,
     classifyError: classifyXSyncError,
     logTag: LOG_TAG,
   });
 
-  // Cooldown source = the later of the DB last-synced time (survives reloads)
-  // and the storage summary (lands the instant the sync resolves).
-  const dbSyncedAt = lib.lastSyncedAt?.getTime() ?? null;
-  const effectiveSyncedAt =
-    dbSyncedAt !== null && syncedAtSeed !== null
-      ? Math.max(dbSyncedAt, syncedAtSeed)
-      : (dbSyncedAt ?? syncedAtSeed);
+  // "N new this run" = the Platform Sync Record's `lastInserted`, written with
+  // the success that `lib.lastSyncedAt` reads. Re-read whenever the sync job's
+  // generation moves — it only moves on success, exactly when the count does —
+  // so an auto-sync finishing while this page is mounted refreshes the caption
+  // just like a manual one.
+  const syncGeneration = lib.syncJob?.generation ?? 0;
+  const [lastInserted, setLastInserted] = useState<number | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const record = await getPlatformSyncRecord('x', await initDbProxy());
+      if (!cancelled) setLastInserted(record?.lastInserted ?? null);
+    })().catch((err) => console.error(`[${LOG_TAG}] sync record load failed:`, err));
+    return () => {
+      cancelled = true;
+    };
+  }, [syncGeneration]);
+
+  // Cooldown anchor = the latest successful sync (Platform Sync Record, survives
+  // reloads; a failed sync never moves it, so it never locks the button).
+  const effectiveSyncedAt = lib.lastSyncedAt?.getTime() ?? null;
 
   // Tick every second while inside the cooldown window to drive the countdown.
   const [now, setNow] = useState(() => Date.now());

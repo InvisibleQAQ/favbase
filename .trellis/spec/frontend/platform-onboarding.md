@@ -35,7 +35,7 @@ is **making them generate your TODO list instead of writing one yourself**.
 | Mechanism | What it catches | How you invoke it |
 | --- | --- | --- |
 | TypeScript exhaustive `Record<CollectionPlatform, T>` | Every registry that must gain a key. The error lands on the object literal, naming the missing property. | `pnpm compile` |
-| `tests/platform-completeness-contract.test.ts` | What types cannot see: a lazy import resolving to nothing, a page that renders no `sections/` view, a view that skips `useCollectionBreadcrumbs`, `main.tsx` naming a platform, a hand-written `jobPlatform`, `hooks/` importing `sections/`, a `childRoutes` or `hostPermissions` value that is computed instead of written out, an analytics axis absent from its own ranked list, a platform literal leaking into `collection-processing-policy.ts`, a missing `lib/<platform>/` directory, and — for a platform whose `readiness` is `'credentials'` — a missing link in the credentials chain (§8): the Connections card file, the `SETTINGS_NAV` connections section, `derive<Pascal>Draft` / `save<Pascal>` in `useSettings`, the `configSavedAt` key. Reports **all** failures as one aggregated list. | `pnpm vitest run tests/platform-completeness-contract.test.ts` |
+| `tests/platform-completeness-contract.test.ts` | What types cannot see: a lazy import resolving to nothing, a page that renders no `sections/` view, a view that skips `useCollectionBreadcrumbs`, `main.tsx` naming a platform, a hand-written `jobPlatform`, `hooks/` importing `sections/`, a `childRoutes` or `hostPermissions` value that is computed instead of written out, an analytics axis absent from its own ranked list, a platform literal leaking into `collection-processing-policy.ts`, a `startCollectionProcessingJobs` call anywhere in `entrypoints/app/**` but its definition and the Platform Sync funnel (a separate case in the same file, listing `file:line`), a missing `lib/<platform>/` directory, and — for a platform whose `readiness` is `'credentials'` — a missing link in the credentials chain (§8): the Connections card file, the `SETTINGS_NAV` connections section, `derive<Pascal>Draft` / `save<Pascal>` in `useSettings`, the `configSavedAt` key. Reports **all** failures as one aggregated list. | `pnpm vitest run tests/platform-completeness-contract.test.ts` |
 
 Five more guards fire with no wiring on your part. Three of them reconcile an
 artefact you still write by hand: the guard turns "silently absent" into a red
@@ -141,11 +141,16 @@ defect, not a convenience.
 
 ### 4.3 Invariants you inherit and must not break
 
-- **Insert-only** (`.trellis/spec/frontend/database-bridge.md`'s ADR, enforced by
-  `ingestCollection`): `items` / `authors` / `item_sources` use
-  `onConflictDoNothing`, first-write-wins. The single exception is `sources`,
-  which upserts to refresh `title` / `lastFetchedAt` (this is how a renamed
-  folder flows in).
+- **Insert-only** (recorded in `lib/ingest/CLAUDE.md`, enforced by
+  `ingestCollection`; the ADR file that older headers used to cite was never
+  in git — docs/32 appendix B): `items` / `authors` / `item_sources`
+  use `onConflictDoNothing`, first-write-wins. The single exception among the
+  ingest tables is `sources`, which upserts to refresh `title` /
+  `lastFetchedAt` (this is how a renamed folder flows in). `lastFetchedAt` is
+  each Source's freshness only — "when did this platform last sync" is the
+  **Platform Sync Record** (`platform_sync_records`, docs/32 §5.1), a
+  per-platform state row that insert-only does not apply to. You never write
+  it: the Platform Sync funnel (§7.2) does.
 - **`contentState`**: declare `'chunked'` only when you actually hand over text;
   declare `'no_content'` when the text is genuinely empty. **Never `'pending'`**
   unless the platform has a real deferred-content pipeline — `'pending'` is what
@@ -290,7 +295,7 @@ stays a one-line re-export whether your platform has child routes or not.
 
 | File | Responsibility |
 | --- | --- |
-| `<platform>-sync-adapter.ts` | **The Platform Sync.** `run<P>Sync(onProgress, control)` is the single definition of what a sync means: credential resolution (missing config = silent no-op), the domain call, and the closing `startCollectionProcessingJobs({ jobPlatform, itemPlatform, itemIds: result.newItemIds })`. Also exports `<p>AutoSyncPolicy` (`probeReady`, optional `isSilentError`). The manual page and the daily coordinator call **this same function** — copying credential resolution or post-sync dispatch into either trigger is the defect this file exists to prevent. |
+| `<platform>-sync-adapter.ts` | **The Platform Sync.** `run<P>Sync(onProgress, control)` is the single definition of what a sync means: credential resolution, then `await runPlatformSync(platform, control, async () => { …domain call…; return { fetched, inserted, newItemIds }; })` (`entrypoints/app/hooks/platform-sync.ts`). The funnel records the attempt in the Platform Sync Record, runs your closure, and on success dispatches the embed/tag lanes (`jobPlatform` derived) and records the success; on failure it records that and rethrows your error unchanged. **Anything you can check without the network goes BEFORE the funnel**: missing config is a silent `return`, a known-absent login throws the platform's own auth error class (the page's logged-out state keys off it) — neither is an attempt, so neither may leave a record (docs/32 §5.2). Put everything that contacts the platform inside the closure; work that follows a successful sync but is not the platform (bookmarks' page extraction) goes after it. Also exports `<p>AutoSyncPolicy` (`probeReady`, optional `isSilentError`). The manual page and the daily coordinator call **this same function** — copying credential resolution or post-sync dispatch into either trigger is the defect this file exists to prevent. |
 | `use-<platform>.ts` | Thin adapter over `useCollectionLibrary`. Inject `queryFn` / `facetsFn` / `lastSyncedFn` / `syncFn = run<P>Sync` / `classifyError` / `logTag`, then rename the generic fields to platform vocabulary. **Config gates live here**, wrapped around the generic `sync` — not inside `useCollectionLibrary`. Every injected function must be a stable reference (module-level or `useCallback`); they sit in effect dependency arrays. |
 | `<platform>-view.tsx` | Assembles `CollectionPageScaffold` + `useCollectionPipeline` + `useCollectionBreadcrumbs`. Owns the i18n seam: structured sync error → locale key. |
 | `<platform>-card.tsx` | Composes the shared `CollectionCard` shell. |
@@ -395,7 +400,8 @@ platform into the wrong one produces worse code than opting out.
 
 **Mandatory for every platform**, no exceptions: `ingestCollection`, the shared
 read helpers, `CollectionPageScaffold`, `useCollectionPipeline`,
-`useCollectionBreadcrumbs`, the shared `*-sync-adapter.ts` seam, both Platform
+`useCollectionBreadcrumbs`, the shared `*-sync-adapter.ts` seam and the
+Platform Sync funnel inside it (`runPlatformSync`, §7.2), both Platform
 Descriptors and all four heavy-value registries (§6).
 
 **Optional**: `useCollectionLibrary`. It models *one list + facets + manual
@@ -419,6 +425,7 @@ opt out of the hook; **do not** opt out of the scaffold or the registries.
 | `@/lib/storage` (or any `chrome.*`-touching barrel) in the sync-service static graph | `lib-import-smoke` |
 | a `t()` call inside `components/collection/**` | design contract (`components/collection/CLAUDE.md`) |
 | duplicating credential resolution or post-sync dispatch across the manual and daily triggers | review — the shared `*-sync-adapter.ts` exists precisely to make this unnecessary |
+| calling `startCollectionProcessingJobs` outside the Platform Sync funnel | completeness contract — the funnel is what records the Platform Sync; a direct call skips the record |
 | a new table or migration for a platform | §3 — escalate instead |
 | a whole-module `vi.mock('…/collection-platform-registry', () => ({ … }))` factory | review — pass `async (importOriginal) => ({ ...(await importOriginal()), … })` and override the one export you are faking. A partial factory goes stale the moment the registry grows a field: docs/26 Step 2 added `palette`, the theme these tests render in reads it, and two suites died at import time with a stack in `theme/core/palette.ts` that never mentioned the mock. |
 

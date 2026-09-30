@@ -14,15 +14,14 @@ import {
   getReposNeedingReadme,
   getStarredRepos,
   getLanguageCounts,
-  getLastSyncedAt,
   MAX_README_CHARS,
 } from './github-sync-service';
 import type { GithubStarredRepo } from './github-api';
 
 // ---------------------------------------------------------------------------
 // Insert-only invariant (first-write-wins) for the github platform. Mirrors
-// lib/bilibili/videos-sync.test.ts — see ADR in
-// .trellis/spec/frontend/database-bridge.md. Re-sync must never update or
+// lib/bilibili/videos-sync.test.ts — the rule is recorded in
+// lib/ingest/CLAUDE.md. Re-sync must never update or
 // delete rows in items / authors / item_sources. The single `sources` row is
 // the allowed upsert exception (lastFetchedAt freshness).
 // ---------------------------------------------------------------------------
@@ -115,7 +114,7 @@ describe('github-sync-service (in-memory PGlite)', () => {
     ];
 
     const result = await syncStarsToDb(db, repos);
-    expect(result).toMatchObject({ total: 3, synced: 3, dropped: 0 });
+    expect(result).toMatchObject({ total: 3, synced: 3, dropped: 0, inserted: 3 });
     // No readmeById → nothing content-persisted, auto-tag/embed get an empty batch.
     expect(result.newItemIds).toEqual([]);
 
@@ -161,13 +160,15 @@ describe('github-sync-service (in-memory PGlite)', () => {
     expect(links).toHaveLength(3);
   });
 
-  it('empty star list still upserts the sources row (synced-but-empty state)', async () => {
-    expect(await getLastSyncedAt(db)).toBeNull();
+  it('empty star list still upserts the sources row (Source freshness)', async () => {
+    expect(await getStarsSource()).toBeUndefined();
 
     const result = await syncStarsToDb(db, []);
-    expect(result).toMatchObject({ total: 0, synced: 0, dropped: 0 });
+    expect(result).toMatchObject({ total: 0, synced: 0, dropped: 0, inserted: 0 });
 
-    expect(await getLastSyncedAt(db)).not.toBeNull();
+    // "Last synced" is the Platform Sync Record's job (docs/32 Step 1); the
+    // ingest invariant kept here is that the stars Source is still refreshed.
+    expect((await getStarsSource())?.lastFetchedAt).toBeInstanceOf(Date);
   });
 
   // -------------------------------------------------------------------------

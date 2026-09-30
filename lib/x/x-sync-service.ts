@@ -8,16 +8,17 @@
  * `authors` rows, bookmarked tweets → `items` rows, tweet full_text →
  * `item_contents` + `item_chunks` with `content_state='chunked'`.
  *
- * Insert-only ADR (.trellis/spec/frontend/database-bridge.md) applies:
+ * The insert-only rule (recorded in lib/ingest/CLAUDE.md) applies:
  * items / authors / item_sources are insert-only (`onConflictDoNothing`,
  * first-write-wins). Allowed exception: the single `sources` row upserts to
  * refresh lastFetchedAt. Un-bookmarked tweets are never deleted.
  *
  * Embedding is NOT run inline during sync (D3 — a bulk sync of thousands of
  * bookmarks would hammer the embedding provider). Content is persisted +
- * chunked → `content_state='chunked'`; vectorization is deferred to the
- * settings 「重建向量」batch (`rebuildPendingEmbeddings`). Full-text (ILIKE)
- * search works right after sync; semantic retrieval after a rebuild.
+ * chunked → `content_state='chunked'`; the app-side Sync Adapter
+ * (x-sync-adapter.ts) hands `newItemIds` to the Platform Sync funnel, which
+ * dispatches the shared embed/tag lanes after the sync returns. Full-text
+ * (ILIKE) search works right after sync.
  */
 
 import { and, desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm';
@@ -29,7 +30,6 @@ import { items } from '@/lib/database/entities/items';
 import { ingestCollection } from '@/lib/ingest/ingest';
 import {
   fetchAllBookmarks,
-  XAuthError,
   type XAuth,
   type XRawBookmark,
   type XMedia,
@@ -78,8 +78,8 @@ export interface SyncBookmarksResult {
   inserted: number;
   /**
    * platformItemIds whose content was persisted this run — auto-tagging +
-   * auto-embed input. The trigger lives in the app.html CALLER
-   * (use-x-bookmarks syncFn), NOT here: the tagging/embedding barrels resolve
+   * auto-embed input. The dispatch lives app-side (the Sync Adapter's Platform
+   * Sync funnel), NOT here: the tagging/embedding barrels resolve
    * LLM/embedding config from chrome.storage, which this lib-layer service
    * must not reach (tests/lib-import-smoke.test.ts).
    */
@@ -133,17 +133,16 @@ export interface AuthorCount {
  * stop-on-known-id) → persist insert-only. `auth` must be resolved by the
  * CALLER via `getXAuth()` — this service stays storage-free (it never reads
  * chrome.storage itself); only storage-capable contexts (app.html page,
- * background SW) read the captured tokens and pass them in. Throws XAuthError
- * when auth is null (not logged in / not
- * captured yet); fetch/rate-limit errors propagate to the caller.
+ * background SW) read the captured tokens and pass them in. "No captured
+ * session" is the caller's check, made before a Platform Sync attempt is
+ * recorded (the app Sync Adapter throws XAuthError('no-token') itself);
+ * fetch/auth-rejected/rate-limit errors propagate to the caller.
  */
 export async function syncBookmarks(
-  auth: XAuth | null,
+  auth: XAuth,
   onProgress?: BookmarksProgressCallback,
   control?: CooperativeCheckpoint,
 ): Promise<SyncBookmarksResult> {
-  if (!auth) throw new XAuthError('Not logged in to x.com', 'no-token');
-
   const db = getDb();
 
   // Incremental: build the stop predicate from already-stored tweet ids.

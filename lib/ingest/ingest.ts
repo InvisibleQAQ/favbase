@@ -5,11 +5,14 @@
  * content chunker); this module holds the schema knowledge and invariants:
  *
  * - transaction boundary: one insert-only tx for sources/authors/items/links;
- * - `sources` upsert is the ADR-allowed exception (title / platformMeta /
+ * - `sources` upsert is the allowed exception (title / platformMeta /
  *   lastFetchedAt freshness — renames flow through), and runs even when items
- *   are empty so the UI can distinguish "never synced" from "synced, empty";
+ *   are empty so every Source the platform reported is refreshed. Whether the
+ *   PLATFORM ever synced is no longer read off these rows — that is the
+ *   Platform Sync Record (lib/database/platform-sync-record.ts, docs/32 §5.1);
  * - authors / items / item_sources are insert-only (`onConflictDoNothing`,
- *   first-write-wins — ADR in .trellis/spec/frontend/database-bridge.md);
+ *   first-write-wins — the rule is recorded in lib/ingest/CLAUDE.md and
+ *   .trellis/spec/frontend/platform-onboarding.md §4.3);
  * - batched INSERTs (`chunk(500)` keeps bind-params < PG 65535);
  * - id maps re-selected by platform (covers rows that existed before this
  *   run — a known item newly added to another source still gets its link);
@@ -18,7 +21,8 @@
  * - two-phase content write: item_contents + chunks go OUTSIDE the tx
  *   (replaceItemChunks opens its own transaction — nesting on the
  *   single-connection proxy would deadlock). Embedding is deferred (D3) —
- *   app.html callers dispatch the shared embed lane after the sync returns.
+ *   the app-side Platform Sync funnel (entrypoints/app/hooks/platform-sync.ts)
+ *   dispatches the shared embed lane after the sync returns.
  *
  * GHOSTS. An interrupted phase-5 run (page close, dev reload, mid-run error)
  * used to leave items that CLAIMED 'chunked' with zero chunk rows — invisible

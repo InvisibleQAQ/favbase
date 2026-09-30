@@ -2,39 +2,66 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CooperativeCheckpoint } from '@/lib/collections';
 
+import type { PlatformSyncOutcome } from '../../hooks/platform-sync';
+
 const mocks = vi.hoisted(() => ({
   getXAuth: vi.fn(),
   syncBookmarks: vi.fn(),
-  setLastSync: vi.fn(),
-  startCollectionProcessingJobs: vi.fn(),
+  runPlatformSync: vi.fn(),
+  XAuthError: class XAuthError extends Error {
+    constructor(
+      message: string,
+      readonly reason: string,
+    ) {
+      super(message);
+    }
+  },
 }));
 
 vi.mock('@/lib/x/x-auth', () => ({ getXAuth: mocks.getXAuth }));
-vi.mock('@/lib/x/x-sync-service', () => ({ syncBookmarks: mocks.syncBookmarks }));
-// Real module runs storage.defineItem (chrome.storage) at load.
-vi.mock('@/lib/storage', () => ({ xLastSyncStorage: { setValue: mocks.setLastSync } }));
-// Real module pulls the embedding/tagging barrels (chrome.storage at load).
-vi.mock('../../hooks/collection-processing-jobs', () => ({
-  startCollectionProcessingJobs: mocks.startCollectionProcessingJobs,
+vi.mock('@/lib/x/x-sync-service', () => ({
+  syncBookmarks: mocks.syncBookmarks,
+  XAuthError: mocks.XAuthError,
 }));
+// The funnel (record + dispatch) has its own tests; here it is a passthrough
+// that runs the adapter's sync closure and keeps what it reported.
+vi.mock('../../hooks/platform-sync', () => ({ runPlatformSync: mocks.runPlatformSync }));
 
 import { runXBookmarksSync, type XSyncProgress } from './x-sync-adapter';
 
 const control: CooperativeCheckpoint = { checkpoint: async () => undefined };
 const AUTH = { cookie: 'c', csrf: 't', bearer: 'b' };
+let outcome: PlatformSyncOutcome | undefined;
 
 describe('x Sync Adapter (shared by manual page + daily auto-sync)', () => {
   beforeEach(() => {
+    outcome = undefined;
     mocks.getXAuth.mockReset().mockResolvedValue(AUTH);
-    mocks.syncBookmarks.mockReset().mockResolvedValue({ newItemIds: [], inserted: 0 });
-    mocks.setLastSync.mockReset();
-    mocks.startCollectionProcessingJobs.mockReset();
+    mocks.syncBookmarks.mockReset().mockResolvedValue({ total: 0, newItemIds: [], inserted: 0 });
+    mocks.runPlatformSync
+      .mockReset()
+      .mockImplementation(async (_platform, _control, sync: () => Promise<PlatformSyncOutcome>) => {
+        outcome = await sync();
+      });
   });
 
-  it('resolves the captured session auth and passes the checkpoint through', async () => {
+  it('runs the domain sync inside the funnel with the captured session and the checkpoint', async () => {
     await runXBookmarksSync(() => undefined, control);
 
+    expect(mocks.runPlatformSync).toHaveBeenCalledWith('x', control, expect.any(Function));
     expect(mocks.syncBookmarks).toHaveBeenCalledWith(AUTH, expect.any(Function), control);
+  });
+
+  it('throws the no-token auth error BEFORE the funnel when no session was captured', async () => {
+    mocks.getXAuth.mockResolvedValue(null);
+
+    const run = runXBookmarksSync(() => undefined, control);
+
+    await expect(run).rejects.toBeInstanceOf(mocks.XAuthError);
+    await expect(run).rejects.toMatchObject({ reason: 'no-token' });
+    // Not an attempt: nothing recorded, the platform never contacted.
+    expect(mocks.runPlatformSync).not.toHaveBeenCalled();
+    expect(mocks.syncBookmarks).not.toHaveBeenCalled();
   });
 
   it('maps cursor progress (initial zero seed + per-page updates)', async () => {
@@ -43,7 +70,7 @@ describe('x Sync Adapter (shared by manual page + daily auto-sync)', () => {
       async (_auth: unknown, onPage: (fetchedCount: number, page: number) => void) => {
         onPage(20, 1);
         onPage(37, 2);
-        return { newItemIds: [], inserted: 0 };
+        return { total: 37, newItemIds: [], inserted: 0 };
       },
     );
 
@@ -56,34 +83,11 @@ describe('x Sync Adapter (shared by manual page + daily auto-sync)', () => {
     ]);
   });
 
-  it('dispatches embed/tag processing with the newly persisted ids', async () => {
-    mocks.syncBookmarks.mockResolvedValue({ newItemIds: ['t1', 't2'], inserted: 2 });
+  it('reports tweets read, items inserted ("N new") and the persisted ids to the funnel', async () => {
+    mocks.syncBookmarks.mockResolvedValue({ total: 37, newItemIds: ['t1', 't2'], inserted: 5 });
 
     await runXBookmarksSync(() => undefined, control);
 
-    expect(mocks.startCollectionProcessingJobs).toHaveBeenCalledWith({
-      jobPlatform: 'x-bookmarks',
-      itemPlatform: 'x',
-      itemIds: ['t1', 't2'],
-    });
-  });
-
-  it('persists the "N new this run" summary on EVERY successful sync (audit #6 drift)', async () => {
-    mocks.syncBookmarks.mockResolvedValue({ newItemIds: ['t1'], inserted: 5 });
-
-    await runXBookmarksSync(() => undefined, control);
-
-    expect(mocks.setLastSync).toHaveBeenCalledWith({
-      syncedAt: expect.any(Number),
-      inserted: 5,
-    });
-  });
-
-  it('writes no summary and dispatches nothing when the sync fails', async () => {
-    mocks.syncBookmarks.mockRejectedValue(new Error('auth expired'));
-
-    await expect(runXBookmarksSync(() => undefined, control)).rejects.toThrow('auth expired');
-    expect(mocks.setLastSync).not.toHaveBeenCalled();
-    expect(mocks.startCollectionProcessingJobs).not.toHaveBeenCalled();
+    expect(outcome).toEqual({ fetched: 37, inserted: 5, newItemIds: ['t1', 't2'] });
   });
 });

@@ -116,7 +116,7 @@ describe('runFavoriteVideosSync', () => {
       'publish:BV5',
       'mark-complete',
     ]);
-    expect(result).toEqual({ fetchedCount: 5, syncedCount: 5 });
+    expect(result).toEqual({ fetchedCount: 5, syncedCount: 5, insertedCount: 5 });
   });
 
   it('stops a completed history at the first source-existing BVID', async () => {
@@ -146,7 +146,7 @@ describe('runFavoriteVideosSync', () => {
 
     expect(fetchedPages).toEqual([1]);
     expect(persisted).toEqual([['BV-NEW']]);
-    expect(result).toEqual({ fetchedCount: 3, syncedCount: 1 });
+    expect(result).toEqual({ fetchedCount: 3, syncedCount: 1, insertedCount: 0 });
   });
 
   it('keeps earlier pages durable but does not mark the Source when a later page fails', async () => {
@@ -216,7 +216,7 @@ describe('runFavoriteVideosSync', () => {
             throw new Error('subscriber failed');
           },
         ),
-      ).resolves.toEqual({ fetchedCount: 1, syncedCount: 1 });
+      ).resolves.toEqual({ fetchedCount: 1, syncedCount: 1, insertedCount: 1 });
       expect(markedComplete).toBe(true);
       expect(errorSpy).toHaveBeenCalledOnce();
     } finally {
@@ -251,7 +251,7 @@ describe('runFavoriteVideosSync', () => {
           undefined,
           async () => { throw subscriberError; },
         ),
-      ).resolves.toEqual({ fetchedCount: 1, syncedCount: 1 });
+      ).resolves.toEqual({ fetchedCount: 1, syncedCount: 1, insertedCount: 1 });
       await vi.waitFor(() => {
         expect(errorSpy).toHaveBeenCalledWith(
           '[bili-sync] persisted-item subscriber failed:',
@@ -306,7 +306,36 @@ describe('runFavoriteVideosSync', () => {
         totalPages: 1,
       },
     ]);
-    expect(result).toEqual({ fetchedCount: 2, syncedCount: 2 });
+    expect(result).toEqual({ fetchedCount: 2, syncedCount: 2, insertedCount: 0 });
+  });
+});
+
+describe('runFavoriteVideosSync insertedCount', () => {
+  it('sums only what each persist reported new, across pages and folders', async () => {
+    // folder:page → the page's videos, and which of them persist reports as new.
+    const pages: Record<string, { bvids: string[]; fresh: string[]; hasMore: boolean }> = {
+      '10:1': { bvids: ['BV1', 'BV2'], fresh: ['BV1'], hasMore: true },
+      '10:2': { bvids: ['BV3'], fresh: [], hasMore: false },
+      '20:1': { bvids: ['BV20', 'BV21'], fresh: ['BV20', 'BV21'], hasMore: false },
+    };
+    let current = pages['10:1'];
+    const deps: FavoriteVideosSyncDeps = {
+      getBaseline: async () => ({ existingBvids: new Set(), historyComplete: false }),
+      fetchPage: async (folder, page) => {
+        current = pages[`${folder.id}:${page}`];
+        return { videos: current.bvids.map(makeVideo), totalPages: 2, hasMore: current.hasMore };
+      },
+      persist: async () => current.fresh,
+      markHistoryComplete: async () => undefined,
+      waitBetweenPages: async () => undefined,
+    };
+
+    const result = await runFavoriteVideosSync(
+      [makeFolder({ id: 10 }), makeFolder({ id: 20, title: 'Folder B' })],
+      deps,
+    );
+
+    expect(result).toEqual({ fetchedCount: 5, syncedCount: 5, insertedCount: 3 });
   });
 });
 

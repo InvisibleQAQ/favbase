@@ -17,7 +17,6 @@ import {
   syncBookmarkTreeToDb,
   getBookmarks,
   getFolders,
-  getLastSyncedAt,
   type BookmarkTree,
   type BookmarkEntry,
   type BookmarkFolder,
@@ -25,8 +24,8 @@ import {
 
 // ---------------------------------------------------------------------------
 // Insert-only invariant (first-write-wins) for the bookmarks platform. Mirrors
-// lib/github/github-sync-service.test.ts — see ADR in
-// .trellis/spec/frontend/database-bridge.md. Re-sync must never update or
+// lib/github/github-sync-service.test.ts — the rule is recorded in
+// lib/ingest/CLAUDE.md. Re-sync must never update or
 // delete rows in items / authors / item_sources. `sources` rows are the allowed
 // upsert exception (title / path / lastFetchedAt freshness).
 // ---------------------------------------------------------------------------
@@ -103,7 +102,7 @@ describe('bookmarks-sync-service (in-memory PGlite)', () => {
         ],
       ),
     );
-    expect(result).toEqual({ totalBookmarks: 2, syncedItems: 2, folders: 2 });
+    expect(result).toEqual({ totalBookmarks: 2, syncedItems: 2, folders: 2, inserted: 2 });
 
     const sourceRows = await db
       .select()
@@ -175,8 +174,22 @@ describe('bookmarks-sync-service (in-memory PGlite)', () => {
 
   it('empty tree writes nothing', async () => {
     const result = await syncBookmarkTreeToDb(db, tree([folder('1', 'Bar')], []));
-    expect(result).toEqual({ totalBookmarks: 0, syncedItems: 0, folders: 0 });
-    expect(await getLastSyncedAt(db)).toBeNull();
+    expect(result).toEqual({ totalBookmarks: 0, syncedItems: 0, folders: 0, inserted: 0 });
+    const rows = await db
+      .select()
+      .from(schema.sources)
+      .where(eq(schema.sources.platform, 'bookmarks'));
+    expect(rows).toEqual([]);
+  });
+
+  it('counts only items new to the library as inserted', async () => {
+    await syncBookmarkTreeToDb(db, tree([folder('1', 'Bar')], [bm('https://a.com/', '1')]));
+
+    const result = await syncBookmarkTreeToDb(
+      db,
+      tree([folder('1', 'Bar')], [bm('https://a.com/', '1'), bm('https://b.com/', '1')]),
+    );
+    expect(result).toMatchObject({ totalBookmarks: 2, syncedItems: 2, inserted: 1 });
   });
 
   // -------------------------------------------------------------------------
@@ -293,9 +306,7 @@ describe('bookmarks-sync-service (in-memory PGlite)', () => {
     expect((await getBookmarks({ search: '%', page: 1, pageSize: 10 }, db)).total).toBe(0);
   });
 
-  it('getFolders returns folders in first-seen order with paths; getLastSyncedAt tracks sync', async () => {
-    expect(await getLastSyncedAt(db)).toBeNull();
-
+  it('getFolders returns folders in first-seen order with paths', async () => {
     await syncBookmarkTreeToDb(
       db,
       tree(
@@ -309,6 +320,5 @@ describe('bookmarks-sync-service (in-memory PGlite)', () => {
       { folderId: '1', title: 'Bar', path: 'Bar' },
       { folderId: '11', title: 'Tech', path: 'Bar/Tech' },
     ]);
-    expect(await getLastSyncedAt(db)).not.toBeNull();
   });
 });

@@ -15,14 +15,13 @@ import {
   syncBookmarksToDb,
   getBookmarks,
   getAuthorCounts,
-  getLastSyncedAt,
 } from './x-sync-service';
 import type { XRawBookmark } from './x-api';
 
 // ---------------------------------------------------------------------------
 // Insert-only invariant (first-write-wins) for the `x` platform. Mirrors
-// lib/github/github-sync-service.test.ts — see ADR in
-// .trellis/spec/frontend/database-bridge.md. Re-sync must never update or delete
+// lib/github/github-sync-service.test.ts — the rule is recorded in
+// lib/ingest/CLAUDE.md. Re-sync must never update or delete
 // rows in items / authors / item_sources. The single `sources` row is the
 // allowed upsert exception (lastFetchedAt freshness).
 // ---------------------------------------------------------------------------
@@ -159,13 +158,15 @@ describe('x-sync-service (in-memory PGlite)', () => {
     expect(chunks[0].embedding).toBeNull();
   });
 
-  it('empty bookmark list still upserts the sources row (synced-but-empty state)', async () => {
-    expect(await getLastSyncedAt(db)).toBeNull();
+  it('empty bookmark list still upserts the sources row (Source freshness)', async () => {
+    expect(await getBookmarksSource()).toBeUndefined();
 
     const result = await syncBookmarksToDb(db, []);
     expect(result).toMatchObject({ total: 0, synced: 0, inserted: 0 });
 
-    expect(await getLastSyncedAt(db)).not.toBeNull();
+    // "Last synced" is the Platform Sync Record's job (docs/32 Step 1); the
+    // ingest invariant kept here is that the bookmarks Source is still refreshed.
+    expect((await getBookmarksSource())?.lastFetchedAt).toBeInstanceOf(Date);
   });
 
   // -------------------------------------------------------------------------

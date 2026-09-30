@@ -23,8 +23,6 @@ export {
   localeStorage,
   type LocalePreference,
   asrQuotaPauseStorage,
-  xLastSyncStorage,
-  type XLastSync,
   onboardingStorage,
   type OnboardingState,
   libraryGateStorage,

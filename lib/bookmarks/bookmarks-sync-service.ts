@@ -9,7 +9,7 @@
  * folder membership → `item_sources` links. A URL bookmarked in several folders
  * yields ONE item and one link per folder.
  *
- * Insert-only ADR (.trellis/spec/frontend/database-bridge.md) applies:
+ * The insert-only rule (recorded in lib/ingest/CLAUDE.md) applies:
  * items / authors / item_sources are insert-only (`onConflictDoNothing`,
  * first-write-wins). Allowed exception: `sources` rows upsert (title +
  * folderPath + lastFetchedAt freshness). Removed bookmarks are never deleted; a
@@ -66,6 +66,8 @@ export interface SyncBookmarksResult {
   syncedItems: number;
   /** Folders that had ≥1 direct bookmark (empty folders are skipped). */
   folders: number;
+  /** Items newly inserted this run (the Platform Sync Record's "N new"). */
+  inserted: number;
 }
 
 /** Row shape returned to the UI — zero drizzle knowledge required downstream. */
@@ -124,7 +126,7 @@ export async function syncBookmarkTreeToDb(
   tree: BookmarkTree,
 ): Promise<SyncBookmarksResult> {
   if (tree.bookmarks.length === 0) {
-    return { totalBookmarks: 0, syncedItems: 0, folders: 0 };
+    return { totalBookmarks: 0, syncedItems: 0, folders: 0, inserted: 0 };
   }
 
   // Only folders with ≥1 DIRECT bookmark become sources (skip empty +
@@ -139,7 +141,7 @@ export async function syncBookmarkTreeToDb(
     if (!itemByUrl.has(b.normalizedUrl)) itemByUrl.set(b.normalizedUrl, b);
   }
 
-  await ingestCollection(db, {
+  const result = await ingestCollection(db, {
     platform: PLATFORM,
     sources: usedFolders.map((f) => ({
       platformSourceId: f.id,
@@ -175,6 +177,7 @@ export async function syncBookmarkTreeToDb(
     totalBookmarks: tree.bookmarks.length,
     syncedItems: itemByUrl.size,
     folders: usedFolders.length,
+    inserted: result.inserted.length,
   };
 }
 

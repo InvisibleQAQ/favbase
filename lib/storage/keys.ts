@@ -10,10 +10,6 @@ export const STORAGE_KEYS = {
   xCookie: 'session:x-cookie',
   xCsrf: 'session:x-csrf',
   xAuth: 'session:x-auth',
-  // X last-sync summary ({ syncedAt, inserted }) — persists the "N new this run"
-  // count across app.html reloads so the X collection caption can show it after
-  // a refresh. Written by sections/x/use-x-bookmarks syncFn. See lib/x/CLAUDE.md.
-  xLastSync: 'local:x-last-sync',
   // WebDAV sync (lib/sync). config: connection settings (password AES-GCM
   // obfuscated). meta: LWW clock + version bookkeeping. status: UI-facing state
   // watched by the settings card. See lib/sync/CLAUDE.md.

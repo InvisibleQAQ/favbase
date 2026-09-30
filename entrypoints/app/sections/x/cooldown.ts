@@ -3,8 +3,9 @@ import { formatClock } from '@/lib/format';
 /**
  * X-specific sync cooldown (pure, testable). After a successful X sync the
  * button is locked for `COOLDOWN_MS`; the window is derived from the last
- * successful sync time (DB `sources.lastFetchedAt`, refreshed only on success),
- * so a failed sync never locks the button and the cooldown survives a reload.
+ * successful sync time (the Platform Sync Record's `last_success_at`, which a
+ * failed attempt never moves), so a failed sync never locks the button and the
+ * cooldown survives a reload.
  */
 
 /** Cooldown window after a successful X sync (5 minutes). */

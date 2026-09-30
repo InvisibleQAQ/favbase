@@ -11,18 +11,17 @@
  * converted to Markdown (turndown) → `item_contents` + chunked `item_chunks`
  * with `content_state='chunked'`; zvideo has no body → `'no_content'`.
  *
- * Insert-only ADR (.trellis/spec/frontend/database-bridge.md) applies:
+ * The insert-only rule (recorded in lib/ingest/CLAUDE.md) applies:
  * items / authors / item_sources are insert-only (`onConflictDoNothing`,
  * first-write-wins). Allowed exception: `sources` rows upsert (title +
  * lastFetchedAt freshness — collection renames flow through). Un-favorited
  * entries are never deleted.
  *
- * Auto-tag + auto-embed are NOT fired here (ST3): the trigger was moved UP into
- * the app.html hook (`use-zhihu-favorites.ts`) so all four collection platforms
- * register embed/tag as `startJob` background jobs from a single seam (the hook
- * layer) with done/total progress. This wrapper only fetches + persists; the
- * settings 「重建向量」batch remains the backlog safety net for embedding.
- * Full-text (ILIKE) search works right after sync either way.
+ * Auto-tag + auto-embed are NOT fired here (ST3): the app-side Sync Adapter
+ * (zhihu-sync-adapter.ts) hands `newItemIds` to the Platform Sync funnel,
+ * which registers embed/tag as `startJob` background jobs for every platform
+ * from one seam, with done/total progress. This wrapper only fetches +
+ * persists. Full-text (ILIKE) search works right after sync either way.
  *
  * Runs in the app.html page context only (manual sync button → RPC proxy →
  * Offscreen PGlite): the turndown conversion wants a DOM, and the zhihu fetch
@@ -177,8 +176,9 @@ export async function syncFavoritesToDb(
 
   const result = await ingestCollection(db, {
     platform: PLATFORM,
-    // ALL public collections become sources — empty collections still get a
-    // row so max(lastFetchedAt) can answer "when was the last sync".
+    // ALL public collections become sources — an empty collection is still a
+    // Source (it shows up as a chip). "When was the last sync" is the Platform
+    // Sync Record's answer now, not max(lastFetchedAt) over these rows.
     sources: collections.map((collection) => ({
       platformSourceId: collection.id,
       title: collection.title,

@@ -47,6 +47,8 @@ export interface FavoriteVideosSyncDeps {
 export interface FavoriteVideosSyncResult {
   fetchedCount: number;
   syncedCount: number;
+  /** Videos newly inserted this run — the sum of what each `persist` reported new. */
+  insertedCount: number;
 }
 
 export type BiliFavoritesSyncProgressCallback = (
@@ -66,6 +68,7 @@ export async function runFavoriteVideosSync(
 ): Promise<FavoriteVideosSyncResult> {
   let fetchedCount = 0;
   let syncedCount = 0;
+  let insertedCount = 0;
 
   for (let folderIndex = 0; folderIndex < folders.length; folderIndex += 1) {
     await control?.checkpoint();
@@ -92,6 +95,7 @@ export async function runFavoriteVideosSync(
         : result.videos;
       if (accepted.length > 0) {
         const newItemIds = await deps.persist(folder, accepted);
+        insertedCount += newItemIds?.length ?? 0;
         if (newItemIds && newItemIds.length > 0) {
           const newIdSet = new Set(newItemIds.map((id) => id.toLowerCase()));
           try {
@@ -128,5 +132,5 @@ export async function runFavoriteVideosSync(
     await deps.markHistoryComplete(folder);
   }
 
-  return { fetchedCount, syncedCount };
+  return { fetchedCount, syncedCount, insertedCount };
 }

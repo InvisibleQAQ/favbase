@@ -5,7 +5,7 @@ WebDAV 双向同步领域。**第一期只同步配置**（`UserSettings` + loca
 ## 三期分界
 
 - **第一期（已落地）**：基础设施 + 配置整体 LWW 同步。WebDAV 客户端 / 锁 / 后台触发 / 逃生 / UI 全通。
-- **第二期**：数据结构表 + `item_contents` 双向合并——利用 favbase insert-only 特性做**主键并集**（非 LWW），需从零建 PGlite 导入层 + Offscreen RPC。挂钩点：`sync-engine.ts` `doSync` 里 `syncConfig` 之后的注释位。
+- **第二期**：数据结构表 + `item_contents` 双向合并——利用 favbase insert-only 特性做**主键并集**（非 LWW），需从零建 PGlite 导入层 + Offscreen RPC。挂钩点：`sync-engine.ts` `doSync` 里 `syncConfig` 之后的注释位。**必须排除 `platform_sync_records`**（Platform Sync Record，docs/32 §5.1）：它是设备本地的 upsert 状态行，既不 insert-only 也不该跨设备——A 设备的记录并到 B，B 会以为今天已同步过而压掉自己的每日自动同步。
 - **第三期**：`item_chunks.embedding` 向量大块传输 + manifest 差量 + 维度兼容守卫。
 
 ## 远端目录约定（`/FavbaseSync`）

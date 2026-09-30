@@ -15,8 +15,10 @@
  * Tokens are session-scoped (chrome.storage.session — cleared on browser
  * close): the background webRequest listener writes them; `getXAuth()` is read
  * from storage-capable contexts only (app.html page, background SW). The
- * app.html X collection page resolves auth here, then calls `syncBookmarks`
- * directly (page context has the RPC proxy to the offscreen PGlite). Requires
+ * app.html X Sync Adapter (sections/x/x-sync-adapter.ts) resolves auth here,
+ * then calls `syncBookmarks` inside the Platform Sync funnel (page context has
+ * the RPC proxy to the offscreen PGlite); a null result is thrown as
+ * XAuthError('no-token') before the funnel, so it records no attempt. Requires
  * the user to have x.com open/browsed at least once this session before a sync
  * can run (surfaced as the "login" empty state).
  */

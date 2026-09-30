@@ -2,33 +2,41 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CooperativeCheckpoint } from '@/lib/collections';
 
+import type { PlatformSyncOutcome } from '../../hooks/platform-sync';
+
 const mocks = vi.hoisted(() => ({
   syncFavorites: vi.fn(),
-  startCollectionProcessingJobs: vi.fn(),
+  runPlatformSync: vi.fn(),
 }));
 
 vi.mock('@/lib/zhihu/zhihu-sync-service', () => ({
   syncFavorites: mocks.syncFavorites,
   ZhihuAuthError: class ZhihuAuthError extends Error {},
 }));
-// Real module pulls the embedding/tagging barrels (chrome.storage at load).
-vi.mock('../../hooks/collection-processing-jobs', () => ({
-  startCollectionProcessingJobs: mocks.startCollectionProcessingJobs,
-}));
+// The funnel (record + dispatch) has its own tests; here it is a passthrough
+// that runs the adapter's sync closure and keeps what it reported.
+vi.mock('../../hooks/platform-sync', () => ({ runPlatformSync: mocks.runPlatformSync }));
 
 import { runZhihuFavoritesSync, type ZhihuSyncProgress } from './zhihu-sync-adapter';
 
 const control: CooperativeCheckpoint = { checkpoint: async () => undefined };
+let outcome: PlatformSyncOutcome | undefined;
 
 describe('zhihu Sync Adapter (shared by manual page + daily auto-sync)', () => {
   beforeEach(() => {
-    mocks.syncFavorites.mockReset().mockResolvedValue({ newItemIds: [] });
-    mocks.startCollectionProcessingJobs.mockReset();
+    outcome = undefined;
+    mocks.syncFavorites.mockReset().mockResolvedValue({ total: 0, inserted: 0, newItemIds: [] });
+    mocks.runPlatformSync
+      .mockReset()
+      .mockImplementation(async (_platform, _control, sync: () => Promise<PlatformSyncOutcome>) => {
+        outcome = await sync();
+      });
   });
 
-  it('passes the checkpoint through to the domain sync (cookie auth, nothing to resolve)', async () => {
+  it('runs the whole domain sync inside the funnel (cookie auth, nothing to check first)', async () => {
     await runZhihuFavoritesSync(() => undefined, control);
 
+    expect(mocks.runPlatformSync).toHaveBeenCalledWith('zhihu', control, expect.any(Function));
     expect(mocks.syncFavorites).toHaveBeenCalledWith(expect.any(Function), control);
   });
 
@@ -38,7 +46,7 @@ describe('zhihu Sync Adapter (shared by manual page + daily auto-sync)', () => {
       async (onPage: (fetchedCount: number, current: number, total: number) => void) => {
         onPage(12, 1, 3);
         onPage(20, 2, 3);
-        return { newItemIds: [] };
+        return { total: 20, inserted: 0, newItemIds: [] };
       },
     );
 
@@ -51,22 +59,11 @@ describe('zhihu Sync Adapter (shared by manual page + daily auto-sync)', () => {
     ]);
   });
 
-  it('dispatches embed/tag processing with the newly persisted ids', async () => {
-    mocks.syncFavorites.mockResolvedValue({ newItemIds: ['z1'] });
+  it('reports entries read, items inserted and the persisted ids to the funnel', async () => {
+    mocks.syncFavorites.mockResolvedValue({ total: 12, inserted: 1, newItemIds: ['z1'] });
 
     await runZhihuFavoritesSync(() => undefined, control);
 
-    expect(mocks.startCollectionProcessingJobs).toHaveBeenCalledWith({
-      jobPlatform: 'zhihu-favorites',
-      itemPlatform: 'zhihu',
-      itemIds: ['z1'],
-    });
-  });
-
-  it('does not dispatch processing when the sync fails (e.g. logged out)', async () => {
-    mocks.syncFavorites.mockRejectedValue(new Error('not logged in'));
-
-    await expect(runZhihuFavoritesSync(() => undefined, control)).rejects.toThrow('not logged in');
-    expect(mocks.startCollectionProcessingJobs).not.toHaveBeenCalled();
+    expect(outcome).toEqual({ fetched: 12, inserted: 1, newItemIds: ['z1'] });
   });
 });

@@ -5,6 +5,7 @@ import { up as v003ChunkTimestamps } from './v003-chunk-timestamps';
 import { up as v004Tags } from './v004-tags';
 import { up as v005ChatConversations } from './v005-chat-conversations';
 import { up as v006SubtitleSource } from './v006-subtitle-source';
+import { up as v007PlatformSyncRecords } from './v007-platform-sync-records';
 
 interface Migration {
   version: number;
@@ -19,6 +20,7 @@ const migrations: Migration[] = [
   { version: 4, name: 'v4_tags', up: v004Tags },
   { version: 5, name: 'v5_chat_conversations', up: v005ChatConversations },
   { version: 6, name: 'v6_subtitle_source', up: v006SubtitleSource },
+  { version: 7, name: 'v7_platform_sync_records', up: v007PlatformSyncRecords },
 ];
 
 const MIGRATIONS_DDL = `

@@ -4,7 +4,7 @@
  * Consumers (hooks / UI) call the high-level operations here and never
  * import drizzle / entities / getDb themselves.
  *
- * Insert-only ADR (.trellis/spec/frontend/database-bridge.md) applies:
+ * The insert-only rule (recorded in lib/ingest/CLAUDE.md) applies:
  * items / authors / item_sources are insert-only (`onConflictDoNothing`,
  * first-write-wins). Allowed exception: the `sources` row is upserted to
  * refresh lastFetchedAt. Unstarred repos are never deleted (knowledge base
@@ -18,9 +18,10 @@
  * console.warn, no retry). README present → `item_contents` + `charSplit`
  * chunks via the shared ingest content channel → `content_state='chunked'`
  * only AFTER chunk rows land (never 'pending' — that feeds auto-transcribe).
- * Embedding is NOT run inline (D3) — the app.html caller
- * (use-github-stars syncFn) dispatches the shared embed/tag lanes with
- * `SyncStarsResult.newItemIds` after the sync returns.
+ * Embedding is NOT run inline (D3) — the app-side Sync Adapter
+ * (github-sync-adapter.ts) hands `SyncStarsResult.newItemIds` to the Platform
+ * Sync funnel, which dispatches the shared embed/tag lanes after the sync
+ * returns.
  */
 
 import { and, desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm';
@@ -32,7 +33,7 @@ import { items } from '@/lib/database/entities/items';
 import { ghostItemCondition, ingestCollection } from '@/lib/ingest/ingest';
 // Leaf import, never the '@/lib/embedding' barrel (its value re-export of
 // './config' reaches '@/lib/storage' at module load). The embed/tag dispatch
-// seam lives in the app.html caller (use-github-stars syncFn); lib-layer
+// seam lives app-side (the Sync Adapter's Platform Sync funnel); lib-layer
 // platform services must not import storage-backed barrels. Guarded by
 // tests/lib-import-smoke.test.ts.
 import { charSplit } from '@/lib/embedding/char-split';
@@ -85,6 +86,8 @@ export interface SyncStarsResult {
   synced: number;
   dropped: number;
   droppedRepoIds: string[];
+  /** Repos newly inserted this run (the Platform Sync Record's "N new"). */
+  inserted: number;
   /** platformItemIds whose README content was persisted this run — auto-tag/embed input. */
   newItemIds: string[];
 }
@@ -293,6 +296,7 @@ export async function syncStarsToDb(
     synced: result.linkCount,
     dropped: droppedRepoIds.length,
     droppedRepoIds,
+    inserted: result.inserted.length,
     newItemIds: result.contentPersisted,
   };
 }

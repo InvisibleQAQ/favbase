@@ -2,19 +2,20 @@
  * Shared read helpers for the platform collection pages. Every platform's
  * paged getter (getBookmarks / getFavorites / getStarredRepos …) carried a
  * byte-identical skeleton — select the same 7 `items` columns, run a parallel
- * `count(*)`, map rows, return `{ rows, total }` — and every getLastSyncedAt was
- * a `max(lastFetchedAt)` over that platform's sources. Extracted per audit
+ * `count(*)`, map rows, return `{ rows, total }`. Extracted per audit
  * docs/15 MEDIUM-3 step 2 so each platform only declares its WHERE conditions,
- * ORDER BY, and row mapper.
+ * ORDER BY, and row mapper. Every getLastSyncedAt delegates to
+ * `getPlatformLastSyncedAt`, which reads the Platform Sync Record.
  *
  * Leaf entity imports (not the '@/lib/database' barrel's schema/db side): keeps
  * this loadable in offscreen documents, matching the sync-services.
  */
 
-import { and, eq, sql, type SQL } from 'drizzle-orm';
+import { and, sql, type SQL } from 'drizzle-orm';
+import type { CollectionPlatform } from '@/lib/collections/platforms';
 import type { FavbaseDb } from '@/lib/database';
 import { items } from '@/lib/database/entities/items';
-import { sources } from '@/lib/database/entities/sources';
+import { getPlatformSyncRecord } from '@/lib/database/platform-sync-record';
 
 /** The fixed column set every platform's paged query selects from `items`. */
 export interface PagedItemRow {
@@ -73,17 +74,16 @@ export async function pagedItemsQuery<TItem>(
 }
 
 /**
- * Latest sync time for a platform = `max(lastFetchedAt)` over its sources; null
- * when never synced. Unifies the single-source (github/x) and multi-source
- * (bookmarks/zhihu) variants: max over one row equals that row's value.
+ * "Last synced" for a platform = the latest SUCCESSFUL Platform Sync in its
+ * Platform Sync Record; null when it has never succeeded (no record, or only
+ * failed / unfinished attempts). A sync that found nothing still succeeds, so
+ * an empty library shows a time too. `sources.lastFetchedAt` is no longer read
+ * here: it is each Source's freshness, and a failed or empty sync never moved
+ * it (docs/32 high-1).
  */
 export async function getPlatformLastSyncedAt(
-  platform: string,
+  platform: CollectionPlatform,
   db: FavbaseDb,
 ): Promise<Date | null> {
-  const rows = await db
-    .select({ last: sql<Date | null>`max(${sources.lastFetchedAt})` })
-    .from(sources)
-    .where(eq(sources.platform, platform));
-  return rows[0]?.last ?? null;
+  return (await getPlatformSyncRecord(platform, db))?.lastSuccessAt ?? null;
 }

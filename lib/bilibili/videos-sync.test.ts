@@ -12,8 +12,8 @@ import { syncFavVideosToDb } from './videos-sync';
 import type { BiliFavVideo } from './types';
 
 // ---------------------------------------------------------------------------
-// Insert-only invariant (first-write-wins). See ADR in
-// .trellis/spec/frontend/database-bridge.md — re-sync must never update or
+// Insert-only invariant (first-write-wins). The rule is recorded in
+// lib/ingest/CLAUDE.md — re-sync must never update or
 // delete rows in items / authors / item_sources.
 // ---------------------------------------------------------------------------
 

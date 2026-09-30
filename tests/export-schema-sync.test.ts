@@ -20,6 +20,10 @@ describe('export stays in sync with schema', () => {
     expect(actual).toEqual(expected);
     expect(actual).toContain('tags.csv');
     expect(actual).toContain('item_tags.csv');
+    // docs/32 Step 1: the Platform Sync Record is exported because its entity
+    // is exported from schema.ts — the one part of the four-piece new-table
+    // checklist the export never sees otherwise.
+    expect(actual).toContain('platform_sync_records.csv');
   });
 
   it('empty-table csv headers derive from schema columns', () => {

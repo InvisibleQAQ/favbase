@@ -3,6 +3,8 @@ import {
   fetchAndSyncFolders,
   BiliAuthError,
 } from '@/lib/bilibili/bili-sync-service';
+import { initDbProxy } from '@/lib/database';
+import { getPlatformLastSyncedAt } from '@/lib/database/collection-queries';
 import type { BiliFavoritesSyncProgress } from '@/lib/bilibili/bili-sync-service';
 import type { BiliFavFolder } from '@/lib/bilibili/types';
 import {
@@ -71,9 +73,24 @@ export function useBiliFavFolders(routeFolderId?: number): UseFavFoldersReturn {
           }
         },
       });
-      if (mountedRef.current) setLastSyncedAt(new Date());
     });
   }, []);
+
+  // "Last synced" = the latest successful Platform Sync in the record, so it
+  // survives a reload. The mount-time folder fetch below is not a Platform
+  // Sync and never moves it. Re-read when the sync job's generation moves
+  // (success only), including a daily auto-sync that finished elsewhere.
+  const syncGeneration = syncJob?.generation ?? 0;
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const syncedAt = await getPlatformLastSyncedAt(PLATFORM, await initDbProxy());
+      if (!cancelled) setLastSyncedAt(syncedAt);
+    })().catch((err) => console.error('[bilibili] last-synced load failed:', err));
+    return () => {
+      cancelled = true;
+    };
+  }, [syncGeneration]);
 
   useEffect(() => {
     let cancelled = false;

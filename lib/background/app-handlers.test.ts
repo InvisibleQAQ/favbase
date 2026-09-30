@@ -1,8 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // In-memory stub of WXT's storage.defineItem — the real one needs a browser
-// extension context (chrome.storage), which vitest lacks. Mirrors the stub in
-// lib/storage/x-last-sync.test.ts.
+// extension context (chrome.storage), which vitest lacks.
 vi.mock('wxt/utils/storage', () => {
   const store = new Map<string, unknown>();
   return {

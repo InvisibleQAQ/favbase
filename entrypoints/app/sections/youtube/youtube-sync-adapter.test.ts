@@ -2,10 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CooperativeCheckpoint } from '@/lib/collections';
 
+import type { PlatformSyncOutcome } from '../../hooks/platform-sync';
+
 const mocks = vi.hoisted(() => ({
   syncYoutubePlaylists: vi.fn(),
   getSettings: vi.fn(),
-  startCollectionProcessingJobs: vi.fn(),
+  runPlatformSync: vi.fn(),
 }));
 
 vi.mock('@/lib/youtube/youtube-sync-service', () => ({
@@ -13,36 +15,44 @@ vi.mock('@/lib/youtube/youtube-sync-service', () => ({
 }));
 // Real module runs storage.defineItem (chrome.storage) at load.
 vi.mock('@/lib/storage', () => ({ settingsStorage: { getValue: mocks.getSettings } }));
-// Real module pulls the embedding/tagging barrels (chrome.storage at load).
-vi.mock('../../hooks/collection-processing-jobs', () => ({
-  startCollectionProcessingJobs: mocks.startCollectionProcessingJobs,
-}));
+// The funnel (record + dispatch) has its own tests; here it is a passthrough
+// that runs the adapter's sync closure and keeps what it reported.
+vi.mock('../../hooks/platform-sync', () => ({ runPlatformSync: mocks.runPlatformSync }));
 
 import { runYoutubePlaylistsSync } from './youtube-sync-adapter';
 
 const control: CooperativeCheckpoint = { checkpoint: async () => undefined };
+let outcome: PlatformSyncOutcome | undefined;
 
 describe('youtube Sync Adapter (shared by manual page + daily auto-sync)', () => {
   beforeEach(() => {
+    outcome = undefined;
     mocks.getSettings
       .mockReset()
       .mockResolvedValue({ youtubeApiKey: 'key', youtubeChannel: '@chan' });
-    mocks.syncYoutubePlaylists.mockReset().mockResolvedValue({ newItemIds: [] });
-    mocks.startCollectionProcessingJobs.mockReset();
+    mocks.syncYoutubePlaylists
+      .mockReset()
+      .mockResolvedValue({ playlists: 0, entries: 0, inserted: 0, newItemIds: [] });
+    mocks.runPlatformSync
+      .mockReset()
+      .mockImplementation(async (_platform, _control, sync: () => Promise<PlatformSyncOutcome>) => {
+        outcome = await sync();
+      });
   });
 
-  it('is a silent no-op without complete config (no domain sync, no dispatch)', async () => {
+  it('is a silent no-op without complete config (never reaches the funnel)', async () => {
     mocks.getSettings.mockResolvedValue({ youtubeApiKey: 'key' });
 
     await runYoutubePlaylistsSync(() => undefined, control);
 
+    expect(mocks.runPlatformSync).not.toHaveBeenCalled();
     expect(mocks.syncYoutubePlaylists).not.toHaveBeenCalled();
-    expect(mocks.startCollectionProcessingJobs).not.toHaveBeenCalled();
   });
 
-  it('resolves the API key + channel from settings and passes the checkpoint through', async () => {
+  it('runs the domain sync inside the funnel with the API key + channel and the checkpoint', async () => {
     await runYoutubePlaylistsSync(() => undefined, control);
 
+    expect(mocks.runPlatformSync).toHaveBeenCalledWith('youtube', control, expect.any(Function));
     expect(mocks.syncYoutubePlaylists).toHaveBeenCalledWith(
       { apiKey: 'key', channel: '@chan' },
       expect.any(Function),
@@ -50,22 +60,16 @@ describe('youtube Sync Adapter (shared by manual page + daily auto-sync)', () =>
     );
   });
 
-  it('dispatches embed/tag processing with the newly persisted ids', async () => {
-    mocks.syncYoutubePlaylists.mockResolvedValue({ newItemIds: ['v1', 'v2'] });
+  it('reports membership entries, items inserted and the persisted ids to the funnel', async () => {
+    mocks.syncYoutubePlaylists.mockResolvedValue({
+      playlists: 2,
+      entries: 7,
+      inserted: 2,
+      newItemIds: ['v1', 'v2'],
+    });
 
     await runYoutubePlaylistsSync(() => undefined, control);
 
-    expect(mocks.startCollectionProcessingJobs).toHaveBeenCalledWith({
-      jobPlatform: 'youtube-playlists',
-      itemPlatform: 'youtube',
-      itemIds: ['v1', 'v2'],
-    });
-  });
-
-  it('does not dispatch processing when the sync fails', async () => {
-    mocks.syncYoutubePlaylists.mockRejectedValue(new Error('quota'));
-
-    await expect(runYoutubePlaylistsSync(() => undefined, control)).rejects.toThrow('quota');
-    expect(mocks.startCollectionProcessingJobs).not.toHaveBeenCalled();
+    expect(outcome).toEqual({ fetched: 7, inserted: 2, newItemIds: ['v1', 'v2'] });
   });
 });
