@@ -35,7 +35,7 @@ is **making them generate your TODO list instead of writing one yourself**.
 | Mechanism | What it catches | How you invoke it |
 | --- | --- | --- |
 | TypeScript exhaustive `Record<CollectionPlatform, T>` | Every registry that must gain a key. The error lands on the object literal, naming the missing property. | `pnpm compile` |
-| `tests/platform-completeness-contract.test.ts` | What types cannot see: a lazy import resolving to nothing, a page that renders no `sections/` view, a view that skips `useCollectionBreadcrumbs`, `main.tsx` naming a platform, a hand-written `jobPlatform`, `hooks/` importing `sections/`, a `childRoutes` or `hostPermissions` value that is computed instead of written out, an analytics axis absent from its own ranked list, a platform literal leaking into `collection-processing-policy.ts`, a `startCollectionProcessingJobs` call anywhere in `entrypoints/app/**` but its definition and the Platform Sync funnel (a separate case in the same file, listing `file:line`), a missing `lib/<platform>/` directory, and — for a platform whose `readiness` is `'credentials'` — a missing link in the credentials chain (§8): the Connections card file, the `SETTINGS_NAV` connections section, `derive<Pascal>Draft` / `save<Pascal>` in `useSettings`, the `configSavedAt` key. Reports **all** failures as one aggregated list. | `pnpm vitest run tests/platform-completeness-contract.test.ts` |
+| `tests/platform-completeness-contract.test.ts` | What types cannot see: a lazy import resolving to nothing, a page that renders no `sections/` view, a view that skips `useCollectionBreadcrumbs`, `main.tsx` naming a platform, a hand-written `jobPlatform`, `hooks/` importing `sections/`, a `childRoutes` or `hostPermissions` value that is computed instead of written out, an analytics axis absent from its own ranked list, platform knowledge leaking into a shared module (a separate case listing `file:line`: a quoted platform id, a literal-key read of `meta` / `platformMeta`, or a literal JSON-path key such as `->>'language'` in SQL text — anywhere in `lib/tagging/**`, `lib/embedding/**`, `lib/chat/**`, `lib/export/**`, `collection-analytics.ts`, `collection-processing-policy.ts` or `collections-query.ts`), a `startCollectionProcessingJobs` call anywhere in `entrypoints/app/**` but its definition and the Platform Sync funnel (a separate case in the same file, listing `file:line`), a missing `lib/<platform>/` directory, and — for a platform whose `readiness` is `'credentials'` — a missing link in the credentials chain (§8): the Connections card file, the `SETTINGS_NAV` connections section, `derive<Pascal>Draft` / `save<Pascal>` in `useSettings`, the `configSavedAt` key. Reports **all** failures as one aggregated list. | `pnpm vitest run tests/platform-completeness-contract.test.ts` |
 
 Five more guards fire with no wiring on your part. Three of them reconcile an
 artefact you still write by hand: the guard turns "silently absent" into a red
@@ -188,8 +188,8 @@ transcribe them into a side document that will rot.
 
 ## 6. Phase 3 — The registries
 
-The facts a platform used to declare one file at a time are now eleven fields
-across two **Platform Descriptors** (ADR 0004). Both are exhaustive
+The facts a platform used to declare one file at a time are now twelve fields
+across two **Platform Descriptors** (ADR 0004) — seven domain, five app. Both are exhaustive
 `Record<CollectionPlatform, …>`, so an undeclared platform is a compile error on
 the object literal that names the platform — and the whole point is that it
 lands there, in the file you are meant to edit, instead of in whatever consumer
@@ -212,7 +212,8 @@ fine, because the first rule keeps its own graph at one leaf.
 | `hostPermissions` | an explicit array literal of match patterns, in the order you want them in the manifest | `PLATFORM_HOST_PERMISSION_LIST`, spread into `wxt.config.ts` `host_permissions` |
 | `sortKey` | `{ source: 'publishedAt' }`, or `{ source: 'meta', field, format }` (§3) | `PLATFORM_SORT_KEYS`, re-exported from `platform-sort-keys.ts` |
 | `contentKind` | the English semantic id for what your Content stage actually produces — `transcript`, `readme`, `page-text`, `post-text`, `body-text`, `description`, or a new member of the union if yours is genuinely a different artefact | the `getProcessingCoverage` Knowledge Tool, which returns it as `content.kind` and derives its own description from the distinct set |
-| `dimensions` | `{ ranked, author, source }` — the ordered Collection Analytics facets, which one carries the **Creator** axis, and which one carries the **Source** membership (`source: null` when the platform has no Source) | the Dashboard composition and breakdown cards, read inline |
+| `descriptionField` | the `platform_meta` key holding an item description that your Content does **not** already carry — bilibili `'intro'` (the Content is the transcript), github `'description'` (the Content is the README) — or `null`. `null` is also right when the meta has a description key whose text the Content already holds: youtube's meta `description` is a truncated slice of its Content, so youtube is `null` | the "description" line of the tagging prompt (`tagPlatformItem`) |
+| `dimensions` | `{ ranked, author, source, meta }` — the ordered Collection Analytics facets, which one carries the **Creator** axis, which one carries the **Source** membership (`source: null` when the platform has no Source), and which one is read straight out of `platform_meta` (`meta: { kind, field }`, e.g. github `{ kind: 'language', field: 'language' }`; `null` when none) | the Dashboard composition and breakdown cards, read inline; `meta` drives Collection Analytics' generic meta-dimension query |
 
 Three of those fields have a cost you cannot see from the object literal, so all
 three are pinned in `lib/collections/platform-descriptor.test.ts`:
@@ -414,7 +415,7 @@ opt out of the hook; **do not** opt out of the scaffold or the registries.
 
 | Never | Enforced by |
 | --- | --- |
-| a platform literal or `platform_meta` field in `lib/collections/collection-processing-policy.ts` | completeness contract |
+| a quoted platform id, a literal-key `meta` / `platformMeta` read (`meta.k`, `meta['k']`, or a `{ k } = meta` pattern), or a literal JSON-path key in SQL text (`->`, `->>`, `#>`, `#>>`), in a shared module (`lib/tagging/**`, `lib/embedding/**`, `lib/chat/**`, `lib/export/**`, `collection-analytics.ts`, `collection-processing-policy.ts`, `collections-query.ts`) — put the fact in the domain descriptor and read it by variable | completeness contract (a separate case listing `file:line`). The check is name-based: a local that holds descriptor data must not be called `meta`, and an alias (`const m = row.platformMeta; m.k`) is not followed |
 | a route line naming a platform in `main.tsx` | completeness contract |
 | a hand-written `jobPlatform` in the auto-sync registry | completeness contract |
 | any `entrypoints/app/hooks/**` module importing `sections/` | completeness contract |

@@ -1,22 +1,21 @@
 import type { TaggedItem } from '@/lib/tagging';
-import type { BookmarkItem } from '@/lib/bookmarks/bookmarks-sync-service';
+import { narrowBookmarkMeta, type BookmarkItem } from '@/lib/bookmarks/bookmarks-sync-service';
 import { BookmarkCard } from './bookmark-card';
 
 /**
  * Map a platform-agnostic TaggedItem back to the BookmarkItem shape BookmarkCard
- * expects. platformMeta was written by bookmarks-sync-service with { domain,
- * dateAdded }; missing fields get safe defaults (defensive narrowing, mirroring
- * toGithubRepoItem). The click-through URL comes from originalUrl, never derived.
+ * expects. `platform_meta` narrowing is delegated to `narrowBookmarkMeta` — the
+ * same decoder the bookmarks query uses, so the tag grid and the folder grid
+ * show the same domain and date. The click-through URL comes from originalUrl,
+ * never derived.
  */
 function toBookmarkItem(item: TaggedItem): BookmarkItem {
-  const meta = item.platformMeta;
   return {
     id: item.itemId,
     normalizedUrl: item.platformItemId,
     title: item.title,
     url: item.originalUrl,
-    domain: typeof meta.domain === 'string' ? meta.domain : item.authorName,
-    dateAdded: typeof meta.dateAdded === 'number' ? meta.dateAdded : null,
+    ...narrowBookmarkMeta(item.platformMeta, item),
   };
 }
 

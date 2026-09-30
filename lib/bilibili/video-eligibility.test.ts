@@ -13,6 +13,7 @@ import {
   INVALID_VIDEO_ATTR,
   bilibiliDownstreamEligibleSql,
   isProcessableVideo,
+  narrowBiliVideoMeta,
 } from './video-eligibility';
 
 /**
@@ -20,6 +21,8 @@ import {
  * auto transcription) and the SQL predicate (shared Collection processing
  * policy) must agree on every attr value — a drift between them is exactly
  * the "one place updated, the other not" defect docs/20 高-4 describes.
+ * The in-memory side reads the stored meta through the real decoder, so its
+ * missing-`attr` default is held to the SQL predicate's too (docs/20 中-8).
  */
 const FIXTURE: ReadonlyArray<{ id: string; attr: number | undefined }> = [
   { id: 'attr-0', attr: 0 },
@@ -27,6 +30,11 @@ const FIXTURE: ReadonlyArray<{ id: string; attr: number | undefined }> = [
   { id: 'attr-9', attr: INVALID_VIDEO_ATTR },
   { id: 'attr-missing', attr: undefined },
 ];
+
+/** The platform_meta a fixture row is stored with — one object for both readers. */
+function metaOf(row: (typeof FIXTURE)[number]): Record<string, unknown> {
+  return row.attr === undefined ? {} : { attr: row.attr };
+}
 
 describe('isProcessableVideo', () => {
   it('rejects only the invalid attr', () => {
@@ -63,7 +71,7 @@ describe('bilibiliDownstreamEligibleSql parity (in-memory PGlite)', () => {
         authorName: 'Author',
         title: row.id,
         originalUrl: `https://example.test/${row.id}`,
-        platformMeta: row.attr === undefined ? {} : { attr: row.attr },
+        platformMeta: metaOf(row),
       })),
     );
 
@@ -73,8 +81,8 @@ describe('bilibiliDownstreamEligibleSql parity (in-memory PGlite)', () => {
       .where(bilibiliDownstreamEligibleSql())
       .orderBy(schema.items.platformItemId);
 
-    // Missing attr reads as 0 everywhere a card is rebuilt from platform_meta.
-    const expected = FIXTURE.filter((row) => isProcessableVideo({ attr: row.attr ?? 0 }))
+    // A card is rebuilt from platform_meta by the decoder, never by hand.
+    const expected = FIXTURE.filter((row) => isProcessableVideo(narrowBiliVideoMeta(metaOf(row))))
       .map((row) => row.id)
       .sort();
 

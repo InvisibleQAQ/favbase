@@ -2,7 +2,9 @@ import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { getDb, type FavbaseDb } from '@/lib/database';
 import { emitDomainEvent } from '@/lib/events';
 import type { CooperativeCheckpoint } from '@/lib/collections';
-import type { CollectionPlatform } from '@/lib/collections/platforms';
+import { isCollectionPlatform, type CollectionPlatform } from '@/lib/collections/platforms';
+// Leaf import, never the '@/lib/collections' barrel (docs/26 iron rule 4).
+import { PLATFORM_DESCRIPTORS } from '@/lib/collections/platform-descriptor';
 import { createCollectionProcessingPolicy } from '@/lib/collections/collection-processing-policy';
 import { items } from '@/lib/database/entities/items';
 import { itemContents } from '@/lib/database/entities/item-contents';
@@ -105,13 +107,21 @@ export async function tagPlatformItem(
     // Existing tags stay library-wide (no platform filter): the LLM should
     // reuse tag names across platforms, not fork per-platform duplicates.
     const existing = await getAllUsedTags(undefined, db);
-    const meta = item.platformMeta as Record<string, unknown>;
+    // Which meta key (if any) holds a description the Content does not already
+    // carry is a platform fact — the descriptor names it, this module never
+    // does (docs/32 Step 2).
+    const field = isCollectionPlatform(platform)
+      ? PLATFORM_DESCRIPTORS[platform].descriptionField
+      : null;
+    const description = field
+      ? (item.platformMeta as Record<string, unknown>)[field]
+      : undefined;
     const names = await d.generate(
       config,
       {
         title: item.title,
         author: item.authorName,
-        description: typeof meta.intro === 'string' && meta.intro ? meta.intro : undefined,
+        description: typeof description === 'string' && description ? description : undefined,
         content: contentRows[0]?.plainText,
       },
       existing.map((tag) => tag.name),

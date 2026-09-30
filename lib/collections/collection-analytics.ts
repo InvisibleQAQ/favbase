@@ -89,6 +89,45 @@ function groupRankedRows(
 }
 
 /**
+ * One platform's `dimensions.meta` facet: every non-blank JSON-string value of
+ * `platform_meta->field`, counted per value, `count desc, value asc`. Platform
+ * and key both come from the descriptor, so neither is written here.
+ *
+ * The key is a bound parameter, which is why the value is projected once in a
+ * subquery: `platform_meta->>$n` in SELECT, GROUP BY and ORDER BY would be
+ * three different parameters, and Postgres would reject them as three
+ * different expressions ("must appear in the GROUP BY clause").
+ */
+function metaDimensionRows(
+  db: FavbaseDb,
+  platform: CollectionPlatform,
+  field: string,
+): Promise<RankedRow[]> {
+  const values = db
+    .select({
+      platform: items.platform,
+      value: sql<string>`${items.platformMeta}->>${field}`.as('value'),
+    })
+    .from(items)
+    .where(
+      sql`${items.platform} = ${platform}
+        AND jsonb_typeof(${items.platformMeta}->${field}) = 'string'
+        AND btrim(${items.platformMeta}->>${field}) <> ''`,
+    )
+    .as('meta_values');
+  return db
+    .select({
+      platform: values.platform,
+      id: values.value,
+      label: values.value,
+      itemCount: sql<number>`count(*)::int`,
+    })
+    .from(values)
+    .groupBy(values.platform, values.value)
+    .orderBy(desc(sql`count(*)`), asc(values.value));
+}
+
+/**
  * Read the current local library as one cohesive analytics snapshot. All
  * metric semantics, platform completion and native-dimension interpretation
  * stay here so consumers render data instead of re-deriving it.
@@ -99,7 +138,7 @@ export async function getCollectionAnalytics(
   const registeredPlatforms = [...COLLECTION_PLATFORMS];
   const registeredItems = inArray(items.platform, registeredPlatforms);
 
-  const [platformRows, tagMetricRows, topTagRows, authorRows, sourceRows, languageRows] =
+  const [platformRows, tagMetricRows, topTagRows, authorRows, sourceRows, metaRows] =
     await Promise.all([
       db
         .select({
@@ -155,24 +194,12 @@ export async function getCollectionAnalytics(
         .where(sql`${registeredItems} AND ${sources.platform} = ${items.platform}`)
         .groupBy(items.platform, sources.id, sources.title)
         .orderBy(desc(sql`count(${itemSources.itemId})`), asc(sources.title), asc(sources.id)),
-      db
-        .select({
-          platform: items.platform,
-          id: sql<string>`${items.platformMeta}->>'language'`,
-          label: sql<string>`${items.platformMeta}->>'language'`,
-          itemCount: sql<number>`count(*)::int`,
-        })
-        .from(items)
-        .where(
-          sql`${items.platform} = 'github'
-            AND jsonb_typeof(${items.platformMeta}->'language') = 'string'
-            AND btrim(${items.platformMeta}->>'language') <> ''`,
-        )
-        .groupBy(items.platform, sql`${items.platformMeta}->>'language'`)
-        .orderBy(
-          desc(sql`count(*)`),
-          asc(sql`${items.platformMeta}->>'language'`),
-        ),
+      Promise.all(
+        COLLECTION_PLATFORMS.flatMap((platform) => {
+          const facet = PLATFORM_DESCRIPTORS[platform].dimensions.meta;
+          return facet ? [metaDimensionRows(db, platform, facet.field)] : [];
+        }),
+      ).then((rows) => rows.flat()),
     ]);
 
   const itemCountByPlatform = new Map<CollectionPlatform, number>();
@@ -188,7 +215,10 @@ export async function getCollectionAnalytics(
     sourceRows,
     (platform) => PLATFORM_DESCRIPTORS[platform].dimensions.source,
   );
-  const languageDimensions = groupRankedRows(languageRows, () => 'language');
+  const metaDimensions = groupRankedRows(
+    metaRows,
+    (platform) => PLATFORM_DESCRIPTORS[platform].dimensions.meta?.kind ?? null,
+  );
 
   const platforms = COLLECTION_PLATFORMS.map((platform) => {
     const itemCount = itemCountByPlatform.get(platform) ?? 0;
@@ -199,7 +229,7 @@ export async function getCollectionAnalytics(
       dimensions: PLATFORM_DESCRIPTORS[platform].dimensions.ranked.map((kind) => ({
         kind,
         entries:
-          languageDimensions.get(platform)?.get(kind) ??
+          metaDimensions.get(platform)?.get(kind) ??
           authorDimensions.get(platform)?.get(kind) ??
           sourceDimensions.get(platform)?.get(kind) ??
           [],

@@ -362,16 +362,20 @@ describe('platform completeness contract', () => {
 
     // The three analytics dimension tables are one `dimensions` object now, so
     // the pair that used to be impossible to cross-check is checkable: a Source
-    // (or Creator) axis the ranked list never renders is a dimension the
-    // Dashboard breakdown card silently leaves empty.
+    // (or Creator, or platform_meta) axis the ranked list never renders is a
+    // dimension the Dashboard breakdown card silently leaves empty — the query
+    // runs, the rows are grouped, and nothing ever asks for them.
     for (const platform of COLLECTION_PLATFORMS) {
-      const { ranked, author, source }: PlatformDimensions =
+      const { ranked, author, source, meta }: PlatformDimensions =
         PLATFORM_DESCRIPTORS[platform].dimensions;
       if (!ranked.includes(author)) {
         missing.push(`${platform}: author dimension '${author}' is absent from the ranked list`);
       }
       if (source !== null && !ranked.includes(source)) {
         missing.push(`${platform}: source dimension '${source}' is absent from the ranked list`);
+      }
+      if (meta !== null && !ranked.includes(meta.kind)) {
+        missing.push(`${platform}: meta dimension '${meta.kind}' is absent from the ranked list`);
       }
     }
 
@@ -542,21 +546,15 @@ describe('platform completeness contract', () => {
     }
 
     // Downstream eligibility is a platform fact: the shared processing policy
-    // composes an exhaustive per-platform registry (null = no exclusion) and
-    // never names a platform or a platform_meta field itself.
+    // composes an exhaustive per-platform registry (null = no exclusion). That
+    // the policy itself never names a platform or a platform_meta key is now
+    // one of the shared modules checked by the separate case below.
     collectRegistryCoverage(
       missing,
       'downstream eligibility predicate',
       'lib/collections/platform-eligibility.ts',
       'PLATFORM_DOWNSTREAM_ELIGIBILITY',
     );
-    const policy = sourceModule('lib/collections/collection-processing-policy.ts');
-    if (
-      new RegExp(`['"](${COLLECTION_PLATFORMS.join('|')})['"]`).test(policy.source)
-      || /platformMeta|->>/.test(policy.source)
-    ) {
-      missing.push('all: collection-processing-policy.ts encodes a platform rule');
-    }
 
     const envDirectories = new Set(PLATFORM_DIRS);
     for (const platform of COLLECTION_PLATFORMS) {
@@ -601,7 +599,146 @@ describe('platform completeness contract', () => {
         + offenders.map((item) => `- ${item}`).join('\n'),
     ).toEqual([]);
   });
+
+  it('keeps platform knowledge out of shared modules', () => {
+    // Shared modules serve every platform, so a platform rule written into one
+    // of them is invisible to the next platform that should have it — the
+    // tagging prompt read Bilibili's `intro` and nothing else, so a GitHub
+    // repository's description never reached it (docs/32 中-4). Platform facts
+    // are descriptor data (`lib/collections/platform-descriptor.ts`); a shared
+    // module reads them by variable, never by literal.
+    //
+    // Read by AST, not by source text: `import.meta.env` (a `MetaProperty`) and
+    // a comment naming `bilibili` in backticks are not offences, and only the
+    // syntax tree tells them apart from `meta.intro` and `'github'`.
+    const offenders = new Set<string>();
+    for (const file of sharedModules()) {
+      const { ast } = sourceModule(file);
+      const report = (position: number, reason: string) => {
+        const { line } = ast.getLineAndCharacterOfPosition(position);
+        offenders.add(`${file}:${line + 1}: ${reason}`);
+      };
+      ast.forEachChild(function visit(node) {
+        // 1. A quoted platform id: a string literal that *is* one, or one
+        //    quoted inside SQL text (`= 'github'` sits in a template part).
+        const moduleSpecifier =
+          ts.isImportDeclaration(node.parent) || ts.isExportDeclaration(node.parent);
+        if (ts.isStringLiteral(node) && PLATFORM_IDS.has(node.text)) {
+          report(node.getStart(ast), `platform literal '${node.text}'`);
+        } else if (isLiteralText(node) && !moduleSpecifier) {
+          // `getText` includes the leading quote / backtick / `}`, so a match
+          // offset lands on the line the match is really on.
+          const text = node.getText(ast);
+          for (const match of text.matchAll(QUOTED_PLATFORM)) {
+            report(node.getStart(ast) + match.index, `platform literal '${match[2]}' in SQL text`);
+          }
+          // 3. A JSON path with a literal key (`->`, `->>`, `#>`, `#>>`).
+          //    `->>${field}` ends the text part at `->>`, so a parameterized
+          //    key never matches.
+          for (const match of text.matchAll(LITERAL_JSON_KEY)) {
+            report(node.getStart(ast) + match.index, `literal JSON key ${match[0]}`);
+          }
+        }
+        // 2. A literal key read off platform meta. Whole-column references
+        //    (`items.platformMeta`) name `platformMeta` as the *property*, not
+        //    the object, and a variable subscript (`meta[field]`) is the fix.
+        if (ts.isPropertyAccessExpression(node) && isMetaObject(node.expression)) {
+          report(node.getStart(ast), `literal meta key ${node.getText(ast)}`);
+        }
+        if (
+          ts.isElementAccessExpression(node)
+          && isMetaObject(node.expression)
+          && ts.isStringLiteralLike(node.argumentExpression)
+        ) {
+          report(node.getStart(ast), `literal meta key ${node.getText(ast)}`);
+        }
+        // `const { intro } = meta` is `meta.intro` spelled as a pattern. A
+        // rest element or a computed key (`{ [field]: value }`) names no key.
+        if (
+          ts.isVariableDeclaration(node)
+          && ts.isObjectBindingPattern(node.name)
+          && node.initializer
+          && isMetaObject(node.initializer)
+          && node.name.elements.some(
+            (element) =>
+              !element.dotDotDotToken
+              && !(element.propertyName && ts.isComputedPropertyName(element.propertyName)),
+          )
+        ) {
+          report(node.getStart(ast), `literal meta key ${node.getText(ast)}`);
+        }
+        node.forEachChild(visit);
+      });
+    }
+
+    expect(
+      [...offenders],
+      `Platform knowledge in a shared module (move it into the Platform Descriptor):\n`
+        + [...offenders].map((item) => `- ${item}`).join('\n')
+        + '\n(The meta check is name-based: a local called `meta` / `platformMeta`, or a'
+        + ' `.platformMeta` column, is read as platform_meta. If a flagged `meta` local'
+        + ' holds descriptor data instead, rename it.)',
+    ).toEqual([]);
+  });
 });
+
+const PLATFORM_IDS = new Set<string>(COLLECTION_PLATFORMS);
+const QUOTED_PLATFORM = new RegExp(`(['"])(${COLLECTION_PLATFORMS.join('|')})\\1`, 'g');
+const LITERAL_JSON_KEY = /(?:->|#>)>?\s*'[^']*'/g;
+
+/**
+ * Modules every platform flows through. Whole directories are listed so a new
+ * file in one is checked without editing this table. `lib/collections/**` is
+ * deliberately *not* one of them: `platforms.ts`, `platform-descriptor.ts` and
+ * `platform-eligibility.ts` are the registries, and naming platforms is their
+ * job. `collections-query.ts` is the counter-example kept in on purpose — it
+ * reads meta by a descriptor-supplied key (`->>${sortKey.field}`), which is the
+ * shape this rule asks for, and it has to stay green.
+ */
+const SHARED_MODULE_DIRECTORIES = ['lib/tagging', 'lib/embedding', 'lib/chat', 'lib/export'];
+const SHARED_MODULE_FILES = [
+  'lib/collections/collection-analytics.ts',
+  'lib/collections/collection-processing-policy.ts',
+  'lib/collections/collections-query.ts',
+];
+
+function sharedModules(): string[] {
+  const walk = (directory: string): string[] =>
+    readdirSync(path.join(ROOT, directory), { withFileTypes: true }).flatMap((entry) => {
+      const relative = `${directory}/${entry.name}`;
+      if (entry.isDirectory()) return walk(relative);
+      return /\.ts$/.test(entry.name) && !/\.test\.ts$/.test(entry.name) ? [relative] : [];
+    });
+  return [...SHARED_MODULE_DIRECTORIES.flatMap(walk), ...SHARED_MODULE_FILES];
+}
+
+function isLiteralText(node: ts.Node): boolean {
+  return (
+    ts.isStringLiteral(node)
+    || ts.isNoSubstitutionTemplateLiteral(node)
+    || ts.isTemplateHead(node)
+    || ts.isTemplateMiddle(node)
+    || ts.isTemplateTail(node)
+  );
+}
+
+/**
+ * `meta` / `platformMeta` as a variable, or `<row>.platformMeta` as a column —
+ * also behind the `(meta ?? {})` fallback this codebase narrows with. By name
+ * only: an alias (`const m = row.platformMeta; m.intro`) is not followed.
+ */
+function isMetaObject(expression: ts.Expression): boolean {
+  const target = unwrap(expression);
+  if (
+    ts.isBinaryExpression(target)
+    && (target.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken
+      || target.operatorToken.kind === ts.SyntaxKind.BarBarToken)
+  ) {
+    return isMetaObject(target.left);
+  }
+  if (ts.isIdentifier(target)) return /^(meta|platformMeta)$/.test(target.text);
+  return ts.isPropertyAccessExpression(target) && target.name.text === 'platformMeta';
+}
 
 /** The dispatcher's definition and the Platform Sync funnel — nothing else. */
 const DISPATCH_OWNERS = new Set([

@@ -1,6 +1,6 @@
 # 32 跨平台流程统一度审计与分步整改（2026-09-29）
 
-> 状态：**审计完成；D1、D2 已决（2026-09-29，§5.1、§5.2）；Step 1 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 1 落地记录）；Step 2–9 均未实施**。执行任一 Step 前先读 §2 否决清单与 §5 对应决策；一次对话只做一个 Step。
+> 状态：**审计完成；D1、D2 已决（2026-09-29，§5.1、§5.2）；Step 1 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 1 落地记录）；D6 已决（用户 2026-09-30，按推荐）；Step 2 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 2 落地记录）；Step 3–9 均未实施**。执行任一 Step 前先读 §2 否决清单与 §5 对应决策；一次对话只做一个 Step。
 >
 > 起因：用户观察「接入新平台时，数据处理、备份、展示都高度统一，真正不同的只有数据获取和风控」，要求找出仍未统一的流程并给出分步整改。
 >
@@ -236,7 +236,7 @@
 | D3 | 数据 hook 的字段改名层 | **删除**：view 直接消费 `useCollectionLibrary` 的通用字段，平台 hook 只留真正平台特有的部分（凭据门、X 冷却）；兑现 docs/15:55 的「~40 行」目标 | 保留：零 churn，但每个新平台继续手写约 25 行改名 |
 | D4 | B站视频网格走远端 API 分页（`use-bili-fav-videos.ts:41` → `bili-sync-service.ts:85-101`） | **维持** | 改本地优先，需要重开 `platform-onboarding.md:401-405` 与 `sections/bilibili/CLAUDE.md:28-29` 两条决定。现状的真实张力：<br>① 同一平台有两条展示路径——B站页走远端，聚合页 / 标签页 / Chat 读本地；<br>② 翻页、换排序、搜索都直接打 `x/v3/fav/resource/list`，这正是同步 runner 因 412 事故限速到 7–10 s / 页的同一端点，而浏览路径没有任何节流。<br>浏览路径是否触发过 412 为 [UNKNOWN]；**观察到第一次就是重开的触发条件** |
 | D5 | 正文来源统一到什么程度 | **只收契约与已重复零件** | 统一进度面板：两个面板的差异来自触发时机、状态位置、冲突策略三处本质不同，强行合并会引入模式分支 |
-| D6 | 共享模块平台特例怎么消 | **domain descriptor 加纯数据字段**（照 `sortKey` 的 `{ source:'meta', field }` 形状） | decoder 暴露函数：tagging / analytics 要 import 六个平台的 decoder，重新引入平台扇入 |
+| D6 | 共享模块平台特例怎么消 | **已决（用户 2026-09-30，按推荐）：domain descriptor 加纯数据字段**（照 `sortKey` 的 `{ source:'meta', field }` 形状；落地见 §6 Step 2 落地记录） | decoder 暴露函数：tagging / analytics 要 import 六个平台的 decoder，重新引入平台扇入 |
 
 ### 5.1 D1 决策记录（用户 2026-09-29 决定：按推荐）
 
@@ -419,6 +419,110 @@
 - **回滚**：revert。
 - **判据**：守卫对今天的 `tagging-service.ts:114` 与 `collection-analytics.ts:167` **先红**，改完转绿；bookmarks 解码全仓只剩一份。
 
+#### Step 2 落地记录（2026-09-30）
+
+代码与单测已落地；上面「验证」两项（Dashboard 的 GitHub 语言数值、给无 README 的 star 仓库重新打标）需要浏览器，**待人工**。判据成立：守卫先红，且红的位置比判据写的更细（见下）；改完转绿。bookmarks 的 meta 收窄全仓只剩 `narrowBookmarkMeta` 一份，B站只剩 `narrowBiliVideoMeta` 一份。两个 tagged card 不再内联 `typeof meta.*`。
+
+**落在哪**：
+
+- **descriptor 从六字段变成七字段**（`lib/collections/platform-descriptor.ts`）：
+  - 新增 `descriptionField: string | null`：bilibili `'intro'`，github `'description'`，其余四个平台 `null`。youtube 那条带注释，说明它的 meta 有 `description` key，但那只是 Content 的截断片段。
+  - `PlatformDimensions` 新增 `meta: { kind, field } | null`：github 是 `{ kind: 'language', field: 'language' }`，其余 `null`。
+  - 两条铁律（只值导入 `./platforms`、不进 barrel）不变，`platform-descriptor.test.ts` 照绿。
+- **tagging**：`tagPlatformItem` 用 `isCollectionPlatform` 判定平台，再按 `PLATFORM_DESCRIPTORS[platform].descriptionField` 读简介。签名仍是 `string`，未注册平台视为没有简介。
+- **analytics**：新函数 `metaDimensionRows(db, platform, field)`，对每个 `dimensions.meta !== null` 的平台跑一次，结果经 `Promise.all(...).then(flat)` 作为原 `Promise.all` 的第六项。
+  - 内层子查询只投影一次 `platform` + `value`（`platform_meta->>${field}`），类型和非空过滤放在 WHERE。
+  - 外层按 `(platform, value)` 分组，排序为 `count desc, value asc`。
+  - `groupRankedRows` 的维度改读 `dimensions.meta?.kind`；查找链里的 `languageDimensions` 改名 `metaDimensions`。
+- **bookmarks**：`bookmarks-sync-service.ts` 导出 `narrowBookmarkMeta(meta, { authorName, publishedAt })`，私有的 `toBookmarkItem` 与 `tagged-bookmark-card.tsx` 都展开它的结果。
+- **bilibili**：
+  - `video-eligibility.ts` 导出 `BiliItemMeta`（`Pick<BiliFavVideo, …七个字段>`）和 `narrowBiliVideoMeta`。
+  - `videos-sync.ts` 的写入字面量加 `satisfies BiliItemMeta`。
+  - `tagged-video-card.tsx` 展开 decoder 的结果，再补 `id`、`title`、`bvid`、`upper` 四个信封字段。
+- **守卫**：`tests/platform-completeness-contract.test.ts` 新增独立用例「keeps platform knowledge out of shared modules」。
+  - 扫描范围：`lib/{tagging,embedding,chat,export}/**` 的非测试 `.ts`，加上 `collection-analytics.ts`、`collection-processing-policy.ts`、`collections-query.ts`。
+  - 聚合用例里原来只查 policy 一个文件的正则删除。
+  - 维度检查多了一条：`meta.kind` 必须在 `ranked` 里。
+
+**先红后绿**：
+
+- **共享模块守卫**：在改 descriptor / tagging / analytics 之前跑，红的恰好是下面八条，没有别的文件，也没有别的行。本段的行号都是改动前的，今天打开文件对不上。
+  - 没有红的位置：tagging 的 `platformMeta` 整列透传（`:91,240,276`）、`tagging-service.ts:108` 的 `item.platformMeta`、`collections-query.ts:60` 的 `->>${sortKey.field}`、chat 注释里的 `` `bilibili` ``、`lib/embedding/config.ts` 的 `import.meta.env`。
+  - 红态原样：
+    ```
+    - lib/tagging/tagging-service.ts:114: literal meta key meta.intro
+    - lib/collections/collection-analytics.ts:161: literal JSON key ->>'language'
+    - lib/collections/collection-analytics.ts:162: literal JSON key ->>'language'
+    - lib/collections/collection-analytics.ts:167: platform literal 'github' in SQL text
+    - lib/collections/collection-analytics.ts:168: literal JSON key ->'language'
+    - lib/collections/collection-analytics.ts:169: literal JSON key ->>'language'
+    - lib/collections/collection-analytics.ts:171: literal JSON key ->>'language'
+    - lib/collections/collection-analytics.ts:174: literal JSON key ->>'language'
+    ```
+- **实现自己的第一次红**：改完 analytics 后，守卫报了 `collection-analytics.ts:200: literal meta key meta.field`，来源是装 descriptor `dimensions.meta` 的局部变量 `meta`。守卫按名字认 meta，所以变量改名为 `facet`，没有放宽规则。这条限制已写进 spec §11 和 `lib/collections/CLAUDE.md`。
+- **维度检查证伪（T2）**：把 github 的 `meta.kind` 临时改成合法但不在 `ranked` 里的 `'domain'`，聚合用例红，且只有一条：`github: meta dimension 'domain' is absent from the ranked list`。改回后转绿。
+- **守卫探针**：临时建 `lib/export/zz-guard-probe.ts`，跑一次后删除。
+  - 命中五条：`meta['intro']`、`row.platformMeta.language`、裸 `'x'`、模板文本里的 `"zhihu"`、`->>'k'`。
+  - 放过四条：`row.platformMeta` 整列、`meta[field]`、`import.meta.env`、`` `${field}->>${field}` ``。
+- **trellis-check 复核（2026-09-30）**：
+  - 独立复现了先红：只把 `tagging-service.ts` 与 `collection-analytics.ts` 换回 HEAD 版再跑守卫，红的正是上面八条，恢复后转绿。T2（`kind: 'domain'`）与 T3（1 failed | 32 passed）也各复现一次。
+  - 守卫补了三处漏网，改后探针全部命中：
+    - 解构读 key：`const { intro } = meta`、`const { language } = row.platformMeta as …`。rest 元素和计算 key（`{ [field]: v }`）不算，因为它们没有写出 key 名。改之前先用探针证实漏过。
+    - `#>` / `#>>` 路径运算符：`#>> '{language}'`。改之前先用探针证实漏过。
+    - `??` / `||` 兜底之后的读取：`(row.platformMeta ?? {}).language`。本仓库的 decoder 就用 `(meta ?? {})` 兜底。这一处没有先跑探针：`unwrap` 不剥 `??`，从代码就能看出它会漏。
+  - 反例探针照旧放过：`const { platformMeta } = row`、`{ ...rest } = meta`、`{ [field]: v } = meta`、`#>>${field}`。
+  - 扩展后改动前的代码仍然恰好红那八条。
+  - 守卫的失败信息补了一句：它按名字认 meta，如果被点名的 `meta` 局部变量装的是 descriptor 数据，就改名。原信息只说「移进 descriptor」，这正是 `facet` 那次误报时的错误建议。
+  - **仍然是已知缺口，不修**：
+    - 别名不追踪，例如 `const m = row.platformMeta; m.intro`。那要做数据流分析，spec §11 已写明守卫按名字认 meta。
+    - 平台 id `x` 只有一个字母，扫描范围里任何 `'x'` 字符串字面量都会被当成平台字面量。今天是绿的。
+- **T3**：只把 `tagging-service.ts` stash 回旧版再跑 `tagging-service.test.ts`，结果是 1 failed | 32 passed，红的恰好是新增的 GitHub description 用例。youtube 与空串 / 非字符串两例在旧代码上也绿：它们锁的是新语义，不是在证明旧 bug。
+
+**默认决定**（PRD 已定，用户未逐条过目）：
+
+- **D-a** 字段名用 `descriptionField`，不用 `description`：youtube 的 meta 有同名 key，而这里它的值是 `null`。
+- **D-b** `dimensions.meta` 只做单格 `{ kind, field } | null`，不做数组（YAGNI，今天只有 github 用）。
+- **D-c** tagging 签名不收窄：`string` 一路穿过 `CollectionProcessingItemDeps.tag`。平台判定照 `collection-processing-policy.ts` 的先例用 `isCollectionPlatform`。
+- **D-d** B站 decoder 放在 `video-eligibility.ts`（docs/20:410）。parity 测试让内存侧经 decoder 读同一份 meta，decoder 的缺失 `attr` 默认值于是也被 SQL 谓词锁住。
+- **D-e** `BookmarkItemMeta` 不导出，只导出 `narrowBookmarkMeta`。fallback 统一为 `publishedAt`，也就是 lib 版原来的行为。
+- **D-f** 守卫是独立 `it`，按 AST 扫描、逐条列 `file:line: reason`。扫描清单是本节列表加原 policy 文件，再加 `collections-query.ts` 作为合法反例。`lib/collections/**` 不整目录扫描，因为那里的注册表写平台字面量是本职。
+- **D-g** analytics 用子查询处理参数化 key，没有用位置式 GROUP BY：`id` 与 `label` 投影的是同一个表达式，位置式要写 `1, 2, 3`，更难读。
+- **D-h** 有 meta 维度的平台各跑一条查询再拼接，不合成一条 CASE。今天只有 github 一个，一条 CASE 的收益为零。
+- **D-i** `narrowBiliVideoMeta` 的缺省值写在函数体内，不提成模块级常量：`lib/<platform>/` 下的 SCREAMING_CASE 常量归 `platform-env-constants-guard` 管，而这些缺省值不是可调参数。
+
+**与 PRD 的偏离**：
+
+1. **policy 文件被管得比以前窄**。原检查是 `/platformMeta|->>/` 正则，任何 `platformMeta` 字样和任何 `->>` 都算违规。新规则按 PRD 放过整列引用（`items.platformMeta`）和参数化 key（`->>${…}`）。policy 文件两种规则下都干净，今天没有差别。
+2. **tagging 测试的 `seedItem` 多了一个可选参数**：第三参数 `platformMeta`，默认值就是原来写死的 `{ intro: 'intro text' }`。bilibili 的「title/author/intro」用例一行未改；改的是 helper，不是用例。
+3. **类别 1 也扫普通字符串字面量里的引号平台 id**，不只扫模板文本；同时跳过 import / export 的模块路径。PRD 只点了模板文本；这里覆盖 `sql.raw("… = 'github'")` 这类写法。
+4. **spec §6 开头的字段总数改成「twelve fields — seven domain, five app」**。PRD 只说「字段数凡是写明的地方都要改」，这是 spec 里 §6.1 表之外唯一写明的总数。
+5. **根 `CLAUDE.md` 的 `lib/collections/CLAUDE.md` 索引行原本就过期**：它写「五字段」，漏了 `contentKind`。这次一并改成七字段并列全字段名。docs/26 条目里的「领域五字段」是 docs/26 落地时的历史事实，没有改。
+
+**行为变化与验证备注**：
+
+- **打标**：
+  - GitHub 条目的 prompt 现在带上仓库 description，没有 README 的仓库因此不再只剩标题和 owner。
+  - B站不变。
+  - x / zhihu / youtube / bookmarks 的写侧从不写 `intro` key，这四个平台原来就没有简介，现在也没有，不变。
+- **tagged bookmark card**：`dateAdded` 的回退从 `null` 改成 `publishedAt`，与书签页查询一致。今天不可见：写侧总是写数字（`bookmarks-api.ts:144` 缺失时写 `0`），两条回退都走不到。
+- **tagged video card**：`cnt_info` 从不检查的 `as` 强转改成逐字段收窄，只在 meta 形状错误时有差别。
+- **analytics**：快照不变，`collection-analytics.test.ts` 一行未改就全绿，包括「ignores malformed GitHub language metadata」和排名、并列、截断各例。`->${field}` 里的未知类型参数解析成 `jsonb -> text`，不需要 `::text`。证据是「ignores malformed GitHub language metadata」这一例：它走的正是 `jsonb_typeof(… -> field)`。`collections-query.ts:60` 只是 `->>` 的先例，证明不了 `->` 也这样解析。
+- **manifest**：`pnpm build` 前后的 `.output/chrome-mv3/manifest.json` **逐字节相同**。基线是在改动前从干净 HEAD 构建的。
+  - 这是实施子 agent 的报告，trellis-check 没有重建 HEAD 基线。
+  - check 核对的是两件事：
+    - diff 里 manifest 的唯一输入是 descriptor，而它的 `hostPermissions` 一行没动；
+    - 重新 build 后，`host_permissions` 的平台段与 descriptor 顺序一致。
+- **SW 体积**：background bundle 检查照过，13 个模块，946 589 → 947 185 字节（+596）。descriptor 在 SW 图里，新字段是纯数据。
+- **测试**：
+  - 聚焦的 32 个测试文件共 202 例绿；
+  - `pnpm compile` 绿；
+  - `pnpm test` 全量绿：主仓库 204 个文件 1619 例，`packages/favbase` 15 个文件 263 例；
+  - `pnpm build` 绿。
+  - trellis-check 扩展守卫后重跑：
+    - `pnpm compile` 绿；
+    - `pnpm test` 的计数与上面相同（主仓库 204 / 1619，`packages/favbase` 15 / 263）；
+    - `pnpm build` 的 bundle-contract 行是 `13 modules / 947185 bytes`。
+
 ### Step 3 风控机制层（中-1，并入低-3 的 X filter）
 
 - **目标**：重试循环与响应读取只有一份实现；数值与语义留在平台。
@@ -537,7 +641,7 @@ lib 侧：平台 API 文件的重试 / 响应读取约减 30–40 行（Step 3�
 | Step | `.trellis/spec/frontend/platform-onboarding.md` | `tests/platform-completeness-contract.test.ts` 等守卫 |
 |---|---|---|
 | 1 | §10 强制清单加「同步收尾 funnel」；adapter 不再手写 `startCollectionProcessingJobs`（已落地 2026-09-30：§4.3、§7.2、§10、§11 与 §2 守卫描述） | `entrypoints/app/**` 非测试模块里，`startCollectionProcessingJobs` 标识符只许出现在定义处与 funnel（AST 扫描，独立用例，失败列 `file:line`） |
-| 2 | §6.1 domain descriptor 六字段 → 七字段（新增简介字段；`dimensions` 内加 meta 维度格） | 共享模块禁平台字面量 / 字面 meta key 从一个文件扩成清单 |
+| 2 | §6.1 domain descriptor 六字段 → 七字段（新增简介字段；`dimensions` 内加 meta 维度格）（已落地 2026-09-30：§6 字段数、§6.1 表 `descriptionField` 行与 `dimensions` 行、§2 守卫描述、§11 禁项行） | 共享模块禁平台字面量 / 字面 meta key 从一个文件扩成清单（独立用例，AST 扫描，失败列 `file:line`）；`dimensions.meta.kind` 必须在 `ranked` 里 |
 | 3 | 风控一节说明「机制在 `lib/http/`，数值与语义在平台」 | `lib/<platform>/` 禁 `setTimeout` 等待 |
 | 4 | 错误类必须继承 `sync-errors.ts` 基类 | 平台错误类继承断言；`lib-import-smoke` 纳入新 leaf |
 | 5 | 新增「延迟正文」一节 | `sections/**` 禁字面 job 命名空间 |

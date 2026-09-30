@@ -368,6 +368,27 @@ function readPath(meta: unknown): string {
   return typeof path === 'string' ? path : '';
 }
 
+/**
+ * Defensive narrowing of the `platform_meta` bookmarks-sync-service writes
+ * (`BookmarkItemMeta`) — the SINGLE source of truth shared by the query mapRow
+ * here and the section tagged card adapter, so the two read paths cannot drift
+ * (they had: the card used to fall back to `null` for `dateAdded`, the query to
+ * `publishedAt`). A missing / mistyped field falls back to the row's own
+ * columns: `domain` to the author name (which sync writes as the domain),
+ * `dateAdded` to `publishedAt` (which sync writes from the same timestamp).
+ */
+export function narrowBookmarkMeta(
+  meta: unknown,
+  fallback: { authorName: string; publishedAt: Date | null },
+): Pick<BookmarkItem, 'domain' | 'dateAdded'> {
+  const m = (meta ?? {}) as Partial<Record<keyof BookmarkItemMeta, unknown>>;
+  return {
+    domain: typeof m.domain === 'string' ? m.domain : fallback.authorName,
+    dateAdded:
+      typeof m.dateAdded === 'number' ? m.dateAdded : (fallback.publishedAt?.getTime() ?? null),
+  };
+}
+
 function toBookmarkItem(row: {
   id: string;
   platformItemId: string;
@@ -377,13 +398,11 @@ function toBookmarkItem(row: {
   publishedAt: Date | null;
   platformMeta: unknown;
 }): BookmarkItem {
-  const meta = (row.platformMeta ?? {}) as Partial<BookmarkItemMeta>;
   return {
     id: row.id,
     normalizedUrl: row.platformItemId,
     title: row.title,
     url: row.originalUrl,
-    domain: typeof meta.domain === 'string' ? meta.domain : row.authorName,
-    dateAdded: typeof meta.dateAdded === 'number' ? meta.dateAdded : (row.publishedAt?.getTime() ?? null),
+    ...narrowBookmarkMeta(row.platformMeta, row),
   };
 }

@@ -1,11 +1,17 @@
 /**
  * Domain-side Platform Descriptor: the per-platform facts that are pure data
  * and belong to no single runtime — background-job namespace, welcome readiness
- * shape, what the Content stage produces, build-time host permissions, native
- * sort key, Collection Analytics dimensions. Six registries a new platform used
- * to declare one at a time are one exhaustive `Record` here, so a missing
+ * shape, what the Content stage produces, which `platform_meta` key holds a
+ * description the Content does not already carry, build-time host permissions,
+ * native sort key, Collection Analytics dimensions. Registries a new platform
+ * used to declare one at a time are one exhaustive `Record` here, so a missing
  * platform is a compile error on this object literal that names the platform
  * (docs/26 Step 2).
+ *
+ * It is also how shared modules stay free of platform rules: tagging and
+ * Collection Analytics read a platform's meta through `descriptionField` and
+ * `dimensions.meta` instead of naming the platform or the key themselves
+ * (docs/32 Step 2; guarded by `tests/platform-completeness-contract.test.ts`).
  *
  * The UI half (`title` / `icon` / `palette` / `hint` / `childRoutes`) lives in
  * `entrypoints/app/collection-platform-registry.ts`: its types (`LocaleKeys`,
@@ -50,11 +56,21 @@ export type PlatformSortKey =
  * Creator axis and the Source membership. `source: null` means the platform has
  * no Source at all — an explicit null rather than an absent key, so "declared a
  * Source dimension the breakdown card never fills" stops being expressible.
+ *
+ * `meta` is the one facet read straight out of `platform_meta`: the string
+ * field `field` of every item, counted as dimension `kind` (GitHub's repository
+ * language). `null` when the platform has none. A single slot rather than a
+ * list — one platform uses it today. Like `author` and `source`, `kind` must be
+ * a member of `ranked` (checked by the completeness contract).
  */
 export interface PlatformDimensions {
   readonly ranked: readonly CollectionAnalyticsDimensionKind[];
   readonly author: CollectionAnalyticsDimensionKind;
   readonly source: CollectionAnalyticsDimensionKind | null;
+  readonly meta: {
+    readonly kind: CollectionAnalyticsDimensionKind;
+    readonly field: string;
+  } | null;
 }
 
 /**
@@ -81,6 +97,15 @@ export interface PlatformDescriptor {
   readonly jobPlatform: string;
   readonly readiness: PlatformReadiness;
   readonly contentKind: PlatformContentKind;
+  /**
+   * The `platform_meta` key holding the item's description, when that text is
+   * NOT already part of the platform's Content — the tagging prompt feeds it
+   * next to the Content, so a key whose text the Content already carries would
+   * only repeat it. `null` when there is no such description. Deliberately not
+   * called `description`: YouTube's meta has a key by that name, and its value
+   * here is `null`.
+   */
+  readonly descriptionField: string | null;
   /** Manifest `host_permissions` this platform contributes, in order. */
   readonly hostPermissions: readonly string[];
   readonly sortKey: PlatformSortKey;
@@ -93,6 +118,8 @@ export const PLATFORM_DESCRIPTORS = {
     readiness: 'login',
     // Subtitles when the video has them, ASR transcription otherwise.
     contentKind: 'transcript',
+    // The uploader's video description; the Content is the transcript.
+    descriptionField: 'intro',
     hostPermissions: [
       'https://*.bilibili.com/*',
       'https://api.bilibili.com/*',
@@ -105,52 +132,79 @@ export const PLATFORM_DESCRIPTORS = {
       ranked: ['uploader', 'favoriteFolder'],
       author: 'uploader',
       source: 'favoriteFolder',
+      meta: null,
     },
   },
   github: {
     jobPlatform: 'github-stars',
     readiness: 'credentials',
     contentKind: 'readme',
+    // The repository description; the README is the Content.
+    descriptionField: 'description',
     hostPermissions: ['https://api.github.com/*'],
     sortKey: { source: 'meta', field: 'starredAt', format: 'iso8601' },
-    dimensions: { ranked: ['language', 'repositoryOwner'], author: 'repositoryOwner', source: null },
+    dimensions: {
+      ranked: ['language', 'repositoryOwner'],
+      author: 'repositoryOwner',
+      source: null,
+      meta: { kind: 'language', field: 'language' },
+    },
   },
   bookmarks: {
     jobPlatform: 'bookmarks',
     readiness: 'local',
     contentKind: 'page-text',
+    descriptionField: null,
     // Bookmark content extraction deliberately needs broad access and sends credentials:'omit'.
     hostPermissions: ['<all_urls>'],
     sortKey: { source: 'publishedAt' },
-    dimensions: { ranked: ['domain', 'folder'], author: 'domain', source: 'folder' },
+    dimensions: { ranked: ['domain', 'folder'], author: 'domain', source: 'folder', meta: null },
   },
   x: {
     jobPlatform: 'x-bookmarks',
     readiness: 'login',
     contentKind: 'post-text',
+    // The post text is the Content; there is no separate description.
+    descriptionField: null,
     // X auth headers are captured from the logged-in web client's own requests.
     hostPermissions: ['*://x.com/*'],
     sortKey: { source: 'publishedAt' },
-    dimensions: { ranked: ['author'], author: 'author', source: null },
+    dimensions: { ranked: ['author'], author: 'author', source: null, meta: null },
   },
   zhihu: {
     jobPlatform: 'zhihu-favorites',
     readiness: 'login',
     // Answers, articles, videos and pins all normalize to one Markdown body.
     contentKind: 'body-text',
+    // Its meta `excerpt` is a snippet of the body, and the body is the Content.
+    descriptionField: null,
     // Zhihu uses extension-context fetch with credentials:'include'.
     hostPermissions: ['https://www.zhihu.com/*', 'https://api.zhihu.com/*'],
     sortKey: { source: 'publishedAt' },
-    dimensions: { ranked: ['author', 'collection'], author: 'author', source: 'collection' },
+    dimensions: {
+      ranked: ['author', 'collection'],
+      author: 'author',
+      source: 'collection',
+      meta: null,
+    },
   },
   youtube: {
     jobPlatform: 'youtube-playlists',
     readiness: 'credentials',
     contentKind: 'description',
+    // NOT an omission: the meta does carry a `description` key, but it is a
+    // truncated snippet for the card, and the full description already IS the
+    // Content (lib/youtube/youtube-sync-service.ts). Feeding it would repeat it.
+    descriptionField: null,
     // YouTube public playlists use the official Data API with an API key.
     hostPermissions: ['https://www.googleapis.com/*'],
     sortKey: { source: 'meta', field: 'addedAt', format: 'iso8601' },
-    dimensions: { ranked: ['channel', 'playlist'], author: 'channel', source: 'playlist' },
+    dimensions: {
+      ranked: ['channel', 'playlist'],
+      author: 'channel',
+      source: 'playlist',
+      meta: null,
+    },
   },
 } as const satisfies Record<CollectionPlatform, PlatformDescriptor>;
 

@@ -80,7 +80,11 @@ describe('tagging-service (in-memory PGlite)', () => {
     await db.delete(schema.authors);
   });
 
-  async function seedItem(platformItemId: string, platform = 'bilibili'): Promise<string> {
+  async function seedItem(
+    platformItemId: string,
+    platform = 'bilibili',
+    platformMeta: Record<string, unknown> = { intro: 'intro text' },
+  ): Promise<string> {
     const authorRows = await db
       .insert(schema.authors)
       .values({ platform, platformAuthorId: `mid-${++authorSeq}`, name: 'Alice' })
@@ -96,7 +100,7 @@ describe('tagging-service (in-memory PGlite)', () => {
         authorName: 'Alice',
         originalUrl: `https://example.test/${platform}/${platformItemId}`,
         contentState: 'embedded',
-        platformMeta: { intro: 'intro text' },
+        platformMeta,
       })
       .returning({ id: schema.items.id });
     return itemRows[0].id;
@@ -236,6 +240,39 @@ describe('tagging-service (in-memory PGlite)', () => {
       expect(input.title).toBe('Title of BV8CONTENT');
       expect(input.author).toBe('Alice');
       expect(input.description).toBe('intro text');
+    });
+
+    it("feeds a GitHub repository's description as input.description, even without a README", async () => {
+      // docs/32 中-4: the prompt used to read Bilibili's `intro` only, so a
+      // star with no README reached the LLM as a bare title and owner.
+      await seedItem('gh-no-readme', 'github', { description: 'A CLI for …', language: 'Rust' });
+      const d = deps();
+      await tagPlatformItem('github', 'gh-no-readme', d);
+
+      const input = d.generate.mock.calls[0][1];
+      expect(input.description).toBe('A CLI for …');
+      expect(input.content).toBeUndefined();
+    });
+
+    it('ignores YouTube meta description: the full text is already the Content', async () => {
+      // Pins youtube's `descriptionField: null`. Its meta `description` is a
+      // card-sized slice of the text the Content already carries.
+      await seedItem('yt-video', 'youtube', { description: 'truncated card snippet' });
+      const d = deps();
+      await tagPlatformItem('youtube', 'yt-video', d);
+
+      expect(d.generate.mock.calls[0][1].description).toBeUndefined();
+    });
+
+    it.each([
+      ['an empty string', ''],
+      ['a non-string', 42],
+    ])('passes undefined description when the GitHub description is %s', async (_, value) => {
+      await seedItem('gh-bad-description', 'github', { description: value });
+      const d = deps();
+      await tagPlatformItem('github', 'gh-bad-description', d);
+
+      expect(d.generate.mock.calls[0][1].description).toBeUndefined();
     });
 
     it('passes undefined content when the item has no transcript row', async () => {

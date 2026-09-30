@@ -1,6 +1,7 @@
 import type { FavbaseDb } from '@/lib/database/db';
 import { ingestCollection } from '@/lib/ingest/ingest';
 import type { BiliFavVideo } from './types';
+import type { BiliItemMeta } from './video-eligibility';
 
 const PLATFORM = 'bilibili';
 
@@ -47,7 +48,7 @@ export async function syncFavVideosToDb(
           attr: video.attr,
           type: video.type,
           fav_time: video.fav_time,
-        },
+        } satisfies BiliItemMeta,
       })),
       links: valid.map((video) => ({
         platformItemId: video.bvid,
