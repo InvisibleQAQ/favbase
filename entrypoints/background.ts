@@ -9,6 +9,9 @@ import { openWelcomePage } from '@/lib/background/app-handlers';
 import { initJobsBadgeJanitor } from '@/lib/background/jobs-badge';
 import { initWebdavSyncScheduler } from '@/lib/sync';
 import { captureXTokens } from '@/lib/x/x-auth';
+// The descriptor file, never the `@/lib/collections` barrel: the barrel
+// re-exports collections-query, which drags drizzle into the Service Worker.
+import { PLATFORM_DESCRIPTORS } from '@/lib/collections/platform-descriptor';
 import { dispatchBackgroundMessage } from '@/lib/background/dispatcher';
 import { routeBackgroundMessage } from '@/lib/background/routes';
 import { encodeBackgroundPush } from '@/lib/background/message-protocol';
@@ -78,7 +81,10 @@ export default defineBackground({
     // Capture X (Twitter) auth headers from the logged-in web client's own
     // requests (observational webRequest — returns nothing). x-api.ts replays
     // them verbatim to read bookmarks; see lib/x/x-auth.ts. host_permission for
-    // x.com is required for the headers to be visible.
+    // x.com is required for the headers to be visible, so the filter is X's
+    // descriptor `hostPermissions` itself (docs/32 Step 3): a host X gains
+    // there widens the capture with it. Safe to widen — captureXTokens writes
+    // only when auth, cookie and csrf headers are all present.
     browser.webRequest.onBeforeSendHeaders.addListener(
       (details) => {
         captureXTokens(details)
@@ -90,7 +96,7 @@ export default defineBackground({
           .catch((err) => console.warn('[favbase x-auth] token capture failed:', err));
         return undefined;
       },
-      { urls: ['*://x.com/*'] },
+      { urls: [...PLATFORM_DESCRIPTORS.x.hostPermissions] },
       ['requestHeaders', 'extraHeaders'],
     );
 

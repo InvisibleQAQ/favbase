@@ -65,7 +65,7 @@ longer written as links.
 - **Platform Onboarding invoked exactly that exception on 2026-09-06** and is
   now `Active`. Adding a Collection Platform touches the lib domain layer, the
   shared ingest pipeline, 13 contract-checked registries across 11 files, the
-  app section tree, welcome, Settings, the manifest, i18n and four guard tests —
+  app section tree, welcome, Settings, the manifest, i18n and six guard tests —
   no single owner `CLAUDE.md` can hold the route through all of them. The file
   points at those owners rather than restating them; the moment it starts
   duplicating a rule an owner already enforces, delete that part of it.

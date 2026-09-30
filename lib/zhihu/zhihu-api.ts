@@ -21,7 +21,9 @@
  * RSSHub's Promise.all fan-out is deliberately NOT copied). Zhihu sends no
  * rate-limit headers, so 429/5xx get capped exponential backoff and 403 is
  * surfaced immediately as ZhihuRateLimitError (retrying an anti-crawler block
- * only digs the hole deeper).
+ * only digs the hole deeper). The retry loop, waits and body snippets are
+ * shared mechanism from lib/http/ (retry.ts, backoff.ts, response-body.ts);
+ * the numbers and the 403-never-retried rule stay in this file.
  *
  * HTTP 200 is NEVER trusted blindly (spec error matrix, X 07-16 root cause):
  * a 200 carrying an `error` body, a non-JSON (challenge HTML) body, or a body
@@ -35,6 +37,8 @@ import type { CooperativeCheckpoint } from '@/lib/collections';
 import { envNumber } from '@/lib/env';
 import { backoffDelayMs, jitteredDelayMs, sleep } from '@/lib/http/backoff';
 import { fetchWithDeadline } from '@/lib/http/fetch-with-deadline';
+import { bodySnippet, parseJsonBody, textSnippet } from '@/lib/http/response-body';
+import { retryAfter, withRetries } from '@/lib/http/retry';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -386,6 +390,11 @@ function jitteredDelay(): Promise<void> {
   return sleep(jitteredDelayMs(BASE_DELAY_MS, JITTER_MS));
 }
 
+/** Wait before transient 429/5xx retry number `retry` (1-based). */
+function transientBackoffMs(retry: number): number {
+  return backoffDelayMs(retry, BACKOFF_BASE_MS, JITTER_MS);
+}
+
 /** Zhihu v4 error body: `{ error: { message, code, name } }`. */
 function zhihuApiError(json: unknown): { code?: number; message?: string } | null {
   const err = (json as { error?: { code?: number; message?: string } } | null)?.error;
@@ -396,17 +405,20 @@ function zhihuApiError(json: unknown): { code?: number; message?: string } | nul
 /**
  * Fetch one zhihu API URL with the session cookies attached by the browser
  * (`credentials:'include'` + host permission). 401 → ZhihuAuthError; 403 →
- * ZhihuRateLimitError (anti-crawler — NOT retried); 429/5xx → capped backoff.
- * A 200 with a non-JSON body (challenge HTML) or an `error` body is thrown
- * with a diagnosable snippet — never swallowed into an empty result.
+ * ZhihuRateLimitError (anti-crawler — NOT retried); 429/5xx → capped backoff,
+ * one `MAX_RETRIES` budget shared by both (the loop is `withRetries` from
+ * lib/http/retry.ts). A 200 with a non-JSON body (challenge HTML) or an
+ * `error` body is thrown with a diagnosable snippet — never swallowed into an
+ * empty result.
+ *
+ * No cooperative checkpoint in here, deliberately: the paging callers check
+ * once per page, and a checkpoint per retry would change how often they do.
  */
 async function fetchZhihuJson(
   url: string,
   extraHeaders?: Record<string, string>,
 ): Promise<unknown> {
-  let attempt = 0;
-
-  while (true) {
+  return withRetries({ maxRetries: MAX_RETRIES }, async () => {
     const res = await fetchWithDeadline(url, {
       method: 'GET',
       credentials: 'include',
@@ -422,34 +434,26 @@ async function fetchZhihuJson(
       throw new ZhihuRateLimitError(`Zhihu rejected the request (403): ${await bodySnippet(res)}`);
     }
     if (res.status === 429) {
-      if (attempt >= MAX_RETRIES) {
-        throw new ZhihuRateLimitError('Zhihu rate limit exceeded (429)');
-      }
-      attempt += 1;
-      await sleep(backoffDelayMs(attempt, BACKOFF_BASE_MS, JITTER_MS));
-      continue;
+      return retryAfter(
+        transientBackoffMs,
+        () => new ZhihuRateLimitError('Zhihu rate limit exceeded (429)'),
+      );
     }
     if (res.status >= 500) {
-      if (attempt >= MAX_RETRIES) {
-        throw new Error(`Zhihu API HTTP ${res.status}: ${await bodySnippet(res)}`);
-      }
-      attempt += 1;
-      await sleep(backoffDelayMs(attempt, BACKOFF_BASE_MS, JITTER_MS));
-      continue;
+      // Only the last, unretried 5xx body is ever read.
+      return retryAfter(
+        transientBackoffMs,
+        async () => new Error(`Zhihu API HTTP ${res.status}: ${await bodySnippet(res)}`),
+      );
     }
     if (!res.ok) {
       throw new Error(`Zhihu API HTTP ${res.status}: ${await bodySnippet(res)}`);
     }
 
     // Read the body ONCE so both the parse and the diagnostics can see it.
+    // A 200 challenge/HTML page (e.g. __zse_ck verification) fails the parse.
     const rawBody = await res.text();
-    let json: unknown;
-    try {
-      json = JSON.parse(rawBody);
-    } catch {
-      // A 200 challenge/HTML page (e.g. __zse_ck verification) — surface it.
-      throw new Error(`Zhihu API 200 with non-JSON body: ${rawBody.slice(0, 300)}`);
-    }
+    const json = parseJsonBody(rawBody, 'Zhihu API 200');
 
     // 200 carrying an error body — zhihu returns some rejections this way.
     const apiErr = zhihuApiError(json);
@@ -459,20 +463,11 @@ async function fetchZhihuJson(
       if (apiErr.code === 100 || apiErr.code === 101) {
         throw new ZhihuAuthError(`Zhihu API auth error — ${detail}`);
       }
-      throw new Error(`Zhihu API 200 with error body — ${detail}. Body: ${rawBody.slice(0, 300)}`);
+      throw new Error(`Zhihu API 200 with error body — ${detail}. Body: ${textSnippet(rawBody)}`);
     }
 
     return json;
-  }
-}
-
-/** First 300 chars of the response body, for diagnosable thrown errors. */
-async function bodySnippet(res: Response): Promise<string> {
-  try {
-    return (await res.text()).slice(0, 300);
-  } catch {
-    return '';
-  }
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -490,7 +485,7 @@ export async function fetchSelfUrlToken(): Promise<string> {
   const token = asString(me?.url_token);
   if (token) return token;
   throw new Error(
-    `Zhihu /api/v4/me response lacks url_token: ${JSON.stringify(json).slice(0, 300)}`,
+    `Zhihu /api/v4/me response lacks url_token: ${textSnippet(JSON.stringify(json))}`,
   );
 }
 
@@ -514,7 +509,7 @@ export async function fetchCollections(
     const body = json as { data?: unknown; paging?: { is_end?: unknown; next?: unknown } };
     if (!Array.isArray(body?.data)) {
       throw new Error(
-        `unexpected Zhihu collections shape (no data array): ${JSON.stringify(json).slice(0, 300)}`,
+        `unexpected Zhihu collections shape (no data array): ${textSnippet(JSON.stringify(json))}`,
       );
     }
     for (const raw of body.data) {
@@ -558,7 +553,7 @@ export async function fetchCollectionItems(
     const body = json as { data?: unknown; paging?: { is_end?: unknown; totals?: unknown } };
     if (!Array.isArray(body?.data)) {
       throw new Error(
-        `unexpected Zhihu items shape for collection ${collection.id} (no data array): ${JSON.stringify(json).slice(0, 300)}`,
+        `unexpected Zhihu items shape for collection ${collection.id} (no data array): ${textSnippet(JSON.stringify(json))}`,
       );
     }
 

@@ -37,7 +37,7 @@ is **making them generate your TODO list instead of writing one yourself**.
 | TypeScript exhaustive `Record<CollectionPlatform, T>` | Every registry that must gain a key. The error lands on the object literal, naming the missing property. | `pnpm compile` |
 | `tests/platform-completeness-contract.test.ts` | What types cannot see: a lazy import resolving to nothing, a page that renders no `sections/` view, a view that skips `useCollectionBreadcrumbs`, `main.tsx` naming a platform, a hand-written `jobPlatform`, `hooks/` importing `sections/`, a `childRoutes` or `hostPermissions` value that is computed instead of written out, an analytics axis absent from its own ranked list, platform knowledge leaking into a shared module (a separate case listing `file:line`: a quoted platform id, a literal-key read of `meta` / `platformMeta`, or a literal JSON-path key such as `->>'language'` in SQL text — anywhere in `lib/tagging/**`, `lib/embedding/**`, `lib/chat/**`, `lib/export/**`, `collection-analytics.ts`, `collection-processing-policy.ts` or `collections-query.ts`), a `startCollectionProcessingJobs` call anywhere in `entrypoints/app/**` but its definition and the Platform Sync funnel (a separate case in the same file, listing `file:line`), a missing `lib/<platform>/` directory, and — for a platform whose `readiness` is `'credentials'` — a missing link in the credentials chain (§8): the Connections card file, the `SETTINGS_NAV` connections section, `derive<Pascal>Draft` / `save<Pascal>` in `useSettings`, the `configSavedAt` key. Reports **all** failures as one aggregated list. | `pnpm vitest run tests/platform-completeness-contract.test.ts` |
 
-Five more guards fire with no wiring on your part. Three of them reconcile an
+Six more guards fire with no wiring on your part. Three of them reconcile an
 artefact you still write by hand: the guard turns "silently absent" into a red
 test, it does not do the work for you.
 
@@ -45,6 +45,7 @@ test, it does not do the work for you.
 | --- | --- | --- |
 | `tests/lib-import-smoke.test.ts` | `lib/<platform>/` MUST contain **exactly one** non-test `*-sync-service.ts`, and it MUST `import()` cleanly with no `chrome` global and zero `vi.mock` — i.e. no `@/lib/storage` (or any module with a `chrome.*` load side effect) in its static graph. | — |
 | `tests/http-fetch-deadline-guard.test.ts` | No bare `fetch(` anywhere in `lib/**`. Use `fetchWithDeadline` (`lib/http/`). | — |
+| `tests/platform-sleep-guard.test.ts` | No hand-rolled wait in `lib/<platform>/`: a `setTimeout(...)` inside the arguments of `new Promise(...)` fails, listed as `file:line` (read by AST; both names match bare or off `globalThis` / `window` / `self`, through `as` / `!` wrappers; a `setTimeout` outside any `new Promise` is a timer callback and passes; an alias such as `const st = setTimeout` is not followed). Wait with `sleep` from `lib/http/backoff.ts`; retry transient errors with `withRetries` from `lib/http/retry.ts`. | — |
 | `tests/platform-env-constants-guard.test.ts` | No bare numeric `SCREAMING_CASE` module constant in `lib/<platform>/`. Every policy number goes through `envNumber('VITE_<PLATFORM>_<NAME>', default)` **and** is registered in that test's `EXPECTED_ENV_CONSTANTS` table with its exact fallback. | your platform's block in `.env.example` — tracked and secret-free, one documented line per key, checked both ways |
 | `tests/platform-completeness-contract.test.ts` — marquee coverage | Every platform's `PLATFORM_META.title` appears as a pill in `entrypoints/welcome/sections/capability-marquee.tsx`. | the pill. Those rows are hand-authored on purpose (docs/26 D5) — the interleaving of platform and capability pills is a design decision, so coverage is checked, never generated |
 | `tests/agent-bridge-cli-aliases.test.ts` | `skills/favbase/SKILL.md` carries **two** platform lists and both are reconciled: the `` `<platform>` is one of … `` sentence against the ids, and the frontmatter `description` against the in-app names (`PLATFORM_META.title` through the en locale). | both lists. Shipped markdown derives nothing, and the frontmatter one is what an external agent *selects the skill by* — miss it and the agent never reaches for favbase when the user asks about your platform |
@@ -92,15 +93,22 @@ nothing from it.
   coming back logged in (F26), so the header only makes the login look like it
   depends on a Chromium forbidden-header exception. The only anonymous mode is
   `credentials: 'omit'`, and it also drops a hand-built `Cookie` header
-  (`lib/x/x-api.ts:493`). Read cookies with `chrome.cookies` only for a
+  (`lib/x/x-api.ts:495`). Read cookies with `chrome.cookies` only for a
   no-network logged-in check or an id the URL needs (Bilibili's `mid`). Test the
   `init` each request function passes; pattern: `lib/bilibili/bilibili-api.test.ts`
   「Bilibili request credentials」. Existing exception, not re-litigated: X
-  replays a captured web-client header set verbatim (`lib/x/x-api.ts:205`).
+  replays a captured web-client header set verbatim (`lib/x/x-api.ts:211`).
 - Export structured error classes (`<P>AuthError`, `<P>RateLimitError`). They
   are the lib half of the i18n seam; the view maps them to locale keys.
 - Pagination: serial, with a politeness delay. Numeric constants via
-  `envNumber` (§2).
+  `envNumber` (§2). The mechanism is shared in `lib/http/` — wait with
+  `sleep`, compute delays with `jitteredDelayMs` / `backoffDelayMs`, retry
+  transient errors with `withRetries` (`retry.ts`), quote bodies and parse
+  non-JSON with `response-body.ts` (`bodySnippet` / `textSnippet` /
+  `parseJsonBody`). The platform injects only which response retries, how
+  long to wait, what to throw once retries are spent — and every number.
+  Pattern: `fetchPageWithBackoff` in `lib/x/x-api.ts`. Adding a retry a
+  platform does not have today is a rate-limit decision, not a refactor.
 - Export the pure parsers (id/handle normalisers, duration parsers) so they can
   be unit-tested without a network.
 
@@ -422,6 +430,7 @@ opt out of the hook; **do not** opt out of the scaffold or the registries.
 | a value import other than `./platforms` in `lib/collections/platform-descriptor.ts` | `platform-descriptor.test.ts` reads its own imports by AST, and `lib-import-smoke` loads it with no `chrome` global. Break it and the build fails in `wxt.config.ts`, which never mentions the real culprit |
 | re-exporting the descriptor from `lib/collections/index.ts` | review — that barrel goes through `collections-query`, so it drags drizzle and `@/lib/database` into every importer, welcome.html and the Node build config included |
 | a bare `fetch(` in `lib/**` | `http-fetch-deadline-guard` |
+| a `setTimeout` wait (`new Promise((r) => setTimeout(r, ms))`) in `lib/<platform>/` — use `sleep`, and `withRetries` for a retry loop | `platform-sleep-guard` |
 | a bare numeric module constant in `lib/<platform>/` | `platform-env-constants-guard` |
 | `@/lib/storage` (or any `chrome.*`-touching barrel) in the sync-service static graph | `lib-import-smoke` |
 | a `t()` call inside `components/collection/**` | design contract (`components/collection/CLAUDE.md`) |

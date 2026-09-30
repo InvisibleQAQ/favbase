@@ -1,6 +1,6 @@
 # 32 跨平台流程统一度审计与分步整改（2026-09-29）
 
-> 状态：**审计完成；D1、D2 已决（2026-09-29，§5.1、§5.2）；Step 1 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 1 落地记录）；D6 已决（用户 2026-09-30，按推荐）；Step 2 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 2 落地记录）；Step 3–9 均未实施**。执行任一 Step 前先读 §2 否决清单与 §5 对应决策；一次对话只做一个 Step。
+> 状态：**审计完成；D1、D2 已决（2026-09-29，§5.1、§5.2）；Step 1 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 1 落地记录）；D6 已决（用户 2026-09-30，按推荐）；Step 2 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 2 落地记录）；Step 3 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 3 落地记录）；Step 4–9 均未实施**。执行任一 Step 前先读 §2 否决清单与 §5 对应决策；一次对话只做一个 Step。
 >
 > 起因：用户观察「接入新平台时，数据处理、备份、展示都高度统一，真正不同的只有数据获取和风控」，要求找出仍未统一的流程并给出分步整改。
 >
@@ -117,7 +117,7 @@
 - `bodySnippet` 在 `lib/x/x-api.ts:367-374` 与 `lib/zhihu/zhihu-api.ts:469-476` **逐字节相同**（diff 验证）。
 - 429 / 5xx 重试循环两份：`x-api.ts:508-528`、`zhihu-api.ts:424-439`，结构相同（attempt 计数、上限、`sleep(backoffDelayMs(...))`、耗尽抛错），只有消息前缀和等待计算不同。
 - 「读一次 body → 解析 → 非 JSON 抛带片段的错」三份：`x-api.ts:536-542`、`zhihu-api.ts:445-452`、`youtube-api.ts:313-318`。
-- 绕过 `lib/http/backoff.ts` 的裸 `setTimeout` 三处：`github-api.ts:206`、`lib/bilibili/bili-sync-service.ts:135`、`lib/bilibili/bilibili-transcription-adapter.ts:29,36`。
+- 绕过 `lib/http/backoff.ts` 的裸 `setTimeout` 三处：`github-api.ts:206`、`lib/bilibili/bili-sync-service.ts:135`、`lib/bilibili/bilibili-transcription-adapter.ts:29,36`。（**勘误 2026-09-30**：实为四个文件五行，漏了 `lib/github/github-sync-service.ts:202` 的 README 仓间等待；Step 3 一并改掉，见 Step 3 落地记录。）
 
 **真实代价**：下一个需要 429 / 5xx 重试的平台只能复制 X 的循环；github / youtube / bilibili 今天完全没有瞬时错误重试，想加时同样只能复制。
 
@@ -530,13 +530,133 @@
 - **文件**：
   - `lib/http/`：新增 `bodySnippet`、读一次 body 的 JSON helper、重试循环骨架（attempt 计数、上限、sleep、checkpoint 钩子）。平台注入「这个响应是否重试、等多久、耗尽抛什么」。
   - `lib/x/x-api.ts`、`lib/zhihu/zhihu-api.ts`、`lib/youtube/youtube-api.ts`：迁入。
-  - `lib/github/github-api.ts:206`、`lib/bilibili/bili-sync-service.ts:135`、`lib/bilibili/bilibili-transcription-adapter.ts:29,36`：裸 `setTimeout` 改 `backoff.sleep`。
+  - `lib/github/github-api.ts:206`、`lib/bilibili/bili-sync-service.ts:135`、`lib/bilibili/bilibili-transcription-adapter.ts:29,36`：裸 `setTimeout` 改 `backoff.sleep`。（**勘误 2026-09-30**：漏了 `lib/github/github-sync-service.ts:202`，已一并改。）
   - `entrypoints/background.ts:93`：filter 改由 `PLATFORM_DESCRIPTORS.x.hostPermissions` 派生（descriptor 是 leaf，SW 体积锁不受影响，`scripts/` 的检查照跑）。
 - **改法要点**：github / youtube / bilibili 今天没有瞬时错误重试，本 Step **不给它们加**（那是行为变化，属于平台风控语义，要单独决定）。
 - **测试**：现有 `x-api` / `zhihu-api` / `youtube-api` 测试**一行不改就绿**，这是行为零变化的判据；新增重试骨架单测；在 `tests/http-fetch-deadline-guard.test.ts` 旁加守卫，禁止 `lib/<platform>/` 出现 `setTimeout(` 等待。
 - **验证**：各平台手动同步一次。
 - **回滚**：revert。
 - **判据**：`bodySnippet` 全仓一份；`lib/<platform>/` 零 `setTimeout` 等待；`lib-import-smoke` 绿。
+
+#### Step 3 落地记录（2026-09-30）
+
+代码与单测已落地；上面「验证」（各平台手动同步一次）需要浏览器，**待人工**。判据三条都成立：`bodySnippet` 全仓只剩 `lib/http/response-body.ts` 一份定义；`lib/<platform>/` 零 `setTimeout` 等待，由新守卫锁住；`lib-import-smoke` 绿。
+
+**落在哪**：
+
+- **`lib/http/response-body.ts`**（新，纯 leaf）：`SNIPPET_CHARS = 300` + `textSnippet` / `bodySnippet` / `parseJsonBody(raw, what, suffix = '')`。
+  - 解析收的是**已读出的字符串**，不收 `Response`：youtube 在判断状态码之前就读了 body（400/403 要从中取 reason），x / zhihu 解析之后还要拿 `rawBody` 拼别的错误。
+  - 「300」从此只出现在这一个文件里。
+- **`lib/http/retry.ts`**（新，纯 leaf）：`RetrySignal` + `retryAfter(delayMs, exhausted)` + `withRetries({ maxRetries, control? }, attempt)`。
+  - 只 import `./backoff` 的 `sleep`，以及 `cooperative-checkpoint` leaf 的 type。
+  - 循环逐条复刻两份旧循环：每次尝试前（含第一次）checkpoint；非 signal 原样返回，抛错原样穿透；`retries >= maxRetries` 才抛；一次调用一个计数器，跨重试原因共享；`delayMs` / `exhausted` 懒调用；用 `instanceof` 判别。
+- **x**：`fetchPageWithBackoff` 的签名与 `{ json, res }` 不变，函数体就是一个 `withRetries`。
+  - 私有 `bodySnippet` 删除；两处 `resetHeader ? new Date(...) : null` 收成私有 `resetAtOf`。
+  - `fetchAllBookmarks` 里的 `while (true)` 是**分页**循环，不是重试循环，留着。
+- **zhihu**：`fetchZhihuJson` 同上，**不传 `control`**。
+  - 私有 `bodySnippet` 删除；429 / 5xx 共用一个私有 `transientBackoffMs`。
+  - 三处 `JSON.stringify(json).slice(0, 300)` 改成 `textSnippet(...)`。
+- **youtube**：`apiFetch` 只换响应读取（`parseJsonBody` + 三处 `textSnippet`），不加重试。
+- **五处裸等待改 `sleep`**（行号为改前）：`github-api.ts:206`、`github-sync-service.ts:202`、`bili-sync-service.ts:135`、`bilibili-transcription-adapter.ts:29,36`。转录 adapter 只换等待，循环与 `SUBTITLE_RETRY_DELAYS` 不动。
+- **`entrypoints/background.ts`**：X 的 filter 改成 `[...PLATFORM_DESCRIPTORS.x.hostPermissions]`，import 走 descriptor 文件，不走 barrel。
+- **守卫** `tests/platform-sleep-guard.test.ts`（新）：扫 `PLATFORM_DIRS`，按 AST 找 `new Promise(...)` 参数子树里的 `setTimeout(...)`（含 `globalThis.` / `window.` / `self.` 前缀；trellis-check 又补了 `as` / `!` 包裹与 `['…']` 下标，见下方复核），失败逐条列 `file:line` 并写明修法。
+
+**先红后绿**：
+
+- **守卫**：在改 F 表五处之前跑，红的恰好是下面五条，与 PRD 的 F 表一致，没有别的文件，也没有别的行。改成 `sleep` 后转绿。红态原样：
+  ```
+  AssertionError: Hand-rolled setTimeout wait in a platform directory — wait with `sleep` from lib/http/backoff.ts, compute delays with `jitteredDelayMs` / `backoffDelayMs`, and retry transient errors with `withRetries` from lib/http/retry.ts:
+  - lib/bilibili/bili-sync-service.ts:135
+  - lib/bilibili/bilibili-transcription-adapter.ts:29
+  - lib/bilibili/bilibili-transcription-adapter.ts:36
+  - lib/github/github-api.ts:206
+  - lib/github/github-sync-service.ts:202: expected [ …(5) ] to deeply equal []
+  ```
+- **探测器自检**（防规则空转；下面是实施时的清单，trellis-check 后命中 11 条、放过 5 条，见复核）：
+  - 命中五条：`new Promise((r) => setTimeout(r, 1))`、`new Promise((resolve) => { setTimeout(() => resolve(), 5); })`，以及 `globalThis.` / `window.` / `self.` 三种前缀。
+  - 放过四条：`setTimeout(send, 0)`、`const t = setTimeout(fn, 100)`、`sleep(100)`、`timer = globalThis.setTimeout(tick, 1000)`。
+  - 另一例断言每个 `PLATFORM_DIRS` 目录都存在且有源文件，防扫描范围空转。
+- **勘误**：§3 中-1 与本 Step 的文件清单都只记了三个文件四行，漏了第四处：`lib/github/github-sync-service.ts:202`，README 串行抓取的仓间等待。本 Step 的判据「`lib/<platform>/` 零 `setTimeout` 等待」要求它，所以一并改了；守卫的红态正好把它列了出来。两处原文已就地标注。
+- **trellis-check 复核（2026-09-30）**：
+  - 独立复现了先红：把 `github-api.ts`、`github-sync-service.ts`、`bili-sync-service.ts`、`bilibili-transcription-adapter.ts` 换回 HEAD 版再跑守卫，红的正是上面五条，恢复后转绿。守卫扩展（见下）后又复现一次，仍恰好是这五条。`lib/bilibili/inject/**` 与 `messaging.ts:97` 的定时回调两次都没被点名。
+  - 行为零变化另核了一遍，没有发现差异：
+    - 逐分支对照 `git show HEAD:` 的 x / zhihu 循环：分支顺序；429 / 5xx / code:88 共用一个计数；`maxRetries` 次重试即 `maxRetries + 1` 次尝试；5xx 的 body 只在耗尽时读；延迟按 1-based 重试序号在睡前算；X 每次尝试前 checkpoint；`fetchZhihuJson` 里不 checkpoint。
+    - 把三个 api 文件里所有 `new <Error 类>(…)` 的字面模板抽出来，与 HEAD 逐条 diff。差异只有两类：三条非 JSON 模板搬进了 `parseJsonBody`，按 `what` / `suffix` 拼回来逐字节相同；`slice(0, 300)` 换成了 `textSnippet`。
+    - 实施侧的 44 例差分对照没有重跑。
+  - **守卫探针**：临时建 `lib/x/zz-sleep-probe.ts`，跑完删除。
+    - 原规则命中三种：`new Promise<void>((r) => globalThis.setTimeout(r, n))`、`function (resolve) { setTimeout(resolve, 1) }`、`setTimeout?.(r, 1)`。
+    - 原规则漏了四种：`(globalThis as any).setTimeout(…)`、`setTimeout!(…)`、`window['setTimeout'](…)`、`new globalThis.Promise(…)`。
+  - **守卫补了这四种漏网**：
+    - 匹配名字之前，先剥掉 `(…)` / `as` / `!` / `satisfies` / `<T>` 这类包裹；
+    - 宿主上的读取也接受 `['…']` 字符串下标；
+    - `Promise` 与 `setTimeout` 共用同一个 `namesGlobal` 判定。
+    - 自检的命中表加了这四种，另加 `function` 表达式与 `?.` 调用两例（5 → 11 条）。放过表加了 `window['clearTimeout'](r)`（4 → 5 条），证明下标 key 是精确比较。
+    - 改后探针命中七种，只剩别名那一种。
+  - **仍然是已知缺口，不修**：
+    - 别名不追踪，例如 `const st = setTimeout; new Promise((r) => st(r, 1))`。那要做数据流分析；spec §2 与 `lib/http/CLAUDE.md` 已写明。
+    - `Promise.race` 的超时写法 `new Promise((_, rej) => setTimeout(rej, ms))` 也会被判违规。今天平台目录里没有这种写法，而本仓库的超时方案是 `fetchWithDeadline`，所以规则不改。
+  - **`lib/http/retry.ts` 的 import 注释改了**：原文说走 barrel「会把 drizzle 拖进每个 importer」，这对 type-only import 不成立——它在构建时被擦除，`x-api.ts` 自己就从 barrel 引这个 type。现在写的是真实理由：`lib/http` 不点 barrel 的名，以后在这里加 value import 也拖不进 `collections-query`。
+  - **本记录的两处勘误**（已就地改正）：
+    - youtube 是三处 `textSnippet` 加一处 `parseJsonBody`，原写「四处」。
+    - 聚焦测试原写「16 个文件 148 例」，与它自己列的清单对不上：那份清单是 14 个文件。按清单重跑是 14 个文件 133 例。
+  - **`.trellis/spec/frontend/index.md:68` 的「four guard tests」改成「six」**。spec §2 点名的守卫测试文件现在是六个：completeness、import-smoke、fetch-deadline、sleep-guard、env-constants、cli-aliases。这个数在本 Step 之前就该是五，已经过期；新守卫让它错得更多，所以顺手改了这一个词。
+  - **残留 grep**：
+    - `bodySnippet` 在 `lib/`、`entrypoints/`、`packages/` 里只有 `response-body.ts:24` 一处定义。
+    - `lib/x` 与 `lib/zhihu` 里的 `while (true)` 只剩 `x-api.ts:435`，是分页循环。
+  - **manifest**：trellis-check 没有重建 HEAD 基线。diff 里 manifest 的三个输入（`wxt.config.ts`、`package.json`、descriptor）一行没动；重新 build 后 sha256 是 `053dd7bd…fde32ae5`，与下面记录的一致。
+
+**错误消息逐字节核对**：
+
+现有三份 api 测试只用正则匹配片段，所以「测试绿」证明不了消息没变。实施时做了一次性对照：
+
+- **做法**：把 HEAD（`3411664`）版的 `x-api.ts` / `zhihu-api.ts` / `youtube-api.ts` 拷到平台目录之外的临时目录，免得撞上 env 守卫。新旧实现吃同一组响应，逐项比较：
+  - 抛出的类名、`name`、`message`、`resetAt`、`reason`；
+  - 返回值、fetch 次数、checkpoint 次数；
+  - 每一个 `setTimeout` 的延迟（`Math.random` 固定为 0.5，时钟固定）。
+- **结果**：44 例全等，跑完即删。
+- **矩阵**：
+  - x（`fetchPageWithBackoff`，带 `control`）：401、403、429 耗尽（reset 头在未来 / 在过去 / 缺失）、503 耗尽、两次 500 后成功、429→502→code:88→成功（跨原因共享计数）、404、200 非 JSON、200 GraphQL errors、code:88 耗尽（有 / 无 reset 头）、200 形状错、200 成功。
+  - zhihu（经 `fetchSelfUrlToken` 走 `fetchZhihuJson`）：401、403、429 耗尽、503 耗尽、429→500→成功、404、200 非 JSON、error body 四种（code 100、code 101 无 message、其他 code、只有 message）、me 缺 `url_token`、成功。另经 `fetchCollections` / `fetchCollectionItems` 核对两个形状错误，以及两页的 checkpoint 次数。
+  - youtube（经 `fetchPlaylists`）：400 keyInvalid、400「API key not valid」文本、403 quota、403 其他、400 其他、429、404、500、200 非 JSON、200 形状错、成功；另加 `resolveChannel` 缺 `items`。
+- **对照测试自身的证伪**：临时把 `SNIPPET_CHARS` 改成 299，19 例红；再临时让 zhihu 传 `control`、同时把上限判断改成 `>`，8 例红。改回后全绿。
+
+**默认决定**（PRD 已定，或实施时照 PRD 取的，用户未逐条过目）：
+
+- **D-a `RetrySignal` 是 class，按 `instanceof` 判别**，不看结构 key：成功值是平台任意形状。`retry.test.ts` 锁住了「长得像 signal 的成功值原样返回」。构造器保持公开，`retryAfter` 只是读起来顺的工厂；把构造器私有化就得把工厂改成静态方法，收益为零。
+- **D-b `withRetries` 的类型参数靠推断**。两个调用点都推对了：x 是 `{ json, res }`；zhihu 是 `unknown`，因为 `unknown | RetrySignal` 折叠成 `unknown`。运行时仍按 `instanceof` 分支，而 `JSON.parse` 产不出 `RetrySignal`。`pnpm compile` 验过，没写显式类型参数。
+- **D-c x 收一个私有 `resetAtOf`**（PRD 列为可选）：两处 `resetHeader ? new Date(...) : null` 逐字相同。
+- **D-d zhihu 的两个退避 lambda 收成私有 `transientBackoffMs`**，与既有的 `jitteredDelay` 并列。x 不收：它的 5xx 只有一处。
+- **D-e 守卫报 `setTimeout` 调用所在的行**，不报 `new Promise` 所在的行。今天五处都是单行，两者相同；多行写法下前者更准。嵌套的 `new Promise` 不重复计数：「在不在 Promise 参数子树里」只是一个往下传的布尔。
+- **D-f 守卫不设 allowlist**：今天没有合法例外，出现了再加。
+
+**与 PRD 的偏离**：
+
+1. **spec §4.1 两个指向 `lib/x/x-api.ts` 的行号一并改了**：`:493` → `:495`，`:205` → `:211`。本 Step 让它们移了位，PRD 的 Docs 一节没点到，不改就指错行。
+2. **根 `CLAUDE.md` 的 platform-onboarding 条目**原写「五个自动守卫」，随 spec §2 改成六个。PRD 只点了 spec 里的「Five more guards」。
+3. **zhihu 也改了注释**：文件头加一句「机制在 `lib/http/`，数值与 403 不重试留本文件」，`fetchZhihuJson` 的注释写明为什么不传 `control`。PRD 只要求同步 x 的注释。
+4. **守卫多了一例「扫描范围非空」**。PRD 只列了探测器自检。
+5. **`lib/collections/CLAUDE.md` 的 descriptor 条目补了一句**：`hostPermissions` 现在有两个消费方（`wxt.config.ts` 的 manifest 与 background 的 X filter），改 x 那一格会同时改两处。PRD 的 Docs 一节没列这个文件。
+
+**行为变化与验证备注**：
+
+- **行为零变化**：PRD Tests §4 的六个现有测试文件一行未改，全部绿（`git status` 里没有它们）。错误消息的逐字节核对见上。
+- **判据之外的残留检查**：
+  - `lib/x`、`lib/zhihu` 零重试用 `while (true)`；x 剩下的一个是 `fetchAllBookmarks` 的分页循环。
+  - `slice(0, 300)` 在 x / zhihu / youtube 零残留。zhihu 的 `slice(0, 200)` / `slice(0, 80)` 是摘要与标题截断，不是错误片段，没动。
+  - github / youtube / bilibili 仍然没有瞬时错误重试（Out of scope）。
+- **X filter**：descriptor 里 x 的 `hostPermissions` 今天就是 `['*://x.com/*']`，所以 filter 的值不变。以后 x 在 descriptor 里加 host，捕获范围会随之扩大。这是安全的：`captureXTokens` 先按 URL 含 `x.com` / `twitter.com` 过滤，且 authorization / cookie / x-csrf-token 三者齐备才写。
+- **manifest**：`pnpm build` 前后的 `.output/chrome-mv3/manifest.json` **逐字节相同**，sha256 两次都是 `053dd7bd…fde32ae5`。基线是在改动前从干净 HEAD（`3411664`）构建的。
+- **SW 体积**：bundle-contract 行从 `13 modules / 947185 bytes` 变成 `13 modules / 947339 bytes`（+154）。descriptor 本来就经 `lib/chat/tools.ts` 在 SW 图里，模块数不变。
+- **测试**：
+  - 聚焦的 14 个测试文件共 133 例绿：PRD 列的 1–4，加 `http-fetch-deadline-guard`、`lib-import-smoke`、`platform-env-constants-guard`，另加 `agent-bridge-background-bundle-contract` 与 `platform-completeness-contract`；
+  - `pnpm compile` 绿；
+  - `pnpm test` 全量绿：主仓库 207 个文件 1638 例（Step 2 后是 204 / 1619，新增三个测试文件共 19 例），`packages/favbase` 15 个文件 263 例；
+  - `pnpm build` 绿。
+  - trellis-check 扩展守卫后重跑（守卫的扩展都在同一个 `it` 里，例数不变）：
+    - 聚焦的 14 个文件 133 例绿；
+    - `pnpm compile` 绿；
+    - `pnpm test` 的计数与上面相同（主仓库 207 / 1638，`packages/favbase` 15 / 263）；
+    - `pnpm build` 的 bundle-contract 行是 `13 modules / 947339 bytes`。
 
 ### Step 4 错误模型（中-2，并入 `COOLDOWN_MS` 归位）
 
@@ -642,7 +762,7 @@ lib 侧：平台 API 文件的重试 / 响应读取约减 30–40 行（Step 3�
 |---|---|---|
 | 1 | §10 强制清单加「同步收尾 funnel」；adapter 不再手写 `startCollectionProcessingJobs`（已落地 2026-09-30：§4.3、§7.2、§10、§11 与 §2 守卫描述） | `entrypoints/app/**` 非测试模块里，`startCollectionProcessingJobs` 标识符只许出现在定义处与 funnel（AST 扫描，独立用例，失败列 `file:line`） |
 | 2 | §6.1 domain descriptor 六字段 → 七字段（新增简介字段；`dimensions` 内加 meta 维度格）（已落地 2026-09-30：§6 字段数、§6.1 表 `descriptionField` 行与 `dimensions` 行、§2 守卫描述、§11 禁项行） | 共享模块禁平台字面量 / 字面 meta key 从一个文件扩成清单（独立用例，AST 扫描，失败列 `file:line`）；`dimensions.meta.kind` 必须在 `ranked` 里 |
-| 3 | 风控一节说明「机制在 `lib/http/`，数值与语义在平台」 | `lib/<platform>/` 禁 `setTimeout` 等待 |
+| 3 | 风控一节说明「机制在 `lib/http/`，数值与语义在平台」（已落地 2026-09-30：§4.1 Pagination 条、§2 守卫表（Five → Six）、§11 禁项行） | `lib/<platform>/` 禁 `setTimeout` 等待（`tests/platform-sleep-guard.test.ts`，AST 扫描 `new Promise` 参数里的 `setTimeout`，失败列 `file:line`） |
 | 4 | 错误类必须继承 `sync-errors.ts` 基类 | 平台错误类继承断言；`lib-import-smoke` 纳入新 leaf |
 | 5 | 新增「延迟正文」一节 | `sections/**` 禁字面 job 命名空间 |
 | 6–8 | §7 页面清单删去状态组件与 tagged 外壳两项 | `CARD_ADAPTERS` 对账不变 |

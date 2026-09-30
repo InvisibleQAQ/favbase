@@ -24,6 +24,7 @@ import type { CooperativeCheckpoint } from '@/lib/collections';
 import { envNumber } from '@/lib/env';
 import { sleep } from '@/lib/http/backoff';
 import { fetchWithDeadline } from '@/lib/http/fetch-with-deadline';
+import { parseJsonBody, textSnippet } from '@/lib/http/response-body';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -299,7 +300,7 @@ async function apiFetch(
         throw new YoutubeRateLimitError(`YouTube API rate limited (403, ${quotaReason})`, null);
       }
     }
-    throw new Error(`YouTube API HTTP ${res.status}: ${rawBody.slice(0, 300)}`);
+    throw new Error(`YouTube API HTTP ${res.status}: ${textSnippet(rawBody)}`);
   }
 
   if (res.status === 429) {
@@ -307,22 +308,17 @@ async function apiFetch(
   }
 
   if (!res.ok) {
-    throw new Error(`YouTube API HTTP ${res.status}: ${rawBody.slice(0, 300)}`);
+    throw new Error(`YouTube API HTTP ${res.status}: ${textSnippet(rawBody)}`);
   }
 
-  let json: unknown;
-  try {
-    json = JSON.parse(rawBody);
-  } catch {
-    throw new Error(`YouTube API 200 with non-JSON body: ${rawBody.slice(0, 300)}`);
-  }
+  const json = parseJsonBody(rawBody, 'YouTube API 200');
 
   // 200 must carry the `items` array (may be empty — a legit zero result).
   // Anything else is a silently-degraded contract → throw, don't return [].
   if (!Array.isArray((json as { items?: unknown }).items)) {
     if (opts.allowMissingItems) return { items: [] };
     throw new Error(
-      `unexpected YouTube response shape (no items array): ${rawBody.slice(0, 300)}`,
+      `unexpected YouTube response shape (no items array): ${textSnippet(rawBody)}`,
     );
   }
   return json;

@@ -1,5 +1,6 @@
 import type { PipelineDeps } from '@/lib/transcription/pipeline';
 import type { SubtitleRow } from '@/lib/subtitle/types';
+import { sleep } from '@/lib/http/backoff';
 import {
   fetchCidByPageList,
   fetchSubtitle,
@@ -26,14 +27,14 @@ async function fetchOfficialSubtitle(bvid: string, cid: number): Promise<Subtitl
         console.warn(
           `[biliAdapter] Official subtitle error for ${bvid} (attempt ${attempt + 1}): ${result.error ?? 'unknown'} — retrying`,
         );
-        await new Promise((r) => setTimeout(r, SUBTITLE_RETRY_DELAYS[attempt]));
+        await sleep(SUBTITLE_RETRY_DELAYS[attempt]);
       }
     } catch (err) {
       if (attempt < SUBTITLE_RETRY_DELAYS.length) {
         console.warn(
           `[biliAdapter] Official subtitle threw for ${bvid} (attempt ${attempt + 1}): ${err instanceof Error ? err.message : err} — retrying`,
         );
-        await new Promise((r) => setTimeout(r, SUBTITLE_RETRY_DELAYS[attempt]));
+        await sleep(SUBTITLE_RETRY_DELAYS[attempt]);
       }
     }
   }

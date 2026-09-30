@@ -6,6 +6,7 @@
 
 import type { CooperativeCheckpoint } from '@/lib/collections';
 import { envNumber } from '@/lib/env';
+import { sleep } from '@/lib/http/backoff';
 import { fetchWithDeadline } from '@/lib/http/fetch-with-deadline';
 
 // ---------------------------------------------------------------------------
@@ -203,7 +204,7 @@ export async function fetchAllStarred(
 
   for (let page = 2; page <= totalPages; page++) {
     await control?.checkpoint();
-    await new Promise((resolve) => setTimeout(resolve, PAGE_DELAY_MS));
+    await sleep(PAGE_DELAY_MS);
     const { repos } = await fetchStarredPage(token, page);
     all.push(...repos);
     onProgress?.(page, totalPages, all.length);

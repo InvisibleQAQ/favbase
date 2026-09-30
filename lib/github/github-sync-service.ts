@@ -38,6 +38,7 @@ import { ghostItemCondition, ingestCollection } from '@/lib/ingest/ingest';
 // tests/lib-import-smoke.test.ts.
 import { charSplit } from '@/lib/embedding/char-split';
 import { envNumber } from '@/lib/env';
+import { sleep } from '@/lib/http/backoff';
 import type { CooperativeCheckpoint } from '@/lib/collections';
 import {
   fetchAllStarred,
@@ -199,7 +200,7 @@ async function fetchReadmesSerial(
   onProgress?.(0, repos.length);
   for (let i = 0; i < repos.length; i++) {
     await control?.checkpoint();
-    if (i > 0) await new Promise((resolve) => setTimeout(resolve, README_DELAY_MS));
+    if (i > 0) await sleep(README_DELAY_MS);
     const repo = repos[i];
     try {
       const readme = await fetchReadme(token, repo.fullName);

@@ -19,6 +19,10 @@
  * to web origins. The fetch also passes NO `credentials` option — 'omit'
  * strips the Cookie header (see fetchPageWithBackoff).
  *
+ * The retry loop, waits and body snippets are shared mechanism from lib/http/
+ * (retry.ts, backoff.ts, response-body.ts); which response X retries, how long
+ * it waits, what it throws when spent, and every number stay in this file.
+ *
  * Pure helpers (parseTweets / extractBottomCursor / mapTweetToRow /
  * buildBookmarksUrl) are exported for unit tests.
  */
@@ -28,6 +32,8 @@ import type { CooperativeCheckpoint } from '@/lib/collections';
 import { envNumber } from '@/lib/env';
 import { backoffDelayMs, jitteredDelayMs, sleep } from '@/lib/http/backoff';
 import { fetchWithDeadline } from '@/lib/http/fetch-with-deadline';
+import { bodySnippet, parseJsonBody, textSnippet } from '@/lib/http/response-body';
+import { retryAfter, withRetries } from '@/lib/http/retry';
 
 // Auth lives in x-auth.ts (session-storage-backed capture); re-export so the
 // sync service keeps a single `./x-api` import surface.
@@ -361,23 +367,20 @@ function extractInstructions(json: unknown): RawInstruction[] {
 }
 
 // ---------------------------------------------------------------------------
-// Pacing helpers
+// Pacing helpers (the wait / retry mechanism is lib/http/; X's numbers and
+// rate-limit semantics stay here)
 // ---------------------------------------------------------------------------
-
-/** First 300 chars of the response body, for diagnosable thrown errors. */
-async function bodySnippet(res: Response): Promise<string> {
-  try {
-    return (await res.text()).slice(0, 300);
-  } catch {
-    return '';
-  }
-}
 
 /** Milliseconds until the reset timestamp header, floored (clock-skew safe). */
 function sleepUntilReset(resetHeader: string | null): number {
   const reset = resetHeader ? Number(resetHeader) * 1000 : NaN;
   if (!Number.isFinite(reset)) return MIN_SLEEP_ON_RESET_MS;
   return Math.max(reset - Date.now(), MIN_SLEEP_ON_RESET_MS);
+}
+
+/** The `resetAt` a spent 429 / code:88 reports, from the same reset header. */
+function resetAtOf(resetHeader: string | null): Date | null {
+  return resetHeader ? new Date(Number(resetHeader) * 1000) : null;
 }
 
 /** A GraphQL error entry as it appears in a 200-with-errors body. */
@@ -471,7 +474,9 @@ export async function fetchAllBookmarks(
 /**
  * Fetch one page. On 429 / code:88 → sleep to reset, retry the SAME page. On
  * transient 5xx → capped exponential backoff + jitter. 401/403 → XAuthError.
- * Exhausted rate-limit retries → XRateLimitError.
+ * Exhausted rate-limit retries → XRateLimitError. The three retry reasons share
+ * one `MAX_RETRIES` budget; the loop itself (counter, cap, wait, checkpoint
+ * before every attempt) is `withRetries` from lib/http/retry.ts.
  *
  * A HTTP 200 is NOT trusted blindly: X returns server-side rejections as 200
  * bodies carrying a GraphQL `errors[]` array (any code ≠ 88), and a wrong
@@ -485,10 +490,7 @@ export async function fetchPageWithBackoff(
   headers: Record<string, string>,
   control?: CooperativeCheckpoint,
 ): Promise<{ json: unknown; res: Response }> {
-  let attempt = 0;
-
-  while (true) {
-    await control?.checkpoint();
+  return withRetries({ maxRetries: MAX_RETRIES, control }, async () => {
     // Mirror supermemory's fetch verbatim: NO `credentials` option. Do NOT use
     // `credentials:'omit'` — omit means "exclude credentials (cookies) from
     // this request", which makes Chromium drop the Cookie header entirely, so
@@ -507,24 +509,18 @@ export async function fetchPageWithBackoff(
 
     if (res.status === 429) {
       const resetHeader = res.headers.get('x-rate-limit-reset');
-      if (attempt >= MAX_RETRIES) {
-        throw new XRateLimitError(
-          'X rate limit exceeded (429)',
-          resetHeader ? new Date(Number(resetHeader) * 1000) : null,
-        );
-      }
-      attempt += 1;
-      await sleep(sleepUntilReset(resetHeader));
-      continue;
+      return retryAfter(
+        () => sleepUntilReset(resetHeader),
+        () => new XRateLimitError('X rate limit exceeded (429)', resetAtOf(resetHeader)),
+      );
     }
 
     if (res.status >= 500) {
-      if (attempt >= MAX_RETRIES) {
-        throw new Error(`X API HTTP ${res.status}: ${await bodySnippet(res)}${DIAG_SUFFIX}`);
-      }
-      attempt += 1;
-      await sleep(backoffDelayMs(attempt, BACKOFF_BASE_MS, JITTER_MS));
-      continue;
+      // Only the last, unretried 5xx body is ever read.
+      return retryAfter(
+        (retry) => backoffDelayMs(retry, BACKOFF_BASE_MS, JITTER_MS),
+        async () => new Error(`X API HTTP ${res.status}: ${await bodySnippet(res)}${DIAG_SUFFIX}`),
+      );
     }
 
     // X's error bodies carry the actual diagnosis (e.g. "The following
@@ -532,29 +528,19 @@ export async function fetchPageWithBackoff(
     if (!res.ok) throw new Error(`X API HTTP ${res.status}: ${await bodySnippet(res)}${DIAG_SUFFIX}`);
 
     // Read the body ONCE (Response body is single-use) so both the JSON parse
-    // and the raw-snippet diagnostic below can see it.
+    // and the raw-snippet diagnostics below can see it.
     const rawBody = await res.text();
-    let json: unknown;
-    try {
-      json = JSON.parse(rawBody);
-    } catch {
-      throw new Error(`X API 200 with non-JSON body: ${rawBody.slice(0, 300)}${DIAG_SUFFIX}`);
-    }
+    const json = parseJsonBody(rawBody, 'X API 200', DIAG_SUFFIX);
 
     const errors = graphqlErrors(json);
 
     // 200 with body-level rate limit (code:88) — treat like 429.
     if (errors.some((e) => e.code === 88)) {
       const resetHeader = res.headers.get('x-rate-limit-reset');
-      if (attempt >= MAX_RETRIES) {
-        throw new XRateLimitError(
-          'X rate limit exceeded (code:88)',
-          resetHeader ? new Date(Number(resetHeader) * 1000) : null,
-        );
-      }
-      attempt += 1;
-      await sleep(sleepUntilReset(resetHeader));
-      continue;
+      return retryAfter(
+        () => sleepUntilReset(resetHeader),
+        () => new XRateLimitError('X rate limit exceeded (code:88)', resetAtOf(resetHeader)),
+      );
     }
 
     // 200 carrying a GraphQL rejection (any code ≠ 88) — X returns server-side
@@ -565,7 +551,7 @@ export async function fetchPageWithBackoff(
         .map((e) => `code ${e.code ?? '?'}: ${e.message ?? '(no message)'}`)
         .join('; ');
       throw new Error(
-        `X API 200 with GraphQL errors — ${detail}. Body: ${rawBody.slice(0, 300)}${DIAG_SUFFIX}`,
+        `X API 200 with GraphQL errors — ${detail}. Body: ${textSnippet(rawBody)}${DIAG_SUFFIX}`,
       );
     }
 
@@ -575,10 +561,10 @@ export async function fetchPageWithBackoff(
     // bookmarks" result and passes this guard (hasTimelineShape is true).
     if (!hasTimelineShape(json)) {
       throw new Error(
-        `unexpected X response shape (no bookmark_timeline_v2, no errors): ${rawBody.slice(0, 300)}${DIAG_SUFFIX}`,
+        `unexpected X response shape (no bookmark_timeline_v2, no errors): ${textSnippet(rawBody)}${DIAG_SUFFIX}`,
       );
     }
 
     return { json, res };
-  }
+  });
 }

@@ -24,6 +24,7 @@ import type { BiliFavFolder, BiliFavOrder, BiliFavVideo } from './types';
 import type { SubtitleRow, SubtitleSource } from '@/lib/subtitle/types';
 import type { CooperativeCheckpoint } from '@/lib/collections';
 import { envNumber } from '@/lib/env';
+import { sleep } from '@/lib/http/backoff';
 
 export { BiliAuthError };
 export type { BiliFavoritesSyncProgress } from './favorites-sync-runner';
@@ -132,7 +133,7 @@ export async function syncAllFavoriteVideos(
         return markVideoHistoryComplete(db, String(folder.id));
       },
       waitBetweenPages() {
-        return new Promise((resolve) => setTimeout(resolve, favoritePageDelayMs()));
+        return sleep(favoritePageDelayMs());
       },
     },
     onProgress,
