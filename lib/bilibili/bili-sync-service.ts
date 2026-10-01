@@ -1,5 +1,11 @@
 import { eq, and, inArray } from 'drizzle-orm';
-import { getBiliAuth, fetchFavFolders, fetchFavVideos, BiliAuthError } from './bilibili-api';
+import {
+  getBiliAuth,
+  fetchFavFolders,
+  fetchFavVideos,
+  BiliAuthError,
+  BiliRateLimitError,
+} from './bilibili-api';
 import {
   getFavoriteVideoSyncBaseline,
   markVideoHistoryComplete,
@@ -26,7 +32,7 @@ import type { CooperativeCheckpoint } from '@/lib/collections';
 import { envNumber } from '@/lib/env';
 import { sleep } from '@/lib/http/backoff';
 
-export { BiliAuthError };
+export { BiliAuthError, BiliRateLimitError };
 export type { BiliFavoritesSyncProgress } from './favorites-sync-runner';
 
 const PLATFORM = 'bilibili';
@@ -64,7 +70,7 @@ export interface SyncVideosResult {
  */
 export async function checkAuth() {
   const auth = await getBiliAuth();
-  if (!auth) throw new BiliAuthError('Not logged in');
+  if (!auth) throw new BiliAuthError('Not logged in', 'missing');
   return auth;
 }
 

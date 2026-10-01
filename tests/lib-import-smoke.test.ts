@@ -29,6 +29,9 @@
  *   - the Bilibili transcription seam (`transcribe-utils`) never value-imports
  *     `@/lib/embedding`/`@/lib/tagging`; post-processing is injected via
  *     `startProcessing` (docs/20 中-5).
+ *   - the shared platform error bases (`lib/collections/sync-errors.ts`) are a
+ *     zero-import leaf: every platform's `*-api.ts` extends them, the
+ *     Background SW included (docs/32 Step 4).
  *
  * No `vi.mock` anywhere in this file — that is the point. Each entry is
  * imported after `vi.resetModules()` so a leak is attributed to the entry
@@ -65,6 +68,7 @@ const PURE_ENTRIES: readonly string[] = [
   '@/lib/embedding/char-split',
   '@/lib/collections/platforms',
   '@/lib/collections/platform-descriptor',
+  '@/lib/collections/sync-errors',
   '@/lib/ingest/ingest',
   '@/lib/database',
   '@/lib/database/proxy-db',

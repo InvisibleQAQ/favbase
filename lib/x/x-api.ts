@@ -29,6 +29,11 @@
 
 import type { XAuth } from './x-auth';
 import type { CooperativeCheckpoint } from '@/lib/collections';
+import {
+  PlatformAuthError,
+  PlatformRateLimitError,
+  type AuthFailReason,
+} from '@/lib/collections/sync-errors';
 import { envNumber } from '@/lib/env';
 import { backoffDelayMs, jitteredDelayMs, sleep } from '@/lib/http/backoff';
 import { fetchWithDeadline } from '@/lib/http/fetch-with-deadline';
@@ -117,32 +122,27 @@ const DIAG_SUFFIX = ` [queryId=${BOOKMARKS_QUERY_ID}]`;
 // ---------------------------------------------------------------------------
 
 /**
- * Why auth failed — the two modes need different user actions:
- * - 'no-token': nothing captured yet (session storage empty) → refresh x.com
- *   so the web client fires an API request the webRequest listener can capture.
- * - 'rejected': we HAD tokens but X returned 401/403 → the session is stale or
- *   the replay is broken → re-login to x.com / re-capture.
+ * X auth failed. The two reasons (`AuthFailReason`, lib/collections/sync-errors.ts)
+ * need different user actions, and collapsing them made real failures
+ * undiagnosable (the 2026-07 "Refresh x.com and retry" dead end):
+ * - 'missing': nothing captured yet (session storage empty) → open x.com so the
+ *   web client fires an API request the webRequest listener can capture. Thrown
+ *   by the app Sync Adapter before the Platform Sync funnel, never from here.
+ * - 'rejected': we HAD a captured session but X returned 401/403 → the session
+ *   is stale or the replay is broken → re-login to x.com / re-capture.
  */
-export type XAuthFailReason = 'no-token' | 'rejected';
-
-export class XAuthError extends Error {
-  readonly reason: XAuthFailReason;
-
-  constructor(message: string, reason: XAuthFailReason) {
-    super(message);
+export class XAuthError extends PlatformAuthError {
+  constructor(message: string, reason: AuthFailReason) {
+    super(message, reason);
     this.name = 'XAuthError';
-    this.reason = reason;
   }
 }
 
-export class XRateLimitError extends Error {
-  /** When the rate-limit window resets (from x-rate-limit-reset), null if absent. */
-  readonly resetAt: Date | null;
-
+/** `resetAt` comes from x-rate-limit-reset; null if absent. */
+export class XRateLimitError extends PlatformRateLimitError {
   constructor(message: string, resetAt: Date | null) {
-    super(message);
+    super(message, resetAt);
     this.name = 'XRateLimitError';
-    this.resetAt = resetAt;
   }
 }
 

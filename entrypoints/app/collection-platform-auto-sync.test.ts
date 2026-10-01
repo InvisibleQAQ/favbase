@@ -128,7 +128,7 @@ describe('auto-sync registry', () => {
 
   it('only zhihu treats its logged-out error as silent', async () => {
     const { ZhihuAuthError } = await import('@/lib/zhihu/zhihu-sync-service');
-    expect(entry('zhihu-favorites').isSilentError?.(new ZhihuAuthError('out'))).toBe(true);
+    expect(entry('zhihu-favorites').isSilentError?.(new ZhihuAuthError('out', 'missing'))).toBe(true);
     expect(entry('zhihu-favorites').isSilentError?.(new Error('boom'))).toBe(false);
     for (const p of AUTO_SYNC_PLATFORMS.filter((p) => p.jobPlatform !== 'zhihu-favorites')) {
       expect(p.isSilentError).toBeUndefined();

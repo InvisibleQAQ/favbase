@@ -18,6 +18,11 @@ import { backgroundJobRuntime, fetchedCountProgress } from '../../hooks/pipeline
 import { useCollectionPipeline } from '../../hooks/use-collection-pipeline';
 import { useCollectionBreadcrumbs } from '../../hooks/use-collection-breadcrumbs';
 import { useJob, type BackgroundJob } from '../../hooks/background-jobs-store';
+import type { CollectionSyncError } from '../../hooks/collection-sync-error';
+import {
+  syncErrorMessage,
+  type SyncErrorCopy,
+} from '../../hooks/collection-sync-error-message';
 import { Iconify } from '../../components/iconify';
 import { CollectionConfigurationNotice } from '../../components/configuration-blocker';
 import { AutoTranscribeBar } from './auto-transcribe-bar';
@@ -32,6 +37,17 @@ import { VideoGridSkeleton } from './video-grid-skeleton';
 
 const PLATFORM = 'bilibili';
 const SEARCH_DEBOUNCE_MS = 300;
+
+/**
+ * i18n seam for a classified sync / browse error (shared `syncErrorMessage`).
+ * Auth never reaches it — both hooks turn it into `loginState`; a 412 risk
+ * control block is a rate limit with no reset, so there is no Fetch-button
+ * lock here.
+ */
+const SYNC_ERROR_COPY: SyncErrorCopy = {
+  auth: 'collections.notLoggedInTitle',
+  rateLimited: 'collections.rateLimited',
+};
 
 /** Transcription is bilibili's content stage on both the folder page and the fallback page. */
 function transcriptionStage(label: string, transcribeJob: BackgroundJob | null) {
@@ -141,7 +157,7 @@ interface BilibiliCollectionPageProps {
   syncJob: ReturnType<typeof useBiliFavFolders>['syncJob'];
   onSync: () => void;
   lastSyncedAt: Date | null;
-  syncError: string | null;
+  syncError: CollectionSyncError | null;
   autoTranscribe: ReturnType<typeof useAutoTranscribe>;
 }
 
@@ -206,6 +222,7 @@ function BilibiliCollectionPage({
     );
   }
   const pipeline = <PipelineProgressStrip segments={segments} />;
+  const syncErrorText = syncError ? syncErrorMessage(syncError, SYNC_ERROR_COPY) : '';
 
   return (
     <CollectionPageScaffold
@@ -217,7 +234,7 @@ function BilibiliCollectionPage({
       loading={loading}
       metaLoading={false}
       syncing={syncing}
-      queryError={error}
+      queryError={error ? syncErrorMessage(error, SYNC_ERROR_COPY) : null}
       hasSyncError={syncError != null}
       authFailed={loginState === 'not_logged_in'}
       page={page}
@@ -237,8 +254,8 @@ function BilibiliCollectionPage({
         syncingLabel: t('pipeline.fetching'),
         loadFailed: t('common.loadFailed'),
         retry: t('common.retry'),
-        syncErrorText: syncError ?? '',
-        syncFailedBanner: t('collections.syncFailed', { error: syncError ?? '' }),
+        syncErrorText,
+        syncFailedBanner: t('collections.syncFailed', { error: syncErrorText }),
       }}
       renderCard={(video, tags, onEditTags) => {
         const invalid = !isProcessableVideo(video);
@@ -303,7 +320,7 @@ interface BilibiliFallbackPageProps {
   loginState: ReturnType<typeof useBiliFavFolders>['loginState'];
   syncing: boolean;
   syncJob: ReturnType<typeof useBiliFavFolders>['syncJob'];
-  error: string | null;
+  error: CollectionSyncError | null;
   onSync: () => void;
   searchInput: string;
   onSearchInput: (value: string) => void;
@@ -338,6 +355,7 @@ function BilibiliFallbackPage({
     extraRefreshKey: transcribeJob?.generation ?? 0,
   });
   const pipeline = <PipelineProgressStrip segments={segments} />;
+  const syncErrorText = error ? syncErrorMessage(error, SYNC_ERROR_COPY) : '';
   return (
     <CollectionPageScaffold
       platform={PLATFORM}
@@ -367,8 +385,8 @@ function BilibiliFallbackPage({
         syncingLabel: t('pipeline.fetching'),
         loadFailed: t('common.loadFailed'),
         retry: t('common.retry'),
-        syncErrorText: error ?? '',
-        syncFailedBanner: t('collections.syncFailed', { error: error ?? '' }),
+        syncErrorText,
+        syncFailedBanner: t('collections.syncFailed', { error: syncErrorText }),
       }}
       renderCard={() => null}
       renderTaggedCard={(item, openEditor) => (

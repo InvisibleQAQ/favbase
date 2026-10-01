@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { COOLDOWN_MS, remainingCooldown, formatCountdown } from './cooldown';
+import { COOLDOWN_MS, remainingCooldown } from './cooldown';
 
 describe('remainingCooldown', () => {
   const NOW = 1_000_000_000;
@@ -34,19 +34,5 @@ describe('remainingCooldown', () => {
 
   it('clock skew (sync time in the future): keeps the button locked', () => {
     expect(remainingCooldown(NOW + 10_000, NOW)).toBe(COOLDOWN_MS);
-  });
-});
-
-describe('formatCountdown', () => {
-  it('formats mm:ss with zero-padded seconds', () => {
-    expect(formatCountdown(5 * 60 * 1000)).toBe('5:00');
-    expect(formatCountdown(4 * 60 * 1000 + 30 * 1000)).toBe('4:30');
-    expect(formatCountdown(9 * 1000)).toBe('0:09');
-    expect(formatCountdown(0)).toBe('0:00');
-  });
-
-  it('rounds up partial seconds so the label never shows 0:00 while time remains', () => {
-    expect(formatCountdown(1)).toBe('0:01');
-    expect(formatCountdown(59_001)).toBe('1:00');
   });
 });

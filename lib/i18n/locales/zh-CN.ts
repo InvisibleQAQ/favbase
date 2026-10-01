@@ -441,6 +441,8 @@ const zhCN = {
   'pipeline.pauseLibrary': '暂停构建知识库',
   'pipeline.resumeLibrary': '继续构建知识库',
   'pipeline.fetchBlockedByPause': '已暂停构建知识库，请先点击「继续构建知识库」',
+  // Fetch-button lock label (X post-sync cooldown, or a rate limit with a known reset).
+  'pipeline.fetchAvailableIn': '{{time}} 后可再拉取',
 
   // Shared collection-page copy (identical across all platforms) — platform
   // prefixes keep only platform-specific nouns (see *.noMatches).
@@ -501,6 +503,7 @@ const zhCN = {
   'collections.lastSynced': '上次同步 {{time}}',
   'collections.bilibiliSyncProgress': '已拉取 {{fetched}} 条（收藏夹 {{current}}/{{total}}：{{title}}，第 {{page}}/{{totalPages}} 页）',
   'collections.syncFailed': '同步失败: {{error}}',
+  'collections.rateLimited': '触发 B 站限流，请稍后重试',
   'collections.selectFolder': '请选择一个收藏夹',
   'collections.sidebarTitle': 'B 站收藏夹',
   'collections.foldersTitle': '收藏夹',
@@ -564,6 +567,8 @@ const zhCN = {
   'x.showLessAuthors': '收起',
   'x.notLoggedInTitle': '未检测到 X 登录状态',
   'x.notLoggedInDesc': '打开 x.com/i/bookmarks 并登录，让扩展捕获你的会话，然后回到此页面点击同步。',
+  'x.sessionRejectedTitle': 'X 登录已失效',
+  'x.sessionRejectedDesc': 'X 拒绝了扩展捕获的会话。打开 x.com/i/bookmarks 重新登录，让扩展重新捕获会话，然后回到此页面点击同步。',
   'x.openBookmarksPage': '打开 X 书签页',
   'x.emptyTitle': '还没有收录任何书签',
   'x.emptyDesc': '打开 x.com/i/bookmarks 并登录，让扩展捕获你的会话，然后回到此页面点击同步，即可一键收录你在 X 上收藏的所有推文。',
@@ -572,7 +577,6 @@ const zhCN = {
   'x.rateLimitedNoReset': '触发 X 限流，请稍后重试',
   'x.newThisSync': '本次新增 {{count}} 条',
   'x.newThisSync.one': '本次新增 {{count}} 条',
-  'x.cooldown': '{{time}} 后可再拉取',
 
   'zhihu.title': '知乎收藏',
   'zhihu.count': '{{count}} 条收藏',

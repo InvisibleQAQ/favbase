@@ -1,8 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import {
-  fetchAndSyncFolders,
-  BiliAuthError,
-} from '@/lib/bilibili/bili-sync-service';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { fetchAndSyncFolders } from '@/lib/bilibili/bili-sync-service';
 import { initDbProxy } from '@/lib/database';
 import { getPlatformLastSyncedAt } from '@/lib/database/collection-queries';
 import type { BiliFavoritesSyncProgress } from '@/lib/bilibili/bili-sync-service';
@@ -12,6 +9,10 @@ import {
   useJob,
   type BackgroundJob,
 } from '../../hooks/background-jobs-store';
+import {
+  classifyCollectionSyncError,
+  type CollectionSyncError,
+} from '../../hooks/collection-sync-error';
 import { runBilibiliSync } from './bilibili-sync-adapter';
 
 const PLATFORM = 'bilibili';
@@ -25,7 +26,8 @@ interface UseFavFoldersReturn {
   syncProgress: BiliFavoritesSyncProgress | null;
   loginState: LoginState;
   lastSyncedAt: Date | null;
-  error: string | null;
+  /** The sync error if there is one, else the mount-time folder load error. Auth never lands here — it is `loginState`. */
+  error: CollectionSyncError | null;
   syncJob: BackgroundJob<BiliFavoritesSyncProgress> | null;
   sync: () => Promise<void>;
 }
@@ -35,17 +37,17 @@ export function useBiliFavFolders(routeFolderId?: number): UseFavFoldersReturn {
   const [loading, setLoading] = useState(true);
   const [loginState, setLoginState] = useState<LoginState>('unknown');
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<CollectionSyncError | null>(null);
   const mountedRef = useRef(true);
   const syncJob = useJob<BiliFavoritesSyncProgress>(PLATFORM, 'sync');
   const syncing = syncJob?.running ?? false;
   const syncProgress = syncJob?.progress ?? null;
-  const syncAuthFailed = syncJob?.error instanceof BiliAuthError;
-  const syncError = syncJob?.error != null && !syncAuthFailed
-    ? syncJob.error instanceof Error
-      ? syncJob.error.message
-      : 'Sync failed'
-    : null;
+  const classifiedSyncError = useMemo(
+    () => (syncJob?.error != null ? classifyCollectionSyncError(syncJob.error) : null),
+    [syncJob?.error],
+  );
+  const syncAuthFailed = classifiedSyncError?.kind === 'auth';
+  const syncError = syncAuthFailed ? null : classifiedSyncError;
   const effectiveLoginState = syncAuthFailed ? 'not_logged_in' : loginState;
   const error = syncError ?? loadError;
 
@@ -104,10 +106,11 @@ export function useBiliFavFolders(routeFolderId?: number): UseFavFoldersReturn {
         setFolders(folderList);
       } catch (err) {
         if (!cancelled) {
-          if (err instanceof BiliAuthError) {
+          const classified = classifyCollectionSyncError(err);
+          if (classified.kind === 'auth') {
             setLoginState('not_logged_in');
           } else {
-            setLoadError(err instanceof Error ? err.message : 'Failed to check login');
+            setLoadError(classified);
           }
         }
       } finally {

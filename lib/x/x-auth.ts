@@ -18,7 +18,7 @@
  * app.html X Sync Adapter (sections/x/x-sync-adapter.ts) resolves auth here,
  * then calls `syncBookmarks` inside the Platform Sync funnel (page context has
  * the RPC proxy to the offscreen PGlite); a null result is thrown as
- * XAuthError('no-token') before the funnel, so it records no attempt. Requires
+ * XAuthError('missing') before the funnel, so it records no attempt. Requires
  * the user to have x.com open/browsed at least once this session before a sync
  * can run (surfaced as the "login" empty state).
  */

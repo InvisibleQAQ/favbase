@@ -2,7 +2,8 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Link from '@mui/material/Link';
 
-import { t, formatDateTime } from '@/lib/i18n';
+import type { AuthFailReason } from '@/lib/collections/sync-errors';
+import { formatDateTime } from '@/lib/i18n';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify } from '../../components/iconify';
 import { CollectionConfigurationNotice } from '../../components/configuration-blocker';
@@ -15,8 +16,13 @@ import {
 import { backgroundJobRuntime, fetchedCountProgress } from '../../hooks/pipeline-segments';
 import { useCollectionPipeline } from '../../hooks/use-collection-pipeline';
 import { useCollectionBreadcrumbs } from '../../hooks/use-collection-breadcrumbs';
-import { useXBookmarks, type XSyncError } from './use-x-bookmarks';
-import { formatCountdown } from './cooldown';
+import { rateLimitRemainingMs } from '../../hooks/collection-sync-error';
+import {
+  syncErrorMessage,
+  type SyncErrorCopy,
+} from '../../hooks/collection-sync-error-message';
+import { formatCountdown, useCountdown } from '../../hooks/use-countdown';
+import { useXBookmarks } from './use-x-bookmarks';
 import { AuthorChips } from './author-chips';
 import { XCard } from './x-card';
 import { TaggedTweetCard } from './tagged-tweet-card';
@@ -30,21 +36,19 @@ const PLATFORM = 'x';
 const X_BOOKMARKS_URL = 'https://x.com/i/bookmarks';
 
 // ---------------------------------------------------------------------------
-// i18n seam: structured sync errors from the hook → user-facing copy here.
+// i18n seam: the classified sync error → user-facing copy (shared
+// `syncErrorMessage`). X tells the two auth reasons apart — no captured
+// session vs. a captured one X refused — because the user action differs, and
+// reports its rate-limit reset, so it has the `rateLimitedUntil` form and the
+// Fetch-button lock below.
 // ---------------------------------------------------------------------------
 
-function syncErrorMessage(error: XSyncError): string {
-  switch (error.kind) {
-    case 'auth':
-      return t('x.notLoggedInTitle');
-    case 'rate-limit':
-      return error.resetAt
-        ? t('x.rateLimited', { reset: formatDateTime(error.resetAt.getTime()) })
-        : t('x.rateLimitedNoReset');
-    case 'unknown':
-      return error.message;
-  }
-}
+const SYNC_ERROR_COPY: SyncErrorCopy = {
+  auth: 'x.notLoggedInTitle',
+  authRejected: 'x.sessionRejectedTitle',
+  rateLimited: 'x.rateLimitedNoReset',
+  rateLimitedUntil: 'x.rateLimited',
+};
 
 // ---------------------------------------------------------------------------
 // Platform-specific dashed-box states (shared StateBox shell, x copy).
@@ -70,14 +74,25 @@ function OpenBookmarksButton() {
 }
 
 /** No valid x.com session (surfaced when a sync throws XAuthError) — guide the
- *  user to log in on X so the extension captures the session, then sync here. */
-function NotLoggedInState({ syncing, onSync }: { syncing: boolean; onSync: () => void }) {
+ *  user to log in on X so the extension captures the session, then sync here.
+ *  `'missing'` = nothing captured yet; `'rejected'` = X refused the captured
+ *  session, so the copy says to sign in again rather than for the first time. */
+function NotLoggedInState({
+  reason,
+  syncing,
+  onSync,
+}: {
+  reason: AuthFailReason;
+  syncing: boolean;
+  onSync: () => void;
+}) {
   const { t } = useTranslation();
+  const rejected = reason === 'rejected';
   return (
     <StateBox
       icon={<Iconify icon="mdi:twitter" width={48} sx={{ color: 'text.secondary' }} />}
-      title={t('x.notLoggedInTitle')}
-      description={t('x.notLoggedInDesc')}
+      title={t(rejected ? 'x.sessionRejectedTitle' : 'x.notLoggedInTitle')}
+      description={t(rejected ? 'x.sessionRejectedDesc' : 'x.notLoggedInDesc')}
       action={
         <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1, flexWrap: 'wrap' }}>
           <OpenBookmarksButton />
@@ -123,6 +138,8 @@ export function XView() {
     embedJob: x.embedJob,
     tagJob: x.tagJob,
   });
+  // A rate limit with a known reset locks the Fetch button until then.
+  const lockMs = useCountdown((now) => rateLimitRemainingMs(x.syncError, now));
 
   const captionParts: string[] = [];
   if (x.libraryCount > 0) {
@@ -137,14 +154,17 @@ export function XView() {
     captionParts.push(t('x.newThisSync', { count: x.lastInserted }));
   }
 
-  const syncErrorText = x.syncError ? syncErrorMessage(x.syncError) : '';
+  const syncErrorText = x.syncError ? syncErrorMessage(x.syncError, SYNC_ERROR_COPY) : '';
+  const authReason: AuthFailReason =
+    x.syncError?.kind === 'auth' ? x.syncError.reason : 'missing';
   const pipeline = <PipelineProgressStrip segments={segments} />;
 
-  // X-only 5-minute cooldown after a successful sync — hard-disables the
-  // title-bar sync button with a live mm:ss countdown label.
-  const inCooldown = x.cooldownRemainingMs > 0;
-  const cooldownLabel = inCooldown
-    ? t('x.cooldown', { time: formatCountdown(x.cooldownRemainingMs) })
+  // The title-bar Fetch button is hard-disabled with a live m:ss countdown by
+  // whichever lock ends later: X's post-sync cooldown, or a rate limit's reset.
+  const lockRemainingMs = Math.max(x.cooldownRemainingMs, lockMs);
+  const locked = lockRemainingMs > 0;
+  const lockLabel = locked
+    ? t('pipeline.fetchAvailableIn', { time: formatCountdown(lockRemainingMs) })
     : undefined;
 
   return (
@@ -165,8 +185,8 @@ export function XView() {
       onPageChange={x.goToPage}
       onSync={x.sync}
       onRetryQuery={x.retryQuery}
-      syncDisabled={inCooldown}
-      syncDisabledLabel={cooldownLabel}
+      syncDisabled={locked}
+      syncDisabledLabel={lockLabel}
       searchInput={x.searchInput}
       onSearchInput={x.setSearchInput}
       copy={{
@@ -198,7 +218,9 @@ export function XView() {
         />
       ) : null}
       emptyState={<EmptyLibraryState syncing={x.syncing} onSync={x.sync} />}
-      authFailedState={<NotLoggedInState syncing={x.syncing} onSync={x.sync} />}
+      authFailedState={
+        <NotLoggedInState reason={authReason} syncing={x.syncing} onSync={x.sync} />
+      }
       configurationNotice={
         <CollectionConfigurationNotice
           platform={PLATFORM}

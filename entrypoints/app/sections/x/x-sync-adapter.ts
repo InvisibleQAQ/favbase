@@ -40,7 +40,7 @@ export async function runXBookmarksSync(
   // an attempt, no record (docs/32 §5.2). The page's logged-out state still
   // keys off this same error class.
   const auth = await getXAuth();
-  if (!auth) throw new XAuthError('Not logged in to x.com', 'no-token');
+  if (!auth) throw new XAuthError('Not logged in to x.com', 'missing');
   await runPlatformSync(ITEM_PLATFORM, control, async () => {
     const result = await syncBookmarks(
       auth,

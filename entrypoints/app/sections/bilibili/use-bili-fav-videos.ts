@@ -1,6 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { fetchFavoriteVideosPage, BiliAuthError } from '@/lib/bilibili/bili-sync-service';
+import { fetchFavoriteVideosPage } from '@/lib/bilibili/bili-sync-service';
 import type { BiliFavOrder, BiliFavVideo } from '@/lib/bilibili/types';
+
+import {
+  classifyCollectionSyncError,
+  type CollectionSyncError,
+} from '../../hooks/collection-sync-error';
 
 type LoginState = 'unknown' | 'logged_in' | 'not_logged_in';
 
@@ -11,7 +16,8 @@ interface UseFavVideosReturn {
   totalPages: number;
   loading: boolean;
   loginState: LoginState;
-  error: string | null;
+  /** Auth never lands here — it is `loginState`. A 412 is a rate limit (docs/32 Step 4). */
+  error: CollectionSyncError | null;
   order: BiliFavOrder;
   setOrder: (o: BiliFavOrder) => void;
   goToPage: (p: number) => void;
@@ -25,7 +31,7 @@ export function useBiliFavVideos(mediaId: number, keyword: string = ''): UseFavV
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const [loginState, setLoginState] = useState<LoginState>('unknown');
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<CollectionSyncError | null>(null);
   const [order, setOrder] = useState<BiliFavOrder>('mtime');
 
   // Guards against stale responses (rapid keyword/order/folder changes): only
@@ -52,10 +58,11 @@ export function useBiliFavVideos(mediaId: number, keyword: string = ''): UseFavV
       setPage(targetPage);
     } catch (err) {
       if (fetchId !== fetchIdRef.current) return;
-      if (err instanceof BiliAuthError) {
+      const classified = classifyCollectionSyncError(err);
+      if (classified.kind === 'auth') {
         setLoginState('not_logged_in');
       } else {
-        setError(err instanceof Error ? err.message : 'Failed to fetch videos');
+        setError(classified);
       }
     } finally {
       if (fetchId === fetchIdRef.current) setLoading(false);

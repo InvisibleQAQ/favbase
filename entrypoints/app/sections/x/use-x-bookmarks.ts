@@ -9,22 +9,19 @@ import {
   type XBookmarkItem,
   type AuthorCount,
 } from '@/lib/x/x-sync-service';
-import { classifyXSyncError, type XSyncError } from '@/lib/x/x-messages';
 
 import {
   useCollectionLibrary,
   type CollectionQueryParams,
 } from '../../hooks/use-collection-library';
 import type { BackgroundJob } from '../../hooks/background-jobs-store';
-import { COOLDOWN_MS, remainingCooldown } from './cooldown';
+import type { CollectionSyncError } from '../../hooks/collection-sync-error';
+import { useCountdown } from '../../hooks/use-countdown';
+import { remainingCooldown } from './cooldown';
 import { runXBookmarksSync, type XSyncProgress } from './x-sync-adapter';
 
 /** Job namespace key (reused as `useCollectionLibrary` logTag). */
 const LOG_TAG = 'x-bookmarks';
-
-// Re-exported so the view keeps importing XSyncError from the hook; the type +
-// classifier live in lib/x (shared classifier; single trigger surface now).
-export type { XSyncError };
 
 // Re-exported so consumers keep importing the progress type from the hook; the
 // type + mapping live in the shared Sync Adapter (single trigger surface).
@@ -56,7 +53,7 @@ export interface UseXBookmarksReturn {
   // One-shot bookmarks sync (manual button — never auto-on-mount, D5)
   syncing: boolean;
   syncProgress: XSyncProgress | null;
-  syncError: XSyncError | null;
+  syncError: CollectionSyncError | null;
   syncJob: BackgroundJob<XSyncProgress> | null;
   sync: () => Promise<void>;
 
@@ -81,7 +78,7 @@ function queryFn({ filter, search, page, pageSize }: CollectionQueryParams) {
 
 /** Thin adapter over the shared collection-library state machine. */
 export function useXBookmarks(): UseXBookmarksReturn {
-  const lib = useCollectionLibrary<XBookmarkItem, AuthorCount, XSyncProgress, XSyncError>({
+  const lib = useCollectionLibrary<XBookmarkItem, AuthorCount, XSyncProgress>({
     queryFn,
     facetsFn: getAuthorCounts,
     lastSyncedFn: getLastSyncedAt,
@@ -90,7 +87,6 @@ export function useXBookmarks(): UseXBookmarksReturn {
     // dispatch and the Platform Sync Record all live there; the daily
     // auto-sync coordinator runs the exact same function.
     syncFn: runXBookmarksSync,
-    classifyError: classifyXSyncError,
     logTag: LOG_TAG,
   });
 
@@ -116,15 +112,8 @@ export function useXBookmarks(): UseXBookmarksReturn {
   // reloads; a failed sync never moves it, so it never locks the button).
   const effectiveSyncedAt = lib.lastSyncedAt?.getTime() ?? null;
 
-  // Tick every second while inside the cooldown window to drive the countdown.
-  const [now, setNow] = useState(() => Date.now());
-  const cooldownRemainingMs = remainingCooldown(effectiveSyncedAt, now);
-  const inCooldown = cooldownRemainingMs > 0;
-  useEffect(() => {
-    if (!inCooldown) return;
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, [inCooldown, effectiveSyncedAt]);
+  // The shared 1 s countdown ticks while inside the cooldown window.
+  const cooldownRemainingMs = useCountdown((now) => remainingCooldown(effectiveSyncedAt, now));
 
   return {
     bookmarks: lib.items,
@@ -154,6 +143,3 @@ export function useXBookmarks(): UseXBookmarksReturn {
     cooldownRemainingMs,
   };
 }
-
-// Re-exported for callers/tests that need the raw window length.
-export { COOLDOWN_MS };

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 
-import { t, formatDateTime } from '@/lib/i18n';
+import { formatDateTime } from '@/lib/i18n';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify } from '../../components/iconify';
 import { CollectionConfigurationNotice } from '../../components/configuration-blocker';
@@ -18,8 +18,12 @@ import {
 import { backgroundJobRuntime, fetchedCountProgress } from '../../hooks/pipeline-segments';
 import { useCollectionPipeline } from '../../hooks/use-collection-pipeline';
 import { useCollectionBreadcrumbs } from '../../hooks/use-collection-breadcrumbs';
+import {
+  syncErrorMessage,
+  type SyncErrorCopy,
+} from '../../hooks/collection-sync-error-message';
 import { settingsPath } from '../settings/settings-nav';
-import { useYoutubePlaylists, type YoutubeSyncError } from './use-youtube-playlists';
+import { useYoutubePlaylists } from './use-youtube-playlists';
 import { PlaylistChips } from './playlist-chips';
 import { YoutubeCard } from './youtube-card';
 import { TaggedYoutubeCard } from './tagged-youtube-card';
@@ -29,20 +33,16 @@ import { YoutubeGridSkeleton } from './youtube-grid-skeleton';
 const PLATFORM = 'youtube';
 
 // ---------------------------------------------------------------------------
-// i18n seam: structured sync errors from the hook → user-facing copy here.
-// Rate-limit reuses the settings.youtube key (same semantics as the card).
+// i18n seam: the classified sync error → user-facing copy (shared
+// `syncErrorMessage`). Rate-limit reuses the settings.youtube key (same
+// semantics as the card). Google sends no quota reset, so there is no
+// `rateLimitedUntil` form and no Fetch-button lock.
 // ---------------------------------------------------------------------------
 
-function syncErrorMessage(error: YoutubeSyncError): string {
-  switch (error.kind) {
-    case 'auth':
-      return t('youtube.authFailedTitle');
-    case 'rate-limit':
-      return t('settings.youtube.rateLimited');
-    case 'unknown':
-      return error.message;
-  }
-}
+const SYNC_ERROR_COPY: SyncErrorCopy = {
+  auth: 'youtube.authFailedTitle',
+  rateLimited: 'settings.youtube.rateLimited',
+};
 
 // ---------------------------------------------------------------------------
 // Platform-specific dashed-box states (shared StateBox shell, youtube copy).
@@ -151,7 +151,7 @@ export function YoutubeView() {
     captionParts.push(t('youtube.lastSynced', { time: formatDateTime(yt.lastSyncedAt.getTime()) }));
   }
 
-  const syncErrorText = yt.syncError ? syncErrorMessage(yt.syncError) : '';
+  const syncErrorText = yt.syncError ? syncErrorMessage(yt.syncError, SYNC_ERROR_COPY) : '';
   const pipeline = <PipelineProgressStrip segments={segments} />;
 
   return (

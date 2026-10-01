@@ -12,6 +12,7 @@ import {
   type CollectionQueryParams,
 } from '../../hooks/use-collection-library';
 import type { BackgroundJob } from '../../hooks/background-jobs-store';
+import type { CollectionSyncError } from '../../hooks/collection-sync-error';
 import { runBookmarksSync, type BookmarksSyncProgress } from './bookmarks-sync-adapter';
 
 /** Job namespace key (reused as `useCollectionLibrary` logTag). */
@@ -40,7 +41,8 @@ export interface UseBookmarksReturn {
 
   // Auto-sync (runs once on mount; `sync` re-exposed for error-state retry)
   syncing: boolean;
-  syncError: string | null;
+  /** Local browser data has neither auth nor rate limits — the view shows `message` verbatim. */
+  syncError: CollectionSyncError | null;
   syncJob: BackgroundJob | null;
   sync: () => Promise<void>;
 }
@@ -55,11 +57,6 @@ function queryFn({ filter, search, page, pageSize }: CollectionQueryParams) {
   });
 }
 
-/** Local browser data throws plain errors — the view shows the message verbatim. */
-function classifySyncError(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
-}
-
 /**
  * Thin adapter over the shared collection-library state machine. Bookmarks'
  * only deviations from the flat remote pages live here: the folder filter is
@@ -69,12 +66,7 @@ function classifySyncError(err: unknown): string {
  * button, so a remount re-joins an in-flight run).
  */
 export function useBookmarks(folderId: string | undefined): UseBookmarksReturn {
-  const lib = useCollectionLibrary<
-    BookmarkItem,
-    BookmarkFolderRef,
-    BookmarksSyncProgress,
-    string
-  >({
+  const lib = useCollectionLibrary<BookmarkItem, BookmarkFolderRef, BookmarksSyncProgress>({
     queryFn,
     facetsFn: getFolders,
     lastSyncedFn: getLastSyncedAt,
@@ -82,7 +74,6 @@ export function useBookmarks(folderId: string | undefined): UseBookmarksReturn {
     // extraction and the backlog embed dispatch all live there — the daily
     // auto-sync coordinator runs the exact same function.
     syncFn: runBookmarksSync,
-    classifyError: classifySyncError,
     logTag: LOG_TAG,
     controlledFilter: folderId ?? null,
   });

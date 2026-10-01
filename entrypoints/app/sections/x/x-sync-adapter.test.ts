@@ -52,13 +52,13 @@ describe('x Sync Adapter (shared by manual page + daily auto-sync)', () => {
     expect(mocks.syncBookmarks).toHaveBeenCalledWith(AUTH, expect.any(Function), control);
   });
 
-  it('throws the no-token auth error BEFORE the funnel when no session was captured', async () => {
+  it('throws the missing-session auth error BEFORE the funnel when no session was captured', async () => {
     mocks.getXAuth.mockResolvedValue(null);
 
     const run = runXBookmarksSync(() => undefined, control);
 
     await expect(run).rejects.toBeInstanceOf(mocks.XAuthError);
-    await expect(run).rejects.toMatchObject({ reason: 'no-token' });
+    await expect(run).rejects.toMatchObject({ reason: 'missing' });
     // Not an attempt: nothing recorded, the platform never contacted.
     expect(mocks.runPlatformSync).not.toHaveBeenCalled();
     expect(mocks.syncBookmarks).not.toHaveBeenCalled();

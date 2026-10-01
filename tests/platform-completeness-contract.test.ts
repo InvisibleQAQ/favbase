@@ -680,7 +680,147 @@ describe('platform completeness contract', () => {
         + ' holds descriptor data instead, rename it.)',
     ).toEqual([]);
   });
+
+  it('detects platform error classes that skip the shared bases', () => {
+    // Self-check (docs/32 Step 4): the inheritance rule below must actually
+    // catch a class that extends `Error` or nothing — declared or assigned as
+    // a class expression — and must not flag a class whose name is outside its
+    // two suffixes.
+    const offending = [
+      'class FooAuthError extends Error {}',
+      'class FooRateLimitError extends Error {}',
+      'class FooAuthError {}',
+      'export default class FooAuthError extends Error {}',
+      'class FooAuthError extends globalThis.Error {}',
+      'const FooAuthError = class extends Error {};',
+      'const FooRateLimitError = (class Inner extends Error {});',
+      'let FooAuthError; FooAuthError = class extends Error {};',
+    ];
+    for (const source of offending) {
+      expect(platformErrorBaseOffenders(source), source).toHaveLength(1);
+    }
+
+    const passing = [
+      'class FooAuthError extends PlatformAuthError {}',
+      'class FooRateLimitError extends PlatformRateLimitError {}',
+      'const FooAuthError = class extends PlatformAuthError {};',
+      'class HttpDeadlineError extends Error {}',
+      'const HttpDeadlineError = class extends Error {};',
+    ];
+    for (const source of passing) {
+      expect(platformErrorBaseOffenders(source), source).toEqual([]);
+    }
+  });
+
+  it('derives every platform auth / rate-limit error from the shared bases', () => {
+    // The app classifies a sync failure by the base class alone
+    // (`classifyCollectionSyncError`), so a platform error that extends
+    // `Error` directly is silently shown as an unknown failure — raw English
+    // debug text instead of the platform's localized auth / rate-limit copy.
+    const offenders: string[] = [];
+    for (const dir of PLATFORM_DIRS) {
+      for (const file of platformSourceFiles(dir)) {
+        for (const { line, text } of platformErrorBaseOffenders(sourceModule(file).source, file)) {
+          offenders.push(`${file}:${line}: ${text}`);
+        }
+      }
+    }
+
+    expect(
+      offenders,
+      'Platform error class not derived from lib/collections/sync-errors.ts — make every'
+        + ' `*AuthError` extend `PlatformAuthError` and every `*RateLimitError` extend'
+        + ' `PlatformRateLimitError` (the `reason` rule is in that file\'s doc comment):\n'
+        + offenders.map((item) => `- ${item}`).join('\n'),
+    ).toEqual([]);
+  });
 });
+
+/** Class-name suffix → the base in `lib/collections/sync-errors.ts` it must extend. */
+const PLATFORM_ERROR_BASES: ReadonlyArray<{ suffix: RegExp; base: string }> = [
+  { suffix: /AuthError$/, base: 'PlatformAuthError' },
+  { suffix: /RateLimitError$/, base: 'PlatformRateLimitError' },
+];
+
+/**
+ * Every class — declaration or expression — named `*AuthError` /
+ * `*RateLimitError` whose `extends` clause is not exactly the matching base
+ * identifier. The base is matched by name, deliberately strict: an alias
+ * (`const Base = PlatformAuthError; … extends Base`) or a wrapped base
+ * (`extends (PlatformAuthError as …)`) is flagged too — write the base itself.
+ */
+function platformErrorBaseOffenders(
+  source: string,
+  fileName = 'probe.ts',
+): Array<{ line: number; text: string }> {
+  const ast = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true);
+  const offenders: Array<{ line: number; text: string }> = [];
+  ast.forEachChild(function visit(node) {
+    if (ts.isClassDeclaration(node) || ts.isClassExpression(node)) {
+      const match = errorClassNames(node)
+        .map((name) => ({ name, rule: PLATFORM_ERROR_BASES.find(({ suffix }) => suffix.test(name)) }))
+        .find(({ rule }) => rule !== undefined);
+      const heritage = node.heritageClauses
+        ?.find((clause) => clause.token === ts.SyntaxKind.ExtendsKeyword)
+        ?.types[0]?.expression;
+      if (
+        match?.rule
+        && !(heritage && ts.isIdentifier(heritage) && heritage.text === match.rule.base)
+      ) {
+        const { line } = ast.getLineAndCharacterOfPosition(node.getStart(ast));
+        offenders.push({
+          line: line + 1,
+          text: `${match.name} extends ${heritage ? heritage.getText(ast) : 'nothing'}`,
+        });
+      }
+    }
+    node.forEachChild(visit);
+  });
+  return offenders;
+}
+
+/**
+ * The names a class goes by: its own, plus — for a class expression — the
+ * binding it is assigned to (`const X = class …`, `X = class …`,
+ * `{ X: class … }`), looking through parentheses and type assertions. An
+ * anonymous class nobody names (`export default class extends Error {}`) has
+ * none and is not checked.
+ */
+function errorClassNames(node: ts.ClassDeclaration | ts.ClassExpression): string[] {
+  const names = node.name ? [node.name.text] : [];
+  if (!ts.isClassExpression(node)) return names;
+  let parent = node.parent;
+  while (
+    ts.isParenthesizedExpression(parent)
+    || ts.isAsExpression(parent)
+    || ts.isSatisfiesExpression(parent)
+    || ts.isTypeAssertionExpression(parent)
+    || ts.isNonNullExpression(parent)
+  ) {
+    parent = parent.parent;
+  }
+  if (ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name)) {
+    names.push(parent.name.text);
+  } else if (
+    ts.isBinaryExpression(parent)
+    && parent.operatorToken.kind === ts.SyntaxKind.EqualsToken
+    && (ts.isIdentifier(parent.left) || ts.isPropertyAccessExpression(parent.left))
+  ) {
+    names.push(ts.isIdentifier(parent.left) ? parent.left.text : parent.left.name.text);
+  } else if (ts.isPropertyAssignment(parent) && ts.isIdentifier(parent.name)) {
+    names.push(parent.name.text);
+  }
+  return names;
+}
+
+/** Every non-test `.ts` module under a platform directory, repo-relative. */
+function platformSourceFiles(directory: string): string[] {
+  return readdirSync(path.join(ROOT, directory), { withFileTypes: true }).flatMap((entry) => {
+    const relative = `${directory}/${entry.name}`;
+    if (entry.isDirectory()) return platformSourceFiles(relative);
+    return /\.ts$/.test(entry.name) && !/\.test\.ts$/.test(entry.name) ? [relative] : [];
+  });
+}
 
 const PLATFORM_IDS = new Set<string>(COLLECTION_PLATFORMS);
 const QUOTED_PLATFORM = new RegExp(`(['"])(${COLLECTION_PLATFORMS.join('|')})\\1`, 'g');

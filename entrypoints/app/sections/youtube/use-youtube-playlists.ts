@@ -5,8 +5,6 @@ import {
   getPlaylistVideos,
   getPlaylistCounts,
   getLastSyncedAt,
-  YoutubeAuthError,
-  YoutubeRateLimitError,
   type YoutubeVideoItem,
   type PlaylistCount,
   type YoutubePlaylistsProgress,
@@ -16,27 +14,11 @@ import {
   type CollectionQueryParams,
 } from '../../hooks/use-collection-library';
 import type { BackgroundJob } from '../../hooks/background-jobs-store';
+import type { CollectionSyncError } from '../../hooks/collection-sync-error';
 import { runYoutubePlaylistsSync } from './youtube-sync-adapter';
 
 /** Job namespace key (reused as `useCollectionLibrary` logTag). */
 const LOG_TAG = 'youtube-playlists';
-
-/**
- * Structured sync error — the view maps kinds to locale keys (i18n seam at the
- * UI boundary). 'auth' now means "the API key is invalid" (no OAuth grant to
- * expire anymore). Google sends no rate-limit reset header, so 'rate-limit'
- * carries no resetAt (quota resets at midnight Pacific).
- */
-export type YoutubeSyncError =
-  | { kind: 'auth' }
-  | { kind: 'rate-limit' }
-  | { kind: 'unknown'; message: string };
-
-export function classifyYoutubeSyncError(err: unknown): YoutubeSyncError {
-  if (err instanceof YoutubeAuthError) return { kind: 'auth' };
-  if (err instanceof YoutubeRateLimitError) return { kind: 'rate-limit' };
-  return { kind: 'unknown', message: err instanceof Error ? err.message : String(err) };
-}
 
 export interface UseYoutubePlaylistsReturn {
   // Paged query results (from PGlite via youtube-sync-service — no API reads)
@@ -71,7 +53,7 @@ export interface UseYoutubePlaylistsReturn {
   // endpoint; playlist order is position order so there is no incremental cutoff)
   syncing: boolean;
   syncProgress: YoutubePlaylistsProgress | null;
-  syncError: YoutubeSyncError | null;
+  syncError: CollectionSyncError | null;
   syncJob: BackgroundJob<YoutubePlaylistsProgress> | null;
   sync: () => Promise<void>;
 
@@ -96,12 +78,7 @@ export function useYoutubePlaylists(): UseYoutubePlaylistsReturn {
   const channel = settings.youtubeChannel ?? '';
   const hasConfig = Boolean(apiKey && channel);
 
-  const lib = useCollectionLibrary<
-    YoutubeVideoItem,
-    PlaylistCount,
-    YoutubePlaylistsProgress,
-    YoutubeSyncError
-  >({
+  const lib = useCollectionLibrary<YoutubeVideoItem, PlaylistCount, YoutubePlaylistsProgress>({
     queryFn,
     facetsFn: getPlaylistCounts,
     lastSyncedFn: getLastSyncedAt,
@@ -109,7 +86,6 @@ export function useYoutubePlaylists(): UseYoutubePlaylistsReturn {
     // mapping and the post-sync embed/tag dispatch all live there — the daily
     // auto-sync coordinator runs the exact same function.
     syncFn: runYoutubePlaylistsSync,
-    classifyError: classifyYoutubeSyncError,
     logTag: LOG_TAG,
   });
 

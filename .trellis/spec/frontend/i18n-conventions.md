@@ -173,6 +173,32 @@ export function useTranslation(): { t, locale, preference, setLocale };
 - Components with only JSX usage: `const { t } = useTranslation()`
 - Components with module-level helpers using `t()`: keep `import { t } from '@/lib/i18n'` + call `useTranslation()` in component body for subscription
 
+> **Warning — `@/lib/i18n` has a load-time side effect.** Its module body calls
+> `localeStorage.getValue()` and `localeStorage.watch()` (`lib/i18n/index.ts:108-114`).
+> In a vitest file with no `chrome` global and no i18n/storage mock, merely
+> **value-importing** it produces unhandled rejections (`@wxt-dev/storage`
+> `getStorageArea` reads `undefined.runtime`; 9 of them, reproduced 2026-09-30),
+> which vitest reports as errors even when every assertion passes.
+>
+> Rule: a module that generic hooks or classifiers import — anything reachable
+> from tests that do not mock i18n (today `useCollectionLibrary`,
+> `use-bookmarks`, the Bilibili hooks) — must not value-import `@/lib/i18n`.
+> `import type { LocaleKeys } from '@/lib/i18n'` is fine (erased at build).
+> Split the `t()` half into a view-only module instead of adding mocks to
+> unrelated tests.
+>
+> ```ts
+> // WRONG — classifier and copy in one file; every hook that classifies now loads storage
+> // entrypoints/app/hooks/collection-sync-error.ts
+> import { t, formatDateTime } from '@/lib/i18n';
+> export function classifyCollectionSyncError(err: unknown) { … }
+> export function syncErrorMessage(error, copy) { return t(copy.auth); }
+>
+> // CORRECT — docs/32 Step 4
+> // collection-sync-error.ts          → classifier, zero i18n (hooks import it)
+> // collection-sync-error-message.ts  → SyncErrorCopy + syncErrorMessage (views import it)
+> ```
+
 ### Convention: `document.documentElement.lang` sync (extension pages only)
 
 **What**: Extension pages (welcome.html; app.html if needed later) may keep `<html lang>` in sync with the resolved locale via a page-local effect:
@@ -370,6 +396,7 @@ export type TranscribeErrorCode = ... | 'ASR_QUOTA_EXCEEDED';
 | Add `TranscribeErrorCode` without locale keys in **both** files | Causes raw key string to render (fallback) |
 | Add `TranscribeStage` without locale keys in **both** files | Same as above |
 | Use `error.message` for conditional logic in UI | Use `error.code` for branching, it is a stable enum |
+| Value-import `@/lib/i18n` from a module that generic hooks / classifiers import | Its load-time `localeStorage` calls reject in tests without a `chrome` global; split the `t()` half into a view-only module (see the Warning under Locale detection) |
 | Set `document.documentElement.lang` (or any `document` mutation) inside `lib/i18n` | Content Scripts share that code — the CS `document` is the host page (bilibili), and the mutation would rewrite the host site's `lang`. Sync lang only in extension-page entry components (see Convention above) |
 
 ---

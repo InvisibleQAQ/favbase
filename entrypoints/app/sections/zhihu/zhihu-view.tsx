@@ -2,7 +2,7 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Link from '@mui/material/Link';
 
-import { t, formatDateTime } from '@/lib/i18n';
+import { formatDateTime } from '@/lib/i18n';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify } from '../../components/iconify';
 import { CollectionConfigurationNotice } from '../../components/configuration-blocker';
@@ -15,7 +15,11 @@ import {
 import { backgroundJobRuntime, fetchedCountProgress } from '../../hooks/pipeline-segments';
 import { useCollectionPipeline } from '../../hooks/use-collection-pipeline';
 import { useCollectionBreadcrumbs } from '../../hooks/use-collection-breadcrumbs';
-import { useZhihuFavorites, type ZhihuSyncError } from './use-zhihu-favorites';
+import {
+  syncErrorMessage,
+  type SyncErrorCopy,
+} from '../../hooks/collection-sync-error-message';
+import { useZhihuFavorites } from './use-zhihu-favorites';
 import { CollectionChips } from './collection-chips';
 import { ZhihuCard } from './zhihu-card';
 import { TaggedZhihuCard } from './tagged-zhihu-card';
@@ -28,19 +32,15 @@ const PLATFORM = 'zhihu';
 const ZHIHU_URL = 'https://www.zhihu.com';
 
 // ---------------------------------------------------------------------------
-// i18n seam: structured sync errors from the hook → user-facing copy here.
+// i18n seam: the classified sync error → user-facing copy (shared
+// `syncErrorMessage`). Zhihu reports no rate-limit reset, so there is no
+// `rateLimitedUntil` form and no Fetch-button lock.
 // ---------------------------------------------------------------------------
 
-function syncErrorMessage(error: ZhihuSyncError): string {
-  switch (error.kind) {
-    case 'auth':
-      return t('zhihu.notLoggedInTitle');
-    case 'rate-limit':
-      return t('zhihu.rateLimited');
-    case 'unknown':
-      return error.message;
-  }
-}
+const SYNC_ERROR_COPY: SyncErrorCopy = {
+  auth: 'zhihu.notLoggedInTitle',
+  rateLimited: 'zhihu.rateLimited',
+};
 
 // ---------------------------------------------------------------------------
 // Platform-specific dashed-box states (shared StateBox shell, zhihu copy).
@@ -128,7 +128,9 @@ export function ZhihuView() {
     captionParts.push(t('zhihu.lastSynced', { time: formatDateTime(zhihu.lastSyncedAt.getTime()) }));
   }
 
-  const syncErrorText = zhihu.syncError ? syncErrorMessage(zhihu.syncError) : '';
+  const syncErrorText = zhihu.syncError
+    ? syncErrorMessage(zhihu.syncError, SYNC_ERROR_COPY)
+    : '';
   const pipeline = <PipelineProgressStrip segments={segments} />;
 
   return (

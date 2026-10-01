@@ -89,7 +89,7 @@ export default defineBackground({
       (details) => {
         captureXTokens(details)
           .then((captured) => {
-            // One log per (deduped) token set — diagnoses "no-token" sync errors:
+            // One log per (deduped) token set — diagnoses "missing"-session sync errors:
             // if this never appears, the capture chain itself is broken.
             if (captured) console.log('[favbase x-auth] captured X session headers');
           })

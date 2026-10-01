@@ -106,9 +106,10 @@ export function BookmarksView() {
         syncingLabel: t('pipeline.fetching'),
         loadFailed: t('common.loadFailed'),
         retry: t('common.retry'),
-        syncErrorText: bm.syncError ?? '',
+        // Local browser data: no auth, no rate limits — the raw message verbatim.
+        syncErrorText: bm.syncError?.message ?? '',
         syncFailedBanner: bm.syncError
-          ? t('bookmarks.syncFailed', { error: bm.syncError })
+          ? t('bookmarks.syncFailed', { error: bm.syncError.message })
           : '',
       }}
       renderCard={(bookmark, tags, onEditTags) => (

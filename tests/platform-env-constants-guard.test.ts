@@ -68,6 +68,7 @@ const EXPECTED_ENV_CONSTANTS: ReadonlyArray<{
   { file: 'lib/x/x-api.ts', key: 'VITE_X_BACKOFF_BASE_MS', fallback: 1000 },
   { file: 'lib/x/x-api.ts', key: 'VITE_X_MIN_SLEEP_ON_RESET_MS', fallback: 1000 },
   { file: 'lib/x/x-sync-service.ts', key: 'VITE_X_TITLE_MAX_CHARS', fallback: 140 },
+  { file: 'lib/x/cooldown.ts', key: 'VITE_X_COOLDOWN_MS', fallback: 300_000 },
   // zhihu
   { file: 'lib/zhihu/zhihu-api.ts', key: 'VITE_ZHIHU_ITEMS_PAGE_SIZE', fallback: 20 },
   { file: 'lib/zhihu/zhihu-api.ts', key: 'VITE_ZHIHU_BASE_DELAY_MS', fallback: 1000 },

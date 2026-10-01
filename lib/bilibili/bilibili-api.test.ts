@@ -1,6 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { fetchCidByPageList, fetchFavFolders, fetchFavVideos, fetchSubtitle } from './bilibili-api';
+import { PlatformRateLimitError } from '@/lib/collections/sync-errors';
+
+import {
+  BiliRateLimitError,
+  fetchCidByPageList,
+  fetchFavFolders,
+  fetchFavVideos,
+  fetchSubtitle,
+} from './bilibili-api';
 import type { BiliFavFolder, SubtitleTrack } from './types';
 
 /**
@@ -326,5 +334,43 @@ describe('fetchFavFolders', () => {
     const folders = await fetchFavFolders({ sessdata: 'SESSION', mid: '1' });
 
     expect(folders.map((f) => f.id)).toEqual([1, 2, 3]);
+  });
+});
+
+/**
+ * HTTP 412 is Bilibili's risk-control block (the 07-24 incident). It is a rate
+ * limit with no reset time, so the UI shows localized rate-limit copy instead
+ * of `Bilibili API HTTP 412` (docs/32 Step 4). Every other non-2xx stays a
+ * plain Error.
+ */
+describe('Bilibili risk control (HTTP 412)', () => {
+  function stubStatus(status: number) {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status })));
+  }
+
+  const calls = [
+    ['fetchFavFolders', () => fetchFavFolders({ sessdata: 'SESSION', mid: '1' })],
+    ['fetchFavVideos', () => fetchFavVideos(1)],
+  ] as const;
+
+  it.each(calls)('%s maps 412 to BiliRateLimitError', async (_name, call) => {
+    stubStatus(412);
+
+    const error = await call().catch((err: unknown) => err);
+
+    expect(error).toBeInstanceOf(BiliRateLimitError);
+    expect(error).toBeInstanceOf(PlatformRateLimitError);
+    expect((error as BiliRateLimitError).resetAt).toBeNull();
+    expect((error as BiliRateLimitError).message).toContain('412');
+  });
+
+  it.each(calls)('%s keeps a 500 a plain Error', async (_name, call) => {
+    stubStatus(500);
+
+    const error = await call().catch((err: unknown) => err);
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toBeInstanceOf(PlatformRateLimitError);
+    expect((error as Error).message).toBe('Bilibili API HTTP 500');
   });
 });

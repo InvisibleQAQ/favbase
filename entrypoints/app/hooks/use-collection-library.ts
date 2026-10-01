@@ -4,6 +4,7 @@ import { initDbProxy } from '@/lib/database';
 import type { CooperativeCheckpoint } from '@/lib/collections';
 
 import { startJob, useJob, type BackgroundJob } from './background-jobs-store';
+import { classifyCollectionSyncError, type CollectionSyncError } from './collection-sync-error';
 
 const DEFAULT_PAGE_SIZE = 24;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -29,7 +30,7 @@ export interface CollectionQueryParams {
  * (module-level constant or useCallback) — they sit in effect dependency
  * arrays, so an unstable reference re-runs queries every render.
  */
-export interface UseCollectionLibraryConfig<TItem, TFacet, TProgress, TError> {
+export interface UseCollectionLibraryConfig<TItem, TFacet, TProgress> {
   /** Paged query against local PGlite (no remote reads). */
   queryFn: (params: CollectionQueryParams) => Promise<CollectionPage<TItem>>;
   /** Facet counts for the chips row (unfiltered). */
@@ -41,8 +42,6 @@ export interface UseCollectionLibraryConfig<TItem, TFacet, TProgress, TError> {
     onProgress: (progress: TProgress) => void,
     control: CooperativeCheckpoint,
   ) => Promise<void>;
-  /** Maps thrown sync errors to the platform's structured error union. */
-  classifyError: (err: unknown) => TError;
   /** console.error prefix, e.g. 'x-bookmarks'. */
   logTag: string;
   pageSize?: number;
@@ -56,7 +55,7 @@ export interface UseCollectionLibraryConfig<TItem, TFacet, TProgress, TError> {
   controlledFilter?: string | null;
 }
 
-export interface UseCollectionLibraryReturn<TItem, TFacet, TProgress, TError> {
+export interface UseCollectionLibraryReturn<TItem, TFacet, TProgress> {
   // Paged query results
   items: TItem[];
   total: number;
@@ -83,7 +82,8 @@ export interface UseCollectionLibraryReturn<TItem, TFacet, TProgress, TError> {
   // adapter's policy; the store dedupes concurrent triggers per logTag.
   syncing: boolean;
   syncProgress: TProgress | null;
-  syncError: TError | null;
+  /** Classified by base class (`classifyCollectionSyncError`) — no per-platform classifier. */
+  syncError: CollectionSyncError | null;
   syncJob: BackgroundJob<TProgress> | null;
   sync: () => Promise<void>;
 
@@ -103,11 +103,10 @@ export interface UseCollectionLibraryReturn<TItem, TFacet, TProgress, TError> {
  * sync orchestration. Platform adapters rename the generic fields back to
  * their domain vocabulary and layer their own trigger policy on top.
  */
-export function useCollectionLibrary<TItem, TFacet, TProgress, TError>(
-  config: UseCollectionLibraryConfig<TItem, TFacet, TProgress, TError>,
-): UseCollectionLibraryReturn<TItem, TFacet, TProgress, TError> {
-  const { queryFn, facetsFn, lastSyncedFn, syncFn, classifyError, logTag, controlledFilter } =
-    config;
+export function useCollectionLibrary<TItem, TFacet, TProgress>(
+  config: UseCollectionLibraryConfig<TItem, TFacet, TProgress>,
+): UseCollectionLibraryReturn<TItem, TFacet, TProgress> {
+  const { queryFn, facetsFn, lastSyncedFn, syncFn, logTag, controlledFilter } = config;
   const pageSize = config.pageSize ?? DEFAULT_PAGE_SIZE;
 
   // Filters
@@ -146,9 +145,9 @@ export function useCollectionLibrary<TItem, TFacet, TProgress, TError>(
   const syncJob = useJob<TProgress>(logTag, 'sync');
   const syncing = syncJob?.running ?? false;
   const syncProgress = (syncJob?.progress ?? null) as TProgress | null;
-  const syncError = useMemo<TError | null>(
-    () => (syncJob?.error != null ? classifyError(syncJob.error) : null),
-    [syncJob?.error, classifyError],
+  const syncError = useMemo<CollectionSyncError | null>(
+    () => (syncJob?.error != null ? classifyCollectionSyncError(syncJob.error) : null),
+    [syncJob?.error],
   );
 
   // Post-sync embed / tag jobs live under the same logTag namespace

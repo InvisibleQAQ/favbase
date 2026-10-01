@@ -34,6 +34,11 @@
  */
 
 import type { CooperativeCheckpoint } from '@/lib/collections';
+import {
+  PlatformAuthError,
+  PlatformRateLimitError,
+  type AuthFailReason,
+} from '@/lib/collections/sync-errors';
 import { envNumber } from '@/lib/env';
 import { backoffDelayMs, jitteredDelayMs, sleep } from '@/lib/http/backoff';
 import { fetchWithDeadline } from '@/lib/http/fetch-with-deadline';
@@ -70,10 +75,14 @@ const MAX_ITEM_PAGES_PER_COLLECTION = envNumber('VITE_ZHIHU_MAX_ITEM_PAGES_PER_C
 // Errors — structured, no UI copy (i18n seam is at the UI boundary)
 // ---------------------------------------------------------------------------
 
-/** Not logged in to zhihu.com (401 from any endpoint, incl. /api/v4/me). */
-export class ZhihuAuthError extends Error {
-  constructor(message: string) {
-    super(message);
+/**
+ * Not logged in to zhihu.com (401 from any endpoint, incl. /api/v4/me, or a 200
+ * carrying error code 100/101). Always `'missing'`: favbase never inspects the
+ * zhihu session before a request, so it never knows it held one.
+ */
+export class ZhihuAuthError extends PlatformAuthError {
+  constructor(message: string, reason: AuthFailReason) {
+    super(message, reason);
     this.name = 'ZhihuAuthError';
   }
 }
@@ -82,9 +91,9 @@ export class ZhihuAuthError extends Error {
  * Zhihu rejected the request as rate-limited / anti-crawler (403, or 429 after
  * exhausted backoff). Zhihu exposes no reset header, so there is no resetAt.
  */
-export class ZhihuRateLimitError extends Error {
+export class ZhihuRateLimitError extends PlatformRateLimitError {
   constructor(message: string) {
-    super(message);
+    super(message, null);
     this.name = 'ZhihuRateLimitError';
   }
 }
@@ -427,7 +436,7 @@ async function fetchZhihuJson(
     });
 
     if (res.status === 401) {
-      throw new ZhihuAuthError('Zhihu session invalid or not logged in (401)');
+      throw new ZhihuAuthError('Zhihu session invalid or not logged in (401)', 'missing');
     }
     if (res.status === 403) {
       // Zhihu's anti-crawler rejection — retrying immediately makes it worse.
@@ -461,7 +470,7 @@ async function fetchZhihuJson(
       const detail = `code ${apiErr.code ?? '?'}: ${apiErr.message ?? '(no message)'}`;
       // code 100/101 family = unauthenticated/invalid token.
       if (apiErr.code === 100 || apiErr.code === 101) {
-        throw new ZhihuAuthError(`Zhihu API auth error — ${detail}`);
+        throw new ZhihuAuthError(`Zhihu API auth error — ${detail}`, 'missing');
       }
       throw new Error(`Zhihu API 200 with error body — ${detail}. Body: ${textSnippet(rawBody)}`);
     }

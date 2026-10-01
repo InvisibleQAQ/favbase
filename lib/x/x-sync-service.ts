@@ -135,7 +135,7 @@ export interface AuthorCount {
  * chrome.storage itself); only storage-capable contexts (app.html page,
  * background SW) read the captured tokens and pass them in. "No captured
  * session" is the caller's check, made before a Platform Sync attempt is
- * recorded (the app Sync Adapter throws XAuthError('no-token') itself);
+ * recorded (the app Sync Adapter throws XAuthError('missing') itself);
  * fetch/auth-rejected/rate-limit errors propagate to the caller.
  */
 export async function syncBookmarks(

@@ -11,6 +11,11 @@
  */
 
 import type { SubtitleResult, SubtitleRow } from '@/lib/subtitle/types';
+import {
+  PlatformAuthError,
+  PlatformRateLimitError,
+  type AuthFailReason,
+} from '@/lib/collections/sync-errors';
 import { fetchWithDeadline } from '@/lib/http/fetch-with-deadline';
 import type { BiliAuthInfo, BiliFavFolder, BiliFavOrder, BiliFavVideoListResponse, DashAudioStream, SubtitleTrack } from './types';
 
@@ -42,10 +47,28 @@ const BILI_COOKIE_URL = 'https://www.bilibili.com';
 // Error
 // ---------------------------------------------------------------------------
 
-export class BiliAuthError extends Error {
-  constructor(message: string) {
-    super(message);
+/**
+ * Not logged in. `'missing'` when no local SESSDATA cookie exists (the no-network
+ * gate in `bili-sync-service.ts`); `'rejected'` when the API answers `-101` to a
+ * request made after that gate found the cookie (docs/32 Step 4 reason rule).
+ */
+export class BiliAuthError extends PlatformAuthError {
+  constructor(message: string, reason: AuthFailReason) {
+    super(message, reason);
     this.name = 'BiliAuthError';
+  }
+}
+
+/**
+ * Bilibili's risk control blocked the request (HTTP 412). Bilibili sends no
+ * reset time, so `resetAt` is always null. Whether it also reports risk control
+ * as a JSON code (`-352` / `-412`) inside an HTTP 200 is unobserved — only the
+ * HTTP status is mapped here.
+ */
+export class BiliRateLimitError extends PlatformRateLimitError {
+  constructor(message: string) {
+    super(message, null);
+    this.name = 'BiliRateLimitError';
   }
 }
 
@@ -113,6 +136,9 @@ export async function fetchFavFolders(
   const url = ENDPOINTS.favFolderListAll(auth.mid);
   const res = await fetchWithDeadline(url, { credentials: 'include' });
 
+  if (res.status === 412) {
+    throw new BiliRateLimitError('Bilibili API HTTP 412 (request blocked by risk control)');
+  }
   if (!res.ok) {
     throw new Error(`Bilibili API HTTP ${res.status}`);
   }
@@ -120,7 +146,7 @@ export async function fetchFavFolders(
   const json: BiliFavFolderListResponse = await res.json();
 
   if (json.code === -101) {
-    throw new BiliAuthError('SESSDATA expired or invalid');
+    throw new BiliAuthError('SESSDATA expired or invalid', 'rejected');
   }
 
   if (json.code !== 0) {
@@ -142,6 +168,9 @@ export async function fetchFavVideos(
   const url = ENDPOINTS.favResourceList(mediaId, page, ps, order, keyword);
   const res = await fetchWithDeadline(url, { credentials: 'include' });
 
+  if (res.status === 412) {
+    throw new BiliRateLimitError('Bilibili API HTTP 412 (request blocked by risk control)');
+  }
   if (!res.ok) {
     throw new Error(`Bilibili API HTTP ${res.status}`);
   }
@@ -149,7 +178,7 @@ export async function fetchFavVideos(
   const json = await res.json();
 
   if (json.code === -101) {
-    throw new BiliAuthError('SESSDATA expired or invalid');
+    throw new BiliAuthError('SESSDATA expired or invalid', 'rejected');
   }
 
   if (json.code !== 0) {

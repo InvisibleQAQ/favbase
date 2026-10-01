@@ -18,7 +18,7 @@ import {
   type UseCollectionLibraryReturn,
 } from './use-collection-library';
 
-type Lib = UseCollectionLibraryReturn<string, never, void, string>;
+type Lib = UseCollectionLibraryReturn<string, never, void>;
 
 /** Page size the probe queries with — distinguishes page queries from the
  * unfiltered `pageSize: 1` library-count probe in `refreshMeta`. */
@@ -30,7 +30,6 @@ const lastSyncedFn = vi.fn(async (): Promise<Date | null> => null);
 const syncFn = vi.fn(
   async (_onProgress: (progress: void) => void, _control: CooperativeCheckpoint) => {},
 );
-const classifyError = (err: unknown): string => String(err);
 
 function pageQueries(): CollectionQueryParams[] {
   return queryFn.mock.calls.map(([params]) => params).filter((p) => p.pageSize === PAGE_SIZE);
@@ -50,12 +49,11 @@ describe('useCollectionLibrary filter ownership', () => {
   let logTag: string;
 
   function Probe({ controlledFilter }: { controlledFilter?: string | null }) {
-    latest = useCollectionLibrary<string, never, void, string>({
+    latest = useCollectionLibrary<string, never, void>({
       queryFn,
       facetsFn,
       lastSyncedFn,
       syncFn,
-      classifyError,
       logTag,
       pageSize: PAGE_SIZE,
       controlledFilter,

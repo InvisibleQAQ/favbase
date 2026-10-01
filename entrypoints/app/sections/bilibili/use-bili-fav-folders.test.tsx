@@ -19,10 +19,14 @@ const recordMocks = vi.hoisted(() => ({
   getPlatformLastSyncedAt: vi.fn(),
 }));
 
-vi.mock('@/lib/bilibili/bili-sync-service', () => ({
-  ...serviceMocks,
-  BiliAuthError: class BiliAuthError extends Error {},
-}));
+// The hook classifies errors by base class, so the mock must extend it too.
+vi.mock('@/lib/bilibili/bili-sync-service', async () => {
+  const { PlatformAuthError } = await import('@/lib/collections/sync-errors');
+  return {
+    ...serviceMocks,
+    BiliAuthError: class BiliAuthError extends PlatformAuthError {},
+  };
+});
 
 vi.mock('./auto-transcribe-runtime', () => runtimeMocks);
 
@@ -114,7 +118,7 @@ describe('useBiliFavFolders sync boundary', () => {
 
   it('does not auto-continue on mount when not logged in', async () => {
     const { BiliAuthError } = await import('@/lib/bilibili/bili-sync-service');
-    serviceMocks.fetchAndSyncFolders.mockRejectedValue(new BiliAuthError('not logged in'));
+    serviceMocks.fetchAndSyncFolders.mockRejectedValue(new BiliAuthError('not logged in', 'missing'));
 
     await act(async () => {
       root.render(<Probe />);

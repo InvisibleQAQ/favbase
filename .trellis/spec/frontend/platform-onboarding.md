@@ -35,7 +35,7 @@ is **making them generate your TODO list instead of writing one yourself**.
 | Mechanism | What it catches | How you invoke it |
 | --- | --- | --- |
 | TypeScript exhaustive `Record<CollectionPlatform, T>` | Every registry that must gain a key. The error lands on the object literal, naming the missing property. | `pnpm compile` |
-| `tests/platform-completeness-contract.test.ts` | What types cannot see: a lazy import resolving to nothing, a page that renders no `sections/` view, a view that skips `useCollectionBreadcrumbs`, `main.tsx` naming a platform, a hand-written `jobPlatform`, `hooks/` importing `sections/`, a `childRoutes` or `hostPermissions` value that is computed instead of written out, an analytics axis absent from its own ranked list, platform knowledge leaking into a shared module (a separate case listing `file:line`: a quoted platform id, a literal-key read of `meta` / `platformMeta`, or a literal JSON-path key such as `->>'language'` in SQL text — anywhere in `lib/tagging/**`, `lib/embedding/**`, `lib/chat/**`, `lib/export/**`, `collection-analytics.ts`, `collection-processing-policy.ts` or `collections-query.ts`), a `startCollectionProcessingJobs` call anywhere in `entrypoints/app/**` but its definition and the Platform Sync funnel (a separate case in the same file, listing `file:line`), a missing `lib/<platform>/` directory, and — for a platform whose `readiness` is `'credentials'` — a missing link in the credentials chain (§8): the Connections card file, the `SETTINGS_NAV` connections section, `derive<Pascal>Draft` / `save<Pascal>` in `useSettings`, the `configSavedAt` key. Reports **all** failures as one aggregated list. | `pnpm vitest run tests/platform-completeness-contract.test.ts` |
+| `tests/platform-completeness-contract.test.ts` | What types cannot see: a lazy import resolving to nothing, a page that renders no `sections/` view, a view that skips `useCollectionBreadcrumbs`, `main.tsx` naming a platform, a hand-written `jobPlatform`, `hooks/` importing `sections/`, a `childRoutes` or `hostPermissions` value that is computed instead of written out, an analytics axis absent from its own ranked list, platform knowledge leaking into a shared module (a separate case listing `file:line`: a quoted platform id, a literal-key read of `meta` / `platformMeta`, or a literal JSON-path key such as `->>'language'` in SQL text — anywhere in `lib/tagging/**`, `lib/embedding/**`, `lib/chat/**`, `lib/export/**`, `collection-analytics.ts`, `collection-processing-policy.ts` or `collections-query.ts`), a `startCollectionProcessingJobs` call anywhere in `entrypoints/app/**` but its definition and the Platform Sync funnel (a separate case in the same file, listing `file:line`), a `*AuthError` / `*RateLimitError` class under `lib/<platform>/` — declared, or a class expression bound to such a name — that does not extend `PlatformAuthError` / `PlatformRateLimitError` by that exact identifier (a separate case listing `file:line`, with a self-check that the detector bites; an alias or a wrapped base is flagged too), a missing `lib/<platform>/` directory, and — for a platform whose `readiness` is `'credentials'` — a missing link in the credentials chain (§8): the Connections card file, the `SETTINGS_NAV` connections section, `derive<Pascal>Draft` / `save<Pascal>` in `useSettings`, the `configSavedAt` key. Reports **all** failures as one aggregated list. | `pnpm vitest run tests/platform-completeness-contract.test.ts` |
 
 Six more guards fire with no wiring on your part. Three of them reconcile an
 artefact you still write by hand: the guard turns "silently absent" into a red
@@ -98,8 +98,21 @@ nothing from it.
   `init` each request function passes; pattern: `lib/bilibili/bilibili-api.test.ts`
   「Bilibili request credentials」. Existing exception, not re-litigated: X
   replays a captured web-client header set verbatim (`lib/x/x-api.ts:211`).
-- Export structured error classes (`<P>AuthError`, `<P>RateLimitError`). They
-  are the lib half of the i18n seam; the view maps them to locale keys.
+- Export structured error classes (`<P>AuthError`, `<P>RateLimitError`) that
+  **extend `PlatformAuthError` / `PlatformRateLimitError`** from
+  `lib/collections/sync-errors.ts` (import the file by path, never the
+  `lib/collections` barrel), each with its own explicit `this.name`. They are
+  the lib half of the i18n seam: the app classifies a failure by base class
+  alone (`classifyCollectionSyncError`), so an error that extends `Error`
+  directly shows up as raw English debug text. `<P>AuthError` takes
+  `(message, reason)` with no default: `'rejected'` only when favbase had
+  already confirmed it holds a credential before the request (PAT, API key,
+  captured session, a local cookie that exists and has not expired) and the
+  platform refused it; otherwise `'missing'` — the full rule is the doc comment
+  on `AuthFailReason`. `<P>RateLimitError` carries `resetAt: Date | null`; a
+  platform whose limit reports a reset must also lock the Fetch button in its
+  view (§7.2). Which response counts as auth or rate limit stays the
+  platform's call. Enforced by the completeness contract (§2).
 - Pagination: serial, with a politeness delay. Numeric constants via
   `envNumber` (§2). The mechanism is shared in `lib/http/` — wait with
   `sleep`, compute delays with `jitteredDelayMs` / `backoffDelayMs`, retry
@@ -305,8 +318,8 @@ stays a one-line re-export whether your platform has child routes or not.
 | File | Responsibility |
 | --- | --- |
 | `<platform>-sync-adapter.ts` | **The Platform Sync.** `run<P>Sync(onProgress, control)` is the single definition of what a sync means: credential resolution, then `await runPlatformSync(platform, control, async () => { …domain call…; return { fetched, inserted, newItemIds }; })` (`entrypoints/app/hooks/platform-sync.ts`). The funnel records the attempt in the Platform Sync Record, runs your closure, and on success dispatches the embed/tag lanes (`jobPlatform` derived) and records the success; on failure it records that and rethrows your error unchanged. **Anything you can check without the network goes BEFORE the funnel**: missing config is a silent `return`, a known-absent login throws the platform's own auth error class (the page's logged-out state keys off it) — neither is an attempt, so neither may leave a record (docs/32 §5.2). Put everything that contacts the platform inside the closure; work that follows a successful sync but is not the platform (bookmarks' page extraction) goes after it. Also exports `<p>AutoSyncPolicy` (`probeReady`, optional `isSilentError`). The manual page and the daily coordinator call **this same function** — copying credential resolution or post-sync dispatch into either trigger is the defect this file exists to prevent. |
-| `use-<platform>.ts` | Thin adapter over `useCollectionLibrary`. Inject `queryFn` / `facetsFn` / `lastSyncedFn` / `syncFn = run<P>Sync` / `classifyError` / `logTag`, then rename the generic fields to platform vocabulary. **Config gates live here**, wrapped around the generic `sync` — not inside `useCollectionLibrary`. Every injected function must be a stable reference (module-level or `useCallback`); they sit in effect dependency arrays. |
-| `<platform>-view.tsx` | Assembles `CollectionPageScaffold` + `useCollectionPipeline` + `useCollectionBreadcrumbs`. Owns the i18n seam: structured sync error → locale key. |
+| `use-<platform>.ts` | Thin adapter over `useCollectionLibrary`. Inject `queryFn` / `facetsFn` / `lastSyncedFn` / `syncFn = run<P>Sync` / `logTag`, then rename the generic fields to platform vocabulary. There is no error classifier to inject: `syncError` is already a `CollectionSyncError`, classified by base class (§4.1). **Config gates live here**, wrapped around the generic `sync` — not inside `useCollectionLibrary`. Every injected function must be a stable reference (module-level or `useCallback`); they sit in effect dependency arrays. |
+| `<platform>-view.tsx` | Assembles `CollectionPageScaffold` + `useCollectionPipeline` + `useCollectionBreadcrumbs`. Owns the i18n seam as data, not a switch: a module-level `SyncErrorCopy` (i18n keys: `auth`, optional `authRejected`, `rateLimited`, optional `rateLimitedUntil`) passed to the shared `syncErrorMessage` (`entrypoints/app/hooks/collection-sync-error-message.ts`). If the platform's `<P>RateLimitError` carries a `resetAt`, lock the Fetch button until it: `useCountdown((now) => rateLimitRemainingMs(syncError, now))` into `syncDisabled` / `syncDisabledLabel` (`pipeline.fetchAvailableIn`). |
 | `<platform>-card.tsx` | Composes the shared `CollectionCard` shell. |
 | `tagged-<platform>-card.tsx` | `TaggedItem` → your item shape, delegating narrowing to `narrow<P>Meta`. |
 | `<platform>-grid-skeleton.tsx` | Shared `CardGridSkeleton` + `CollectionCardSkeleton`. |
@@ -430,6 +443,8 @@ opt out of the hook; **do not** opt out of the scaffold or the registries.
 | a value import other than `./platforms` in `lib/collections/platform-descriptor.ts` | `platform-descriptor.test.ts` reads its own imports by AST, and `lib-import-smoke` loads it with no `chrome` global. Break it and the build fails in `wxt.config.ts`, which never mentions the real culprit |
 | re-exporting the descriptor from `lib/collections/index.ts` | review — that barrel goes through `collections-query`, so it drags drizzle and `@/lib/database` into every importer, welcome.html and the Node build config included |
 | a bare `fetch(` in `lib/**` | `http-fetch-deadline-guard` |
+| a `*AuthError` / `*RateLimitError` class in `lib/<platform>/` that extends `Error` (or nothing) instead of `PlatformAuthError` / `PlatformRateLimitError` | completeness contract — the app classifies by base class only |
+| a per-platform sync-error classifier or `switch` over error kinds in a view | review — declare a `SyncErrorCopy` and call the shared `syncErrorMessage` |
 | a `setTimeout` wait (`new Promise((r) => setTimeout(r, ms))`) in `lib/<platform>/` — use `sleep`, and `withRetries` for a retry loop | `platform-sleep-guard` |
 | a bare numeric module constant in `lib/<platform>/` | `platform-env-constants-guard` |
 | `@/lib/storage` (or any `chrome.*`-touching barrel) in the sync-service static graph | `lib-import-smoke` |

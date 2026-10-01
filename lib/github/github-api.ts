@@ -5,6 +5,11 @@
  */
 
 import type { CooperativeCheckpoint } from '@/lib/collections';
+import {
+  PlatformAuthError,
+  PlatformRateLimitError,
+  type AuthFailReason,
+} from '@/lib/collections/sync-errors';
 import { envNumber } from '@/lib/env';
 import { sleep } from '@/lib/http/backoff';
 import { fetchWithDeadline } from '@/lib/http/fetch-with-deadline';
@@ -39,28 +44,26 @@ function buildHeaders(token: string): Record<string, string> {
 // Errors — structured, no UI copy (i18n seam is at the UI boundary)
 // ---------------------------------------------------------------------------
 
-export class GithubAuthError extends Error {
-  constructor(message: string) {
-    super(message);
+/** The PAT was refused (401). Only ever `'rejected'`: a request is made only with a token. */
+export class GithubAuthError extends PlatformAuthError {
+  constructor(message: string, reason: AuthFailReason) {
+    super(message, reason);
     this.name = 'GithubAuthError';
   }
 }
 
-export class GithubRateLimitError extends Error {
-  /** When the rate limit window resets (from X-RateLimit-Reset), null if header missing. */
-  readonly resetAt: Date | null;
-
+/** `resetAt` comes from X-RateLimit-Reset; null if the header is missing. */
+export class GithubRateLimitError extends PlatformRateLimitError {
   constructor(message: string, resetAt: Date | null) {
-    super(message);
+    super(message, resetAt);
     this.name = 'GithubRateLimitError';
-    this.resetAt = resetAt;
   }
 }
 
 /** Classify non-ok responses into structured errors. */
 function throwForStatus(res: Response): never {
   if (res.status === 401) {
-    throw new GithubAuthError('GitHub token invalid or expired');
+    throw new GithubAuthError('GitHub token invalid or expired', 'rejected');
   }
   if (res.status === 403 && res.headers.get('x-ratelimit-remaining') === '0') {
     const reset = res.headers.get('x-ratelimit-reset');

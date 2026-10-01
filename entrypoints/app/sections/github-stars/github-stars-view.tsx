@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom';
 
 import Button from '@mui/material/Button';
 
-import { t, formatDateTime } from '@/lib/i18n';
+import { formatDateTime } from '@/lib/i18n';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify } from '../../components/iconify';
 import { CollectionConfigurationNotice } from '../../components/configuration-blocker';
@@ -23,8 +23,14 @@ import {
 } from '../../hooks/pipeline-segments';
 import { useCollectionPipeline } from '../../hooks/use-collection-pipeline';
 import { useCollectionBreadcrumbs } from '../../hooks/use-collection-breadcrumbs';
+import { rateLimitRemainingMs } from '../../hooks/collection-sync-error';
+import {
+  syncErrorMessage,
+  type SyncErrorCopy,
+} from '../../hooks/collection-sync-error-message';
+import { formatCountdown, useCountdown } from '../../hooks/use-countdown';
 import { settingsPath } from '../settings/settings-nav';
-import { useGithubStars, type GithubSyncError } from './use-github-stars';
+import { useGithubStars } from './use-github-stars';
 import { LanguageChips } from './language-chips';
 import { RepoCard } from './repo-card';
 import { TaggedRepoCard } from './tagged-repo-card';
@@ -33,22 +39,17 @@ import { TaggedRepoCard } from './tagged-repo-card';
 const PLATFORM = 'github';
 
 // ---------------------------------------------------------------------------
-// i18n seam: structured sync errors from the hook → user-facing copy here.
-// Reuses the settings.github.* keys (same error semantics as the token test).
+// i18n seam: the classified sync error → user-facing copy (shared
+// `syncErrorMessage`). Reuses the settings.github.* keys (same error semantics
+// as the token test). GitHub reports its rate-limit reset, so it has the
+// `rateLimitedUntil` form and the Fetch-button lock below.
 // ---------------------------------------------------------------------------
 
-function syncErrorMessage(error: GithubSyncError): string {
-  switch (error.kind) {
-    case 'auth':
-      return t('settings.github.invalidToken');
-    case 'rate-limit':
-      return error.resetAt
-        ? t('settings.github.rateLimited', { reset: formatDateTime(error.resetAt.getTime()) })
-        : t('settings.github.rateLimitedNoReset');
-    case 'unknown':
-      return error.message;
-  }
-}
+const SYNC_ERROR_COPY: SyncErrorCopy = {
+  auth: 'settings.github.invalidToken',
+  rateLimited: 'settings.github.rateLimitedNoReset',
+  rateLimitedUntil: 'settings.github.rateLimited',
+};
 
 // ---------------------------------------------------------------------------
 // Platform-specific dashed-box states (shared StateBox shell, github copy).
@@ -136,6 +137,8 @@ export function GithubStarsView() {
     embedJob: gh.embedJob,
     tagJob: gh.tagJob,
   });
+  // A rate limit with a known reset locks the Fetch button until then.
+  const lockMs = useCountdown((now) => rateLimitRemainingMs(gh.syncError, now));
 
   // No token: the whole page short-circuits into the connect guide.
   if (!gh.settingsLoading && !gh.hasToken) {
@@ -157,7 +160,7 @@ export function GithubStarsView() {
     );
   }
 
-  const syncErrorText = gh.syncError ? syncErrorMessage(gh.syncError) : '';
+  const syncErrorText = gh.syncError ? syncErrorMessage(gh.syncError, SYNC_ERROR_COPY) : '';
 
   const pipeline = <PipelineProgressStrip segments={segments} />;
 
@@ -181,6 +184,10 @@ export function GithubStarsView() {
       onPageChange={gh.goToPage}
       onSync={gh.sync}
       onRetryQuery={gh.retryQuery}
+      syncDisabled={lockMs > 0}
+      syncDisabledLabel={
+        lockMs > 0 ? t('pipeline.fetchAvailableIn', { time: formatCountdown(lockMs) }) : undefined
+      }
       searchInput={gh.searchInput}
       onSearchInput={gh.setSearchInput}
       copy={{

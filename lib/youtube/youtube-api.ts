@@ -21,6 +21,11 @@
  */
 
 import type { CooperativeCheckpoint } from '@/lib/collections';
+import {
+  PlatformAuthError,
+  PlatformRateLimitError,
+  type AuthFailReason,
+} from '@/lib/collections/sync-errors';
 import { envNumber } from '@/lib/env';
 import { sleep } from '@/lib/http/backoff';
 import { fetchWithDeadline } from '@/lib/http/fetch-with-deadline';
@@ -49,23 +54,20 @@ const RATE_LIMIT_REASONS = new Set([
 // Errors — structured, no UI copy (i18n seam is at the UI boundary)
 // ---------------------------------------------------------------------------
 
-export class YoutubeAuthError extends Error {
-  constructor(message: string) {
-    super(message);
+/** The API key was refused. Only ever `'rejected'`: a request is made only with a key. */
+export class YoutubeAuthError extends PlatformAuthError {
+  constructor(message: string, reason: AuthFailReason) {
+    super(message, reason);
     this.name = 'YoutubeAuthError';
   }
 }
 
-export class YoutubeRateLimitError extends Error {
-  /** When the quota window resets. Google sends no reset header → always null
-   *  today (kept in the signature per the platform contract; quota resets at
-   *  midnight Pacific). */
-  readonly resetAt: Date | null;
-
+/** Google sends no reset header, so `resetAt` is always null today (quota
+ *  resets at midnight Pacific); kept in the signature per the platform contract. */
+export class YoutubeRateLimitError extends PlatformRateLimitError {
   constructor(message: string, resetAt: Date | null = null) {
-    super(message);
+    super(message, resetAt);
     this.name = 'YoutubeRateLimitError';
-    this.resetAt = resetAt;
   }
 }
 
@@ -292,7 +294,7 @@ async function apiFetch(
   if (res.status === 400 || res.status === 403) {
     const reasons = extractErrorReasons(rawBody);
     if (reasons.includes('keyInvalid') || rawBody.includes('API key not valid')) {
-      throw new YoutubeAuthError('YouTube API rejected the API key — re-configure');
+      throw new YoutubeAuthError('YouTube API rejected the API key — re-configure', 'rejected');
     }
     if (res.status === 403) {
       const quotaReason = reasons.find((r) => RATE_LIMIT_REASONS.has(r));

@@ -1,6 +1,6 @@
 # 32 跨平台流程统一度审计与分步整改（2026-09-29）
 
-> 状态：**审计完成；D1、D2 已决（2026-09-29，§5.1、§5.2）；Step 1 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 1 落地记录）；D6 已决（用户 2026-09-30，按推荐）；Step 2 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 2 落地记录）；Step 3 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 3 落地记录）；Step 4–9 均未实施**。执行任一 Step 前先读 §2 否决清单与 §5 对应决策；一次对话只做一个 Step。
+> 状态：**审计完成；D1、D2 已决（2026-09-29，§5.1、§5.2）；Step 1 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 1 落地记录）；D6 已决（用户 2026-09-30，按推荐）；Step 2 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 2 落地记录）；Step 3 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 3 落地记录）；Step 4 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 4 落地记录）；Step 5–9 均未实施**。执行任一 Step 前先读 §2 否决清单与 §5 对应决策；一次对话只做一个 Step。
 >
 > 起因：用户观察「接入新平台时，数据处理、备份、展示都高度统一，真正不同的只有数据获取和风控」，要求找出仍未统一的流程并给出分步整改。
 >
@@ -201,7 +201,7 @@
 
 ### 低-3 守卫缝隙（并入相关 Step，不单列）
 
-- env 守卫只扫 `lib/<platform>/`（`tests/platform-env-guard-contract.ts:3`），漏掉 `sections/x/cooldown.ts:11` 的 `COOLDOWN_MS = 5 * 60 * 1000`。
+- env 守卫只扫 `lib/<platform>/`（`tests/platform-env-guard-contract.ts:3`），漏掉 `sections/x/cooldown.ts:11` 的 `COOLDOWN_MS = 5 * 60 * 1000`。**Step 4 已修（2026-09-30）**：常量迁到 `lib/x/cooldown.ts`，经 `envNumber('VITE_X_COOLDOWN_MS', 300_000)`，env 守卫三方同步。
 - X 的 `webRequest` filter 手抄 `['*://x.com/*']`（`entrypoints/background.ts:93`），与 descriptor 的 `hostPermissions`（`lib/collections/platform-descriptor.ts:132`）是两个事实源。
 
 ### 低-4 过期文档与注释（并入触碰它们的 Step）
@@ -674,6 +674,184 @@
 - **回滚**：revert。
 - **判据**：`classifySyncError` / `syncErrorMessage` 全仓各一份；`lib-import-smoke` 覆盖新 leaf。
 
+#### Step 4 落地记录（2026-09-30）
+
+代码与单测已落地；上面「验证」四项（GitHub 无效 token、X 登出、B站 412、GitHub 限流锁按钮）需要浏览器，**待人工**。判据成立：`classifyCollectionSyncError` 与 `syncErrorMessage` 全仓各一份定义（`entrypoints/app/hooks/collection-sync-error.ts:23`、`collection-sync-error-message.ts:29`）；`lib-import-smoke` 覆盖新 leaf。
+
+**落在哪**：
+
+- **`lib/collections/sync-errors.ts`**（新，零 import，不进 `lib/collections/index.ts` barrel）：`AuthFailReason = 'missing' | 'rejected'`，`abstract class PlatformAuthError(message, reason)`，`abstract class PlatformRateLimitError(message, resetAt: Date | null)`。基类不设 `name`，子类各自显式 `this.name`。`reason` 的判定规则写在 doc comment 里：`'rejected'` 只在请求前已确认持有凭据、平台仍拒绝时使用，其余一律 `'missing'`。
+- **六平台十个类全部继承**（改前行号）：
+  - bilibili：`BiliAuthError(message, reason)`；`checkAuth` 本地无 cookie → `'missing'`（`bili-sync-service.ts:67`），两处 `-101` → `'rejected'`（`bilibili-api.ts:123,152`）。
+  - bilibili：新增 `BiliRateLimitError(message)`，`fetchFavFolders` / `fetchFavVideos` 在 `if (!res.ok)` 之前把 HTTP 412 映射成它，消息保留 `412` 字样。`bili-sync-service.ts:29` 的 re-export 补上它。
+  - github：`GithubAuthError(…, 'rejected')`；`GithubRateLimitError` 签名不变。
+  - zhihu：两处 `ZhihuAuthError(…, 'missing')`；`ZhihuRateLimitError(message)` 内部 `super(message, null)`。
+  - youtube：`YoutubeAuthError(…, 'rejected')`；`YoutubeRateLimitError(message, resetAt = null)` 签名不变。
+  - x：`XAuthError` 两处 `'rejected'` 不变；`XAuthFailReason` 删除，`'no-token'` 改名 `'missing'`（`x-sync-adapter.ts:43`）。注释同步改了 `x-api.ts`、`x-auth.ts:21`、`x-sync-service.ts:138`、`entrypoints/background.ts:92`。
+  - 子类删掉自己的 `reason` / `resetAt` 字段声明，由基类持有。
+- **app 侧分类与文案**：
+  - `entrypoints/app/hooks/collection-sync-error.ts`（新，零 i18n）：`CollectionSyncError`（三个变体都带 `message`）、`classifyCollectionSyncError`、`rateLimitRemainingMs`。
+  - `entrypoints/app/hooks/collection-sync-error-message.ts`（新）：`SyncErrorCopy` + `syncErrorMessage`。它与分类器分成两个文件，原因见偏离 1。
+- **`useCollectionLibrary`**：删掉 `classifyError` 注入与 `TError` 泛型（4 → 3 个类型参数），`syncError` 由 hook 内部分类。
+- **五个平台 hook**：删掉 `classifyError:` 行和第 4 个泛型实参，`syncError` 改为 `CollectionSyncError | null`。以下全部删除：`GithubSyncError` / `XSyncError` / `ZhihuSyncError` / `YoutubeSyncError`、github 私有的 `classifySyncError`、`classifyZhihuSyncError`、`classifyYoutubeSyncError`、bookmarks 的 `classifySyncError`、`lib/x/x-messages.ts`。
+- **五个 view**：github / x / zhihu / youtube 各有一个模块级 `SYNC_ERROR_COPY`，四份 switch 删除，键映射保持改前文案。bookmarks 改为 `bm.syncError?.message`。
+- **X 的两种 auth**：
+  - `NotLoggedInState` 收 `reason`，`rejected` 时用新键 `x.sessionRejectedTitle` / `x.sessionRejectedDesc`。
+  - 横幅由 `authRejected` 覆盖。
+- **B站**：
+  - `use-bili-fav-folders.ts` / `use-bili-fav-videos.ts` 的错误都经分类器：`auth` → `not_logged_in`，其余存为 `CollectionSyncError`。
+  - 删掉三个英文兜底字面量：`'Sync failed'` / `'Failed to check login'` / `'Failed to fetch videos'`。
+  - `bilibili-view.tsx` 有模块级 `SYNC_ERROR_COPY`（新键 `collections.rateLimited`）。三处原先把字符串直接交给 scaffold（夹内页的 `queryError` 与横幅，fallback 页的横幅），现在都先翻译再交。
+- **按钮锁**：
+  - `entrypoints/app/hooks/use-countdown.ts`（新）：`useCountdown` + 从 `sections/x/cooldown.ts` 搬来的 `formatCountdown`。
+  - X 冷却改用它：`use-x-bookmarks.ts` 里内联的 `now` state 与 interval 删除。
+  - github / x view 各加一个 `useCountdown((now) => rateLimitRemainingMs(syncError, now))`，结果接 scaffold 的 `syncDisabled` / `syncDisabledLabel`。X 取冷却与限流锁中较晚结束的那个。
+  - label 用新键 `pipeline.fetchAvailableIn`，`x.cooldown` 删除。
+- **`COOLDOWN_MS`**：
+  - 新 leaf `lib/x/cooldown.ts` 定义 `envNumber('VITE_X_COOLDOWN_MS', 300_000)`。
+  - app 侧 `sections/x/cooldown.ts` re-export 它，所以 `cooldown.test.ts` 的 `COOLDOWN_MS` / `remainingCooldown` 用例一行未改。
+  - `use-x-bookmarks.ts` 原有的 `export { COOLDOWN_MS }` 没有消费者，删除。
+  - `.env.example` 与 `.env.local` 的 x 块、`EXPECTED_ENV_CONSTANTS` 三方同步。§3 低-3 第一条随之关闭。
+- **守卫**：
+  - `tests/platform-completeness-contract.test.ts` 新增两个独立 `it`：继承检查，以及它的探测器自检。
+  - `tests/lib-import-smoke.test.ts` 的 `PURE_ENTRIES` 加上 `'@/lib/collections/sync-errors'`，文件头补一句说明。
+
+**先红后绿**：
+
+- **继承守卫**：在改任何错误类之前、只写好新 `it` 时跑，红的恰好是下面 9 条（5 个 Auth + 4 个 RateLimit），与 PRD 预期一致。`BiliRateLimitError` 是新写的，不在红态里。自检同一次跑是绿的。改完 B 节后转绿。红态原样：
+  ```
+  AssertionError: Platform error class not derived from lib/collections/sync-errors.ts — make every `*AuthError` extend `PlatformAuthError` and every `*RateLimitError` extend `PlatformRateLimitError` (the `reason` rule is in that file's doc comment):
+  - lib/bilibili/bilibili-api.ts:45: BiliAuthError extends Error
+  - lib/github/github-api.ts:42: GithubAuthError extends Error
+  - lib/github/github-api.ts:49: GithubRateLimitError extends Error
+  - lib/x/x-api.ts:128: XAuthError extends Error
+  - lib/x/x-api.ts:138: XRateLimitError extends Error
+  - lib/zhihu/zhihu-api.ts:74: ZhihuAuthError extends Error
+  - lib/zhihu/zhihu-api.ts:85: ZhihuRateLimitError extends Error
+  - lib/youtube/youtube-api.ts:52: YoutubeAuthError extends Error
+  - lib/youtube/youtube-api.ts:59: YoutubeRateLimitError extends Error: expected [ …(9) ] to deeply equal []
+  ```
+- **探测器自检**（下面是实施时的清单；trellis-check 后命中 8 条、放过 5 条，见下方复核）：
+  - 命中三条：`class FooAuthError extends Error {}`、`class FooRateLimitError extends Error {}`、`class FooAuthError {}`。
+  - 放过三条：`class FooAuthError extends PlatformAuthError {}`、`class FooRateLimitError extends PlatformRateLimitError {}`、`class HttpDeadlineError extends Error {}`。
+- **`tsc` 生成的清单**：Auth 构造器的 `reason` 必填、无默认值，所以改完类后 `tsc --noEmit` 只剩两处报错，恰好是 PRD Tests §6 预告的 `collection-platform-auto-sync.test.ts:131` 与 `use-bili-fav-folders.test.tsx:117`（`Expected 2 arguments, but got 1`）。十个生产抛出点都已按 B 表写了 `reason`。
+- **陈旧 `now` 回归例**：临时把 `useCountdown` 换回旧 X hook 的写法（`useState(() => Date.now())`，interval 里 `setNow`），只红新回归例：`expected 605000 to be 5000`。恢复后 6 例全绿。
+- **trellis-check 复核（2026-09-30）**：
+  - 独立复现了先红：把五个 `*-api.ts` 换回 HEAD 版再跑继承用例，红的正是上面 9 条，行号逐条相同；恢复后用 `cmp` 确认与改动版逐字节一致。守卫扩展（见下）后又复现一次，仍恰好是这 9 条。
+  - 十个抛出点的 `reason` 逐一对照 PRD B 表，全部一致。五个 Auth 构造器都是 `(message, reason)`、无默认值；十个子类都有显式 `this.name`；`sync-errors.ts` 零 import，`lib/collections/index.ts` 不导出它。B站 412 只在 `fetchFavFolders` / `fetchFavVideos` 两处、都在 `!res.ok` 之前判定。
+  - **守卫探针**：临时建 `lib/x/zz-error-probe.ts`，跑完删除。
+    - 原规则命中：`extends (Error)`、`extends globalThis.Error`、`export default class …AuthError extends Error`、`extends (Error as ErrorConstructor)`。
+    - 原规则漏了三种，全是 class 表达式：`export const FooAuthError = class extends Error {}`、`const FooRateLimitError = class FooRateLimitError extends Error {}`、`FooAuthError = class extends Error {}`。原实现只认 `ClassDeclaration`。
+  - **守卫补了 class 表达式**：新 helper `errorClassNames` 取类自己的名字，再加上它被绑定到的名字（`const X = class …`、`X = class …`、`{ X: class … }`，穿过括号与类型断言），任一名字命中后缀就检查。
+    - 自检的命中表从 3 条扩到 8 条：加 `export default`、`globalThis.Error`，以及三种 class 表达式。
+    - 放过表从 3 条扩到 5 条：加 `const FooAuthError = class extends PlatformAuthError {}`，以及名字不匹配的 class 表达式。
+    - 改后探针原先漏的三种全部命中，`class extends PlatformAuthError` 的表达式照样放过。spec §2 的描述同步改了。
+  - **刻意从严，不算缺口**：别名（`const Base = PlatformAuthError; … extends Base`）与包过的基类（`extends (PlatformAuthError as …)`）都判违规。失败信息已经写明要直接写基类名。
+  - **仍然是已知缺口，不修**：
+    - 基类按标识符名认，不查 import 来源。在平台目录里本地声明 `class PlatformAuthError extends Error`，它自己就会被后缀规则抓到；剩下的洞只有「从别的模块 import 一个同名类」。
+    - 规则按类名后缀认：`BiliRiskControlError extends Error` 这种名字不在检查范围。这是设计如此，spec 只约定 `*AuthError` / `*RateLimitError` 两个名字。
+    - 没有任何名字的匿名类（`export default class extends Error {}`）不检查。
+  - **偏离 1（拆文件）复核**：
+    - 复现了 i18n 的加载副作用：临时 vitest 文件只 `import('@/lib/i18n')`，报 9 个 unhandled rejection（`getStorageArea` 读 `undefined.runtime`），文件判失败，跑完删除。
+    - 三份测试确实都没 mock `@/lib/i18n` 或 `@/lib/storage`。
+    - 判断：拆文件是对的修法，不是绕路。分类器在泛型层，本来就用不到 i18n；另一条路是给三份测试补 mock，而那是 PRD 没许可改的文件。
+    - 原文「放在一个文件就会全红」措辞偏重：红的是 vitest 对 unhandled error 的判定，不是用例断言。结论不变。
+  - **偏离 2（渲染期读时钟）复核**：
+    - StrictMode 双渲染两次读到的时钟相同；effect 挂载、卸载、再挂载只是建一个 interval、清掉、再建一个，稳态只有一个。
+    - interval 只在 `active` 由假变真时建、由真变假时清。到 0 的那次 tick 渲染把 `active` 置假，cleanup 随即清掉；`use-countdown.test.ts` 用 `getTimerCount()` 锁住了这一点。
+    - 解锁比 reset 晚不到 1 s（tick 粒度），与旧 X hook 相同。
+    - X 页冷却与限流锁同时生效时是两个 interval 实例、一个实现；view 取两者的 `Math.max`。
+    - `remainingCooldown` 的函数体与它的用例都没动；`cooldown.test.ts` 只少了 `formatCountdown` 的 describe 与对应 import。
+  - **偏离 3 复核**：`entrypoints/**` 里另外两个 `setInterval` 都不是倒计时：`bilibili-video.content/components/SubtitleView.tsx:93` 是 250 ms 的播放头轮询，`welcome/hooks/use-typewriter.ts:33` 是打字动画。所以「另有三个既有倒计时」成立。
+  - **偏离 4 复核**：接受。它只进 review 表，没有冒充自动守卫，与 §7.2 的写法一致。
+  - **本记录的勘误**（已就地改正）：`use-collection-library.test.tsx` 的两处泛型实参在 HEAD 是 `:21`、`:53`，原写 `:20`、`:54`。其余 `file:line` 逐条回查无误：`bili-sync-service.ts:67`、`bilibili-api.ts:123,152`、`x-sync-adapter.ts:43`、`x-auth.ts:21`、`x-sync-service.ts:138`、`background.ts:92`、`collection-platform-auto-sync.test.ts:131`、`use-bili-fav-folders.test.tsx:117`、`x-sync-adapter.test.ts:55,61`、`use-countdown.ts:28`、`zhihu-sync-adapter.ts:52`、`collection-sync-error.ts:23`、`collection-sync-error-message.ts:29`。
+  - **残留 grep**：
+    - `GithubSyncError` / `XSyncError` / `ZhihuSyncError` / `YoutubeSyncError` / `classifyXSyncError` / `XAuthFailReason` / `x-messages` / `'no-token'` / `x.cooldown` 在代码里零引用，只剩 docs、本任务 PRD 与归档。
+    - `entrypoints/app/**` 非测试代码里按平台类 `instanceof` 的只剩上面说的三处刻意保留。
+    - `COOLDOWN_MS` 只在 `lib/x/cooldown.ts` 定义；`.env.local` 的 x 块有 `# VITE_X_COOLDOWN_MS=`。
+    - PRD Tests §7 列的五个文件，以及 bilibili / zhihu 两个 adapter 测试与 `bili-sync-service.test.ts`，都不在 diff 里。`x-sync-adapter.test.ts` 只改了 §6 许可的两行，mock 类本身没动。
+  - **重跑**：
+    - 聚焦的 19 个测试文件共 186 例绿；守卫扩展后 completeness contract 5 例绿；
+    - `pnpm compile` 绿；
+    - `pnpm test` 在默认并行度下两次都挂了几个文件，失败集合互不相同：一次是 5 个（PGlite `beforeAll` 10 s 超时为主），一次是 3 个（含 `lib-import-smoke` 的 5 s 超时）。两组分别单跑全绿。这是根 `CLAUDE.md` 记下的已知抖动，本机当时负载偏高；
+    - `VITEST_MAX_WORKERS=4 pnpm test` 全量绿：主仓库 210 个文件 1689 例，`packages/favbase` 15 个文件 263 例；
+    - `pnpm build` 的 bundle-contract 行是 `14 modules / 947838 bytes`；manifest 的 sha256 是 `053dd7bd…fde32ae5`，与改动前的 HEAD 基线相同。
+
+**改了哪些现有测试**（都只因签名或形状变化）：
+
+- `entrypoints/app/sections/x/x-sync-adapter.test.ts`：`:61` 的 `reason: 'no-token'` → `'missing'`；`:55` 的用例标题同步改名（见偏离 3）。
+- `entrypoints/app/collection-platform-auto-sync.test.ts:131`：`new ZhihuAuthError('out')` 补第二参 `'missing'`。mock 工厂里的类没动。
+- `entrypoints/app/sections/bilibili/use-bili-fav-folders.test.tsx`：
+  - mock 工厂改成 async，在工厂里 `await import('@/lib/collections/sync-errors')`，mock 的 `BiliAuthError` 继承 `PlatformAuthError`（hook 改为按基类分类）。
+  - `:117` 补 `'missing'`。
+  - 这个测试不断言 `error` 字符串，没有别的改动。
+- `entrypoints/app/hooks/use-collection-library.test.tsx`：`:33`、`:58` 删 `classifyError`；另外 `:21`、`:53` 的第 4 个泛型实参也得删（见偏离 2）。
+- `entrypoints/app/sections/x/cooldown.test.ts`：`formatCountdown` 的 describe 与 import 搬到 `use-countdown.test.ts`，其余一行未改。
+- PRD 点名要扩的守卫与测试：`tests/platform-completeness-contract.test.ts`、`tests/lib-import-smoke.test.ts`、`tests/platform-env-constants-guard.test.ts`（一行表项）、`lib/bilibili/bilibili-api.test.ts`（412 用例）。
+- **一行未改就绿**：
+  - `lib/x/x-api.test.ts`、`lib/zhihu/zhihu-api.test.ts`、`lib/youtube/youtube-api.test.ts`、`lib/github/github-api.test.ts`（`toBeInstanceOf(XAuthError)` 等照绿）；
+  - `collection-page-scaffold.test.tsx`；
+  - 另外五个 `*-sync-adapter.test.ts`、`use-bookmarks.test.tsx`、`bili-sync-service.test.ts`、`sections/configuration-heading.test.tsx`。
+
+**默认决定**（PRD 已定，用户未逐条过目）：
+
+- **D-a 类名** 用 `PlatformAuthError` / `PlatformRateLimitError`，不叫 Sync*：错误也从非同步路径抛出，例如 B站浏览和设置卡的 token 测试。文件名按本文用 `sync-errors.ts`。
+- **D-b 基类 `abstract`**，子类各自显式 `name`。
+- **D-c `reason` 判定规则**见 PRD B 表，知乎恒 `missing`。X 的 `'no-token'` 改名 `'missing'`，一处测试断言随之改。
+- **D-d Auth 构造器的 `reason` 必填、无默认值**：漏写编译不过，比给默认值安全。
+- **D-e `useCollectionLibrary` 删掉 `classifyError` 注入与 `TError`**。
+- **D-f 每个 `CollectionSyncError` 变体都带 `message`**：bookmarks 零新键，行为逐字不变。
+- **D-g `SyncErrorCopy` 的 `authRejected` / `rateLimitedUntil` 可选**：只有能区分两种 auth、能拿到 reset 的平台才给。缺省回落到基础键，表示平台不认识这个维度，不是隐藏特例。
+- **D-h B站两个 hook 都走分类器**：浏览路径的 412 也显示本地化文案，D4 的风险面正是浏览路径。
+- **D-i 倒计时 hook 共享**：X 冷却迁入，`pipeline.fetchAvailableIn` 取代 `x.cooldown`。锁只在 github / x 接，只有它们带 `resetAt`。
+- **D-j `COOLDOWN_MS` 放新 leaf `lib/x/cooldown.ts`**，app 侧 `cooldown.ts` re-export，`cooldown.test.ts` 因此不用改。
+- **D-k 继承守卫并进 completeness contract 的独立 `it`**，不新建文件，spec §2 的守卫文件计数不变。
+- **倒计时的实现选择**（PRD 让落地记录写明）：选渲染期读 `Date.now()`，不把 `now` 存进 state，interval 只负责 `setTick` 触发重渲染。理由：
+  - 存 state 的 `now` 在没有倒计时时不 tick，会一直停在挂载时刻。挂载 10 分钟后才到的限流错误，首帧就会多算 10 分钟。
+  - 另一种做法是激活时在 layout effect 里重置 `now`，但那样首帧仍按旧值渲染一次，靠第二次渲染纠正，会闪一下。
+  - 渲染期读时钟是非纯的，但只影响显示的秒数，不影响任何状态转移。
+  - effect 依赖只有 `active`：`remainingAt` 每次渲染都是新闭包，放进依赖会每帧重建 interval。
+
+**与 PRD 的偏离**：
+
+1. **`syncErrorMessage` 不和分类器放在同一个文件**，拆到 `entrypoints/app/hooks/collection-sync-error-message.ts`，函数签名与 PRD 逐字相同。
+   - 原因：`@/lib/i18n` 在模块加载时就调 `localeStorage.getValue()` / `.watch()`。
+   - 实测：临时写一个只 `import('@/lib/i18n')` 的 vitest 文件，报 9 个 unhandled rejection，`@wxt-dev/storage` 的 `getStorageArea` 读 `undefined.runtime`，跑完删除。
+   - 分类器被 `useCollectionLibrary` 与两个 B站 hook import，而 `use-collection-library.test.tsx`、`use-bookmarks.test.tsx`、`use-bili-fav-folders.test.tsx` 都没 mock i18n。这三份测试不在 PRD 允许修改的范围里，放在一个文件就会全红。
+   - 结果：分类器那个文件零 i18n，只有 view import 带 i18n 的那一半。新测试 `collection-sync-error.test.ts` 自己 mock `@/lib/i18n`。
+2. **`use-collection-library.test.tsx` 多改了两行**：PRD 只点了 `:33,58`，但 `:21` 的 `UseCollectionLibraryReturn<string, never, void, string>` 与 `:53` 的 `useCollectionLibrary<string, never, void, string>` 也带着第 4 个泛型，理由同样是 E 的签名变化。
+3. **`x-sync-adapter.test.ts:55` 的用例标题**从「throws the no-token auth error…」改成「throws the missing-session auth error…」，与 `:61` 的改名同一个理由。
+4. **`use-countdown.test.ts` 不写 JSX**，用 `createElement`，以保留 PRD 定的 `.ts` 文件名。
+5. **「全仓只有一个 1 s 倒计时 interval 实现」只对 app.html 成立**：`entrypoints/app/**` 非测试代码里 `setInterval` 只剩 `use-countdown.ts:28`。
+   - 全仓还有三个既有倒计时：Content Script 的 `lib/hooks/useRetryCountdown.ts`（转录限流重试），以及 `lib/auto-transcribe/pipeline.ts`、`lib/bilibili/transcription-coordinator.ts` 两个非 React 类里的 `countdownTimer`。
+   - 它们跑在另一个 runtime，或在 React 之外，不能 import app hook，也不在本 Step 的范围里，没动。
+6. **spec §11 多加了一行**「per-platform 分类器或 view 里的 switch → review」。PRD 只要求「直接 `extends Error` → completeness contract」那一行；多出的这行把 §7.2 的新写法写成禁项。
+7. **注释同步多了一处 `entrypoints/background.ts:92`**（`"no-token" sync errors` → `"missing"-session sync errors`），属 PRD B 的「等注释」。
+
+**行为变化与验证备注**：
+
+- **B站 412**：改前同步横幅是「同步失败: Bilibili API HTTP 412」，浏览错误态显示 `Bilibili API HTTP 412`。现在两处都是「触发 B 站限流，请稍后重试」。其余非 2xx 仍显示原始消息。非 `Error` 的抛出值现在显示 `String(err)`，改前是三个英文兜底字面量之一。
+- **X `rejected`**：横幅与空库 StateBox 都改用「X 登录已失效」这套文案。`missing` 不变。
+- **GitHub / X 带 reset 的限流**：标题栏按钮禁用并显示倒计时，到点自动解锁。
+  - 锁只活在内存 job store 里：刷新页面即解锁。这是接受的行为，Platform Sync Record 刻意不存错误（§5.1）。
+  - 锁只作用于标题栏按钮。空库错误态、X 未登录态 StateBox 里的「立即获取」不受锁。
+  - 知识库暂停时，scaffold 照旧 `gatePaused || syncDisabled` 并丢掉 label。
+- **X 冷却**：label 键从 `x.cooldown` 换成 `pipeline.fetchAvailableIn`，文案逐字相同。
+  - 顺带记一个旧实现的巧合：旧 hook 的 `now` 从挂载起就不 tick。长时间挂着的页面同步成功后，`now < lastSyncedAt` 会落进 clock-skew 分支、返回满窗口，所以首帧碰巧显示 5:00。限流的 deadline 没有这个巧合可依赖，这是新 hook 在渲染期读时钟的直接原因。
+- **zhihu / youtube / bookmarks**：用户可见文案不变。
+- **i18n**：新增 `pipeline.fetchAvailableIn`、`collections.rateLimited`、`x.sessionRejectedTitle`、`x.sessionRejectedDesc`（zh / en 各一），删除 `x.cooldown`。
+- **仍按平台类 `instanceof` 的三处**（刻意保留）：`zhihu-sync-adapter.ts:52` 的 `isSilentError`（触发方策略），`github-connection-card.tsx` 与 `youtube-connection-card.tsx` 的 token 测试。
+- **manifest**：改动前从干净 HEAD（`63eac7e`）构建，`.output/chrome-mv3/manifest.json` 的 sha256 是 `053dd7bd…fde32ae5`；改动后重建相同，**逐字节不变**。
+- **SW 体积**：bundle-contract 行从 `13 modules / 947339 bytes` 变成 `14 modules / 947838 bytes`（+1 模块、+499 字节）。多出的模块是经 `bilibili-api.ts` 进 SW 图的 `sync-errors.ts`，本身零 import。
+- **测试**：
+  - 聚焦的 27 个测试文件共 249 例绿；
+  - `pnpm compile` 绿；
+  - `pnpm test` 全量绿：主仓库 210 个文件 1689 例（Step 3 后是 207 / 1638，新增三个测试文件，加上 412 用例与守卫用例），`packages/favbase` 15 个文件 263 例；
+  - `pnpm build` 绿。
+- **`.env.local`** 是 gitignored 文件，本机已按空值注释行格式补上 `# VITE_X_COOLDOWN_MS=`，env 守卫的 `.env.local` 半边在本机跑过、是绿的。
+
+**[UNKNOWN]**：B站在 HTTP 200 的 JSON 里是否也用风控码（`-352` / `-412`）表示拦截，没有观测记录。本 Step 只映射 HTTP 412。JSON 层的码仍落到 `Bilibili API error <code>: <message>` 这个普通 `Error`，显示为原始消息。观察到再议，与附录 A 的 D4 浏览路径 412 同属一类待观测项。
+
 ### Step 5 正文来源契约（中-6）
 
 - **目标**：延迟正文有一份可照抄的契约；两条现有管线共享已经重复的零件。
@@ -763,7 +941,7 @@ lib 侧：平台 API 文件的重试 / 响应读取约减 30–40 行（Step 3�
 | 1 | §10 强制清单加「同步收尾 funnel」；adapter 不再手写 `startCollectionProcessingJobs`（已落地 2026-09-30：§4.3、§7.2、§10、§11 与 §2 守卫描述） | `entrypoints/app/**` 非测试模块里，`startCollectionProcessingJobs` 标识符只许出现在定义处与 funnel（AST 扫描，独立用例，失败列 `file:line`） |
 | 2 | §6.1 domain descriptor 六字段 → 七字段（新增简介字段；`dimensions` 内加 meta 维度格）（已落地 2026-09-30：§6 字段数、§6.1 表 `descriptionField` 行与 `dimensions` 行、§2 守卫描述、§11 禁项行） | 共享模块禁平台字面量 / 字面 meta key 从一个文件扩成清单（独立用例，AST 扫描，失败列 `file:line`）；`dimensions.meta.kind` 必须在 `ranked` 里 |
 | 3 | 风控一节说明「机制在 `lib/http/`，数值与语义在平台」（已落地 2026-09-30：§4.1 Pagination 条、§2 守卫表（Five → Six）、§11 禁项行） | `lib/<platform>/` 禁 `setTimeout` 等待（`tests/platform-sleep-guard.test.ts`，AST 扫描 `new Promise` 参数里的 `setTimeout`，失败列 `file:line`） |
-| 4 | 错误类必须继承 `sync-errors.ts` 基类 | 平台错误类继承断言；`lib-import-smoke` 纳入新 leaf |
+| 4 | 错误类必须继承 `sync-errors.ts` 基类（已落地 2026-09-30：§4.1 错误类条、§7.2 `use-<platform>.ts` 与 `<platform>-view.tsx` 两行、§2 completeness contract 描述、§11 禁项行） | 平台错误类继承断言（completeness contract 的独立用例 + 探测器自检，AST 扫描，失败列 `file:line`）；`lib-import-smoke` 纳入新 leaf |
 | 5 | 新增「延迟正文」一节 | `sections/**` 禁字面 job 命名空间 |
 | 6–8 | §7 页面清单删去状态组件与 tagged 外壳两项 | `CARD_ADAPTERS` 对账不变 |
 | 9 | 查询片段 builder 列入「shared read helpers」 | — |

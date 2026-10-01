@@ -451,6 +451,8 @@ const en: Record<LocaleKeys, string> = {
   'pipeline.pauseLibrary': 'Pause library build',
   'pipeline.resumeLibrary': 'Resume library build',
   'pipeline.fetchBlockedByPause': 'Library build is paused — resume it before fetching',
+  // Fetch-button lock label (X post-sync cooldown, or a rate limit with a known reset).
+  'pipeline.fetchAvailableIn': 'Retry in {{time}}',
 
   // Shared collection-page copy (identical across all platforms) — platform
   // prefixes keep only platform-specific nouns (see *.noMatches).
@@ -512,6 +514,7 @@ const en: Record<LocaleKeys, string> = {
   'collections.lastSynced': 'Last synced {{time}}',
   'collections.bilibiliSyncProgress': 'Fetched {{fetched}} (folder {{current}}/{{total}}: {{title}}, page {{page}}/{{totalPages}})',
   'collections.syncFailed': 'Sync failed: {{error}}',
+  'collections.rateLimited': 'Bilibili rate limit hit — please retry later',
   'collections.selectFolder': 'Select a folder',
   'collections.sidebarTitle': 'Bilibili Favorites',
   'collections.foldersTitle': 'Folders',
@@ -576,6 +579,8 @@ const en: Record<LocaleKeys, string> = {
   'x.showLessAuthors': 'Show less',
   'x.notLoggedInTitle': 'X login not detected',
   'x.notLoggedInDesc': 'Open x.com/i/bookmarks and sign in so the extension captures your session, then come back here and click Sync.',
+  'x.sessionRejectedTitle': 'X session expired',
+  'x.sessionRejectedDesc': 'X rejected the session the extension captured. Open x.com/i/bookmarks and sign in again so the extension captures a fresh one, then come back here and click Sync.',
   'x.openBookmarksPage': 'Open X bookmarks',
   'x.emptyTitle': 'No bookmarks collected yet',
   'x.emptyDesc': 'Open x.com/i/bookmarks and sign in so the extension captures your session, then come back here and click Sync to import every tweet you saved on X.',
@@ -584,7 +589,6 @@ const en: Record<LocaleKeys, string> = {
   'x.rateLimitedNoReset': 'X rate limit hit — please retry later',
   'x.newThisSync': '{{count}} new this sync',
   'x.newThisSync.one': '{{count}} new this sync',
-  'x.cooldown': 'Retry in {{time}}',
 
   'zhihu.title': 'Zhihu Favorites',
   'zhihu.count': '{{count}} favorites',

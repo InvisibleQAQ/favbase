@@ -5,8 +5,6 @@ import {
   getStarredRepos,
   getLanguageCounts,
   getLastSyncedAt,
-  GithubAuthError,
-  GithubRateLimitError,
   type GithubRepoItem,
   type LanguageCount,
 } from '@/lib/github/github-sync-service';
@@ -15,6 +13,7 @@ import {
   type CollectionQueryParams,
 } from '../../hooks/use-collection-library';
 import type { BackgroundJob } from '../../hooks/background-jobs-store';
+import type { CollectionSyncError } from '../../hooks/collection-sync-error';
 import { runGithubStarsSync, type SyncProgress } from './github-sync-adapter';
 
 /** Job namespace key (reused as `useCollectionLibrary` logTag). */
@@ -23,12 +22,6 @@ const LOG_TAG = 'github-stars';
 // Re-exported so the view keeps importing progress types from the hook; the
 // types + mapping live in the shared Sync Adapter (single trigger surface).
 export type { SyncProgress, StarsPhaseProgress, ReadmePhaseProgress } from './github-sync-adapter';
-
-/** Structured sync error — the view maps kinds to locale keys (i18n seam at UI). */
-export type GithubSyncError =
-  | { kind: 'auth' }
-  | { kind: 'rate-limit'; resetAt: Date | null }
-  | { kind: 'unknown'; message: string };
 
 export interface UseGithubStarsReturn {
   // Paged query results (from PGlite via github-sync-service — no API reads)
@@ -60,19 +53,13 @@ export interface UseGithubStarsReturn {
   // One-shot full sync
   syncing: boolean;
   syncProgress: SyncProgress | null;
-  syncError: GithubSyncError | null;
+  syncError: CollectionSyncError | null;
   syncJob: BackgroundJob<SyncProgress> | null;
   sync: () => Promise<void>;
 
   // Post-sync embed / tag jobs (progress captions).
   embedJob: BackgroundJob | null;
   tagJob: BackgroundJob | null;
-}
-
-function classifySyncError(err: unknown): GithubSyncError {
-  if (err instanceof GithubAuthError) return { kind: 'auth' };
-  if (err instanceof GithubRateLimitError) return { kind: 'rate-limit', resetAt: err.resetAt };
-  return { kind: 'unknown', message: err instanceof Error ? err.message : String(err) };
 }
 
 function queryFn({ filter, search, page, pageSize }: CollectionQueryParams) {
@@ -90,7 +77,7 @@ export function useGithubStars(): UseGithubStarsReturn {
   const token = settings.githubToken;
   const hasToken = Boolean(token);
 
-  const lib = useCollectionLibrary<GithubRepoItem, LanguageCount, SyncProgress, GithubSyncError>({
+  const lib = useCollectionLibrary<GithubRepoItem, LanguageCount, SyncProgress>({
     queryFn,
     facetsFn: getLanguageCounts,
     lastSyncedFn: getLastSyncedAt,
@@ -98,7 +85,6 @@ export function useGithubStars(): UseGithubStarsReturn {
     // mapping and the post-sync embed/tag dispatch all live there — the daily
     // auto-sync coordinator runs the exact same function.
     syncFn: runGithubStarsSync,
-    classifyError: classifySyncError,
     logTag: LOG_TAG,
   });
 
