@@ -50,7 +50,7 @@ describe('SectionTitleBar anatomy', () => {
     expect(container.querySelector('button')).toBeNull();
   });
 
-  it('renders one contained, normal-size action with the sync three-state', () => {
+  it('renders one contained primary, normal-size action with the sync three-state', () => {
     const onSync = vi.fn();
     act(() => {
       root.render(
@@ -68,6 +68,7 @@ describe('SectionTitleBar anatomy', () => {
     const button = container.querySelector('button');
     expect(button?.textContent).toBe('Fetch now');
     expect(button?.className).toMatch(/MuiButton-contained/);
+    expect(button?.className).toMatch(/MuiButton-colorPrimary/);
     expect(button?.className).toMatch(/MuiButton-sizeMedium/);
     expect(button?.hasAttribute('disabled')).toBe(false);
 

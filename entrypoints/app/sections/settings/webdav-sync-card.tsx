@@ -214,6 +214,7 @@ export function WebdavSyncCard() {
             <Stack direction="row" spacing={1.5} useFlexGap sx={{ flexWrap: 'wrap' }}>
               <Button
                 variant="contained"
+                color="primary"
                 onClick={() => void handleSyncNow()}
                 disabled={!hasCreds || syncing}
                 startIcon={

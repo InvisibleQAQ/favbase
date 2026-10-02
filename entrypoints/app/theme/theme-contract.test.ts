@@ -20,6 +20,7 @@ const SCHEMES = ['light', 'dark'] as const;
 // preset list is read from the theme owner (its `Record<ThemeColorPreset, …>`
 // key set is locked to the persisted enum by the compiler).
 const PRESETS = Object.keys(primaryColorPresets) as ThemeColorPreset[];
+const PRIMARY_STAGES = ['lighter', 'light', 'main', 'dark', 'darker'] as const;
 
 /** The theme app.html builds for a persisted preset / contrast pair. */
 function themeFor(primaryColor: ThemeColorPreset, contrast: ThemeContrast = 'default') {
@@ -111,8 +112,9 @@ describe('theme token contract', () => {
 
   it.each(SCHEMES)('%s text and action colors meet WCAG contrast', (scheme) => {
     const colors = themeConfig.scheme[scheme];
-    // The default button is Minimal's `contained` + `inherit`: filledStyles
-    // inverts the scheme, so it is `text.primary` under `background.paper`.
+    // `contained` + `inherit` (Minimal's default color) inverts the scheme:
+    // `text.primary` under `background.paper`. Primary actions no longer use it
+    // (they are `color="primary"`, asserted per preset below), but the skin exists.
     const containedBackground = colors.text.primary;
     const containedForeground = colors.background.paper;
 
@@ -154,6 +156,23 @@ describe('theme token contract', () => {
     for (const scheme of SCHEMES) {
       const { primary } = paletteOf(themeFor(preset), scheme);
       expect(contrastRatio(primary.contrastText, primary.main), `${preset} ${scheme}`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  // 2026-10-02: primary actions are `contained` + `color="primary"`. MUI hovers
+  // a contained button to `.dark`, where the ink `contrastText` falls to 3.69
+  // (default) / 2.26 (preset1) / 4.06 (preset4) / 2.60 (preset5); the theme
+  // keeps hover on a stage that has to clear 4.5 for every preset.
+  it.each(PRESETS)('%s contained primary keeps contrastText readable on hover', (preset) => {
+    const hover = resolveStyle('MuiButton', 'root', { variant: 'contained', color: 'primary' })['&:hover'] as
+      | Record<string, unknown>
+      | undefined;
+    const stage = PRIMARY_STAGES.find((key) => theme.vars.palette.primary[key] === hover?.backgroundColor);
+    if (!stage) throw new Error(`hover background is not a primary stage: ${String(hover?.backgroundColor)}`);
+    expect(stage).toBe('main');
+    for (const scheme of SCHEMES) {
+      const { primary } = paletteOf(themeFor(preset), scheme);
+      expect(contrastRatio(primary.contrastText, primary[stage]), `${preset} ${scheme}`).toBeGreaterThanOrEqual(4.5);
     }
   });
 
@@ -254,6 +273,18 @@ describe('theme geometry and component defaults', () => {
     const contained = resolveStyle('MuiButton', 'root', { variant: 'contained', color: 'inherit' });
     expect(contained.color).toBe(theme.vars.palette.common.white);
     expect(contained.backgroundColor).toBe(theme.vars.palette.grey[800]);
+  });
+
+  // button.tsx favbase override: no palette color hovers to `.dark`, so a
+  // contained button reads on hover exactly as it does at rest.
+  it('keeps every contained palette button on main when hovered', () => {
+    for (const key of colorKeys.palette) {
+      const hover = resolveStyle('MuiButton', 'root', { variant: 'contained', color: key })['&:hover'] as
+        | Record<string, unknown>
+        | undefined;
+      expect(hover?.backgroundColor, key).toBe(theme.vars.palette[key].main);
+      expect(hover?.boxShadow, key).toBe(theme.vars.customShadows[key]);
+    }
   });
 
   // docs/25 D11: single-line height = 24px line box + INPUT_PADDING; the theme

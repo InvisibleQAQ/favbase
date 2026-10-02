@@ -85,6 +85,7 @@ function OpenSiteButton({ href, label, icon }: SiteAction) {
       target="_blank"
       rel="noopener"
       variant="contained"
+      color="primary"
       startIcon={<Iconify icon={icon} width={18} />}
     >
       {t(label)}
@@ -98,7 +99,7 @@ function GoToSettingsButton({ settings }: { settings: SettingsLeaf }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   return (
-    <Button variant="contained" onClick={() => navigate(settingsPath(settings))}>
+    <Button variant="contained" color="primary" onClick={() => navigate(settingsPath(settings))}>
       {t('common.goToSettings')}
     </Button>
   );

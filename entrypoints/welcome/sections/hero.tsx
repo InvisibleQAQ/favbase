@@ -248,6 +248,7 @@ export function Hero() {
               <Button
                 href="#welcome-picker"
                 variant="contained"
+                color="primary"
                 size="large"
                 endIcon={<Iconify icon="eva:arrow-ios-forward-fill" width={18} />}
                 sx={(theme) => ({ px: 3, boxShadow: ctaGlowShadow(theme) })}

@@ -281,7 +281,16 @@ someone adds the rows:
 - `MuiButton`: `color="inherit"` and `disableElevation` by default; four size
   variants with minimum heights 30 / 36 / 48 / 56 (`small` / `medium` /
   `large` / `xLarge`). `contained inherit` inverts the scheme; `outlined` and
-  `text` primary ink is `text.accent`.
+  `text` primary ink is `text.accent`. Contained palette buttons hover on
+  `main`, not MUI's `.dark`, so hover contrast equals rest contrast for every
+  preset.
+- Button color by role (user decision 2026-10-02): a **primary action** is
+  `variant="contained"` + `color="primary"`, written at the call site (the
+  preset's `main` under its WCAG-picked `contrastText`). Secondary outlined /
+  text buttons keep the `inherit` default and stay neutral; destructive actions
+  stay `color="error"`. The inverted `contained inherit` skin is not used for
+  primary actions. Do not flip `MuiButton.defaultProps.color` to `primary`
+  instead: it would re-ink every outlined / text default in `text.accent`.
 - `MuiInputBase`, `MuiInput`, `MuiFilledInput`, `MuiOutlinedInput`: single-line
   height is **derived**, not declared — a 24px line box plus `INPUT_PADDING`,
   giving outlined 56px medium / 40px small and base 32 / 28 (docs/25 D11,
@@ -458,7 +467,7 @@ new pre-scaffold gate with the same assertion as
 
 `SectionTitleBar` renders the route's single `h1` (the `h1` variant: Barlow
 700, 28px), optional secondary copy (`body2`, `text.secondary`) stacked below
-it, and one medium contained action on the right. It owns the 24px bottom
+it, and one medium contained primary action on the right. It owns the 24px bottom
 margin; the rows under it (pipeline, banner, search, chip rows) all end with
 the same 24px so the control stack reads as one rhythm. The sync three-state
 (idle / syncing / hard-disabled with countdown label or gate tooltip) stays.

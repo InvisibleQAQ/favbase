@@ -8,7 +8,8 @@ export interface SyncNowButtonProps {
   onSync: () => void;
   /** Pre-translated button label — this component carries no i18n keys. */
   label: string;
-  /** 'contained' for the primary empty-state action, 'outlined' otherwise. */
+  /** 'contained' for the primary empty-state action, 'outlined' otherwise.
+   *  Color follows it: contained is brand `primary`, outlined stays `inherit`. */
   variant?: 'contained' | 'outlined';
 }
 
@@ -17,6 +18,7 @@ export function SyncNowButton({ syncing, onSync, label, variant = 'outlined' }: 
   return (
     <Button
       variant={variant}
+      color={variant === 'contained' ? 'primary' : 'inherit'}
       onClick={onSync}
       disabled={syncing}
       startIcon={

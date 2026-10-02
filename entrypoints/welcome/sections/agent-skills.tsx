@@ -188,7 +188,7 @@ export function AgentSkills() {
 
               <Button
                 variant="contained"
-                color="inherit"
+                color="primary"
                 onClick={handleCopy}
                 startIcon={
                   <Iconify

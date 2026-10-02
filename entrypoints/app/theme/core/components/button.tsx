@@ -6,11 +6,14 @@ import { buttonClasses } from '@mui/material/Button';
 import { colorKeys } from '../palette';
 
 /**
- * Minimal button. favbase override (marked inline): outlined and
- * text `primary` buttons take `text.accent` as their ink — coral `main` reads
- * 2.5:1 as text. The docs/23 ink-block `contained primary` special case is
- * gone: `app.html` has no `<Button color="primary">`, and Minimal's default
- * `color="inherit"` already renders the one inverted button per screen.
+ * Minimal button. favbase overrides (marked inline): outlined and text
+ * `primary` buttons take `text.accent` as their ink — coral `main` reads 2.5:1
+ * as text; contained palette buttons keep `main` on hover.
+ *
+ * The default stays Minimal's `color="inherit"`, so secondary outlined / text
+ * buttons stay neutral. A primary action is `variant="contained"` +
+ * `color="primary"`, written at its call site (2026-10-02); the inherit
+ * contained skin (scheme-inverted block) is no longer used for primary actions.
  */
 export type ButtonExtendSize = { xLarge: true };
 export type ButtonExtendVariant = { soft: true };
@@ -54,6 +57,11 @@ const containedVariants = [
     props: (props) => props.variant === 'contained' && props.color === colorKey,
     style: ({ theme }) => ({
       '&:hover': {
+        // favbase override: MUI hovers to `.dark`, which drops the ink
+        // `contrastText` below 4.5:1 (coral 3.69, preset1 2.26); `main` is the
+        // per-preset pair D14 already clears. Uniform for every palette color,
+        // so hover contrast equals rest contrast (error: 4.23 at both, was 6.57).
+        backgroundColor: theme.vars.palette[colorKey].main,
         boxShadow: theme.vars.customShadows[colorKey],
       },
     }),

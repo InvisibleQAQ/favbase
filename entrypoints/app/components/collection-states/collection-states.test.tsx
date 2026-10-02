@@ -67,6 +67,13 @@ function variantOf(element: Element): 'contained' | 'outlined' | 'other' {
   return 'other';
 }
 
+/** Contained actions are brand primary; outlined Fetch stays neutral (`inherit`). */
+function colorOf(element: Element): 'primary' | 'inherit' | 'other' {
+  if (element.classList.contains(buttonClasses.colorPrimary)) return 'primary';
+  if (element.classList.contains(buttonClasses.colorInherit)) return 'inherit';
+  return 'other';
+}
+
 describe('collection states', () => {
   let container: HTMLDivElement;
   let root: Root;
@@ -135,6 +142,7 @@ describe('collection states', () => {
     expect(fetch.tagName).toBe('BUTTON');
     expect(fetch.textContent).toBe('pipeline.fetchNow');
     expect(variantOf(fetch)).toBe('contained');
+    expect(colorOf(fetch)).toBe('primary');
 
     act(() => fetch.click());
     expect(onSync).toHaveBeenCalledTimes(1);
@@ -194,12 +202,14 @@ describe('collection states', () => {
     expect(site.getAttribute('target')).toBe('_blank');
     expect(site.getAttribute('rel')).toBe('noopener');
     expect(variantOf(site)).toBe('contained');
+    expect(colorOf(site)).toBe('primary');
     expect(site.textContent).toBe('x.openBookmarksPage');
     expect(site.querySelector('[data-icon="mdi:twitter"]')?.getAttribute('data-width')).toBe('18');
 
     expect(fetch.tagName).toBe('BUTTON');
     expect(fetch.textContent).toBe('pipeline.fetchNow');
     expect(variantOf(fetch)).toBe('outlined');
+    expect(colorOf(fetch)).toBe('inherit');
     act(() => fetch.click());
     expect(onSync).toHaveBeenCalledTimes(1);
   });
@@ -219,6 +229,7 @@ describe('collection states', () => {
     expect(settings.tagName).toBe('BUTTON');
     expect(settings.textContent).toBe('common.goToSettings');
     expect(variantOf(settings)).toBe('contained');
+    expect(colorOf(settings)).toBe('primary');
 
     act(() => settings.click());
     expect(container.querySelector('[data-testid="location"]')?.textContent)
@@ -241,8 +252,10 @@ describe('collection states', () => {
     expect(rest).toHaveLength(0);
     expect(settings.textContent).toBe('common.goToSettings');
     expect(variantOf(settings)).toBe('contained');
+    expect(colorOf(settings)).toBe('primary');
     expect(fetch.textContent).toBe('pipeline.fetchNow');
     expect(variantOf(fetch)).toBe('outlined');
+    expect(colorOf(fetch)).toBe('inherit');
 
     act(() => fetch.click());
     expect(onSync).toHaveBeenCalledTimes(1);

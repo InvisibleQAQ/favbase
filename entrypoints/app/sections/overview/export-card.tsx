@@ -118,6 +118,7 @@ export function ExportCard() {
 
           <Button
             variant="contained"
+            color="primary"
             onClick={handleBackup}
             disabled={busy !== null}
             sx={{ alignSelf: 'flex-start' }}

@@ -33,7 +33,7 @@ typography, radius, or elevation values into local `sx`.
 
 - `core/components/css-baseline.tsx` — whole file: tabular numerals, scrollbar, `::selection` (16% brand wash `varAlpha(primary.mainChannel, 0.16)` under `text.primary`), caret, `:focus-visible` ring (`primary.darker` / dark `primary.main`).
 - `core/components/typography.tsx` — `variantMapping: { subtitle1: 'p', subtitle2: 'p' }` (one page, one h1).
-- `core/components/button.tsx` — outlined / text `primary` ink is `text.accent`; border and hover wash follow `currentColor`. The docs/23 ink-block `contained primary` special case is deleted (app has no `<Button color="primary">`).
+- `core/components/button.tsx` — outlined / text `primary` ink is `text.accent`; border and hover wash follow `currentColor`. Contained palette buttons keep `main` on hover instead of MUI's `.dark` (2026-10-02): with an ink `contrastText`, `.dark` reads 3.69 (coral) / 2.26 (preset1) / 4.06 (preset4) / 2.60 (preset5), so hover now equals rest contrast for every color (error: 4.23 at both, white on `#E53935`, was 6.57 on `.dark` — the error ramp is sub-AA at rest, a token issue, not a hover one).
 - `core/mixins/global-styles-components.ts` — `softStyles(theme, 'primary')` text is `text.accent` (coral `dark` reads 3.99:1 on the 16% wash; C-3). Other colors keep Minimal's `dark` / dark-scheme `light`.
 - `core/components/link.tsx` — `color: text.accent`.
 - `core/components/dialog.tsx` — `defaultProps { fullWidth, maxWidth: 'sm' }`, paper `width calc(100% - 32px)` / `maxHeight calc(100dvh - 32px)`, actions `flexWrap + gap 12` (Minimal uses sibling margins).
@@ -89,7 +89,12 @@ consumer is Minimal's own `core/components/avatar.tsx` surplus badge. Consumers:
 
 - Button: `color="inherit"`, `disableElevation`; sizes 30/36/48/56 (`xLarge`)
   via `--padding-y/x` CSS vars; `soft` variant; `contained inherit` inverts the
-  scheme (`filledStyles`).
+  scheme (`filledStyles`). A primary action is `variant="contained"` +
+  `color="primary"` at the call site (preset `main` + `contrastText`, hover
+  stays on `main`); secondary outlined / text buttons keep the `inherit`
+  default; the inverted `contained inherit` skin is not used for primary
+  actions (user decision 2026-10-02; the default is deliberately not flipped —
+  that would ink every outlined / text default in `text.accent`).
 - Chip: default `variant="soft"`, radius 8 (small) / 10 (medium); `filled
   default` is the ink block; outlined default border `shared.buttonOutlined`.
 - Card radius `var(--card-radius, 16px)`, shadow `var(--card-shadow,
@@ -128,12 +133,14 @@ when matching a Card. `50%` is reserved for circular/pill controls.
   `shared` + `opacity` vars, radii 16/10/16/6/8/10, input heights from
   `INPUT_PADDING`, real dark card shadow, directional temporary-drawer shadow,
   mixin registration, defaults (`inherit` button, `soft` chip, Dialog `sm`,
-  Tooltip arrow, CardHeader `sx`, Skeleton wave/rounded, Stack flex gap).
+  Tooltip arrow, CardHeader `sx`, Skeleton wave/rounded, Stack flex gap),
+  every contained palette button hovering on `main`.
   WCAG block runs `it.each` over the six presets on the **resolved**
   `createTheme({ settingsState })` palettes: `text.accent` vs both grounds and
   the high-contrast ground, `primary.contrastText` vs `primary.main` (D14),
-  accent on the 16% soft wash (C-3/C-5), body text on the high-contrast ground
-  (4.508), `palette[color].darker` on `palette[color].lighter` for all six
+  `contrastText` vs the contained-primary hover stage (resolved from the button
+  override, must be `main`), accent on the 16% soft wash (C-3/C-5), body text
+  on the high-contrast ground (4.508), `palette[color].darker` on `palette[color].lighter` for all six
   colors — the `Label variant="inverted"` pair, floor 6.89:1 at success and
   7.95:1 for primary at preset4 (docs/25 Step 10; one pass covers both schemes
   because dark swaps the same pair and the ratio is symmetric) — plus the

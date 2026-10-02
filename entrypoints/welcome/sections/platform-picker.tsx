@@ -211,6 +211,7 @@ export function PlatformPicker() {
         <Button
           size="large"
           variant="contained"
+          color="primary"
           disabled={leaving}
           onClick={() => exit(picked)}
           endIcon={<Iconify icon="eva:arrow-ios-forward-fill" width={18} />}

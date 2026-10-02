@@ -107,6 +107,7 @@ export function ChatMessageInput({ isStreaming, onSend, onStop }: ChatMessageInp
             type="submit"
             size="small"
             variant="contained"
+            color="primary"
             disabled={!value.trim()}
             sx={{ flexShrink: 0 }}
           >

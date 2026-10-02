@@ -46,6 +46,7 @@ export function SaveActions({
         </Button>
         <Button
           variant="contained"
+          color="primary"
           onClick={onSave}
           disabled={saveDisabled || saving}
           startIcon={saving ? <CircularProgress size={16} color="inherit" /> : undefined}

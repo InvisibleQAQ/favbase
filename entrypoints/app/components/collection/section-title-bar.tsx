@@ -37,7 +37,7 @@ export interface SectionTitleBarProps {
 
 /**
  * Route heading shared by every collection page: h1 with its caption stacked
- * beneath, and the page's one contained action on the right. Reads first
+ * beneath, and the page's one contained primary action on the right. Reads first
  * (title → status → control) before any content row.
  *
  * With `links` it delegates to `CustomBreadcrumbs`; without them it keeps the
@@ -58,6 +58,7 @@ export function SectionTitleBar({
   const syncButton = onSync ? (
     <Button
       variant="contained"
+      color="primary"
       startIcon={
         syncing ? (
           <CircularProgress size={16} color="inherit" />

@@ -77,7 +77,7 @@ export function useHostPermission() {
       </DialogContent>
       <DialogActions>
         <Button onClick={handleCancel}>{t('settings.permission.cancel')}</Button>
-        <Button variant="contained" onClick={handleGrant}>
+        <Button variant="contained" color="primary" onClick={handleGrant}>
           {t('settings.permission.grant')}
         </Button>
       </DialogActions>

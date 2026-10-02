@@ -10,15 +10,15 @@ Step 6 原文要「scaffold 给外壳文案默认值」「共享状态组件只�
 
 - `collection-states.tsx` — 三个导出状态 + 私有件：
   - 私有 `GuideState({ icon, title, description, lead?, sync? })`：共享 `StateBox` + 48px `text.secondary` 图标 + `t(title)` / `t(description)`。动作区规则**由组件推出，不是 prop**：`lead` 与 `sync` 都有 → 居中可换行的 `Box`（`gap: 1`）里 `lead` 在前、`SyncNowButton` **outlined** 在后；只有 `sync` → 单个 **contained** 获取按钮（获取即主路径）；只有 `lead` → 单个 `lead`。获取按钮文案恒 `pipeline.fetchNow`。
-  - 私有 `OpenSiteButton(site)`：`Button component={Link} target="_blank" rel="noopener"`，contained，18px 图标——与迁移前 x / zhihu 两份逐属性相同（`rel` 刻意保持 `noopener`，不是 `noopener noreferrer`）。
-  - 私有 `GoToSettingsButton({ settings })`：contained，`onClick` → `navigate(settingsPath(settings))`，文案 `common.goToSettings`。**是点击不是链接**：`sections/configuration-heading.test.tsx` 点它再读 router location。
+  - 私有 `OpenSiteButton(site)`：`Button component={Link} target="_blank" rel="noopener"`，contained `color="primary"`，18px 图标——与迁移前 x / zhihu 两份逐属性相同（`rel` 刻意保持 `noopener`，不是 `noopener noreferrer`）。
+  - 私有 `GoToSettingsButton({ settings })`：contained `color="primary"`，`onClick` → `navigate(settingsPath(settings))`，文案 `common.goToSettings`。**是点击不是链接**：`sections/configuration-heading.test.tsx` 点它再读 router location。
   - `SiteAction = { href, label: LocaleKeys, icon: IconifyName }`。
   - `EmptyLibraryState({ icon, title, description, syncing, onSync, site? })`：从未同步 / 同步为空。带 `site`（x）→ 打开站点在前、获取 outlined；不带（github / zhihu / youtube）→ 获取 contained。
   - `NotLoggedInState({ icon, title, description, site, syncing, onSync })`：站点会话缺失（x / zhihu），`site` 必填。x 的两种 auth（`missing` / `rejected`）由 **view** 选键传入，组件不认识 `reason`。
   - `NeedsConfigState({ icon, title, description, settings, sync? })`：要在设置页填的凭据缺失（github token、youtube key + 频道，不带 `sync`）或被拒（youtube `YoutubeAuthError`，带 `sync` 以便改完重试）。
 - `use-collection-chrome-copy.ts` — `useCollectionChromeCopy()` → `{ syncLabel, syncingLabel, loadFailed, retry, syncFailed(error) }`（`pipeline.fetchNow` / `pipeline.fetching` / `common.loadFailed` / `common.retry` / `common.syncFailed`）。**唯一消费方是 `CollectionPageScaffold`，且它直接 import 本叶文件**——经 barrel 会把 react-router、`settings-nav` 与 Iconify 拖进 scaffold 的模块图。本文件只依赖 `useTranslation`，以后也不要给它加别的 import。
 - `index.ts` — barrel：三个组件、`SiteAction`、三个 props 类型、`useCollectionChromeCopy` / `CollectionChromeCopy`。
-- `collection-states.test.tsx` — 三个状态的动作区形状（按钮数、先后、`buttonClasses.contained` / `outlined`、站点链接属性、点击）、`NeedsConfigState` 落到 `settingsPath(leaf)`、hook 五个字段与传给 `t()` 的参数名（`t` mock 把参数拼成 `key|name=value`，所以证的是键与参数名，不是插值）、以及真实 zh-CN / en 里 `common.syncFailed` / `lastSynced` / `showMore` 确实带 `{{error}}` / `{{time}}` / `{{n}}`（直接 import 两个纯数据 locale 文件）。翻转变体规则时 4 例红、把 en 的 `{{error}}` 改名时 1 例红（均已证伪）。
+- `collection-states.test.tsx` — 三个状态的动作区形状（按钮数、先后、`buttonClasses.contained` / `outlined` 及配套的 `colorPrimary` / `colorInherit`——contained 一律品牌主色、outlined 获取保持中性、站点链接属性、点击）、`NeedsConfigState` 落到 `settingsPath(leaf)`、hook 五个字段与传给 `t()` 的参数名（`t` mock 把参数拼成 `key|name=value`，所以证的是键与参数名，不是插值）、以及真实 zh-CN / en 里 `common.syncFailed` / `lastSynced` / `showMore` 确实带 `{{error}}` / `{{time}}` / `{{n}}`（直接 import 两个纯数据 locale 文件）。翻转变体规则时 4 例红、把 en 的 `{{error}}` 改名时 1 例红（均已证伪）。
 
 ## 导入方向
 
