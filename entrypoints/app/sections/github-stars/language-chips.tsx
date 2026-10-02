@@ -37,15 +37,15 @@ export function LanguageChips({ languages, totalCount, selected, onSelect }: Lan
     <CollapsibleChipRow
       icon={<Iconify icon="mdi:github" width={20} />}
       title={t('githubStars.languagesTitle')}
-      allLabel={`${t('githubStars.allLanguages')} (${totalCount})`}
+      allLabel={`${t('common.all')} (${totalCount})`}
       items={languages}
       getKey={({ language }) => language}
       getLabel={({ language, count }) => `${language} (${count})`}
       getIcon={({ language }) => <LanguageDot language={language} />}
       selected={selected}
       onSelect={onSelect}
-      showMoreLabel={(n) => t('githubStars.showMoreLanguages', { n })}
-      showLessLabel={t('githubStars.showLessLanguages')}
+      showMoreLabel={(n) => t('common.showMore', { n })}
+      showLessLabel={t('common.showLess')}
     />
   );
 }

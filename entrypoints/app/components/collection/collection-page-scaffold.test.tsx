@@ -14,6 +14,19 @@ interface FakeGate {
 }
 const gateState = vi.hoisted(() => ({ gate: null as FakeGate | null }));
 const titleBarProps = vi.hoisted(() => ({ last: null as Record<string, unknown> | null }));
+const errorStateProps = vi.hoisted(() => ({ last: null as Record<string, unknown> | null }));
+
+// The chrome copy is the scaffold's own (docs/32 Step 6): sentinels prove the
+// title bar, both error phases and the banner read it, not the view's `copy`.
+vi.mock('../collection-states/use-collection-chrome-copy', () => ({
+  useCollectionChromeCopy: () => ({
+    syncLabel: 'chrome:fetch',
+    syncingLabel: 'chrome:fetching',
+    loadFailed: 'chrome:load-failed',
+    retry: 'chrome:retry',
+    syncFailed: (error: string) => `chrome:failed:${error}`,
+  }),
+}));
 
 vi.mock('../../layouts/dashboard', () => ({
   DashboardContent: ({ children }: { children: ReactNode }) => (
@@ -65,13 +78,17 @@ vi.mock('./card-grid', () => ({
 }));
 
 vi.mock('./error-state', () => ({
-  ErrorState: () => <div data-section="content" />,
+  ErrorState: (props: Record<string, unknown>) => {
+    errorStateProps.last = props;
+    return <div data-section="content" />;
+  },
 }));
 
 vi.mock('./no-matches-state', () => ({
   NoMatchesState: () => <div data-section="content" />,
 }));
 
+import { ThemeProvider } from '../../theme/theme-provider';
 import { CollectionPageScaffold } from './collection-page-scaffold';
 
 const baseProps = {
@@ -97,12 +114,7 @@ const baseProps = {
     title: 'Title',
     searchPlaceholder: 'Search',
     noMatches: 'None',
-    syncLabel: 'Sync',
-    syncingLabel: 'Syncing',
-    loadFailed: 'Failed',
-    retry: 'Retry',
     syncErrorText: 'Sync failed',
-    syncFailedBanner: 'Sync failed',
   },
   renderCard: () => <div />,
   renderTaggedCard: () => <div />,
@@ -127,6 +139,7 @@ describe('CollectionPageScaffold section contract', () => {
     tagState.selectedTagIds = [];
     gateState.gate = null;
     titleBarProps.last = null;
+    errorStateProps.last = null;
     container = document.createElement('div');
     document.body.append(container);
     root = createRoot(container);
@@ -253,6 +266,67 @@ describe('CollectionPageScaffold section contract', () => {
       syncDisabledLabel: 'cooldown 4:59',
       syncDisabledTooltip: undefined,
     });
+  });
+
+  it('labels the title-bar fetch button from its own chrome copy', () => {
+    act(() => root.render(<CollectionPageScaffold {...baseProps} />));
+
+    expect(titleBarProps.last).toMatchObject({
+      syncLabel: 'chrome:fetch',
+      syncingLabel: 'chrome:fetching',
+    });
+  });
+
+  it('titles the query-error phase from its own chrome copy and retries the query', () => {
+    act(() => {
+      root.render(<CollectionPageScaffold {...baseProps} queryError="Boom" />);
+    });
+
+    expect(errorStateProps.last).toMatchObject({
+      title: 'chrome:load-failed',
+      message: 'Boom',
+      retryLabel: 'chrome:retry',
+      onRetry: baseProps.onRetryQuery,
+    });
+  });
+
+  it('titles the sync-error phase from its own chrome copy and retries the sync', () => {
+    act(() => {
+      root.render(
+        <CollectionPageScaffold {...baseProps} libraryCount={0} hasSyncError />,
+      );
+    });
+
+    expect(errorStateProps.last).toMatchObject({
+      title: 'chrome:load-failed',
+      message: 'Sync failed',
+      retryLabel: 'chrome:retry',
+      onRetry: baseProps.onSync,
+    });
+  });
+
+  it('composes the sync-failed banner itself, and only above a populated library', () => {
+    // The banner's sx reads `theme.vars`, which only the CSS-vars provider sets.
+    const copy = { ...baseProps.copy, syncErrorText: 'Quota hit' };
+
+    act(() => {
+      root.render(
+        <ThemeProvider>
+          <CollectionPageScaffold {...baseProps} copy={copy} hasSyncError />
+        </ThemeProvider>,
+      );
+    });
+    expect(container.textContent).toContain('chrome:failed:Quota hit');
+
+    // An empty library shows the sync-error phase instead — no banner.
+    act(() => {
+      root.render(
+        <ThemeProvider>
+          <CollectionPageScaffold {...baseProps} copy={copy} libraryCount={0} hasSyncError />
+        </ThemeProvider>,
+      );
+    });
+    expect(container.textContent).not.toContain('chrome:failed:');
   });
 
   it('keeps page operations but hides primary-category scoped sections during tag takeover', () => {

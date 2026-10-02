@@ -48,8 +48,8 @@ export function FolderChips({ folders, selectedId, loading, onSelect }: FolderCh
       getLabel={(folder) => folder.title}
       selected={selectedId == null ? null : String(selectedId)}
       onSelect={(key) => key != null && onSelect(Number(key))}
-      showMoreLabel={(n) => t('collections.showMoreFolders', { n })}
-      showLessLabel={t('collections.showLessFolders')}
+      showMoreLabel={(n) => t('common.showMore', { n })}
+      showLessLabel={t('common.showLess')}
     />
   );
 }

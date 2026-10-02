@@ -30,8 +30,8 @@ export function TagFilterChips({ tags, selectedIds, onToggle, onClear }: TagFilt
       getLabel={(tag) => `${tag.name} (${tag.count})`}
       selected={selectedIds}
       onSelect={(key) => key != null && onToggle(key)}
-      showMoreLabel={(n) => t('tags.showMore', { n })}
-      showLessLabel={t('tags.showLess')}
+      showMoreLabel={(n) => t('common.showMore', { n })}
+      showLessLabel={t('common.showLess')}
       headerExtra={
         selectedIds.length > 0 && (
           <Button size="small" variant="text" onClick={onClear} sx={{ minWidth: 0, px: 1, py: 0 }}>

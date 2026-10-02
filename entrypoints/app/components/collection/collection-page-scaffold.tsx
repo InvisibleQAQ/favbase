@@ -15,9 +15,12 @@ import {
   TaggedItemGrid,
   TagEditPopover,
 } from '../tags';
-// Smart module (own t() + gate subscription) — allowed as an import; this file
-// itself still never calls t().
+// Smart modules (own t() + subscriptions) — allowed as imports; this file
+// itself still never calls t(). The chrome-copy hook is imported from its leaf
+// file, not the `collection-states` barrel (that barrel drags react-router, the
+// settings route table and Iconify along).
 import { LibraryGateButton, useCollectionGate } from '../library-gate';
+import { useCollectionChromeCopy } from '../collection-states/use-collection-chrome-copy';
 import { SectionTitleBar } from './section-title-bar';
 import { SearchField } from './search-field';
 import { CardGrid, CardGridItem, CardGridPagination } from './card-grid';
@@ -25,9 +28,13 @@ import { ErrorState } from './error-state';
 import { NoMatchesState } from './no-matches-state';
 
 /**
- * Pre-translated copy for a collection page. The scaffold lives in the
- * zero-`t()` `components/collection/` layer, so every user-facing string is
- * translated by the consuming view and handed in here (the i18n seam).
+ * The platform's pre-translated copy for a collection page — only the strings
+ * that differ per platform. The scaffold lives in the zero-`t()`
+ * `components/collection/` layer, so the view translates these and hands them
+ * in here (the i18n seam). The chrome copy that is the same on every platform
+ * — Fetch button labels, the error-phase title and retry, the sync-failed
+ * banner — is the scaffold's own, read from `useCollectionChromeCopy`
+ * (`components/collection-states/`, docs/32 Step 6); views never pass it.
  */
 export interface CollectionPageCopy {
   /** SectionTitleBar heading. */
@@ -39,17 +46,10 @@ export interface CollectionPageCopy {
   searchPlaceholder: string;
   /** no-matches phase message. */
   noMatches: string;
-  /** SectionTitleBar sync button labels. */
-  syncLabel: string;
-  syncingLabel: string;
-  /** ErrorState title for both query-error and sync-error phases (`common.loadFailed`). */
-  loadFailed: string;
-  /** ErrorState retry button (`common.retry`). */
-  retry: string;
-  /** sync-error phase message — the structured sync error mapped to copy by the view. */
+  /** The structured sync error mapped to copy by the view (`syncErrorMessage`).
+   *  Shown as the sync-error phase message, and inside the scaffold's
+   *  sync-failed banner above a still-populated library. */
   syncErrorText: string;
-  /** Failure banner shown above the still-populated library (`{platform}.syncFailed`). */
-  syncFailedBanner: string;
 }
 
 /**
@@ -149,7 +149,9 @@ export interface CollectionPageScaffoldProps<T> {
  * its 8-case render), the two-id mapping (grid key vs tag id), the main-grid
  * TagEditPopover + pagination, and the page skeleton region with its five
  * conditional gates. Platforms inject only their cards, chips, states, progress
- * bar and pre-translated copy — no phase wiring is copied per platform.
+ * bar and pre-translated platform copy — no phase wiring is copied per
+ * platform. The chrome copy (Fetch labels, error title / retry, sync-failed
+ * banner) comes from `useCollectionChromeCopy`, so no view passes it either.
  *
  * The config gate (missing token / api key) is NOT here: it is a
  * platform-specific early return that runs in the view before this renders.
@@ -196,6 +198,7 @@ export function CollectionPageScaffold<T>({
   // an explanatory tooltip (pause wins over any adapter cooldown label).
   const gate = useCollectionGate(platform);
   const gatePaused = gate?.paused ?? false;
+  const chrome = useCollectionChromeCopy();
 
   // Manual tagging — batch page tags + single popover + platform-scoped filter
   // chips, with the refresh invariant sealed inside the hook.
@@ -247,9 +250,9 @@ export function CollectionPageScaffold<T>({
     case 'query-error':
       content = (
         <ErrorState
-          title={copy.loadFailed}
+          title={chrome.loadFailed}
           message={queryError ?? ''}
-          retryLabel={copy.retry}
+          retryLabel={chrome.retry}
           onRetry={onRetryQuery}
         />
       );
@@ -262,9 +265,9 @@ export function CollectionPageScaffold<T>({
     case 'sync-error':
       content = (
         <ErrorState
-          title={copy.loadFailed}
+          title={chrome.loadFailed}
           message={copy.syncErrorText}
-          retryLabel={copy.retry}
+          retryLabel={chrome.retry}
           onRetry={onSync}
         />
       );
@@ -317,8 +320,8 @@ export function CollectionPageScaffold<T>({
         caption={copy.caption}
         syncing={syncing}
         onSync={showSyncButton ? onSync : undefined}
-        syncLabel={copy.syncLabel}
-        syncingLabel={copy.syncingLabel}
+        syncLabel={chrome.syncLabel}
+        syncingLabel={chrome.syncingLabel}
         syncDisabled={gatePaused || syncDisabled}
         syncDisabledLabel={gatePaused ? undefined : syncDisabledLabel}
         syncDisabledTooltip={gatePaused ? gate?.fetchBlockedHint : undefined}
@@ -354,7 +357,7 @@ export function CollectionPageScaffold<T>({
             ...theme.applyStyles('dark', { color: theme.vars.palette.error.light }),
           })}
         >
-          {copy.syncFailedBanner}
+          {chrome.syncFailed(copy.syncErrorText)}
         </Typography>
       )}
 

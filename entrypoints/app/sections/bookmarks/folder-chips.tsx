@@ -23,14 +23,14 @@ export function FolderChips({ folders, totalCount, selectedId, onSelect }: Folde
         <Iconify icon="solar:folder-with-files-bold-duotone" width={20} />
       }
       title={t('bookmarks.foldersTitle')}
-      allLabel={t('bookmarks.allFolders', { count: totalCount })}
+      allLabel={`${t('common.all')} (${totalCount})`}
       items={folders}
       getKey={(folder) => folder.folderId}
       getLabel={(folder) => folder.title}
       selected={selectedId ?? null}
       onSelect={(key) => onSelect(key ?? undefined)}
-      showMoreLabel={(n) => t('bookmarks.showMoreFolders', { n })}
-      showLessLabel={t('bookmarks.showLessFolders')}
+      showMoreLabel={(n) => t('common.showMore', { n })}
+      showLessLabel={t('common.showLess')}
     />
   );
 }

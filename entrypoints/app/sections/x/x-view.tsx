@@ -1,18 +1,13 @@
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Link from '@mui/material/Link';
-
 import type { AuthFailReason } from '@/lib/collections/sync-errors';
 import { formatDateTime } from '@/lib/i18n';
 import { useTranslation } from '@/lib/i18n/use-translation';
-import { Iconify } from '../../components/iconify';
 import { CollectionConfigurationNotice } from '../../components/configuration-blocker';
 import {
-  StateBox,
-  SyncNowButton,
-  PipelineProgressStrip,
-  CollectionPageScaffold,
-} from '../../components/collection';
+  EmptyLibraryState,
+  NotLoggedInState,
+  type SiteAction,
+} from '../../components/collection-states';
+import { PipelineProgressStrip, CollectionPageScaffold } from '../../components/collection';
 import { backgroundJobRuntime, fetchedCountProgress } from '../../hooks/pipeline-segments';
 import { useCollectionPipeline } from '../../hooks/use-collection-pipeline';
 import { useCollectionBreadcrumbs } from '../../hooks/use-collection-breadcrumbs';
@@ -32,8 +27,13 @@ import { TweetGridSkeleton } from './tweet-grid-skeleton';
 const PLATFORM = 'x';
 // Deep-link to the bookmarks page: logged-out users get X's own login flow
 // first; logged-in users land there so the extension captures their session,
-// after which app.html's Sync button can pull the bookmarks.
-const X_BOOKMARKS_URL = 'https://x.com/i/bookmarks';
+// after which app.html's Sync button can pull the bookmarks. It leads both
+// the empty and the not-logged-in state, so Fetch steps back to outlined.
+const X_BOOKMARKS_SITE = {
+  href: 'https://x.com/i/bookmarks',
+  label: 'x.openBookmarksPage',
+  icon: 'mdi:twitter',
+} as const satisfies SiteAction;
 
 // ---------------------------------------------------------------------------
 // i18n seam: the classified sync error → user-facing copy (shared
@@ -49,78 +49,6 @@ const SYNC_ERROR_COPY: SyncErrorCopy = {
   rateLimited: 'x.rateLimitedNoReset',
   rateLimitedUntil: 'x.rateLimited',
 };
-
-// ---------------------------------------------------------------------------
-// Platform-specific dashed-box states (shared StateBox shell, x copy).
-// ---------------------------------------------------------------------------
-
-/** Primary action of both empty states: open x.com/i/bookmarks (login-gated by
- *  X itself) so the extension captures the session; the user then returns here
- *  and clicks Sync. */
-function OpenBookmarksButton() {
-  const { t } = useTranslation();
-  return (
-    <Button
-      component={Link}
-      href={X_BOOKMARKS_URL}
-      target="_blank"
-      rel="noopener"
-      variant="contained"
-      startIcon={<Iconify icon="mdi:twitter" width={18} />}
-    >
-      {t('x.openBookmarksPage')}
-    </Button>
-  );
-}
-
-/** No valid x.com session (surfaced when a sync throws XAuthError) — guide the
- *  user to log in on X so the extension captures the session, then sync here.
- *  `'missing'` = nothing captured yet; `'rejected'` = X refused the captured
- *  session, so the copy says to sign in again rather than for the first time. */
-function NotLoggedInState({
-  reason,
-  syncing,
-  onSync,
-}: {
-  reason: AuthFailReason;
-  syncing: boolean;
-  onSync: () => void;
-}) {
-  const { t } = useTranslation();
-  const rejected = reason === 'rejected';
-  return (
-    <StateBox
-      icon={<Iconify icon="mdi:twitter" width={48} sx={{ color: 'text.secondary' }} />}
-      title={t(rejected ? 'x.sessionRejectedTitle' : 'x.notLoggedInTitle')}
-      description={t(rejected ? 'x.sessionRejectedDesc' : 'x.notLoggedInDesc')}
-      action={
-        <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1, flexWrap: 'wrap' }}>
-          <OpenBookmarksButton />
-          <SyncNowButton syncing={syncing} onSync={onSync} label={t('pipeline.fetchNow')} />
-        </Box>
-      }
-    />
-  );
-}
-
-/** Never synced (or synced empty) — guide the user to log in on X (session
- *  capture) then sync here, with immediate in-app sync as the secondary path. */
-function EmptyLibraryState({ syncing, onSync }: { syncing: boolean; onSync: () => void }) {
-  const { t } = useTranslation();
-  return (
-    <StateBox
-      icon={<Iconify icon="mdi:twitter" width={48} sx={{ color: 'text.secondary' }} />}
-      title={t('x.emptyTitle')}
-      description={t('x.emptyDesc')}
-      action={
-        <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1, flexWrap: 'wrap' }}>
-          <OpenBookmarksButton />
-          <SyncNowButton syncing={syncing} onSync={onSync} label={t('pipeline.fetchNow')} />
-        </Box>
-      }
-    />
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Main view: scaffold assembly (title bar + sync + search + author chips +
@@ -146,7 +74,7 @@ export function XView() {
     captionParts.push(t('x.count', { count: x.libraryCount }));
   }
   if (x.lastSyncedAt) {
-    captionParts.push(t('x.lastSynced', { time: formatDateTime(x.lastSyncedAt.getTime()) }));
+    captionParts.push(t('common.lastSynced', { time: formatDateTime(x.lastSyncedAt.getTime()) }));
   }
   // "N new this run" — persisted across reloads (omitted for legacy libraries
   // synced before this feature existed).
@@ -155,8 +83,11 @@ export function XView() {
   }
 
   const syncErrorText = x.syncError ? syncErrorMessage(x.syncError, SYNC_ERROR_COPY) : '';
+  // `'missing'` = no session captured yet; `'rejected'` = X refused the
+  // captured one, so the copy says to sign in again, not for the first time.
   const authReason: AuthFailReason =
     x.syncError?.kind === 'auth' ? x.syncError.reason : 'missing';
+  const sessionRejected = authReason === 'rejected';
   const pipeline = <PipelineProgressStrip segments={segments} />;
 
   // The title-bar Fetch button is hard-disabled with a live m:ss countdown by
@@ -195,12 +126,7 @@ export function XView() {
         caption: captionParts.length > 0 ? captionParts.join(' · ') : undefined,
         searchPlaceholder: t('x.searchPlaceholder'),
         noMatches: t('x.noMatches'),
-        syncLabel: t('pipeline.fetchNow'),
-        syncingLabel: t('pipeline.fetching'),
-        loadFailed: t('common.loadFailed'),
-        retry: t('common.retry'),
         syncErrorText,
-        syncFailedBanner: t('x.syncFailed', { error: syncErrorText }),
       }}
       renderCard={(bookmark, tags, onEditTags) => (
         <XCard bookmark={bookmark} tags={tags} onEditTags={onEditTags} />
@@ -217,9 +143,25 @@ export function XView() {
           onSelect={x.setAuthor}
         />
       ) : null}
-      emptyState={<EmptyLibraryState syncing={x.syncing} onSync={x.sync} />}
+      emptyState={
+        <EmptyLibraryState
+          icon="mdi:twitter"
+          title="x.emptyTitle"
+          description="x.emptyDesc"
+          site={X_BOOKMARKS_SITE}
+          syncing={x.syncing}
+          onSync={x.sync}
+        />
+      }
       authFailedState={
-        <NotLoggedInState reason={authReason} syncing={x.syncing} onSync={x.sync} />
+        <NotLoggedInState
+          icon="mdi:twitter"
+          title={sessionRejected ? 'x.sessionRejectedTitle' : 'x.notLoggedInTitle'}
+          description={sessionRejected ? 'x.sessionRejectedDesc' : 'x.notLoggedInDesc'}
+          site={X_BOOKMARKS_SITE}
+          syncing={x.syncing}
+          onSync={x.sync}
+        />
       }
       configurationNotice={
         <CollectionConfigurationNotice

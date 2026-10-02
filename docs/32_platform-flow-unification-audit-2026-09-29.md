@@ -1,6 +1,6 @@
 # 32 跨平台流程统一度审计与分步整改（2026-09-29）
 
-> 状态：**审计完成；D1、D2 已决（2026-09-29，§5.1、§5.2）；Step 1 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 1 落地记录）；D6 已决（用户 2026-09-30，按推荐）；Step 2 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 2 落地记录）；Step 3 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 3 落地记录）；Step 4 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 4 落地记录）；Step 5 已落地 2026-10-01（代码 + 单测；运行时验证待人工，见 §6 Step 5 落地记录）；Step 6–9 均未实施**。执行任一 Step 前先读 §2 否决清单与 §5 对应决策；一次对话只做一个 Step。
+> 状态：**审计完成；D1、D2 已决（2026-09-29，§5.1、§5.2）；Step 1 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 1 落地记录）；D6 已决（用户 2026-09-30，按推荐）；Step 2 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 2 落地记录）；Step 3 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 3 落地记录）；Step 4 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 4 落地记录）；Step 5 已落地 2026-10-01（代码 + 单测；运行时验证待人工，见 §6 Step 5 落地记录）；Step 6 已落地 2026-10-01（代码 + 单测；运行时验证待人工，见 §6 Step 6 落地记录）；Step 7–9 均未实施**。执行任一 Step 前先读 §2 否决清单与 §5 对应决策；一次对话只做一个 Step。
 >
 > 起因：用户观察「接入新平台时，数据处理、备份、展示都高度统一，真正不同的只有数据获取和风控」，要求找出仍未统一的流程并给出分步整改。
 >
@@ -168,6 +168,7 @@
 - `LOG_TAG` 手写五份（`use-github-stars.ts:21` 等），与 adapter 里 `jobPlatformForCollection` 派生的值是两个事实源，今天恰好相同。（**已于 Step 5 改派生**，2026-10-01，用户决定从 Step 6 提前；它是 job 命名空间而不只是日志前缀，见中-6 勘误②。）
 - `SEARCH_DEBOUNCE_MS = 300` 三份：`hooks/use-collection-library.ts:9`、`sections/bilibili/bilibili-view.tsx:33`、`sections/collections/use-collections.ts:20`。
 - i18n 第一类同文键 30 个：`*.lastSynced`「上次同步 {{time}}」×6、`*.syncFailed`「同步失败: {{error}}」×6（`lib/i18n/locales/zh-CN.ts:501-605`，已 grep 验证）、`showMore*` ×6、`showLess*` ×6、`all*` ×4（`allCollections.*` 与 `tags.*` 另有两组同文的展开/收起）。docs/16:11 把 docs/15 LOW-7（`common.*` i18n）记为「已修复」，实际只迁了 `retry` / `loadFailed`，**此记录需勘误**。
+  - **勘误（2026-10-01，Step 6 落地时）**：「30 个」与它自己列的分项对不上——6+6+6+6+4 = **28** 个平台副本。Step 6 连同 `tags.*` / `allCollections.*` 两组（5 个）、`bookmarks.allFolders`（把计数烤进字符串的「全部」）与两个 `*.goToSettings`，两个 locale 各删 **36** 个，新增 6 个 `common.*`。docs/16:11 已同步勘误。
 - B站时间用 `toLocaleTimeString()`（`bilibili-view.tsx:204`），其余五平台用 `formatDateTime`。
 
 **方案**：共享状态组件 + scaffold 默认文案 + 共享 i18n 键（Step 6）；hook 改名层去留见 D3（Step 7）。
@@ -1042,6 +1043,245 @@
 - **回滚**：revert。
 - **判据**：`EmptyLibraryState` / `NotLoggedInState` 全仓各一份；`*.lastSynced` 平台键零残留。
 
+#### Step 6 落地记录（2026-10-01）
+
+代码与单测已落地；上面「验证」（六平台页 × 亮 / 暗 × 中 / 英截图，空库、未登录、未配置三种状态）需要浏览器，**待人工**。判据都成立：
+
+- `EmptyLibraryState` / `NotLoggedInState` / `NeedsConfigState` 全仓各一个定义，都在 `entrypoints/app/components/collection-states/collection-states.tsx`；
+- `NoTokenState` / `NotConnectedState` / `AuthFailedState` / `OpenZhihuButton` / `OpenBookmarksButton` 在 `entrypoints/`（代码与 `CLAUDE.md`）零残留；
+- 两个 locale 里 `.lastSynced` / `.syncFailed` / `showMore` / `showLess` / `.goToSettings` 只剩 `common.*` 那一个（`snackbar.syncFailed` 文案不同，不在范围），`allLanguages` / `allAuthors` / `zhihu.allCollections` / `allPlaylists` / `allPlatforms` / `allFolders` 零残留；
+- `CollectionPageCopy` 不含那五个字段，七个调用点都不传；
+- `SEARCH_DEBOUNCE_MS = 300` 全仓一个定义（`SubtitleView.tsx` 的 100 除外）；
+- `entrypoints/app/components/collection/**` 非测试文件零 `t(` / `useTranslation` / `@/lib/i18n` import（剥掉注释行后 grep 为空；剩下的命中全是「Zero `t()`」这类注释）。
+
+**铁律冲突与解法（用户 2026-10-01 决定）**：本 Step 原文要「scaffold 给四个文案默认值」「共享状态组件只收 i18n 键」，两件都要调 `t()`，而 `components/collection/**` 有零 `t()` 铁律（spec `platform-onboarding.md` §11、`components/collection/CLAUDE.md`）。解法是新建智能兄弟目录 `entrypoints/app/components/collection-states/`，自带 `useTranslation()`；scaffold 只在它已有的具名例外名单（原来只有 `library-gate`）里多 import 一个叶文件。`components/collection/` 的文件自身仍零 `t()`。
+
+**落在哪**：
+
+- **`components/collection-states/`（新）**：
+  - `collection-states.tsx`：三个导出状态 `EmptyLibraryState({ icon, title, description, syncing, onSync, site? })`、`NotLoggedInState({ …, site })`、`NeedsConfigState({ …, settings, sync? })`，加私有 `GuideState` / `OpenSiteButton` / `GoToSettingsButton`。
+    - 平台只传 `IconifyName`、`LocaleKeys`、`SiteAction`（`{ href, label: LocaleKeys, icon: IconifyName }`）或 `SettingsLeaf`，`tsc` 校验三者。
+    - 动作区规则由组件推出、不做 prop：前导动作（打开站点 / 前往设置）与获取都有 → 居中可换行 `Box`（`gap: 1`）里前导在前、`SyncNowButton` **outlined** 在后；只有获取 → 单个 **contained**；只有前导 → 单个前导。这是 `sync-now-button.tsx` 原来写在文档里的约定。
+    - `OpenSiteButton` 与迁移前 x / zhihu 两份逐属性相同（`component={Link}`、`target="_blank"`、`rel="noopener"`、contained、18px 图标）。`GoToSettingsButton` 保持 `onClick` + `navigate(settingsPath(leaf))`，不改成链接。
+  - `use-collection-chrome-copy.ts`：`useCollectionChromeCopy()` → `{ syncLabel, syncingLabel, loadFailed, retry, syncFailed(error) }`，只依赖 `useTranslation`。
+  - `index.ts`（barrel）、`CLAUDE.md`、`collection-states.test.tsx`。
+- **scaffold**：
+  - `CollectionPageCopy` 删 `syncLabel` / `syncingLabel` / `loadFailed` / `retry` / `syncFailedBanner`，剩 `title` / `breadcrumbs?` / `caption?` / `searchPlaceholder` / `noMatches` / `syncErrorText`。
+  - 顶部 `const chrome = useCollectionChromeCopy()`（直接 import 叶文件 `../collection-states/use-collection-chrome-copy`）。标题栏两个 label、两处 `ErrorState` 的 `title` / `retryLabel` 改读 `chrome`；横幅改成 `chrome.syncFailed(copy.syncErrorText)`，渲染条件仍是 `hasSyncError && libraryCount > 0`。文件头与 `CollectionPageCopy` 的注释改写成「平台文案 vs 外壳文案」。
+- **四个平铺 view**：
+  - github：配置门 → `NeedsConfigState`（`mdi:github`、`githubStars.noTokenTitle/Desc`、`settings="connections/github"`）；库空 → `EmptyLibraryState`（`mdi:star`）。
+  - youtube：配置门与 `authFailedState` 都是 `NeedsConfigState`（`settings="connections/youtube"`，后者带 `sync`）；库空 → `EmptyLibraryState`。
+  - x：模块级 `X_BOOKMARKS_SITE`（`as const satisfies SiteAction`，原注释保留）同时传给 `EmptyLibraryState` 与 `NotLoggedInState`；未登录态的两套键由 view 按 `authReason` 选（`sessionRejected ? 'x.sessionRejectedTitle' : 'x.notLoggedInTitle'` 等）。
+  - zhihu：模块级 `ZHIHU_SITE` 只给 `NotLoggedInState`；`EmptyLibraryState` 不传 `site`（单个 contained 获取，与改前相同）。
+  - 删除的本地件：github `NoTokenState` / `EmptyLibraryState`，youtube `NotConnectedState` / `AuthFailedState` / `EmptyLibraryState`，x 与 zhihu 各自的 `NotLoggedInState` / `EmptyLibraryState` 与 `OpenBookmarksButton` / `OpenZhihuButton`——九个状态、两个按钮。github / youtube 的 `useNavigate` 与 `settings-nav` import 随之消失。
+- **七个 `copy={{…}}`**（四个平铺 view + bookmarks + B站两处）删掉那五行；bookmarks「无错误时传 `''`」的横幅三元式随之消失。
+- **六处 caption 的「上次同步」**改用 `common.lastSynced`。
+- **i18n**：zh-CN 与 en 各新增 `common.lastSynced` / `syncFailed` / `showMore` / `showLess` / `all` / `goToSettings`（放在 `common.retry` / `loadFailed` 旁），各删 36 个副本。
+  - 开工前用脚本逐字节核对过：表 D 的 35 个旧键在两个 locale 里的值都与新值相同，另一个是 `bookmarks.allFolders`（`全部 ({{count}})` / `All ({{count}})`）。
+  - `bookmarks/folder-chips.tsx` 改成与其余四个 chips 同一拼法 `` `${t('common.all')} (${totalCount})` ``，渲染逐字不变。
+  - 调用点：六个 chips 文件、`sections/collections/collections-view.tsx`、`components/tags/tag-filter-chips.tsx`。删键后 `tsc` 一次全绿，没有遗漏的调用点。
+- **`SEARCH_DEBOUNCE_MS`**：`hooks/use-collection-library.ts` 改为 `export const`；`sections/bilibili/bilibili-view.tsx` 与 `sections/collections/use-collections.ts` 删本地定义、改 import。`SubtitleView.tsx` 的 100 不动。
+- **view 行数**（HEAD → 现在）：github 236 → 196、x 234 → 176、zhihu 196 → 149、youtube 227 → 160、bookmarks 146 → 139、bilibili 503 → 493。新目录 `collection-states.tsx` 185 行、hook 34 行。
+
+**先红后绿**：
+
+- **scaffold**：先建好叶文件 `use-collection-chrome-copy.ts`（新代码，不是 scaffold 改动，好让 `vi.mock` 的目标能解析），再改 `collection-page-scaffold.test.tsx`。
+  - 测试改动：`vi.mock` 该 hook 返回哨兵串；`./error-state` 的 mock 改为记录 props（保留 `data-section="content"`，否则顺序用例跟着红）；`baseProps.copy` 删五个字段；新增四例。横幅那例包一层 `ThemeProvider`——横幅的 `sx` 读 `theme.vars`，没有 CSS-vars provider 会直接 TypeError，而不是断言失败。
+  - 对**未改动**的 scaffold 跑，红的恰好是四个新例，原有 7 例绿。红态原样（只删掉了 `stderr | … act(...)` 环境告警行与 `RUN` 横幅——这个文件原来就没设 `IS_REACT_ACT_ENVIRONMENT`；收尾前把 scaffold 临时换回 HEAD 版重跑了一次，结果相同，下面是那一次的输出，换回后 `cmp` 与改动版一致）：
+    ```
+     ❯ entrypoints/app/components/collection/collection-page-scaffold.test.tsx (11 tests | 4 failed) 66ms
+         × labels the title-bar fetch button from its own chrome copy 6ms
+         × titles the query-error phase from its own chrome copy and retries the query 2ms
+         × titles the sync-error phase from its own chrome copy and retries the sync 2ms
+         × composes the sync-failed banner itself, and only above a populated library 26ms
+
+    ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+     FAIL  entrypoints/app/components/collection/collection-page-scaffold.test.tsx > CollectionPageScaffold section contract > labels the title-bar fetch button from its own chrome copy
+    AssertionError: expected { title: 'Title', …(9) } to match object { syncLabel: 'chrome:fetch', …(1) }
+    (8 matching properties omitted from actual)
+
+    - Expected
+    + Received
+
+      {
+    -   "syncLabel": "chrome:fetch",
+    -   "syncingLabel": "chrome:fetching",
+    +   "syncLabel": undefined,
+    +   "syncingLabel": undefined,
+      }
+
+     ❯ entrypoints/app/components/collection/collection-page-scaffold.test.tsx:274:32
+        272|     act(() => root.render(<CollectionPageScaffold {...baseProps} />));
+        273|
+        274|     expect(titleBarProps.last).toMatchObject({
+           |                                ^
+        275|       syncLabel: 'chrome:fetch',
+        276|       syncingLabel: 'chrome:fetching',
+
+    ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+     FAIL  entrypoints/app/components/collection/collection-page-scaffold.test.tsx > CollectionPageScaffold section contract > titles the query-error phase from its own chrome copy and retries the query
+    AssertionError: expected { title: undefined, …(3) } to match object { title: 'chrome:load-failed', …(3) }
+
+    - Expected
+    + Received
+
+      {
+        "message": "Boom",
+        "onRetry": [Function Mock],
+    -   "retryLabel": "chrome:retry",
+    -   "title": "chrome:load-failed",
+    +   "retryLabel": undefined,
+    +   "title": undefined,
+      }
+
+     ❯ entrypoints/app/components/collection/collection-page-scaffold.test.tsx:285:34
+        283|     });
+        284|
+        285|     expect(errorStateProps.last).toMatchObject({
+           |                                  ^
+        286|       title: 'chrome:load-failed',
+        287|       message: 'Boom',
+
+    ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+     FAIL  entrypoints/app/components/collection/collection-page-scaffold.test.tsx > CollectionPageScaffold section contract > titles the sync-error phase from its own chrome copy and retries the sync
+    AssertionError: expected { title: undefined, …(3) } to match object { title: 'chrome:load-failed', …(3) }
+
+    - Expected
+    + Received
+
+      {
+        "message": "Sync failed",
+        "onRetry": [Function Mock],
+    -   "retryLabel": "chrome:retry",
+    -   "title": "chrome:load-failed",
+    +   "retryLabel": undefined,
+    +   "title": undefined,
+      }
+
+     ❯ entrypoints/app/components/collection/collection-page-scaffold.test.tsx:300:34
+        298|     });
+        299|
+        300|     expect(errorStateProps.last).toMatchObject({
+           |                                  ^
+        301|       title: 'chrome:load-failed',
+        302|       message: 'Sync failed',
+
+    ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+     FAIL  entrypoints/app/components/collection/collection-page-scaffold.test.tsx > CollectionPageScaffold section contract > composes the sync-failed banner itself, and only above a populated library
+    AssertionError: expected '' to contain 'chrome:failed:Quota hit'
+
+    - Expected
+    + Received
+
+    - chrome:failed:Quota hit
+
+     ❯ entrypoints/app/components/collection/collection-page-scaffold.test.tsx:319:35
+        317|       );
+        318|     });
+        319|     expect(container.textContent).toContain('chrome:failed:Quota hit');
+           |                                   ^
+        320|
+        321|     // An empty library shows the sync-error phase instead — no banner.
+
+    ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+     Test Files  1 failed (1)
+          Tests  4 failed | 7 passed (11)
+       Start at  03:21:03
+       Duration  2.49s (transform 455ms, setup 17ms, import 1.57s, tests 66ms, environment 612ms)
+    ```
+  - 改完 scaffold 后 11 例全绿。
+  - 横幅那例的后半段（`libraryCount === 0` 时没有横幅）在旧代码上也成立，是守卫而不是红；红态里它没有跑到，因为同一例的前半段先失败了。
+- **`collection-states.test.tsx`（8 例）证伪**：临时把变体规则翻成 `lead ? 'contained' : 'outlined'`，红 4 例（单获取 contained、x 两态的 outlined 获取、带 `sync` 的 `NeedsConfigState`），`4 failed | 4 passed`；恢复后 `cmp` 与改动版一致，8 例全绿。变体按 `buttonClasses.contained` / `buttonClasses.outlined` 判定，不手打 `MuiButton-*` 类名（`entrypoints/app/CLAUDE.md` 的 v9 约定）。
+
+**默认决定**（PRD 已定，用户未逐条过目）：
+
+- **D-a 删字段，不给默认值**：七个调用点传的外壳文案逐字相同，没有调用方会覆盖；可选 + 无人覆盖 = 死代码。`syncFailedBanner` 一并删：键共享之后七处拼法相同，由 scaffold 拼。这是对本 Step 原文「给默认值」措辞的偏离。
+- **D-b 命名空间用 `common.*`，不用原文的 `collection.*`**：`collection.` 与 B站历史命名空间 `collections.` 只差一个字母，而 `collections.lastSynced` 本身就是要删的键；docs/15 LOW-7 当年指定的就是 `common.*`。
+- **D-c 刻意留在本地的状态**：bookmarks `EmptyState`（没有按钮，是另一个状态）、B站 `NotLoggedIn`（动作是重试）、`EmptyFolderState`（无图标无按钮）、`SelectFolderState`（240 高）。
+- **D-d `tags.*` / `allCollections.*` 的同文键一并收**，代价是 `collections-view.test.tsx` 的键名映射。
+- **D-e「本次新增」不在本 Step**：它是新功能不是去重，`sections/x/CLAUDE.md` 那句已改成「未排期，适合与 Step 7 一起做」。
+- **D-f 状态组件收 `LocaleKeys` 而不是字符串**；x 的两种 auth 由 view 选键，组件不认识 `reason`。
+- **D-g 不新增守卫**：「locale 里没有同文副本」写不成不误报的规则；`tsc` 已保证删掉的键零残留调用。
+- **D-h scaffold 直接 import 叶文件**，测试 mock 叶路径。
+- **D-i 状态组件 `icon` 收 `IconifyName`**，统一画 48px `text.secondary`；站点按钮图标 18px。
+- **D-j 不动 `sync-now-button.tsx` / `state-box.tsx` / `error-state.tsx` 的接口**。
+
+**与 PRD 的偏离**：
+
+1. **`collection-states.tsx` 从叶文件 import `StateBox` / `SyncNowButton`**（`../collection/state-box`、`../collection/sync-now-button`），没有走 PRD 写的 `../collection` barrel。barrel 带着 scaffold，scaffold 又 import 本目录的 hook 和 `library-gate`（加载期读 `libraryGateStorage`）；两个哑组件用不着这些。走 barrel 不成环（scaffold 引的是叶 hook），但新测试就得 mock `@/lib/storage` 才能加载，而 `GuideState` 只渲染两个哑组件。
+2. **`collection-states.test.tsx` 的 `t` mock 把参数拼在键后面**（`common.syncFailed|error=Quota hit`），不是 PRD 写的 `{{x}}` 插值。键原样返回，键里没有 `{{error}}` 占位符，插值什么也证明不了；拼在后面才看得出参数确实传进去了。
+3. **`collection-states` barrel 多导出四个类型**：三个 props 类型和 `CollectionChromeCopy`。PRD 只列了组件、`SiteAction` 与 hook。
+4. **PRD G 清单之外多改了三处文档**，都是本 Step 让它们过期的：
+   - `entrypoints/app/sections/CLAUDE.md` 原写「`settingsPath` 是本目录唯一一处 section → sibling section 的 import」——github / youtube 改用 `NeedsConfigState` 后 `sections/` 里已没有这个 import；
+   - `entrypoints/app/hooks/CLAUDE.md` 的 `collection-phase.ts` 条目点名了 `NoTokenState`，判据要求 `entrypoints/` 零残留；
+   - 顺手更正 `github-stars/CLAUDE.md`、`bookmarks/CLAUDE.md` 与 `components/collection/CLAUDE.md` 消费方清单里把 chips 写成「`ChipRowShell` + `FilterChip`」的描述——代码早已是 `CollapsibleChipRow`，这几行本 Step 本来就要改。
+5. **`i18n-conventions.md` 改了**：PRD 的条件是「若有平台前缀键的约定处」。§2 Key naming conventions 表就是键前缀的约定处，所以加了一行 `common.*` 与一段「一句话跨平台一个键」（列出六个新键、计数在调用点拼、为什么没有守卫）。不写的话，下一个平台照 §2 还会造出 `<p>.lastSynced`。
+6. **被删的本地 JSDoc 里有两句信息搬了家**：x 的 `'missing'` / `'rejected'` 解释挪到 view 里 `authReason` 的计算处；zhihu、youtube 未登录 / 被拒态的说明挪成 `authFailedState` 上方的注释。
+
+**行为变化与验证备注**：
+
+- **渲染逐字不变**（逐态对照过改前 JSX）：
+  - 动作区 `Box` 的 `sx`、按钮先后与变体：github 库空 contained、zhihu 库空 contained、youtube 库空 contained；x 两态与 zhihu 未登录是打开站点 contained + 获取 outlined；youtube 被拒是前往设置 contained + 获取 outlined；github / youtube 未配置是单个 contained 前往设置。
+  - `rel="noopener"`、18px / 48px 图标与 `text.secondary`。
+  - 文案值：`common.goToSettings` 与原两个键同值；所有「全部 (N)」与展开 / 收起同值；横幅与上次同步同值。
+  - React 树多了一层 `GuideState` 包装，DOM 不变。
+- **i18n**：`LocaleKeys` 净减 30 个（36 删、6 增）。新键全部双语，`en.ts` 的 `Record<LocaleKeys, string>` 保证 parity。
+- **模块图**：`sections/collections/use-collections.ts` 现在 import `hooks/use-collection-library.ts`（只为常量），后者把 `background-jobs-store` / `collection-sync-error` 带进来；两者都只有模块级数据结构、无加载副作用，`use-collections.test.tsx` 一行未改就绿。
+- **manifest**：本 Step 不动 descriptor。`pnpm build` 后 `.output/chrome-mv3/manifest.json` 的 sha256 是 `053dd7bd…fde32ae5`，与 Step 4 / 5 相同。
+- **SW 体积**：bundle-contract 行是 `14 modules / 947838 bytes`，与 Step 5 后相同。
+- **测试**：
+  - 聚焦（PRD 命令：`components/collection` + `components/collection-states` + `components/tags` + `sections` + `hooks` + `lib/i18n` + contract + i18n-no-hardcoded + ui-vendor-boundaries）64 个文件 441 例绿；
+  - `pnpm compile` 绿；
+  - `pnpm test` 全量绿：主仓库 211 个文件 1706 例（Step 5 后 210 / 1694，+1 文件、+12 例：scaffold 4 例、collection-states 8 例），`packages/favbase` 15 个文件 263 例；在 config 的 `maxWorkers: 8` 下一次跑过；
+  - `pnpm build` 绿。
+- **运行时验证待人工**：六平台页 × 亮 / 暗 × 中 / 英，空库、未登录（x 两种 reason、zhihu）、未配置（github、youtube）、youtube 密钥被拒各过一遍；同步失败横幅在有库时出现。
+
+**改了哪些现有测试**：
+
+- `entrypoints/app/components/collection/collection-page-scaffold.test.tsx`：PRD F.1 许可的先红改动（见上）。
+- `entrypoints/app/sections/configuration-heading.test.tsx`：只改键名映射——`githubStars.goToSettings` / `youtube.goToSettings` 两行合成一行 `'common.goToSettings': 'Open settings'`。其余一行未改，三组用例照绿（单 h1、按钮落到 `/settings/connections/<platform>`、面包屑）。
+- `entrypoints/app/sections/collections/collections-view.test.tsx`：只改键名映射——`allCollections.allPlatforms` / `showMorePlatforms` / `showLessPlatforms` 换成 `common.all` / `showMore` / `showLess`，值不变；`tags.showMore` / `showLess` 两行与之重复，删掉。没有断言依赖这些文案。
+- **一行未改就绿**：`use-collection-library.test.tsx`、`use-bookmarks.test.tsx`、`use-bili-fav-folders.test.tsx`、`use-collections.test.tsx`、`tests/platform-completeness-contract.test.ts`（含面包屑与 job 命名空间两个守卫）、`tests/i18n-no-hardcoded.test.ts`、`tests/ui-vendor-boundaries.test.ts`、`lib/i18n/index.test.ts`。
+
+**trellis-check 复核（2026-10-02）**：
+
+- **独立复现了 scaffold 先红**：把 `collection-page-scaffold.tsx` 换回 HEAD 版（`git show HEAD:<path>`），只跑 `collection-page-scaffold.test.tsx`：`4 failed | 7 passed (11)`，红的恰好是四个新例，原有 7 例绿；恢复后 `cmp` 与改动版逐字节一致。
+- **独立复现了变体证伪**：把 `collection-states.tsx` 的 `variant={lead ? 'outlined' : 'contained'}` 翻成 `lead ? 'contained' : 'outlined'`，`4 failed | 4 passed (8)`，红的正是记录里那四例；恢复后 `cmp` 一致。
+- **渲染等价逐态对照**（HEAD 的本地组件 vs 共享组件，九个状态）：github 无 token / 库空、youtube 未配置 / 被拒 / 库空、x 库空 / 未登录（`missing` 与 `rejected` 两套键）、zhihu 库空 / 未登录。逐项核对图标名、48px、`text.secondary`，标题 / 描述键，动作区 `Box` 的 `sx`（`display: flex`、`justifyContent: center`、`gap: 1`、`flexWrap: wrap`），按钮先后，变体（无前导才 contained——HEAD 的 x / zhihu / youtube 双按钮态都是 `SyncNowButton` 默认的 outlined），`component={Link}` + `target="_blank"` + `rel="noopener"`，站点按钮 18px 图标，`navigate(settingsPath('connections/<platform>'))`。没有差异。scaffold 外壳文案：七个调用点 HEAD 传的 `syncLabel` / `syncingLabel` / `loadFailed` / `retry` 都是 `pipeline.fetchNow` / `pipeline.fetching` / `common.loadFailed` / `common.retry`，横幅是 `t('<p>.syncFailed', { error: syncErrorText })`；bookmarks 的 `syncErrorText` 仍是原始 `message`，「无错误传 `''`」分支被 `hasSyncError && libraryCount > 0` 条件覆盖、从不渲染；B站 fallback 页 `libraryCount={0}`，横幅本来就不出现。等价。
+- **i18n**：用脚本把两个 locale 的 HEAD 版与现版逐键比较：被删的 35 个键在 zh-CN / en 里都与对应 `common.*` 新值逐字节相同，`bookmarks.allFolders` 两种语言都没有 `.one` 变体（所以旧的 `{ count }` 调用走 base key、`String(count)` 插值），与代码拼的 `` `${t('common.all')} (${totalCount})` `` 渲染相同；每个 locale 恰好删 36、增 6；`allCollections.*` 只删了那三个，`allCollections.allTags` / `.count` / `.count.one` 等未动；残留调用点 grep 为零（`snackbar.syncFailed` 不在范围）。
+- **铁律**：`components/collection/**` 非测试文件剥掉注释行后零 `t(` / `useTranslation` / `@/lib/i18n`；scaffold import 的是叶文件 `../collection-states/use-collection-chrome-copy`。偏离 1 的理由成立：`../collection` barrel → scaffold → `../library-gate` → `hooks/library-gate.ts` 在加载期调 `libraryGateStorage.getValue()` / `.watch()`（另经 `../tags` 带进 `@/lib/database` / `@/lib/tagging`）；`collection-states/CLAUDE.md` 的「导入方向」一节写明了。
+- **测试**：既有测试里只有 `configuration-heading.test.tsx` 与 `collections-view.test.tsx` 改了，且只改键名映射行；`collections-view.test.tsx` 的 `'common.all': 'All platforms'` 保留了测试映射值，没有断言依赖它。`collection-states.test.tsx` 确实断言了变体（`buttonClasses`）、`href` / `target` / `rel`、点击后的 location、`syncing` 时禁用。
+
+**本轮修掉的**：
+
+1. **「两个具名例外 / and nowhere else」不成立**：scaffold 自 docs/16 MEDIUM-3 起就 import `../tags` 的 `useCollectionTags` / `TagFilterChips` / `TaggedItemGrid` / `TagEditPopover`，而 `tag-filter-chips.tsx` / `tag-edit-popover.tsx` / `tagged-item-grid.tsx` / `tag-row.tsx` 都调 `useTranslation()`——它是第三个智能模块，只是从未被列入。上面「铁律冲突与解法」说的「原来只有 `library-gate`」对**名单**是准的，但名单本身早就不全。改了三处：`components/collection/CLAUDE.md` 边界例外改成三个具名模块（`tags` 排第一，并写明它的形状不同——自己渲染带译文的 chip / 网格 / popover，不往本目录交字符串）；spec `platform-onboarding.md` §11 的 `t()` 行把 `components/tags/` 加进「and nowhere else」之前的清单；§8 表 6–8 行同步。`components/tags/CLAUDE.md` 的 i18n 条补了 `common.showMore` / `showLess` 与「scaffold 具名导入的三个智能模块之一」。
+2. **根 `CLAUDE.md` 的「manifest 与 SW bundle 逐字节不变」说过头**：bundle 只比了 bundle-contract 行的模块数与字节数，改成如实写法；manifest 的 sha256 本轮重算过，确实相同。
+3. **`collection-states.test.tsx` 的 mock 注释写错**：原写「with `{{x}}` interpolated」，实际是把参数拼成 `key|name=value`。注释改成实际行为和理由（证的是键与参数名）。
+4. **`syncFailed` 的测试缺一半**：mock 只能证明 hook 传了 `common.syncFailed` 和参数名 `error`，没有任何测试证明真实 zh / en 字符串带 `{{error}}`——占位符改名后每个收藏页都会把它原样显示出来。在同一文件末尾加了 `it.each` 三例：`common.syncFailed` / `common.lastSynced` / `common.showMore` 在 zh-CN 与 en 里分别含 `{{error}}` / `{{time}}` / `{{n}}`（直接 import 两个纯数据 locale 文件；`en.ts` 只 `import type` 自 `./zh-CN`，不碰 `@/lib/i18n` 的加载期 storage 读取，先例 `tests/agent-bridge-cli-aliases.test.ts`）。证伪：临时把 en 的 `{{error}}` 改成 `{{err}}`，恰好红 `common.syncFailed carries {{error}}` 一例（`1 failed | 10 passed`），恢复后 `cmp` 一致。`collection-states/CLAUDE.md` 的测试条同步。
+5. **`i18n-conventions.md` 的「36 platform copies deleted」不准**：36 里有 5 个在 `tags.*` / `allCollections.*` 下，不是平台副本；改成「36 per locale: 31 under platform prefixes, 5 under `tags.*` / `allCollections.*`」。同表的 `common.*` 行补一句 `retry` / `loadFailed` 也服务 Dashboard 的错误态（`overview-view.tsx`），否则「every collection page」描述不了它的全部用途。偏离 5 本身（在 §2 表加 `common.*` 行与规则段）准确，与文件其余部分一致。
+
+**核对过、无需改的**：落地记录里的 `file:line` 与数字逐条对过当前树——view 行数（236 → 196 等六个）、`collection-states.tsx` 185 行与 hook 34 行、红态里的 `collection-page-scaffold.test.tsx:274` / `:285` / `:300` / `:319`、§3 中-5 勘误的 28 = 6+6+6+6+4 与 36 = 28 + `tags.*` 2 + `allCollections.*` 3 + `bookmarks.allFolders` 1 + `*.goToSettings` 2、docs/16:11 勘误、附录 B 条、根 `CLAUDE.md` 索引新行、六个 section `CLAUDE.md`（`sections/x/CLAUDE.md` 的「本次新增」已改成「未排期」，不再归 Step 6）、`sections/CLAUDE.md`（`settings-nav` 在 `settings/` 之外的非测试引用确实只有 `configuration-blocker` 与 `collection-states`）、`hooks/CLAUDE.md`、spec §7.2 / §7.3。一处措辞偏窄但不错：「模块图」条说 `use-collection-library.ts` 带进 `background-jobs-store` / `collection-sync-error`，它还带进 `@/lib/database`（`initDbProxy`）——`use-collections.ts` 自己就 import 它、`bilibili-view.tsx` 经 `use-bili-fav-folders.ts` 也早已在图里，所以两个消费方的模块图都没多出东西。
+
+**仍然是已知缺口，不修**：
+
+- scaffold「只 import 叶文件、不经 `collection-states` barrel」没有机械守卫：scaffold 测试 mock 的是叶路径，而 barrel 是 re-export，改成经 barrel 导入时 mock 照样生效、测试照绿。今天只靠 `components/collection/CLAUDE.md` 与 scaffold 文件头注释。
+- `components/collection/**` 零 `t()` 仍只是设计约定（spec §11 写的就是 design contract），本 Step 没有升级成守卫。
+- 「locale 里没有同文副本」没有守卫（D-g）。
+- `SEARCH_DEBOUNCE_MS` 住在 `use-collection-library.ts` 这个 hook 模块里（PRD E 指定），聚合页与 B站 view 为一个常量 import 了整个 hook 模块；今天不多拖依赖（见上），以后那个模块变重时应挪到叶文件。
+- 运行时验证（六平台页 × 亮 / 暗 × 中 / 英，各状态）仍**待人工**。
+
+**重跑**（全量在代码与测试文件改动——即修复 3、4——之后跑；其后只改了 `.md`（修复 1、2、5 与本记录），grep 确认没有测试按路径读 `CLAUDE.md` / `.trellis/spec` / `docs/`，读仓库文件的守卫 `agent-bridge-cli-aliases` / `platform-completeness-contract` / `ui-vendor-boundaries` / `i18n-no-hardcoded` 连同 `collection-states` 另行重跑，5 个文件 60 例绿）：
+
+- 聚焦（PRD 命令）64 个文件 444 例绿（+3 是新加的占位符例）；
+- `pnpm compile` 绿；
+- `pnpm test` 全量绿：主仓库 211 个文件 1709 例，`packages/favbase` 15 个文件 263 例，一次跑过；
+- `pnpm build` 的 bundle-contract 行是 `14 modules / 947838 bytes`；`.output/chrome-mv3/manifest.json` 的 sha256 是 `053dd7bdf0da2ba2fa5ae8c67453ecc286b56394f5704585b38c3e34fde32ae5`，与 Step 4 / 5 相同。
+
 ### Step 7 数据 hook 改名层（D3；若 D3 选保留则跳过）
 
 - **目标**：五个平台 hook 只留平台特有部分，兑现 docs/15:55 的约 40 行目标。
@@ -1100,7 +1340,7 @@ lib 侧：平台 API 文件的重试 / 响应读取约减 30–40 行（Step 3�
 | 3 | 风控一节说明「机制在 `lib/http/`，数值与语义在平台」（已落地 2026-09-30：§4.1 Pagination 条、§2 守卫表（Five → Six）、§11 禁项行） | `lib/<platform>/` 禁 `setTimeout` 等待（`tests/platform-sleep-guard.test.ts`，AST 扫描 `new Promise` 参数里的 `setTimeout`，失败列 `file:line`） |
 | 4 | 错误类必须继承 `sync-errors.ts` 基类（已落地 2026-09-30：§4.1 错误类条、§7.2 `use-<platform>.ts` 与 `<platform>-view.tsx` 两行、§2 completeness contract 描述、§11 禁项行） | 平台错误类继承断言（completeness contract 的独立用例 + 探测器自检，AST 扫描，失败列 `file:line`）；`lib-import-smoke` 纳入新 leaf |
 | 5 | 新增「延迟正文」一节（已落地 2026-10-01：§4.4「Deferred content」，原 §4.4 Tests 顺延 §4.5；另改 §2 completeness contract 描述、§4.2 Chunking 行、§4.3 `'pending'` 条的交叉引用、§7.2 `use-<platform>.ts` 行、§11 禁项行） | `entrypoints/app/**`（比原写的 `sections/**` 宽）禁手写 job 命名空间：job-store 调用（`startJob` / `useJob` / `getJob` / `pauseJob` / `resumeJob` / `trackJobRun`）的第一参与 `jobPlatform` / `logTag` 属性，不得是字面量或同模块里绑到字面量的常量（AST 扫描，独立用例 + 探测器自检，失败列 `file:line`） |
-| 6–8 | §7 页面清单删去状态组件与 tagged 外壳两项 | `CARD_ADAPTERS` 对账不变 |
+| 6–8 | §7 页面清单删去状态组件与 tagged 外壳两项（Step 6 已落地 2026-10-01：§7.2 view 行改为「状态组件从 `components/collection-states/` 取、`copy` 只传平台文案」，§7.3 加 scaffold 自持外壳文案一段，§11「`components/collection/**` 内 `t()`」行补具名例外（实施时补了 `library-gate` 与 chrome-copy 叶文件两个，2026-10-02 trellis-check 补上一直在用却未具名的 `components/tags/`，共三个）；tagged 外壳待 Step 8。另 `i18n-conventions.md` §2 加 `common.*` 一行） | `CARD_ADAPTERS` 对账不变；Step 6 不新增守卫（D-g） |
 | 9 | 查询片段 builder 列入「shared read helpers」 | — |
 
 每个 Step 落地时同 commit 更新上表对应的 spec 与目录 `CLAUDE.md`。
@@ -1116,7 +1356,7 @@ lib 侧：平台 API 文件的重试 / 响应读取约减 30–40 行（Step 3�
 
 ## 附录 B 勘误与旁注
 
-- **docs/16:11**：记 docs/15 LOW-7「已修复」，实际只迁了 `retry` / `loadFailed`；Step 6 落地时同 commit 勘误。
+- **docs/16:11**：记 docs/15 LOW-7「已修复」，实际只迁了 `retry` / `loadFailed`；**已于 Step 6 勘误**（2026-10-01，原句不改，句末补勘误括注）。
 - **§2 漏记一条既有决定**（2026-09-29 定 D1 时发现）：07-26 daily auto-sync 任务定过「复用 `sources.lastFetchedAt`，不建新表、不加新 storage 记录」（`.trellis/tasks/archive/2026-07/07-26-daily-first-open-auto-sync-all-platforms/prd.md:11`）。它不属于「不得重提」，因为 D1 明确推翻了它（§5.1）；记在这里，是为了不让后人以为本文不知道它。
 - **docs/15:55**：「各平台 hook 退化为 ~40 行」未兑现，现为 115–163 行（D3）。
 - **命名冲突**：`SyncBookmarksResult`、`getBookmarks`、`BookmarksQuery` 在 `lib/x` 与 `lib/bookmarks` 同名导出，今天没有文件同时 import 两者。**Step 1 未改名**（2026-09-30，D-h）：六个 lib 结果类型各自只追加了缺的字段（github `inserted`、bookmarks `inserted`、bilibili runner `insertedCount`），没有被统一成一个类型；统一只发生在 app 侧 adapter 返回给 funnel 的 `PlatformSyncOutcome`。lib 层两个同名类型不在同一文件相遇，改名收益为零。等哪天真有文件同时 import 两者，再改。

@@ -19,6 +19,7 @@ import { useCollectionPipeline } from '../../hooks/use-collection-pipeline';
 import { useCollectionBreadcrumbs } from '../../hooks/use-collection-breadcrumbs';
 import { useJob, type BackgroundJob } from '../../hooks/background-jobs-store';
 import { jobPlatformForCollection } from '../../hooks/collection-job-platform';
+import { SEARCH_DEBOUNCE_MS } from '../../hooks/use-collection-library';
 import type { CollectionSyncError } from '../../hooks/collection-sync-error';
 import {
   syncErrorMessage,
@@ -38,7 +39,6 @@ import { VideoGridSkeleton } from './video-grid-skeleton';
 
 const PLATFORM = 'bilibili';
 const JOB_PLATFORM = jobPlatformForCollection(PLATFORM);
-const SEARCH_DEBOUNCE_MS = 300;
 
 /**
  * i18n seam for a classified sync / browse error (shared `syncErrorMessage`).
@@ -220,7 +220,7 @@ function BilibiliCollectionPage({
   }
   if (lastSyncedAt) {
     captionParts.push(
-      t('collections.lastSynced', { time: formatDateTime(lastSyncedAt.getTime()) }),
+      t('common.lastSynced', { time: formatDateTime(lastSyncedAt.getTime()) }),
     );
   }
   const pipeline = <PipelineProgressStrip segments={segments} />;
@@ -252,12 +252,7 @@ function BilibiliCollectionPage({
         caption: captionParts.length > 0 ? captionParts.join(' · ') : undefined,
         searchPlaceholder: t('collections.searchPlaceholder'),
         noMatches: t('collections.noMatches'),
-        syncLabel: t('pipeline.fetchNow'),
-        syncingLabel: t('pipeline.fetching'),
-        loadFailed: t('common.loadFailed'),
-        retry: t('common.retry'),
         syncErrorText,
-        syncFailedBanner: t('collections.syncFailed', { error: syncErrorText }),
       }}
       renderCard={(video, tags, onEditTags) => {
         const invalid = !isProcessableVideo(video);
@@ -383,12 +378,7 @@ function BilibiliFallbackPage({
         breadcrumbs,
         searchPlaceholder: t('collections.searchPlaceholder'),
         noMatches: t('collections.noMatches'),
-        syncLabel: t('pipeline.fetchNow'),
-        syncingLabel: t('pipeline.fetching'),
-        loadFailed: t('common.loadFailed'),
-        retry: t('common.retry'),
         syncErrorText,
-        syncFailedBanner: t('collections.syncFailed', { error: syncErrorText }),
       }}
       renderCard={() => null}
       renderTaggedCard={(item, openEditor) => (

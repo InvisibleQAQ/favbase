@@ -70,11 +70,10 @@ vi.mock('@/lib/i18n/use-translation', () => ({
       'githubStars.title': 'GitHub Stars',
       'githubStars.noTokenTitle': 'Connect GitHub',
       'githubStars.noTokenDesc': 'Add a token to continue.',
-      'githubStars.goToSettings': 'Open settings',
+      'common.goToSettings': 'Open settings',
       'youtube.title': 'YouTube Playlists',
       'youtube.notConnectedTitle': 'Connect YouTube',
       'youtube.notConnectedDesc': 'Add an API key and channel.',
-      'youtube.goToSettings': 'Open settings',
     })[key] ?? key,
   }),
 }));

@@ -69,7 +69,7 @@ export function BookmarksView() {
   }
   if (bm.lastSyncedAt) {
     captionParts.push(
-      t('bookmarks.lastSynced', {
+      t('common.lastSynced', {
         time: formatDateTime(bm.lastSyncedAt.getTime()),
       }),
     );
@@ -102,15 +102,8 @@ export function BookmarksView() {
         caption: captionParts.length > 0 ? captionParts.join(' · ') : undefined,
         searchPlaceholder: t('bookmarks.searchPlaceholder'),
         noMatches: t('bookmarks.noMatches'),
-        syncLabel: t('pipeline.fetchNow'),
-        syncingLabel: t('pipeline.fetching'),
-        loadFailed: t('common.loadFailed'),
-        retry: t('common.retry'),
         // Local browser data: no auth, no rate limits — the raw message verbatim.
         syncErrorText: bm.syncError?.message ?? '',
-        syncFailedBanner: bm.syncError
-          ? t('bookmarks.syncFailed', { error: bm.syncError.message })
-          : '',
       }}
       renderCard={(bookmark, tags, onEditTags) => (
         <BookmarkCard bookmark={bookmark} tags={tags} onEditTags={onEditTags} />

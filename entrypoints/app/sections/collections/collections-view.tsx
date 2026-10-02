@@ -131,11 +131,11 @@ export function CollectionsView() {
         items={collectionPlatformRegistry}
         getKey={(item) => item.id}
         getLabel={(item) => t(item.title)}
-        allLabel={t('allCollections.allPlatforms')}
+        allLabel={t('common.all')}
         selected={platform}
         onSelect={handlePlatformSelect}
-        showMoreLabel={(overflow) => t('allCollections.showMorePlatforms', { n: overflow })}
-        showLessLabel={t('allCollections.showLessPlatforms')}
+        showMoreLabel={(overflow) => t('common.showMore', { n: overflow })}
+        showLessLabel={t('common.showLess')}
       />
 
       {usedTags.length > 0 && (
@@ -148,8 +148,8 @@ export function CollectionsView() {
           allLabel={t('allCollections.allTags')}
           selected={selectedTagId}
           onSelect={setSelectedTagId}
-          showMoreLabel={(n) => t('tags.showMore', { n })}
-          showLessLabel={t('tags.showLess')}
+          showMoreLabel={(n) => t('common.showMore', { n })}
+          showLessLabel={t('common.showLess')}
           headerExtra={
             selectedTagId && (
               <Button

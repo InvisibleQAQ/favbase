@@ -29,11 +29,11 @@ export function PlaylistChips({ playlists, totalCount, selected, onSelect }: Pla
       items={playlists}
       getKey={(p) => p.playlistId}
       getLabel={playlistLabel}
-      allLabel={`${t('youtube.allPlaylists')} (${totalCount})`}
+      allLabel={`${t('common.all')} (${totalCount})`}
       selected={selected}
       onSelect={onSelect}
-      showMoreLabel={(n) => t('youtube.showMorePlaylists', { n })}
-      showLessLabel={t('youtube.showLessPlaylists')}
+      showMoreLabel={(n) => t('common.showMore', { n })}
+      showLessLabel={t('common.showLess')}
     />
   );
 }

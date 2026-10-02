@@ -1,16 +1,9 @@
-import { useNavigate } from 'react-router-dom';
-
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-
 import { formatDateTime } from '@/lib/i18n';
 import { useTranslation } from '@/lib/i18n/use-translation';
-import { Iconify } from '../../components/iconify';
 import { CollectionConfigurationNotice } from '../../components/configuration-blocker';
+import { EmptyLibraryState, NeedsConfigState } from '../../components/collection-states';
 import { DashboardContent } from '../../layouts/dashboard';
 import {
-  StateBox,
-  SyncNowButton,
   PipelineProgressStrip,
   CollectionPageScaffold,
   SectionTitleBar,
@@ -22,7 +15,6 @@ import {
   syncErrorMessage,
   type SyncErrorCopy,
 } from '../../hooks/collection-sync-error-message';
-import { settingsPath } from '../settings/settings-nav';
 import { useYoutubePlaylists } from './use-youtube-playlists';
 import { PlaylistChips } from './playlist-chips';
 import { YoutubeCard } from './youtube-card';
@@ -45,82 +37,12 @@ const SYNC_ERROR_COPY: SyncErrorCopy = {
 };
 
 // ---------------------------------------------------------------------------
-// Platform-specific dashed-box states (shared StateBox shell, youtube copy).
-// ---------------------------------------------------------------------------
-
-/** API key / channel not configured — guide the user to Settings → Connections. */
-function NotConnectedState({ onGoToSettings }: { onGoToSettings: () => void }) {
-  const { t } = useTranslation();
-  return (
-    <StateBox
-      icon={<Iconify icon="mdi:youtube" width={48} sx={{ color: 'text.secondary' }} />}
-      title={t('youtube.notConnectedTitle')}
-      description={t('youtube.notConnectedDesc')}
-      action={
-        <Button variant="contained" onClick={onGoToSettings}>
-          {t('youtube.goToSettings')}
-        </Button>
-      }
-    />
-  );
-}
-
-/** API key rejected mid-sync (YoutubeAuthError) — fix it in settings, then retry. */
-function AuthFailedState({
-  syncing,
-  onSync,
-  onGoToSettings,
-}: {
-  syncing: boolean;
-  onSync: () => void;
-  onGoToSettings: () => void;
-}) {
-  const { t } = useTranslation();
-  return (
-    <StateBox
-      icon={<Iconify icon="mdi:youtube" width={48} sx={{ color: 'text.secondary' }} />}
-      title={t('youtube.authFailedTitle')}
-      description={t('youtube.authFailedDesc')}
-      action={
-        <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1, flexWrap: 'wrap' }}>
-          <Button variant="contained" onClick={onGoToSettings}>
-            {t('youtube.goToSettings')}
-          </Button>
-          <SyncNowButton syncing={syncing} onSync={onSync} label={t('pipeline.fetchNow')} />
-        </Box>
-      }
-    />
-  );
-}
-
-/** Connected but nothing collected yet — the in-app sync IS the primary path. */
-function EmptyLibraryState({ syncing, onSync }: { syncing: boolean; onSync: () => void }) {
-  const { t } = useTranslation();
-  return (
-    <StateBox
-      icon={<Iconify icon="mdi:youtube" width={48} sx={{ color: 'text.secondary' }} />}
-      title={t('youtube.emptyTitle')}
-      description={t('youtube.emptyDesc')}
-      action={
-        <SyncNowButton
-          syncing={syncing}
-          onSync={onSync}
-          label={t('pipeline.fetchNow')}
-          variant="contained"
-        />
-      }
-    />
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Main view: config gate + scaffold assembly (title bar + sync + search +
 // channel chips + video grid all owned by CollectionPageScaffold).
 // ---------------------------------------------------------------------------
 
 export function YoutubeView() {
   const { t } = useTranslation();
-  const navigate = useNavigate();
   const yt = useYoutubePlaylists();
   const breadcrumbs = useCollectionBreadcrumbs(PLATFORM);
   const { coverage, coverageStatus, segments } = useCollectionPipeline({
@@ -138,7 +60,12 @@ export function YoutubeView() {
     return (
       <DashboardContent maxWidth="xl">
         <SectionTitleBar title={t('youtube.title')} links={breadcrumbs} />
-        <NotConnectedState onGoToSettings={() => navigate(settingsPath('connections/youtube'))} />
+        <NeedsConfigState
+          icon="mdi:youtube"
+          title="youtube.notConnectedTitle"
+          description="youtube.notConnectedDesc"
+          settings="connections/youtube"
+        />
       </DashboardContent>
     );
   }
@@ -148,7 +75,7 @@ export function YoutubeView() {
     captionParts.push(t('youtube.count', { count: yt.libraryCount }));
   }
   if (yt.lastSyncedAt) {
-    captionParts.push(t('youtube.lastSynced', { time: formatDateTime(yt.lastSyncedAt.getTime()) }));
+    captionParts.push(t('common.lastSynced', { time: formatDateTime(yt.lastSyncedAt.getTime()) }));
   }
 
   const syncErrorText = yt.syncError ? syncErrorMessage(yt.syncError, SYNC_ERROR_COPY) : '';
@@ -180,12 +107,7 @@ export function YoutubeView() {
         caption: captionParts.length > 0 ? captionParts.join(' · ') : undefined,
         searchPlaceholder: t('youtube.searchPlaceholder'),
         noMatches: t('youtube.noMatches'),
-        syncLabel: t('pipeline.fetchNow'),
-        syncingLabel: t('pipeline.fetching'),
-        loadFailed: t('common.loadFailed'),
-        retry: t('common.retry'),
         syncErrorText,
-        syncFailedBanner: t('youtube.syncFailed', { error: syncErrorText }),
       }}
       renderCard={(video, tags, onEditTags) => (
         <YoutubeCard video={video} tags={tags} onEditTags={onEditTags} />
@@ -202,12 +124,23 @@ export function YoutubeView() {
           onSelect={yt.setPlaylistId}
         />
       ) : null}
-      emptyState={<EmptyLibraryState syncing={yt.syncing} onSync={yt.sync} />}
-      authFailedState={
-        <AuthFailedState
+      emptyState={
+        <EmptyLibraryState
+          icon="mdi:youtube"
+          title="youtube.emptyTitle"
+          description="youtube.emptyDesc"
           syncing={yt.syncing}
           onSync={yt.sync}
-          onGoToSettings={() => navigate(settingsPath('connections/youtube'))}
+        />
+      }
+      // API key rejected mid-sync (YoutubeAuthError): fix it in Settings, then retry.
+      authFailedState={
+        <NeedsConfigState
+          icon="mdi:youtube"
+          title="youtube.authFailedTitle"
+          description="youtube.authFailedDesc"
+          settings="connections/youtube"
+          sync={{ syncing: yt.syncing, onSync: yt.sync }}
         />
       }
       configurationNotice={

@@ -7,7 +7,9 @@ import { startJob, useJob, type BackgroundJob } from './background-jobs-store';
 import { classifyCollectionSyncError, type CollectionSyncError } from './collection-sync-error';
 
 const DEFAULT_PAGE_SIZE = 24;
-const SEARCH_DEBOUNCE_MS = 300;
+/** Search-input debounce for every app.html collection page (the five
+ *  `useCollectionLibrary` platforms, bilibili's view, the aggregate page). */
+export const SEARCH_DEBOUNCE_MS = 300;
 
 /** One page of rows from the platform's PGlite query function. */
 export interface CollectionPage<TItem> {

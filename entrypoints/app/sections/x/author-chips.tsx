@@ -29,11 +29,11 @@ export function AuthorChips({ authors, totalCount, selected, onSelect }: AuthorC
       items={authors}
       getKey={(a) => a.authorHandle}
       getLabel={authorLabel}
-      allLabel={`${t('x.allAuthors')} (${totalCount})`}
+      allLabel={`${t('common.all')} (${totalCount})`}
       selected={selected}
       onSelect={onSelect}
-      showMoreLabel={(n) => t('x.showMoreAuthors', { n })}
-      showLessLabel={t('x.showLessAuthors')}
+      showMoreLabel={(n) => t('common.showMore', { n })}
+      showLessLabel={t('common.showLess')}
     />
   );
 }

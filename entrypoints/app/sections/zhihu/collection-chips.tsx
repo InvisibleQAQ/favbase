@@ -34,11 +34,11 @@ export function CollectionChips({
       items={collections}
       getKey={(c) => c.collectionId}
       getLabel={collectionLabel}
-      allLabel={`${t('zhihu.allCollections')} (${totalCount})`}
+      allLabel={`${t('common.all')} (${totalCount})`}
       selected={selected}
       onSelect={onSelect}
-      showMoreLabel={(n) => t('zhihu.showMoreCollections', { n })}
-      showLessLabel={t('zhihu.showLessCollections')}
+      showMoreLabel={(n) => t('common.showMore', { n })}
+      showLessLabel={t('common.showLess')}
     />
   );
 }

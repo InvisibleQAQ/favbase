@@ -1,15 +1,9 @@
-import { useNavigate } from 'react-router-dom';
-
-import Button from '@mui/material/Button';
-
 import { formatDateTime } from '@/lib/i18n';
 import { useTranslation } from '@/lib/i18n/use-translation';
-import { Iconify } from '../../components/iconify';
 import { CollectionConfigurationNotice } from '../../components/configuration-blocker';
+import { EmptyLibraryState, NeedsConfigState } from '../../components/collection-states';
 import { DashboardContent } from '../../layouts/dashboard';
 import {
-  StateBox,
-  SyncNowButton,
   PipelineProgressStrip,
   CardGridSkeleton,
   CollectionCardSkeleton,
@@ -29,7 +23,6 @@ import {
   type SyncErrorCopy,
 } from '../../hooks/collection-sync-error-message';
 import { formatCountdown, useCountdown } from '../../hooks/use-countdown';
-import { settingsPath } from '../settings/settings-nav';
 import { useGithubStars } from './use-github-stars';
 import { LanguageChips } from './language-chips';
 import { RepoCard } from './repo-card';
@@ -51,47 +44,6 @@ const SYNC_ERROR_COPY: SyncErrorCopy = {
   rateLimitedUntil: 'settings.github.rateLimited',
 };
 
-// ---------------------------------------------------------------------------
-// Platform-specific dashed-box states (shared StateBox shell, github copy).
-// ---------------------------------------------------------------------------
-
-/** No token configured — guide the user to Settings → Connections. */
-function NoTokenState({ onGoToSettings }: { onGoToSettings: () => void }) {
-  const { t } = useTranslation();
-  return (
-    <StateBox
-      icon={<Iconify icon="mdi:github" width={48} sx={{ color: 'text.secondary' }} />}
-      title={t('githubStars.noTokenTitle')}
-      description={t('githubStars.noTokenDesc')}
-      action={
-        <Button variant="contained" onClick={onGoToSettings}>
-          {t('githubStars.goToSettings')}
-        </Button>
-      }
-    />
-  );
-}
-
-/** Token configured but nothing collected yet — guide the user to sync. */
-function EmptyLibraryState({ syncing, onSync }: { syncing: boolean; onSync: () => void }) {
-  const { t } = useTranslation();
-  return (
-    <StateBox
-      icon={<Iconify icon="mdi:star" width={48} sx={{ color: 'text.secondary' }} />}
-      title={t('githubStars.emptyTitle')}
-      description={t('githubStars.emptyDesc')}
-      action={
-        <SyncNowButton
-          syncing={syncing}
-          onSync={onSync}
-          label={t('pipeline.fetchNow')}
-          variant="contained"
-        />
-      }
-    />
-  );
-}
-
 /** Repo card shape: owner line + name + description. */
 function RepoGridSkeleton() {
   return <CardGridSkeleton card={<CollectionCardSkeleton header lines={3} />} />;
@@ -104,7 +56,6 @@ function RepoGridSkeleton() {
 
 export function GithubStarsView() {
   const { t } = useTranslation();
-  const navigate = useNavigate();
   const gh = useGithubStars();
   const breadcrumbs = useCollectionBreadcrumbs(PLATFORM);
 
@@ -140,12 +91,18 @@ export function GithubStarsView() {
   // A rate limit with a known reset locks the Fetch button until then.
   const lockMs = useCountdown((now) => rateLimitRemainingMs(gh.syncError, now));
 
-  // No token: the whole page short-circuits into the connect guide.
+  // No token: the whole page short-circuits into the connect guide
+  // (Settings -> Connections).
   if (!gh.settingsLoading && !gh.hasToken) {
     return (
       <DashboardContent maxWidth="xl">
         <SectionTitleBar title={t('githubStars.title')} links={breadcrumbs} />
-        <NoTokenState onGoToSettings={() => navigate(settingsPath('connections/github'))} />
+        <NeedsConfigState
+          icon="mdi:github"
+          title="githubStars.noTokenTitle"
+          description="githubStars.noTokenDesc"
+          settings="connections/github"
+        />
       </DashboardContent>
     );
   }
@@ -156,7 +113,7 @@ export function GithubStarsView() {
   }
   if (gh.lastSyncedAt) {
     captionParts.push(
-      t('githubStars.lastSynced', { time: formatDateTime(gh.lastSyncedAt.getTime()) }),
+      t('common.lastSynced', { time: formatDateTime(gh.lastSyncedAt.getTime()) }),
     );
   }
 
@@ -177,7 +134,7 @@ export function GithubStarsView() {
       queryError={gh.queryError}
       hasSyncError={gh.syncError != null}
       // GitHub has no auth-failed content phase — a missing token short-circuits
-      // to NoTokenState above, before the scaffold renders.
+      // to the configuration gate above, before the scaffold renders.
       authFailed={false}
       page={gh.page}
       totalPages={gh.totalPages}
@@ -196,12 +153,7 @@ export function GithubStarsView() {
         caption: captionParts.length > 0 ? captionParts.join(' · ') : undefined,
         searchPlaceholder: t('githubStars.searchPlaceholder'),
         noMatches: t('githubStars.noMatches'),
-        syncLabel: t('pipeline.fetchNow'),
-        syncingLabel: t('pipeline.fetching'),
-        loadFailed: t('common.loadFailed'),
-        retry: t('common.retry'),
         syncErrorText,
-        syncFailedBanner: t('githubStars.syncFailed', { error: syncErrorText }),
       }}
       renderCard={(repo, tags, onEditTags) => (
         <RepoCard repo={repo} tags={tags} onEditTags={onEditTags} />
@@ -218,7 +170,15 @@ export function GithubStarsView() {
           onSelect={gh.setLanguage}
         />
       ) : null}
-      emptyState={<EmptyLibraryState syncing={gh.syncing} onSync={gh.sync} />}
+      emptyState={
+        <EmptyLibraryState
+          icon="mdi:star"
+          title="githubStars.emptyTitle"
+          description="githubStars.emptyDesc"
+          syncing={gh.syncing}
+          onSync={gh.sync}
+        />
+      }
       configurationNotice={
         <CollectionConfigurationNotice
           platform={PLATFORM}

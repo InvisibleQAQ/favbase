@@ -113,6 +113,7 @@ export interface TranscribeStatusPush {
 | Breadcrumb ancestry (shared by every route with a trail) | `breadcrumbs.*` | `breadcrumbs.home` |
 | Appearance drawer (theme settings) | `settingsDrawer.*` | `settingsDrawer.presets` |
 | Toast region chrome and generic one-shot results | `snackbar.*` | `snackbar.saved`, `snackbar.regionLabel` |
+| Copy identical on every collection page (any platform, the aggregate page, tag chips); `retry` / `loadFailed` also serve the Dashboard's error state | `common.*` | `common.lastSynced`, `common.showMore` |
 
 **Specific copy wins over generic copy**: a toast for an outcome that already has
 a precise key (`settings.sync.err.*`, `export.dbNotReady`,
@@ -120,6 +121,20 @@ a precise key (`settings.sync.err.*`, `export.dbNotReady`,
 strings nothing else owns — the region/close chrome and the generic
 `saved`/`saveFailed`-style fallbacks. Minting a second synonym for an existing
 message is how two copies of one sentence start drifting apart.
+
+**One sentence, one key across platforms**: a platform namespace (`x.*`,
+`zhihu.*`, `collections.*` for bilibili …) holds only copy that names or
+describes that platform. A string that reads the same on every collection page
+lives once in `common.*` — today `common.retry`, `common.loadFailed`, and the
+six docs/32 Step 6 moved in: `common.lastSynced`, `common.syncFailed`,
+`common.showMore`, `common.showLess`, `common.all`, `common.goToSettings`
+(36 copies deleted per locale: 31 under platform prefixes, 5 under `tags.*` /
+`allCollections.*`). Counts are concatenated at the call site
+(`` `${t('common.all')} (${totalCount})` ``), never baked into a key — the old
+`bookmarks.allFolders` (`全部 ({{count}})`) was the one key that did, and it is
+why the "All" chip could not be shared. Nothing guards this mechanically (a
+platform key may legitimately read the same in one locale), so review it when
+onboarding a platform.
 
 **One operation, one word**: `backgroundJobs.kind.sync` (header reminder tooltip) and `pipeline.fetch` (per-page processing strip) name the SAME operation — pulling favorites from a platform. Their copy must stay identical (`获取` / `Fetch`). Do not reintroduce a second wording (`同步` / `Sync`) for it.
 

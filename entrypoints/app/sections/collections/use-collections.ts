@@ -11,13 +11,13 @@ import {
 import { initDbProxy } from '@/lib/database';
 import { onDomainEvent } from '@/lib/events';
 import { getAllUsedTags, type UsedTag } from '@/lib/tagging';
+import { SEARCH_DEBOUNCE_MS } from '../../hooks/use-collection-library';
 import {
   resolveCollectionTagFilter,
   updateCollectionTagParams,
 } from './collection-tag-filter';
 
 const PAGE_SIZE = 24;
-const SEARCH_DEBOUNCE_MS = 300;
 
 export interface UseCollectionsReturn {
   items: CollectionItem[];

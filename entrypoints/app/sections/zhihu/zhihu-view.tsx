@@ -1,17 +1,12 @@
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Link from '@mui/material/Link';
-
 import { formatDateTime } from '@/lib/i18n';
 import { useTranslation } from '@/lib/i18n/use-translation';
-import { Iconify } from '../../components/iconify';
 import { CollectionConfigurationNotice } from '../../components/configuration-blocker';
 import {
-  StateBox,
-  SyncNowButton,
-  PipelineProgressStrip,
-  CollectionPageScaffold,
-} from '../../components/collection';
+  EmptyLibraryState,
+  NotLoggedInState,
+  type SiteAction,
+} from '../../components/collection-states';
+import { PipelineProgressStrip, CollectionPageScaffold } from '../../components/collection';
 import { backgroundJobRuntime, fetchedCountProgress } from '../../hooks/pipeline-segments';
 import { useCollectionPipeline } from '../../hooks/use-collection-pipeline';
 import { useCollectionBreadcrumbs } from '../../hooks/use-collection-breadcrumbs';
@@ -28,8 +23,13 @@ import { ZhihuGridSkeleton } from './zhihu-grid-skeleton';
 /** Platform key for all tag operations in this (zhihu-only) section. */
 const PLATFORM = 'zhihu';
 // Deep-link for the not-logged-in state: zhihu's own login flow, after which
-// the extension fetch rides the fresh session cookies.
-const ZHIHU_URL = 'https://www.zhihu.com';
+// the extension fetch rides the fresh session cookies. Only that state leads
+// with it — in the empty state the in-app Fetch IS the primary path.
+const ZHIHU_SITE = {
+  href: 'https://www.zhihu.com',
+  label: 'zhihu.openZhihu',
+  icon: 'simple-icons:zhihu',
+} as const satisfies SiteAction;
 
 // ---------------------------------------------------------------------------
 // i18n seam: the classified sync error → user-facing copy (shared
@@ -41,67 +41,6 @@ const SYNC_ERROR_COPY: SyncErrorCopy = {
   auth: 'zhihu.notLoggedInTitle',
   rateLimited: 'zhihu.rateLimited',
 };
-
-// ---------------------------------------------------------------------------
-// Platform-specific dashed-box states (shared StateBox shell, zhihu copy).
-// ---------------------------------------------------------------------------
-
-/** Primary action of the not-logged-in state: open zhihu.com (login there,
- *  then come back and sync — cookies ride the extension fetch automatically). */
-function OpenZhihuButton() {
-  const { t } = useTranslation();
-  return (
-    <Button
-      component={Link}
-      href={ZHIHU_URL}
-      target="_blank"
-      rel="noopener"
-      variant="contained"
-      startIcon={<Iconify icon="simple-icons:zhihu" width={18} />}
-    >
-      {t('zhihu.openZhihu')}
-    </Button>
-  );
-}
-
-/** No valid zhihu session (surfaced when a sync throws ZhihuAuthError) —
- *  guide the user to log in on zhihu.com, then retry the sync. */
-function NotLoggedInState({ syncing, onSync }: { syncing: boolean; onSync: () => void }) {
-  const { t } = useTranslation();
-  return (
-    <StateBox
-      icon={<Iconify icon="simple-icons:zhihu" width={48} sx={{ color: 'text.secondary' }} />}
-      title={t('zhihu.notLoggedInTitle')}
-      description={t('zhihu.notLoggedInDesc')}
-      action={
-        <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1, flexWrap: 'wrap' }}>
-          <OpenZhihuButton />
-          <SyncNowButton syncing={syncing} onSync={onSync} label={t('pipeline.fetchNow')} />
-        </Box>
-      }
-    />
-  );
-}
-
-/** Never synced (or synced empty) — the in-app sync IS the primary path. */
-function EmptyLibraryState({ syncing, onSync }: { syncing: boolean; onSync: () => void }) {
-  const { t } = useTranslation();
-  return (
-    <StateBox
-      icon={<Iconify icon="simple-icons:zhihu" width={48} sx={{ color: 'text.secondary' }} />}
-      title={t('zhihu.emptyTitle')}
-      description={t('zhihu.emptyDesc')}
-      action={
-        <SyncNowButton
-          syncing={syncing}
-          onSync={onSync}
-          label={t('pipeline.fetchNow')}
-          variant="contained"
-        />
-      }
-    />
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Main view: scaffold assembly (title bar + sync + search + collection chips +
@@ -125,7 +64,7 @@ export function ZhihuView() {
     captionParts.push(t('zhihu.count', { count: zhihu.libraryCount }));
   }
   if (zhihu.lastSyncedAt) {
-    captionParts.push(t('zhihu.lastSynced', { time: formatDateTime(zhihu.lastSyncedAt.getTime()) }));
+    captionParts.push(t('common.lastSynced', { time: formatDateTime(zhihu.lastSyncedAt.getTime()) }));
   }
 
   const syncErrorText = zhihu.syncError
@@ -159,12 +98,7 @@ export function ZhihuView() {
         caption: captionParts.length > 0 ? captionParts.join(' · ') : undefined,
         searchPlaceholder: t('zhihu.searchPlaceholder'),
         noMatches: t('zhihu.noMatches'),
-        syncLabel: t('pipeline.fetchNow'),
-        syncingLabel: t('pipeline.fetching'),
-        loadFailed: t('common.loadFailed'),
-        retry: t('common.retry'),
         syncErrorText,
-        syncFailedBanner: t('zhihu.syncFailed', { error: syncErrorText }),
       }}
       renderCard={(favorite, tags, onEditTags) => (
         <ZhihuCard favorite={favorite} tags={tags} onEditTags={onEditTags} />
@@ -181,8 +115,27 @@ export function ZhihuView() {
           onSelect={zhihu.setCollectionId}
         />
       ) : null}
-      emptyState={<EmptyLibraryState syncing={zhihu.syncing} onSync={zhihu.sync} />}
-      authFailedState={<NotLoggedInState syncing={zhihu.syncing} onSync={zhihu.sync} />}
+      emptyState={
+        <EmptyLibraryState
+          icon="simple-icons:zhihu"
+          title="zhihu.emptyTitle"
+          description="zhihu.emptyDesc"
+          syncing={zhihu.syncing}
+          onSync={zhihu.sync}
+        />
+      }
+      // No valid zhihu session (a sync threw ZhihuAuthError): log in on
+      // zhihu.com, then retry — cookies ride the extension fetch automatically.
+      authFailedState={
+        <NotLoggedInState
+          icon="simple-icons:zhihu"
+          title="zhihu.notLoggedInTitle"
+          description="zhihu.notLoggedInDesc"
+          site={ZHIHU_SITE}
+          syncing={zhihu.syncing}
+          onSync={zhihu.sync}
+        />
+      }
       configurationNotice={
         <CollectionConfigurationNotice
           platform={PLATFORM}

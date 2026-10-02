@@ -8,7 +8,7 @@ Favbase 现有 6 个收藏平台：Bilibili、GitHub Stars、浏览器书签、X
 
 - `docs/13`（2026-06-29）：lib 层平台耦合 8 条——全部修复。
 - `docs/14`（2026-07-13）：UI 层标签圈禁 + section 脚手架——已修复。
-- `docs/15`（2026-07-17）：HIGH-1（`useCollectionLibrary` 泛型 hook）、HIGH-2（`resolveCollectionPhase` + 四件套组件提升）、MEDIUM-3 步骤 1+2（`sql-utils` + `collection-queries`）、MEDIUM-4（`CollapsibleChipRow`）、LOW-7（`common.*` i18n）——已修复，本次复查全部兑现。
+- `docs/15`（2026-07-17）：HIGH-1（`useCollectionLibrary` 泛型 hook）、HIGH-2（`resolveCollectionPhase` + 四件套组件提升）、MEDIUM-3 步骤 1+2（`sql-utils` + `collection-queries`）、MEDIUM-4（`CollapsibleChipRow`）、LOW-7（`common.*` i18n）——已修复，本次复查全部兑现。（**勘误 2026-10-01**：LOW-7 当时只把 `retry` / `loadFailed` 迁进了 `common.*`，「全部兑现」对它不成立——`*.lastSynced` / `*.syncFailed` / 展开收起 / 「全部」/ `*.goToSettings` 等同文键仍是平台副本，2026-10-01 由 docs/32 Step 6 迁完、共删 36 个。）
 
 **本次审计的触发点**：docs/15 修复之后接入了 YouTube——**这是共享层全部就位后接入的第一个平台**，是「新平台边际成本」的最真实测量，也是 docs/15 两个「暂缓评估」条款（ingest 事务骨架、字符软切 chunker）设定的触发条件的直接检验。
 

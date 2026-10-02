@@ -392,7 +392,7 @@ stays a one-line re-export whether your platform has child routes or not.
 | --- | --- |
 | `<platform>-sync-adapter.ts` | **The Platform Sync.** `run<P>Sync(onProgress, control)` is the single definition of what a sync means: credential resolution, then `await runPlatformSync(platform, control, async () => { …domain call…; return { fetched, inserted, newItemIds }; })` (`entrypoints/app/hooks/platform-sync.ts`). The funnel records the attempt in the Platform Sync Record, runs your closure, and on success dispatches the embed/tag lanes (`jobPlatform` derived) and records the success; on failure it records that and rethrows your error unchanged. **Anything you can check without the network goes BEFORE the funnel**: missing config is a silent `return`, a known-absent login throws the platform's own auth error class (the page's logged-out state keys off it) — neither is an attempt, so neither may leave a record (docs/32 §5.2). Put everything that contacts the platform inside the closure; work that follows a successful sync but is not the platform (bookmarks' page extraction) goes after it. Also exports `<p>AutoSyncPolicy` (`probeReady`, optional `isSilentError`). The manual page and the daily coordinator call **this same function** — copying credential resolution or post-sync dispatch into either trigger is the defect this file exists to prevent. |
 | `use-<platform>.ts` | Thin adapter over `useCollectionLibrary`. Inject `queryFn` / `facetsFn` / `lastSyncedFn` / `syncFn = run<P>Sync` / `logTag = jobPlatformForCollection(<platform>)` — it is the background-job namespace, not a free-form log label — then rename the generic fields to platform vocabulary. There is no error classifier to inject: `syncError` is already a `CollectionSyncError`, classified by base class (§4.1). **Config gates live here**, wrapped around the generic `sync` — not inside `useCollectionLibrary`. Every injected function must be a stable reference (module-level or `useCallback`); they sit in effect dependency arrays. |
-| `<platform>-view.tsx` | Assembles `CollectionPageScaffold` + `useCollectionPipeline` + `useCollectionBreadcrumbs`. Owns the i18n seam as data, not a switch: a module-level `SyncErrorCopy` (i18n keys: `auth`, optional `authRejected`, `rateLimited`, optional `rateLimitedUntil`) passed to the shared `syncErrorMessage` (`entrypoints/app/hooks/collection-sync-error-message.ts`). If the platform's `<P>RateLimitError` carries a `resetAt`, lock the Fetch button until it: `useCountdown((now) => rateLimitRemainingMs(syncError, now))` into `syncDisabled` / `syncDisabledLabel` (`pipeline.fetchAvailableIn`). |
+| `<platform>-view.tsx` | Assembles `CollectionPageScaffold` + `useCollectionPipeline` + `useCollectionBreadcrumbs`. `copy` carries only the platform's own strings (`title`, `breadcrumbs`, `caption`, `searchPlaceholder`, `noMatches`, `syncErrorText`); the caption's "last synced" part is `common.lastSynced`. The guide states come from `components/collection-states/` — `EmptyLibraryState` (pass `site` when opening the platform's site is how the library fills), `NotLoggedInState` (site-session platforms) and `NeedsConfigState` (`settings: SettingsLeaf`, plus `sync` when the credential was rejected rather than missing) — and take an `IconifyName`, `LocaleKeys` and a `SiteAction` / settings leaf, never translated strings; a state shaped differently from those three (bookmarks' button-less empty state, bilibili's retry) stays local. Owns the i18n seam as data, not a switch: a module-level `SyncErrorCopy` (i18n keys: `auth`, optional `authRejected`, `rateLimited`, optional `rateLimitedUntil`) passed to the shared `syncErrorMessage` (`entrypoints/app/hooks/collection-sync-error-message.ts`). If the platform's `<P>RateLimitError` carries a `resetAt`, lock the Fetch button until it: `useCountdown((now) => rateLimitRemainingMs(syncError, now))` into `syncDisabled` / `syncDisabledLabel` (`pipeline.fetchAvailableIn`). |
 | `<platform>-card.tsx` | Composes the shared `CollectionCard` shell. |
 | `tagged-<platform>-card.tsx` | `TaggedItem` → your item shape, delegating narrowing to `narrow<P>Meta`. |
 | `<platform>-grid-skeleton.tsx` | Shared `CardGridSkeleton` + `CollectionCardSkeleton`. |
@@ -405,8 +405,16 @@ stays a one-line re-export whether your platform has child routes or not.
 ladder** (`resolveCollectionPhase`, whose branch order is the contract), the
 grid/popover/pagination, and the fixed page order (title → pipeline → search →
 configuration notice → primary category → tag chips → content). You inject
-cards, chips, states, and **pre-translated copy** — the
+cards, chips, states, and **pre-translated platform copy** — the
 `components/collection/` layer calls `t()` zero times.
+
+The scaffold also owns the **chrome copy** that is identical on every platform:
+the Fetch button's two labels, the error phases' title and retry, and the
+sync-failed banner (`common.syncFailed` around your `syncErrorText`). It reads
+them from `useCollectionChromeCopy` in `components/collection-states/` — the
+translated sibling of `components/collection/` (docs/32 Step 6, user decision
+2026-10-01). `CollectionPageCopy` has no field for any of them, so there is
+nothing to pass and nothing to get wrong.
 
 `useCollectionPipeline` owns the coverage refresh key, the shared
 `pipeline.*` labels, and the stage array. Views pass only the Fetch runtime
@@ -522,7 +530,7 @@ opt out of the hook; **do not** opt out of the scaffold or the registries.
 | a `setTimeout` wait (`new Promise((r) => setTimeout(r, ms))`) in `lib/<platform>/` — use `sleep`, and `withRetries` for a retry loop | `platform-sleep-guard` |
 | a bare numeric module constant in `lib/<platform>/` | `platform-env-constants-guard` |
 | `@/lib/storage` (or any `chrome.*`-touching barrel) in the sync-service static graph | `lib-import-smoke` |
-| a `t()` call inside `components/collection/**` | design contract (`components/collection/CLAUDE.md`) |
+| a `t()` call inside `components/collection/**` | design contract (`components/collection/CLAUDE.md`). Translation lives in sibling smart modules the scaffold may import by name — `components/tags/` (renders its own translated chips, grid and popover), `components/library-gate/` and the leaf `components/collection-states/use-collection-chrome-copy.ts` — and nowhere else; a dumb component that needs copy takes it as a prop |
 | duplicating credential resolution or post-sync dispatch across the manual and daily triggers | review — the shared `*-sync-adapter.ts` exists precisely to make this unnecessary |
 | calling `startCollectionProcessingJobs` outside the Platform Sync funnel | completeness contract — the funnel is what records the Platform Sync; a direct call skips the record |
 | a new table or migration for a platform | §3 — escalate instead |
