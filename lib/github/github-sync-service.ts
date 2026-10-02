@@ -15,7 +15,7 @@
  * READMEs serially for NEW repos plus GHOST repos — rows claiming content with
  * zero chunk rows, the bug-fix exception to "no backfill" (100ms pacing;
  * per-repo failures — including non-404 — degrade to no_content with a
- * console.warn, no retry). README present → `item_contents` + `charSplit`
+ * console.warn, no retry). README present → `item_contents` + `paragraphSplit`
  * chunks via the shared ingest content channel → `content_state='chunked'`
  * only AFTER chunk rows land (never 'pending' — that feeds auto-transcribe).
  * Embedding is NOT run inline (D3) — the app-side Sync Adapter
@@ -36,7 +36,7 @@ import { ghostItemCondition, ingestCollection } from '@/lib/ingest/ingest';
 // seam lives app-side (the Sync Adapter's Platform Sync funnel); lib-layer
 // platform services must not import storage-backed barrels. Guarded by
 // tests/lib-import-smoke.test.ts.
-import { charSplit } from '@/lib/embedding/char-split';
+import { paragraphSplit } from '@/lib/embedding/char-split';
 import { envNumber } from '@/lib/env';
 import { sleep } from '@/lib/http/backoff';
 import type { CooperativeCheckpoint } from '@/lib/collections';
@@ -272,7 +272,7 @@ export async function syncStarsToDb(
     // HERE — the single enforcement point at the persistence boundary.
     content: {
       textOf: (pid) => (readmeById?.get(pid) ?? '').slice(0, MAX_README_CHARS),
-      chunk: (text) => charSplit(text, { preferParagraph: true }),
+      chunk: paragraphSplit,
     },
   });
 

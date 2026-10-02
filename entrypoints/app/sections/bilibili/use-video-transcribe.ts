@@ -6,9 +6,12 @@ import {
 import type { BiliFavVideo } from '@/lib/bilibili/types';
 import type { VideoTranscribeState } from '@/lib/bilibili/transcription-coordinator';
 import { startJob } from '../../hooks/background-jobs-store';
+import { jobPlatformForCollection } from '../../hooks/collection-job-platform';
 import { enqueueBiliCollectionProcessing } from './bilibili-processing-adapter';
 
 export type { VideoTranscribeState, ContentStatus } from '@/lib/bilibili/transcription-coordinator';
+
+const JOB_PLATFORM = jobPlatformForCollection('bilibili');
 
 // Reflect the SW-held manual transcription run into the global "don't close"
 // indicator as a running-state-only job (progress stays null/indeterminate —
@@ -17,7 +20,7 @@ export type { VideoTranscribeState, ContentStatus } from '@/lib/bilibili/transcr
 // the job clears when transcription actually finishes. Module-level so the
 // reference is stable across renders/mounts.
 const trackTranscribeRun = (_bvid: string, run: Promise<unknown>): void => {
-  startJob('bilibili', 'transcribe', () => run.then(() => undefined));
+  startJob(JOB_PLATFORM, 'transcribe', () => run.then(() => undefined));
 };
 
 export interface UseVideoTranscribeReturn {

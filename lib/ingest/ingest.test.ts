@@ -8,7 +8,7 @@ import { asc, eq } from 'drizzle-orm';
 import * as schema from '@/lib/database/schema';
 import { runMigrations } from '@/lib/database/migrations';
 import type { FavbaseDb } from '@/lib/database';
-import { ingestCollection, persistExistingItemContent, persistItemContent } from './ingest';
+import { ingestCollection, persistExistingItemContent, settleItemContent } from './ingest';
 
 describe('ingest module', () => {
   let pg: PGlite;
@@ -292,7 +292,7 @@ describe('ingest module', () => {
     ]);
   });
 
-  it('persistItemContent clears a subtitle source when it overwrites the text', async () => {
+  it('settleItemContent clears a subtitle source when it overwrites the text', async () => {
     const item = await seedItem('BV-SOURCE-OVERWRITE');
     await persistExistingItemContent(
       db,
@@ -304,12 +304,49 @@ describe('ingest module', () => {
     );
 
     await expect(
-      persistItemContent(db, item.id, 'extracted text', (text) => [{ text }]),
+      settleItemContent(db, item.id, 'extracted text', (text) => [{ text }]),
     ).resolves.toBe(true);
 
     await expect(contentRowOf(item.id)).resolves.toEqual([
       { plain_text: 'extracted text', subtitle_source: null },
     ]);
+    await expect(
+      db.select({ state: schema.items.contentState }).from(schema.items).where(eq(schema.items.id, item.id)),
+    ).resolves.toEqual([{ state: 'chunked' }]);
+  });
+
+  it('settleItemContent writes the chunker output and settles at chunked', async () => {
+    const item = await seedItem('BV-SETTLE-TEXT');
+
+    await expect(
+      settleItemContent(db, item.id, '  one\ntwo  ', (text) =>
+        text.split('\n').map((line) => ({ text: line })),
+      ),
+    ).resolves.toBe(true);
+
+    await expect(
+      db.select({ state: schema.items.contentState }).from(schema.items).where(eq(schema.items.id, item.id)),
+    ).resolves.toEqual([{ state: 'chunked' }]);
+    await expect(
+      db
+        .select({ text: schema.itemChunks.chunkText })
+        .from(schema.itemChunks)
+        .where(eq(schema.itemChunks.itemId, item.id))
+        .orderBy(asc(schema.itemChunks.chunkIndex)),
+    ).resolves.toEqual([{ text: 'one' }, { text: 'two' }]);
+  });
+
+  it('settleItemContent settles blank text at no_content without writing content', async () => {
+    const item = await seedItem('BV-SETTLE-BLANK');
+
+    await expect(
+      settleItemContent(db, item.id, '  \n  ', (text) => [{ text }]),
+    ).resolves.toBe(false);
+
+    await expect(
+      db.select({ state: schema.items.contentState }).from(schema.items).where(eq(schema.items.id, item.id)),
+    ).resolves.toEqual([{ state: 'no_content' }]);
+    await expect(contentRowOf(item.id)).resolves.toEqual([]);
   });
 
   it('rejects a subtitle source other than official or asr', async () => {

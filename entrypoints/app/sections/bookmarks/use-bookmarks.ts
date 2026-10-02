@@ -12,11 +12,15 @@ import {
   type CollectionQueryParams,
 } from '../../hooks/use-collection-library';
 import type { BackgroundJob } from '../../hooks/background-jobs-store';
+import { jobPlatformForCollection } from '../../hooks/collection-job-platform';
 import type { CollectionSyncError } from '../../hooks/collection-sync-error';
 import { runBookmarksSync, type BookmarksSyncProgress } from './bookmarks-sync-adapter';
 
-/** Job namespace key (reused as `useCollectionLibrary` logTag). */
-const LOG_TAG = 'bookmarks';
+/**
+ * Background-job namespace, derived from the domain Platform Descriptor's
+ * `jobPlatform` — also this hook's `useCollectionLibrary` `logTag`.
+ */
+const JOB_PLATFORM = jobPlatformForCollection('bookmarks');
 
 export interface UseBookmarksReturn {
   // Paged query results (from PGlite via bookmarks-sync-service)
@@ -74,7 +78,7 @@ export function useBookmarks(folderId: string | undefined): UseBookmarksReturn {
     // extraction and the backlog embed dispatch all live there — the daily
     // auto-sync coordinator runs the exact same function.
     syncFn: runBookmarksSync,
-    logTag: LOG_TAG,
+    logTag: JOB_PLATFORM,
     controlledFilter: folderId ?? null,
   });
 

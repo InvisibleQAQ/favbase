@@ -30,7 +30,8 @@
  * EXISTS(chunks) filter). Two rules eliminate them:
  *   1. 'chunked' is only ever written AFTER chunk rows are persisted. Items
  *      declared 'chunked' by the platform are INSERTED as 'has_content' and
- *      flipped per item in phase 5 (mirrors saveBookmarkContent's safe order).
+ *      flipped per item in phase 5 by `settleItemContent` — the one
+ *      writer of opaque-text content, shared with bookmark extraction.
  *   2. When `content` is provided, phase 5 also sweeps the platform's ghosts
  *      (state IN ('chunked','has_content') with no chunk rows): re-chunk from
  *      `textOf` or the persisted `item_contents.plainText`; when neither text
@@ -159,15 +160,15 @@ export function ghostItemCondition(db: FavbaseDb) {
  * whitespace-only text is skipped. Returns whether CHUNK ROWS were actually
  * written — `true` is the caller's license to claim 'chunked'; a chunker that
  * yields zero chunks returns `false` so no state can ever say 'chunked' over
- * an empty chunk set (the ghost-sweep convergence guarantee). Shared by the
- * ingest content step below and the bookmarks extraction pipeline
- * (`saveBookmarkContent` in lib/bookmarks/bookmarks-sync-service.ts).
+ * an empty chunk set (the ghost-sweep convergence guarantee). Only
+ * `settleItemContent` calls it — module-private so that writing content and
+ * hand-setting `content_state` cannot be paired anywhere else.
  *
  * The text it writes is never a transcript, so `subtitle_source` is written
  * as NULL in the same statement — every write of `plain_text` also writes
  * `subtitle_source`, so a stale 'asr'/'official' can never outlive its text.
  */
-export async function persistItemContent(
+async function persistItemContent(
   db: FavbaseDb,
   itemId: string,
   text: string,
@@ -184,6 +185,33 @@ export async function persistItemContent(
     });
   const inserted = await replaceItemChunks(db, itemId, chunkText(plainText));
   return inserted.length > 0;
+}
+
+/**
+ * Write one item's opaque-text content and settle its `content_state`: chunk
+ * rows written ⇒ 'chunked', anything else (blank text, a chunker that yields
+ * nothing) ⇒ 'no_content'. Returns whether chunk rows were written — `true`
+ * is the caller's license to dispatch Embed / Tag for the item.
+ *
+ * The single owner of GHOSTS rule 1 above: 'chunked' is only ever written
+ * AFTER the chunk rows are. Used by the ingest content step (new items and
+ * the ghost sweep) and by deferred extraction (`saveBookmarkContent`). It
+ * emits no domain event and dispatches no processing lane — both are the
+ * caller's. A transcript (timestamped chunks, a subtitle source, addressed by
+ * platform identity) goes through `persistExistingItemContent` instead.
+ */
+export async function settleItemContent(
+  db: FavbaseDb,
+  itemId: string,
+  text: string,
+  chunkText: (plainText: string) => ChunkInput[],
+): Promise<boolean> {
+  const written = await persistItemContent(db, itemId, text, chunkText);
+  await db
+    .update(items)
+    .set({ contentState: written ? 'chunked' : 'no_content', updatedAt: new Date() })
+    .where(eq(items.id, itemId));
+  return written;
 }
 
 /**
@@ -401,13 +429,7 @@ export async function ingestCollection(db: FavbaseDb, input: IngestInput): Promi
       platformItemId: string,
       text: string,
     ): Promise<boolean> => {
-      const written = text.trim()
-        ? await persistItemContent(db, itemId, text, chunkText)
-        : false;
-      await db
-        .update(items)
-        .set({ contentState: written ? 'chunked' : 'no_content', updatedAt: new Date() })
-        .where(eq(items.id, itemId));
+      const written = await settleItemContent(db, itemId, text, chunkText);
       if (written) contentPersisted.push(platformItemId);
       return written;
     };

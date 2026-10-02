@@ -31,7 +31,7 @@ export type { ChunkInput } from './types';
 
 export { chunkSubtitleRows, type ChunkerOptions } from './chunker';
 
-export { charSplit } from './char-split';
+export { charSplit, paragraphSplit } from './char-split';
 
 export {
   persistItemChunks,

@@ -30,7 +30,10 @@ export type BackgroundJobKind = 'sync' | 'extract' | 'embed' | 'tag' | 'transcri
 export type BackgroundJobPhase = PipelineRunPhase | 'completed' | 'failed';
 
 export interface BackgroundJob<TProgress = unknown> {
-  /** Platform key — reuses the collection library's logTag (e.g. 'zhihu-favorites'). */
+  /**
+   * Job namespace — the domain Platform Descriptor's `jobPlatform`
+   * (e.g. 'zhihu-favorites'), reached through `jobPlatformForCollection`.
+   */
   platform: string;
   kind: BackgroundJobKind;
   phase: BackgroundJobPhase;

@@ -42,7 +42,10 @@ export interface UseCollectionLibraryConfig<TItem, TFacet, TProgress> {
     onProgress: (progress: TProgress) => void,
     control: CooperativeCheckpoint,
   ) => Promise<void>;
-  /** console.error prefix, e.g. 'x-bookmarks'. */
+  /**
+   * Background-job namespace — pass `jobPlatformForCollection(platform)`
+   * (docs/32 Step 5); also the console.error prefix.
+   */
   logTag: string;
   pageSize?: number;
   /**

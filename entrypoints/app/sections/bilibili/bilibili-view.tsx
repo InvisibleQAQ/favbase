@@ -18,6 +18,7 @@ import { backgroundJobRuntime, fetchedCountProgress } from '../../hooks/pipeline
 import { useCollectionPipeline } from '../../hooks/use-collection-pipeline';
 import { useCollectionBreadcrumbs } from '../../hooks/use-collection-breadcrumbs';
 import { useJob, type BackgroundJob } from '../../hooks/background-jobs-store';
+import { jobPlatformForCollection } from '../../hooks/collection-job-platform';
 import type { CollectionSyncError } from '../../hooks/collection-sync-error';
 import {
   syncErrorMessage,
@@ -36,6 +37,7 @@ import { VideoCard } from './video-card';
 import { VideoGridSkeleton } from './video-grid-skeleton';
 
 const PLATFORM = 'bilibili';
+const JOB_PLATFORM = jobPlatformForCollection(PLATFORM);
 const SEARCH_DEBOUNCE_MS = 300;
 
 /**
@@ -193,9 +195,9 @@ function BilibiliCollectionPage({
   } = useBiliFavVideos(mediaId, keyword);
   const { getState, startTranscribe, cancelTranscribe, activeBvid } =
     useVideoTranscribe(videos);
-  const transcribeJob = useJob(PLATFORM, 'transcribe');
-  const embedJob = useJob(PLATFORM, 'embed');
-  const tagJob = useJob(PLATFORM, 'tag');
+  const transcribeJob = useJob(JOB_PLATFORM, 'transcribe');
+  const embedJob = useJob(JOB_PLATFORM, 'embed');
+  const tagJob = useJob(JOB_PLATFORM, 'tag');
   const { coverage, coverageStatus, segments } = useCollectionPipeline({
     platform: PLATFORM,
     syncing,
@@ -342,9 +344,9 @@ function BilibiliFallbackPage({
 }: BilibiliFallbackPageProps) {
   const { t } = useTranslation();
   const breadcrumbs = useCollectionBreadcrumbs(PLATFORM);
-  const transcribeJob = useJob(PLATFORM, 'transcribe');
-  const embedJob = useJob(PLATFORM, 'embed');
-  const tagJob = useJob(PLATFORM, 'tag');
+  const transcribeJob = useJob(JOB_PLATFORM, 'transcribe');
+  const embedJob = useJob(JOB_PLATFORM, 'embed');
+  const tagJob = useJob(JOB_PLATFORM, 'tag');
   const { coverage, coverageStatus, segments } = useCollectionPipeline({
     platform: PLATFORM,
     syncing,

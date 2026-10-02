@@ -48,7 +48,7 @@ import { htmlToMarkdown } from './zhihu-markdown';
 // Leaf import, never the '@/lib/embedding' barrel (its value re-export of
 // './config' reaches '@/lib/storage' at module load). Guarded by
 // tests/lib-import-smoke.test.ts.
-import { charSplit } from '@/lib/embedding/char-split';
+import { paragraphSplit } from '@/lib/embedding/char-split';
 import type { CooperativeCheckpoint } from '@/lib/collections';
 
 // Re-export what service consumers actually need: structured errors + the
@@ -218,7 +218,7 @@ export async function syncFavoritesToDb(
     // the content persist for it.
     content: {
       textOf: (pid) => markdownById.get(pid) ?? '',
-      chunk: (text) => charSplit(text, { preferParagraph: true }),
+      chunk: paragraphSplit,
     },
   });
 

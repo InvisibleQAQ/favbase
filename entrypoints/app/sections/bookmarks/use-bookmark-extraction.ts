@@ -12,7 +12,11 @@ import {
   useJob,
   type BackgroundJob,
 } from '../../hooks/background-jobs-store';
+import { jobPlatformForCollection } from '../../hooks/collection-job-platform';
 import { enqueueCollectionProcessingItem } from '../../hooks/collection-processing-jobs';
+
+const PLATFORM = 'bookmarks';
+const JOB_PLATFORM = jobPlatformForCollection(PLATFORM);
 
 export type ExtractionPhase = 'idle' | 'running' | 'pausing' | 'paused';
 
@@ -55,7 +59,7 @@ export interface BookmarkExtractionState {
  * the auto-continuation target — bookmark sync chains it after success.
  */
 export function startBookmarkExtraction(): void {
-  startJob('bookmarks', 'extract', async (setProgress, control) => {
+  startJob(JOB_PLATFORM, 'extract', async (setProgress, control) => {
     const db = await initDbProxy(); // idempotent — joins the in-flight init
     await extractPendingBookmarks({
       db,
@@ -63,8 +67,8 @@ export function startBookmarkExtraction(): void {
       onProgress: (progress) => setProgress(progress),
       onItemExtracted: (id) => {
         enqueueCollectionProcessingItem({
-          jobPlatform: 'bookmarks',
-          itemPlatform: 'bookmarks',
+          jobPlatform: JOB_PLATFORM,
+          itemPlatform: PLATFORM,
           itemId: id,
         });
       },
@@ -74,9 +78,9 @@ export function startBookmarkExtraction(): void {
 
 /** Subscribe to the extraction progress (drives the bookmarks progress panel). */
 export function useBookmarkExtraction(refreshKey?: unknown): BookmarkExtractionState {
-  const job = useJob('bookmarks', 'extract');
-  const embedJob = useJob('bookmarks', 'embed');
-  const tagJob = useJob('bookmarks', 'tag');
+  const job = useJob(JOB_PLATFORM, 'extract');
+  const embedJob = useJob(JOB_PLATFORM, 'embed');
+  const tagJob = useJob(JOB_PLATFORM, 'tag');
   const [pendingCount, setPendingCount] = useState<number | null>(null);
   const [pendingCountError, setPendingCountError] = useState<string | null>(null);
   // progress is cleared when a run settles; lastProgress keeps the final counts

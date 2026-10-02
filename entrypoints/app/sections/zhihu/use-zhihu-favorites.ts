@@ -10,11 +10,15 @@ import {
   type CollectionQueryParams,
 } from '../../hooks/use-collection-library';
 import type { BackgroundJob } from '../../hooks/background-jobs-store';
+import { jobPlatformForCollection } from '../../hooks/collection-job-platform';
 import type { CollectionSyncError } from '../../hooks/collection-sync-error';
 import { runZhihuFavoritesSync, type ZhihuSyncProgress } from './zhihu-sync-adapter';
 
-/** Job namespace key (reused as `useCollectionLibrary` logTag). */
-const LOG_TAG = 'zhihu-favorites';
+/**
+ * Background-job namespace, derived from the domain Platform Descriptor's
+ * `jobPlatform` — also this hook's `useCollectionLibrary` `logTag`.
+ */
+const JOB_PLATFORM = jobPlatformForCollection('zhihu');
 
 // Re-exported so consumers keep importing the progress type from the hook; the
 // type + mapping live in the shared Sync Adapter (single trigger surface).
@@ -75,7 +79,7 @@ export function useZhihuFavorites(): UseZhihuFavoritesReturn {
     // post-sync embed/tag dispatch live there — the daily auto-sync coordinator
     // runs the exact same function.
     syncFn: runZhihuFavoritesSync,
-    logTag: LOG_TAG,
+    logTag: JOB_PLATFORM,
   });
 
   return {

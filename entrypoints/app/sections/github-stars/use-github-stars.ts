@@ -13,11 +13,15 @@ import {
   type CollectionQueryParams,
 } from '../../hooks/use-collection-library';
 import type { BackgroundJob } from '../../hooks/background-jobs-store';
+import { jobPlatformForCollection } from '../../hooks/collection-job-platform';
 import type { CollectionSyncError } from '../../hooks/collection-sync-error';
 import { runGithubStarsSync, type SyncProgress } from './github-sync-adapter';
 
-/** Job namespace key (reused as `useCollectionLibrary` logTag). */
-const LOG_TAG = 'github-stars';
+/**
+ * Background-job namespace, derived from the domain Platform Descriptor's
+ * `jobPlatform` — also this hook's `useCollectionLibrary` `logTag`.
+ */
+const JOB_PLATFORM = jobPlatformForCollection('github');
 
 // Re-exported so the view keeps importing progress types from the hook; the
 // types + mapping live in the shared Sync Adapter (single trigger surface).
@@ -85,7 +89,7 @@ export function useGithubStars(): UseGithubStarsReturn {
     // mapping and the post-sync embed/tag dispatch all live there — the daily
     // auto-sync coordinator runs the exact same function.
     syncFn: runGithubStarsSync,
-    logTag: LOG_TAG,
+    logTag: JOB_PLATFORM,
   });
 
   const { sync: syncInner } = lib;

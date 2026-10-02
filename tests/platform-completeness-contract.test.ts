@@ -734,7 +734,199 @@ describe('platform completeness contract', () => {
         + offenders.map((item) => `- ${item}`).join('\n'),
     ).toEqual([]);
   });
+
+  it('detects hand-written job namespaces', () => {
+    // Self-check (docs/32 Step 5): the namespace rule below must catch a
+    // literal however it reaches a job-store call or a `jobPlatform` /
+    // `logTag` property — directly, through a same-module constant (or a
+    // chain of them), or as a shorthand property — and must pass a value that
+    // is derived, a parameter, or imported.
+    const offending = [
+      "startJob('p', 'sync', r);",
+      "useJob(`p`, 'embed');",
+      "const P = 'p'; useJob(P, 'tag');",
+      "const A = 'p'; const B = A; startJob(B, 'sync', r);",
+      "deps.startJob('p', 'sync', r);",
+      "({ jobPlatform: 'p' });",
+      "const P = 'p'; ({ jobPlatform: P });",
+      "const jobPlatform = 'p'; ({ jobPlatform });",
+      "const LOG_TAG = 'p'; ({ logTag: LOG_TAG });",
+      "startJob(`${x}-stars`, 'sync', r);",
+      "const P = 'p'; startJob(P!, 'sync', r);",
+      "deps['startJob']('p', 'sync', r);",
+      "({ ['jobPlatform']: 'p' });",
+      "({ [`logTag`]: 'p' });",
+    ];
+    for (const source of offending) {
+      expect(jobNamespaceOffenders(source), source).toHaveLength(1);
+    }
+
+    const passing = [
+      "const J = jobPlatformForCollection('p'); useJob(J, 'tag');",
+      "startJob(platform.jobPlatform, 'sync', r);",
+      "function f(p: string) { return useJob(p, 'sync'); }",
+      "import { J } from './j'; useJob(J, 'sync');",
+      "({ itemPlatform: 'p' });",
+      "useCollectionBreadcrumbs('p');",
+      "({ [key]: 'p' });",
+    ];
+    for (const source of passing) {
+      expect(jobNamespaceOffenders(source), source).toEqual([]);
+    }
+  });
+
+  it('derives every job namespace from the descriptor', () => {
+    // A job namespace is the descriptor's `jobPlatform`, reached through
+    // `jobPlatformForCollection`. The descriptor's value differs from the
+    // platform id for four platforms, so a copied literal splits one
+    // platform's jobs across two namespaces: the sync runs in one, the
+    // funnel's embed / tag lanes in the other, and the page and the library
+    // gate watch whichever the literal happened to name.
+    const offenders: string[] = [];
+    for (const file of appModules()) {
+      for (const { line, text } of jobNamespaceOffenders(sourceModule(file).source, file)) {
+        offenders.push(`${file}:${line}: ${text}`);
+      }
+    }
+
+    expect(
+      offenders,
+      'Job namespace written by hand — derive it with `jobPlatformForCollection(platform)`'
+        + ' (docs/32 Step 5). `jobPlatform` differs from the platform id for github / x /'
+        + ' zhihu / youtube, so a copied literal silently splits a platform\'s jobs across'
+        + ' two namespaces:\n'
+        + offenders.map((item) => `- ${item}`).join('\n'),
+    ).toEqual([]);
+  });
 });
+
+/** Job-store functions whose first argument is a background-job namespace. */
+const JOB_STORE_CALLS = new Set([
+  'startJob',
+  'useJob',
+  'getJob',
+  'pauseJob',
+  'resumeJob',
+  'trackJobRun',
+]);
+/** Object properties that carry a background-job namespace. */
+const JOB_NAMESPACE_PROPERTIES = new Set(['jobPlatform', 'logTag']);
+/** How far a chain of same-module constants is followed (`const B = A`). */
+const MAX_CONSTANT_HOPS = 5;
+
+/**
+ * Every place a background-job namespace is written by hand: the first
+ * argument of a job-store call (bare or as a member, `deps.startJob` /
+ * `deps['startJob']`), or a `jobPlatform` / `logTag` property (assigned,
+ * shorthand, or a computed literal key). Hand-written = a string or template
+ * literal (through `as` / `satisfies` / parentheses / `!`), or an identifier
+ * bound in the same module to one (followed up to `MAX_CONSTANT_HOPS`). A
+ * call, a property access, a parameter, or an import is a derived value and
+ * passes. Name-based like the meta check: a constant is resolved by its name
+ * anywhere in the module, not by scope, and a literal constant imported from
+ * another module is not followed. Not seen: a literal inside a conditional or
+ * a `+` concatenation, an aliased import of a job-store function, a getter or
+ * an assignment (`o.jobPlatform = …`), and namespace consumers outside the
+ * `JOB_STORE_CALLS` list.
+ */
+function jobNamespaceOffenders(
+  source: string,
+  fileName = 'probe.ts',
+): Array<{ line: number; text: string }> {
+  const ast = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true);
+  const offenders: Array<{ line: number; text: string }> = [];
+  const report = (node: ts.Node, text: string) => {
+    const { line } = ast.getLineAndCharacterOfPosition(node.getStart(ast));
+    offenders.push({ line: line + 1, text });
+  };
+  ast.forEachChild(function visit(node) {
+    if (ts.isCallExpression(node)) {
+      const callee = calleeName(node.expression);
+      const namespace = node.arguments[0];
+      if (callee && JOB_STORE_CALLS.has(callee) && namespace) {
+        const literal = handWrittenNamespace(ast, namespace);
+        if (literal) report(namespace, `${callee}(${literal})`);
+      }
+    }
+    if (ts.isPropertyAssignment(node)) {
+      const key = namespacePropertyKey(node.name);
+      const literal = key && JOB_NAMESPACE_PROPERTIES.has(key)
+        ? handWrittenNamespace(ast, node.initializer)
+        : undefined;
+      if (literal) report(node, `${key}: ${literal}`);
+    }
+    if (ts.isShorthandPropertyAssignment(node) && JOB_NAMESPACE_PROPERTIES.has(node.name.text)) {
+      const literal = handWrittenNamespace(ast, node.name);
+      if (literal) report(node, `${node.name.text}: ${literal}`);
+    }
+    node.forEachChild(visit);
+  });
+  return offenders;
+}
+
+/** `startJob` for `startJob(…)`, `deps.startJob(…)` and `deps['startJob'](…)`. */
+function calleeName(callee: ts.Expression): string | undefined {
+  if (ts.isIdentifier(callee)) return callee.text;
+  if (ts.isPropertyAccessExpression(callee)) return callee.name.text;
+  if (ts.isElementAccessExpression(callee) && ts.isStringLiteralLike(callee.argumentExpression)) {
+    return callee.argumentExpression.text;
+  }
+  return undefined;
+}
+
+/** A property's key, including a computed literal key (`['jobPlatform']`). */
+function namespacePropertyKey(name: ts.PropertyName): string | undefined {
+  if (!ts.isComputedPropertyName(name)) return propertyName(name);
+  const key = unwrap(name.expression);
+  return ts.isStringLiteralLike(key) ? key.text : undefined;
+}
+
+/**
+ * The literal behind a namespace expression, rendered for the failure message
+ * (`'bilibili'`, or `PLATFORM = 'bilibili'` through a constant), or
+ * `undefined` when the value is derived.
+ */
+function handWrittenNamespace(
+  ast: ts.SourceFile,
+  expression: ts.Expression,
+  hops = 0,
+): string | undefined {
+  let target = unwrap(expression);
+  while (ts.isNonNullExpression(target)) target = unwrap(target.expression);
+  if (
+    ts.isStringLiteral(target)
+    || ts.isNoSubstitutionTemplateLiteral(target)
+    || ts.isTemplateExpression(target)
+  ) {
+    return target.getText(ast);
+  }
+  if (!ts.isIdentifier(target) || hops >= MAX_CONSTANT_HOPS) return undefined;
+  const initializer = moduleVariableInitializer(ast, target.text);
+  const literal = initializer ? handWrittenNamespace(ast, initializer, hops + 1) : undefined;
+  return literal ? `${target.text} = ${literal}` : undefined;
+}
+
+/**
+ * The initializer of the first `const|let|var <name> = …` anywhere in a parsed
+ * module. Same lookup as `variableInitializer`, over a bare `ts.SourceFile`
+ * so the detector can run on a probe string as well as a repo module.
+ */
+function moduleVariableInitializer(
+  ast: ts.SourceFile,
+  name: string,
+): ts.Expression | undefined {
+  return (function find(node: ts.Node): ts.Expression | undefined {
+    if (
+      ts.isVariableDeclaration(node)
+      && ts.isIdentifier(node.name)
+      && node.name.text === name
+      && node.initializer
+    ) {
+      return node.initializer;
+    }
+    return ts.forEachChild(node, find);
+  })(ast);
+}
 
 /** Class-name suffix → the base in `lib/collections/sync-errors.ts` it must extend. */
 const PLATFORM_ERROR_BASES: ReadonlyArray<{ suffix: RegExp; base: string }> = [

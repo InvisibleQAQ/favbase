@@ -18,7 +18,7 @@
  * Content pipeline: new bookmarks land as contentState='pending' and are
  * drained by the extraction worker (./bookmark-content-service.ts) through the
  * queue/update methods at the bottom of this file — fetch page → defuddle →
- * Markdown → item_contents + charSplit chunks → 'chunked', or 'no_content' on
+ * Markdown → item_contents + paragraphSplit chunks → 'chunked', or 'no_content' on
  * permanent failure. Existing content without chunks is rebuilt from
  * item_contents without another fetch. contentState UPDATEs do not violate
  * the insert-only ADR
@@ -36,11 +36,11 @@ import { items } from '@/lib/database/entities/items';
 import { itemChunks } from '@/lib/database/entities/item-chunks';
 import { itemContents } from '@/lib/database/entities/item-contents';
 import { itemSources } from '@/lib/database/entities/item-sources';
-import { ingestCollection, persistItemContent } from '@/lib/ingest/ingest';
+import { ingestCollection, settleItemContent } from '@/lib/ingest/ingest';
 // Leaf import, never the '@/lib/embedding' barrel (its value re-export of
 // './config' reaches '@/lib/storage' at module load). Guarded by
 // tests/lib-import-smoke.test.ts.
-import { charSplit } from '@/lib/embedding/char-split';
+import { paragraphSplit } from '@/lib/embedding/char-split';
 import { readBookmarkTree, type BookmarkTree } from './bookmarks-api';
 import type { CooperativeCheckpoint } from '@/lib/collections';
 
@@ -337,26 +337,20 @@ export async function markItemNoContent(itemId: string, db: FavbaseDb = getDb())
 }
 
 /**
- * Persist extracted Markdown (item_contents + charSplit chunks via the shared
- * two-phase helper — runs OUTSIDE any transaction) and advance contentState to
- * 'chunked'. Whitespace-only markdown (the caller's threshold guard should
- * prevent it) degrades to 'no_content' — a 'chunked' state without chunks
- * would lie. Returns whether chunk rows were durably inserted; only `true`
- * licenses downstream Embed/Tag enqueue.
+ * Persist extracted Markdown and settle contentState through the shared
+ * `settleItemContent` (lib/ingest — item_contents + `paragraphSplit` chunks,
+ * OUTSIDE any transaction; 'chunked' only once chunk rows exist, otherwise
+ * 'no_content'). This wrapper only binds the chunker and the default db.
+ * Whitespace-only markdown (the caller's threshold guard should prevent it)
+ * degrades to 'no_content'. Returns whether chunk rows were durably inserted;
+ * only `true` licenses downstream Embed/Tag enqueue.
  */
 export async function saveBookmarkContent(
   itemId: string,
   markdown: string,
   db: FavbaseDb = getDb(),
 ): Promise<boolean> {
-  const written = await persistItemContent(db, itemId, markdown, (text) =>
-    charSplit(text, { preferParagraph: true }),
-  );
-  await db
-    .update(items)
-    .set({ contentState: written ? 'chunked' : 'no_content', updatedAt: new Date() })
-    .where(eq(items.id, itemId));
-  return written;
+  return settleItemContent(db, itemId, markdown, paragraphSplit);
 }
 
 // ---------------------------------------------------------------------------

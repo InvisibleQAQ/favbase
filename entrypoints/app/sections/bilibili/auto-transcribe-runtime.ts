@@ -17,9 +17,10 @@ import { isProcessableVideo } from '@/lib/bilibili/video-eligibility';
 import type { CooperativeCheckpoint } from '@/lib/collections';
 
 import { startJob } from '../../hooks/background-jobs-store';
+import { jobPlatformForCollection } from '../../hooks/collection-job-platform';
 import { enqueueBiliCollectionProcessing } from './bilibili-processing-adapter';
 
-const PLATFORM = 'bilibili';
+const JOB_PLATFORM = jobPlatformForCollection('bilibili');
 
 export const biliAutoTranscribePipeline = new AutoTranscribePipeline(
   createBiliAutoTranscribeAdapter({ startProcessing: enqueueBiliCollectionProcessing }),
@@ -41,7 +42,7 @@ async function dispatchTranscriptSession(session: AutoTranscribeSession): Promis
   // 'queue' parks the session behind whatever holds the shared
   // 'bilibili:transcribe' key (a manual per-video run) and starts it at
   // settlement — the store owns the redispatch that used to be a loop here.
-  await startJob(PLATFORM, 'transcribe', async (setProgress, control) => {
+  await startJob(JOB_PLATFORM, 'transcribe', async (setProgress, control) => {
     const publishProgress = (): void => {
       const state = biliAutoTranscribePipeline.getSnapshot();
       if (state.totalVideos > 0) {

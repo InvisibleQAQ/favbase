@@ -15,13 +15,17 @@ import {
   type CollectionQueryParams,
 } from '../../hooks/use-collection-library';
 import type { BackgroundJob } from '../../hooks/background-jobs-store';
+import { jobPlatformForCollection } from '../../hooks/collection-job-platform';
 import type { CollectionSyncError } from '../../hooks/collection-sync-error';
 import { useCountdown } from '../../hooks/use-countdown';
 import { remainingCooldown } from './cooldown';
 import { runXBookmarksSync, type XSyncProgress } from './x-sync-adapter';
 
-/** Job namespace key (reused as `useCollectionLibrary` logTag). */
-const LOG_TAG = 'x-bookmarks';
+/**
+ * Background-job namespace, derived from the domain Platform Descriptor's
+ * `jobPlatform` — also this hook's `useCollectionLibrary` `logTag`.
+ */
+const JOB_PLATFORM = jobPlatformForCollection('x');
 
 // Re-exported so consumers keep importing the progress type from the hook; the
 // type + mapping live in the shared Sync Adapter (single trigger surface).
@@ -87,7 +91,7 @@ export function useXBookmarks(): UseXBookmarksReturn {
     // dispatch and the Platform Sync Record all live there; the daily
     // auto-sync coordinator runs the exact same function.
     syncFn: runXBookmarksSync,
-    logTag: LOG_TAG,
+    logTag: JOB_PLATFORM,
   });
 
   // "N new this run" = the Platform Sync Record's `lastInserted`, written with
@@ -102,7 +106,7 @@ export function useXBookmarks(): UseXBookmarksReturn {
     (async () => {
       const record = await getPlatformSyncRecord('x', await initDbProxy());
       if (!cancelled) setLastInserted(record?.lastInserted ?? null);
-    })().catch((err) => console.error(`[${LOG_TAG}] sync record load failed:`, err));
+    })().catch((err) => console.error(`[${JOB_PLATFORM}] sync record load failed:`, err));
     return () => {
       cancelled = true;
     };

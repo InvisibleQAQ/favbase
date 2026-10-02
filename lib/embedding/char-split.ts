@@ -64,3 +64,13 @@ export function charSplit(
   if (rest) chunks.push({ text: rest });
   return chunks;
 }
+
+/**
+ * The paragraph-first preset: `charSplit` with `preferParagraph: true`. For
+ * text with paragraph structure — Markdown bodies, READMEs, zhihu answers,
+ * YouTube descriptions, extracted web pages. Tweet text deliberately does not
+ * use it: X splits on sentence ends only (`preferParagraph: false`).
+ */
+export function paragraphSplit(text: string): ChunkInput[] {
+  return charSplit(text, { preferParagraph: true });
+}

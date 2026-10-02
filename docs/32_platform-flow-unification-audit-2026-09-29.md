@@ -1,6 +1,6 @@
 # 32 跨平台流程统一度审计与分步整改（2026-09-29）
 
-> 状态：**审计完成；D1、D2 已决（2026-09-29，§5.1、§5.2）；Step 1 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 1 落地记录）；D6 已决（用户 2026-09-30，按推荐）；Step 2 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 2 落地记录）；Step 3 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 3 落地记录）；Step 4 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 4 落地记录）；Step 5–9 均未实施**。执行任一 Step 前先读 §2 否决清单与 §5 对应决策；一次对话只做一个 Step。
+> 状态：**审计完成；D1、D2 已决（2026-09-29，§5.1、§5.2）；Step 1 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 1 落地记录）；D6 已决（用户 2026-09-30，按推荐）；Step 2 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 2 落地记录）；Step 3 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 3 落地记录）；Step 4 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 4 落地记录）；Step 5 已落地 2026-10-01（代码 + 单测；运行时验证待人工，见 §6 Step 5 落地记录）；Step 6–9 均未实施**。执行任一 Step 前先读 §2 否决清单与 §5 对应决策；一次对话只做一个 Step。
 >
 > 起因：用户观察「接入新平台时，数据处理、备份、展示都高度统一，真正不同的只有数据获取和风控」，要求找出仍未统一的流程并给出分步整改。
 >
@@ -165,7 +165,7 @@
   - `copy={{…}}` 块里有四个键在 7 处调用点（五个 view + B站两处）恒为同一常量：`zhihu-view.tsx:154-166` 与 `youtube-view.tsx:177-189` 替换平台前缀后**逐行相同**（diff 验证）。
   - `EmptyLibraryState` 三份（`github-stars-view.tsx:75`、`zhihu-view.tsx:87`、`youtube-view.tsx:97`，x 另有一份 `x-view.tsx:93`）；`NotLoggedInState` 两份（`x-view.tsx:74`、`zhihu-view.tsx:69`）；打开站点按钮两份（`x-view.tsx:56`、`zhihu-view.tsx:51`）。
 - 五个数据 hook（115–163 行）60–70% 是把 `useCollectionLibrary` 的通用字段改名（`repos: lib.items`、`language: lib.filter`…，约 25 行 / 个）。docs/15 当年的目标是「各平台 hook 退化为 ~40 行薄 adapter」（`docs/15:55`），没有兑现。
-- `LOG_TAG` 手写五份（`use-github-stars.ts:21` 等），与 adapter 里 `jobPlatformForCollection` 派生的值是两个事实源，今天恰好相同。
+- `LOG_TAG` 手写五份（`use-github-stars.ts:21` 等），与 adapter 里 `jobPlatformForCollection` 派生的值是两个事实源，今天恰好相同。（**已于 Step 5 改派生**，2026-10-01，用户决定从 Step 6 提前；它是 job 命名空间而不只是日志前缀，见中-6 勘误②。）
 - `SEARCH_DEBOUNCE_MS = 300` 三份：`hooks/use-collection-library.ts:9`、`sections/bilibili/bilibili-view.tsx:33`、`sections/collections/use-collections.ts:20`。
 - i18n 第一类同文键 30 个：`*.lastSynced`「上次同步 {{time}}」×6、`*.syncFailed`「同步失败: {{error}}」×6（`lib/i18n/locales/zh-CN.ts:501-605`，已 grep 验证）、`showMore*` ×6、`showLess*` ×6、`all*` ×4（`allCollections.*` 与 `tags.*` 另有两组同文的展开/收起）。docs/16:11 把 docs/15 LOW-7（`common.*` i18n）记为「已修复」，实际只迁了 `retry` / `loadFailed`，**此记录需勘误**。
 - B站时间用 `toLocaleTimeString()`（`bilibili-view.tsx:204`），其余五平台用 `formatDateTime`。
@@ -184,6 +184,12 @@
 - spec 没有「延迟正文」一节：下一个需要转录或网页提取的平台，只能去读 bookmarks 或 bilibili 的源码来抄。
 
 **方案**：只收契约与已经重复的零件，**不统一面板**（两个面板的差异来自上面三点本质差异）；保留 `'extract'` / `'transcribe'` 两个 job kind。
+
+**勘误（2026-10-01，Step 5 落地时）**：
+
+1. **只按字面量判定的守卫只会红 2 个文件**（`use-video-transcribe.ts` 与 `use-bookmark-extraction.ts`，共 6 处）。上面列的另外 4 个文件经模块常量 `const PLATFORM = 'bilibili'` 传入，字面量不在调用点上，所以守卫必须解析同模块常量。上面的行号也已漂移，以 Step 5 落地记录的先红清单为准。
+2. **`LOG_TAG` 就是 job 命名空间**，不只是日志前缀（中-5 记的是后者）。`useCollectionLibrary` 拿 `logTag` 做 `useJob(logTag, 'sync'|'embed'|'tag')` 与 `startJob(logTag, 'sync', …)`（`use-collection-library.ts:148,159,160,274`；HEAD `65e7e02` 时是 `:145,156,157,271`，Step 5 在 `:45` 的注释多了三行），github / x / zhihu / youtube 又恰是 `jobPlatform ≠ 平台 id` 的四个。新平台照抄 `const LOG_TAG = '<id>'`、而 descriptor 写的是 `'<id>-items'` 时：手动同步跑在 `'<id>'`，funnel 派发的 embed / tag lane 在 `'<id>-items'`，页面的 `embedJob` / `tagJob` 永远是 null，知识库闸门暂停的也是另一个命名空间。Step 5 的判据「零字面 job 命名空间」与 Step 6 的「`LOG_TAG` 改派生」因此互相矛盾，**用户 2026-10-01 决定提前到 Step 5**（先例：Step 1 D-g）。
+3. **preset 在 `lib/embedding/char-split.ts`，不在 `chunker`**。`charSplit` 住在 `char-split.ts`；`chunker.ts` 是字幕行打包器。Step 5 文件清单里的「`lib/embedding/chunker`」是笔误。
 
 ### 低-1 查询 WHERE 片段
 
@@ -868,6 +874,157 @@
 - **回滚**：revert。
 - **判据**：`sections/**` 零字面 job 命名空间；`persistItemContent` + 手写 `contentState` 更新的组合全仓只在 `settleItemContent` 里出现。
 
+#### Step 5 落地记录（2026-10-01）
+
+代码与单测已落地；上面「验证」（书签提取、B站手动转录各跑一条，看 pipeline strip 与 job 徽标）需要浏览器，**待人工**。判据两条都成立：
+
+- `entrypoints/app/**`（比原写的 `sections/**` 宽）零手写 job 命名空间，由新守卫锁住；
+- `persistItemContent` 全仓只剩 `lib/ingest/ingest.ts` 里的私有定义与 `settleItemContent` 这一个调用点；`contentState: written ? 'chunked' : 'no_content'` 全仓只剩 `settleItemContent` 一处。
+
+**落在哪**：
+
+- **job 命名空间改派生**：一律 `import { jobPlatformForCollection } from '../../hooks/collection-job-platform'`（`sections/` → `hooks/` 是允许方向）。
+  - 平台 id 既当条目平台、又当 job 命名空间用的四个文件，保留 `const PLATFORM = '<id>'`（面包屑、pipeline、scaffold、`getPlatformLastSyncedAt`、`itemPlatform` 继续用它），新增模块级 `const JOB_PLATFORM = jobPlatformForCollection(PLATFORM)`：`bilibili-view.tsx`、`use-bili-fav-folders.ts`、`bilibili-processing-adapter.ts`、`use-bookmark-extraction.ts`（后者原来没有 `PLATFORM`，新建）。
+  - 只当命名空间用的两个文件只有 `JOB_PLATFORM = jobPlatformForCollection('bilibili')`：`auto-transcribe-runtime.ts`（原 `PLATFORM` 只有 `:44` 一处使用，删除）、`use-video-transcribe.ts`。
+  - 五个平铺 hook：`const LOG_TAG = '<namespace>'` → `const JOB_PLATFORM = jobPlatformForCollection('<平台 id>')`，`logTag: JOB_PLATFORM`。X hook 的 `console.error` 前缀跟着改名，输出仍是 `[x-bookmarks]`。**键名 `logTag` 不改**（Step 7 的改名层）。
+  - 注释：`hooks/use-collection-library.ts` 的 `logTag` 注释改成「Background-job namespace — pass `jobPlatformForCollection(platform)`; also the console.error prefix」，`hooks/background-jobs-store.ts` 的 `platform` 字段注释改指 descriptor 的 `jobPlatform`。
+- **`lib/ingest/ingest.ts`**：
+  - 第 5 阶段的私有闭包 `settleContent` 提成导出的 `settleItemContent(db, itemId, text, chunkText) → Promise<boolean>`。它写正文与 chunk 行，写成则 `'chunked'`，否则 `'no_content'`，返回是否写成。
+  - 原闭包里的 `text.trim() ? … : false` 预判删掉：`persistItemContent` 对空白文本本来就返回 `false` 且不碰数据库，两者等价。
+  - ingest 的闭包缩成「调 `settleItemContent`，写成则 push 进 `contentPersisted`」。5b 仍读它的返回值算 `healedItemIds`。
+  - `persistItemContent` 去掉 `export`。doc comment 改成「Only `settleItemContent` calls it」，文件头 GHOSTS 第 1 条改指 `settleItemContent`。
+  - `persistExistingItemContent` 不动（B站转录：按平台身份寻址、带时间戳的 prepared chunks、要写 `subtitle_source`、先 `has_content` 后 `chunked`）。
+- **`lib/embedding/char-split.ts`**：新增导出 `paragraphSplit(text)` = `charSplit(text, { preferParagraph: true })`，barrel `lib/embedding/index.ts` 在 `charSplit` 旁多 re-export 它。github / zhihu / youtube 三个 sync-service 的 `chunk:` 改成 `chunk: paragraphSplit`，import 换成只 import `paragraphSplit`（leaf）。x 的 `preferParagraph: false` 不动。
+- **`saveBookmarkContent`**：签名不变，函数体一行 `return settleItemContent(db, itemId, markdown, paragraphSplit)`；`persistItemContent` 与 `charSplit` 的 import 删除，`items` / `eq` 仍被 `markItemNoContent` 用着。
+- **守卫** `tests/platform-completeness-contract.test.ts` 新增两个独立 `it`：探测器自检「detects hand-written job namespaces」与真实扫描「derives every job namespace from the descriptor」。
+  - 纯函数 `jobNamespaceOffenders(source, fileName)` 自己 `ts.createSourceFile`。它检查两类位置（下面是实施时的形状；trellis-check 又补了 `deps['startJob']` 下标调用、计算字面量键与 `!` 包裹，见复核）：job-store 调用（callee 是裸名或属性访问末段，属于 `startJob` / `useJob` / `getJob` / `pauseJob` / `resumeJob` / `trackJobRun`）的第一参；名为 `jobPlatform` / `logTag` 的 `PropertyAssignment` 与 `ShorthandPropertyAssignment`。
+  - 「手写」的判定：`unwrap` 后是字符串 / 无替换模板 / 模板表达式，或是标识符，且其同模块 `VariableDeclaration` 的初始值递归满足本判定（最多 5 跳）。调用、属性访问、参数、import 都放过。
+  - 同模块常量的查找另写了一个收 `ts.SourceFile` 的 `moduleVariableInitializer`；原 `variableInitializer` 签名没动。
+  - 扫描范围是 `appModules()`，与 funnel 守卫同一个 helper。
+
+**先红后绿**：
+
+- **守卫**：在改任何生产代码之前、只写好两个 `it` 时跑。真实扫描红的恰好是 PRD 表里 **11 个文件 21 处**，行号逐条相同，没有 `sections/**` 之外的文件；自检同一次跑是绿的（`1 failed | 6 passed`）。改完 B 节后转绿。红态原样：
+  ```
+  AssertionError: Job namespace written by hand — derive it with `jobPlatformForCollection(platform)` (docs/32 Step 5). `jobPlatform` differs from the platform id for github / x / zhihu / youtube, so a copied literal silently splits a platform's jobs across two namespaces:
+  - entrypoints/app/sections/bilibili/auto-transcribe-runtime.ts:44: startJob(PLATFORM = 'bilibili')
+  - entrypoints/app/sections/bilibili/bilibili-processing-adapter.ts:9: jobPlatform: PLATFORM = 'bilibili'
+  - entrypoints/app/sections/bilibili/bilibili-view.tsx:196: useJob(PLATFORM = 'bilibili')
+  - entrypoints/app/sections/bilibili/bilibili-view.tsx:197: useJob(PLATFORM = 'bilibili')
+  - entrypoints/app/sections/bilibili/bilibili-view.tsx:198: useJob(PLATFORM = 'bilibili')
+  - entrypoints/app/sections/bilibili/bilibili-view.tsx:345: useJob(PLATFORM = 'bilibili')
+  - entrypoints/app/sections/bilibili/bilibili-view.tsx:346: useJob(PLATFORM = 'bilibili')
+  - entrypoints/app/sections/bilibili/bilibili-view.tsx:347: useJob(PLATFORM = 'bilibili')
+  - entrypoints/app/sections/bilibili/use-bili-fav-folders.ts:42: useJob(PLATFORM = 'bilibili')
+  - entrypoints/app/sections/bilibili/use-bili-fav-folders.ts:64: startJob(PLATFORM = 'bilibili')
+  - entrypoints/app/sections/bilibili/use-video-transcribe.ts:20: startJob('bilibili')
+  - entrypoints/app/sections/bookmarks/use-bookmark-extraction.ts:58: startJob('bookmarks')
+  - entrypoints/app/sections/bookmarks/use-bookmark-extraction.ts:66: jobPlatform: 'bookmarks'
+  - entrypoints/app/sections/bookmarks/use-bookmark-extraction.ts:77: useJob('bookmarks')
+  - entrypoints/app/sections/bookmarks/use-bookmark-extraction.ts:78: useJob('bookmarks')
+  - entrypoints/app/sections/bookmarks/use-bookmark-extraction.ts:79: useJob('bookmarks')
+  - entrypoints/app/sections/bookmarks/use-bookmarks.ts:77: logTag: LOG_TAG = 'bookmarks'
+  - entrypoints/app/sections/github-stars/use-github-stars.ts:88: logTag: LOG_TAG = 'github-stars'
+  - entrypoints/app/sections/x/use-x-bookmarks.ts:90: logTag: LOG_TAG = 'x-bookmarks'
+  - entrypoints/app/sections/youtube/use-youtube-playlists.ts:89: logTag: LOG_TAG = 'youtube-playlists'
+  - entrypoints/app/sections/zhihu/use-zhihu-favorites.ts:78: logTag: LOG_TAG = 'zhihu-favorites': expected [ …(21) ] to deeply equal []
+  ```
+  `hooks/` 一条都没红：`use-collection-library.ts` 的 `logTag` 是从 `config` 解构出来的（`ObjectBindingPattern`，不是标识符命名的 `VariableDeclaration`）；`collection-processing-jobs.ts` 里的 `jobPlatform` 都是参数；`library-gate.ts` 的 `const jobPlatform = jobPlatformForCollection(platform)` 初始值是调用。三者按规则放过。
+- **探测器自检**（下面是实施时的清单；trellis-check 后命中 14 条、放过 7 条，见下方复核）：命中表 10 条各恰好 1 条：直接字面量、无替换模板、同模块常量、两跳常量链、`deps.startJob`、`jobPlatform` 字面量 / 常量 / shorthand、`logTag` 常量、模板表达式。放过表 6 条零条：派生常量、属性访问、参数、import、`itemPlatform`、`useCollectionBreadcrumbs`。
+- **证伪**：把 `bilibili-view.tsx:200` 的 `useJob(JOB_PLATFORM, 'tag')` 临时换回 `PLATFORM`，真实扫描恰好红一条：`- entrypoints/app/sections/bilibili/bilibili-view.tsx:200: useJob(PLATFORM = 'bilibili')`（`1 failed | 6 passed`）。恢复后 `7 passed`，`git diff` 与证伪前相同。
+- **只按字面量判定会漏多少**：上表里调用点直接写字面量的只有 `use-video-transcribe.ts` 与 `use-bookmark-extraction.ts` 两个文件 6 处。其余 15 处经模块常量传入，所以规则必须解析同模块常量（§3 中-6 勘误①）。
+- **新增的 ingest / char-split 用例**：没做先红。`settleItemContent` 与 `paragraphSplit` 在 HEAD 不存在，旧代码上这几例是 import 失败，不是断言红，证明不了什么。它们锁的是新 API 的语义：
+  - `settleItemContent` 有文本 → `true` + `'chunked'` + chunk 行 = chunker 输出；
+  - 空白文本 → `false` + `'no_content'` + `item_contents` 无行；
+  - 覆盖转录正文时 `subtitle_source` 清成 NULL，且状态是 `'chunked'`；
+  - `paragraphSplit` 与 `charSplit(…, { preferParagraph: true })` 深相等，且与 `preferParagraph: false` **不**相等——所以用的那段文本确实能区分两种模式。
+- **trellis-check 复核（2026-10-01）**：
+  - **独立复现了先红**：把 11 个生产文件换回 HEAD 版（`git show HEAD:<path>`），只跑命名空间两例：自检绿，真实扫描恰好红上面 21 条，11 个文件、行号逐条相同；恢复后 `cmp` 确认 11 个文件与改动版逐字节一致。守卫补完下面三处后又复现一次，仍恰好这 21 条、行号相同，恢复后再次 `cmp` 11/11。
+  - **独立复现了证伪**：`bilibili-view.tsx:200` 换回 `PLATFORM`，整份契约测试 `1 failed | 6 passed`，唯一一条正是 `bilibili-view.tsx:200: useJob(PLATFORM = 'bilibili')`；恢复后 `cmp` 一致。
+  - **守卫探针**（临时在契约测试里加一例打印探测器结果，跑完删掉，删后 `cmp` 与探针前一致）：
+    - 任务点名的 9 种写法，原规则命中 7 种：`` startJob(`b` as const, …) ``、`const P = 'b' as const`、`const P = ('b')`、`let P = 'b'`、`{ ...{ jobPlatform: 'b' } }`（内层对象照样被遍历）、`useJob<Foo>('b', …)`、`` startJob(`${'b'}`, …) ``。
+    - 漏了 2 种：`startJob(P!, …)`（非空断言不在 `unwrap` 里）、`{ ['jobPlatform']: 'b' }`（计算键，`propertyName` 只认标识符与字符串键；`` [`jobPlatform`] `` 同样漏）。
+    - 另试的写法里，`startJob?.('b')`、`{ 'jobPlatform': 'b' }`、`useJob(ns satisfies string)` 命中；`deps['startJob']('b')` 漏（callee 只认标识符与属性访问）。
+  - **守卫补了三处**：
+    - `handWrittenNamespace` 剥掉 `unwrap` 后再循环剥 `!`（只在本探测器里做，共享的 `unwrap` 不动——它还服务前面的注册表解析）；
+    - 新 helper `namespacePropertyKey`：计算键的表达式是字符串 / 无替换模板时按该名字算；
+    - 新 helper `calleeName`：在裸名、属性访问之外再认 `deps['startJob']` 这种字面量下标。
+    - 自检命中表从 10 条扩到 14 条（`P!`、`deps['startJob']`、`['jobPlatform']`、`` [`logTag`] ``），放过表从 6 条扩到 7 条（`({ [key]: 'p' })`：计算键不是字面量就不算）。改后整份契约测试 7 例绿，真实扫描仍是零条。探测器 doc comment 同步写了新覆盖面与「Not seen」清单；spec §2 的描述粒度够，不用改；根 `CLAUDE.md` 的守卫描述同步补了这三处与下面的缺口。
+  - **仍然是已知缺口，不修**（今天树里都没有这种写法；补任何一种都要改「手写」的定义或追 import）：
+    - 条件与拼接：`startJob(c ? 'a' : 'b', …)`、`startJob('b' + x, …)`；
+    - job-store 函数的别名 import（`import { startJob as sj }`）、getter（`get jobPlatform() { return 'b'; }`）、赋值（`o.jobPlatform = 'b'`）、解构出来的常量（`const { P } = { P: 'b' }`）、经常量的计算键（`const k = 'jobPlatform'; ({ [k]: 'b' })`）；
+    - callee 是封闭清单：`isLibraryPaused(jobPlatform)`、`collectionPlatformForJob`、`backgroundJobPlatformLabel` 也收命名空间，不在 `JOB_STORE_CALLS` 里（今天没有字面量调用点，`isLibraryPaused` 只被当 reader 传给 `setJobGate`）；
+    - D-b 记下的两条（跨模块字面量常量不追、同名参数被当成模块常量误报）实测成立。
+  - **语义复核**：
+    - `settleItemContent` 与旧 ingest 闭包等价：被删的 `text.trim() ? … : false` 与 `persistItemContent` 开头的 `trim` + `return false` 同义，空白文本两边都不碰 `item_contents`、都只写一条 `'no_content'`；与旧 `saveBookmarkContent` 逐语句相同（同一个 `update … set { contentState, updatedAt }`）。phase 5 的 5a / 5b、`contentPersisted`、`healedItemIds` 那几段除闭包体外一行没动。
+    - `persistItemContent` 无 `export`；`lib` / `entrypoints` / `tests` / `packages` / `scripts` / `spikes` 里（含测试）只剩 `ingest.ts` 的定义与 `settleItemContent` 里的调用。`item_contents` 的 insert 全仓只在 `lib/ingest/ingest.ts`。
+    - 六个派生值逐个对照 `platform-descriptor.ts` 的 `jobPlatform`，与 HEAD 字面量相同；`PLATFORM` 仍只用于条目平台的位置；`auto-transcribe-runtime.ts` 删掉的 `PLATFORM` 没有别的引用；代码里 `LOG_TAG` 零残留。
+    - `paragraphSplit` 恰好四处，x 的 lambda 没动，四个 lib 文件都 leaf import，无闲置 `charSplit` import。
+    - 测试 diff 只有三个文件：`char-split.test.ts` 15 增 1 删（删的那行是 import 行加了 `paragraphSplit`，原有用例没动）、`ingest.test.ts` 40 增 3 删（import、标题、调用）、契约测试。
+  - **修了一处测试标题**：新增例原名「settleItemContent writes chunk rows before claiming chunked」，但它只断言终态，证明不了先后顺序，改成「settleItemContent writes the chunker output and settles at chunked」。断言没动。
+  - **spec §4.4 补了四处**（新平台照抄时会漏的契约，不读源码看不出来）：
+    - 模板第一条补：funnel 闭包返回 `newItemIds: []`——pending 条目还没有正文，由 worker 逐条派发；funnel 的 backlog-only embed lane 仍会捡起中断留下的 `'chunked'`（`platform-sync.ts` 的 `PlatformSyncOutcome.newItemIds` 注释、`collection-processing-jobs.ts` 的「empty → 不派 tag」）；
+    - `settleItemContent` 不发领域事件，worker 对每条落定的条目发 `item-content-updated`（`bookmark-content-service.ts:142`、`transcribe-utils.ts:78`），否则 coverage 与卡片不刷新；B站变体同样「写成 → 事件 → 逐条派发」；
+    - B站代码清单补 `lib/bilibili/transcribe-utils.ts`（persist → 事件 → `startProcessing` 的顺序住在那里）；
+    - 「Which writer」末句原写模块私有让那种组合「cannot be written outside `lib/ingest`」，说过头了（谁都能直接对 `item_contents` 写 drizzle），改成「outside `lib/ingest` there is no exported piece to build that pairing from」。
+  - **本记录与 §3 的勘误**（已就地改正）：§3 中-6 勘误②引用的 `use-collection-library.ts:145,156,157,271` 是 HEAD 行号；Step 5 在 `:45` 的注释多了三行，现在是 `:148,159,160,274`。其余 `file:line` 逐条回查无误：`auto-transcribe-runtime.test.ts:153`、`use-bookmark-extraction.test.ts:87-88`、`bilibili-processing-adapter.test.ts:19-20`、`transcription-coordinator.ts:79`、`github-sync-service.ts:18`、`bookmarks-sync-service.ts:21`、`bilibili-view.tsx:200`；`bili-sync-service.test.ts` 对 `@/lib/ingest/ingest` 的 mock 确实只导出 `persistExistingItemContent`。
+  - **重跑**（在上面这些改动之后）：
+    - 聚焦（PRD 命令）36 个文件 291 例绿；
+    - `pnpm compile` 绿；
+    - `pnpm test` 一次全绿：主仓库 210 个文件 1694 例，`packages/favbase` 15 个文件 263 例，没遇到超时（自检扩展都在同一个 `it` 里，例数不变）；
+    - `pnpm build` 的 bundle-contract 行是 `14 modules / 947838 bytes`；manifest 的 sha256 是 `053dd7bd…fde32ae5`，与 Step 4 相同。
+    - 运行时验证（书签提取、B站手动转录各跑一条）仍**待人工**。
+
+**默认决定**（PRD 已定，用户未逐条过目）：
+
+- **D-a 守卫范围 `entrypoints/app/**`**，比 Step 5 原文的 `sections/**` 宽；`hooks/` 今天全是派生，扩大范围零成本，以后也不会漏。
+- **D-b 守卫解析同模块常量**（最多 5 跳），不追 import。按名字在整个模块里找 `VariableDeclaration`，不按作用域。已知缺口：
+  - 从别的模块 import 进来的字面量常量（例如 `export const NS = 'p'` 再 import）不追，今天没有这种写法；
+  - 同名的参数与模块常量并存时会误报（参数会被当成那个常量），今天也没有。
+- **D-c 守卫同时查 `logTag:`**（用户决定提前 `LOG_TAG`，§3 中-6 勘误②）；`logTag` 键名不改。
+- **D-d 不改 `enqueueCollectionProcessingItem` / `startCollectionProcessingJobs` 的签名**（不让它们内部派生 `jobPlatform`）。**未做**，理由：`collection-processing-jobs.test.ts` 有 8 处用任意命名空间调用它们，改签名属 D5 之外的 churn；调用方传的值已由守卫锁住，派生在调用方做和在函数里做，结果一样。
+- **D-e `persistItemContent` 去 `export`**，靠模块边界兑现判据，不另加守卫。
+- **D-f preset 名 `paragraphSplit`**：按行为（段落优先）命名，因为 YouTube description 不是 Markdown；写成 `function` 声明（PRD 允许 `const` 箭头或等价的 `function`）。
+- **D-g `saveBookmarkContent` 保留为薄包装**：`bookmark-content-service.ts` 调它，绑定 preset 与默认 db 是它存在的理由。
+- **D-h spec 新节放 §4.4**，原 §4.4 Tests 顺延 §4.5：全仓 grep `§4.4` / `§4.5` 零交叉引用，插入不打断任何现有引用。
+- **守卫报告的行**：调用报**第一参**所在的行，属性报属性节点所在的行。今天每处都与调用 / 属性起始同一行；多行调用下前者更准（同 Step 3 D-e）。
+
+**与 PRD 的偏离**：
+
+1. **spec 多改了两处 PRD G 节没点名的地方**：
+   - §4.2 的「Chunking: `charSplit` …」一行改成先推荐 `paragraphSplit`（`chunk: paragraphSplit`），句末切的推文仍用 `charSplit`。不改的话，接新平台的人照 §4.2 会再写出第五份同形 lambda。
+   - §4.3 的 `'pending'` 条加了「(§4.4)」交叉引用。PRD 只在「挂到 §10 之后」那个备选方案里要求它；放 §4.4 时它同样有用。
+2. **spec §2 原文「a hand-written `jobPlatform`」补成「… in the auto-sync registry」**，与新加的命名空间守卫区分开。PRD 说「若只指 auto-sync registry，保留那半句」——它确实只指那一项，保留并写明。
+3. **`paragraphSplit` 用例多一条 `not.toEqual(charSplit(…, { preferParagraph: false }))`**：PRD 只要求与 `preferParagraph: true` 深相等。只断言相等的话，一段两种模式切法相同的文本也能过；加上这条，证明这段文本确实能区分两种模式。
+4. **两个 sync-service 的头注释顺手改了**：`github-sync-service.ts:18` 与 `bookmarks-sync-service.ts:21` 原写「`charSplit` chunks」，改成 `paragraphSplit`。只动注释。
+5. **`entrypoints/app/hooks/CLAUDE.md` 的 `collection-job-platform.ts` 条目也补了一句**：消费方从「`library-gate` 与 provider 恢复门面」扩到 funnel 与 `sections/**` 的全部命名空间。PRD G.5 只点了 `useCollectionLibrary` 的 `logTag`。
+6. **四个平铺平台 section 的 `CLAUDE.md` 没改**：PRD G.5 的条件是「如有提到 `LOG_TAG` 的地方」，逐个 grep 都没有。x / zhihu 文中的 `x-bookmarks:embed|tag`、`zhihu-favorites:embed|tag` 是运行时键的描述，值没变。约定统一写进了 `hooks/CLAUDE.md` 消费方那一行。
+7. **`lib/bilibili/transcription-coordinator.ts:79` 注释里的 `startJob('bilibili', 'transcribe', …)` 字样没改**：lib 层描述 app 接线的注释，不在守卫范围，PRD 写「不改也行」。
+8. **多改了四个平台 lib 目录的 `CLAUDE.md`**：`lib/github`、`lib/zhihu`、`lib/youtube` 三处原写「`charSplit(text, { preferParagraph: true })` 切块」，改成 `paragraphSplit`（并注明它等于前者）；`lib/bookmarks/CLAUDE.md` 的 items 行映射条原写「`charSplit` 切块；`persistItemContent` 返回值 …」——后者已是模块私有、书签不再碰它——改成「`paragraphSplit` 切块，经 `settleItemContent`」。PRD G.5 只点了 `lib/bookmarks/CLAUDE.md`（且只指 `saveBookmarkContent` 条），另外三个不在清单里，但不改就是写着已经不成立的调用形状。`lib/x/CLAUDE.md` 不动（`preferParagraph: false` 没变）。
+
+**行为变化与验证备注**：
+
+- **运行时行为零变化**：六个平台的 `jobPlatform` 都没变，派生值与原字面量逐个相同（bilibili `'bilibili'`、bookmarks `'bookmarks'`、github `'github-stars'`、x `'x-bookmarks'`、zhihu `'zhihu-favorites'`、youtube `'youtube-playlists'`，`platform-descriptor.ts` 已回查），所以 job 键、闸门、徽标、indicator 文案都不变。
+- **ingest phase 5 与书签提取**：写入顺序与状态转移逐字相同；只是两份实现变成一份。`'chunked'` 仍只在 chunk 行落库之后写。
+- **manifest**：本 Step 不动 descriptor。`pnpm build` 后 `.output/chrome-mv3/manifest.json` 的 sha256 是 `053dd7bd…fde32ae5`，与 Step 4 记录的基线相同。
+- **SW 体积**：bundle-contract 行是 `14 modules / 947838 bytes`，模块数与字节数都与 Step 4 后相同。所以本 Step 的改动没有进入 SW 的产物；`char-split.ts` / `ingest.ts` 是否在 SW 的模块图里、只是新导出被 tree-shake 掉，没有单独核对。
+- **测试**：
+  - 聚焦（PRD 命令：contract + `lib/ingest` + `char-split` + `lib/bookmarks` + `sections/bookmarks` + `sections/bilibili` + `hooks/`）36 个文件 291 例绿；
+  - `pnpm compile` 绿；
+  - `pnpm test` 全量绿：主仓库 210 个文件 1694 例（Step 4 后 210 / 1689，+5：两个守卫 `it`、两例 `settleItemContent`、一例 `paragraphSplit`），`packages/favbase` 15 个文件 263 例；在 config 的 `maxWorkers: 8` 下一次跑过，没遇到 PGlite / import-smoke 超时；
+  - `pnpm build` 绿。
+
+**改了哪些现有测试**：
+
+- `lib/ingest/ingest.test.ts`：PRD 唯一许可的一处。`:11` 的 import 把 `persistItemContent` 换成 `settleItemContent`。原「persistItemContent clears a subtitle source…」改调 `settleItemContent`，标题改成「settleItemContent clears a subtitle source…」，多断言该行 `content_state = 'chunked'`。另新增两例：有文本 / 空白文本。
+- `lib/embedding/char-split.test.ts`：只新增（import 加 `paragraphSplit`，末尾新 `describe('paragraphSplit')` 一例），原有用例一行未改。
+- `tests/platform-completeness-contract.test.ts`：只新增两个 `it` 与它们的 helper。
+- **一行未改就绿**：
+  - `lib/bookmarks/bookmark-content-service.test.ts`（真 PGlite 跑 `extractPendingBookmarks` → `saveBookmarkContent` → `settleItemContent`）；
+  - `entrypoints/app/sections/bookmarks/use-bookmark-extraction.test.ts`（`:87-88` 断言 `jobPlatform: 'bookmarks'`，派生值相同）；
+  - `entrypoints/app/sections/bilibili/bilibili-processing-adapter.test.ts`（`:19-20` 同理）；
+  - `auto-transcribe-runtime.test.ts`（`:153` 用字面量 `'bilibili'` 抢占 transcribe 键，派生值相同所以照样排队）、`use-bookmarks.test.tsx`、`use-bili-fav-folders.test.tsx`、`use-collection-library.test.tsx`、各 `*-sync-service.test.ts`、`lib/bilibili/bili-sync-service.test.ts`（它的 `@/lib/ingest/ingest` 部分 mock 只导出 `persistExistingItemContent`，本 Step 没碰那条路径）。
+
 ### Step 6 平台页外壳（中-5 除 hook 改名层外的部分）
 
 - **目标**：平铺平台 view 只写平台特有部分。
@@ -878,7 +1035,7 @@
   - 五个 view 删本地副本。
   - i18n：新增 `collection.lastSynced` / `syncFailed` / `showMore` / `showLess` / `all` 五个共享键（zh / en 各一份），删 30 个平台副本；勘误 docs/16:11 的 LOW-7 记录。
   - `hooks/use-collection-library.ts` 导出 `SEARCH_DEBOUNCE_MS`，B站 view 与 `use-collections.ts` 复用它。
-  - `LOG_TAG` 改由 `jobPlatformForCollection` 派生。
+  - ~~`LOG_TAG` 改由 `jobPlatformForCollection` 派生。~~ **已提前到 Step 5**（2026-10-01，用户决定）：五个 `LOG_TAG` 就是 `useCollectionLibrary` 的 job 命名空间，Step 5 的「零字面 job 命名空间」判据不提前它就不成立（§3 中-6 勘误②）。
   - ~~B站 caption 时间改用 `formatDateTime`。~~ **已提前到 Step 1**（2026-09-30，D-g）：Step 1 让 `lastSyncedAt` 活过刷新，只显示时刻会把上周的同步显示成「10:32」。
 - **测试**：`collection-page-scaffold.test.tsx` 加默认文案断言；`tests/i18n-no-hardcoded.test.ts` 照跑；locale parity 测试照跑。
 - **验证**：六平台页 × 亮 / 暗 × 中 / 英截图，空库、未登录、未配置三种状态逐一过一遍。
@@ -942,7 +1099,7 @@ lib 侧：平台 API 文件的重试 / 响应读取约减 30–40 行（Step 3�
 | 2 | §6.1 domain descriptor 六字段 → 七字段（新增简介字段；`dimensions` 内加 meta 维度格）（已落地 2026-09-30：§6 字段数、§6.1 表 `descriptionField` 行与 `dimensions` 行、§2 守卫描述、§11 禁项行） | 共享模块禁平台字面量 / 字面 meta key 从一个文件扩成清单（独立用例，AST 扫描，失败列 `file:line`）；`dimensions.meta.kind` 必须在 `ranked` 里 |
 | 3 | 风控一节说明「机制在 `lib/http/`，数值与语义在平台」（已落地 2026-09-30：§4.1 Pagination 条、§2 守卫表（Five → Six）、§11 禁项行） | `lib/<platform>/` 禁 `setTimeout` 等待（`tests/platform-sleep-guard.test.ts`，AST 扫描 `new Promise` 参数里的 `setTimeout`，失败列 `file:line`） |
 | 4 | 错误类必须继承 `sync-errors.ts` 基类（已落地 2026-09-30：§4.1 错误类条、§7.2 `use-<platform>.ts` 与 `<platform>-view.tsx` 两行、§2 completeness contract 描述、§11 禁项行） | 平台错误类继承断言（completeness contract 的独立用例 + 探测器自检，AST 扫描，失败列 `file:line`）；`lib-import-smoke` 纳入新 leaf |
-| 5 | 新增「延迟正文」一节 | `sections/**` 禁字面 job 命名空间 |
+| 5 | 新增「延迟正文」一节（已落地 2026-10-01：§4.4「Deferred content」，原 §4.4 Tests 顺延 §4.5；另改 §2 completeness contract 描述、§4.2 Chunking 行、§4.3 `'pending'` 条的交叉引用、§7.2 `use-<platform>.ts` 行、§11 禁项行） | `entrypoints/app/**`（比原写的 `sections/**` 宽）禁手写 job 命名空间：job-store 调用（`startJob` / `useJob` / `getJob` / `pauseJob` / `resumeJob` / `trackJobRun`）的第一参与 `jobPlatform` / `logTag` 属性，不得是字面量或同模块里绑到字面量的常量（AST 扫描，独立用例 + 探测器自检，失败列 `file:line`） |
 | 6–8 | §7 页面清单删去状态组件与 tagged 外壳两项 | `CARD_ADAPTERS` 对账不变 |
 | 9 | 查询片段 builder 列入「shared read helpers」 | — |
 

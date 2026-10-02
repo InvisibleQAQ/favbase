@@ -52,7 +52,7 @@ import {
 // Leaf import, never the '@/lib/embedding' barrel (its value re-export of
 // './config' reaches '@/lib/storage' at module load). Guarded by
 // tests/lib-import-smoke.test.ts.
-import { charSplit } from '@/lib/embedding/char-split';
+import { paragraphSplit } from '@/lib/embedding/char-split';
 import { envNumber } from '@/lib/env';
 import type { CooperativeCheckpoint } from '@/lib/collections';
 
@@ -302,7 +302,7 @@ export async function syncPlaylistsToDb(
     ),
     content: {
       textOf: (videoId) => byId.get(videoId)?.video.description ?? '',
-      chunk: (text) => charSplit(text, { preferParagraph: true }),
+      chunk: paragraphSplit,
     },
   });
 

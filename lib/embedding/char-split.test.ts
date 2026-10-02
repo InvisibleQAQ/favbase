@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { charSplit } from './char-split';
+import { charSplit, paragraphSplit } from './char-split';
 
 describe('charSplit', () => {
   it('returns [] for empty / whitespace input', () => {
@@ -91,5 +91,19 @@ describe('charSplit', () => {
     const head = 'x'.repeat(1200) + '. ';
     const text = head + '\n\n' + 'y'.repeat(400) + '.';
     expect(charSplit(text)).toEqual(charSplit(text, { preferParagraph: false }));
+  });
+});
+
+describe('paragraphSplit', () => {
+  it('is charSplit with preferParagraph: true', () => {
+    // A body where the two modes cut differently, so the equality is not
+    // trivially shared by both: paragraph mode cuts on the blank line,
+    // sentence mode on the last full stop inside the window (in para2).
+    const para1 = 'First paragraph. '.repeat(83).trim(); // 1410 chars
+    const para2 = 'Second paragraph content here. '.repeat(4).trim(); // ~123 chars
+    const text = `${para1}\n\n${para2}`;
+
+    expect(paragraphSplit(text)).toEqual(charSplit(text, { preferParagraph: true }));
+    expect(paragraphSplit(text)).not.toEqual(charSplit(text, { preferParagraph: false }));
   });
 });

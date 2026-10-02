@@ -9,6 +9,7 @@ import {
   useJob,
   type BackgroundJob,
 } from '../../hooks/background-jobs-store';
+import { jobPlatformForCollection } from '../../hooks/collection-job-platform';
 import {
   classifyCollectionSyncError,
   type CollectionSyncError,
@@ -16,6 +17,7 @@ import {
 import { runBilibiliSync } from './bilibili-sync-adapter';
 
 const PLATFORM = 'bilibili';
+const JOB_PLATFORM = jobPlatformForCollection(PLATFORM);
 
 type LoginState = 'unknown' | 'logged_in' | 'not_logged_in';
 
@@ -39,7 +41,7 @@ export function useBiliFavFolders(routeFolderId?: number): UseFavFoldersReturn {
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [loadError, setLoadError] = useState<CollectionSyncError | null>(null);
   const mountedRef = useRef(true);
-  const syncJob = useJob<BiliFavoritesSyncProgress>(PLATFORM, 'sync');
+  const syncJob = useJob<BiliFavoritesSyncProgress>(JOB_PLATFORM, 'sync');
   const syncing = syncJob?.running ?? false;
   const syncProgress = syncJob?.progress ?? null;
   const classifiedSyncError = useMemo(
@@ -61,7 +63,7 @@ export function useBiliFavFolders(routeFolderId?: number): UseFavFoldersReturn {
 
   const sync = useCallback(async () => {
     setLoadError(null);
-    startJob(PLATFORM, 'sync', async (setProgress, control) => {
+    startJob(JOB_PLATFORM, 'sync', async (setProgress, control) => {
       // The shared Sync Adapter: folder sync, the streaming Fetch→Transcript
       // runtime and the backlog embed dispatch all live there — the daily
       // auto-sync coordinator runs the exact same function. Only the manual

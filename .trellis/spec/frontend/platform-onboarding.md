@@ -35,7 +35,7 @@ is **making them generate your TODO list instead of writing one yourself**.
 | Mechanism | What it catches | How you invoke it |
 | --- | --- | --- |
 | TypeScript exhaustive `Record<CollectionPlatform, T>` | Every registry that must gain a key. The error lands on the object literal, naming the missing property. | `pnpm compile` |
-| `tests/platform-completeness-contract.test.ts` | What types cannot see: a lazy import resolving to nothing, a page that renders no `sections/` view, a view that skips `useCollectionBreadcrumbs`, `main.tsx` naming a platform, a hand-written `jobPlatform`, `hooks/` importing `sections/`, a `childRoutes` or `hostPermissions` value that is computed instead of written out, an analytics axis absent from its own ranked list, platform knowledge leaking into a shared module (a separate case listing `file:line`: a quoted platform id, a literal-key read of `meta` / `platformMeta`, or a literal JSON-path key such as `->>'language'` in SQL text — anywhere in `lib/tagging/**`, `lib/embedding/**`, `lib/chat/**`, `lib/export/**`, `collection-analytics.ts`, `collection-processing-policy.ts` or `collections-query.ts`), a `startCollectionProcessingJobs` call anywhere in `entrypoints/app/**` but its definition and the Platform Sync funnel (a separate case in the same file, listing `file:line`), a `*AuthError` / `*RateLimitError` class under `lib/<platform>/` — declared, or a class expression bound to such a name — that does not extend `PlatformAuthError` / `PlatformRateLimitError` by that exact identifier (a separate case listing `file:line`, with a self-check that the detector bites; an alias or a wrapped base is flagged too), a missing `lib/<platform>/` directory, and — for a platform whose `readiness` is `'credentials'` — a missing link in the credentials chain (§8): the Connections card file, the `SETTINGS_NAV` connections section, `derive<Pascal>Draft` / `save<Pascal>` in `useSettings`, the `configSavedAt` key. Reports **all** failures as one aggregated list. | `pnpm vitest run tests/platform-completeness-contract.test.ts` |
+| `tests/platform-completeness-contract.test.ts` | What types cannot see: a lazy import resolving to nothing, a page that renders no `sections/` view, a view that skips `useCollectionBreadcrumbs`, `main.tsx` naming a platform, a hand-written `jobPlatform` in the auto-sync registry, `hooks/` importing `sections/`, a `childRoutes` or `hostPermissions` value that is computed instead of written out, an analytics axis absent from its own ranked list, platform knowledge leaking into a shared module (a separate case listing `file:line`: a quoted platform id, a literal-key read of `meta` / `platformMeta`, or a literal JSON-path key such as `->>'language'` in SQL text — anywhere in `lib/tagging/**`, `lib/embedding/**`, `lib/chat/**`, `lib/export/**`, `collection-analytics.ts`, `collection-processing-policy.ts` or `collections-query.ts`), a `startCollectionProcessingJobs` call anywhere in `entrypoints/app/**` but its definition and the Platform Sync funnel (a separate case in the same file, listing `file:line`), a `*AuthError` / `*RateLimitError` class under `lib/<platform>/` — declared, or a class expression bound to such a name — that does not extend `PlatformAuthError` / `PlatformRateLimitError` by that exact identifier (a separate case listing `file:line`, with a self-check that the detector bites; an alias or a wrapped base is flagged too), a hand-written job namespace anywhere in `entrypoints/app/**` — a string literal, or a same-module constant bound to one, as the first argument of `startJob` / `useJob` / `getJob` / `pauseJob` / `resumeJob` / `trackJobRun` or as a `jobPlatform` / `logTag` property (a separate case listing `file:line`, with a self-check that the detector bites; a constant imported from another module is not followed), a missing `lib/<platform>/` directory, and — for a platform whose `readiness` is `'credentials'` — a missing link in the credentials chain (§8): the Connections card file, the `SETTINGS_NAV` connections section, `derive<Pascal>Draft` / `save<Pascal>` in `useSettings`, the `configSavedAt` key. Reports **all** failures as one aggregated list. | `pnpm vitest run tests/platform-completeness-contract.test.ts` |
 
 Six more guards fire with no wiring on your part. Three of them reconcile an
 artefact you still write by hand: the guard turns "silently absent" into a red
@@ -151,8 +151,11 @@ import { escapeLike } from '@/lib/database/sql-utils';
 
 Your file contributes only the WHERE conditions, the ORDER BY, and `mapRow`.
 
-Chunking: `charSplit` from `@/lib/embedding/char-split` — a **leaf import**, not
-the `@/lib/embedding` barrel (the barrel has a `chrome.storage` load side effect
+Chunking: `paragraphSplit` from `@/lib/embedding/char-split` for text with
+paragraph structure (Markdown, READMEs, descriptions, extracted pages — pass it
+as `chunk: paragraphSplit`), or `charSplit` with `preferParagraph: false` for
+sentence-only text like tweets. Either way a **leaf import**, not the
+`@/lib/embedding` barrel (the barrel has a `chrome.storage` load side effect
 and will break import-smoke).
 
 Also export `narrow<P>Meta(meta: unknown, fallbacks)` from this file. It is the
@@ -174,8 +177,8 @@ defect, not a convenience.
   it: the Platform Sync funnel (§7.2) does.
 - **`contentState`**: declare `'chunked'` only when you actually hand over text;
   declare `'no_content'` when the text is genuinely empty. **Never `'pending'`**
-  unless the platform has a real deferred-content pipeline — `'pending'` is what
-  feeds auto-transcribe.
+  unless the platform has a real deferred-content pipeline (§4.4) — `'pending'`
+  is what feeds auto-transcribe.
 - **Multi-Source membership**: one Collection Item + N links. `platform_meta`
   may carry a first-seen Source for display and sorting, but every *filter* goes
   through `item_sources`. **Item Count** and **Membership Count** are different
@@ -184,7 +187,77 @@ defect, not a convenience.
   *claim-the-next-page / claim-the-next-item* boundaries. The in-flight request
   and the final DB write always finish. Pause is not cancel.
 
-### 4.4 Tests
+### 4.4 Deferred content
+
+Only when the platform's Content is **not in hand at sync time** — a web page
+still has to be fetched, a video still has to be transcribed. Declare
+`contentState: 'pending'` and pass no `content` block; the item's text arrives
+later through a worker. If the text is in the sync response, this section does
+not apply (§4.3).
+
+**Template — bookmarks (chained after the sync).**
+
+- The Sync Adapter starts the worker **after** `runPlatformSync` returns —
+  outside the funnel, because fetching a bookmarked page is not contacting the
+  platform: `startJob(jobPlatformForCollection(p), 'extract', runner)` with the
+  default `'drop'` collision (a second chain while one runs is a no-op). The
+  funnel closure returns `newItemIds: []`: the pending items have no text
+  yet, and the worker dispatches each one itself (below); the funnel's
+  backlog-only embed lane still picks up items an interrupted run left
+  `'chunked'`.
+- The worker `await control.checkpoint()`s before claiming each item, so the
+  library gate can pause it between items.
+- Each item settles through `settleItemContent(db, itemId, text, chunker)`
+  (`lib/ingest/ingest.ts`; `paragraphSplit` for opaque text). It writes the
+  content and chunk rows, then `'chunked'` — or `'no_content'` when nothing
+  chunked — and returns whether chunk rows landed. It emits no domain event:
+  the worker emits `item-content-updated` for every item it settles, so
+  coverage and the cards refresh.
+- Only on `true`: `enqueueCollectionProcessingItem({ jobPlatform:
+  jobPlatformForCollection(p), itemPlatform: p, itemId })`, **per item**, not
+  in one batch at the end. A page closed mid-run must not leave items that are
+  chunked but never embedded.
+- A permanent failure (dead link, non-HTML, empty shell) settles
+  `'no_content'`; a transient one (5xx, 429, timeout) stays `'pending'` and
+  heals on the next run. One item's failure never aborts the run.
+- Code: `lib/bookmarks/bookmark-content-service.ts`,
+  `sections/bookmarks/use-bookmark-extraction.ts`, the chained start in
+  `sections/bookmarks/bookmarks-sync-adapter.ts`.
+
+**Streaming variant — bilibili (during the sync, timestamped).**
+
+- The Fetch producer feeds new items to a transcription pipeline while the
+  sync is still paging. The pipeline is a module singleton holding its own
+  state, and its `'transcribe'` job uses the `'queue'` collision so an
+  automatic session waits behind a manual single-video transcription.
+- The text is timestamped subtitle rows, so the write is
+  `persistExistingItemContent(db, platform, platformItemId, text,
+  chunkSubtitleRows(rows), subtitleSource)`. It addresses the item by
+  platform identity, records the subtitle source, and commits `has_content`
+  before `chunked`. A successful write is followed by the same
+  `item-content-updated` event and per-item `enqueueCollectionProcessingItem`.
+- Code: `persistContentChunks` in `lib/bilibili/bili-sync-service.ts`, the
+  persist → event → enqueue sequence in `lib/bilibili/transcribe-utils.ts`,
+  `sections/bilibili/auto-transcribe-runtime.ts`,
+  `sections/bilibili/bilibili-processing-adapter.ts`.
+
+**Which writer.** Opaque text → `settleItemContent`. A transcript (timestamped
+chunks, a subtitle source to record) → `persistExistingItemContent`. Never pair
+a content write with a hand-written `content_state` update; the content writer
+under `settleItemContent` is module-private, so outside `lib/ingest` there is
+no exported piece to build that pairing from.
+
+**Job namespace.** Always `jobPlatformForCollection(platform)` (§11). The kinds
+`'extract'` and `'transcribe'` already exist — use one of them, do not add a
+kind.
+
+**Not unified, on purpose** (docs/32 D5): each variant keeps its own progress
+panel. Trigger timing (chained after the sync vs streamed during it), where the
+state lives (a job plus DB counts vs a pipeline singleton) and the collision
+policy (`'drop'` vs `'queue'`) genuinely differ, and one shared panel would
+need a mode switch for each.
+
+### 4.5 Tests
 
 An in-memory PGlite guard test for the sync-service (equivalence of the ingest
 result, dedup, membership) and a pure-function test for the API parsers. Both
@@ -318,7 +391,7 @@ stays a one-line re-export whether your platform has child routes or not.
 | File | Responsibility |
 | --- | --- |
 | `<platform>-sync-adapter.ts` | **The Platform Sync.** `run<P>Sync(onProgress, control)` is the single definition of what a sync means: credential resolution, then `await runPlatformSync(platform, control, async () => { …domain call…; return { fetched, inserted, newItemIds }; })` (`entrypoints/app/hooks/platform-sync.ts`). The funnel records the attempt in the Platform Sync Record, runs your closure, and on success dispatches the embed/tag lanes (`jobPlatform` derived) and records the success; on failure it records that and rethrows your error unchanged. **Anything you can check without the network goes BEFORE the funnel**: missing config is a silent `return`, a known-absent login throws the platform's own auth error class (the page's logged-out state keys off it) — neither is an attempt, so neither may leave a record (docs/32 §5.2). Put everything that contacts the platform inside the closure; work that follows a successful sync but is not the platform (bookmarks' page extraction) goes after it. Also exports `<p>AutoSyncPolicy` (`probeReady`, optional `isSilentError`). The manual page and the daily coordinator call **this same function** — copying credential resolution or post-sync dispatch into either trigger is the defect this file exists to prevent. |
-| `use-<platform>.ts` | Thin adapter over `useCollectionLibrary`. Inject `queryFn` / `facetsFn` / `lastSyncedFn` / `syncFn = run<P>Sync` / `logTag`, then rename the generic fields to platform vocabulary. There is no error classifier to inject: `syncError` is already a `CollectionSyncError`, classified by base class (§4.1). **Config gates live here**, wrapped around the generic `sync` — not inside `useCollectionLibrary`. Every injected function must be a stable reference (module-level or `useCallback`); they sit in effect dependency arrays. |
+| `use-<platform>.ts` | Thin adapter over `useCollectionLibrary`. Inject `queryFn` / `facetsFn` / `lastSyncedFn` / `syncFn = run<P>Sync` / `logTag = jobPlatformForCollection(<platform>)` — it is the background-job namespace, not a free-form log label — then rename the generic fields to platform vocabulary. There is no error classifier to inject: `syncError` is already a `CollectionSyncError`, classified by base class (§4.1). **Config gates live here**, wrapped around the generic `sync` — not inside `useCollectionLibrary`. Every injected function must be a stable reference (module-level or `useCallback`); they sit in effect dependency arrays. |
 | `<platform>-view.tsx` | Assembles `CollectionPageScaffold` + `useCollectionPipeline` + `useCollectionBreadcrumbs`. Owns the i18n seam as data, not a switch: a module-level `SyncErrorCopy` (i18n keys: `auth`, optional `authRejected`, `rateLimited`, optional `rateLimitedUntil`) passed to the shared `syncErrorMessage` (`entrypoints/app/hooks/collection-sync-error-message.ts`). If the platform's `<P>RateLimitError` carries a `resetAt`, lock the Fetch button until it: `useCountdown((now) => rateLimitRemainingMs(syncError, now))` into `syncDisabled` / `syncDisabledLabel` (`pipeline.fetchAvailableIn`). |
 | `<platform>-card.tsx` | Composes the shared `CollectionCard` shell. |
 | `tagged-<platform>-card.tsx` | `TaggedItem` → your item shape, delegating narrowing to `narrow<P>Meta`. |
@@ -439,6 +512,7 @@ opt out of the hook; **do not** opt out of the scaffold or the registries.
 | a quoted platform id, a literal-key `meta` / `platformMeta` read (`meta.k`, `meta['k']`, or a `{ k } = meta` pattern), or a literal JSON-path key in SQL text (`->`, `->>`, `#>`, `#>>`), in a shared module (`lib/tagging/**`, `lib/embedding/**`, `lib/chat/**`, `lib/export/**`, `collection-analytics.ts`, `collection-processing-policy.ts`, `collections-query.ts`) — put the fact in the domain descriptor and read it by variable | completeness contract (a separate case listing `file:line`). The check is name-based: a local that holds descriptor data must not be called `meta`, and an alias (`const m = row.platformMeta; m.k`) is not followed |
 | a route line naming a platform in `main.tsx` | completeness contract |
 | a hand-written `jobPlatform` in the auto-sync registry | completeness contract |
+| a job-namespace literal (or a constant bound to one) passed to the job store or as `jobPlatform` / `logTag` in `entrypoints/app/**` — derive it with `jobPlatformForCollection(platform)` | completeness contract (a separate case listing `file:line`) |
 | any `entrypoints/app/hooks/**` module importing `sections/` | completeness contract |
 | a value import other than `./platforms` in `lib/collections/platform-descriptor.ts` | `platform-descriptor.test.ts` reads its own imports by AST, and `lib-import-smoke` loads it with no `chrome` global. Break it and the build fails in `wxt.config.ts`, which never mentions the real culprit |
 | re-exporting the descriptor from `lib/collections/index.ts` | review — that barrel goes through `collections-query`, so it drags drizzle and `@/lib/database` into every importer, welcome.html and the Node build config included |
