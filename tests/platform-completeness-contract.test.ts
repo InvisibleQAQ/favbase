@@ -737,10 +737,10 @@ describe('platform completeness contract', () => {
 
   it('detects hand-written job namespaces', () => {
     // Self-check (docs/32 Step 5): the namespace rule below must catch a
-    // literal however it reaches a job-store call or a `jobPlatform` /
-    // `logTag` property — directly, through a same-module constant (or a
-    // chain of them), or as a shorthand property — and must pass a value that
-    // is derived, a parameter, or imported.
+    // literal however it reaches a job-store call or a `jobPlatform` property
+    // — directly, through a same-module constant (or a chain of them), or as
+    // a shorthand property — and must pass a value that is derived, a
+    // parameter, or imported.
     const offending = [
       "startJob('p', 'sync', r);",
       "useJob(`p`, 'embed');",
@@ -750,12 +750,11 @@ describe('platform completeness contract', () => {
       "({ jobPlatform: 'p' });",
       "const P = 'p'; ({ jobPlatform: P });",
       "const jobPlatform = 'p'; ({ jobPlatform });",
-      "const LOG_TAG = 'p'; ({ logTag: LOG_TAG });",
       "startJob(`${x}-stars`, 'sync', r);",
       "const P = 'p'; startJob(P!, 'sync', r);",
       "deps['startJob']('p', 'sync', r);",
       "({ ['jobPlatform']: 'p' });",
-      "({ [`logTag`]: 'p' });",
+      "({ [`jobPlatform`]: 'p' });",
     ];
     for (const source of offending) {
       expect(jobNamespaceOffenders(source), source).toHaveLength(1);
@@ -810,14 +809,14 @@ const JOB_STORE_CALLS = new Set([
   'trackJobRun',
 ]);
 /** Object properties that carry a background-job namespace. */
-const JOB_NAMESPACE_PROPERTIES = new Set(['jobPlatform', 'logTag']);
+const JOB_NAMESPACE_PROPERTIES = new Set(['jobPlatform']);
 /** How far a chain of same-module constants is followed (`const B = A`). */
 const MAX_CONSTANT_HOPS = 5;
 
 /**
  * Every place a background-job namespace is written by hand: the first
  * argument of a job-store call (bare or as a member, `deps.startJob` /
- * `deps['startJob']`), or a `jobPlatform` / `logTag` property (assigned,
+ * `deps['startJob']`), or a `jobPlatform` property (assigned,
  * shorthand, or a computed literal key). Hand-written = a string or template
  * literal (through `as` / `satisfies` / parentheses / `!`), or an identifier
  * bound in the same module to one (followed up to `MAX_CONSTANT_HOPS`). A

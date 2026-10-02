@@ -1,8 +1,9 @@
 import type { CooperativeCheckpoint } from '@/lib/collections';
-import { settingsStorage } from '@/lib/storage';
+import { settingsStorage, type UserSettings } from '@/lib/storage';
 import {
   syncYoutubePlaylists,
   type YoutubePlaylistsProgress,
+  type YoutubeSyncConfig,
 } from '@/lib/youtube/youtube-sync-service';
 
 import { runPlatformSync } from '../../hooks/platform-sync';
@@ -23,20 +24,26 @@ export async function runYoutubePlaylistsSync(
   onProgress: (progress: YoutubePlaylistsProgress) => void,
   control: CooperativeCheckpoint,
 ): Promise<void> {
-  const settings = await settingsStorage.getValue();
-  if (!settings.youtubeApiKey || !settings.youtubeChannel) return;
+  const config = youtubeCredentials(await settingsStorage.getValue());
+  if (config === null) return;
   onProgress({ fetchedCount: 0, playlistIndex: 0, playlistCount: 0 });
-  const config = { apiKey: settings.youtubeApiKey, channel: settings.youtubeChannel };
   await runPlatformSync(ITEM_PLATFORM, control, async () => {
     const result = await syncYoutubePlaylists(config, onProgress, control);
     return { fetched: result.entries, inserted: result.inserted, newItemIds: result.newItemIds };
   });
 }
 
+/**
+ * The API key + channel, or `null` unless both are set — the single "is
+ * YouTube configured" check. The run gate above, the daily probe below and
+ * the page gate (`useCredentialGatedLibrary`) all read it.
+ */
+export function youtubeCredentials(settings: UserSettings): YoutubeSyncConfig | null {
+  const { youtubeApiKey: apiKey, youtubeChannel: channel } = settings;
+  return apiKey && channel ? { apiKey, channel } : null;
+}
+
 /** Daily auto-sync trigger policy: both the API key and the channel are configured. */
 export const youtubeAutoSyncPolicy: AutoSyncPolicy = {
-  probeReady: async () => {
-    const settings = await settingsStorage.getValue();
-    return Boolean(settings.youtubeApiKey && settings.youtubeChannel);
-  },
+  probeReady: async () => youtubeCredentials(await settingsStorage.getValue()) !== null,
 };

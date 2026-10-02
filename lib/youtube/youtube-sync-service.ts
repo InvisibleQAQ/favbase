@@ -214,8 +214,8 @@ export async function syncYoutubePlaylists(
     batches.push({ playlist, entries: result.entries, videos: result.videos });
   }
 
-  // Auto-tag / auto-embed are fired by the caller (use-youtube-playlists hook)
-  // via `startJob`, NOT here — see the module docstring (ST3 trigger move).
+  // Auto-tag / auto-embed are dispatched by the Platform Sync funnel that
+  // youtube-sync-adapter.ts runs this inside, NOT here (module docstring, ST3).
   return syncPlaylistsToDb(db, batches);
 }
 

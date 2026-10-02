@@ -92,7 +92,7 @@ describe('platform configuration gates', () => {
   beforeEach(() => {
     mocks.github.mockReturnValue({
       settingsLoading: false,
-      hasToken: false,
+      configured: false,
       syncing: false,
       syncJob: null,
       embedJob: null,
@@ -100,7 +100,7 @@ describe('platform configuration gates', () => {
     });
     mocks.youtube.mockReturnValue({
       settingsLoading: false,
-      hasConfig: false,
+      configured: false,
       syncing: false,
       syncJob: null,
       embedJob: null,

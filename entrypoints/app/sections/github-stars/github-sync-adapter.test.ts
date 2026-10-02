@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CooperativeCheckpoint } from '@/lib/collections';
+import type { UserSettings } from '@/lib/storage';
 
 import type { PlatformSyncOutcome } from '../../hooks/platform-sync';
 
@@ -17,7 +18,7 @@ vi.mock('@/lib/storage', () => ({ settingsStorage: { getValue: mocks.getSettings
 // that runs the adapter's sync closure and keeps what it reported.
 vi.mock('../../hooks/platform-sync', () => ({ runPlatformSync: mocks.runPlatformSync }));
 
-import { runGithubStarsSync, type SyncProgress } from './github-sync-adapter';
+import { githubCredentials, runGithubStarsSync, type SyncProgress } from './github-sync-adapter';
 
 const control: CooperativeCheckpoint = { checkpoint: async () => undefined };
 let outcome: PlatformSyncOutcome | undefined;
@@ -86,5 +87,16 @@ describe('github Sync Adapter (shared by manual page + daily auto-sync)', () => 
     await runGithubStarsSync(() => undefined, control);
 
     expect(outcome).toEqual({ fetched: 55, inserted: 2, newItemIds: ['a', 'b'] });
+  });
+});
+
+describe('githubCredentials (run gate, daily probe and page gate share it)', () => {
+  it('returns the stored token', () => {
+    expect(githubCredentials({ githubToken: 'tok' } as UserSettings)).toBe('tok');
+  });
+
+  it('is null for a missing or empty token', () => {
+    expect(githubCredentials({} as UserSettings)).toBeNull();
+    expect(githubCredentials({ githubToken: '' } as UserSettings)).toBeNull();
   });
 });

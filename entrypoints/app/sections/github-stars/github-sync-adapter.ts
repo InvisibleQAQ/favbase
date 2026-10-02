@@ -1,6 +1,6 @@
 import type { CooperativeCheckpoint } from '@/lib/collections';
 import { syncStars } from '@/lib/github/github-sync-service';
-import { settingsStorage } from '@/lib/storage';
+import { settingsStorage, type UserSettings } from '@/lib/storage';
 
 import { runPlatformSync } from '../../hooks/platform-sync';
 import type { AutoSyncPolicy } from '../../hooks/use-daily-auto-sync';
@@ -41,8 +41,8 @@ export async function runGithubStarsSync(
   onProgress: (progress: SyncProgress) => void,
   control: CooperativeCheckpoint,
 ): Promise<void> {
-  const token = (await settingsStorage.getValue()).githubToken;
-  if (!token) return;
+  const token = githubCredentials(await settingsStorage.getValue());
+  if (token === null) return;
   let fetchedTotal = 0;
   onProgress({
     phase: 'stars',
@@ -77,7 +77,16 @@ export async function runGithubStarsSync(
   });
 }
 
+/**
+ * The stored token, or `null` — the single "is GitHub configured" check. The
+ * run gate above, the daily probe below and the page gate
+ * (`useCredentialGatedLibrary`) all read it, so they cannot disagree.
+ */
+export function githubCredentials(settings: UserSettings): string | null {
+  return settings.githubToken || null;
+}
+
 /** Daily auto-sync trigger policy: a stored token means worth attempting. */
 export const githubAutoSyncPolicy: AutoSyncPolicy = {
-  probeReady: async () => Boolean((await settingsStorage.getValue()).githubToken),
+  probeReady: async () => githubCredentials(await settingsStorage.getValue()) !== null,
 };

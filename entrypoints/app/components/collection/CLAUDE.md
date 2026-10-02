@@ -7,7 +7,7 @@
 2. **`CollectionPageScaffold`**（`collection-page-scaffold.tsx`）——六个平台共用的页面级编排。固定「标题/紧凑 pipeline → 搜索 → provider 配置提醒（可选）→ 业务操作（可选）→ 主分类 → 标签 → 次分类（可选）→ 列表」（HEAD `75c42a2` 堆叠；docs/19 P0-1 的三行压缩于 2026-08-20 被用户否决并恢复，只保留色彩与 `role=status`），并持有 tag 接线 + phase 阶梯 + 8-case 渲染 + 双 id 映射 + 主 grid popover/分页；平台只注入 adapter、文案和 slots。
 3. **`CollectionCard`**（`collection-card.tsx`）——六平台共用的条目外壳（docs/19 P0-2），平台卡片只装配内容，不允许第七份复制。链接之外的行用同文件的 `CollectionCardRow`，骨架用 `CollectionCardSkeleton`。
 
-**docs/14 曾反对 `CollectionPageFrame` 大一统 frame**（理由：分支顺序有差异、消费方少 3）——`docs/16` 推翻此结论：分支顺序已被纯函数 `resolveCollectionPhase`（+ `collection-phase.test.ts`）消解，消费方涨到 4 且逐字同构。证据变了，结论跟着变。scaffold 接口偏宽（~26 props）但实现更深（隐藏 phase 顺序/双 id/tag 刷新不变量/双 popover 区分/5 个骨架区条件门），不是浅模块。**配置门早退（hasToken/hasConfig）留在 view**——平台专属。平台状态（库空 / 未登录 / 需配置）自 docs/32 Step 6 起来自智能兄弟目录 `components/collection-states/`（`EmptyLibraryState` / `NotLoggedInState` / `NeedsConfigState`，平台只传图标、i18n 键、站点或设置页叶子），仍由 view 构造、经 slot 注入；scaffold 不认识它们。
+**docs/14 曾反对 `CollectionPageFrame` 大一统 frame**（理由：分支顺序有差异、消费方少 3）——`docs/16` 推翻此结论：分支顺序已被纯函数 `resolveCollectionPhase`（+ `collection-phase.test.ts`）消解，消费方涨到 4 且逐字同构。证据变了，结论跟着变。scaffold 接口偏宽（~26 props）但实现更深（隐藏 phase 顺序/双 id/tag 刷新不变量/双 popover 区分/5 个骨架区条件门），不是浅模块。**配置门早退（`configured`，docs/32 Step 7 起 github / youtube 同名，来自 `hooks/use-credential-gated-library.ts`）留在 view**——平台专属。平台状态（库空 / 未登录 / 需配置）自 docs/32 Step 6 起来自智能兄弟目录 `components/collection-states/`（`EmptyLibraryState` / `NotLoggedInState` / `NeedsConfigState`，平台只传图标、i18n 键、站点或设置页叶子），仍由 view 构造、经 slot 注入；scaffold 不认识它们。
 
 ## 铁律（沿用 components/tags）
 

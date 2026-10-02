@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CooperativeCheckpoint } from '@/lib/collections';
+import type { UserSettings } from '@/lib/storage';
 
 import type { PlatformSyncOutcome } from '../../hooks/platform-sync';
 
@@ -19,7 +20,7 @@ vi.mock('@/lib/storage', () => ({ settingsStorage: { getValue: mocks.getSettings
 // that runs the adapter's sync closure and keeps what it reported.
 vi.mock('../../hooks/platform-sync', () => ({ runPlatformSync: mocks.runPlatformSync }));
 
-import { runYoutubePlaylistsSync } from './youtube-sync-adapter';
+import { runYoutubePlaylistsSync, youtubeCredentials } from './youtube-sync-adapter';
 
 const control: CooperativeCheckpoint = { checkpoint: async () => undefined };
 let outcome: PlatformSyncOutcome | undefined;
@@ -71,5 +72,24 @@ describe('youtube Sync Adapter (shared by manual page + daily auto-sync)', () =>
     await runYoutubePlaylistsSync(() => undefined, control);
 
     expect(outcome).toEqual({ fetched: 7, inserted: 2, newItemIds: ['v1', 'v2'] });
+  });
+});
+
+describe('youtubeCredentials (run gate, daily probe and page gate share it)', () => {
+  it('returns the API key + channel when both are set', () => {
+    expect(
+      youtubeCredentials({ youtubeApiKey: 'key', youtubeChannel: '@chan' } as UserSettings),
+    ).toEqual({ apiKey: 'key', channel: '@chan' });
+  });
+
+  it('is null when either one is missing or empty', () => {
+    expect(youtubeCredentials({ youtubeApiKey: 'key' } as UserSettings)).toBeNull();
+    expect(youtubeCredentials({ youtubeChannel: '@chan' } as UserSettings)).toBeNull();
+    expect(
+      youtubeCredentials({ youtubeApiKey: '', youtubeChannel: '@chan' } as UserSettings),
+    ).toBeNull();
+    expect(
+      youtubeCredentials({ youtubeApiKey: 'key', youtubeChannel: '' } as UserSettings),
+    ).toBeNull();
   });
 });

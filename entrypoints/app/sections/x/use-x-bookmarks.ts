@@ -2,96 +2,33 @@ import { useEffect, useState } from 'react';
 
 import { initDbProxy } from '@/lib/database';
 import { getPlatformSyncRecord } from '@/lib/database/platform-sync-record';
-import {
-  getBookmarks,
-  getAuthorCounts,
-  getLastSyncedAt,
-  type XBookmarkItem,
-  type AuthorCount,
-} from '@/lib/x/x-sync-service';
-
-import {
-  useCollectionLibrary,
-  type CollectionQueryParams,
-} from '../../hooks/use-collection-library';
-import type { BackgroundJob } from '../../hooks/background-jobs-store';
+import { getBookmarks, getAuthorCounts, getLastSyncedAt } from '@/lib/x/x-sync-service';
+import { useCollectionLibrary } from '../../hooks/use-collection-library';
 import { jobPlatformForCollection } from '../../hooks/collection-job-platform';
-import type { CollectionSyncError } from '../../hooks/collection-sync-error';
+import { facetQuery } from '../../hooks/facet-query';
 import { useCountdown } from '../../hooks/use-countdown';
 import { remainingCooldown } from './cooldown';
-import { runXBookmarksSync, type XSyncProgress } from './x-sync-adapter';
+import { runXBookmarksSync } from './x-sync-adapter';
 
-/**
- * Background-job namespace, derived from the domain Platform Descriptor's
- * `jobPlatform` — also this hook's `useCollectionLibrary` `logTag`.
- */
+/** Background-job namespace — the domain Platform Descriptor's `jobPlatform`,
+ *  which keys this page's sync / embed / tag jobs in `useCollectionLibrary`. */
 const JOB_PLATFORM = jobPlatformForCollection('x');
 
-// Re-exported so consumers keep importing the progress type from the hook; the
-// type + mapping live in the shared Sync Adapter (single trigger surface).
-export type { XSyncProgress } from './x-sync-adapter';
+/** Author chip → `getBookmarks({ author })`; module-level, so stable. */
+const queryFn = facetQuery(getBookmarks, 'author');
 
-export interface UseXBookmarksReturn {
-  // Paged query results (from PGlite via x-sync-service — no API reads)
-  bookmarks: XBookmarkItem[];
-  total: number;
-  totalPages: number;
-  loading: boolean;
-  queryError: string | null;
-  retryQuery: () => void;
-
-  // Filters
-  author: string | null;
-  setAuthor: (author: string | null) => void;
-  searchInput: string;
-  setSearchInput: (value: string) => void;
-  page: number;
-  goToPage: (page: number) => void;
-
-  // Library meta (unfiltered)
-  authors: AuthorCount[];
-  libraryCount: number;
-  lastSyncedAt: Date | null;
-  metaLoading: boolean;
-
-  // One-shot bookmarks sync (manual button — never auto-on-mount, D5)
-  syncing: boolean;
-  syncProgress: XSyncProgress | null;
-  syncError: CollectionSyncError | null;
-  syncJob: BackgroundJob<XSyncProgress> | null;
-  sync: () => Promise<void>;
-
-  // Post-sync embed / tag jobs (progress captions).
-  embedJob: BackgroundJob | null;
-  tagJob: BackgroundJob | null;
-
-  // X-specific: last-sync "N new this run" (Platform Sync Record) + sync cooldown.
-  lastInserted: number | null;
-  /** Ms remaining before the sync button can be pressed again (0 = ready). */
-  cooldownRemainingMs: number;
-}
-
-function queryFn({ filter, search, page, pageSize }: CollectionQueryParams) {
-  return getBookmarks({
-    author: filter ?? undefined,
-    search: search || undefined,
-    page,
-    pageSize,
-  });
-}
-
-/** Thin adapter over the shared collection-library state machine. */
-export function useXBookmarks(): UseXBookmarksReturn {
-  const lib = useCollectionLibrary<XBookmarkItem, AuthorCount, XSyncProgress>({
+/** Thin adapter over the shared library (manual sync — never auto-on-mount, D5) plus X's
+ *  own `lastInserted` ("N new this run") and `cooldownRemainingMs` (0 = ready). */
+export function useXBookmarks() {
+  const lib = useCollectionLibrary({
     queryFn,
     facetsFn: getAuthorCounts,
     lastSyncedFn: getLastSyncedAt,
-    // The shared Sync Adapter (module ref = stable): auth resolution, progress
-    // mapping and — through the Platform Sync funnel — the post-sync embed/tag
-    // dispatch and the Platform Sync Record all live there; the daily
-    // auto-sync coordinator runs the exact same function.
+    // The shared Sync Adapter (module ref = stable): auth resolution, progress mapping
+    // and — through the Platform Sync funnel — the post-sync embed/tag dispatch and the
+    // Platform Sync Record; the daily auto-sync coordinator runs the exact same function.
     syncFn: runXBookmarksSync,
-    logTag: JOB_PLATFORM,
+    jobPlatform: JOB_PLATFORM,
   });
 
   // "N new this run" = the Platform Sync Record's `lastInserted`, written with
@@ -119,31 +56,5 @@ export function useXBookmarks(): UseXBookmarksReturn {
   // The shared 1 s countdown ticks while inside the cooldown window.
   const cooldownRemainingMs = useCountdown((now) => remainingCooldown(effectiveSyncedAt, now));
 
-  return {
-    bookmarks: lib.items,
-    total: lib.total,
-    totalPages: lib.totalPages,
-    loading: lib.loading,
-    queryError: lib.queryError,
-    retryQuery: lib.retryQuery,
-    author: lib.filter,
-    setAuthor: lib.setFilter,
-    searchInput: lib.searchInput,
-    setSearchInput: lib.setSearchInput,
-    page: lib.page,
-    goToPage: lib.goToPage,
-    authors: lib.facets,
-    libraryCount: lib.libraryCount,
-    lastSyncedAt: lib.lastSyncedAt,
-    metaLoading: lib.metaLoading,
-    syncing: lib.syncing,
-    syncProgress: lib.syncProgress,
-    syncError: lib.syncError,
-    syncJob: lib.syncJob,
-    sync: lib.sync,
-    embedJob: lib.embedJob,
-    tagJob: lib.tagJob,
-    lastInserted,
-    cooldownRemainingMs,
-  };
+  return { ...lib, lastInserted, cooldownRemainingMs };
 }

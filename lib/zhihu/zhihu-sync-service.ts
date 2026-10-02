@@ -141,8 +141,8 @@ export async function syncFavorites(
 ): Promise<SyncZhihuResult> {
   const db = getDb();
   const { collections, favorites } = await fetchAllFavorites(onProgress, control);
-  // Auto-tag / auto-embed are fired by the caller (use-zhihu-favorites hook)
-  // via `startJob`, NOT here — see the module docstring (ST3 trigger move).
+  // Auto-tag / auto-embed are dispatched by the Platform Sync funnel that
+  // zhihu-sync-adapter.ts runs this inside, NOT here (module docstring, ST3).
   return syncFavoritesToDb(db, collections, favorites);
 }
 

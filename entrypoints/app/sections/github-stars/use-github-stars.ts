@@ -1,87 +1,28 @@
-import { useCallback } from 'react';
-
-import { useSettings } from '@/lib/hooks/useSettings';
 import {
   getStarredRepos,
   getLanguageCounts,
   getLastSyncedAt,
-  type GithubRepoItem,
-  type LanguageCount,
 } from '@/lib/github/github-sync-service';
-import {
-  useCollectionLibrary,
-  type CollectionQueryParams,
-} from '../../hooks/use-collection-library';
-import type { BackgroundJob } from '../../hooks/background-jobs-store';
 import { jobPlatformForCollection } from '../../hooks/collection-job-platform';
-import type { CollectionSyncError } from '../../hooks/collection-sync-error';
-import { runGithubStarsSync, type SyncProgress } from './github-sync-adapter';
+import { facetQuery } from '../../hooks/facet-query';
+import { useCredentialGatedLibrary } from '../../hooks/use-credential-gated-library';
+import { githubCredentials, runGithubStarsSync } from './github-sync-adapter';
 
-/**
- * Background-job namespace, derived from the domain Platform Descriptor's
- * `jobPlatform` — also this hook's `useCollectionLibrary` `logTag`.
- */
+/** Background-job namespace — the domain Platform Descriptor's `jobPlatform`,
+ *  which keys this page's sync / embed / tag jobs in `useCollectionLibrary`. */
 const JOB_PLATFORM = jobPlatformForCollection('github');
 
-// Re-exported so the view keeps importing progress types from the hook; the
-// types + mapping live in the shared Sync Adapter (single trigger surface).
-export type { SyncProgress, StarsPhaseProgress, ReadmePhaseProgress } from './github-sync-adapter';
+/** Language chip → `getStarredRepos({ language })`; module-level, so stable. */
+const queryFn = facetQuery(getStarredRepos, 'language');
 
-export interface UseGithubStarsReturn {
-  // Paged query results (from PGlite via github-sync-service — no API reads)
-  repos: GithubRepoItem[];
-  total: number;
-  totalPages: number;
-  loading: boolean;
-  queryError: string | null;
-  retryQuery: () => void;
-
-  // Filters
-  language: string | null;
-  setLanguage: (language: string | null) => void;
-  searchInput: string;
-  setSearchInput: (value: string) => void;
-  page: number;
-  goToPage: (page: number) => void;
-
-  // Library meta (unfiltered)
-  languages: LanguageCount[];
-  libraryCount: number;
-  lastSyncedAt: Date | null;
-  metaLoading: boolean;
-
-  // Token presence (drives the "not connected" empty state)
-  hasToken: boolean;
-  settingsLoading: boolean;
-
-  // One-shot full sync
-  syncing: boolean;
-  syncProgress: SyncProgress | null;
-  syncError: CollectionSyncError | null;
-  syncJob: BackgroundJob<SyncProgress> | null;
-  sync: () => Promise<void>;
-
-  // Post-sync embed / tag jobs (progress captions).
-  embedJob: BackgroundJob | null;
-  tagJob: BackgroundJob | null;
-}
-
-function queryFn({ filter, search, page, pageSize }: CollectionQueryParams) {
-  return getStarredRepos({
-    language: filter ?? undefined,
-    search: search || undefined,
-    page,
-    pageSize,
-  });
-}
-
-/** Thin adapter over the shared collection-library state machine. */
-export function useGithubStars(): UseGithubStarsReturn {
-  const { settings, loading: settingsLoading } = useSettings();
-  const token = settings.githubToken;
-  const hasToken = Boolean(token);
-
-  const lib = useCollectionLibrary<GithubRepoItem, LanguageCount, SyncProgress>({
+/**
+ * Thin adapter over the shared collection-library state machine, behind the
+ * stored-token gate: without a token the view shows the connect guide
+ * (`configured: false`) and `sync` is a silent no-op. Rows come from PGlite
+ * via github-sync-service — no API reads.
+ */
+export function useGithubStars() {
+  return useCredentialGatedLibrary(githubCredentials, {
     queryFn,
     facetsFn: getLanguageCounts,
     lastSyncedFn: getLastSyncedAt,
@@ -89,43 +30,6 @@ export function useGithubStars(): UseGithubStarsReturn {
     // mapping and the post-sync embed/tag dispatch all live there — the daily
     // auto-sync coordinator runs the exact same function.
     syncFn: runGithubStarsSync,
-    logTag: JOB_PLATFORM,
+    jobPlatform: JOB_PLATFORM,
   });
-
-  const { sync: syncInner } = lib;
-
-  // Token gate outside the generic sync: without a token this is a silent
-  // no-op (no syncing state flip), matching the pre-extraction behavior.
-  const sync = useCallback(async () => {
-    if (!token) return;
-    await syncInner();
-  }, [token, syncInner]);
-
-  return {
-    repos: lib.items,
-    total: lib.total,
-    totalPages: lib.totalPages,
-    loading: lib.loading,
-    queryError: lib.queryError,
-    retryQuery: lib.retryQuery,
-    language: lib.filter,
-    setLanguage: lib.setFilter,
-    searchInput: lib.searchInput,
-    setSearchInput: lib.setSearchInput,
-    page: lib.page,
-    goToPage: lib.goToPage,
-    languages: lib.facets,
-    libraryCount: lib.libraryCount,
-    lastSyncedAt: lib.lastSyncedAt,
-    metaLoading: lib.metaLoading,
-    hasToken,
-    settingsLoading,
-    syncing: lib.syncing,
-    syncProgress: lib.syncProgress,
-    syncError: lib.syncError,
-    syncJob: lib.syncJob,
-    sync,
-    embedJob: lib.embedJob,
-    tagJob: lib.tagJob,
-  };
 }

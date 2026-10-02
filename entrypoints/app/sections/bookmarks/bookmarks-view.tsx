@@ -79,7 +79,7 @@ export function BookmarksView() {
   return (
     <CollectionPageScaffold
       platform={PLATFORM}
-      items={bm.bookmarks}
+      items={bm.items}
       getRowKey={(bookmark) => bookmark.id}
       getTagId={(bookmark) => bookmark.normalizedUrl}
       libraryCount={bm.libraryCount}
@@ -116,7 +116,7 @@ export function BookmarksView() {
       primaryCategory={
         bm.libraryCount > 0 ? (
           <FolderChips
-            folders={bm.folders}
+            folders={bm.facets}
             totalCount={bm.libraryCount}
             selectedId={folderId}
             onSelect={(id) =>

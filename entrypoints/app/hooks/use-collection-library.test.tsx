@@ -46,7 +46,7 @@ describe('useCollectionLibrary filter ownership', () => {
   let root: Root;
   let latest: Lib;
   let tag = 0;
-  let logTag: string;
+  let jobPlatform: string;
 
   function Probe({ controlledFilter }: { controlledFilter?: string | null }) {
     latest = useCollectionLibrary<string, never, void>({
@@ -54,7 +54,7 @@ describe('useCollectionLibrary filter ownership', () => {
       facetsFn,
       lastSyncedFn,
       syncFn,
-      logTag,
+      jobPlatform,
       pageSize: PAGE_SIZE,
       controlledFilter,
     });
@@ -68,7 +68,7 @@ describe('useCollectionLibrary filter ownership', () => {
     syncFn.mockClear();
     // Distinct job namespace per test — the background-jobs store is a module singleton.
     tag += 1;
-    logTag = `lib-test-${tag}`;
+    jobPlatform = `lib-test-${tag}`;
     container = document.createElement('div');
     document.body.append(container);
     root = createRoot(container);

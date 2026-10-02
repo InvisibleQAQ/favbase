@@ -1,6 +1,6 @@
 # 32 跨平台流程统一度审计与分步整改（2026-09-29）
 
-> 状态：**审计完成；D1、D2 已决（2026-09-29，§5.1、§5.2）；Step 1 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 1 落地记录）；D6 已决（用户 2026-09-30，按推荐）；Step 2 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 2 落地记录）；Step 3 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 3 落地记录）；Step 4 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 4 落地记录）；Step 5 已落地 2026-10-01（代码 + 单测；运行时验证待人工，见 §6 Step 5 落地记录）；Step 6 已落地 2026-10-01（代码 + 单测；运行时验证待人工，见 §6 Step 6 落地记录）；Step 7–9 均未实施**。执行任一 Step 前先读 §2 否决清单与 §5 对应决策；一次对话只做一个 Step。
+> 状态：**审计完成；D1、D2 已决（2026-09-29，§5.1、§5.2）；Step 1 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 1 落地记录）；D6 已决（用户 2026-09-30，按推荐）；Step 2 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 2 落地记录）；Step 3 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 3 落地记录）；Step 4 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 4 落地记录）；Step 5 已落地 2026-10-01（代码 + 单测；运行时验证待人工，见 §6 Step 5 落地记录）；Step 6 已落地 2026-10-01（代码 + 单测；运行时验证待人工，见 §6 Step 6 落地记录）；D3 已决（用户 2026-10-02，按推荐：删除）；Step 7 已落地 2026-10-02（代码 + 单测；运行时验证待人工，见 §6 Step 7 落地记录）；Step 8–9 均未实施**。执行任一 Step 前先读 §2 否决清单与 §5 对应决策；一次对话只做一个 Step。
 >
 > 起因：用户观察「接入新平台时，数据处理、备份、展示都高度统一，真正不同的只有数据获取和风控」，要求找出仍未统一的流程并给出分步整改。
 >
@@ -164,7 +164,7 @@
 - github / x / zhihu / youtube 四个平铺 view（229 / 212 / 194 / 227 行）约 70% 是相同接线。
   - `copy={{…}}` 块里有四个键在 7 处调用点（五个 view + B站两处）恒为同一常量：`zhihu-view.tsx:154-166` 与 `youtube-view.tsx:177-189` 替换平台前缀后**逐行相同**（diff 验证）。
   - `EmptyLibraryState` 三份（`github-stars-view.tsx:75`、`zhihu-view.tsx:87`、`youtube-view.tsx:97`，x 另有一份 `x-view.tsx:93`）；`NotLoggedInState` 两份（`x-view.tsx:74`、`zhihu-view.tsx:69`）；打开站点按钮两份（`x-view.tsx:56`、`zhihu-view.tsx:51`）。
-- 五个数据 hook（115–163 行）60–70% 是把 `useCollectionLibrary` 的通用字段改名（`repos: lib.items`、`language: lib.filter`…，约 25 行 / 个）。docs/15 当年的目标是「各平台 hook 退化为 ~40 行薄 adapter」（`docs/15:55`），没有兑现。
+- 五个数据 hook（115–163 行）60–70% 是把 `useCollectionLibrary` 的通用字段改名（`repos: lib.items`、`language: lib.filter`…，约 25 行 / 个）。docs/15 当年的目标是「各平台 hook 退化为 ~40 行薄 adapter」（`docs/15:55`），没有兑现。（**已于 Step 7 删除改名层**，2026-10-02；五个 hook 现为 34–60 行，见 Step 7 落地记录。）
 - `LOG_TAG` 手写五份（`use-github-stars.ts:21` 等），与 adapter 里 `jobPlatformForCollection` 派生的值是两个事实源，今天恰好相同。（**已于 Step 5 改派生**，2026-10-01，用户决定从 Step 6 提前；它是 job 命名空间而不只是日志前缀，见中-6 勘误②。）
 - `SEARCH_DEBOUNCE_MS = 300` 三份：`hooks/use-collection-library.ts:9`、`sections/bilibili/bilibili-view.tsx:33`、`sections/collections/use-collections.ts:20`。
 - i18n 第一类同文键 30 个：`*.lastSynced`「上次同步 {{time}}」×6、`*.syncFailed`「同步失败: {{error}}」×6（`lib/i18n/locales/zh-CN.ts:501-605`，已 grep 验证）、`showMore*` ×6、`showLess*` ×6、`all*` ×4（`allCollections.*` 与 `tags.*` 另有两组同文的展开/收起）。docs/16:11 把 docs/15 LOW-7（`common.*` i18n）记为「已修复」，实际只迁了 `retry` / `loadFailed`，**此记录需勘误**。
@@ -240,7 +240,7 @@
 |---|---|---|---|
 | D1 | 同步运行记录存哪里 | **已决（用户 2026-09-29，按推荐）：DB 新表**（迁移 v007，随 Step 1 建；形状与理由见 §5.1）：daily 触发方与页面 caption 已经读 DB；自动进导出；X 冷却可直接读 | WXT `local:` storage：免迁移，但「上次同步」变成 DB + storage 两个来源，且不进导出。扩展未发布，无旧数据迁移问题 |
 | D2 | 自动同步节奏 | **已决（用户 2026-09-29，按推荐）：按最近尝试判定，每平台每天最多自动尝试一次**（成功、失败、静默都算；判定细则、代价落在哪些平台、Step 1 的硬约束见 §5.2）：最简单，风控最安全 | 失败后指数退避：要多一套退避状态。推荐方案的真实代价有两条：<br>① 探针不联网就判断不了登录的平台（今天只有知乎，`probeReady: () => true`）一天只有一次机会——00:05 未登录静默一次，09:00 登录后当天不会再自动同步；<br>② funnel 是手动与自动共用的，**手动同步失败也算当天的尝试**，会压掉当天的自动同步。<br>两种情况都只影响自动触发，手动按钮不受限。启动时网络抖动导致当天不再自动重试属于同一类，较少见 |
-| D3 | 数据 hook 的字段改名层 | **删除**：view 直接消费 `useCollectionLibrary` 的通用字段，平台 hook 只留真正平台特有的部分（凭据门、X 冷却）；兑现 docs/15:55 的「~40 行」目标 | 保留：零 churn，但每个新平台继续手写约 25 行改名 |
+| D3 | 数据 hook 的字段改名层 | **已决（用户 2026-10-02 以「开始 step7」选定，按推荐）：删除**（落地见 §6 Step 7 落地记录）：view 直接消费 `useCollectionLibrary` 的通用字段，平台 hook 只留真正平台特有的部分（凭据门、X 冷却）；兑现 docs/15:55 的「~40 行」目标 | 保留：零 churn，但每个新平台继续手写约 25 行改名 |
 | D4 | B站视频网格走远端 API 分页（`use-bili-fav-videos.ts:41` → `bili-sync-service.ts:85-101`） | **维持** | 改本地优先，需要重开 `platform-onboarding.md:401-405` 与 `sections/bilibili/CLAUDE.md:28-29` 两条决定。现状的真实张力：<br>① 同一平台有两条展示路径——B站页走远端，聚合页 / 标签页 / Chat 读本地；<br>② 翻页、换排序、搜索都直接打 `x/v3/fav/resource/list`，这正是同步 runner 因 412 事故限速到 7–10 s / 页的同一端点，而浏览路径没有任何节流。<br>浏览路径是否触发过 412 为 [UNKNOWN]；**观察到第一次就是重开的触发条件** |
 | D5 | 正文来源统一到什么程度 | **只收契约与已重复零件** | 统一进度面板：两个面板的差异来自触发时机、状态位置、冲突策略三处本质不同，强行合并会引入模式分支 |
 | D6 | 共享模块平台特例怎么消 | **已决（用户 2026-09-30，按推荐）：domain descriptor 加纯数据字段**（照 `sortKey` 的 `{ source:'meta', field }` 形状；落地见 §6 Step 2 落地记录） | decoder 暴露函数：tagging / analytics 要 import 六个平台的 decoder，重新引入平台扇入 |
@@ -1291,8 +1291,202 @@
   - `queryFn` 的 filter / search / page 规整抽成共享 helper；
   - 凭据门（github token、youtube 配置）用一个共享 wrapper；
   - X 冷却、bookmarks 的路由受控筛选与挂载同步，留在各自 hook。
-- **测试**：`use-bookmarks.test.tsx` 与各 view 测试随改名更新；`use-collection-library.test.tsx` 不动。
+  - （**补记 2026-10-02**）`useCollectionLibrary` 的 config 键 `logTag` 改名 `jobPlatform`：Step 5 落地记录与 `hooks/CLAUDE.md` 都把这个键名明确留给本 Step 的改名层，本节原文没列。
+- **测试**：`use-bookmarks.test.tsx` 与各 view 测试随改名更新；`use-collection-library.test.tsx` 不动。（**勘误 2026-10-02**：仓库里没有 `*-view.test.tsx`（docs/25 Step 8 已查明），本 Step 唯一触及的 view 级测试是 `sections/configuration-heading.test.tsx`；`use-bookmarks.test.tsx` 实际一行未改。`use-collection-library.test.tsx` 改了三行——只是 config 键 `logTag` → `jobPlatform` 及同名局部变量，零断言改动；「不动」写在 Step 5 把键名延到本 Step 之前。）
 - **判据**：五个平台 hook 各 ≤ 60 行（估算门槛）。
+
+#### Step 7 落地记录（2026-10-02）
+
+代码与单测已落地；运行时验证（五个平铺平台页照常加载、筛选、搜索、翻页、获取，github / youtube 未配置时显示连接引导）需要浏览器，**待人工**。判据都成立：
+
+- 五个平台 hook 各 ≤ 60 行（`wc -l`）：github 35、x 60、zhihu 34、youtube 37、bookmarks 59（Step 7 之前依次是 131 / 149 / 110 / 132 / 110）；
+- `entrypoints/` 非测试代码零 `logTag`（grep）；`useCollectionLibrary` 的 config 键是 `jobPlatform`（`hooks/use-collection-library.ts:51`）；
+- `entrypoints/` 零 `hasToken` / `hasConfig` / `UseGithubStarsReturn` / `UseXBookmarksReturn` / `UseZhihuFavoritesReturn` / `UseYoutubePlaylistsReturn`；
+- github / youtube 的「是否已配置」各只有一个定义：`githubCredentials`（`sections/github-stars/github-sync-adapter.ts:85`）与 `youtubeCredentials`（`sections/youtube/youtube-sync-adapter.ts:41`）。run 门（`:44` / `:27`）、`probeReady`（`:91` / `:48`）、页面门（两个 hook 传给 `useCredentialGatedLibrary`）三处都调它。`entrypoints/` 与 `lib/` 非测试代码里，读 `githubToken` / `youtubeApiKey` / `youtubeChannel` 的只剩这两个解析函数，以及 `lib/hooks/useSettings.ts` 的设置卡草稿派生与保存；
+- 新 wrapper 测试与契约测试都做了证伪，红态见下；
+- `use-collection-library.test.tsx` 只改了 config 键（及同名局部变量），两个 adapter 测试的现有用例零改动；
+- `pnpm compile` / `pnpm test` / `pnpm build` 全绿，manifest sha256 不变。
+
+**落在哪**：
+
+- **`hooks/use-collection-library.ts`**：
+  - `UseCollectionLibraryConfig.logTag` 改名 `jobPlatform`：类型、解构、`useJob` / `startJob` 的第一参、两处 `console.error` 前缀、三个 effect / callback 的依赖数组，以及注释。
+  - 函数 doc comment 的「Platform adapters rename the generic fields back to their domain vocabulary」改写成「平台 hook 只注入稳定函数、叠加自己的触发策略和平台特有状态；view 直接消费通用字段」。
+  - `UseCollectionLibraryReturn` 的字段不改名、不增减。
+- **`hooks/facet-query.ts`**（新，15 行，泛型层纯函数，只 `import type` 自 `./use-collection-library`）：
+  - `facetQuery(query, facetKey)` 返回 `({ filter, search, page, pageSize }) => query({ [facetKey]: filter ?? undefined, search: search || undefined, page, pageSize } as TQuery)`。
+  - 函数体两行，唯一的断言是 `as TQuery`，五个调用点零断言。
+  - PRD A.2 的接受条件全部满足，所以保留 helper（实证见下）。
+- **`hooks/use-credential-gated-library.ts`**（新，43 行，**平台感知层**：经 `useSettings` 读 storage）：
+  - `useCredentialGatedLibrary(credentials, config)` 渲染期算 `configured = credentials(settings) !== null`，`sync` 是 `useCallback`：未配置时 `return`，否则 `await lib.sync()`，依赖 `[configured, syncInner]`。
+  - 返回 `{ ...lib, sync, configured, settingsLoading }`。
+  - 与两个平台改前的门逐行等价（github：`if (!token) return`，依赖 `[token, syncInner]`；youtube：`if (!hasConfig) return`，依赖 `[hasConfig, syncInner]`）。
+- **两个 adapter**：
+  - github 导出 `githubCredentials(settings): string | null`（`settings.githubToken || null`）。
+  - youtube 导出 `youtubeCredentials(settings): YoutubeSyncConfig | null`（`apiKey` 与 `channel` 都非空才返回 `{ apiKey, channel }`）。
+  - run 门直接用返回值（`if (token === null) return;` / `if (config === null) return;`，无 `!`），`probeReady` 改为 `<p>Credentials(...) !== null`。youtube 的 `config` 对象原先在 `onProgress` 之后构造，现在由解析函数在门里给出，无可观测差别。
+- **五个平台 hook**：
+  - 全部 `logTag: JOB_PLATFORM` → `jobPlatform: JOB_PLATFORM`；`queryFn` 改成模块级 `facetQuery(get…, '<facetKey>')`。
+  - 删五个 `Use*Return` 接口，以及 github / x / zhihu 的进度类型 re-export（改前 grep 确认零消费者：五个 hook 文件只被各自 view 和两个测试 import，view 只 import `use*` 函数）。
+  - 返回形状：
+    - zhihu：`return useCollectionLibrary({...})`；
+    - github / youtube：`return useCredentialGatedLibrary(<p>Credentials, {...})`；
+    - x：`{ ...lib, lastInserted, cooldownRemainingMs }`，`lastInserted` effect 与冷却逻辑（含注释）逐字保留；
+    - bookmarks：挂载 `useEffect(() => void sync())` 保留，`return lib`，返回类型 `UseBookmarksReturn = Omit<UseCollectionLibraryReturn<BookmarkItem, BookmarkFolderRef, BookmarksSyncProgress>, 'filter' | 'setFilter'>`（导出，`use-bookmarks.test.tsx:43` 在用）。
+  - 原写在 `Use*Return` 接口里的平台说明（youtube「手动按钮，绝不 auto-on-mount：配额端点、位置序无增量游标」、zhihu「限流远程端点」、x「D5」与 `lastInserted` / `cooldownRemainingMs` 的含义）挪进函数 doc comment。
+- **五个 view**：只改字段名——`.repos` / `.favorites` / `.videos` / `.bookmarks` → `.items`，`.language` / `.collectionId` / `.playlistId` / `.author` → `.filter`，`.setLanguage` / … → `.setFilter`，`.languages` / `.collections` / `.playlists` / `.authors` / `.folders` → `.facets`，`.hasToken` / `.hasConfig` → `.configured`。github / youtube 的配置门与 `pipeline` 条件因此同形（`!x.settingsLoading && !x.configured`）。chips 组件自己的 prop 名不改（Step 8）。view 行数与 Step 6 后相同（github 196、x 176、zhihu 149、youtube 160、bookmarks 139）。
+- **契约测试**（`tests/platform-completeness-contract.test.ts`）：
+  - `JOB_NAMESPACE_PROPERTIES` 只剩 `'jobPlatform'`（`:812`）。
+  - 自检命中表删 `"const LOG_TAG = 'p'; ({ logTag: LOG_TAG });"`（已被 `"const P = 'p'; ({ jobPlatform: P });"` 覆盖）；`` "({ [`logTag`]: 'p' });" `` 改成 `` "({ [`jobPlatform`]: 'p' });" ``，保住模板字面量计算键这一格。
+  - 自检注释与探测器 doc comment 去掉 `logTag`。
+
+**先红后绿与实证**：
+
+- **`facetQuery` 接受条件**：先写好 helper，再建临时探针文件 `entrypoints/app/hooks/zz-facet-probe.ts`，跑 `tsc --noEmit -p tsconfig.json`，跑完删除（`git status` 确认无残留）。
+  - 探针内容：五个真实调用（`getStarredRepos` / `'language'`、x `getBookmarks` / `'author'`、`getFavorites` / `'collectionId'`、`getPlaylistVideos` / `'playlistId'`、bookmarks `getBookmarks` / `'folderId'`）；一条把结果赋给 `(p: CollectionQueryParams) => Promise<CollectionPage<GithubRepoItem>>` 的类型断言，证 `TItem` 推得出；三条错误用法。
+  - 输出恰好是三条错误用法，五个真实调用与类型断言都通过：
+    ```
+    entrypoints/app/hooks/zz-facet-probe.ts(17,49): error TS2345: Argument of type '"lang"' is not assignable to parameter of type '"language"'.
+    entrypoints/app/hooks/zz-facet-probe.ts(18,49): error TS2345: Argument of type '"search"' is not assignable to parameter of type '"language"'.
+    entrypoints/app/hooks/zz-facet-probe.ts(19,47): error TS2345: Argument of type '"language"' is not assignable to parameter of type '"author"'.
+    ```
+  - 另用第二个临时探针证明 `as TQuery` 删不掉（同样跑完删除）：去掉断言后 `tsc` 报
+    ```
+    error TS2345: Argument of type '{ [facetKey]: string | undefined; search: string | undefined; page: number; pageSize: number; }' is not assignable to parameter of type 'TQuery'.
+      '{ [facetKey]: string | undefined; search: string | undefined; page: number; pageSize: number; }' is assignable to the constraint of type 'TQuery', but 'TQuery' could be instantiated with a different subtype of constraint '{ search?: string | undefined; page: number; pageSize: number; }'.
+    ```
+- **wrapper 证伪**：临时删掉 `use-credential-gated-library.ts:38` 的 `if (!configured) return;`，只跑 `use-credential-gated-library.test.tsx`，红的恰好是未配置那一例（`1 failed | 3 passed`），已配置、`settingsLoading` 透传、settings 切换三例照绿；恢复后 `cmp` 与保留版一致，4 例全绿。红态原样（只删了开头的 `RUN` 横幅与结尾的 `Start at` / `Duration` 两行；收尾前未过滤重跑一次，输出里零 `stderr` / `act(` 行——这个文件设了 `IS_REACT_ACT_ENVIRONMENT`；恢复后再次 `cmp` 一致）：
+  ```
+   ❯ entrypoints/app/hooks/use-credential-gated-library.test.tsx (4 tests | 1 failed) 120ms
+       × unconfigured: sync() is a silent no-op — no job, no syncing flip 33ms
+
+  ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+   FAIL  entrypoints/app/hooks/use-credential-gated-library.test.tsx > useCredentialGatedLibrary > unconfigured: sync() is a silent no-op — no job, no syncing flip
+  AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+
+  Received:
+
+    1st vi.fn() call:
+
+      Array [
+        [Function anonymous],
+        Object {
+          "checkpoint": [Function checkpoint],
+        },
+      ]
+
+
+  Number of calls: 1
+
+   ❯ entrypoints/app/hooks/use-credential-gated-library.test.tsx:102:24
+      100|     await flush();
+      101|
+      102|     expect(syncFn).not.toHaveBeenCalled();
+         |                        ^
+      103|     expect(latest.syncing).toBe(false);
+      104|     expect(latest.syncJob).toBeNull();
+
+  ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+   Test Files  1 failed (1)
+        Tests  1 failed | 3 passed (4)
+  ```
+- **契约测试证伪**：临时把 `sections/zhihu/use-zhihu-favorites.ts:32` 的 `jobPlatform: JOB_PLATFORM` 改成 `jobPlatform: 'zhihu-favorites'`，红的恰好是「derives every job namespace from the descriptor」一例（`1 failed | 6 passed`），只列这一行；恢复后 `cmp` 一致，7 例全绿。红态（只保留断言与计数行）：
+  ```
+   FAIL  tests/platform-completeness-contract.test.ts > platform completeness contract > derives every job namespace from the descriptor
+  AssertionError: Job namespace written by hand — derive it with `jobPlatformForCollection(platform)` (docs/32 Step 5). `jobPlatform` differs from the platform id for github / x / zhihu / youtube, so a copied literal silently splits a platform's jobs across two namespaces:
+  - entrypoints/app/sections/zhihu/use-zhihu-favorites.ts:32: jobPlatform: 'zhihu-favorites': expected [ Array(1) ] to deeply equal []
+   Test Files  1 failed (1)
+        Tests  1 failed | 6 passed (7)
+  ```
+- **自检表改动后照绿**：删掉 `LOG_TAG` 行、`` [`logTag`] `` 改成 `` [`jobPlatform`] `` 之后，自检一例绿（命中表 13 条各恰好 1 条，放过表 7 条零条），真实扫描零条。
+
+**默认决定**（PRD 已定，照做）：
+
+- **D-a 返回形状是 spread**，不嵌套 `{ library: lib }`。
+- **D-b 删 `Use*Return` 接口**，只留 `UseBookmarksReturn`（测试在用），且由 `Omit` 派生，不手写字段表。
+- **D-c `configured` 一个字段名**服务 github / youtube（原 `hasToken` / `hasConfig`）。
+- **D-d 凭据解析函数返回凭据或 `null`**，不返回 boolean：run 门要用它的值，boolean 版会逼出 `!` 断言。
+- **D-e wrapper 是独立 hook**，不往 `useCollectionLibrary` 加 `canSync` 之类开关（spec §7.2 的既有决定：门不进泛型层）。
+- **D-f 不新增「hook 不得改名」守卫**：判据是行数，`tsc` 已保证 view 与 hook 字段一致。
+- **D-g 契约测试去掉 `logTag`**。
+- **实施时补的两个默认**（PRD 未写，按最少代码取）：
+  - 五个 hook 都不写显式类型实参与返回类型注解（bookmarks 除外）。`TItem` / `TFacet` / `TProgress` 由注入的函数推出，`pnpm compile` 验过；原来的显式实参只是为了配手写的 `Use*Return`。
+  - `facet-query.test.ts` 断言的是「值为 `undefined`」，不是「键不存在」。helper 与改前手写的 `queryFn` 一样写 `language: filter ?? undefined`，键在、值是 `undefined`，lib 查询把它当作没传。
+
+**与 PRD 的偏离**：
+
+1. **wrapper 先写、测试后写**。PRD 判据写「新 wrapper 测试先写、证伪红过」。实际顺序是先写 `use-credential-gated-library.ts`，再写测试，再删掉 no-op 分支证伪。红态证据来自证伪，不来自「对不存在的 wrapper 跑测试」。后者只会是 import 失败，不是断言红，Step 5 落地记录对同类情况有同样的说明。
+2. **五个 hook 的 `JOB_PLATFORM` JSDoc 压成两行**（`/** … */`，与 `use-collection-library.ts` 里 `SEARCH_DEBOUNCE_MS` 的写法相同）。PRD 只要求把其中的 `logTag` 改成 `jobPlatform`。x 不压就是 62 行；为了五个文件一致，统一压缩。x 的 `syncFn` 注释从 4 行压到 3 行，删了「all live there」，其余措辞不变；`lastInserted` effect 与冷却两段逐字保留。
+3. **两个 adapter 测试改了 import 行**（github 那行加 `githubCredentials`，youtube 那行加 `youtubeCredentials`，两份都多一行 `import type { UserSettings }`）。PRD 允许追加用例；要追加就得 import 解析函数。现有 `it` 一行未动。
+4. **spec 多改了 §12 末段**：「anchor 5's `probeReady`」改成「anchor 5's `<p>Credentials` resolver (what `probeReady` reads)」。PRD G 没点 §12；不改的话它指向的东西和 §8 第 5 条对不上。
+5. **根 `CLAUDE.md` 的 `entrypoints/app/hooks/CLAUDE.md` 索引行**补了 `useCredentialGatedLibrary` 与 `facetQuery`。PRD 的条件是「若提到改名」：这一行没提改名，但新增的两个 hook 模块不写进去就查不到。
+6. **`sections/github-stars/CLAUDE.md` 与 `sections/youtube/CLAUDE.md` 的 adapter 行也改了**，写明 `<p>Credentials` 住在 adapter、三处共用。PRD G 只点了这两份文件的 hook 行。
+
+**行为变化与验证备注**：
+
+- **运行时行为零变化**：
+  - view 只改字段名，渲染逐字不变。
+  - `configured` 与原 `hasToken` / `hasConfig` 同值：github 是 `(githubToken || null) !== null` ≡ `Boolean(githubToken)`；youtube 是两者都非空 ≡ 原 `Boolean(apiKey && channel)`（原来经 `?? ''`）。
+  - `probeReady` 与 run 门的判定也同值。
+  - `facetQuery` 发给 lib 查询的对象与改前手写的 `queryFn` 逐键相同，键序也相同：facet 键、`search`、`page`、`pageSize`。
+- **bookmarks 返回值的类型面变宽**：`Omit<…, 'filter' | 'setFilter'>` 让 view 在类型上看得到 `syncProgress` / `embedJob` / `tagJob`，原手写接口没列这三个。今天没有消费者；运行时本来就有。`filter` / `setFilter` 运行时也在对象上（`return lib`），只是类型不暴露，与 PRD「保留刻意不暴露」的意图一致。
+- **「本次新增 N」扩到其余五平台没做**（PRD Out of Scope）：`sections/x/CLAUDE.md` 那句改成只写「未排期」，理由一并写明。
+- **manifest**：本 Step 不动 descriptor。`pnpm build` 后 `.output/chrome-mv3/manifest.json` 的 sha256 是 `053dd7bdf0da2ba2fa5ae8c67453ecc286b56394f5704585b38c3e34fde32ae5`，与 Step 4 / 5 / 6 相同。
+- **SW 体积**：bundle-contract 行是 `14 modules / 947838 bytes`，与 Step 6 后相同（只比了计数）。
+- **测试**：
+  - 聚焦（PRD H.1 命令：`entrypoints/app/hooks` + `entrypoints/app/sections` + contract + i18n-no-hardcoded + ui-vendor-boundaries + lib-import-smoke）57 个文件 391 例绿；
+  - `pnpm compile` 绿；
+  - `pnpm test` 全量绿：主仓库 213 个文件 1720 例（Step 6 后 211 / 1709，+2 文件、+11 例：`use-credential-gated-library.test.tsx` 4 例、`facet-query.test.ts` 3 例、两个 adapter 测试各追加 2 例），`packages/favbase` 15 个文件 263 例；在 config 的 `maxWorkers: 8` 下一次跑过；
+  - `pnpm build` 绿。
+
+**改了哪些现有测试**：
+
+- `entrypoints/app/hooks/use-collection-library.test.tsx`：只改 config 键——`let logTag` → `let jobPlatform`、`logTag,` → `jobPlatform,`、`logTag = …` → `jobPlatform = …`，三行，零断言改动（偏离见上方 Step 7 正文勘误）。
+- `entrypoints/app/sections/configuration-heading.test.tsx`：两个 mock 的 `hasToken: false` / `hasConfig: false` → `configured: false`，其余一行未改。
+- `tests/platform-completeness-contract.test.ts`：见「落在哪」。
+- `entrypoints/app/sections/github-stars/github-sync-adapter.test.ts`、`entrypoints/app/sections/youtube/youtube-sync-adapter.test.ts`：只追加解析函数的 `describe`（空串 / 缺一项 → `null`），外加 import 行（偏离 3）；现有用例零改动，照绿（含 github `mockResolvedValue({})` 与 youtube 只给 `youtubeApiKey` 的两个静默 no-op 例）。
+- **新增**：`entrypoints/app/hooks/use-credential-gated-library.test.tsx`（4 例：未配置不启动 job、已配置跑一次、`settingsLoading` 透传、settings 切换后 `configured` 跟着变；整模块 mock `@/lib/hooks/useSettings`，因为真模块加载期读 `@/lib/storage`；每例用不同的 job 命名空间，因为 job store 是模块单例）、`entrypoints/app/hooks/facet-query.test.ts`（3 例）。
+- **一行未改就绿**：`use-bookmarks.test.tsx`（四例，含 route→folder 映射与换 folder 回页 1）、`collection-page-scaffold.test.tsx`、`collection-states.test.tsx`、`collection-platform-auto-sync.test.ts`（`toBe` 身份锁定）、`use-daily-auto-sync.test.tsx`，以及其余全部。
+
+**trellis-check 复核（2026-10-02）**：
+
+- **行为等价逐项对照**（`git show HEAD:` 的五个 hook 与五个 view）：
+  - view 读的每个字段都映射到同一个值。旧 hook 里 `repos` / `favorites` / `videos` / `bookmarks`、`language` / `collectionId` / `playlistId` / `author`、`setLanguage` / …、`languages` / `collections` / `playlists` / `authors` / `folders` 本来就是 `lib.items` / `lib.filter` / `lib.setFilter` / `lib.facets` 的别名；其余字段（`syncError`、`syncJob`、`sync`、`embedJob` …）原样透传。`tsc` 保证 view 没有漏改的读取。
+  - 凭据判定：`githubCredentials` 与旧三处（run 门 `if (!token) return`、`probeReady` 的 `Boolean(githubToken)`、hook 的 `Boolean(token)`）在 `undefined` / `''` / 非空串上同真值；`youtubeCredentials` 与旧三处（`!apiKey || !channel`、`Boolean(apiKey && channel)`、hook 里经 `?? ''` 的同式）在缺一项 / 空串 / 都有上同真值。run 门、`probeReady`、页面门都调同一个解析函数（`github-sync-adapter.ts:44,91`、`youtube-sync-adapter.ts:27,48`、两个 hook 传给 `useCredentialGatedLibrary` 的第一参）。`DEFAULT_SETTINGS` 不含这三个键，所以 settings 加载窗口里 `configured` 为假、`sync()` 静默，与改前相同。
+  - **唯一不逐字等价的是 `sync` 的引用身份**：旧 github 门的 `useCallback` 依赖 `[token, syncInner]`，token 在两个非空值之间切换会换一个新函数；现在依赖 `[configured, syncInner]`，不换。没有地方按它的身份做事：两个 view 只把它当 `onSync` 传给 scaffold 与 `collection-states`，`components/collection/` 与 `components/collection-states/` 的非测试文件零 `useEffect` / `useMemo` / `useCallback` / `memo(`；run 门每次调用都重读 storage。youtube 的旧依赖本来就是布尔 `[hasConfig, syncInner]`，完全等价。上面「与两个平台改前的门逐行等价」对 github 说得略宽，以此为准。
+  - x：`lastInserted` effect、冷却锚点与 `useCountdown` 逐字未变（只压了 `syncFn` 注释，偏离 2）；`{ ...lib, lastInserted, cooldownRemainingMs }` 与旧的逐字段返回同值。bookmarks：挂载 `useEffect(() => void sync())` 保留；`UseBookmarksReturn` 由 `Omit` 派生，类型上不含 `filter` / `setFilter`。
+  - `facetQuery` 发给 lib 查询的对象与旧手写 `queryFn` 同键、同值、同序（facet 键 `filter ?? undefined`、`search || undefined`、`page`、`pageSize`）。
+- **`facetQuery` 接受条件**：函数体两行、一个 `as TQuery`、五个调用点零断言。独立重跑 tsc 探针（`entrypoints/app/hooks/zz-check-facet-probe.ts`，跑完删除）：五个真实调用通过，四条错误用法恰好四个 TS2345——`'lang'`、`'search'`、`'page'`（都是「not assignable to parameter of type '"language"'」）与 x 查询上的 `'language'`（「… '"author"'」）。比上面的记录多验了 `'page'` 一条；记录原有的三条输出不改。
+- **独立复现了两次证伪**：
+  - 删掉 `use-credential-gated-library.ts:38` 的 `if (!configured) return;`：`1 failed | 3 passed (4)`，红的只有未配置那一例（`expected "vi.fn()" to not be called at all, but actually been called 1 times`）。
+  - `use-zhihu-favorites.ts:32` 改成 `jobPlatform: 'zhihu-favorites'`：契约测试 `1 failed | 6 passed (7)`，只列 `entrypoints/app/sections/zhihu/use-zhihu-favorites.ts:32: jobPlatform: 'zhihu-favorites'` 一行。
+  - 两次都从改前的副本拷回。对拷回的文件跑 `cmp` 只是自证，不算证据；证据是拷回后 zhihu 文件的 `git diff --stat` 仍是证伪前的 15 增 91 删，两份测试随后各 4/4、7/7 绿，`git status` 无残留副本。
+- **测试 diff**：`use-collection-library.test.tsx` 只有三行（config 键与同名局部变量），零断言改动；两个 adapter 测试只有 import 行与追加的 `describe`，原有 `it` 未动；`configuration-heading.test.tsx` 只有两个 mock 字段。契约测试的 `JOB_NAMESPACE_PROPERTIES` 是 `new Set(['jobPlatform'])`（`:812`）；自检命中表 13 条，仍含「常量经属性」`const P = 'p'; ({ jobPlatform: P })` 与模板计算键 `` ({ [`jobPlatform`]: 'p' }) ``，放过表 7 条；真实扫描零条。
+- **残留 grep**：`entrypoints/`、`lib/`、`tests/`、`packages/` 的 `.ts` / `.tsx` 里 `logTag` / `LOG_TAG` / `hasToken` / `hasConfig` / 四个 `Use*Return` 为零。读 `githubToken` / `youtubeApiKey` / `youtubeChannel` 的非测试代码只剩两个解析函数与 `lib/hooks/useSettings.ts`（另有 `settings-schema.ts` 的声明）。view 行数与 HEAD 相同（196 / 176 / 149 / 160 / 139）。
+
+**本轮修掉的**：
+
+1. **五个 hook 的 `JOB_PLATFORM` JSDoc 改名后成了同义反复**：「… derived from the domain Platform Descriptor's `jobPlatform` — also this hook's `useCollectionLibrary` `jobPlatform`」。改成「Background-job namespace — the domain Platform Descriptor's `jobPlatform`, which keys this page's sync / embed / tag jobs in `useCollectionLibrary`.」。仍是两行，所以五个 hook 的行数（35 / 60 / 34 / 37 / 59）与 `jobPlatform: JOB_PLATFORM` 的行号（zhihu 仍是 `:32`）都不变，上文与各 `CLAUDE.md` 引用的数字照旧成立。
+2. **`lib/youtube/youtube-sync-service.ts:217-218` 与 `lib/zhihu/zhihu-sync-service.ts:144-145` 的行内注释**仍写「Auto-tag / auto-embed are fired by the caller (use-youtube-playlists hook) via `startJob`」。这是 Step 1 漏掉的旧文（两个文件的模块 docstring 早已改对），而它点名的正是本 Step 刚掏空的 hook。改成指向 adapter 在外层跑的 Platform Sync funnel，2 行换 2 行。这两个文件不在 PRD 的文件清单里，只动了注释。
+
+**核对过、无需改的**：落地记录里的 `file:line`（`use-collection-library.ts:51`、`github-sync-adapter.ts:44/85/91`、`youtube-sync-adapter.ts:27/41/48`、`use-credential-gated-library.ts:38`、`use-zhihu-favorites.ts:32`、契约测试 `:812`、`use-bookmarks.test.tsx:43`）；行数（hook 35 / 60 / 34 / 37 / 59、wrapper 43、facet-query 15）；自检 13 / 7 条；六处偏离（偏离 1 如实写明测试在 wrapper 之后写）。spec §2 `:38`、§7.2、§8 第 5 条、§11（job 命名空间行现为 `:527`）、§12；`hooks/CLAUDE.md` 的分档（`facet-query` 在泛型层，`use-credential-gated-library` 在平台感知层）；五个 `sections/*/CLAUDE.md`；`components/collection/CLAUDE.md:10`；根 `CLAUDE.md` 的 docs/32 条与契约测试条。
+
+**仍然是已知缺口，不修**：
+
+- `<p>Credentials` 读错 key 仍无守卫（spec §8 第 5 条 unchecked）。三处读同一个函数，只保证它们不互相分叉。
+- 「平台 hook 不得改名」无守卫（D-f），靠行数判据与 review。
+- manifest 基线没有从 HEAD 重建，只比对了与 Step 4 / 5 / 6 记录相同的 sha256；bundle 只比了 bundle-contract 行的计数。
+- 运行时验证仍**待人工**。
+
+**重跑**（在上面两处注释改动之后；其后只改了 `.md`）：
+
+- 聚焦（PRD H.1 命令）57 个文件 391 例绿；
+- `pnpm compile` 绿；
+- `pnpm test` 全量绿：主仓库 213 个文件 1720 例，`packages/favbase` 15 个文件 263 例，一次跑过；
+- `pnpm build` 的 bundle-contract 行是 `14 modules / 947838 bytes`；`.output/chrome-mv3/manifest.json` 的 sha256 是 `053dd7bdf0da2ba2fa5ae8c67453ecc286b56394f5704585b38c3e34fde32ae5`。
 
 ### Step 8 tagged card 外壳 + facet chips（低-2）
 
@@ -1317,7 +1511,7 @@
 | 文件 | 今天 | 全部 Step 后 | 主要来源 |
 |---|---|---|---|
 | sync adapter | 58 | ~30 | Step 1 收尾 funnel |
-| 数据 hook | 129 | ~40（D3=删）/ ~110（D3=留） | Step 7 |
+| 数据 hook | 129 | ~40（D3=删）/ ~110（D3=留）；**实测 34**（Step 7 落地 2026-10-02；Step 7 之前是 110） | Step 7 |
 | view | 194 | ~110 | Step 4 / 6 |
 | card | 94 | 94 | 平台特有，不动 |
 | tagged card | 31 | ~3 | Step 8 |
@@ -1341,6 +1535,7 @@ lib 侧：平台 API 文件的重试 / 响应读取约减 30–40 行（Step 3�
 | 4 | 错误类必须继承 `sync-errors.ts` 基类（已落地 2026-09-30：§4.1 错误类条、§7.2 `use-<platform>.ts` 与 `<platform>-view.tsx` 两行、§2 completeness contract 描述、§11 禁项行） | 平台错误类继承断言（completeness contract 的独立用例 + 探测器自检，AST 扫描，失败列 `file:line`）；`lib-import-smoke` 纳入新 leaf |
 | 5 | 新增「延迟正文」一节（已落地 2026-10-01：§4.4「Deferred content」，原 §4.4 Tests 顺延 §4.5；另改 §2 completeness contract 描述、§4.2 Chunking 行、§4.3 `'pending'` 条的交叉引用、§7.2 `use-<platform>.ts` 行、§11 禁项行） | `entrypoints/app/**`（比原写的 `sections/**` 宽）禁手写 job 命名空间：job-store 调用（`startJob` / `useJob` / `getJob` / `pauseJob` / `resumeJob` / `trackJobRun`）的第一参与 `jobPlatform` / `logTag` 属性，不得是字面量或同模块里绑到字面量的常量（AST 扫描，独立用例 + 探测器自检，失败列 `file:line`） |
 | 6–8 | §7 页面清单删去状态组件与 tagged 外壳两项（Step 6 已落地 2026-10-01：§7.2 view 行改为「状态组件从 `components/collection-states/` 取、`copy` 只传平台文案」，§7.3 加 scaffold 自持外壳文案一段，§11「`components/collection/**` 内 `t()`」行补具名例外（实施时补了 `library-gate` 与 chrome-copy 叶文件两个，2026-10-02 trellis-check 补上一直在用却未具名的 `components/tags/`，共三个）；tagged 外壳待 Step 8。另 `i18n-conventions.md` §2 加 `common.*` 一行） | `CARD_ADAPTERS` 对账不变；Step 6 不新增守卫（D-g） |
+| 7 | §7.2 `use-<platform>.ts` 行改写：不改名、无手写返回接口、view 直接读通用字段，`jobPlatform = jobPlatformForCollection(<platform>)`，单 facet 查询用 `facetQuery`，`'credentials'` 平台用 `useCredentialGatedLibrary(<p>Credentials, config)`；§7.2 `<platform>-sync-adapter.ts` 行加 `<p>Credentials(settings)`；§8 第 5 条改成「导出解析函数，run 门 / `probeReady` / 页面门三处读同一个，仍 unchecked」；§12 末段同步；§2 completeness contract 描述与 §11 job 命名空间行只剩 `jobPlatform`（已落地 2026-10-02） | job 命名空间守卫的 `JOB_NAMESPACE_PROPERTIES` 去掉 `'logTag'`（改名后 `entrypoints/app/**` 不再有这个键，`tsc` 也拒绝它）；自检表删 `LOG_TAG` 行、`` [`logTag`] `` 行改 `` [`jobPlatform`] ``；不新增守卫（D-f） |
 | 9 | 查询片段 builder 列入「shared read helpers」 | — |
 
 每个 Step 落地时同 commit 更新上表对应的 spec 与目录 `CLAUDE.md`。
@@ -1358,7 +1553,7 @@ lib 侧：平台 API 文件的重试 / 响应读取约减 30–40 行（Step 3�
 
 - **docs/16:11**：记 docs/15 LOW-7「已修复」，实际只迁了 `retry` / `loadFailed`；**已于 Step 6 勘误**（2026-10-01，原句不改，句末补勘误括注）。
 - **§2 漏记一条既有决定**（2026-09-29 定 D1 时发现）：07-26 daily auto-sync 任务定过「复用 `sources.lastFetchedAt`，不建新表、不加新 storage 记录」（`.trellis/tasks/archive/2026-07/07-26-daily-first-open-auto-sync-all-platforms/prd.md:11`）。它不属于「不得重提」，因为 D1 明确推翻了它（§5.1）；记在这里，是为了不让后人以为本文不知道它。
-- **docs/15:55**：「各平台 hook 退化为 ~40 行」未兑现，现为 115–163 行（D3）。
+- **docs/15:55**：「各平台 hook 退化为 ~40 行」未兑现，现为 115–163 行（D3）。**已于 Step 7 兑现**（2026-10-02，`wc -l`）：github 35、x 60、zhihu 34、youtube 37、bookmarks 59（Step 7 之前依次是 131 / 149 / 110 / 132 / 110）。x 与 bookmarks 超过 40 行的部分是平台自己的状态（X 的「本次新增」与冷却、书签的路由受控筛选与挂载同步），不是改名。
 - **命名冲突**：`SyncBookmarksResult`、`getBookmarks`、`BookmarksQuery` 在 `lib/x` 与 `lib/bookmarks` 同名导出，今天没有文件同时 import 两者。**Step 1 未改名**（2026-09-30，D-h）：六个 lib 结果类型各自只追加了缺的字段（github `inserted`、bookmarks `inserted`、bilibili runner `insertedCount`），没有被统一成一个类型；统一只发生在 app 侧 adapter 返回给 funnel 的 `PlatformSyncOutcome`。lib 层两个同名类型不在同一文件相遇，改名收益为零。等哪天真有文件同时 import 两者，再改。
 - **悬空 ADR 引用**：`lib/ingest/ingest.ts:11` 曾写「ADR in .trellis/spec/frontend/database-bridge.md」，该文件不存在，也**从未进过 git**（`git log --all -- '*database-bridge*'` 为空；工作日志记它曾加过一节「Insert-Only Policy」，但从未提交，内容已丢失）。insert-only 规则实际只记录在 `lib/ingest/CLAUDE.md:16` 与 `platform-onboarding.md:117`。**Step 1 起全部改指 `lib/ingest/CLAUDE.md`**（2026-09-30）：`ingest.ts` 与这两处文档先改；同一条悬空引用还留在五个 sync-service 头注释（github / x / zhihu / youtube / bookmarks）、六个测试文件头注释（上面五个平台的 service 测试加 `lib/bilibili/videos-sync.test.ts`）与四个 `lib/<platform>/CLAUDE.md`（bilibili / bookmarks / github / x）里，**用户同日追加范围**，由 trellis-check 一并改掉；docs/ 与归档任务之外该路径零残留。
 - **「synced」含义不一**：x 报拉取数（`x-sync-service.ts:224`），github / bilibili 报 link 数（`github-sync-service.ts:293`、`videos-sync.ts:66`）。**已于 Step 1 在 adapter 层消除**（2026-09-30）：进 Platform Sync Record 的只有 `fetched` / `inserted` 两个口径明确的数（口径见 D-d）；lib 各自的 `synced` 字段原样保留，也不入记录。

@@ -93,7 +93,7 @@ export function GithubStarsView() {
 
   // No token: the whole page short-circuits into the connect guide
   // (Settings -> Connections).
-  if (!gh.settingsLoading && !gh.hasToken) {
+  if (!gh.settingsLoading && !gh.configured) {
     return (
       <DashboardContent maxWidth="xl">
         <SectionTitleBar title={t('githubStars.title')} links={breadcrumbs} />
@@ -124,7 +124,7 @@ export function GithubStarsView() {
   return (
     <CollectionPageScaffold
       platform={PLATFORM}
-      items={gh.repos}
+      items={gh.items}
       getRowKey={(repo) => repo.id}
       getTagId={(repo) => repo.repoId}
       libraryCount={gh.libraryCount}
@@ -164,10 +164,10 @@ export function GithubStarsView() {
       skeleton={<RepoGridSkeleton />}
       primaryCategory={gh.libraryCount > 0 ? (
         <LanguageChips
-          languages={gh.languages}
+          languages={gh.facets}
           totalCount={gh.libraryCount}
-          selected={gh.language}
-          onSelect={gh.setLanguage}
+          selected={gh.filter}
+          onSelect={gh.setFilter}
         />
       ) : null}
       emptyState={
@@ -187,7 +187,7 @@ export function GithubStarsView() {
         />
       }
       pipeline={
-        !gh.settingsLoading && gh.hasToken && gh.syncError?.kind !== 'auth'
+        !gh.settingsLoading && gh.configured && gh.syncError?.kind !== 'auth'
           ? pipeline
           : undefined
       }

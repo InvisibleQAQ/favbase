@@ -9,57 +9,25 @@ import {
 } from '@/lib/bookmarks/bookmarks-sync-service';
 import {
   useCollectionLibrary,
-  type CollectionQueryParams,
+  type UseCollectionLibraryReturn,
 } from '../../hooks/use-collection-library';
-import type { BackgroundJob } from '../../hooks/background-jobs-store';
 import { jobPlatformForCollection } from '../../hooks/collection-job-platform';
-import type { CollectionSyncError } from '../../hooks/collection-sync-error';
+import { facetQuery } from '../../hooks/facet-query';
 import { runBookmarksSync, type BookmarksSyncProgress } from './bookmarks-sync-adapter';
 
-/**
- * Background-job namespace, derived from the domain Platform Descriptor's
- * `jobPlatform` — also this hook's `useCollectionLibrary` `logTag`.
- */
+/** Background-job namespace — the domain Platform Descriptor's `jobPlatform`,
+ *  which keys this page's sync / embed / tag jobs in `useCollectionLibrary`. */
 const JOB_PLATFORM = jobPlatformForCollection('bookmarks');
 
-export interface UseBookmarksReturn {
-  // Paged query results (from PGlite via bookmarks-sync-service)
-  bookmarks: BookmarkItem[];
-  total: number;
-  totalPages: number;
-  loading: boolean;
-  queryError: string | null;
-  retryQuery: () => void;
-
-  // Search + pagination (the folder filter is the route's, not the hook's)
-  searchInput: string;
-  setSearchInput: (value: string) => void;
-  page: number;
-  goToPage: (page: number) => void;
-
-  // Library meta
-  folders: BookmarkFolderRef[];
-  libraryCount: number;
-  lastSyncedAt: Date | null;
-  metaLoading: boolean;
-
-  // Auto-sync (runs once on mount; `sync` re-exposed for error-state retry)
-  syncing: boolean;
-  /** Local browser data has neither auth nor rate limits — the view shows `message` verbatim. */
-  syncError: CollectionSyncError | null;
-  syncJob: BackgroundJob | null;
-  sync: () => Promise<void>;
-}
+/** The generic library minus its filter: the route owns the folder, so the view
+ *  never sees `filter` (and `setFilter` would be a controlled no-op). */
+export type UseBookmarksReturn = Omit<
+  UseCollectionLibraryReturn<BookmarkItem, BookmarkFolderRef, BookmarksSyncProgress>,
+  'filter' | 'setFilter'
+>;
 
 /** `filter` is the route folder id; `null` (route "All") = whole library. */
-function queryFn({ filter, search, page, pageSize }: CollectionQueryParams) {
-  return getBookmarks({
-    folderId: filter ?? undefined,
-    search: search || undefined,
-    page,
-    pageSize,
-  });
-}
+const queryFn = facetQuery(getBookmarks, 'folderId');
 
 /**
  * Thin adapter over the shared collection-library state machine. Bookmarks'
@@ -70,7 +38,7 @@ function queryFn({ filter, search, page, pageSize }: CollectionQueryParams) {
  * button, so a remount re-joins an in-flight run).
  */
 export function useBookmarks(folderId: string | undefined): UseBookmarksReturn {
-  const lib = useCollectionLibrary<BookmarkItem, BookmarkFolderRef, BookmarksSyncProgress>({
+  const lib = useCollectionLibrary({
     queryFn,
     facetsFn: getFolders,
     lastSyncedFn: getLastSyncedAt,
@@ -78,7 +46,7 @@ export function useBookmarks(folderId: string | undefined): UseBookmarksReturn {
     // extraction and the backlog embed dispatch all live there — the daily
     // auto-sync coordinator runs the exact same function.
     syncFn: runBookmarksSync,
-    logTag: JOB_PLATFORM,
+    jobPlatform: JOB_PLATFORM,
     controlledFilter: folderId ?? null,
   });
 
@@ -87,24 +55,5 @@ export function useBookmarks(folderId: string | undefined): UseBookmarksReturn {
     void sync();
   }, [sync]);
 
-  return {
-    bookmarks: lib.items,
-    total: lib.total,
-    totalPages: lib.totalPages,
-    loading: lib.loading,
-    queryError: lib.queryError,
-    retryQuery: lib.retryQuery,
-    searchInput: lib.searchInput,
-    setSearchInput: lib.setSearchInput,
-    page: lib.page,
-    goToPage: lib.goToPage,
-    folders: lib.facets,
-    libraryCount: lib.libraryCount,
-    lastSyncedAt: lib.lastSyncedAt,
-    metaLoading: lib.metaLoading,
-    syncing: lib.syncing,
-    syncError: lib.syncError,
-    syncJob: lib.syncJob,
-    sync,
-  };
+  return lib;
 }

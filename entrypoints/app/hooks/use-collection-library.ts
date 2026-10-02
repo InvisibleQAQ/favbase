@@ -48,7 +48,7 @@ export interface UseCollectionLibraryConfig<TItem, TFacet, TProgress> {
    * Background-job namespace — pass `jobPlatformForCollection(platform)`
    * (docs/32 Step 5); also the console.error prefix.
    */
-  logTag: string;
+  jobPlatform: string;
   pageSize?: number;
   /**
    * Controlled facet filter. Leave `undefined` for the default uncontrolled
@@ -84,7 +84,7 @@ export interface UseCollectionLibraryReturn<TItem, TFacet, TProgress> {
   metaLoading: boolean;
 
   // One-shot sync. WHEN to trigger (button / mount / daily coordinator) is the
-  // adapter's policy; the store dedupes concurrent triggers per logTag.
+  // adapter's policy; the store dedupes concurrent triggers per jobPlatform.
   syncing: boolean;
   syncProgress: TProgress | null;
   /** Classified by base class (`classifyCollectionSyncError`) — no per-platform classifier. */
@@ -92,7 +92,7 @@ export interface UseCollectionLibraryReturn<TItem, TFacet, TProgress> {
   syncJob: BackgroundJob<TProgress> | null;
   sync: () => Promise<void>;
 
-  // Post-sync background jobs (embed / tag) registered under the same logTag —
+  // Post-sync background jobs (embed / tag) registered under the same jobPlatform —
   // exposed for progress captions only. Platform-neutral (no branch): the
   // running-state feeds the global "don't close" reminder automatically, and
   // completion is NOT wired into refreshMeta/queryVersion (embed adds no rows;
@@ -105,13 +105,14 @@ export interface UseCollectionLibraryReturn<TItem, TFacet, TProgress> {
  * Platform-neutral state machine for "single list + facet chips + one-shot
  * sync" collection pages (github / x / zhihu / youtube / bookmarks). Owns:
  * search debounce, paged query with cancellation, library meta refresh, and
- * sync orchestration. Platform adapters rename the generic fields back to
- * their domain vocabulary and layer their own trigger policy on top.
+ * sync orchestration. Platform hooks only inject stable functions and layer
+ * their own trigger policy / platform-only state on top; views consume these
+ * generic fields directly.
  */
 export function useCollectionLibrary<TItem, TFacet, TProgress>(
   config: UseCollectionLibraryConfig<TItem, TFacet, TProgress>,
 ): UseCollectionLibraryReturn<TItem, TFacet, TProgress> {
-  const { queryFn, facetsFn, lastSyncedFn, syncFn, logTag, controlledFilter } = config;
+  const { queryFn, facetsFn, lastSyncedFn, syncFn, jobPlatform, controlledFilter } = config;
   const pageSize = config.pageSize ?? DEFAULT_PAGE_SIZE;
 
   // Filters
@@ -145,9 +146,9 @@ export function useCollectionLibrary<TItem, TFacet, TProgress>(
   const [metaLoading, setMetaLoading] = useState(true);
 
   // Sync state lives in the module-level backgroundJobs singleton (keyed by
-  // logTag) so it survives app.html route switches and dedupes across mounts;
+  // jobPlatform) so it survives app.html route switches and dedupes across mounts;
   // this hook only derives its view fields from that job.
-  const syncJob = useJob<TProgress>(logTag, 'sync');
+  const syncJob = useJob<TProgress>(jobPlatform, 'sync');
   const syncing = syncJob?.running ?? false;
   const syncProgress = (syncJob?.progress ?? null) as TProgress | null;
   const syncError = useMemo<CollectionSyncError | null>(
@@ -155,11 +156,11 @@ export function useCollectionLibrary<TItem, TFacet, TProgress>(
     [syncJob?.error],
   );
 
-  // Post-sync embed / tag jobs live under the same logTag namespace
-  // ({logTag}:embed / {logTag}:tag). Exposed for progress captions; their
+  // Post-sync embed / tag jobs live under the same jobPlatform namespace
+  // ({jobPlatform}:embed / {jobPlatform}:tag). Exposed for progress captions; their
   // completion is intentionally NOT wired into meta/query refresh.
-  const embedJob = useJob(logTag, 'embed');
-  const tagJob = useJob(logTag, 'tag');
+  const embedJob = useJob(jobPlatform, 'embed');
+  const tagJob = useJob(jobPlatform, 'tag');
 
   // Staleness guard for user-triggered async (sync) — no context id drifts on
   // these pages (single global source per platform), only unmount to protect
@@ -244,12 +245,12 @@ export function useCollectionLibrary<TItem, TFacet, TProgress>(
       try {
         await refreshMeta();
       } catch (err) {
-        console.error(`[${logTag}] meta load failed:`, err);
+        console.error(`[${jobPlatform}] meta load failed:`, err);
       } finally {
         if (mountedRef.current) setMetaLoading(false);
       }
     })();
-  }, [refreshMeta, logTag]);
+  }, [refreshMeta, jobPlatform]);
 
   // Refresh derived view data (meta + current page) when a sync this mount did
   // NOT observe end completes — i.e. it finished while we were on another route.
@@ -264,20 +265,20 @@ export function useCollectionLibrary<TItem, TFacet, TProgress>(
     }
     if (gen > lastSyncGenRef.current) {
       lastSyncGenRef.current = gen;
-      refreshMeta().catch((err) => console.error(`[${logTag}] meta refresh failed:`, err));
+      refreshMeta().catch((err) => console.error(`[${jobPlatform}] meta refresh failed:`, err));
       setQueryVersion((v) => v + 1);
     }
-  }, [syncJob?.generation, refreshMeta, logTag]);
+  }, [syncJob?.generation, refreshMeta, jobPlatform]);
 
   // One-shot sync. Dedupe + progress + error all live in the singleton, so a
   // remount re-joins an in-flight run instead of starting a duplicate; auth
   // resolution stays inside the platform's syncFn closure.
   const sync = useCallback(async () => {
-    startJob(logTag, 'sync', async (setProgress, control) => {
+    startJob(jobPlatform, 'sync', async (setProgress, control) => {
       await initDbProxy();
       await syncFn((progress) => setProgress(progress), control);
     });
-  }, [logTag, syncFn]);
+  }, [jobPlatform, syncFn]);
 
   return {
     items,

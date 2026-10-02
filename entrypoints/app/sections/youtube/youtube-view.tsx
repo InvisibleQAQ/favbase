@@ -56,7 +56,7 @@ export function YoutubeView() {
   // Not configured (API key / channel missing from settings): the whole page
   // short-circuits into the connect guide. A single synchronous gate — the
   // old async authorization probe died with OAuth.
-  if (!yt.settingsLoading && !yt.hasConfig) {
+  if (!yt.settingsLoading && !yt.configured) {
     return (
       <DashboardContent maxWidth="xl">
         <SectionTitleBar title={t('youtube.title')} links={breadcrumbs} />
@@ -84,7 +84,7 @@ export function YoutubeView() {
   return (
     <CollectionPageScaffold
       platform={PLATFORM}
-      items={yt.videos}
+      items={yt.items}
       getRowKey={(video) => video.id}
       getTagId={(video) => video.videoId}
       libraryCount={yt.libraryCount}
@@ -118,10 +118,10 @@ export function YoutubeView() {
       skeleton={<YoutubeGridSkeleton />}
       primaryCategory={yt.libraryCount > 0 ? (
         <PlaylistChips
-          playlists={yt.playlists}
+          playlists={yt.facets}
           totalCount={yt.libraryCount}
-          selected={yt.playlistId}
-          onSelect={yt.setPlaylistId}
+          selected={yt.filter}
+          onSelect={yt.setFilter}
         />
       ) : null}
       emptyState={
@@ -151,7 +151,7 @@ export function YoutubeView() {
         />
       }
       pipeline={
-        !yt.settingsLoading && yt.hasConfig && yt.syncError?.kind !== 'auth'
+        !yt.settingsLoading && yt.configured && yt.syncError?.kind !== 'auth'
           ? pipeline
           : undefined
       }

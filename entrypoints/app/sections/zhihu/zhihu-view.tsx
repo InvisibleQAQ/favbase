@@ -75,7 +75,7 @@ export function ZhihuView() {
   return (
     <CollectionPageScaffold
       platform={PLATFORM}
-      items={zhihu.favorites}
+      items={zhihu.items}
       getRowKey={(favorite) => favorite.id}
       getTagId={(favorite) => favorite.platformItemId}
       libraryCount={zhihu.libraryCount}
@@ -109,10 +109,10 @@ export function ZhihuView() {
       skeleton={<ZhihuGridSkeleton />}
       primaryCategory={zhihu.libraryCount > 0 ? (
         <CollectionChips
-          collections={zhihu.collections}
+          collections={zhihu.facets}
           totalCount={zhihu.libraryCount}
-          selected={zhihu.collectionId}
-          onSelect={zhihu.setCollectionId}
+          selected={zhihu.filter}
+          onSelect={zhihu.setFilter}
         />
       ) : null}
       emptyState={

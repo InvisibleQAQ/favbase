@@ -101,7 +101,7 @@ export function XView() {
   return (
     <CollectionPageScaffold
       platform={PLATFORM}
-      items={x.bookmarks}
+      items={x.items}
       getRowKey={(bookmark) => bookmark.id}
       getTagId={(bookmark) => bookmark.tweetId}
       libraryCount={x.libraryCount}
@@ -137,10 +137,10 @@ export function XView() {
       skeleton={<TweetGridSkeleton />}
       primaryCategory={x.libraryCount > 0 ? (
         <AuthorChips
-          authors={x.authors}
+          authors={x.facets}
           totalCount={x.libraryCount}
-          selected={x.author}
-          onSelect={x.setAuthor}
+          selected={x.filter}
+          onSelect={x.setFilter}
         />
       ) : null}
       emptyState={
