@@ -26,6 +26,7 @@ export {
   onboardingStorage,
   type OnboardingState,
   libraryGateStorage,
+  douyinBackfillStorage,
 } from './ui-state';
 
 export {

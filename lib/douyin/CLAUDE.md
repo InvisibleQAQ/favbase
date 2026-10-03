@@ -2,11 +2,29 @@
 
 抖音收藏收录领域（第 7 个平台，docs/33）。同步登录用户的**全部收藏**（`aweme/listcollection`），`status === 1` 的公开收藏夹是 Source；正文 = 作品 `desc`，同步时即得。复用现有表（`platform='douyin'`），零新表零迁移。
 
-**状态：Step 1 已落地（2026-10-03，代码 + 单测，已复核），判别符未翻**——`'douyin'` 不在 `COLLECTION_PLATFORMS`，没有 app 侧接线；`lib-import-smoke`、env 守卫的「平台目录无裸数值常量」、sleep 守卫要到 docs/33 Step 2 翻判别符后才自动覆盖本目录，在那之前按它们的规则自律（Step 1 落地时临时跑过一遍，全绿）。transport 实现、标签页门、断点 storage、处理 lane 派发都在 Step 2 的 `entrypoints/app/sections/douyin/`。
+**状态：Step 1 + Step 2 已落地（2026-10-03，代码 + 单测；实机验证是 Step 3）**。判别符已翻（`COLLECTION_PLATFORMS` 第 7 项），`lib-import-smoke`、env 守卫（裸数值常量 + 未登记键）、sleep 守卫、completeness contract 的错误基类检查自此按 `COLLECTION_PLATFORMS` 自动覆盖本目录。本目录的 chrome 半边是 `douyin-tab.ts`（transport + 标签页解析，见下）；app 侧接线（Sync Adapter、断点 storage 读写、逐页派发处理 lane、页面）在 `entrypoints/app/sections/douyin/`，见该目录 `CLAUDE.md`。
+
+**已知缺陷，Step 3 首次真实账号全量入库之前必须先处理**：一页入库在写正文的中途断掉，该页还没轮到的条目停在 `'has_content'` 且没有 `plainText`（`lib/ingest/ingest.ts:364`、`:434-440`）；之后任何一次带 `content` 的 `ingestCollection` 调用都按**本次调用的** `textOf` 加已存 `plainText` 清扫全平台幽灵，都没有就落 `'no_content'` 且不再清扫（`:442-461`、`:143-145`）。本目录的 `textOf` 只认本页（`douyin-sync-service.ts:378`），所以中断页的条目只要不在下一次入库的那一页里，就永久无正文（insert-only，事后补不回来）。复核时用临时测试实跑确认；细节与自愈条件见 docs/33 §6「阻塞项」。
 
 ## 为什么是注入的 transport（docs/33 D4）
 
-2026-08-16/17 起三个收藏接口都在页面 SDK 的 `webSign` 受保护表里，扩展直连 → `403 Blocked by ArgusSecurityPlugin`。请求在用户**已打开**的 www.douyin.com 标签页 MAIN world 里发，由页面 SDK 自动补 `a_bogus` / `x-secsdk-web-signature`。所以本目录**零 chrome、零 storage、零裸 `fetch`**：`douyin-api.ts` 只定义 `DouyinTransport`（`(req) => Promise<DouyinTransportResult>`，transport 自己不抛，失败折成 `kind: 'sdk-not-ready' | 'unreachable'`），分类全在 lib，测试用 fake transport 覆盖每一种失败。deadline 由 lib 给（`timeoutMs = resolveHttpDeadlineMs()`），transport 负责执行。
+2026-08-16/17 起三个收藏接口都在页面 SDK 的 `webSign` 受保护表里，扩展直连 → `403 Blocked by ArgusSecurityPlugin`。请求在用户**已打开**的 www.douyin.com 标签页 MAIN world 里发，由页面 SDK 自动补 `a_bogus` / `x-secsdk-web-signature`。所以 `douyin-api.ts` / `douyin-sync-service.ts` 的加载图**零 chrome、零 storage、零裸 `fetch`**（`chrome.*` 只在 transport leaf `douyin-tab.ts`，用户 2026-10-03 决定：平台的请求与计时代码要留在 `lib/<p>/` 的守卫范围内）：`douyin-api.ts` 只定义 `DouyinTransport`（`(req) => Promise<DouyinTransportResult>`，transport 自己不抛，失败折成 `kind: 'sdk-not-ready' | 'unreachable'`），分类全在 lib，测试用 fake transport 覆盖每一种失败。deadline 由 lib 给（`timeoutMs = resolveHttpDeadlineMs()`），transport 负责执行。
+
+## Tab transport leaf（`douyin-tab.ts`，docs/33 Step 2；落点由用户 2026-10-03 决定）
+
+本目录**唯一**碰 `chrome.*` 的模块（`browser` 取自 `wxt/browser`），照 `lib/x/x-auth.ts` 的做法做成独立 leaf：放在 `lib/douyin/` 而不是 `sections/douyin/`，是因为它就是这个平台真实的请求路径，必须留在平台目录守卫（sleep、env 裸常量、裸 fetch 白名单）的扫描范围里。
+
+- `findDouyinTab(): Promise<number | null>` — 第一个 `!discarded && status === 'complete'` 的 www.douyin.com 标签页 id（`browser.tabs.query({ url })`，url 取 descriptor 的 `hostPermissions[0]`；host permission 足以读这些标签页的 url，**不需要** `tabs` 权限）。**唯一的标签页解析器**（D-c）：Sync Adapter 的 funnel 前门、daily `probeReady`、transport 三处共用，「就绪」永远不会指向一个 transport 随后注不进去的被丢弃 / 加载中的标签页
+- `douyinPageFetch(req)` — **在页面 MAIN world 里运行**，不是在扩展里。`executeScript` 用 `toString()` 序列化它，所以必须自包含：零闭包、零 import、零模块级常量、零 helper，只读参数与页面全局（`window` / `Function` / `URLSearchParams` / `AbortSignal` / `Error` / `String`）。先查 `window.fetch` 是否仍是 native（SDK 没包上 → `sdk-not-ready`，什么都不发）；相对路径 + 业务参数，`credentials: 'include'`，POST 用 form 编码，`AbortSignal.timeout(req.timeoutMs)`；从不抛，失败折成 `unreachable`
+- `decodePageFetchResult(unknown)` — `executeScript` 边界的 decoder：不是三种形状之一（含 frame 出错没有 result）一律 `unreachable`，不信任
+- `douyinTabTransport: DouyinTransport` — **每次请求都重新解析标签页**（中途关掉 / 被丢弃 → `unreachable` → 共用重试预算，不会拿着过期 id 硬注）；`executeScript({ target: { tabId }, world: 'MAIN', func: douyinPageFetch, args: [req] })` 与 `sleep(req.timeoutMs)` 赛跑——**同一个 `req.timeoutMs` 在页内与页外各执行一次**（被冻结的后台页里页内的 `AbortSignal` 不会触发），谁先到都是 `unreachable`；不新增 env 键。从不碰标签页本身（不 reload、不导航、不激活，铁律 6）
+- **守卫**：`tests/http-fetch-deadline-guard.test.ts` 的 `ALLOWED_BARE_FETCH` 有本文件一行（理由：只有经页面 SDK 包过的 `window.fetch` 发出的请求才被签名，`fetchWithDeadline` 是序列化函数带不走的闭包；期限由上面的双重超时保证）。sleep / env 守卫照常扫描本文件——**不要在本文件写含「斜杠 + 星号」的字符串字面量**：两个守卫用朴素正则剥块注释，这种字面量会把其后到下一个 `*/` 之间的代码从扫描里藏起来（`'https://www.douyin.com/*'` 改从 descriptor 读，正是为此；非测试文件里今天被藏起代码的是 `lib/x/x-api.ts:224-231`、`lib/collections/platform-descriptor.ts:124-233`、`lib/permissions/host-access.ts:30-34`，被藏的行里暂无违规，docs/33 Step 2 落地记录偏离 5）
+- **分层**：`douyin-api.ts` / `douyin-sync-service.ts` 不得 import 本文件——import-smoke 在无 `chrome` 全局下加载 sync-service，而本文件加载期不碰 chrome，所以 smoke **发现不了**它被拉进来；这条边由 `douyin-tab.test.ts` 按 AST 断言。反过来，import-smoke 从不加载本文件，它的覆盖全在自己的测试里（`douyin-tab.test.ts`：解析器过滤、transport 每种失败折成的 kind、注入函数的序列化守卫——`String(fn)` 无 build helper、自由标识符只有页面全局、用 `new Function` 从源码重建后跑一遍）
+- **打包产物**：`pnpm build` 后注入函数在 app 主 chunk 里仍是一个自包含的 `async function`（自由标识符只有上面六个页面全局，零 `__name` / `__async`）；docs/33 Step 2 落地记录有原文与检查脚本的结果
+
+## App 侧接线（docs/33 Step 2）
+
+`entrypoints/app/sections/douyin/`（详见该目录 `CLAUDE.md`）：`runDouyinSync` 在 Platform Sync funnel **之前**用 `findDouyinTab()` 做标签页门（无 → `DouyinAuthError('missing')`，不算尝试，F1）；funnel 内读 `douyinBackfillStorage`（`local:douyin-backfill`，`lib/storage/ui-state.ts`）→ `syncDouyinCollections(douyinTabTransport, { backfill, onBackfill: 写回, onPagePersisted: 逐条 enqueueCollectionProcessingItem, onProgress, control })` → 回报 `newItemIds: []`（D-b）。job namespace 就是平台 id `'douyin'`（用户 2026-10-03 决定：bilibili / bookmarks 已是同名先例，不再给平台 id 发明第二个名字；docs/33 原写的 `'douyin-collections'` 作废）。
 
 ## 请求构造铁律（`build*Request`，纯函数）
 

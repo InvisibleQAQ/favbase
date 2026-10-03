@@ -18,6 +18,7 @@ export const COLLECTION_PAGE_LOADERS: Record<CollectionPlatform, CollectionPage>
   x: lazy(() => import('./pages/x')),
   zhihu: lazy(() => import('./pages/zhihu')),
   youtube: lazy(() => import('./pages/youtube')),
+  douyin: lazy(() => import('./pages/douyin')),
 };
 
 /** Child param segments that render the same lazy Page; flat platforms declare an explicit empty list. */

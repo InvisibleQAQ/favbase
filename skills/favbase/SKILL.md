@@ -1,9 +1,9 @@
 ---
 name: favbase
-description: Search the user's own saved collections (Bilibili favorites, GitHub stars, browser bookmarks, X bookmarks, Zhihu favorites, YouTube playlists) through the local favbase browser extension. Use whenever the user asks what they saved, bookmarked, starred or favorited, or wants an answer grounded in their own collection. Read-only; runs the `favbase` CLI.
+description: Search the user's own saved collections (Bilibili favorites, GitHub stars, browser bookmarks, X bookmarks, Zhihu favorites, YouTube playlists, Douyin favorites) through the local favbase browser extension. Use whenever the user asks what they saved, bookmarked, starred or favorited, or wants an answer grounded in their own collection. Read-only; runs the `favbase` CLI.
 allowed-tools: Bash(favbase:*)
 metadata:
-  version: "0.2.1"
+  version: "0.2.2"
 ---
 
 # favbase
@@ -50,7 +50,7 @@ favbase doctor                         # config, daemon, extension, CLI and skil
 ```
 
 `<platform>` is one of `bilibili`, `github`, `bookmarks`, `x`, `zhihu`,
-`youtube`. Omit it to search everything. `favbase --help` is authoritative if
+`youtube`, `douyin`. Omit it to search everything. `favbase --help` is authoritative if
 this file and the CLI disagree.
 
 Windows PowerShell 5.1 strips the double quotes out of `--args '<json>'`, so

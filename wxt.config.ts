@@ -62,6 +62,10 @@ export default defineConfig({
       // _favicon API to render bookmark icons locally (no third-party leak).
       'bookmarks',
       'favicon',
+      // scripting: inject a MAIN-world fetch into the user's already-open
+      // www.douyin.com tab, where the page SDK signs it (docs/33 D4). Never
+      // opens, reloads or navigates a tab. See lib/douyin/douyin-tab.ts.
+      'scripting',
     ],
     host_permissions: [
       ...PLATFORM_HOST_PERMISSION_LIST,

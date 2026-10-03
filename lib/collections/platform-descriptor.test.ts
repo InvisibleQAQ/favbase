@@ -25,6 +25,7 @@ const HOST_PERMISSIONS = [
   'https://www.zhihu.com/*',
   'https://api.zhihu.com/*',
   'https://www.googleapis.com/*',
+  'https://www.douyin.com/*',
 ];
 
 describe('platform descriptor', () => {

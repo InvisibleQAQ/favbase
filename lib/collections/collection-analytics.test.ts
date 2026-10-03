@@ -10,6 +10,7 @@ import { runMigrations } from '@/lib/database/migrations';
 import * as schema from '@/lib/database/schema';
 
 import { getCollectionAnalytics } from './collection-analytics';
+import { COLLECTION_PLATFORMS } from './platforms';
 
 describe('getCollectionAnalytics (in-memory PGlite)', () => {
   let pg: PGlite;
@@ -57,19 +58,12 @@ describe('getCollectionAnalytics (in-memory PGlite)', () => {
     return rows[0].id;
   }
 
-  it('returns a fixed six-platform zero snapshot', async () => {
+  it('returns a zero snapshot that still lists every platform, in canonical order', async () => {
     const snapshot = await getCollectionAnalytics(db);
 
     expect(snapshot).toMatchObject({ totalItems: 0, usedTags: 0, taggedItems: 0 });
     expect(snapshot.platforms.map(({ platform, itemCount, share }) => ({ platform, itemCount, share })))
-      .toEqual([
-        { platform: 'bilibili', itemCount: 0, share: 0 },
-        { platform: 'github', itemCount: 0, share: 0 },
-        { platform: 'bookmarks', itemCount: 0, share: 0 },
-        { platform: 'x', itemCount: 0, share: 0 },
-        { platform: 'zhihu', itemCount: 0, share: 0 },
-        { platform: 'youtube', itemCount: 0, share: 0 },
-      ]);
+      .toEqual(COLLECTION_PLATFORMS.map((platform) => ({ platform, itemCount: 0, share: 0 })));
     expect(snapshot.topTags).toEqual([]);
   });
 

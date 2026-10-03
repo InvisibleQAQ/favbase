@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { BiliAuthError, BiliRateLimitError } from '@/lib/bilibili/bilibili-api';
+import { DouyinAuthError, DouyinRateLimitError } from '@/lib/douyin/douyin-api';
 import { GithubAuthError, GithubRateLimitError } from '@/lib/github/github-api';
 import { XAuthError, XRateLimitError } from '@/lib/x/x-api';
 import { YoutubeAuthError, YoutubeRateLimitError } from '@/lib/youtube/youtube-api';
@@ -24,6 +25,7 @@ describe('platform error bases', () => {
     ['YoutubeAuthError', new YoutubeAuthError('m', 'rejected'), 'rejected'],
     ['XAuthError', new XAuthError('m', 'missing'), 'missing'],
     ['XAuthError', new XAuthError('m', 'rejected'), 'rejected'],
+    ['DouyinAuthError', new DouyinAuthError('m', 'missing'), 'missing'],
   ] as const)('%s (%s) is a PlatformAuthError', (name, error, reason) => {
     expect(error).toBeInstanceOf(PlatformAuthError);
     expect(error).toBeInstanceOf(Error);
@@ -42,6 +44,8 @@ describe('platform error bases', () => {
     ['YoutubeRateLimitError', new YoutubeRateLimitError('m', RESET), RESET],
     ['XRateLimitError', new XRateLimitError('m', RESET), RESET],
     ['XRateLimitError', new XRateLimitError('m', null), null],
+    ['DouyinRateLimitError', new DouyinRateLimitError('m', RESET), RESET],
+    ['DouyinRateLimitError', new DouyinRateLimitError('m', null), null],
   ] as const)('%s is a PlatformRateLimitError', (name, error, resetAt) => {
     expect(error).toBeInstanceOf(PlatformRateLimitError);
     expect(error).toBeInstanceOf(Error);

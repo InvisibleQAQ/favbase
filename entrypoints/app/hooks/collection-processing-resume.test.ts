@@ -27,6 +27,7 @@ describe('resumeCollectionProcessing', () => {
       { jobPlatform: 'x-bookmarks', itemPlatform: 'x', capability: 'embedding' },
       { jobPlatform: 'zhihu-favorites', itemPlatform: 'zhihu', capability: 'embedding' },
       { jobPlatform: 'youtube-playlists', itemPlatform: 'youtube', capability: 'embedding' },
+      { jobPlatform: 'douyin', itemPlatform: 'douyin', capability: 'embedding' },
     ]);
   });
 

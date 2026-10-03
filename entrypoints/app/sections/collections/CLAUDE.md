@@ -8,7 +8,7 @@
 
 - `use-collections.ts` — 只读页面状态：300ms 搜索防抖、平台/搜索/标签切换回第 1 页、cancelled guard、分页查询、手动/AI 标签变更刷新；先读取 Used Tags，再验证 Hash Router `tag` 参数
 - `collection-tag-filter.ts` — 纯 URL 契约：只接受一个当前已使用的 UUID；替换/清除只修改 `tag`，保留其他查询参数
-- `collection-item-card.tsx` — `Record<CollectionPlatform, Tagged*Card>` 的穷尽 renderer registry，直接复用六个平台卡片 adapter（值类型 `ComponentType<TaggedCardProps>`，`TaggedCardProps` 由 `components/tags/` 的 `taggedCard` 工厂导出，docs/32 Step 8 起取代本文件的本地 `AdapterProps`；对象字面量形状不变）
+- `collection-item-card.tsx` — `Record<CollectionPlatform, Tagged*Card>` 的穷尽 renderer registry，直接复用每个平台的卡片 adapter（抖音 `TaggedDouyinCard` 自 docs/33 Step 2 起在内）（值类型 `ComponentType<TaggedCardProps>`，`TaggedCardProps` 由 `components/tags/` 的 `taggedCard` 工厂导出，docs/32 Step 8 起取代本文件的本地 `AdapterProps`；对象字面量形状不变）
 - `collections-view.tsx` — 组合共享 collection 哑组件与动态 `(platform, platformItemId)` `TagEditPopover`；不复用带同步/pipeline 的单平台 `CollectionPageScaffold`。mixed grid 加载态用 `CardGridSkeleton + CollectionCardSkeleton(header, 3 lines)`，不得自画 Card；空态用 48px secondary glyph + `StateBox`
 - `collections-view.test.tsx` — route 单 h1、grid-of-8 共享骨架与聚合空态几何回归
 

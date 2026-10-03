@@ -11,8 +11,10 @@ import path from 'node:path';
  * reason. Comments are stripped first; offenders are reported as file:line.
  *
  * Allowlisting is file-level and must state WHY a fixed whole-request deadline
- * would break that file's semantics (streaming / large payloads). A stale
- * entry (file gone, or no bare fetch left) also fails — keep the list honest.
+ * would break that file's semantics (streaming / large payloads), or why the
+ * request cannot go through `fetchWithDeadline` at all and how its deadline is
+ * enforced instead (the Douyin page-injected fetch). A stale entry (file gone,
+ * or no bare fetch left) also fails — keep the list honest.
  */
 
 const ROOT = path.resolve(__dirname, '..');
@@ -24,6 +26,11 @@ const ALLOWED_BARE_FETCH: Record<string, string> = {
   'lib/transcription/groq-client.ts': 'ASR upload — large audio payloads exceed a fixed deadline',
   'lib/transcription/audio-extractor.ts': 'audio download for ASR — large payloads',
   'lib/offscreen/ffmpeg-subsystem.ts': 'FFmpeg core download — large one-off asset fetch',
+  'lib/douyin/douyin-tab.ts':
+    'injected into the douyin.com page (MAIN world): only a request sent through the page SDK\'s ' +
+    'wrapped window.fetch gets signed (docs/33 D4), and fetchWithDeadline would be a closure the ' +
+    'serialized function cannot carry. The deadline is still enforced, twice with the same ' +
+    'req.timeoutMs: AbortSignal.timeout inside the page and a race in the transport',
 };
 
 const BARE_FETCH = /(?<![\w$.])fetch\s*\(|(?:globalThis|window|self)\s*\.\s*fetch\s*\(/;

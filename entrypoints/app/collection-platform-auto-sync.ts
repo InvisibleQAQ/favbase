@@ -4,6 +4,7 @@ import { jobPlatformForCollection } from './hooks/collection-job-platform';
 import type { AutoSyncDefinition, AutoSyncPlatform } from './hooks/use-daily-auto-sync';
 import { bilibiliAutoSyncPolicy, runBilibiliSync } from './sections/bilibili/bilibili-sync-adapter';
 import { bookmarksAutoSyncPolicy, runBookmarksSync } from './sections/bookmarks/bookmarks-sync-adapter';
+import { douyinAutoSyncPolicy, runDouyinSync } from './sections/douyin/douyin-sync-adapter';
 import { githubAutoSyncPolicy, runGithubStarsSync } from './sections/github-stars/github-sync-adapter';
 import { runXBookmarksSync, xAutoSyncPolicy } from './sections/x/x-sync-adapter';
 import { runYoutubePlaylistsSync, youtubeAutoSyncPolicy } from './sections/youtube/youtube-sync-adapter';
@@ -24,6 +25,8 @@ export const AUTO_SYNC_PLATFORM_BY_COLLECTION: Record<CollectionPlatform, AutoSy
   bookmarks: { runSync: runBookmarksSync, ...bookmarksAutoSyncPolicy },
   // No preferFolderId: the API's natural Source order runs.
   bilibili: { runSync: runBilibiliSync, ...bilibiliAutoSyncPolicy },
+  // Ready only while a usable douyin.com tab is open; favbase never opens one.
+  douyin: { runSync: runDouyinSync, ...douyinAutoSyncPolicy },
 };
 
 /** Fully-keyed entries for `useDailyAutoSync`; `App.tsx` injects this list. */

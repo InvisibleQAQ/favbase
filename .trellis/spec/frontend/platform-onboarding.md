@@ -21,10 +21,13 @@ Read this before touching anything when you are:
 Out of scope: visual conventions (`ui-design-system.md`), locale mechanics
 (`i18n-conventions.md`), the PGlite RPC bridge (`lib/database/CLAUDE.md`).
 
-Already onboarded: `bilibili`, `github`, `bookmarks`, `x`, `zhihu`, `youtube`.
-**`youtube` is the reference implementation** — thinnest complete platform (no
-content stage, no child route, credential-gated, multi-Source). `bilibili` is
-the outlier; read §10 before copying anything from it.
+Already onboarded: `bilibili`, `github`, `bookmarks`, `x`, `zhihu`, `youtube`,
+`douyin`. **`youtube` is the reference implementation** — thinnest complete
+platform (no content stage, no child route, credential-gated, multi-Source).
+`bilibili` is the outlier; read §10 before copying anything from it. `douyin`
+(docs/33) is the reference for two shapes nobody else has: a request that must
+leave from the site's own page (injected transport, §4.1) and per-page
+persistence with a resumable backfill (§4.6).
 
 ## 2. The two machine-checked halves
 
@@ -44,7 +47,7 @@ test, it does not do the work for you.
 | Guard | Contract | You still hand-write |
 | --- | --- | --- |
 | `tests/lib-import-smoke.test.ts` | `lib/<platform>/` MUST contain **exactly one** non-test `*-sync-service.ts`, and it MUST `import()` cleanly with no `chrome` global and zero `vi.mock` — i.e. no `@/lib/storage` (or any module with a `chrome.*` load side effect) in its static graph. | — |
-| `tests/http-fetch-deadline-guard.test.ts` | No bare `fetch(` anywhere in `lib/**`. Use `fetchWithDeadline` (`lib/http/`). | — |
+| `tests/http-fetch-deadline-guard.test.ts` | No bare `fetch(` anywhere in `lib/**`. Use `fetchWithDeadline` (`lib/http/`). Exceptions are a file-level allowlist with a stated reason; the one platform exception is the Douyin injected transport (§4.1). | — |
 | `tests/platform-sleep-guard.test.ts` | No hand-rolled wait in `lib/<platform>/`: a `setTimeout(...)` inside the arguments of `new Promise(...)` fails, listed as `file:line` (read by AST; both names match bare or off `globalThis` / `window` / `self`, through `as` / `!` wrappers; a `setTimeout` outside any `new Promise` is a timer callback and passes; an alias such as `const st = setTimeout` is not followed). Wait with `sleep` from `lib/http/backoff.ts`; retry transient errors with `withRetries` from `lib/http/retry.ts`. | — |
 | `tests/platform-env-constants-guard.test.ts` | No bare numeric `SCREAMING_CASE` module constant in `lib/<platform>/`. Every policy number goes through `envNumber('VITE_<PLATFORM>_<NAME>', default)` **and** is registered in that test's `EXPECTED_ENV_CONSTANTS` table with its exact fallback. | your platform's block in `.env.example` — tracked and secret-free, one documented line per key, checked both ways |
 | `tests/platform-completeness-contract.test.ts` — marquee coverage | Every platform's `PLATFORM_META.title` appears as a pill in `entrypoints/welcome/sections/capability-marquee.tsx`. | the pill. Those rows are hand-authored on purpose (docs/26 D5) — the interleaving of platform and capability pills is a design decision, so coverage is checked, never generated |
@@ -57,9 +60,9 @@ a rewrite, not an edit.
 
 | Question | Where the answer lands | Reference answers |
 | --- | --- | --- |
-| **Auth shape** — what must exist before the first sync can run? | the descriptor's `readiness` (`'credentials'` / `'login'` / `'local'`; `WELCOME_READINESS_BY_PLATFORM` derives from it), and whether you owe a Connections card (§8) | `credentials`: github, youtube · `login`: bilibili, x, zhihu · `local`: bookmarks |
-| **Source shape** — does the platform expose containers (folders / playlists / collections)? | the descriptor's `dimensions` (`ranked` / `author` / `source`, `null` when the platform has no Source), whether a Collection Item may hold N memberships | multi-Source: bilibili, bookmarks, zhihu, youtube · single: github, x |
-| **Content shape** — what text feeds Embedding, and is it available at sync time? | the `content` block of `IngestInput`, the `contentState` you declare, the descriptor's `contentKind` (§6.1), whether the pipeline gains a content stage | inline at sync: github README, zhihu answer, youtube description, x tweet · deferred: bookmarks extraction, bilibili transcription |
+| **Auth shape** — what must exist before the first sync can run? | the descriptor's `readiness` (`'credentials'` / `'login'` / `'local'`; `WELCOME_READINESS_BY_PLATFORM` derives from it), and whether you owe a Connections card (§8) | `credentials`: github, youtube · `login`: bilibili, x, zhihu, douyin (a usable logged-in site tab, checked before the funnel) · `local`: bookmarks |
+| **Source shape** — does the platform expose containers (folders / playlists / collections)? | the descriptor's `dimensions` (`ranked` / `author` / `source`, `null` when the platform has no Source), whether a Collection Item may hold N memberships | multi-Source: bilibili, bookmarks, zhihu, youtube, douyin (public folders; an item may belong to no Source at all) · single: github, x |
+| **Content shape** — what text feeds Embedding, and is it available at sync time? | the `content` block of `IngestInput`, the `contentState` you declare, the descriptor's `contentKind` (§6.1), whether the pipeline gains a content stage | inline at sync: github README, zhihu answer, youtube description, x tweet, douyin post text · deferred: bookmarks extraction, bilibili transcription |
 | **Sort key** — what is the platform's native "recency"? | the descriptor's `sortKey` (`PLATFORM_SORT_KEYS` derives from it) | `publishedAt` column, or a `platform_meta` field with `unixSeconds` / `iso8601` format |
 | **Downstream eligibility** — are some persisted items ineligible for Content → Embedding → Tags? | `PLATFORM_DOWNSTREAM_ELIGIBILITY` (`null` when none) | only bilibili has one (taken-down videos) |
 
@@ -84,7 +87,23 @@ nothing from it.
 ### 4.1 `lib/<platform>/<platform>-api.ts` — the remote layer
 
 - No DB imports. No UI copy. No `t()`.
-- Every request through `fetchWithDeadline`.
+- Every request through `fetchWithDeadline` — with one sanctioned exception,
+  the **injected transport** (docs/33 D4, `lib/douyin/`). When the site only
+  accepts a request its own page signed (Douyin's page SDK wraps `window.fetch`
+  and adds `a_bogus` / `x-secsdk-web-signature`), `<p>-api.ts` defines a
+  transport type that never throws (`DouyinTransport`: every failure is a
+  `kind`) and classifies everything itself, so its tests use a fake transport.
+  The implementation is a **separate chrome leaf in `lib/<p>/`** that neither
+  `<p>-api.ts` nor the sync service imports (user decision 2026-10-03: a
+  platform's request and timing code stays inside the `lib/<p>/` guards;
+  import-smoke cannot see that edge, so a layering test does —
+  `lib/douyin/douyin-tab.test.ts`). It stays under the sleep and env guards;
+  the injected function's bare `fetch(` is one file-level row in
+  `ALLOWED_BARE_FETCH`, and the deadline is still enforced — inside the page
+  (`AbortSignal.timeout`) and outside it, with the same `timeoutMs` the lib
+  hands the transport. The injected function must survive `toString()`: no
+  closure, import, module constant or build helper; test the free identifiers
+  and rebuild it from source, then check the production bundle once.
 - **Never trust HTTP 200.** A 200 carrying non-JSON, or missing the array you
   expected, MUST throw with a body snippet. Swallowing it into an empty array
   is how a sync silently reports success and persists nothing. An `items: []`
@@ -297,6 +316,36 @@ need a mode switch for each.
 An in-memory PGlite guard test for the sync-service (equivalence of the ingest
 result, dedup, membership) and a pure-function test for the API parsers. Both
 run before the platform exists anywhere else.
+
+### 4.6 Per-page persistence with a resumable backfill (douyin)
+
+Only when one full sync is long enough that losing it to a failure is not
+acceptable (Douyin: ~115 paced pages, ~20 minutes). Every other platform
+fetches everything and calls `ingestCollection` once at the end.
+
+- **Persist each page as it arrives** — one `ingestCollection` call per page.
+- **Dispatch per page, not through the funnel.** The funnel only dispatches
+  on success, so a run that fails at page 80 would leave 79 pages chunked and
+  never embedded. The sync service reports each page's `contentPersisted`
+  (`onPagePersisted`); the Sync Adapter calls `enqueueCollectionProcessingItem`
+  per id — the **platformItemId**, not `items.id` — and returns
+  `newItemIds: []` to the funnel. Same mechanics as §4.4's per-item dispatch.
+- **Keep a breakpoint in app storage**, passed into the sync service and
+  written back on every change (the lib stays storage-free): where the first
+  full walk stopped, so the next run tops up the head and then resumes. Douyin
+  keeps `{ resumeCursor, backfillDone }` under `local:douyin-backfill`; it has
+  no reader outside its adapter, so it is a `local:` item, not a Platform Sync
+  Record column. Validate the stored value at the lib boundary.
+- **Known defect, fix before relying on it**: an item declared `'chunked'` is
+  inserted as `'has_content'` and gets its text outside the transaction
+  (`lib/ingest/ingest.ts:364`, `:434-440`), so an interrupted page leaves
+  items with no stored `plainText`. The next call with `content` sweeps every
+  ghost of the platform with only its own `textOf` and the stored `plainText`
+  (`:442-461`) and settles the rest `'no_content'`, which is never swept again
+  (`:143-145`). A page-sized `textOf` therefore loses an earlier page's items
+  for good; a platform that fetches everything and ingests once usually hands
+  the next call a `textOf` that covers the same items. Douyin's
+  first real full sync waits on that fix (docs/33 §6).
 
 ## 5. Phase 2 — Flip the discriminator, harvest the TODO list
 
@@ -598,8 +647,13 @@ pnpm build && diff /tmp/manifest-before.json .output/chrome-mv3/manifest.json
 ```
 
 The only added lines may be your own `hostPermissions`, in
-`COLLECTION_PLATFORMS` order. A reordered or reworded existing entry means every
-installed extension asks its user to re-authorize.
+`COLLECTION_PLATFORMS` order, plus an API permission your platform genuinely
+needs and documents next to the `permissions` array in `wxt.config.ts` —
+appended last, never reordering an existing entry. Precedents: `webRequest`
+(x), `bookmarks` / `favicon` (bookmarks), `cookies` / `declarativeNetRequest`
+(bilibili), `scripting` (douyin, docs/33 D4: inject into the user's open tab).
+A reordered or reworded existing entry means every installed extension asks
+its user to re-authorize.
 
 Finally, walk §9 by hand — the one row no command above will tell you about —
 and re-read the *unchecked* parts of §8: anchor 1's settings fields and zod
@@ -610,7 +664,7 @@ The credentials-chain guard deliberately covers neither.
 
 - [ ] `pnpm compile`, `pnpm test`, `pnpm build` all green
 - [ ] both Platform Descriptors (§6.1, §6.2) and the four heavy-value registries (§6.3) declare your platform
-- [ ] the manifest diff adds only your own `host_permissions` (§12)
+- [ ] the manifest diff adds only your own `host_permissions` and any documented API permission (§12)
 - [ ] `lib/<platform>/CLAUDE.md` and `entrypoints/app/sections/<platform>/CLAUDE.md` written
 - [ ] root `CLAUDE.md` directory index gains both entries
 - [ ] `entrypoints/app/CLAUDE.md` route list gains the new route

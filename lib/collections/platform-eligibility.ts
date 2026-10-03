@@ -20,4 +20,5 @@ export const PLATFORM_DOWNSTREAM_ELIGIBILITY: PlatformDownstreamEligibility = {
   x: null,
   zhihu: null,
   youtube: null,
+  douyin: null,
 };

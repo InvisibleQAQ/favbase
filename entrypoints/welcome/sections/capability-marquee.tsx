@@ -31,6 +31,7 @@ const ROW_BOTTOM: Pill[] = [
   { labelKey: 'welcome.tags.transcription' },
   { labelKey: 'nav.youtubePlaylists', icon: 'mdi:youtube' },
   { labelKey: 'welcome.tags.summary' },
+  { labelKey: 'nav.douyinFavorites', icon: 'simple-icons:tiktok' },
   { labelKey: 'welcome.tags.pglite' },
   { labelKey: 'welcome.tags.obsidian' },
   { labelKey: 'welcome.tags.incremental' },

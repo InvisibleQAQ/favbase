@@ -14,6 +14,7 @@ const JOB_NAMESPACES: Record<CollectionPlatform, string> = {
   x: 'x-bookmarks',
   zhihu: 'zhihu-favorites',
   youtube: 'youtube-playlists',
+  douyin: 'douyin',
 };
 
 describe('Collection job platform mapping', () => {

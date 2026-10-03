@@ -206,6 +206,30 @@ export const PLATFORM_DESCRIPTORS = {
       meta: null,
     },
   },
+  douyin: {
+    // The platform id itself, not a second name for it (user decision
+    // 2026-10-03): bilibili and bookmarks already do this.
+    jobPlatform: 'douyin',
+    // Rides the user's own logged-in www.douyin.com tab; nothing to enter.
+    readiness: 'login',
+    // The post text (`desc`); video transcription is out of scope.
+    contentKind: 'post-text',
+    descriptionField: null,
+    // Requests run inside the user's open douyin.com tab (MAIN-world
+    // injection, signed by the page SDK) — docs/33 D4. Also needs the
+    // `scripting` API permission, declared in wxt.config.ts.
+    hostPermissions: ['https://www.douyin.com/*'],
+    // Douyin reports no per-item favorite time: publish time, as zhihu.
+    sortKey: { source: 'publishedAt' },
+    dimensions: {
+      ranked: ['author', 'favoriteFolder'],
+      author: 'author',
+      // Public folders only; favorites outside every public folder carry no
+      // Source at all (docs/33 D1 / D-a).
+      source: 'favoriteFolder',
+      meta: null,
+    },
+  },
 } as const satisfies Record<CollectionPlatform, PlatformDescriptor>;
 
 /**

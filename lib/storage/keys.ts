@@ -32,6 +32,12 @@ export const STORAGE_KEYS = {
   // compactLayout }). Light/dark mode is NOT here — MUI owns it under the
   // `favbase-color-mode` localStorage key. See theme-settings.ts.
   themeSettings: 'local:themeSettings',
+  // Where the first full walk of the Douyin all-favorites list stopped
+  // ({ resumeCursor, backfillDone }, lib/douyin DouyinBackfillState). Device-
+  // local sync state: read and written only by the app.html Douyin Sync Adapter
+  // (entrypoints/app/sections/douyin/douyin-sync-adapter.ts). See
+  // lib/douyin/CLAUDE.md and docs/33.
+  douyinBackfill: 'local:douyin-backfill',
 } as const;
 
 export const STORAGE_PREFIXES = {

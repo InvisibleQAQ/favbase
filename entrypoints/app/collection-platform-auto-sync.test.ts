@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   getBiliAuth: vi.fn(),
   getPlatformLastSyncedAt: vi.fn(),
   remainingCooldown: vi.fn(),
+  findDouyinTab: vi.fn(),
 }));
 
 vi.mock('@/lib/bilibili/bili-sync-service', () => ({
@@ -25,7 +26,18 @@ vi.mock('@/lib/database/collection-queries', () => ({
   getPlatformLastSyncedAt: mocks.getPlatformLastSyncedAt,
 }));
 vi.mock('@/lib/github/github-sync-service', () => ({ syncStars: vi.fn() }));
-vi.mock('@/lib/storage', () => ({ settingsStorage: { getValue: mocks.getSettings } }));
+vi.mock('@/lib/storage', () => ({
+  settingsStorage: { getValue: mocks.getSettings },
+  douyinBackfillStorage: { getValue: vi.fn(), setValue: vi.fn() },
+}));
+vi.mock('@/lib/douyin/douyin-tab', () => ({
+  findDouyinTab: mocks.findDouyinTab,
+  douyinTabTransport: vi.fn(),
+}));
+vi.mock('@/lib/douyin/douyin-sync-service', () => ({
+  syncDouyinCollections: vi.fn(),
+  DouyinAuthError: class DouyinAuthError extends Error {},
+}));
 vi.mock('@/lib/x/x-auth', () => ({ getXAuth: mocks.getXAuth }));
 vi.mock('@/lib/x/x-sync-service', () => ({
   syncBookmarks: vi.fn(),
@@ -40,11 +52,15 @@ vi.mock('./sections/x/cooldown', () => ({ remainingCooldown: mocks.remainingCool
 // The Platform Sync funnel every adapter calls (record + dispatch → DB proxy
 // and the embedding/tagging barrels).
 vi.mock('./hooks/platform-sync', () => ({ runPlatformSync: vi.fn() }));
+// The per-item processing inbox the Douyin adapter feeds page by page (same
+// embedding/tagging barrels).
+vi.mock('./hooks/collection-processing-jobs', () => ({ enqueueCollectionProcessingItem: vi.fn() }));
 
 import { AUTO_SYNC_PLATFORMS } from './collection-platform-auto-sync';
 import { jobPlatformForCollection } from './hooks/collection-job-platform';
 import { runBilibiliSync } from './sections/bilibili/bilibili-sync-adapter';
 import { runBookmarksSync } from './sections/bookmarks/bookmarks-sync-adapter';
+import { runDouyinSync } from './sections/douyin/douyin-sync-adapter';
 import { runGithubStarsSync } from './sections/github-stars/github-sync-adapter';
 import { runXBookmarksSync } from './sections/x/x-sync-adapter';
 import { runYoutubePlaylistsSync } from './sections/youtube/youtube-sync-adapter';
@@ -63,6 +79,7 @@ describe('auto-sync registry', () => {
     mocks.getBiliAuth.mockReset().mockResolvedValue(null);
     mocks.getPlatformLastSyncedAt.mockReset().mockResolvedValue(null);
     mocks.remainingCooldown.mockReset().mockReturnValue(0);
+    mocks.findDouyinTab.mockReset().mockResolvedValue(null);
   });
 
   it('keeps the existing evaluation order while using a keyed registry', () => {
@@ -73,6 +90,7 @@ describe('auto-sync registry', () => {
       'youtube',
       'bookmarks',
       'bilibili',
+      'douyin',
     ]);
   });
 
@@ -89,6 +107,7 @@ describe('auto-sync registry', () => {
     expect(entry('youtube-playlists').runSync).toBe(runYoutubePlaylistsSync);
     expect(entry('bookmarks').runSync).toBe(runBookmarksSync);
     expect(entry('bilibili').runSync).toBe(runBilibiliSync);
+    expect(entry('douyin').runSync).toBe(runDouyinSync);
   });
 
   it('github readiness = token present', async () => {
@@ -121,16 +140,26 @@ describe('auto-sync registry', () => {
     await expect(entry('bilibili').probeReady()).resolves.toBe(true);
   });
 
+  it('douyin readiness = a usable douyin.com tab is open (favbase never opens one)', async () => {
+    await expect(entry('douyin').probeReady()).resolves.toBe(false);
+    mocks.findDouyinTab.mockResolvedValue(42);
+    await expect(entry('douyin').probeReady()).resolves.toBe(true);
+  });
+
   it('zhihu + bookmarks are always ready (cookie jar / local data)', async () => {
     await expect(entry('zhihu-favorites').probeReady()).resolves.toBe(true);
     await expect(entry('bookmarks').probeReady()).resolves.toBe(true);
   });
 
-  it('only zhihu treats its logged-out error as silent', async () => {
+  it('only zhihu and douyin treat their logged-out error as silent', async () => {
     const { ZhihuAuthError } = await import('@/lib/zhihu/zhihu-sync-service');
     expect(entry('zhihu-favorites').isSilentError?.(new ZhihuAuthError('out', 'missing'))).toBe(true);
     expect(entry('zhihu-favorites').isSilentError?.(new Error('boom'))).toBe(false);
-    for (const p of AUTO_SYNC_PLATFORMS.filter((p) => p.jobPlatform !== 'zhihu-favorites')) {
+    const { DouyinAuthError } = await import('@/lib/douyin/douyin-sync-service');
+    expect(entry('douyin').isSilentError?.(new DouyinAuthError('out', 'missing'))).toBe(true);
+    expect(entry('douyin').isSilentError?.(new Error('boom'))).toBe(false);
+    const silent = new Set(['zhihu-favorites', 'douyin']);
+    for (const p of AUTO_SYNC_PLATFORMS.filter((p) => !silent.has(p.jobPlatform))) {
       expect(p.isSilentError).toBeUndefined();
     }
   });

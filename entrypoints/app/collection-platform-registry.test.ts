@@ -61,6 +61,7 @@ describe('collection platform registry', () => {
       '/collections/bookmarks',
       '/collections/zhihu',
       '/collections/youtube',
+      '/collections/douyin',
     ]);
   });
 

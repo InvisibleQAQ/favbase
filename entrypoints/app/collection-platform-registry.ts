@@ -90,6 +90,14 @@ export const PLATFORM_META: Record<CollectionPlatform, CollectionPlatformMeta> =
     hint: 'welcome.picker.hint.youtube',
     childRoutes: [],
   },
+  douyin: {
+    title: 'nav.douyinFavorites',
+    icon: 'simple-icons:tiktok',
+    // A black-logo brand, like github and x: the scheme's own text ink.
+    palette: 'ink',
+    hint: 'welcome.picker.hint.douyin',
+    childRoutes: [],
+  },
 };
 
 /** UI metadata for every persisted collection platform, in navigation order. */

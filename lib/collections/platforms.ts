@@ -6,6 +6,7 @@ export const COLLECTION_PLATFORMS = [
   'x',
   'zhihu',
   'youtube',
+  'douyin',
 ] as const;
 
 export type CollectionPlatform = (typeof COLLECTION_PLATFORMS)[number];

@@ -6,6 +6,7 @@ import type { TaggedCardProps } from '../../components/tags';
 
 import { TaggedVideoCard } from '../bilibili/tagged-video-card';
 import { TaggedBookmarkCard } from '../bookmarks/tagged-bookmark-card';
+import { TaggedDouyinCard } from '../douyin/tagged-douyin-card';
 import { TaggedRepoCard } from '../github-stars/tagged-repo-card';
 import { TaggedTweetCard } from '../x/tagged-tweet-card';
 import { TaggedYoutubeCard } from '../youtube/tagged-youtube-card';
@@ -18,6 +19,7 @@ const CARD_ADAPTERS: Record<CollectionPlatform, ComponentType<TaggedCardProps>> 
   x: TaggedTweetCard,
   zhihu: TaggedZhihuCard,
   youtube: TaggedYoutubeCard,
+  douyin: TaggedDouyinCard,
 };
 
 export function CollectionItemCard({

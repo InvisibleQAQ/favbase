@@ -1,6 +1,6 @@
 # 33 抖音收藏接入手册（2026-10-03）
 
-> 状态：**Step 0 已完成 2026-10-03**（调研 + 用户账号实测 + 决策 D1–D4 + 默认项）；**Step 1 已落地 2026-10-03（代码 + 单测，已复核）**，判别符未翻，见 Step 1 节末「Step 1 落地记录」（断点状态收成两个字段，`restartBackfill` 删除；复核把 D-e 收窄为仅续传段第一次请求、并纳入该请求的 F10）；**Step 2–3 待实施**。一次对话只做一个 Step；执行任一 Step 前先读 §1 决策、§2 否决清单、§3 铁律，再读该 Step 的八段。
+> 状态：**Step 0 已完成 2026-10-03**（调研 + 用户账号实测 + 决策 D1–D4 + 默认项）；**Step 1 已落地 2026-10-03（代码 + 单测，已复核）**，见 Step 1 节末「Step 1 落地记录」（断点状态收成两个字段，`restartBackfill` 删除；复核把 D-e 收窄为仅续传段第一次请求、并纳入该请求的 F10）；**Step 2 已落地 2026-10-03（代码 + 单测，未提交；SKILL.md 与 CLI 0.2.2 未发布）**，判别符已翻，见 Step 2 节末「Step 2 落地记录」（用户 2026-10-03 决定的三处偏离：job namespace 用平台 id、transport 进 `lib/douyin/` 独立 leaf、验证页与限流冷却两条文案）；**Step 3 待实施**，且首次真实账号全量入库之前有两项阻塞（§6 末「阻塞项」：幽灵清扫会把中断页的条目永久落 `no_content`；是否存接口序位由用户决定）。一次对话只做一个 Step；执行任一 Step 前先读 §1 决策、§2 否决清单、§3 铁律，再读该 Step 的八段。
 >
 > 任务目录：`.trellis/tasks/10-03-douyin-public-favorites-platform/`（`prd.md` 记需求与决策，`research/` 五份调研是本文所有外部事实的出处）。接入契约：`.trellis/spec/frontend/platform-onboarding.md`。
 >
@@ -73,7 +73,7 @@
 
 ## 3. 跨 Step 铁律
 
-1. **`lib/douyin/` 零 chrome、零 storage、零裸 `fetch(`**：请求经注入的 transport（§4.1）。lib 的加载图必须过 `tests/lib-import-smoke.test.ts`（Step 2 翻判别符后自动纳入）与 `tests/http-fetch-deadline-guard.test.ts`。
+1. **`douyin-api.ts` / `douyin-sync-service.ts` 的加载图零 chrome、零 storage；`chrome.*` 只在 transport leaf**（Step 2 勘误：用户 2026-10-03 决定：平台的请求与计时代码要留在 `lib/<p>/` 的守卫范围内。原写「`lib/douyin/` 零 chrome、零 storage、零裸 `fetch(`」——transport 与 `findDouyinTab()` 改住 `lib/douyin/douyin-tab.ts`，那里有本平台唯一一处裸 `fetch(`，经 `ALLOWED_BARE_FETCH` 文件级登记）：请求经注入的 transport（§4.1）。sync-service 的加载图必须过 `tests/lib-import-smoke.test.ts`（Step 2 翻判别符后已自动纳入），全目录过 `tests/http-fetch-deadline-guard.test.ts` / sleep / env 守卫；api 与 sync-service 不得 import 这个 leaf（`douyin-tab.test.ts` 按 AST 守）。
 2. **绝不预填任何签名参数**（`a_bogus` / `verifyFp` / `fp` / `uifid` / `timestamp` / `x-secsdk-web-signature` / `msToken`）：签名覆盖精确 query，SDK 签完后再改一个参数就是 `403 Sign Invalid`。只发业务参数 + `device_platform=webapp&aid=6383&channel=channel_pc_web`，路径一律相对 `www.douyin.com`。
 3. **抖音 API 的 `favorite*` 是「喜欢 / 点赞」，`collect*` 才是收藏**。`/aweme/v1/web/aweme/favorite/`、`favorite_permission`、`show_favorite_list`、`favoriting_count` 全都与本平台无关。
 4. **id 一律用字符串**：`aweme_id`、`collects_id_str`、`sec_uid`。`collects_id` 是 int64 JSON number，`JSON.parse` 后已丢精度。
@@ -88,6 +88,8 @@
 ## 4. 接口与形状速查（Step 1 / 2 共用）
 
 ### 4.1 transport 契约（lib 定义类型，app 实现）
+
+> Step 2 勘误：实现也在 lib——`lib/douyin/douyin-tab.ts` 是独立的 chrome leaf（用户 2026-10-03 决定：平台的请求与计时代码要留在 `lib/<p>/` 的守卫范围内），app 侧只接线；`douyin-api.ts` / `douyin-sync-service.ts` 的加载图仍零 chrome。
 
 ```ts
 // lib/douyin/douyin-api.ts —— 形状示意，命名可在 Step 1 定稿
@@ -287,7 +289,7 @@ pnpm test
 
 - `titleOf` 用 `.slice` 截断，可能切开一个代理对（emoji）——与 X（`lib/x/x-sync-service.ts:188`）同款，要改应各平台一起改。
 - `ORDER BY publishedAt DESC NULLS LAST` 没有并列决胜键，分页在同秒发布的作品之间不稳定——与 zhihu / x 同款。
-- 逐页 `ingestCollection` 每页都按平台全量重读 author / item id 映射并跑一次幽灵清扫，首次全量约 115 次；正确性无影响，实际耗时留给 Step 3 记录。
+- 逐页 `ingestCollection` 每页都按平台全量重读 author / item id 映射并跑一次幽灵清扫，首次全量约 115 次；实际耗时留给 Step 3 记录。（Step 2 勘误：原写「正确性无影响」，不成立。声明 `'chunked'` 的条目在入库事务里先以 `'has_content'` 插入（`lib/ingest/ingest.ts:364`），正文与切块在事务之外逐条写（`:434-440`）；这一段中途断掉（关页、重载、写库抛错），该页还没轮到的条目就停在 `'has_content'`、没有 `item_contents.plainText`。之后**任何一次**带 `content` 的 `ingestCollection` 调用都清扫全平台幽灵（`:442-461`），文本先取本次调用的 `textOf`、再取已存 `plainText`，都没有就落 `'no_content'`；抖音的 `textOf` 只认本页（`lib/douyin/douyin-sync-service.ts:378`）。`'no_content'` 不在幽灵谓词里（`lib/ingest/ingest.ts:143-145`），条目再次出现时已是存量、不进 5a（`:436-438`），所以永久无正文。正文其实还在 `platform_meta.desc`，ingest 不读它。复核时用临时测试实跑确认（跑完已删），见 §6 末「阻塞项」。）
 - `platformMeta.folderId` / `folderTitle` 几乎总是 `null`：编排顺序是先走全部收藏、后走收藏夹，条目首见几乎都来自全部收藏。这是改法第 5 条顺序的结果，不是 bug；Step 2 的卡片若要展示所属夹，应读 `item_sources` 而不是这两个字段。
 - `sec_uid` 为空的作品被 ingest 丢弃、永远不进已知集合，所以含它的那一页永远不是「整页已知」，增量头部段会多读一页。频率 `[UNKNOWN]`（失效作品本应已被抖音剔除），代价每次运行至多多一页，不改。
 
@@ -317,13 +319,13 @@ pnpm vitest run tests/platform-completeness-contract.test.ts    # 类型看不�
 
 | 位置 | 抖音的值 / 做法 |
 |---|---|
-| domain descriptor（`lib/collections/platform-descriptor.ts`） | `jobPlatform: 'douyin-collections'`、`readiness: 'login'`、`contentKind: 'post-text'`、`descriptionField: null`、`hostPermissions: ['https://www.douyin.com/*']`、`sortKey: { source: 'publishedAt' }`、`dimensions: { ranked: ['author', 'favoriteFolder'], author: 'author', source: 'favoriteFolder', meta: null }`；`platform-descriptor.test.ts` 的 hostPermissions 黄金顺序末尾追加 |
-| app descriptor（`entrypoints/app/collection-platform-registry.ts`） | `title: 'nav.douyinCollections'`；`palette: 'ink'`（黑标品牌，同 github / x）；`icon` 先把离线 SVG 加进 `components/iconify/icon-sets.ts`（抖音 logo 与 TikTok 音符同形，用 iconify 现有集合里的 tiktok 图标，具体名字 Step 2 查）；`childRoutes: []`；`hint` 用 `welcome.picker.hint.douyin` |
+| domain descriptor（`lib/collections/platform-descriptor.ts`） | `jobPlatform: 'douyin'`（Step 2 勘误：用户 2026-10-03 决定：bilibili / bookmarks 已是同名先例，不再给平台 id 发明第二个名字——job namespace 直接用平台 id，原写的 `'douyin-collections'` 作废；其余四平台的统一不在本步）、`readiness: 'login'`、`contentKind: 'post-text'`、`descriptionField: null`、`hostPermissions: ['https://www.douyin.com/*']`、`sortKey: { source: 'publishedAt' }`、`dimensions: { ranked: ['author', 'favoriteFolder'], author: 'author', source: 'favoriteFolder', meta: null }`；`platform-descriptor.test.ts` 的 hostPermissions 黄金顺序末尾追加 |
+| app descriptor（`entrypoints/app/collection-platform-registry.ts`） | `title: 'nav.douyinFavorites'`（Step 2 勘误：原写 `nav.douyinCollections`；`Collection` 是 favbase 自己的领域词，`CONTEXT.md`，与 `nav.zhihuFavorites` / `nav.bilibiliFavorites` 同形）；`palette: 'ink'`（黑标品牌，同 github / x）；`icon` 先把离线 SVG 加进 `components/iconify/icon-sets.ts`（抖音 logo 与 TikTok 音符同形，用 iconify 现有集合里的 tiktok 图标，具体名字 Step 2 查——取 `simple-icons:tiktok`）；`childRoutes: []`；`hint` 用 `welcome.picker.hint.douyin` |
 | 四处重值注册表 | `PLATFORM_DOWNSTREAM_ELIGIBILITY.douyin = null`；auto-sync `{ runSync: runDouyinSync, ...douyinAutoSyncPolicy }` |
 | `wxt.config.ts` | `permissions` 加 `'scripting'`，注释写明「往用户已打开的 douyin.com 标签页注入 MAIN-world fetch，由页面 SDK 签名（docs/33 D4）」 |
 | `lib/storage/keys.ts` + storage item | 断点状态 `local:douyin-backfill`（`{ resumeCursor, backfillDone }`，即 `DouyinBackfillState`；Step 1 勘误：原有 `restartBackfill`，已删，见 Step 1 落地记录）；设备本地状态，WebDAV 只同步 settings + locale（`lib/sync/sync-engine.ts`），无需排除 |
-| `entrypoints/app/sections/douyin/` | 见下方「改法」 |
-| i18n（zh-CN + en） | `nav.douyinCollections`（同 `nav.zhihuFavorites` / `nav.youtubePlaylists` 的形状，它也是 `PLATFORM_META.title`）、`welcome.picker.hint.douyin`、`douyin.*`（标题、caption——说明「按发布时间排序」、搜索、无匹配、未登录空态、限流 / 验证文案、收藏夹 chip 标题）；en 显示名进 SKILL.md frontmatter `description` 的对账 |
+| `entrypoints/app/sections/douyin/` | 见下方「改法」（Step 2 勘误：改法第 1、2 条的标签页解析与 transport 不在这里，进了 `lib/douyin/douyin-tab.ts`，见那两条的注） |
+| i18n（zh-CN + en） | `nav.douyinFavorites`（Step 2 勘误，同上；同 `nav.zhihuFavorites` / `nav.youtubePlaylists` 的形状，它也是 `PLATFORM_META.title`）、`welcome.picker.hint.douyin`、`douyin.*`（标题、caption——说明「按发布时间排序」、搜索、无匹配、未登录空态、限流 / 验证文案、收藏夹 chip 标题）；en 显示名进 SKILL.md frontmatter `description` 的对账 |
 | welcome marquee | `capability-marquee.tsx` 加药丸（守卫只查覆盖，位置是设计决定，docs/26 D5） |
 | `skills/favbase/SKILL.md` | 两份清单 + `metadata.version`；`packages/favbase/package.json` 同号（见依赖） |
 | `CONTEXT.md` | D1 偏离与 B 站规则并列；术语：抖音 `collect` = 收藏、`favorite` = 喜欢；「抖音的 Source 是公开收藏夹，全部收藏里的条目可以不属于任何 Source」 |
@@ -331,15 +333,15 @@ pnpm vitest run tests/platform-completeness-contract.test.ts    # 类型看不�
 
 **改法**（`entrypoints/app/sections/douyin/`）
 
-1. `douyin-tab.ts`：`findDouyinTab()`——`chrome.tabs.query({ url: 'https://www.douyin.com/*' })`，取第一个 `!discarded && status === 'complete'` 的；host permission 足以读到这些标签页的 url，**不需要** `tabs` 权限。标签页门、`probeReady`、transport 三处都调它（D-c）。
-2. `douyin-tab-transport.ts`：实现 `DouyinTransport`。注入函数 `douyinPageFetch(req)`：
+1. `douyin-tab.ts`（Step 2 勘误：用户 2026-10-03 决定：平台的请求与计时代码要留在 `lib/<p>/` 的守卫范围内——与第 2 条合成一个 leaf `lib/douyin/douyin-tab.ts`，不在 `sections/douyin/`；返回标签页 id `number | null`；url 模式取 descriptor 的 `hostPermissions[0]`）：`findDouyinTab()`——`chrome.tabs.query({ url: 'https://www.douyin.com/*' })`，取第一个 `!discarded && status === 'complete'` 的；host permission 足以读到这些标签页的 url，**不需要** `tabs` 权限。标签页门、`probeReady`、transport 三处都调它（D-c）。
+2. `douyin-tab-transport.ts`（Step 2 勘误：同上，并入 `lib/douyin/douyin-tab.ts`；注入函数的 `fetch(` 在 `ALLOWED_BARE_FETCH` 加文件级一行；外层超时复用同一个 `req.timeoutMs`，不新增 env 键）：实现 `DouyinTransport`。注入函数 `douyinPageFetch(req)`：
    - **自包含**：零闭包、零 import、零模块级常量、零 TS 专有运行时语法；所有输入走 `args`。`executeScript` 用 `toString()` 序列化它，打包器若插入 `__name(...)` / `__async` 之类 helper，页面里第一次调用就是 `ReferenceError`。扩展页 CSP 禁 `new Function`，所以这是唯一路线。
    - 先查 `Function.prototype.toString.call(window.fetch)` 是否含 `[native code]` → 是则返回 `{ kind: 'sdk-not-ready' }`。
    - 相对路径 `fetch(path + '?' + query, { method, credentials: 'include', headers: form ? { 'content-type': 'application/x-www-form-urlencoded' } : undefined, body, signal: AbortSignal.timeout(timeoutMs) })`，返回 `{ kind: 'response', status, text }`；`catch` → `{ kind: 'unreachable', message }`。
    - 外层再包一圈超时（被冻结的后台页里，页内的 `AbortSignal` 不会触发），`executeScript` 抛错（标签页关了、导航走了、被丢弃）→ `unreachable`。
 3. `douyin-sync-adapter.ts`：`runDouyinSync(onProgress, control)`——`findDouyinTab()` 为 null → **funnel 之前**抛 `DouyinAuthError('missing')`（F1，不算尝试）；读断点状态 → `runPlatformSync('douyin', control, async () => { … syncDouyinCollections(transport, { backfill, onBackfill: 写回 storage, onPagePersisted: (ids) => ids.forEach((id) => enqueueCollectionProcessingItem({ jobPlatform: jobPlatformForCollection('douyin'), itemPlatform: 'douyin', itemId: id })), onProgress, control }); return { fetched, inserted, newItemIds: [] }; })`（D-b）。`douyinAutoSyncPolicy = { probeReady: async () => (await findDouyinTab()) !== null, isSilentError: (e) => e instanceof DouyinAuthError }`。
-4. `use-douyin.ts`：`useCollectionLibrary({ queryFn: facetQuery(getDouyinItems, 'folderId'), facetsFn: getFolderCounts, platform: PLATFORM, syncFn: runDouyinSync, jobPlatform: jobPlatformForCollection(PLATFORM) })`，`const PLATFORM = 'douyin'` 写一次（spec §7.2）。
-5. `douyin-view.tsx`：`CollectionPageScaffold` + `useCollectionPipeline` + `useCollectionBreadcrumbs`；`NotLoggedInState` 带打开 `https://www.douyin.com/` 的 `SiteAction`，文案说清「登录后**保持这个标签页打开**，回来点获取；首次全量约 20 分钟」；`SyncErrorCopy`（`auth` / `rateLimited` / `rateLimitedUntil`——验证码与限流共用「去抖音标签页看看是否要验证，稍后再试」）；`DouyinRateLimitError.resetAt` 非空时 `useCountdown((now) => rateLimitRemainingMs(syncError, now))` 锁「立即获取」；收藏夹 chip 用 `FacetChips`（`components/collection-states/`）。
+4. `use-douyin.ts`（Step 2 勘误：文件名取 `use-douyin-favorites.ts`，同 `use-zhihu-favorites.ts`；`jobPlatformForCollection(PLATFORM)` 的值就是 `'douyin'`）：`useCollectionLibrary({ queryFn: facetQuery(getDouyinItems, 'folderId'), facetsFn: getFolderCounts, platform: PLATFORM, syncFn: runDouyinSync, jobPlatform: jobPlatformForCollection(PLATFORM) })`，`const PLATFORM = 'douyin'` 写一次（spec §7.2）。
+5. `douyin-view.tsx`：`CollectionPageScaffold` + `useCollectionPipeline` + `useCollectionBreadcrumbs`；`NotLoggedInState` 带打开 `https://www.douyin.com/` 的 `SiteAction`，文案说清「登录后**保持这个标签页打开**，回来点获取；首次全量约 20 分钟」；`SyncErrorCopy`（`auth` / `rateLimited` / `rateLimitedUntil`——验证码与限流共用「去抖音标签页看看是否要验证，稍后再试」）（Step 2 勘误：用户 2026-10-03 决定：验证与冷却是两件事，`SyncErrorCopy` 本来就按 `resetAt` 的有无来选文案——两条文案、不共用：`resetAt === null`（F6 验证页）→ `rateLimited` = 去抖音标签页完成验证后再试；`resetAt` 非空（F4 / F5 / F8 冷却）→ `rateLimitedUntil` = 请求过于频繁、{{reset}} 后再试，并配倒计时锁按钮）；`DouyinRateLimitError.resetAt` 非空时 `useCountdown((now) => rateLimitRemainingMs(syncError, now))` 锁「立即获取」；收藏夹 chip 用 `FacetChips`（`components/collection-states/`）。
 6. `douyin-card.tsx`（`CollectionCard` 外壳：封面、`desc` 摘要、作者、时长角标、图文标记）、`tagged-douyin-card.tsx`（一行 `taggedCard(DouyinCard, '<prop>', toDouyinItem)`）、`douyin-grid-skeleton.tsx`、`CLAUDE.md`；`entrypoints/app/pages/douyin.tsx` 一行 re-export。
 
 **测试**
@@ -347,7 +349,7 @@ pnpm vitest run tests/platform-completeness-contract.test.ts    # 类型看不�
 - `douyinPageFetch` 序列化守卫：断言 `String(douyinPageFetch)` 不含 `__name`、`__async`、`import`，也不引用任何不在其参数与浏览器全局里的标识符；再用 `new Function` **在测试环境里**重建它跑一遍（测试环境没有扩展 CSP）。
 - transport：`findDouyinTab` 过滤 `discarded` / `loading`；`executeScript` 抛错、超时、`sdk-not-ready` 都折成对应 `kind`。
 - adapter：无标签页 → 抛 `DouyinAuthError` 且**不写** Platform Sync Record（funnel deps 注入断言）；逐页 `enqueueCollectionProcessingItem` 收到的是 platformItemId；断点状态读写；`probeReady` 与标签页门用同一个 `findDouyinTab`。
-- view：未登录空态、限流锁按钮、chip 渲染（照 zhihu / x 的 view 测试形状）。
+- view：未登录空态、限流锁按钮、chip 渲染（照 zhihu / x 的 view 测试形状）。（Step 2 勘误：五个平铺平台 view 此前都没有测试文件，所以没有「zhihu / x 的形状」可照；`douyin-view.test.tsx` 照 `sections/configuration-heading.test.tsx` 的形状写。）
 - spec §2 的全部守卫：completeness contract、import-smoke、env、sleep、fetch-deadline、SKILL.md 双清单、marquee 覆盖、i18n 无硬编码 CJK。
 
 **验证**（spec §12 顺序）
@@ -360,7 +362,7 @@ pnpm test
 pnpm build && diff /tmp/manifest-before.json .output/chrome-mv3/manifest.json
 ```
 
-manifest diff 只允许两处：`host_permissions` **末尾**多 `https://www.douyin.com/*`、`permissions` 多 `scripting`。任何既有条目改序或改字都是缺陷。最后手走 spec §9（视图里的英文硬编码文案）。
+manifest diff 只允许两处：`host_permissions` **末尾**多 `https://www.douyin.com/*`、`permissions` 多 `scripting`（Step 2 勘误：「末尾」指平台段的末尾——manifest 里平台 host 之后还跟着 provider host，所以它落在 `https://www.googleapis.com/*` 之后、provider 段之前；`scripting` 追加在 `permissions` 最后）。任何既有条目改序或改字都是缺陷。最后手走 spec §9（视图里的英文硬编码文案）。
 
 **文档（同 commit）**：`entrypoints/app/sections/douyin/CLAUDE.md`（新建）、`lib/douyin/CLAUDE.md`（补 app 侧接线）、`.trellis/spec/frontend/platform-onboarding.md`（「Already onboarded」加 douyin；§4.1 写明「注入式 transport」是 `fetchWithDeadline` 规则的例外及其守卫方式；逐页入库 + 断点续传 + 逐条派发作为新形状；§12 manifest diff 记 `scripting` 例外）、根 `CLAUDE.md` 目录索引两条、`entrypoints/app/CLAUDE.md` 路由表、`lib/storage/CLAUDE.md`（新 key）、`CONTEXT.md`、本文 Step 2 落地记录。
 
@@ -368,13 +370,86 @@ manifest diff 只允许两处：`host_permissions` **末尾**多 `https://www.do
 
 **判据**：验证五条全绿；manifest diff 恰好两处；无标签页时空态正确、每日自动同步静默跳过且不写记录（单测层面）；SKILL.md 与 CLI 版本按用户选的 (a) / (b) 处理完毕。
 
+#### Step 2 落地记录（2026-10-03，代码 + 单测；未提交，SKILL.md 与 CLI 0.2.2 未发布）
+
+**做了什么**
+
+- 翻判别符：`COLLECTION_PLATFORMS` 末尾追加 `'douyin'`，然后按 spec §5 让 `pnpm compile`、completeness contract 与 `pnpm test` 生成待办，逐条烧掉。
+- 两份 descriptor：domain `jobPlatform: 'douyin'`、`readiness: 'login'`、`contentKind: 'post-text'`、`descriptionField: null`、`hostPermissions: ['https://www.douyin.com/*']`、`sortKey: { source: 'publishedAt' }`、`dimensions: { ranked: ['author', 'favoriteFolder'], author: 'author', source: 'favoriteFolder', meta: null }`；app `title: 'nav.douyinFavorites'`、`icon: 'simple-icons:tiktok'`（离线 SVG 取自 Iconify API）、`palette: 'ink'`、`hint: 'welcome.picker.hint.douyin'`、`childRoutes: []`。四处重值注册表：`PLATFORM_DOWNSTREAM_ELIGIBILITY.douyin = null`、`COLLECTION_PAGE_LOADERS`、`CARD_ADAPTERS`、auto-sync（评估顺序最后一位）。`wxt.config.ts` 的 `permissions` 末尾加 `'scripting'` 并注明用途。
+- `lib/douyin/douyin-tab.ts`（新）：`findDouyinTab()`、注入函数 `douyinPageFetch`、`executeScript` 边界的 `decodePageFetchResult`、`douyinTabTransport`（每次请求重新解析标签页；`executeScript` 与 `sleep(req.timeoutMs)` 赛跑）。`tests/http-fetch-deadline-guard.test.ts` 的 `ALLOWED_BARE_FETCH` 加本文件一行并写明理由，文件头的白名单规则补「为何不能走 `fetchWithDeadline`、期限如何另行保证」这一类。
+- `lib/storage`：`STORAGE_KEYS.douyinBackfill = 'local:douyin-backfill'`，`ui-state.ts` 的 `douyinBackfillStorage`（fallback `{ resumeCursor: null, backfillDone: false }`，类型只 `import type`），barrel 导出。
+- `entrypoints/app/sections/douyin/`（新）：`douyin-sync-adapter.ts`、`use-douyin-favorites.ts`、`douyin-view.tsx`、`douyin-card.tsx`、`tagged-douyin-card.tsx`、`douyin-grid-skeleton.tsx`、`CLAUDE.md` 与两份测试；`entrypoints/app/pages/douyin.tsx`。
+- i18n（zh-CN + en 各 17 键）：`nav.douyinFavorites`（zh「抖音收藏」、en「Douyin Favorites」）、`welcome.picker.hint.douyin`、`douyin.*` 15 个（含 `count.one`、`verificationRequired`、`rateLimited`、`mediaKind.note`）。welcome 跑马灯下排在 `summary` 与 `pglite` 之间加抖音药丸（保持平台 / 能力交替）。
+- `skills/favbase/SKILL.md` 两份清单加抖音（`<platform>` 句末尾加 `douyin`，frontmatter `description` 末尾加 `Douyin favorites`，都与 `COLLECTION_PLATFORMS` 同序），`metadata.version` 与 `packages/favbase/package.json` 同改 `0.2.2`（`packages/favbase/` 里再没有别的版本副本：`CLAUDE.md` 与 `exit-codes.test.ts` 提到的 0.2.1 是历史叙述）。只做了 Release 第 1 步。
+- 文档：本记录、`lib/douyin/CLAUDE.md`、`sections/douyin/CLAUDE.md`、spec（Already onboarded、§3 三行参考答案、§4.1 注入式 transport 例外、新 §4.6 逐页入库 + 断点续传 + 逐条派发、§12 / §13 的 API 权限例外）、根 `CLAUDE.md`（docs/33 状态一句 + 目录索引两条）、`entrypoints/app/CLAUDE.md` 路由表、`lib/storage/CLAUDE.md`、`CONTEXT.md`（D1 偏离与 B 站规则并列、`collect` / `favorite` 词汇陷阱、Relationships 一句改成「零个或多个 Source」）、`lib/collections/CLAUDE.md`、`sections/collections/CLAUDE.md`、`components/iconify/CLAUDE.md`。
+
+**与手册的偏离**
+
+1. **job namespace 直接用平台 id**（用户 2026-10-03 决定：bilibili / bookmarks 已是同名先例，不再给平台 id 发明第二个名字）：`jobPlatform: 'douyin'`，不发明 `'douyin-collections'`。其他四个平台的统一不做。
+2. **transport 与 `findDouyinTab()` 住 `lib/douyin/` 的独立 leaf**（用户 2026-10-03 决定：平台的请求与计时代码要留在 `lib/<p>/` 的守卫范围内），不在 `sections/douyin/`；手册的两个文件（`douyin-tab.ts` + `douyin-tab-transport.ts`）合成一个 `lib/douyin/douyin-tab.ts`。§3 铁律 1 已改述。外层超时复用 `req.timeoutMs`，没有新增 env 键（`.env.local` 未动）。
+3. **验证页与限流冷却两条文案**（用户 2026-10-03 决定：验证与冷却是两件事，`SyncErrorCopy` 本来就按 `resetAt` 的有无来选文案）：`SYNC_ERROR_COPY = { auth, rateLimited: 'douyin.verificationRequired', rateLimitedUntil: 'douyin.rateLimited' }`，共享 `syncErrorMessage` 按 `resetAt` 有无选键；只有冷却锁按钮。
+4. 命名：`nav.douyinFavorites`（不是 `nav.douyinCollections`）、`use-douyin-favorites.ts`（不是 `use-douyin.ts`）、`findDouyinTab()` 返回标签页 id（`number | null`）。
+5. **标签页 url 模式从 descriptor 读，不在 leaf 里再写一遍字面量**——这是证伪时撞出来的：手写 `'https://www.douyin.com/*'` 时，往该文件塞一个裸数值常量，env 守卫**没有变红**（下表 G3 第一次）。原因：env 守卫与裸 fetch 守卫都用 `/\/\*[\s\S]*?\*\//` 朴素正则剥块注释，字符串里的「斜杠 + 星号」被当成注释开头，一直吞到下一个 `*/`，中间的代码从扫描里消失。改从 `PLATFORM_DESCRIPTORS.douyin.hostPermissions` 读之后同一处证伪变红。**同一盲区今天就在别处**（复核时按 TypeScript 解析出的真实注释范围逐文件对照，非测试文件）：`lib/x/x-api.ts:224-231`（`Accept: '*/*'`，env 与裸 fetch 两个守卫都扫它）、`lib/collections/platform-descriptor.ts:124-233` 与 `lib/permissions/host-access.ts:30-34`（只有裸 fetch 守卫扫）；被藏起的行里今天没有违规，`entrypoints/**`（CJK 守卫同一写法）零盲区。`lib/bookmarks/bookmark-page-fetch.ts:106` 的 `*/*` 其后再无 `*/`，正则不成立，**不**在盲区里（初稿误记）。守卫是跨平台的，本步不改，见「未做与延后」。
+6. 新增手册没有列的两处：`decodePageFetchResult`（`executeScript` 返回的是 `unknown`，按根 `CLAUDE.md` 跨 runtime 规则先经 decoder，畸形结果一律 `unreachable`）；`douyin-tab.test.ts` 的分层断言（api 与 sync-service 不 import 这个 leaf、不读 `chrome.*` / `browser.*`——leaf 加载期不碰 chrome，所以 import-smoke 看不见这条边）。
+7. 库空态也带「打开抖音」（`EmptyLibraryState site=…`，同 X）：库只能经已打开的抖音标签页填满。auth 相位 `pipeline` 传 `undefined`、`configurationNotice` 恒传（同 zhihu；它在 scaffold 上是可选 slot，漏传 `tsc` 不报，而没有横幅时 Tags 积压就没有恢复入口）。
+8. 卡片：标题即 `desc` 首行（3 行 clamp），不再重复一段摘要；不展示所属收藏夹（`platformMeta.folderTitle` 几乎总是 null，见 Step 1 复核）。封面照先例不设 `referrerPolicy`，失败回退字形。
+9. 测试夹具：成员清单类改为由 `COLLECTION_PLATFORMS` 派生（`overview-view.test.tsx` 的 `emptySnapshot`、`collection-analytics.test.ts` 的零快照）；有意义的黄金顺序保留手写、末尾追加抖音（`platform-descriptor.test.ts` host 顺序、`collection-platform-registry.test.ts` 与 `load-navigation.test.ts` 的导航顺序、auto-sync 评估顺序、三张 job namespace 镜像表）。`sync-errors.test.ts` 补抖音两个错误类（不补不会红，但它声称覆盖每个平台）。
+10. `wxt.config.test.ts` 只锁 `host_permissions`，`permissions` 数组没有黄金断言；本步没加：跨平台项，本步不做。
+
+**先红证据**
+
+- 翻判别符后第一跑：`tsc` 列出 6 个源码穷举 `Record`（auto-sync、page loaders、`PLATFORM_META`、`CARD_ADAPTERS`、domain descriptor 的 `satisfies`、eligibility）、2 张测试镜像表（`collection-job-platform.test.ts`、`library-gate.test.ts`），以及由 descriptor 缺键连带出的 TS7053（`lib/chat/tools.ts`、`collection-analytics.ts`、`tagging-service.ts`、`wxt.config.ts` 与三个测试）；completeness contract 在 descriptor 缺键处直接 `TypeError`；全量 `vitest` 72 个文件红（多数在 import 时就因 descriptor 缺键崩掉）。
+- 注册表补齐后第二跑：7 个文件 / 11 例红——`agent-bridge-cli-aliases` 两份 SKILL.md 清单、`collection-platform-registry.test.ts` 1 例与 `load-navigation.test.ts` 4 例导航顺序、`collection-analytics.test.ts` 零快照、`collection-processing-resume.test.ts` namespace 表、`overview-view.test.tsx` 2 例（夹具只有六个平台），另 `collection-platform-auto-sync.test.ts` 整个套件加载失败（抖音 adapter 引入 `collection-processing-jobs`，该测试对 `@/lib/database` 的 mock 没有 `schema`）。
+- 新代码逐条证伪（改一处、跑对应测试、还原）：
+
+| # | 改动 | 变红 |
+|---|---|---|
+| M1 | 删掉 adapter 在 funnel 前的标签页门 | adapter「funnel 之前抛」1 例 |
+| M2 | 逐页派发改成什么都不派 | adapter「逐页派发」1 例 |
+| M3 | 给 funnel 回报 `result.newItemIds`（双重派发） | 同上 1 例 |
+| M4 | `findDouyinTab` 接受被丢弃的标签页 | tab 测试 3 例 |
+| M5 | 去掉外层 `sleep(req.timeoutMs)` 赛跑 | 「冻结页超时」1 例（5 s 测试超时） |
+| M6 | 注入函数读模块常量 | 自由标识符 1 例 + 「从源码重建」3 例 |
+| M7 | 不经 decoder 直接信任 `executeScript` 结果 | 1 例 |
+| M8 | 只留一条限流文案（手册原写法） | view「冷却」1 例 |
+| M9 | 去掉冷却锁 | view 3 例 |
+| M10 | 漏传 `configurationNotice` | view 2 例 |
+| G1 | 去掉 `ALLOWED_BARE_FETCH` 一行 | 裸 fetch 守卫 2 例 |
+| G2 | leaf 里手写 `new Promise` + `setTimeout` | sleep 守卫 1 例（证明本目录已在扫描范围） |
+| G3 | leaf 里加裸数值常量 | 第一次**不红**（偏离 5）；改从 descriptor 读之后 env 守卫 1 例 |
+| G4 | sync-service import leaf | 分层断言 1 例（import-smoke 仍绿，正是加这条断言的理由） |
+| G5 | 删掉跑马灯药丸 | completeness contract 1 例 |
+| G6 | `jobPlatform` 改回 `'douyin-collections'` | 5 个文件 6 例（namespace 镜像表、resume 表、auto-sync、adapter 派发） |
+
+**验证**（2026-10-03，全部在本工作树跑）
+
+- `pnpm vitest run tests/platform-completeness-contract.test.ts tests/lib-import-smoke.test.ts tests/agent-bridge-cli-aliases.test.ts`：3 文件 / 58 例全过。
+- `pnpm vitest run lib/douyin entrypoints/app/sections/douyin`：6 文件 / 141 例全过。
+- `pnpm compile`：通过（根 `tsc --noEmit` + `pnpm -r compile`）。
+- `pnpm test`：根 222 文件 / 1901 例、`packages/*` 15 文件 / 263 例全过，无偶发超时。
+- `pnpm build`：通过；`[bundle-contract] background graph 14 modules / 948269 bytes`（基线 14 / 947838，+431 字节，模块数不变）。增量全是数据：SW 图里的 `platform-descriptor` chunk 多了 `COLLECTION_PLATFORMS` 的 `'douyin'`、`PLATFORM_DESCRIPTORS.douyin`、`STORAGE_KEYS.douyinBackfill` 与 `douyinBackfillStorage` 的定义（`app-handlers` 经 `@/lib/storage` barrel 取 `onboardingStorage`，barrel 的 eager item 随之进 SW），`x-auth` chunk 里的 `PLATFORM_DOWNSTREAM_ELIGIBILITY` 多了 `douyin: null`。`lib/douyin/` 的代码零进入 SW（`background.js` 零 `douyin` 命中）。
+- manifest：`diff` 原文是单行 JSON 的整行替换；按字符比对恰好两处插入——`permissions` 在 `"favicon"` 之后插入 `,"scripting"`，`host_permissions` 在 `"https://www.googleapis.com/*"` 之后插入 `"https://www.douyin.com/*",`；按键比对，其余条目与顺序逐项不变。
+- 打包后的注入函数：在 `.output/chrome-mv3/chunks/app-*.js`（app 主 chunk——auto-sync 注册表是 eager 的，所有平台 adapter 都在那里）里找到，压缩成 `async function du(e){…}`（580 字符）；按 AST 算出的自由标识符只有 `AbortSignal, Error, Function, String, URLSearchParams, window`，零 `__name` / `__async` / `__awaiter` / `import(` / `require(`（整个 chunk 也零 helper 命中），`new Function` 从这段原文重建得到 `AsyncFunction`。
+- spec §9 手走：抖音 view / card 里没有英文硬编码展示文案（只有 `alt: ''` 与站点 URL）；CJK 守卫照常通过。
+
+**未做与延后**
+
+- **两项阻塞 Step 3 首次真实账号全量入库**（insert-only，事后补不回来），见 §6 末「阻塞项」：幽灵清扫会把中断页的条目永久落 `no_content`（Step 1 复核里那句已就地勘误）；是否存接口序位由用户决定。
+- 翻判别符后已过期、本步按指示不动（都是手写副本，无守卫）：welcome 首屏三句「六个平台 / Six platforms」文案（`lib/i18n/locales/*.ts`）、`skills/favbase/INSTALL.md` 开头的平台枚举、README / README_zh_CN / PRODUCT.md 的平台清单。
+- 首次全量期间页面不重读：`useCollectionLibrary` 只在挂载时（`entrypoints/app/hooks/use-collection-library.ts:248-258`）与 sync job 的 `generation` 变大时（`:265-276`）重读 meta，没有订阅任何领域事件，`generation` 只在成功时加一（`entrypoints/app/hooks/background-jobs-store.ts:296`，失败分支 `:304` 不动）。所以约 20 分钟里库为空的页面一直是骨架屏，中途失败显示空库错误框（库里其实已有条目），重新挂载才恢复。延后。逐条派发仍是 adapter 里手拼 `{ jobPlatform, itemPlatform, itemId }`（同书签与 B 站），没有命名入口。
+- 冷却锁只在内存（job store 的 error）、只锁标题栏按钮（`entrypoints/app/components/collection/collection-page-scaffold.tsx:325`），刷新即解；错误相位的 Retry 直接是 `onSync`（`:271`），每日自动同步的 `probeReady` 也只看标签页，都不看它。平台守卫的目录集合仍由 `COLLECTION_PLATFORMS` 派生（翻判别符前看不见新目录），`permissions` 无黄金断言。均未做。
+- 守卫的块注释剥离盲区（偏离 5）：`lib/x/x-api.ts`、`lib/collections/platform-descriptor.ts`、`lib/permissions/host-access.ts` 今天就有（被藏起的行里暂无违规），修法是守卫按 AST 或 TypeScript scanner 剥注释——跨平台工具改动，留给独立任务。
+- `sdk-not-ready`、Argus 403、`DouyinStatusError` 等「非 auth、非限流」失败在 UI 上显示英文原文（`'unknown'` 分支，docs/32 Step 4 的既定设计）；「SDK 未就绪 → 刷新抖音标签页」是否值得一条本地化文案，等 Step 3 看它多常见。
+- **发布**：SKILL.md 改动即发布 commit（`packages/favbase/CLAUDE.md` Release）。本步只做了第 1 步（版本号），没有跑第 2–6 步；要么这次提交即当场发布（a），要么先不提交（b），由用户决定；推 `main` 之前必须发布 0.2.2。
+- `[UNKNOWN]`（Step 3 实机验证）：扩展 `executeScript` 注入的请求是否和 DevTools / CDP 一样被签名接受、后台标签页的签名是否被接受（§6）；抖音 CDN 封面 URL 是否带会过期的签名参数（过期后卡片只会回退字形，不会报错）；`executeScript` 回传 1.6 MB 页的实际耗时。
+
 ---
 
 ### Step 3 — 实机端到端验证（生产条件）
 
 **目标**：在用户真实账号上确认整条链路在**生产条件**下成立，把 §6 的 `[UNKNOWN]` 逐条变成已知，按实测修正默认值。
 
-**依赖**：Step 2 已落地；BrowserOS 已登录抖音。BrowserOS MCP 若连不上，用 CDP（端口见 `%LOCALAPPDATA%\BrowserClaw\User Data\.browseros\config.json` 的 `ports.cdp`）。先确认扩展是从哪个目录加载的（`chrome://extensions` target 里 `chrome.developerPrivate.getExtensionsInfo()` 的 `prettifiedPath`），装新构建前告诉用户。
+**依赖**：Step 2 已落地；§6 末「阻塞项」两条已处理（幽灵清扫已修、序位已由用户决定）；BrowserOS 已登录抖音。BrowserOS MCP 若连不上，用 CDP（端口见 `%LOCALAPPDATA%\BrowserClaw\User Data\.browseros\config.json` 的 `ports.cdp`）。先确认扩展是从哪个目录加载的（`chrome://extensions` target 里 `chrome.developerPrivate.getExtensionsInfo()` 的 `prettifiedPath`），装新构建前告诉用户。
 
 **生产条件与 Step 0 实测的差别**：Step 0 的探测都在抖音标签页可能处于前台时做的；真实使用时 **app.html 在前台、抖音标签页在后台**，而且首次全量要 20 分钟。
 
@@ -412,6 +487,11 @@ manifest diff 只允许两处：`host_permissions` **末尾**多 `https://www.do
 | 收藏接口上验证码 / 412 / `filter_list` 的真实样本 | 分类器覆盖面 | 错误消息带原始片段，出现时补测试 |
 | 整页失效作品时是否 `aweme_list: []` + `has_more: 1` + 非空 `disabled_item_ids` | F8 的分支 | 出现时补测试（推断自实测 #6） |
 | 抖音签名门禁规则继续变化（2026-08 → 09 至少变过两次） | 整条路线 | 持续：F3 的错误消息是第一信号 |
+
+**阻塞项（Step 3 首次真实账号全量入库之前；insert-only，入库之后补不回来）**
+
+- **逐页入库会把中断页的条目永久落 `no_content`**（代码事实，复核时用临时测试实跑确认）。声明 `'chunked'` 的条目在入库事务里先以 `'has_content'` 插入（`lib/ingest/ingest.ts:364`），正文与切块在事务之外逐条写（`:434-440`）；中途断掉，该页还没轮到的条目没有 `item_contents.plainText`。之后任何一次带 `content` 的 `ingestCollection` 调用都清扫全平台幽灵（`:442-461`），文本只取本次调用的 `textOf` 与已存 `plainText`，都没有就落 `'no_content'`，且 `'no_content'` 不再被清扫（`:143-145`）、存量条目不进 5a（`:436-438`）。抖音的 `textOf` 只认本页（`lib/douyin/douyin-sync-service.ts:378`），所以：下次运行头部第一页若整页已知（不入库），幽灵暂时不动；只要头部有一条新收藏、或任一公开夹页入库，不在那一页的幽灵就永久无正文，之后再全量走也救不回。能自愈的只有一种情况：中断之后第一次带正文的调用恰好包含它（例如按断点重拉的正是那一页、且头部没有新收藏）。这一形态主要是逐页入库的问题：一次拉全量再入库一次的平台，下一次调用的 `textOf` 通常覆盖同一批条目。正文其实还在 `platform_meta.desc`，ingest 不读它。
+- Step 3 首次全量入库前由用户决定是否存接口序位（insert-only，事后只能清库重拉）。
 
 ---
 

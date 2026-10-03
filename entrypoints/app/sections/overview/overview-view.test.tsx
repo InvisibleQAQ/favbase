@@ -66,6 +66,7 @@ const copy: Record<string, string> = {
   'nav.xBookmarks': 'X',
   'nav.zhihuFavorites': 'Zhihu',
   'nav.youtubePlaylists': 'YouTube',
+  'nav.douyinFavorites': 'Douyin',
 };
 
 vi.mock('@/lib/i18n/use-translation', () => ({
@@ -86,13 +87,14 @@ vi.mock('@/lib/i18n/use-translation', () => ({
 import { CollectionAnalyticsContent } from './overview-view';
 
 function emptySnapshot(): CollectionAnalyticsSnapshot {
-  const platforms = ['bilibili', 'github', 'bookmarks', 'x', 'zhihu', 'youtube'] as const;
+  // Every platform, in canonical order — the snapshot always carries all of
+  // them (zeros included), so a hand-written list here goes stale per platform.
   return {
     totalItems: 0,
     usedTags: 0,
     taggedItems: 0,
     topTags: [],
-    platforms: platforms.map((platform) => ({
+    platforms: COLLECTION_PLATFORMS.map((platform) => ({
       platform,
       itemCount: 0,
       share: 0,
@@ -235,7 +237,7 @@ describe('CollectionAnalyticsContent', () => {
     expect(container.querySelector('main > header')).toBeNull();
   });
 
-  it('keeps six accessible platform tabs in the truthful empty state', () => {
+  it('keeps one accessible tab per platform in the truthful empty state', () => {
     render(
       <CollectionAnalyticsContent
         snapshot={emptySnapshot()}

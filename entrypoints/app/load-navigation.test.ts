@@ -34,6 +34,7 @@ describe('loadNavigationData', () => {
       '/collections/bookmarks',
       '/collections/zhihu',
       '/collections/youtube',
+      '/collections/douyin',
     ]);
   });
 
@@ -49,6 +50,7 @@ describe('loadNavigationData', () => {
       '/collections/x',
       '/collections/zhihu',
       '/collections/youtube',
+      '/collections/douyin',
     ]);
     expect(errorSpy).toHaveBeenCalledWith(
       '[app] failed to load onboarding navigation preference',
@@ -69,6 +71,7 @@ describe('loadNavigationData', () => {
       '/collections/x',
       '/collections/zhihu',
       '/collections/youtube',
+      '/collections/douyin',
     ]);
     expect(errorSpy).not.toHaveBeenCalled();
 
@@ -88,6 +91,7 @@ describe('loadNavigationData', () => {
       '/collections/bookmarks',
       '/collections/x',
       '/collections/zhihu',
+      '/collections/douyin',
     ]);
   });
 });
