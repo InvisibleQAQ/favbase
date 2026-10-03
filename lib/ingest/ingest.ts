@@ -46,6 +46,7 @@
 import { and, eq, exists, inArray, not, sql } from 'drizzle-orm';
 import type { FavbaseDb } from '@/lib/database';
 import { chunk } from '@/lib/database/sql-utils';
+import { platformItemIds } from '@/lib/database/collection-queries';
 import { sources } from '@/lib/database/entities/sources';
 import { authors } from '@/lib/database/entities/authors';
 import { items, type NewItem } from '@/lib/database/entities/items';
@@ -339,11 +340,7 @@ export async function ingestCollection(db: FavbaseDb, input: IngestInput): Promi
 
     // 3. Items — insert-only, first-write-wins. Track pre-existing ids so
     //    content below is persisted for fresh rows only.
-    const existingRows = await tx
-      .select({ platformItemId: items.platformItemId })
-      .from(items)
-      .where(eq(items.platform, platform));
-    const preExisting = new Set(existingRows.map((r) => r.platformItemId));
+    const preExisting = await platformItemIds(tx, platform);
 
     const droppedItemIds: string[] = [];
     const itemValues: NewItem[] = [];

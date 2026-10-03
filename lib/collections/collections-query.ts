@@ -1,11 +1,11 @@
-import { and, asc, desc, eq, ilike, inArray, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql, type SQL } from 'drizzle-orm';
 
 import { getDb, type FavbaseDb } from '@/lib/database';
 import { items } from '@/lib/database/entities/items';
 import { itemTags } from '@/lib/database/entities/item-tags';
 import { tags } from '@/lib/database/entities/tags';
 import type { TagRef, TaggedItem } from '@/lib/tagging';
-import { escapeLike } from '@/lib/database/sql-utils';
+import { searchCondition } from '@/lib/database/collection-queries';
 
 export {
   COLLECTION_PLATFORMS,
@@ -99,11 +99,7 @@ function buildConditions({
     )`);
   }
 
-  const normalizedSearch = search?.trim() ?? '';
-  if (normalizedSearch) {
-    const pattern = `%${escapeLike(normalizedSearch)}%`;
-    conditions.push(or(ilike(items.title, pattern), ilike(items.authorName, pattern)));
-  }
+  conditions.push(searchCondition(search, [items.title, items.authorName]));
 
   return conditions.filter((condition): condition is SQL => condition !== undefined);
 }

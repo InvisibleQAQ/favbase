@@ -1,6 +1,6 @@
 # 32 跨平台流程统一度审计与分步整改（2026-09-29）
 
-> 状态：**审计完成；D1、D2 已决（2026-09-29，§5.1、§5.2）；Step 1 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 1 落地记录）；D6 已决（用户 2026-09-30，按推荐）；Step 2 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 2 落地记录）；Step 3 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 3 落地记录）；Step 4 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 4 落地记录）；Step 5 已落地 2026-10-01（代码 + 单测；运行时验证待人工，见 §6 Step 5 落地记录）；Step 6 已落地 2026-10-01（代码 + 单测；运行时验证待人工，见 §6 Step 6 落地记录）；D3 已决（用户 2026-10-02，按推荐：删除）；Step 7 已落地 2026-10-02（代码 + 单测；运行时验证待人工，见 §6 Step 7 落地记录）；Step 8 已落地 2026-10-02（代码 + 单测；运行时验证待人工，见 §6 Step 8 落地记录）；Step 9 未实施**。执行任一 Step 前先读 §2 否决清单与 §5 对应决策；一次对话只做一个 Step。
+> 状态：**审计完成；D1、D2 已决（2026-09-29，§5.1、§5.2）；Step 1 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 1 落地记录）；D6 已决（用户 2026-09-30，按推荐）；Step 2 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 2 落地记录）；Step 3 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 3 落地记录）；Step 4 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 4 落地记录）；Step 5 已落地 2026-10-01（代码 + 单测；运行时验证待人工，见 §6 Step 5 落地记录）；Step 6 已落地 2026-10-01（代码 + 单测；运行时验证待人工，见 §6 Step 6 落地记录）；D3 已决（用户 2026-10-02，按推荐：删除）；Step 7 已落地 2026-10-02（代码 + 单测；运行时验证待人工，见 §6 Step 7 落地记录）；Step 8 已落地 2026-10-02（代码 + 单测；运行时验证待人工，见 §6 Step 8 落地记录）；Step 9 已落地 2026-10-02（代码 + 单测；运行时验证待人工，见 §6 Step 9 落地记录）——九个 Step 全部落地**。执行任一 Step 前先读 §2 否决清单与 §5 对应决策；一次对话只做一个 Step。
 >
 > 起因：用户观察「接入新平台时，数据处理、备份、展示都高度统一，真正不同的只有数据获取和风控」，要求找出仍未统一的流程并给出分步整改。
 >
@@ -27,7 +27,7 @@
 | 共享模块里的平台特例 | 2 处无守卫 | tagging 读 B站专属 `meta.intro`；analytics 写死 `'github'` | 中-4 |
 | 平台页外壳 / 数据 hook | 复制 | 4 个平铺 view 约 70% 相同接线；hook 60–70% 是字段改名 | 中-5 |
 | 正文来源（延迟获取） | 两条平行管线 | 书签网页提取与 B站转录各写各的，job 命名空间硬编码 | 中-6 |
-| 查询 WHERE 片段 | 部分 | `pagedItemsQuery` 已共享，片段仍复制 | 低-1 |
+| 查询 WHERE 片段 | 部分 | `pagedItemsQuery` 已共享，片段仍复制（**Step 9 已落地 2026-10-02**：片段收成 `lib/database/collection-queries.ts` 的四个 builder，五平台 + 聚合页 + ingest 共用，`getLastSyncedAt` 包装删除） | 低-1 |
 | tagged card / facet chips | 复制 | 外壳 ×6、chips ×3 | 低-2 |
 
 ### 0.2 对用户假设的两处修正
@@ -199,6 +199,19 @@
 - source 成员子查询 ×3（`zhihu-sync-service.ts:251-257`、`youtube-sync-service.ts:335-341`、`bookmarks-sync-service.ts:203-209`，只有最后一个参数不同）；
 - 每 source 计数 ×2（`zhihu-sync-service.ts:284-296` 与 `youtube-sync-service.ts:365-377` 只差一个别名）；
 - 搜索条件 ×5；已知 id 集合 ×4（含 `ingest.ts:310-314`）；三行 `getLastSyncedAt` 包装 ×5。
+
+（**勘误 2026-10-02，Step 9 复核**，在 HEAD `19bd032` 上重新核对：
+
+① **搜索条件是 ×6 不是 ×5**。漏数的是聚合页 `lib/collections/collections-query.ts:102-106`，套路与五个平台相同：`search?.trim()` → `escapeLike` → `%…%` → `or(ilike(title), ilike(authorName))`。
+
+② **行号已漂移**，Step 9 改动前的位置如下：
+
+- source 成员子查询（整个 `if` 块）：zhihu `:249-259`、youtube `:333-343`、bookmarks `:204-214`（PRD 原写 `:248-257`、`:332-341`、`:203-212`，起点多算一行空行或上一块的 `}`、终点少了 `);` 与 `}`，trellis-check 复核时更正）；
+- 每 source 计数：zhihu `getCollectionCounts` `:281-297`、youtube `getPlaylistCounts` `:364-378`；
+- 五个平台的搜索条件：github `:323-331`、x `:246-255`、zhihu `:260-269`、youtube `:344-352`、bookmarks `:198-203`；
+- 已知 id 集合：github `getReposNeedingReadme` 里的 `existing`（`:169-173`）、x 私有的 `getKnownTweetIds`（`:157-163`）、youtube 私有的 `getKnownVideoIds`（`:223-229`）、`ingest.ts:342-346`（在事务 `tx` 里）。
+
+③ **spec §4 开头那句自 Step 1 起就过期了**：「`IngestInput.platform` and `getPlatformLastSyncedAt(platform)` both take a plain `string`」。Step 1 把后者收窄成了 `CollectionPlatform`，于是新平台在翻转 `COLLECTION_PLATFORMS` 之前写 `getLastSyncedAt` 包装，`tsc` 就会红，这与 §4「先建 lib 层再翻转判别符」矛盾。Step 9 删掉包装以后，lib 层不再调用这个函数，矛盾随之消失；新 builder 的 `platform` 参数因此取 `string`，spec 那句也改成只说 `IngestInput.platform` 与这些 builder。）
 
 ### 低-2 tagged card 外壳 ×6、facet chips ×3
 
@@ -1724,6 +1737,259 @@
   - 删除五个 `getLastSyncedAt` 包装（Step 1 之后已冗余）。
 - **判据**：各平台查询测试不改就绿，生成的 SQL 与改前相同。
 
+#### Step 9 落地记录（2026-10-02）
+
+代码与单测已落地；运行时验证（github / x / zhihu / youtube / bookmarks 五个平铺页的搜索、chip 筛选、chip 计数与「上次同步」caption，x 的增量同步与 youtube 的详情补拉）需要浏览器，**待人工**。判据都成立：
+
+- `entrypoints/`、`lib/`、`tests/`、`packages/`、`scripts/`、`spikes/` 的 `.ts` / `.tsx` 里，下面这些名字零残留（grep）：五个平台各自的 `getLastSyncedAt`、x 的 `getKnownTweetIds`、youtube 的 `getKnownVideoIds`、`UseCollectionLibraryConfig.lastSyncedFn`；
+- `lib/<platform>/` 零 `escapeLike` 调用：五个 sync-service 的 `escapeLike` import 全删，全仓非测试代码里只剩 `collection-queries.ts` 的 `searchCondition` 与 `lib/chat/retrieval.ts:69`（后者不在范围内，PRD 已列）；`SELECT 1 FROM ${itemSources}` 全仓只剩 `collection-queries.ts:139` 一处；
+- SQL 比对通过：272 条语句里 222 条逐字节相同，其余 50 条只差五个 meta 搜索项的 `ILIKE` → `ilike`，参数数组全部逐字节相同（规格与归一化范围见下）；
+- PRD D 列出的测试一行未改就绿：五个 lib 查询测试、`lib/ingest/ingest.test.ts`、`lib/collections/collections-query.test.ts`、`tests/platform-completeness-contract.test.ts`、`tests/lib-import-smoke.test.ts`；
+- `pnpm compile` / `pnpm test` / `pnpm build` 全绿；manifest sha256 不变，bundle-contract 行是 `14 modules / 947838 bytes`。
+
+**落在哪**：
+
+- **`lib/database/collection-queries.ts`**（89 → 192 行）：四个 builder。平台参数一律是 `string`（D-c）；实体只从叶文件 import（`entities/items`、`entities/sources`、`entities/item-sources`）；`escapeLike` 从 `./sql-utils` 取；零平台字面量。文件头注释已改写：这个文件不再只是收藏页的读骨架，「Every getLastSyncedAt delegates to…」一句已删。
+  - `searchCondition(search, targets: (Column | SQL)[]): SQL | undefined`（`:115`）：`search?.trim()` 为空就返回 `undefined`，否则返回 `` or(...targets.map((t) => ilike(t, `%${escapeLike(term)}%`))) ``。
+  - `sourceMembership(platform, platformSourceId: string | null | undefined): SQL | undefined`（`:131`）：空 id 返回 `undefined`，否则返回 `item_sources` EXISTS 子查询。**模板内的空白与被替换的三处逐字节相同**：换行和缩进是 SQL 文本的一部分，重新缩进会让 zhihu / youtube / bookmarks 的每条 facet 语句在比对里多出空白差异。所以函数里这段模板保留了原缩进，旁边留了一行注释说明原因。
+  - `sourceItemCounts(db, platform): Promise<SourceItemCount[]>`（`:159`）：返回 `{ platformSourceId, title, count }`，类型 `SourceItemCount` 一并导出。
+  - `platformItemIds(db: Pick<FavbaseDb, 'select'>, platform): Promise<Set<string>>`（`:183`）。
+- **调用点**（push 顺序全部不变，D-d）：
+  - github：`getStarredRepos` 先走 language 的 `if`，再 push `searchCondition`（targets：title、`platform_meta->>'description'`）；`getReposNeedingReadme` 的 `existing` 改用 `platformItemIds`，ghost 查询不动。409 → 397 行。
+  - x：`getBookmarks` 先走 author 的 `if`，再 push `searchCondition`（title、authorName、`->>'text'`）；`getKnownTweetIds` 删除，`syncBookmarks` 改调 `platformItemIds(db, PLATFORM)`。355 → 341 行。
+  - zhihu：先 push `sourceMembership(PLATFORM, query.collectionId)`，再 push `searchCondition`（title、authorName、`->>'excerpt'`）；`getCollectionCounts` 改成 `sourceItemCounts` 加一行 `.map`，把 `platformSourceId` 映射回 `collectionId`。352 → 325 行。
+  - youtube：先 push `sourceMembership(PLATFORM, query.playlistId)`，再 push `searchCondition`（title、`->>'description'`）；`getPlaylistCounts` 改成 `sourceItemCounts` 加 `.map`，映射回 `playlistId`；`getKnownVideoIds` 删除，`syncYoutubePlaylists` 改调 `platformItemIds`。433 → 392 行。
+  - bookmarks：**先** push `searchCondition`（title、`->>'domain'`），**后** push `sourceMembership(PLATFORM, query.folderId)`。404 → 388 行。
+  - `lib/collections/collections-query.ts`：`buildConditions` 的搜索块改成 `conditions.push(searchCondition(search, [items.title, items.authorName]))`，原有的 `.filter` 保留。182 → 178 行。
+  - `lib/ingest/ingest.ts`：`existingRows` 与 `preExisting` 两步合成 `const preExisting = await platformItemIds(tx, platform)`。469 → 466 行。
+  - 因此不再使用的 import 全部删除：`ilike`、`or`、`escapeLike`、`sources`、`itemSources`、zhihu 的 `desc`、`getPlatformLastSyncedAt`。本仓的 `tsc` 不报未用 import，所以另用 TypeScript AST 对 17 个改动文件逐个核过，零未用 import。
+  - `lib/database/sql-utils.ts` 的文件头注释与 `lib/database/CLAUDE.md` 的 `sql-utils.ts` 条目原写「`escapeLike` 由各平台 sync-service 共用」，本 Step 之后不再成立，改为：平台搜索只经 `searchCondition` 用到它，另一个调用方是 `lib/chat/retrieval.ts`。只动注释与文档。
+- **删掉五个 `getLastSyncedAt` 包装，`useCollectionLibrary` 改读 `platform`**（D-a）：
+  - `UseCollectionLibraryConfig.lastSyncedFn` 换成 `platform: CollectionPlatform`。JSDoc 写明它读的是 Platform Sync Record 的 `last_success_at`，并且它不是 job 命名空间。
+  - `refreshMeta` 改成 `const db = await initDbProxy();`，`Promise.all` 的第二项改为 `getPlatformLastSyncedAt(platform, db)`，依赖数组改为 `[facetsFn, platform, queryFn]`。
+  - 五个平台 hook：
+    - 新增模块级 `const PLATFORM = '<id>'`。写法沿用六个 view 已有的形式，没有加 `satisfies`：`const` 推出的字面量类型在 `platform:` 和 `jobPlatformForCollection(…)` 两处都由 `tsc` 校验。
+    - `JOB_PLATFORM = jobPlatformForCollection(PLATFORM)`，config 里写 `platform: PLATFORM`；x hook 的 `getPlatformSyncRecord('x', …)` 也改用 `PLATFORM`。每个 hook 里平台 id 字面量只出现一次。
+    - 行数：github 35 → 32、x 60 → 61、zhihu 34 → 31、youtube 37 → 34、bookmarks 59 → 59。
+  - `jobPlatform` 仍是独立的 config 键，不由 `platform` 派生（D-a）。
+
+**先红后绿与实证**：
+
+- **SQL 比对**（本 Step 的核心证据）：
+  - 脚本：
+    - 改代码之前先写好临时 vitest 文件 `lib/database/zz-step9-sql-capture.test.ts`：内存 PGlite 加真迁移，用 `drizzle(client, { schema, logger: { logQuery } })` 捕获每条 SQL 和参数；`initializeDb(async () => db)`（`lib/database/db-state.ts`）让 `getDb()` 返回这个 db。
+    - x 与 youtube 的网络函数用 `importOriginal` 展开后替换（`fetchAllBookmarks`、`resolveChannel`、`fetchPlaylists`、`fetchPlaylistItems`）；`shouldStop` 与 `needsDetails` 对已存 id 和未存 id 的判定结果也一起落盘。
+    - 输出写到 `%TEMP%`。比对脚本 `favbase-step9-compare.js` 也放在 `%TEMP%`：按序号逐条配对，把差异分成两类——(a) SQL 只差 `platform_meta->>'k' ILIKE` → `ilike` 且参数相同；(b) 其余一切。(b) 非空、语句数不等、或探测结果不等时 exit 1。
+    - 两个脚本跑完都已删除。
+  - 输入：
+    - 每个平台一次 `ingestCollection`（3 条带正文的 item、两个 Source），再加一次 items 为空的 ingest，走 `preExisting` 非空的路径。
+    - 五个分页 getter 各 11 个变体：无条件；facet；facet 为 `''`；搜索 `'  50%_off\path  '`（含 `%`、`_`、`\` 与首尾空白）；全空白搜索；facet + 搜索；标题命中；meta 命中；facet + meta 命中。
+    - `getCollectionCounts` 与 `getPlaylistCounts`。
+    - `getCollectionItems` 五个变体：无条件、上面那个搜索串、全空白、命中、平台 + 搜索。
+    - `getReposNeedingReadme` 两次，中间补一条数字 id 的 github 条目，让 `existing` 有命中。
+    - `syncBookmarks`（x 的增量截断）与 `syncYoutubePlaylists`（详情补拉的跳过集合）。
+  - 归一化只碰三种参数：UUID（DB 生成的 item / source id）→ `<uuid>`；ISO 时间串（`sources.last_fetched_at` 的 `new Date()` 与播种的 `publishedAt`）→ `<ts>`；`Date` 对象 → `<date>`。其余参数原样比较。同一份未改代码连跑两次（baseline 对 baseline2），272 条逐字节相同，说明归一化之后的捕获是确定的。
+  - 结果（baseline 对改后）：
+    ```
+    statements: 272 vs 272
+    identical: 222
+    class (a) ILIKE->ilike only, params equal: 50 statements
+      distinct meta keys: description, domain, excerpt, text
+      getters: github.getStarredRepos, x.getBookmarks, zhihu.getFavorites, youtube.getPlaylistVideos, bookmarks.getBookmarks
+    class (b) anything else: 0
+    probe results equal: true
+    ```
+    50 = 五个 getter × 五个带搜索的变体 × 2 条语句（分页 select 与 count）。五个 meta 项是 github `description`、x `text`、zhihu `excerpt`、youtube `description`、bookmarks `domain`；`description` 出现两次，所以 distinct key 只有四个。例：github 的 meta 命中，改前与改后：
+    ```
+    … where ("items"."platform" = $1 and ("items"."title" ilike $2 or "items"."platform_meta"->>'description' ILIKE $3)) order by …
+    … where ("items"."platform" = $1 and ("items"."title" ilike $2 or "items"."platform_meta"->>'description' ilike $3)) order by …
+    params ["github","%desc 2%","%desc 2%",10] / ["github","%desc 2%","%desc 2%",10]
+    ```
+  - **逐字节相同的部分**：
+    - `getCollectionCounts` 与 `getPlaylistCounts` 各一条，也就是 `sourceItemCounts` 生成的 SQL；
+    - 三条已知 id 路径：`getReposNeedingReadme` 两次共 4 条、`syncBookmarks` 7 条、`syncYoutubePlaylists` 7 条；
+    - `getCollectionItems` 的全部五个变体；
+    - 每个平台的 ingest 与再次 ingest，包括事务内那条 `preExisting` 查询 `select "platform_item_id" from "items" where "items"."platform" = $1`；
+    - 五个 getter 不带搜索的变体，包括 zhihu / youtube / bookmarks 用 `sourceMembership` 的 facet 语句。
+
+    分页 getter 的 `count(*)` 语句只在带搜索的变体里有差异，差的也只是同一个 `ILIKE` → `ilike`。
+  - 结果数据相同：`probe results equal: true` 覆盖每个变体的 `total`、两份 Source 计数的完整行、`getReposNeedingReadme` 的返回、`shouldStop`（`[true,true,true,false]`）与 `needsDetails`（`[false,false,false,true]`）。
+- **证伪（必做）**：临时把 bookmarks 的 push 顺序换成先 folder 后 search，比对 exit 1，(b) 恰好 4 条：`facet+meta-hit` 与 `facet+search` 两个变体的 select 和 count。第一条原样如下（SQL 里 EXISTS 子查询的中段用 `…` 截掉）：
+  ```
+  class (b) anything else: 4
+  {
+   "i": 218,
+   "label": "bookmarks.getBookmarks:facet+meta-hit",
+   "sameSql": false,
+   "sameParams": false,
+   "sqlA": "select … from \"items\" where (\"items\".\"platform\" = $1 and (\"items\".\"title\" ilike $2 or \"items\".\"platform_meta\"->>'domain' ILIKE $3) and EXISTS (… \"sources\".\"platform\" = $4 … \"sources\".\"platform_source_id\" = $5\n      )) order by \"items\".\"published_at\" DESC NULLS LAST limit $6",
+   "sqlB": "select … from \"items\" where (\"items\".\"platform\" = $1 and EXISTS (… \"sources\".\"platform\" = $2 … \"sources\".\"platform_source_id\" = $3\n      ) and (\"items\".\"title\" ilike $4 or \"items\".\"platform_meta\"->>'domain' ilike $5)) order by \"items\".\"published_at\" DESC NULLS LAST limit $6",
+   "paramsA": ["bookmarks","%SITE2%","%SITE2%","bookmarks","f1",10],
+   "paramsB": ["bookmarks","bookmarks","f1","%SITE2%","%SITE2%",10]
+  }
+  …
+  probe results equal: true
+  ```
+  命中数照样相同：换顺序不改语义，所以只有 SQL 比对抓得到，测试抓不到。改前与恢复后 `sha256sum` 都是 `db925bfe…bab632b2`；恢复后重跑比对，回到 222 / 50 / 0。
+- **`platformItemIds(tx, …)` 的 tsc 探针**（D-f，在改其余三处之前）：
+  - 临时文件 `lib/ingest/zz-step9-tx-probe.ts` 写了两个调用：`platformItemIds(db, platform)` 与 `db.transaction(async (tx) => platformItemIds(tx, platform))`。`npx tsc --noEmit -p tsconfig.json` 对这两个调用零错误；当时唯一的错误在比对脚本自己的测试数据类型上，与探针无关。
+  - 再追加一条反例 `platformItemIds({…} as unknown as { notSelect: true }, 'x')`，证明这个文件确实被检查：
+    ```
+    lib/ingest/zz-step9-tx-probe.ts(10,47): error TS2345: Argument of type '{ notSelect: true; }' is not assignable to parameter of type 'Pick<PgliteDatabase<typeof import(".../lib/database/schema")> & { $client: PGlite; }, "select">'.
+      Property 'select' is missing in type '{ notSelect: true; }' but required in type 'Pick<PgliteDatabase<…> & { $client: PGlite; }, "select">'.
+    ```
+  - 结论：`Pick<FavbaseDb, 'select'>` 不加任何断言就能接收 `PgliteTransaction`。探针随即删除。
+- **D-a 新测试证伪**：
+  - `use-collection-library.test.tsx` 新增一例「reads "last synced" from the Platform Sync Record of config.platform, not the job namespace」。
+  - 临时把 `refreshMeta` 的实参换成 `jobPlatform as typeof platform`，只红这一例（`1 failed | 3 passed (4)`）：
+    ```
+    AssertionError: expected "vi.fn()" to be called with arguments: [ 'github', { stub: 'db' } ]
+    Received:
+      1st vi.fn() call:
+      [
+    -   "github",
+    +   "lib-test-3",
+        {
+          "stub": "db",
+        },
+      ]
+    ```
+  - 改前与恢复后 `sha256sum` 都是 `b3557010…2686bb61`，恢复后 4/4 绿。
+- **`lib/ingest/ingest.ts` 改完立刻跑了 `tests/lib-import-smoke.test.ts` 与 `lib/ingest`**：2 个文件 35 例绿。`ingest/ingest` 经 `collection-queries` 新引入了 `platform-sync-record`，加载期仍然零未处理 rejection。
+
+**默认决定**（D-a 用户已决，其余照 PRD 推荐）：
+
+- **D-a** config 的 `lastSyncedFn` 换成 `platform: CollectionPlatform`；`jobPlatform` 不派生。
+- **D-b** 搜索 builder 收声明式 targets，接受 meta 项关键字从 `ILIKE` 变成 `ilike`。
+- **D-c** builder 的 `platform` 取 `string`；`getPlatformLastSyncedAt` 维持 `CollectionPlatform`。
+- **D-d** 可选筛选返回 `undefined`，调用点无条件 push，push 顺序不变。
+- **D-e** `sourceItemCounts` 返回 `platformSourceId`，zhihu 与 youtube 各用一行 `.map` 映射键名。
+- **D-f** `platformItemIds` 收 `Pick<FavbaseDb, 'select'>`，先过探针再改调用点（见上）。
+- **D-g** 不新增守卫。
+- builder 名字用 PRD 的推荐值，没有改。
+- 实施时补的三个默认：
+  - `sourceMembership` 模板保留原缩进（理由见上）；
+  - 导出 `SourceItemCount` 类型，`sourceItemCounts` 的返回类型要有名字；
+  - 平台 hook 写 `const PLATFORM = '<id>'`，没有用 PRD 举例的 `satisfies CollectionPlatform`：六个 view 已经是这个写法，`tsc` 的校验效果相同。
+
+**与 PRD 的偏离**：
+
+1. **D-a 的测试多了一例，也多改了一行 mock**。
+   - PRD 只要求两个通用 hook 测试把 `lastSyncedFn` 换成 `platform` 并加桩。`use-collection-library.test.tsx` 另外加了上面那条 D-a 测试；不加的话，「读的是 `platform` 而不是 `jobPlatform`」没有任何测试锁住。
+   - 为了断言 `getPlatformLastSyncedAt` 收到的正是 `initDbProxy()` 的返回值，`@/lib/database` 的 `initDbProxy` 桩从每次新建 `{}` 改成返回同一个 hoisted 对象。
+   - 三个测试文件都用 `importOriginal` 展开后只替换 `getPlatformLastSyncedAt`，没有写整模块工厂。spec §11 对 registry 给的理由在这里同样成立。
+2. **x hook 61 行**，比 Step 7「各 ≤ 60 行」的估算门槛多一行。多出来的就是 `const PLATFORM = 'x'`；x 的 import 本来就是单行，没有可以收的。没有为凑行数去压注释。
+3. **多改了几处 PRD F 没点名、但本 Step 让它们变错的文档**：
+   - `lib/database/sql-utils.ts` 文件头注释与 `lib/database/CLAUDE.md` 的 `sql-utils.ts` 条目（见「落在哪」）；spec §10 的「the shared read helpers」补成「the shared read helpers and query builders (§4.2)」，让 §8 第 9 行说的「列入」在页面上成立；§7 表「数据 hook」行补上 Step 9 后的实测 31 行；
+   - `lib/zhihu/CLAUDE.md` 与 `lib/youtube/CLAUDE.md` 被改的那一行里还写着「`newItemIds` 由 app.html hook enqueue」，这从 Step 1 起就不对了，改为指向 Sync Adapter 的 Platform Sync funnel；
+   - `lib/youtube/CLAUDE.md` 的「边缘：频道零公开列表 → `getLastSyncedAt` 保持 null」已改写：Step 1 起空库的成功同步也会记 `last_success_at`；
+   - `sections/x/CLAUDE.md` 里「本次新增」未排期的理由原写「改 `useCollectionLibrary` 的 `lastSyncedFn` 契约」，改为「让它暴露整条记录」。
+4. **比对矩阵比 PRD 宽**：
+   - 加了标题命中、meta 命中、facet + meta 命中三个变体。PRD 要求的特殊字符搜索串不命中任何行，`total` 全是 0，证明不了 `ilike` 与 `ILIKE` 的结果相同；
+   - 加了 facet 为 `''` 与全空白搜索两个边界变体；
+   - Source 计数与已知 id 的判定结果也逐项比较。
+
+**行为变化与验证备注**：
+
+- **运行时行为零变化**：
+  - SQL 只有五个 meta 搜索项的关键字大小写变了。PostgreSQL 关键字不区分大小写；参数逐字节相同，命中数也相同。
+  - 「上次同步」读的还是同一条 Platform Sync Record。原来经 lib 包装调 `getPlatformLastSyncedAt(PLATFORM, getDb())`；现在由通用 hook 用 `initDbProxy()` 的返回值调同一个函数，而 `initDbProxy()` ready 之后返回的就是 `getDb()` 那个实例。
+- **模块图**：
+  - `useCollectionLibrary` 新增对 `@/lib/database/collection-queries` 的值导入，只为 `getPlatformLastSyncedAt`。该模块只带 entity 叶文件、drizzle、`platform-sync-record` 与零导入的 `sql-utils`，零 storage。
+  - `lib/ingest/ingest.ts` 与 `lib/collections/collections-query.ts` 也新增了这条边。
+  - `tests/lib-import-smoke.test.ts` 一行未改就绿。
+- **manifest**：`pnpm build` 后 sha256 是 `053dd7bdf0da2ba2fa5ae8c67453ecc286b56394f5704585b38c3e34fde32ae5`，与 Step 4–8 相同。基线没有从 HEAD 重建，只是与记录值比对。
+- **SW 体积**：bundle-contract 行是 `14 modules / 947838 bytes`，与 Step 6–8 相同（实测，只比了计数）。模块数没变，说明新的 import 边没有进 SW 的模块图。
+- **测试**：
+  - 聚焦：五个 lib 目录、`lib/ingest`、`lib/collections`、`lib/database`、`entrypoints/app/hooks`、`entrypoints/app/sections`，加上 contract、lib-import-smoke、bundle-contract、i18n-no-hardcoded、ui-vendor-boundaries，共 92 个文件 695 例绿。
+  - 另跑了 `entrypoints/app/collection-platform-auto-sync.test.ts` 与 `use-bili-fav-folders.test.tsx`，2 个文件 17 例绿。前者整模块 mock 了 `collection-queries`，但它也整模块 mock 了五个 sync-service，所以碰不到新 builder。
+  - `pnpm compile` 绿。
+  - `pnpm test` 全量绿：主仓库 216 个文件 1748 例，`packages/favbase` 15 个文件 263 例。比 Step 8 的 215 / 1733 多 1 个文件、15 例，其中本 Step 只贡献 1 例（D-a 新测试）。其余 1 个文件、14 例来自工作树里另一任务（`10-02-colored-secondary-buttons`）尚未提交的改动：新文件 `sections/bilibili/video-card.test.tsx` 有 3 例（实跑）；扩展后的 `theme/theme-contract.test.ts` 多 11 例，这个数是由差额推出的。
+- **运行时验证待人工**。
+
+**改了哪些现有测试**：
+
+- `entrypoints/app/hooks/use-collection-library.test.tsx`：
+  - `lastSyncedFn` 常量、config 里的 `lastSyncedFn,` 与 `lastSyncedFn.mockClear()`，分别换成 `platform: 'github'` 和 `getPlatformLastSyncedAt` 桩的 reset；
+  - `@/lib/database` 桩改为返回 hoisted 的 `mocks.db`；
+  - 加 `collection-queries` 的 `importOriginal` 桩；
+  - 新增一例（见上）。
+- `entrypoints/app/hooks/use-credential-gated-library.test.tsx`：同样的替换并加桩，零断言改动。
+- `entrypoints/app/sections/bookmarks/use-bookmarks.test.tsx`：`serviceMocks` 删掉 `getLastSyncedAt` 和它的 reset，加桩，零断言改动。
+- **一行未改就绿**：PRD D 所列的测试（五个 lib 查询测试、`lib/ingest/ingest.test.ts`、`lib/collections/collections-query.test.ts`、`tests/platform-completeness-contract.test.ts`、`tests/lib-import-smoke.test.ts`），以及其余全部测试。
+
+**仍然是已知缺口，不修**：
+
+- 生产代码里 `jobPlatform` 与 `platform` 两个 config 键并存，并且恒有 `jobPlatform === jobPlatformForCollection(platform)`，这是一处冗余（D-a）。改成派生会打破两个通用 hook 测试靠每例唯一命名空间做的隔离（job store 是没有 reset 的模块单例），也会重开 Step 5 / 7 的决定。
+- push 顺序决定参数编号，这一点没有守卫（D-g）。比对脚本是一次性的，跑完已删除。
+- `sourceMembership` 模板的缩进是刻意保留的。改缩进不改语义，只会让下一次 SQL 比对多出空白差异。
+- 运行时验证待人工。
+
+**trellis-check 复核（2026-10-02）**：
+
+- **SQL 比对独立重建**（不复用实施时的脚本，那份已删；也不碰工作树、不 `git stash`，因为另一会话在同一工作树里改别的任务）：
+  - `git archive HEAD lib tests/setup vitest.config.ts` 解到 gitignored 的 `.claude/zz-step9/head/`，工作树的 `lib/` 拷到 `.claude/zz-step9/work/`。两份 `lib/` 去掉行尾 CR 后 `diff -rq`，差异恰好是本 Step 的 9 个 `.ts` 与 8 个 `CLAUDE.md`。同一个 capture 测试分别以 `--root` 跑在两棵树上；`node_modules` 向上解析到仓库根，两棵树各配一个最小 `tsconfig.json`（根的那份 extends `.wxt/`，拷不过去）。
+  - 捕获方式与实施时相同：内存 PGlite + 真迁移，`drizzle({ client, schema, logger: { logQuery } })`，`initializeDb(async () => db)` 让 `getDb()` 默认参数也打到这个实例。x 的 `fetchAllBookmarks` 与 youtube 的 `resolveChannel` / `fetchPlaylists` / `fetchPlaylistItems` 用 `importOriginal` 展开后替换，回调里的 `shouldStop` / `needsDetails` 判定结果一起落盘。归一化只换 UUID、ISO 时间串与 `Date`。
+  - 矩阵与实施时不同，是另写的：每个平台用 `*ToDb` 灌两轮（第二轮走 `preExisting` 非空）；五个分页 getter 各 11 个变体（无条件、facet、facet `''`、search `''`、`'  50%_off\path  '`、`'   \t '`、facet + 特殊串、标题命中、meta 命中、facet + meta 命中、不存在的 facet + `' x '`），zhihu 用 `page: 2, pageSize: 1`，让 offset 也进比对；两个 Source 计数；`getCollectionItems` 五个变体；`getReposNeedingReadme`（一个新 id 加两个已存 id）；`syncBookmarks`（x）与 `syncYoutubePlaylists` 各一次。
+  - HEAD 对 HEAD 连跑两次：268 条逐字节相同，捕获是确定的。HEAD 对工作树的结果如下：
+    ```
+    statements: 268 vs 268
+    identical: 208
+    class (a) meta ILIKE->ilike only, params equal: 60
+      github.getStarredRepos: 12 stmts, keys "items"."platform_meta"->>'description'
+      x.getBookmarks: 12 stmts, keys "items"."platform_meta"->>'text'
+      zhihu.getFavorites: 12 stmts, keys "items"."platform_meta"->>'excerpt'
+      youtube.getPlaylistVideos: 12 stmts, keys "items"."platform_meta"->>'description'
+      bookmarks.getBookmarks: 12 stmts, keys "items"."platform_meta"->>'domain'
+    class (b) anything else: 0
+    results equal: true
+    ```
+    60 = 五个 getter × 六个带非空白搜索的变体 × 2 条语句。
+  - 逐字节相同的部分：
+    - facet `''`、search `''`、全空白 search 三个变体在两棵树上逐字节相同。HEAD 的 `if (query.x)`、`if (query.search?.trim())` 对这三种输入都不加条件，所以 `sourceMembership` 对空 id、`searchCondition` 对空白串返回 `undefined` 的行为与原写法等价。聚合页的 `search?.trim() ?? ''` 同理，覆盖它的是 `getCollectionItems` 的 blank 变体。
+    - `getCollectionItems` 的全部五个变体。
+    - 两条 Source 计数 SQL：`select "sources"."platform_source_id", "sources"."title", count(*)::int from "item_sources" … order by count(*) desc, "sources"."title"`。drizzle 不把 select 键写成别名，所以 `collectionId` / `playlistId` 改成 `platformSourceId` 不进 SQL。
+    - 以 `select "platform_item_id"` 开头的 16 条全部相同。其中 15 条是已知 id 查询 `… where "items"."platform" = $1`：十次 ingest 的事务内查询、`getReposNeedingReadme` 的 `existing`，以及 x 与 youtube 同步各两条（一条 `platformItemIds`，一条是随后 ingest 的 preExisting）。剩下一条是没动的 ghost 查询。
+  - 结果数据：`results equal` 覆盖每个变体的 `total` 与行数、两份计数的完整行、`getReposNeedingReadme` → `[77]`、`shouldStop` → `[true,true,true,false]`、`needsDetails` → `[false,false,false,true]`。meta 命中变体在五个平台都至少命中 1 行（例如 bookmarks `SITE2` 命中 1、github `desc 2` 命中 1），所以 `ilike` 与 `ILIKE` 的结果相同是有数据支撑的，不是零对零。特殊串转义后的参数是 `%50\%\_off\\path%`，github、x、bookmarks 各命中 1 行，聚合页命中 2 行。
+- **证伪（独立重做，只改 scratch 副本）**：把 `work/` 副本里 bookmarks 的两次 push 换成先 folder 后 search，比对 exit 1。class (b) 恰好 6 条，是 `facet+search`、`facet+meta-hit`、`facet-missing` 三个变体的 select 和 count，参数从 `["bookmarks","%50\\%\\_off\\\\path%","%50\\%\\_off\\\\path%","bookmarks","f1",10]` 变成 `["bookmarks","bookmarks","f1","%50\\%\\_off\\\\path%","%50\\%\\_off\\\\path%",10]`，`results equal: true` 依旧。仓库里的文件没动过：副本改前的 sha256 是 `db925bfe…bab632b2`，与工作树相同，也与上文记录相同。比对完整个 `.claude/zz-step9/` 已删，`ls .claude/` 与 `git status --untracked-files=all` 都没有 `zz-` 残留。
+- **类型与模块图**：
+  - `ingest.ts` 的 `platformItemIds(tx, platform)` 没有任何断言，`pnpm compile` 绿。
+  - `collection-queries.ts` 的值导入只有 drizzle、三个 entity 叶文件、`platform-sync-record` 与 `sql-utils`。前两者零 storage；`sql-utils` 零 import。`FavbaseDb` / `CollectionPlatform` 都是 `import type`，没有值导入 `@/lib/database` barrel。`tests/lib-import-smoke.test.ts` 一行未改即绿。
+  - 本仓 `tsc` 不报未用 import，所以另跑 `tsc --noEmit --noUnusedLocals`：全工程 10 处报错，都在本 Step 之外；本 Step 改动的 18 个 `.ts` / `.tsx`（lib 9 个，hook 6 个，测试 3 个）零报错。
+- **D-a**：
+  - `refreshMeta` 读的是 `getPlatformLastSyncedAt(platform, await initDbProxy())`。`initializeDb` 返回的就是 `getDb()` 持有的那个 `dbInstance`，所以与旧的 `getLastSyncedAt()`（默认参数 `getDb()`）读同一个实例。
+  - `jobPlatform` 仍是独立的键，五个 hook 都是 `JOB_PLATFORM = jobPlatformForCollection(PLATFORM)`。job 命名空间守卫只看 job-store 调用与 `jobPlatform` 属性，遇到 call expression 就停，契约测试照绿。
+  - 现有测试里只改了 PRD 点名的三个文件。复核开始时工作树里另有两个改过的 tracked 测试文件（`theme-contract.test.ts`、`collection-states.test.tsx`）和 untracked 的 `video-card.test.tsx`，都属于另一任务，复核期间已随 `4ecfb54` 提交（见「重跑」）。
+- **D 列出的不变量**：五个 lib 查询测试、`lib/ingest/**`（`git diff` 只有 `ingest.ts` 与 `CLAUDE.md`）、`collections-query.test.ts`、`tests/**` 的 `git diff --stat` 为空。
+- **残留 grep**：`entrypoints/`、`lib/`、`tests/`、`packages/`、`scripts/`、`spikes/` 与 `wxt.config.ts` 里，`.ts` / `.tsx` 零 `getLastSyncedAt` / `getKnownTweetIds` / `getKnownVideoIds` / `lastSyncedFn`。`lib/<platform>/`（含 bilibili）零 `escapeLike`。`` SELECT 1 FROM ${itemSources} `` 全仓只剩 `collection-queries.ts:139`。`.md` 里剩下的提及有三类：spec §4.2 与 §7.2 的「没有 `getLastSyncedAt`」，十一个目录 `CLAUDE.md`（hooks、五个 `sections/<p>`、五个 `lib/<p>`）的「已删 / 换成」，以及 docs/15、docs/32、根 `CLAUDE.md` 与 `.trellis/tasks/**` 的历史记录。没有一处写成现行接口。
+- **数字**：`wc -l` 与 `git show HEAD: | wc -l` 复核了全部行数：`collection-queries.ts` 89 → 192，五个 sync-service 409 → 397、355 → 341、352 → 325、433 → 392、404 → 388，`collections-query.ts` 182 → 178，`ingest.ts` 469 → 466，五个 hook 35 → 32、60 → 61、34 → 31、37 → 34、59 → 59，都对。四个 builder 的行号 `:115` / `:131` / `:159` / `:183` 也对。§7 的算术成立（12 + 14 + 27 + 41 + 16 = 110，110 + 4 + 3 − 103 = 14）；如果把 `sql-utils.ts` 文件头注释多出的行也算进去，净减会更少，那是纯注释，§7 没有计入。§3 低-1 勘误里的搜索、计数、已知 id 行号逐一对过 `git show HEAD:`，都对；source 成员子查询那一组不对，见下。
+
+**本轮修掉的**：
+
+1. **§3 低-1 勘误 ② 的 source 成员子查询行号**：照抄 PRD 的 zhihu `:248-257`、youtube `:332-341`、bookmarks `:203-212`，起点落在空行（zhihu / youtube）或上一个 `if` 块的 `}`（bookmarks），终点又少了 `);` 和 `}`。已改为整个 `if` 块：`:249-259`、`:333-343`、`:204-214`，原值保留在括注里。
+2. **`lib/database/CLAUDE.md` 写「唯一的收藏页读者是 app 侧 `useCollectionLibrary`」**，这不对。`getPlatformLastSyncedAt` 在 app 侧有三个调用方：`useCollectionLibrary`、B站 `use-bili-fav-folders.ts:91`（页面 caption）、`x-sync-adapter.ts:65`（`xAutoSyncPolicy.probeReady` 的冷却判定）。PRD 的 D-a 自己也引用了后两个，已改成列出三处。
+3. **`lib/database/sql-utils.ts` 文件头注释与上文「落在哪」的说法不一致**。记录说注释改成了「平台搜索只经 `searchCondition` 用到它，另一个调用方是 `lib/chat/retrieval.ts`」，注释里实际没提 retrieval。已补上那半句，只改注释，比对之后再跑的 `pnpm compile` / `pnpm test` / `pnpm build` 都覆盖了这次改动。
+4. **模块图的描述漏了 `sql-utils`**：「模块图」一条和 `entrypoints/app/hooks/CLAUDE.md` 都写 `collection-queries` 只带「entity 叶文件、drizzle（与 `platform-sync-record`）」，两处都补上零导入的 `sql-utils`。
+5. **§7 表「数据 hook」行写「四行 import 收成一行」**：zhihu hook 在 HEAD 的 import 是 5 行（`import {`、三个名字、`} from`），已改成「五行 import 收成一行」。34 → 31 的算术没变：−5 + 1 + 1。
+
+**核对过、无需改的**：顶部状态行；§0.1 计分卡低-1 行；§8 第 9 行；spec §4 开头那句、§4.2 的 import 块与 builder 说明、§7.2 `use-<platform>.ts` 行、§10 的「and query builders」；`lib/ingest`、`lib/collections`、五个 `lib/<p>`、五个 `sections/<p>` 的 `CLAUDE.md`。根 `CLAUDE.md` 的 diff 只有一行，按词比对只有 docs/32 条目里的 Step 9 改动，没有别的任务的 hunk。
+
+**仍然是已知缺口，不修**：
+
+- 运行时验证仍**待人工**。
+- 上面的实证记录写「五个分页 getter 各 11 个变体」，后面却只列了 9 个名字（数「带搜索的变体」得到的 50 与这 9 个一致）。脚本已删，那两个变体是什么 [UNKNOWN]。本轮的矩阵是独立重写的，覆盖了全部 11 个变体，所以等价性结论不依赖这一处。
+- `searchCondition` 有两个边界今天没有调用方会碰到。`targets` 为空时 `or()` 返回 `undefined`，搜索会被静默忽略；只有一个 target 时，drizzle 的 `or` 不加括号。后者语义不变，因为每个条件外面还有 `and()` 的括号。今天六个调用点都至少有两个 target。
+- SQL 比对的基线是 `19bd032`，也就是本 Step 开工时的 HEAD。复核期间另一任务（`10-02-colored-secondary-buttons`）以 `4ecfb54` 提交，`git diff --stat 19bd032 4ecfb54` 在本 Step 的文件上为空，所以基线仍然成立，本 Step 的 diff 也没有变化。
+
+**重跑**：
+
+- 第一轮在 `sql-utils.ts` 注释改动之后跑，当时另一任务还没提交、仍在改，`theme-contract.test.ts` 的 diff 在本轮中途从 182 行涨到 246 行。
+- 第二轮在它以 `4ecfb54` 提交之后，于 `4ecfb54` 加本 Step 的工作树上整轮重跑。工作树里已经只剩本 Step 的文件，其后只改了 `.md`。两轮数字相同：
+  - 聚焦：用上文同一组文件，92 个文件 695 例绿，与上文相同。第一轮另跑了 `collection-platform-auto-sync.test.ts` 加 `use-bili-fav-folders.test.tsx`，2 个文件 17 例绿，也与上文相同。
+  - `pnpm compile` 绿。
+  - `pnpm test` 全量绿：主仓库 216 个文件 1755 例，`packages/favbase` 15 个文件 263 例。比上文的 1748 多 7 例，都来自另一任务：本 Step 改的三个测试文件里，只有 `use-collection-library.test.tsx` 从 3 例变成 4 例；`theme-contract.test.ts` 的 `it` / `test` 声明在 `19bd032` 是 24 个，在 `4ecfb54` 是 31 个。
+  - `pnpm build` 绿。bundle-contract 行是 `14 modules / 947838 bytes`；`.output/chrome-mv3/manifest.json` 的 sha256 是 `053dd7bdf0da2ba2fa5ae8c67453ecc286b56394f5704585b38c3e34fde32ae5`。
+
 ---
 
 ## 7. 收益估算（估算，误差 ±30%）
@@ -1733,7 +1999,7 @@
 | 文件 | 今天 | 全部 Step 后 | 主要来源 |
 |---|---|---|---|
 | sync adapter | 58 | ~30 | Step 1 收尾 funnel |
-| 数据 hook | 129 | ~40（D3=删）/ ~110（D3=留）；**实测 34**（Step 7 落地 2026-10-02；Step 7 之前是 110） | Step 7 |
+| 数据 hook | 129 | ~40（D3=删）/ ~110（D3=留）；**实测 34**（Step 7 落地 2026-10-02；Step 7 之前是 110）；**Step 9 后 31**（2026-10-02：五行 import 收成一行，多一行模块级 `PLATFORM`） | Step 7 / 9 |
 | view | 194 | ~110 | Step 4 / 6 |
 | card | 94 | 94 | 平台特有，不动 |
 | tagged card | 31 | ~3；**实测 6**（Step 8 落地 2026-10-02：import 三行 + 空行 + 一行 JSDoc + 一行 `taggedCard(ZhihuCard, 'favorite', toZhihuFavoriteItem)`；mapper 是 lib 导出的 `mapRow`，不再计入 app 侧） | Step 8 |
@@ -1741,7 +2007,7 @@
 | skeleton | 6 | 6 | 有意保留 |
 | **合计** | **556** | **~283（-49%）** | |
 
-lib 侧：平台 API 文件的重试 / 响应读取约减 30–40 行（Step 3），sync-service 的查询片段约减 30–40 行（Step 9）；每平台 i18n 键约 22 → 16。
+lib 侧：平台 API 文件的重试 / 响应读取约减 30–40 行（Step 3），sync-service 的查询片段约减 30–40 行（Step 9）；每平台 i18n 键约 22 → 16。**Step 9 实测**（2026-10-02）：五个 sync-service 共减 110 行——github 12、x 14、zhihu 27、youtube 41、bookmarks 16。多 Source 平台（zhihu / youtube）减得多，因为它们同时省掉了成员子查询与 Source 计数；单 Source 平台只省搜索与已知 id。以知乎为样本是 27 行，略低于估算。`collection-queries.ts` 增加 103 行（四个 builder 加注释），聚合页与 ingest 各减 4 行和 3 行，lib 合计净减 14 行。新平台不必再写的，是上面那 12–41 行。
 
 四个轴（获取、风控、凭据、正文来源）的代码量**不会减少**——它们本来就该由平台手写。
 
@@ -1758,7 +2024,7 @@ lib 侧：平台 API 文件的重试 / 响应读取约减 30–40 行（Step 3�
 | 5 | 新增「延迟正文」一节（已落地 2026-10-01：§4.4「Deferred content」，原 §4.4 Tests 顺延 §4.5；另改 §2 completeness contract 描述、§4.2 Chunking 行、§4.3 `'pending'` 条的交叉引用、§7.2 `use-<platform>.ts` 行、§11 禁项行） | `entrypoints/app/**`（比原写的 `sections/**` 宽）禁手写 job 命名空间：job-store 调用（`startJob` / `useJob` / `getJob` / `pauseJob` / `resumeJob` / `trackJobRun`）的第一参与 `jobPlatform` / `logTag` 属性，不得是字面量或同模块里绑到字面量的常量（AST 扫描，独立用例 + 探测器自检，失败列 `file:line`） |
 | 6–8 | §7 页面清单删去状态组件与 tagged 外壳两项（Step 6 已落地 2026-10-01：§7.2 view 行改为「状态组件从 `components/collection-states/` 取、`copy` 只传平台文案」，§7.3 加 scaffold 自持外壳文案一段，§11「`components/collection/**` 内 `t()`」行补具名例外（实施时补了 `library-gate` 与 chrome-copy 叶文件两个，2026-10-02 trellis-check 补上一直在用却未具名的 `components/tags/`，共三个）；tagged 外壳待 Step 8。另 `i18n-conventions.md` §2 加 `common.*` 一行）。**Step 8 已落地 2026-10-02**：§4.2 的 `narrow<P>Meta` 段改为连整个 `mapRow`（`export function to<P>Item(row: PagedItemRow)`）一起导出、tagged card 复用；§7.2 `tagged-<platform>-card.tsx` 行改为一行 `taggedCard(<P>Card, '<prop>', to<P>Item)`；chips 行改为「一维带计数的 facet（Creator 或 Source）用 `components/collection-states/` 的 `FacetChips`，形状不同的自己组合 `CollapsibleChipRow`」，去掉不准确的「if the platform has Sources」 | `CARD_ADAPTERS` 对账不变；Step 6 不新增守卫（D-g）；Step 8 同样不新增（D-f），判据是行数与 `tsc` 探针 |
 | 7 | §7.2 `use-<platform>.ts` 行改写：不改名、无手写返回接口、view 直接读通用字段，`jobPlatform = jobPlatformForCollection(<platform>)`，单 facet 查询用 `facetQuery`，`'credentials'` 平台用 `useCredentialGatedLibrary(<p>Credentials, config)`；§7.2 `<platform>-sync-adapter.ts` 行加 `<p>Credentials(settings)`；§8 第 5 条改成「导出解析函数，run 门 / `probeReady` / 页面门三处读同一个，仍 unchecked」；§12 末段同步；§2 completeness contract 描述与 §11 job 命名空间行只剩 `jobPlatform`（已落地 2026-10-02） | job 命名空间守卫的 `JOB_NAMESPACE_PROPERTIES` 去掉 `'logTag'`（改名后 `entrypoints/app/**` 不再有这个键，`tsc` 也拒绝它）；自检表删 `LOG_TAG` 行、`` [`logTag`] `` 行改 `` [`jobPlatform`] ``；不新增守卫（D-f） |
-| 9 | 查询片段 builder 列入「shared read helpers」 | — |
+| 9 | 查询片段 builder 列入「shared read helpers」（**已落地 2026-10-02**：§4 开头那句改为只说 `IngestInput.platform` 与新 builder 取 `string`，并解释 lib 层为什么不调 `getPlatformLastSyncedAt`；§4.2 read-side 代码块换成四个 builder 的 import，「Your file contributes only…」一段改为平台只声明 WHERE、ORDER BY、`mapRow` 与可搜字段，并逐个说明 builder 的用法与「push 顺序决定参数编号」，不再写 `getLastSyncedAt`；§7.2 `use-<platform>.ts` 行把 `lastSyncedFn` 换成 `platform`） | 不新增（D-g），判据是 SQL 比对与 lib 查询测试零改动 |
 
 每个 Step 落地时同 commit 更新上表对应的 spec 与目录 `CLAUDE.md`。
 

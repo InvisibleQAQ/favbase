@@ -10,7 +10,6 @@ const serviceMocks = vi.hoisted(() => ({
   syncBookmarks: vi.fn(),
   getBookmarks: vi.fn(),
   getFolders: vi.fn(),
-  getLastSyncedAt: vi.fn(),
 }));
 
 const extractionMocks = vi.hoisted(() => ({
@@ -38,6 +37,12 @@ vi.mock('@/lib/database/platform-sync-record', () => ({
   recordPlatformSyncAttempt: vi.fn(async () => undefined),
   recordPlatformSyncSuccess: vi.fn(async () => undefined),
   recordPlatformSyncFailure: vi.fn(async () => undefined),
+}));
+
+// "Last synced" reads the Platform Sync Record through the db, `{}` here.
+vi.mock('@/lib/database/collection-queries', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/database/collection-queries')>()),
+  getPlatformLastSyncedAt: vi.fn(async () => null),
 }));
 
 import { useBookmarks, type UseBookmarksReturn } from './use-bookmarks';
@@ -78,7 +83,6 @@ describe('useBookmarks sync ownership', () => {
     serviceMocks.syncBookmarks.mockReset().mockReturnValue(gate.promise);
     serviceMocks.getBookmarks.mockReset().mockResolvedValue({ rows: [], total: 0 });
     serviceMocks.getFolders.mockReset().mockResolvedValue([]);
-    serviceMocks.getLastSyncedAt.mockReset().mockResolvedValue(null);
     extractionMocks.startBookmarkExtraction.mockReset();
     processingMocks.startCollectionProcessingJobs.mockReset();
     container = document.createElement('div');

@@ -24,11 +24,14 @@
  * returns.
  */
 
-import { and, desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, sql, type SQL } from 'drizzle-orm';
 import { getDb } from '@/lib/database';
 import type { FavbaseDb } from '@/lib/database';
-import { escapeLike } from '@/lib/database/sql-utils';
-import { getPlatformLastSyncedAt, pagedItemsQuery } from '@/lib/database/collection-queries';
+import {
+  pagedItemsQuery,
+  platformItemIds,
+  searchCondition,
+} from '@/lib/database/collection-queries';
 import { items } from '@/lib/database/entities/items';
 import { ghostItemCondition, ingestCollection } from '@/lib/ingest/ingest';
 // Leaf import, never the '@/lib/embedding' barrel (its value re-export of
@@ -166,11 +169,7 @@ export async function getReposNeedingReadme(
   db: FavbaseDb,
   repos: GithubStarredRepo[],
 ): Promise<GithubStarredRepo[]> {
-  const rows = await db
-    .select({ platformItemId: items.platformItemId })
-    .from(items)
-    .where(eq(items.platform, PLATFORM));
-  const existing = new Set(rows.map((r) => r.platformItemId));
+  const existing = await platformItemIds(db, PLATFORM);
 
   const ghostRows = await db
     .select({ platformItemId: items.platformItemId })
@@ -320,15 +319,9 @@ export async function getStarredRepos(
   if (query.language) {
     conditions.push(sql`${items.platformMeta}->>'language' = ${query.language}`);
   }
-  if (query.search?.trim()) {
-    const pattern = `%${escapeLike(query.search.trim())}%`;
-    conditions.push(
-      or(
-        ilike(items.title, pattern),
-        sql`${items.platformMeta}->>'description' ILIKE ${pattern}`,
-      ),
-    );
-  }
+  conditions.push(
+    searchCondition(query.search, [items.title, sql`${items.platformMeta}->>'description'`]),
+  );
 
   return pagedItemsQuery(db, {
     conditions,
@@ -352,11 +345,6 @@ export async function getLanguageCounts(db: FavbaseDb = getDb()): Promise<Langua
     .groupBy(langExpr)
     .orderBy(desc(sql`count(*)`), sql`${langExpr}`);
   return rows;
-}
-
-/** When the stars source was last synced; null = never synced. */
-export async function getLastSyncedAt(db: FavbaseDb = getDb()): Promise<Date | null> {
-  return getPlatformLastSyncedAt(PLATFORM, db);
 }
 
 // ---------------------------------------------------------------------------

@@ -70,10 +70,14 @@ needs a new table is not a platform — escalate it.
 
 ## 4. Phase 1 — Domain layer first, discriminator second
 
-`IngestInput.platform` and `getPlatformLastSyncedAt(platform)` both take a plain
-`string`. That is deliberate: **you can build and green-test the entire
+`IngestInput.platform` and the shared query builders in
+`lib/database/collection-queries.ts` (§4.2) take a plain `string` platform.
+That is deliberate: **you can build and green-test the entire
 `lib/<platform>/` layer before adding the id to `COLLECTION_PLATFORMS`**, with
-`tsc` staying green the whole time. Do it in that order — flipping the
+`tsc` staying green the whole time. (`getPlatformLastSyncedAt` takes a
+`CollectionPlatform`, and that is why the lib layer never calls it: "last
+synced" is read app-side by `useCollectionLibrary` from its `platform`, §7.2 —
+docs/32 Step 9.) Do it in that order — flipping the
 discriminator first means working for a day against a red compiler and learning
 nothing from it.
 
@@ -145,11 +149,37 @@ your first `ingestCollection` call.
 Read side — also shared:
 
 ```ts
-import { pagedItemsQuery, getPlatformLastSyncedAt, type PagedItemRow } from '@/lib/database/collection-queries';
-import { escapeLike } from '@/lib/database/sql-utils';
+import {
+  pagedItemsQuery,
+  searchCondition,
+  sourceMembership,
+  sourceItemCounts,
+  platformItemIds,
+  type PagedItemRow,
+} from '@/lib/database/collection-queries';
 ```
 
-Your file contributes only the WHERE conditions, the ORDER BY, and `mapRow`.
+Your file contributes only the WHERE conditions, the ORDER BY, `mapRow`, and
+which fields are searchable. The fragments every platform used to copy are
+builders (docs/32 Step 9):
+
+- `searchCondition(search, targets)` — trims, escapes the LIKE metacharacters
+  (`escapeLike`), wraps in `%…%` and ORs an `ilike` over each target: a column,
+  or a `platform_meta` field as `` sql`${items.platformMeta}->>'key'` ``. Blank
+  search → no condition.
+- `sourceMembership(platform, platformSourceId)` — the `item_sources` EXISTS
+  filter of a multi-Source platform (every Source filter goes through the link
+  table, §4.3). Empty id → no condition.
+- `sourceItemCounts(db, platform)` — the Source chips' counts as
+  `{ platformSourceId, title, count }`; map `platformSourceId` onto your facet
+  key.
+- `platformItemIds(db, platform)` — the platform's stored `platformItemId`
+  set, for an incremental stop-on-known cutoff or a details-fill skip set.
+
+The two optional filters return `undefined` when inactive, so push them
+unconditionally — and keep your push order fixed: it decides the bind-param
+numbering. There is no `getLastSyncedAt` to write; the page hook passes
+`platform` and `useCollectionLibrary` reads the Platform Sync Record (§7.2).
 
 Chunking: `paragraphSplit` from `@/lib/embedding/char-split` for text with
 paragraph structure (Markdown, READMEs, descriptions, extracted pages — pass it
@@ -396,7 +426,7 @@ stays a one-line re-export whether your platform has child routes or not.
 | File | Responsibility |
 | --- | --- |
 | `<platform>-sync-adapter.ts` | **The Platform Sync.** `run<P>Sync(onProgress, control)` is the single definition of what a sync means: credential resolution, then `await runPlatformSync(platform, control, async () => { …domain call…; return { fetched, inserted, newItemIds }; })` (`entrypoints/app/hooks/platform-sync.ts`). The funnel records the attempt in the Platform Sync Record, runs your closure, and on success dispatches the embed/tag lanes (`jobPlatform` derived) and records the success; on failure it records that and rethrows your error unchanged. **Anything you can check without the network goes BEFORE the funnel**: missing config is a silent `return`, a known-absent login throws the platform's own auth error class (the page's logged-out state keys off it) — neither is an attempt, so neither may leave a record (docs/32 §5.2). Put everything that contacts the platform inside the closure; work that follows a successful sync but is not the platform (bookmarks' page extraction) goes after it. Also exports `<p>AutoSyncPolicy` (`probeReady`, optional `isSilentError`). A `'credentials'` platform also exports `<p>Credentials(settings)` — the stored credential, or `null` (github `githubCredentials` → the token, youtube `youtubeCredentials` → `{ apiKey, channel }`); an empty string must come back as `null` too, because the wrapper tests `!== null` and `settings.githubToken ?? null` would hand it `''`, which type-checks and reads as configured — the single "is it configured" check: the run gate uses its value, `probeReady` compares it with `null`, and the page hook passes it to `useCredentialGatedLibrary` (§8 anchor 5). The manual page and the daily coordinator call **this same function** — copying credential resolution or post-sync dispatch into either trigger is the defect this file exists to prevent. |
-| `use-<platform>.ts` | Thin adapter over `useCollectionLibrary`. Inject `queryFn` / `facetsFn` / `lastSyncedFn` / `syncFn = run<P>Sync` / `jobPlatform = jobPlatformForCollection(<platform>)` — it is the background-job namespace, not a free-form log label. A single-facet query is one module-level line, `const queryFn = facetQuery(get<P>Items, '<facetKey>')` (`entrypoints/app/hooks/facet-query.ts`): it maps the hook's `filter` to your query's facet key and drops a `null` filter / `''` search, and a misspelled key is a `tsc` error. Return the generic fields as they are — the view reads `items` / `filter` / `setFilter` / `facets` directly; there is no rename layer and no hand-written return interface (docs/32 Step 7). Add only what is genuinely the platform's own (X's cooldown and "N new this run"; bookmarks' route-controlled filter and mount sync). There is no error classifier to inject: `syncError` is already a `CollectionSyncError`, classified by base class (§4.1). **A `'credentials'` platform** returns `useCredentialGatedLibrary(<p>Credentials, config)` (`entrypoints/app/hooks/use-credential-gated-library.ts`) instead: it adds `configured` / `settingsLoading` and makes `sync` a silent no-op until configured. That gate is its own hook, never inside `useCollectionLibrary` (the generic tier reads no storage), and the resolver it takes is the adapter's — so the page gate, the run gate and `probeReady` cannot drift apart. Every injected function must be a stable reference (module-level or `useCallback`); they sit in effect dependency arrays. |
+| `use-<platform>.ts` | Thin adapter over `useCollectionLibrary`. Inject `queryFn` / `facetsFn` / `platform` / `syncFn = run<P>Sync` / `jobPlatform = jobPlatformForCollection(<platform>)`. `platform` is the Collection Platform whose "last synced" the hook reads from the Platform Sync Record (`getPlatformLastSyncedAt`; there is no lib `getLastSyncedAt` wrapper, docs/32 Step 9); `jobPlatform` is the background-job namespace, not a free-form log label. Write the id once — `const PLATFORM = '<id>'` — and derive both from it. A single-facet query is one module-level line, `const queryFn = facetQuery(get<P>Items, '<facetKey>')` (`entrypoints/app/hooks/facet-query.ts`): it maps the hook's `filter` to your query's facet key and drops a `null` filter / `''` search, and a misspelled key is a `tsc` error. Return the generic fields as they are — the view reads `items` / `filter` / `setFilter` / `facets` directly; there is no rename layer and no hand-written return interface (docs/32 Step 7). Add only what is genuinely the platform's own (X's cooldown and "N new this run"; bookmarks' route-controlled filter and mount sync). There is no error classifier to inject: `syncError` is already a `CollectionSyncError`, classified by base class (§4.1). **A `'credentials'` platform** returns `useCredentialGatedLibrary(<p>Credentials, config)` (`entrypoints/app/hooks/use-credential-gated-library.ts`) instead: it adds `configured` / `settingsLoading` and makes `sync` a silent no-op until configured. That gate is its own hook, never inside `useCollectionLibrary` (the generic tier reads no storage), and the resolver it takes is the adapter's — so the page gate, the run gate and `probeReady` cannot drift apart. Every injected function must be a stable reference (module-level or `useCallback`); they sit in effect dependency arrays. |
 | `<platform>-view.tsx` | Assembles `CollectionPageScaffold` + `useCollectionPipeline` + `useCollectionBreadcrumbs`. `copy` carries only the platform's own strings (`title`, `breadcrumbs`, `caption`, `searchPlaceholder`, `noMatches`, `syncErrorText`); the caption's "last synced" part is `common.lastSynced`. The guide states come from `components/collection-states/` — `EmptyLibraryState` (pass `site` when opening the platform's site is how the library fills), `NotLoggedInState` (site-session platforms) and `NeedsConfigState` (`settings: SettingsLeaf`, plus `sync` when the credential was rejected rather than missing) — and take an `IconifyName`, `LocaleKeys` and a `SiteAction` / settings leaf, never translated strings; a state shaped differently from those three (bookmarks' button-less empty state, bilibili's retry) stays local. Owns the i18n seam as data, not a switch: a module-level `SyncErrorCopy` (i18n keys: `auth`, optional `authRejected`, `rateLimited`, optional `rateLimitedUntil`) passed to the shared `syncErrorMessage` (`entrypoints/app/hooks/collection-sync-error-message.ts`). If the platform's `<P>RateLimitError` carries a `resetAt`, lock the Fetch button until it: `useCountdown((now) => rateLimitRemainingMs(syncError, now))` into `syncDisabled` / `syncDisabledLabel` (`pipeline.fetchAvailableIn`). |
 | `<platform>-card.tsx` | Composes the shared `CollectionCard` shell. |
 | `tagged-<platform>-card.tsx` | One line: `export const Tagged<P>Card = taggedCard(<P>Card, '<prop>', to<P>Item);` (`entrypoints/app/components/tags/tagged-card.tsx`). `to<P>Item` is the `mapRow` your lib file exports (§4.2) — no envelope mapping is written here; `'<prop>'` is your card's item prop. A misspelled prop or a mapper that does not produce what the card takes is a `tsc` error at this call. |
@@ -511,7 +541,7 @@ Not every abstraction is mandatory. The distinction matters, because forcing a
 platform into the wrong one produces worse code than opting out.
 
 **Mandatory for every platform**, no exceptions: `ingestCollection`, the shared
-read helpers, `CollectionPageScaffold`, `useCollectionPipeline`,
+read helpers and query builders (§4.2), `CollectionPageScaffold`, `useCollectionPipeline`,
 `useCollectionBreadcrumbs`, the shared `*-sync-adapter.ts` seam and the
 Platform Sync funnel inside it (`runPlatformSync`, §7.2), both Platform
 Descriptors and all four heavy-value registries (§6).

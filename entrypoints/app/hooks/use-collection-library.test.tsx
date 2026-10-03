@@ -8,8 +8,19 @@ import type { CooperativeCheckpoint } from '@/lib/collections';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
+const mocks = vi.hoisted(() => ({
+  db: { stub: 'db' },
+  getPlatformLastSyncedAt: vi.fn(async (): Promise<Date | null> => null),
+}));
+
 vi.mock('@/lib/database', () => ({
-  initDbProxy: vi.fn(async () => ({})),
+  initDbProxy: vi.fn(async () => mocks.db),
+}));
+
+// The real reader queries the Platform Sync Record through the db, a stub here.
+vi.mock('@/lib/database/collection-queries', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/database/collection-queries')>()),
+  getPlatformLastSyncedAt: mocks.getPlatformLastSyncedAt,
 }));
 
 import {
@@ -26,7 +37,6 @@ const PAGE_SIZE = 10;
 
 const queryFn = vi.fn(async (_params: CollectionQueryParams) => ({ rows: [] as string[], total: 0 }));
 const facetsFn = vi.fn(async (): Promise<never[]> => []);
-const lastSyncedFn = vi.fn(async (): Promise<Date | null> => null);
 const syncFn = vi.fn(
   async (_onProgress: (progress: void) => void, _control: CooperativeCheckpoint) => {},
 );
@@ -52,7 +62,7 @@ describe('useCollectionLibrary filter ownership', () => {
     latest = useCollectionLibrary<string, never, void>({
       queryFn,
       facetsFn,
-      lastSyncedFn,
+      platform: 'github',
       syncFn,
       jobPlatform,
       pageSize: PAGE_SIZE,
@@ -64,7 +74,7 @@ describe('useCollectionLibrary filter ownership', () => {
   beforeEach(() => {
     queryFn.mockClear();
     facetsFn.mockClear();
-    lastSyncedFn.mockClear();
+    mocks.getPlatformLastSyncedAt.mockReset().mockResolvedValue(null);
     syncFn.mockClear();
     // Distinct job namespace per test — the background-jobs store is a module singleton.
     tag += 1;
@@ -121,6 +131,20 @@ describe('useCollectionLibrary filter ownership', () => {
     // One source of truth: the page reset happens during the same render that
     // adopts the new filter, so no query ever runs with (new filter, old page).
     expect(pageQueries()).not.toContainEqual(expect.objectContaining({ filter: 'b', page: 3 }));
+  });
+
+  it('reads "last synced" from the Platform Sync Record of config.platform, not the job namespace', async () => {
+    const at = new Date('2026-10-02T08:00:00Z');
+    mocks.getPlatformLastSyncedAt.mockResolvedValue(at);
+
+    await act(async () => {
+      root.render(<Probe />);
+    });
+    await flush();
+
+    expect(mocks.getPlatformLastSyncedAt).toHaveBeenCalledWith('github', mocks.db);
+    expect(mocks.getPlatformLastSyncedAt).not.toHaveBeenCalledWith(jobPlatform, expect.anything());
+    expect(latest.lastSyncedAt).toBe(at);
   });
 
   it('controlled: null means "no filter" and setFilter is a no-op', async () => {

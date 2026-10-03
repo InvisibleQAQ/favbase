@@ -1,9 +1,12 @@
 /**
- * Pure batch / SQL string helpers shared by every platform sync-service.
- * Zero imports, zero side effects — safe to load in offscreen documents (which
- * have no chrome.storage). Extracted per audit docs/15 MEDIUM-3: these were
- * byte-identical copies in 4 sync-services, and `escapeLike` is the single
- * ILIKE-injection defense — one copy, not four drift-prone ones.
+ * Pure batch / SQL string helpers. Zero imports, zero side effects — safe to
+ * load in offscreen documents (which have no chrome.storage). Extracted per
+ * audit docs/15 MEDIUM-3: these were byte-identical copies in 4 sync-services,
+ * and `escapeLike` is the single ILIKE-injection defense — one copy, not four
+ * drift-prone ones. Since docs/32 Step 9 the platform searches reach it only
+ * through `searchCondition` (./collection-queries.ts); its other caller is the
+ * keyword arm of lib/chat/retrieval.ts. `chunk` serves lib/ingest's batched
+ * INSERTs.
  */
 
 /** Split an array into fixed-size batches (keeps INSERT bind-params < PG 65535). */

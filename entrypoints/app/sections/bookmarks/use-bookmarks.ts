@@ -3,7 +3,6 @@ import { useEffect } from 'react';
 import {
   getBookmarks,
   getFolders,
-  getLastSyncedAt,
   type BookmarkItem,
   type BookmarkFolderRef,
 } from '@/lib/bookmarks/bookmarks-sync-service';
@@ -15,9 +14,10 @@ import { jobPlatformForCollection } from '../../hooks/collection-job-platform';
 import { facetQuery } from '../../hooks/facet-query';
 import { runBookmarksSync, type BookmarksSyncProgress } from './bookmarks-sync-adapter';
 
+const PLATFORM = 'bookmarks';
 /** Background-job namespace — the domain Platform Descriptor's `jobPlatform`,
  *  which keys this page's sync / embed / tag jobs in `useCollectionLibrary`. */
-const JOB_PLATFORM = jobPlatformForCollection('bookmarks');
+const JOB_PLATFORM = jobPlatformForCollection(PLATFORM);
 
 /** The generic library minus its filter: the route owns the folder, so the view
  *  never sees `filter` (and `setFilter` would be a controlled no-op). */
@@ -41,7 +41,7 @@ export function useBookmarks(folderId: string | undefined): UseBookmarksReturn {
   const lib = useCollectionLibrary({
     queryFn,
     facetsFn: getFolders,
-    lastSyncedFn: getLastSyncedAt,
+    platform: PLATFORM,
     // The shared Sync Adapter (module ref = stable): tree sync, chained content
     // extraction and the backlog embed dispatch all live there — the daily
     // auto-sync coordinator runs the exact same function.

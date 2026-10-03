@@ -26,16 +26,18 @@
  * pending→chunked advance).
  */
 
-import { and, asc, eq, exists, ilike, inArray, not, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, eq, exists, inArray, not, or, sql, type SQL } from 'drizzle-orm';
 import { getDb } from '@/lib/database';
 import type { FavbaseDb } from '@/lib/database';
-import { escapeLike } from '@/lib/database/sql-utils';
-import { getPlatformLastSyncedAt, pagedItemsQuery } from '@/lib/database/collection-queries';
+import {
+  pagedItemsQuery,
+  searchCondition,
+  sourceMembership,
+} from '@/lib/database/collection-queries';
 import { sources } from '@/lib/database/entities/sources';
 import { items } from '@/lib/database/entities/items';
 import { itemChunks } from '@/lib/database/entities/item-chunks';
 import { itemContents } from '@/lib/database/entities/item-contents';
-import { itemSources } from '@/lib/database/entities/item-sources';
 import { ingestCollection, settleItemContent } from '@/lib/ingest/ingest';
 // Leaf import, never the '@/lib/embedding' barrel (its value re-export of
 // './config' reaches '@/lib/storage' at module load). Guarded by
@@ -195,23 +197,10 @@ export async function getBookmarks(
   db: FavbaseDb = getDb(),
 ): Promise<{ rows: BookmarkItem[]; total: number }> {
   const conditions: (SQL | undefined)[] = [eq(items.platform, PLATFORM)];
-  if (query.search?.trim()) {
-    const pattern = `%${escapeLike(query.search.trim())}%`;
-    conditions.push(
-      or(ilike(items.title, pattern), sql`${items.platformMeta}->>'domain' ILIKE ${pattern}`),
-    );
-  }
-  if (query.folderId) {
-    conditions.push(
-      sql`EXISTS (
-        SELECT 1 FROM ${itemSources}
-        JOIN ${sources} ON ${sources.id} = ${itemSources.sourceId}
-        WHERE ${itemSources.itemId} = ${items.id}
-          AND ${sources.platform} = ${PLATFORM}
-          AND ${sources.platformSourceId} = ${query.folderId}
-      )`,
-    );
-  }
+  conditions.push(
+    searchCondition(query.search, [items.title, sql`${items.platformMeta}->>'domain'`]),
+  );
+  conditions.push(sourceMembership(PLATFORM, query.folderId));
   return pagedItemsQuery(db, {
     conditions,
     orderBy: sql`${items.publishedAt} DESC NULLS LAST`,
@@ -237,11 +226,6 @@ export async function getFolders(db: FavbaseDb = getDb()): Promise<BookmarkFolde
     title: r.title,
     path: readPath(r.platformMeta),
   }));
-}
-
-/** Latest folder sync time; null = never synced. */
-export async function getLastSyncedAt(db: FavbaseDb = getDb()): Promise<Date | null> {
-  return getPlatformLastSyncedAt(PLATFORM, db);
 }
 
 // ---------------------------------------------------------------------------

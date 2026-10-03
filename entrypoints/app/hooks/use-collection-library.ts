@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { initDbProxy } from '@/lib/database';
-import type { CooperativeCheckpoint } from '@/lib/collections';
+import { getPlatformLastSyncedAt } from '@/lib/database/collection-queries';
+import type { CollectionPlatform, CooperativeCheckpoint } from '@/lib/collections';
 
 import { startJob, useJob, type BackgroundJob } from './background-jobs-store';
 import { classifyCollectionSyncError, type CollectionSyncError } from './collection-sync-error';
@@ -37,8 +38,12 @@ export interface UseCollectionLibraryConfig<TItem, TFacet, TProgress> {
   queryFn: (params: CollectionQueryParams) => Promise<CollectionPage<TItem>>;
   /** Facet counts for the chips row (unfiltered). */
   facetsFn: () => Promise<TFacet[]>;
-  /** Last successful sync time. */
-  lastSyncedFn: () => Promise<Date | null>;
+  /**
+   * The Collection Platform whose "last synced" the page shows: the hook reads
+   * its Platform Sync Record's `last_success_at` (`getPlatformLastSyncedAt`).
+   * Not the job namespace — that is `jobPlatform` below.
+   */
+  platform: CollectionPlatform;
   /** One-shot remote sync. Auth resolution stays inside the platform closure. */
   syncFn: (
     onProgress: (progress: TProgress) => void,
@@ -112,7 +117,7 @@ export interface UseCollectionLibraryReturn<TItem, TFacet, TProgress> {
 export function useCollectionLibrary<TItem, TFacet, TProgress>(
   config: UseCollectionLibraryConfig<TItem, TFacet, TProgress>,
 ): UseCollectionLibraryReturn<TItem, TFacet, TProgress> {
-  const { queryFn, facetsFn, lastSyncedFn, syncFn, jobPlatform, controlledFilter } = config;
+  const { queryFn, facetsFn, platform, syncFn, jobPlatform, controlledFilter } = config;
   const pageSize = config.pageSize ?? DEFAULT_PAGE_SIZE;
 
   // Filters
@@ -226,10 +231,10 @@ export function useCollectionLibrary<TItem, TFacet, TProgress>(
 
   // Library meta: facet counts + last sync time + unfiltered total.
   const refreshMeta = useCallback(async () => {
-    await initDbProxy();
+    const db = await initDbProxy();
     const [facetRows, syncedAt, countResult] = await Promise.all([
       facetsFn(),
-      lastSyncedFn(),
+      getPlatformLastSyncedAt(platform, db),
       // Unfiltered total = library size (facet counts may exclude rows with a
       // null facet, so they cannot be summed as a substitute).
       queryFn({ filter: null, search: '', page: 1, pageSize: 1 }),
@@ -238,7 +243,7 @@ export function useCollectionLibrary<TItem, TFacet, TProgress>(
     setFacets(facetRows);
     setLastSyncedAt(syncedAt);
     setLibraryCount(countResult.total);
-  }, [facetsFn, lastSyncedFn, queryFn]);
+  }, [facetsFn, platform, queryFn]);
 
   useEffect(() => {
     (async () => {

@@ -28,18 +28,18 @@
  * either way.
  */
 
-import { desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm';
+import { desc, eq, sql, type SQL } from 'drizzle-orm';
 import { getDb } from '@/lib/database';
 import type { FavbaseDb } from '@/lib/database';
-import { escapeLike } from '@/lib/database/sql-utils';
 import {
-  getPlatformLastSyncedAt,
   pagedItemsQuery,
+  platformItemIds,
+  searchCondition,
+  sourceItemCounts,
+  sourceMembership,
   type PagedItemRow,
 } from '@/lib/database/collection-queries';
-import { sources } from '@/lib/database/entities/sources';
 import { items } from '@/lib/database/entities/items';
-import { itemSources } from '@/lib/database/entities/item-sources';
 import { ingestCollection } from '@/lib/ingest/ingest';
 import {
   resolveChannel,
@@ -188,7 +188,7 @@ export async function syncYoutubePlaylists(
   const channel = await resolveChannel(config.apiKey, config.channel);
   const playlists = await fetchPlaylists(config.apiKey, channel.channelId, control);
 
-  const known = await getKnownVideoIds(db);
+  const known = await platformItemIds(db, PLATFORM);
   const fetchedThisRun = new Set<string>();
   const batches: PlaylistBatch[] = [];
   let entryTotal = 0;
@@ -217,15 +217,6 @@ export async function syncYoutubePlaylists(
   // Auto-tag / auto-embed are dispatched by the Platform Sync funnel that
   // youtube-sync-adapter.ts runs this inside, NOT here (module docstring, ST3).
   return syncPlaylistsToDb(db, batches);
-}
-
-/** Set of already-stored video ids (platform='youtube') — details-fill skip set. */
-async function getKnownVideoIds(db: FavbaseDb): Promise<Set<string>> {
-  const rows = await db
-    .select({ platformItemId: items.platformItemId })
-    .from(items)
-    .where(eq(items.platform, PLATFORM));
-  return new Set(rows.map((r) => r.platformItemId));
 }
 
 /**
@@ -330,26 +321,10 @@ export async function getPlaylistVideos(
 ): Promise<{ rows: YoutubeVideoItem[]; total: number }> {
   const conditions: (SQL | undefined)[] = [eq(items.platform, PLATFORM)];
 
-  if (query.playlistId) {
-    conditions.push(
-      sql`EXISTS (
-        SELECT 1 FROM ${itemSources}
-        JOIN ${sources} ON ${sources.id} = ${itemSources.sourceId}
-        WHERE ${itemSources.itemId} = ${items.id}
-          AND ${sources.platform} = ${PLATFORM}
-          AND ${sources.platformSourceId} = ${query.playlistId}
-      )`,
-    );
-  }
-  if (query.search?.trim()) {
-    const pattern = `%${escapeLike(query.search.trim())}%`;
-    conditions.push(
-      or(
-        ilike(items.title, pattern),
-        sql`${items.platformMeta}->>'description' ILIKE ${pattern}`,
-      ),
-    );
-  }
+  conditions.push(sourceMembership(PLATFORM, query.playlistId));
+  conditions.push(
+    searchCondition(query.search, [items.title, sql`${items.platformMeta}->>'description'`]),
+  );
 
   return pagedItemsQuery(db, {
     conditions,
@@ -362,24 +337,8 @@ export async function getPlaylistVideos(
 
 /** Distinct playlists with video counts, descending — data for the chip row. */
 export async function getPlaylistCounts(db: FavbaseDb = getDb()): Promise<PlaylistCount[]> {
-  const rows = await db
-    .select({
-      playlistId: sources.platformSourceId,
-      title: sources.title,
-      count: sql<number>`count(*)::int`,
-    })
-    .from(itemSources)
-    .innerJoin(sources, eq(itemSources.sourceId, sources.id))
-    .innerJoin(items, eq(itemSources.itemId, items.id))
-    .where(eq(sources.platform, PLATFORM))
-    .groupBy(sources.platformSourceId, sources.title)
-    .orderBy(desc(sql`count(*)`), sources.title);
-  return rows;
-}
-
-/** When playlists were last synced; null = never synced. */
-export async function getLastSyncedAt(db: FavbaseDb = getDb()): Promise<Date | null> {
-  return getPlatformLastSyncedAt(PLATFORM, db);
+  const rows = await sourceItemCounts(db, PLATFORM);
+  return rows.map((r) => ({ playlistId: r.platformSourceId, title: r.title, count: r.count }));
 }
 
 // ---------------------------------------------------------------------------

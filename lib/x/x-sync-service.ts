@@ -21,11 +21,14 @@
  * (ILIKE) search works right after sync.
  */
 
-import { and, desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, sql, type SQL } from 'drizzle-orm';
 import { getDb } from '@/lib/database';
 import type { FavbaseDb } from '@/lib/database';
-import { escapeLike } from '@/lib/database/sql-utils';
-import { getPlatformLastSyncedAt, pagedItemsQuery } from '@/lib/database/collection-queries';
+import {
+  pagedItemsQuery,
+  platformItemIds,
+  searchCondition,
+} from '@/lib/database/collection-queries';
 import { items } from '@/lib/database/entities/items';
 import { ingestCollection } from '@/lib/ingest/ingest';
 import {
@@ -146,20 +149,11 @@ export async function syncBookmarks(
   const db = getDb();
 
   // Incremental: build the stop predicate from already-stored tweet ids.
-  const known = await getKnownTweetIds(db);
+  const known = await platformItemIds(db, PLATFORM);
   const shouldStop = (id: string) => known.has(id);
 
   const bookmarks = await fetchAllBookmarks(auth, onProgress, { shouldStop, control });
   return syncBookmarksToDb(db, bookmarks);
-}
-
-/** Set of already-stored tweet ids (platform='x') — the incremental cutoff. */
-async function getKnownTweetIds(db: FavbaseDb): Promise<Set<string>> {
-  const rows = await db
-    .select({ platformItemId: items.platformItemId })
-    .from(items)
-    .where(eq(items.platform, PLATFORM));
-  return new Set(rows.map((r) => r.platformItemId));
 }
 
 /**
@@ -243,16 +237,13 @@ export async function getBookmarks(
   if (query.author) {
     conditions.push(sql`${items.platformMeta}->>'authorHandle' = ${query.author}`);
   }
-  if (query.search?.trim()) {
-    const pattern = `%${escapeLike(query.search.trim())}%`;
-    conditions.push(
-      or(
-        ilike(items.title, pattern),
-        ilike(items.authorName, pattern),
-        sql`${items.platformMeta}->>'text' ILIKE ${pattern}`,
-      ),
-    );
-  }
+  conditions.push(
+    searchCondition(query.search, [
+      items.title,
+      items.authorName,
+      sql`${items.platformMeta}->>'text'`,
+    ]),
+  );
 
   return pagedItemsQuery(db, {
     conditions,
@@ -278,11 +269,6 @@ export async function getAuthorCounts(db: FavbaseDb = getDb()): Promise<AuthorCo
     .groupBy(nameExpr, handleExpr)
     .orderBy(desc(sql`count(*)`), handleExpr);
   return rows;
-}
-
-/** When bookmarks were last synced; null = never synced. */
-export async function getLastSyncedAt(db: FavbaseDb = getDb()): Promise<Date | null> {
-  return getPlatformLastSyncedAt(PLATFORM, db);
 }
 
 // ---------------------------------------------------------------------------

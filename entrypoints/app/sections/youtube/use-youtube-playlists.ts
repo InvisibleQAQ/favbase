@@ -1,16 +1,13 @@
-import {
-  getPlaylistVideos,
-  getPlaylistCounts,
-  getLastSyncedAt,
-} from '@/lib/youtube/youtube-sync-service';
+import { getPlaylistVideos, getPlaylistCounts } from '@/lib/youtube/youtube-sync-service';
 import { jobPlatformForCollection } from '../../hooks/collection-job-platform';
 import { facetQuery } from '../../hooks/facet-query';
 import { useCredentialGatedLibrary } from '../../hooks/use-credential-gated-library';
 import { runYoutubePlaylistsSync, youtubeCredentials } from './youtube-sync-adapter';
 
+const PLATFORM = 'youtube';
 /** Background-job namespace — the domain Platform Descriptor's `jobPlatform`,
  *  which keys this page's sync / embed / tag jobs in `useCollectionLibrary`. */
-const JOB_PLATFORM = jobPlatformForCollection('youtube');
+const JOB_PLATFORM = jobPlatformForCollection(PLATFORM);
 
 /** Playlist chip → `getPlaylistVideos({ playlistId })`; module-level, so stable. */
 const queryFn = facetQuery(getPlaylistVideos, 'playlistId');
@@ -27,7 +24,7 @@ export function useYoutubePlaylists() {
   return useCredentialGatedLibrary(youtubeCredentials, {
     queryFn,
     facetsFn: getPlaylistCounts,
-    lastSyncedFn: getLastSyncedAt,
+    platform: PLATFORM,
     // The shared Sync Adapter (module ref = stable): config resolution, progress
     // mapping and the post-sync embed/tag dispatch all live there — the daily
     // auto-sync coordinator runs the exact same function.

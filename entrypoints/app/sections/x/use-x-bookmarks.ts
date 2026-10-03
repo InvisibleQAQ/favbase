@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { initDbProxy } from '@/lib/database';
 import { getPlatformSyncRecord } from '@/lib/database/platform-sync-record';
-import { getBookmarks, getAuthorCounts, getLastSyncedAt } from '@/lib/x/x-sync-service';
+import { getBookmarks, getAuthorCounts } from '@/lib/x/x-sync-service';
 import { useCollectionLibrary } from '../../hooks/use-collection-library';
 import { jobPlatformForCollection } from '../../hooks/collection-job-platform';
 import { facetQuery } from '../../hooks/facet-query';
@@ -10,9 +10,10 @@ import { useCountdown } from '../../hooks/use-countdown';
 import { remainingCooldown } from './cooldown';
 import { runXBookmarksSync } from './x-sync-adapter';
 
+const PLATFORM = 'x';
 /** Background-job namespace — the domain Platform Descriptor's `jobPlatform`,
  *  which keys this page's sync / embed / tag jobs in `useCollectionLibrary`. */
-const JOB_PLATFORM = jobPlatformForCollection('x');
+const JOB_PLATFORM = jobPlatformForCollection(PLATFORM);
 
 /** Author chip → `getBookmarks({ author })`; module-level, so stable. */
 const queryFn = facetQuery(getBookmarks, 'author');
@@ -23,7 +24,7 @@ export function useXBookmarks() {
   const lib = useCollectionLibrary({
     queryFn,
     facetsFn: getAuthorCounts,
-    lastSyncedFn: getLastSyncedAt,
+    platform: PLATFORM,
     // The shared Sync Adapter (module ref = stable): auth resolution, progress mapping
     // and — through the Platform Sync funnel — the post-sync embed/tag dispatch and the
     // Platform Sync Record; the daily auto-sync coordinator runs the exact same function.
@@ -41,7 +42,7 @@ export function useXBookmarks() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const record = await getPlatformSyncRecord('x', await initDbProxy());
+      const record = await getPlatformSyncRecord(PLATFORM, await initDbProxy());
       if (!cancelled) setLastInserted(record?.lastInserted ?? null);
     })().catch((err) => console.error(`[${JOB_PLATFORM}] sync record load failed:`, err));
     return () => {

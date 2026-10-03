@@ -17,6 +17,12 @@ vi.mock('@/lib/database', () => ({
   initDbProxy: vi.fn(async () => ({})),
 }));
 
+// The real reader queries the Platform Sync Record through the db, a stub here.
+vi.mock('@/lib/database/collection-queries', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/database/collection-queries')>()),
+  getPlatformLastSyncedAt: vi.fn(async () => null),
+}));
+
 // The real hook loads `@/lib/storage` (chrome.storage at import) and the
 // embedding config; the gate only needs `settings` + `loading`.
 vi.mock('@/lib/hooks/useSettings', () => ({
@@ -29,7 +35,6 @@ type Gated = ReturnType<typeof useCredentialGatedLibrary<string, never, void>>;
 
 const queryFn = vi.fn(async () => ({ rows: [] as string[], total: 0 }));
 const facetsFn = vi.fn(async (): Promise<never[]> => []);
-const lastSyncedFn = vi.fn(async (): Promise<Date | null> => null);
 const syncFn = vi.fn(
   async (_onProgress: (progress: void) => void, _control: CooperativeCheckpoint) => {},
 );
@@ -57,7 +62,7 @@ describe('useCredentialGatedLibrary', () => {
     latest = useCredentialGatedLibrary<string, never, void>(credentials, {
       queryFn,
       facetsFn,
-      lastSyncedFn,
+      platform: 'github',
       syncFn,
       jobPlatform,
     });
@@ -74,7 +79,6 @@ describe('useCredentialGatedLibrary', () => {
   beforeEach(() => {
     queryFn.mockClear();
     facetsFn.mockClear();
-    lastSyncedFn.mockClear();
     syncFn.mockClear();
     setSettings({});
     // Distinct job namespace per test — the background-jobs store is a module singleton.
