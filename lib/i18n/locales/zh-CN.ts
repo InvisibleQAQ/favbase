@@ -215,7 +215,8 @@ const zhCN = {
   'settings.youtube.apiKeyPlaceholder': 'AIzaSy...',
   'settings.youtube.channelLabel': '频道',
   'settings.youtube.channelPlaceholder': '@handle 或 UC 开头的频道 ID',
-  'settings.youtube.channelNote': '支持 @handle、UC 开头的频道 ID，或频道主页链接。只收录该频道公开的播放列表（私密/未列出的拿不到）。',
+  'settings.youtube.channelNote':
+    'API 密钥不代表你的账号，所以需要指明收录哪个频道的播放列表，一般填你自己的频道。可填频道主页链接、@handle 或 UC 开头的频道 ID。只收录公开的播放列表（私密/未列出的拿不到）。',
   'settings.youtube.guideTitle': '如何创建 YouTube API 密钥',
   'settings.youtube.freeQuotaNote':
     'YouTube Data API v3 免费使用，无需绑卡；默认每日 10,000 units 配额，个人播放列表同步绰绰有余。',

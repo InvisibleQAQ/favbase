@@ -222,7 +222,7 @@ const en: Record<LocaleKeys, string> = {
   'settings.youtube.channelLabel': 'Channel',
   'settings.youtube.channelPlaceholder': '@handle or UC… channel ID',
   'settings.youtube.channelNote':
-    'Accepts an @handle, a UC… channel ID, or a channel URL. Only the channel\'s PUBLIC playlists are collected (private/unlisted are not accessible).',
+    'The API key does not identify your account, so enter the channel whose playlists to collect — usually your own. Accepts a channel URL, an @handle, or a UC… channel ID. Only PUBLIC playlists are collected (private/unlisted are not accessible).',
   'settings.youtube.guideTitle': 'How to create a YouTube API key',
   'settings.youtube.freeQuotaNote':
     'The YouTube Data API v3 is free (no billing account needed) — the default 10,000 units/day quota is far more than personal sync needs.',
