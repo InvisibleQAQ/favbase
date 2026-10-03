@@ -94,8 +94,8 @@ export function ChatMessageInput({ isStreaming, onSend, onStop }: ChatMessageInp
           <Button
             type="button"
             size="small"
-            variant="outlined"
-            color="inherit"
+            variant="soft"
+            color="primary"
             onClick={onStop}
             startIcon={<Iconify icon="solar:stop-bold" width={17} />}
             sx={{ flexShrink: 0 }}

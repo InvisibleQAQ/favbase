@@ -10,10 +10,13 @@ import { colorKeys } from '../palette';
  * `primary` buttons take `text.accent` as their ink — coral `main` reads 2.5:1
  * as text; contained palette buttons keep `main` on hover.
  *
- * The default stays Minimal's `color="inherit"`, so secondary outlined / text
- * buttons stay neutral. A primary action is `variant="contained"` +
- * `color="primary"`, written at its call site (2026-10-02); the inherit
- * contained skin (scheme-inverted block) is no longer used for primary actions.
+ * The default stays Minimal's `color="inherit"`; color is chosen at the call
+ * site by role (2026-10-02). Primary action: `variant="contained"` +
+ * `color="primary"`. Secondary action: `variant="soft"` + `color="primary"`
+ * (16% `main` wash under `text.accent`, 24% hovered; `softStyles` owns both).
+ * Inline clear/reset links: `variant="text"` + `color="primary"`. Dialog
+ * dismissal and buttons inside a tinted Alert / notice keep `inherit`. The
+ * inherit contained skin (scheme-inverted block) is no longer used for actions.
  */
 export type ButtonExtendSize = { xLarge: true };
 export type ButtonExtendVariant = { soft: true };

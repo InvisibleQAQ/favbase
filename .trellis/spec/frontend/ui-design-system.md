@@ -266,7 +266,8 @@ them). Values below are the resolved contract after docs/25 Step 1. Most of
 them are locked in `theme/theme-contract.test.ts` — but not all: that test
 reads Card/CardHeader/CardContent, Button, Chip, Dialog(+Title/Content/
 Actions), Drawer, the four input families, InputLabel, List, Menu/MenuItem,
-Paper, Popover, Skeleton, Stack, TextField, Tooltip and Typography, and
+Paper, Popover, Skeleton, Stack, TextField, ToggleButton (selected `primary`
+ink only, since 2026-10-02), Tooltip and Typography, and
 **does not** assert `MuiTabs`/`MuiTab`, `MuiAvatar` or `MuiTableCell`
 (corrected 2026-09-04; the earlier "every one of them is locked" was false).
 Treat the three unasserted families as source-of-truth-by-reading until
@@ -284,13 +285,41 @@ someone adds the rows:
   `text` primary ink is `text.accent`. Contained palette buttons hover on
   `main`, not MUI's `.dark`, so hover contrast equals rest contrast for every
   preset.
-- Button color by role (user decision 2026-10-02): a **primary action** is
-  `variant="contained"` + `color="primary"`, written at the call site (the
-  preset's `main` under its WCAG-picked `contrastText`). Secondary outlined /
-  text buttons keep the `inherit` default and stay neutral; destructive actions
-  stay `color="error"`. The inverted `contained inherit` skin is not used for
-  primary actions. Do not flip `MuiButton.defaultProps.color` to `primary`
-  instead: it would re-ink every outlined / text default in `text.accent`.
+- Button color by role (user decisions 2026-10-02), written at the call site:
+  - **Primary action**: `variant="contained"` + `color="primary"` (the preset's
+    `main` under its WCAG-picked `contrastText`).
+  - **Secondary action**: `variant="soft"` + `color="primary"` — 16% `main`
+    wash under `text.accent`, 24% hovered (`opacity.soft.paletteHoverBg`;
+    floor 4.58:1, preset2 dark on `background.neutral`, and it holds over
+    paper, neutral and the high-contrast ground for all six presets;
+    `theme-contract.test.ts`). Minimal's 32% hover fell to 4.28 (coral dark)
+    on neutral; the theme lowered it once in `softStyles` instead of telling
+    call sites where not to put a soft control.
+    Not `outlined color="primary"`: its light ink is the preset's near-black
+    `darker` stage under a faint border, so it still reads black and white.
+  - **Inline clear / reset link** (tag filter "clear"): `variant="text"` +
+    `color="primary"` (`text.accent` ink, 8% hover wash, floor 5.02 over
+    paper).
+  - Destructive actions stay `color="error"`; state toggles that already carry
+    a semantic color (library gate paused = `warning`) keep it.
+  - Stay `inherit`, one line each:
+    - Dialog dismissal (Cancel): colorless on purpose, it is not an action.
+    - A button inside a tinted Alert / notice inherits the container's ink,
+      already colored; brand ink fails there. Error Alert (Agent Skills
+      "copy setup to fix"): soft `error` reads 4.34 light at rest / 3.46 dark
+      hovered. Warning notice (configuration blocker, on `background.default`):
+      soft primary 4.38 at rest / 4.22 hovered (preset2 dark), text primary
+      4.18 preset2 dark hovered. (Hover figures at the 24% palette wash; the
+      32% era read 3.22 and 3.85.)
+    - `IconButton`s: `color="primary"` paints the glyph `primary.main`,
+      2.5:1 for coral on white, under the 3:1 non-text floor; the theme has no
+      icon-button accent override.
+  - The inverted `contained inherit` skin is not used for actions. Do not flip
+    `MuiButton.defaultProps.color` to `primary` instead: it would also re-ink
+    dismissal and container-tinted buttons.
+- `MuiToggleButton`: pass `color="primary"` on the `ToggleButtonGroup`; a
+  selected primary toggle inks `text.accent` (favbase override; MUI's own is
+  `primary.main`, 2.5:1 as text) on MUI's 8% `main` wash, 16% hovered.
 - `MuiInputBase`, `MuiInput`, `MuiFilledInput`, `MuiOutlinedInput`: single-line
   height is **derived**, not declared — a 24px line box plus `INPUT_PADDING`,
   giving outlined 56px medium / 40px small and base 32 / 28 (docs/25 D11,
@@ -318,7 +347,21 @@ someone adds the rows:
 - `MuiDialog`: `fullWidth` + `maxWidth="sm"` defaults, dialog shadow, 16px
   radius, 16px viewport gutters.
 - `MuiChip`: `variant="soft"` by default, with its own `deleteIcon`; radius 8px
-  small / 10px medium.
+  small / 10px medium. A clickable soft palette chip hovers to the same 24%
+  `paletteHoverBg` wash as the soft button. Keyboard focus keeps the rest
+  wash plus the CssBaseline ring: MUI's own focus-visible `.dark` paint loses
+  to the soft base re-emitted under `&.MuiChip-clickable` (same specificity,
+  later), so soft needs no focus override. A clickable **filled** palette chip
+  (the selected `FilterChip`) does: MUI hovers and focuses it to `.dark`, where
+  the ink `contrastText` reads 3.69 (coral) / 2.26 (preset1) / 4.06 (preset4) /
+  2.60 (preset5), so the theme keeps it on `main` for both states and adds
+  `customShadows[color]` on hover, like the contained button. The override is
+  three classes against MUI's two; the disabled rule (three) is emitted after
+  it and still wins (emitted CSS checked 2026-10-02). While pressed, the hover
+  shadow also outranks MUI's `:active` `shadows[1]`, so pressed = hovered plus
+  the ripple, as for soft chips and the contained button. An `onDelete`-only
+  palette chip of either variant (no clickable class) still focuses to
+  `.dark`; none exists in app.html.
 - `MuiTooltip`: scheme-aware inverse surface, 6px radius, `arrow`, 400ms enter
   delay.
 - `MuiTypography`: `variantMapping` maps `subtitle1` / `subtitle2` to `p`.
@@ -496,7 +539,7 @@ Only a real URL level becomes a crumb. A folder that is a chip filter with an
 `StateBox` is the one dashed state surface: 1px dashed `divider`, centered
 column, 16px gaps, 320px minimum height. Its title is a `subtitle1`
 paragraph, never a heading; its description is `body2` in `text.secondary`.
-`ErrorState` (48px error glyph + one outlined retry), `NoMatchesState`
+`ErrorState` (48px error glyph + one soft primary retry), `NoMatchesState`
 (description only) and the tag no-match state all render through it. State
 copy never uses `text.disabled`: an empty result is information.
 
@@ -533,6 +576,25 @@ toggle in `CollapsibleChipRow` (`outlined`, because it is an action on the row
 rather than another selectable value, and the source says so). Tag chips, stat
 chips and type stamps all ride the default. `chip-row.test.tsx` locks both
 `FilterChip` states.
+
+Chip color is picked by meaning, not by source (user decision 2026-10-02), and
+still on the default `soft` skin. The B站 video card's action bar is the
+reference (`sections/bilibili/video-card.tsx`, locked by its
+`video-card.test.tsx`):
+
+| Chip | Color | Meaning |
+| --- | --- | --- |
+| Transcribe, Retry (clickable) | `primary` | an action: the secondary-action convention of section 7 |
+| CC / ASR source badge | `info` | state: has a transcript (CC vs ASR is in the text; they never co-occur) |
+| Indexed badge | `secondary` | state: searchable |
+
+Status badges are never clickable, so only the 16% rest wash counts, but the
+card hovers to `background.neutral` under them: floors info 4.66 (light,
+neutral), secondary 5.00 (dark, neutral). `success` was rejected for "indexed":
+`success.dark` on its own 16% wash is 3.69 on light paper, 3.43 on neutral.
+Known, not fixed: under preset2 the `secondary` badge (`#8E33FF`) and the soft
+`primary` actions (`#7635dc`) are near-identical hues; the badges still differ
+by icon and text, and Favbase never re-colors `secondary` per preset.
 
 ### CardGrid
 

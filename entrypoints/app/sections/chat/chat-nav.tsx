@@ -138,8 +138,8 @@ export function ChatNav({
         <Box sx={{ px: 2.5, pb: 1.5 }}>
           <Button
             fullWidth
-            variant="outlined"
-            color="inherit"
+            variant="soft"
+            color="primary"
             startIcon={<Iconify icon="mingcute:add-line" width={18} />}
             onClick={onNew}
           >

@@ -9,9 +9,10 @@ import { autocompleteClasses } from '@mui/material/Autocomplete';
 import type { PaletteColorKey, CommonColorsKeys } from '../palette';
 
 /**
- * Minimal component-style mixins. One favbase override, marked inline: soft
+ * Minimal component-style mixins. Two favbase overrides, marked inline: soft
  * `primary` text is `text.accent` instead of `primary.dark` (coral dark reads
- * 3.99:1 on the 16% wash; docs/25 C-3).
+ * 3.99:1 on the 16% wash; docs/25 C-3), and a soft palette color hovers to
+ * `opacity.soft.paletteHoverBg` (24%) instead of `soft.hoverBg` (32%).
  */
 
 /**
@@ -251,9 +252,15 @@ export function softStyles(theme: Theme, colorKey: ColorKey, options?: StyleOpti
       ...softText,
     },
     hover: getHoverStyles(options?.hover, {
+      // favbase override: Minimal's 32% `soft.hoverBg` drops the soft ink under
+      // 4.5:1 over `background.neutral` (coral dark 4.28, preset2 dark 4.30) —
+      // and a clickable chip on a hovered `CollectionCard` always sits on
+      // neutral. `soft.paletteHoverBg` (24%) floors at 4.58 (preset2 dark on
+      // neutral; coral dark 4.99). The hover step is subtler (16% -> 24%, not
+      // -> 32%). The grey `inherit` branch above keeps `soft.hoverBg`.
       backgroundColor: varAlpha(
         theme.vars.palette[colorKey].mainChannel,
-        theme.vars.opacity.soft.hoverBg,
+        theme.vars.opacity.soft.paletteHoverBg,
       ),
     }),
   };

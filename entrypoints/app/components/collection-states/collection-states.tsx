@@ -42,7 +42,7 @@ interface GuideStateProps {
  * The anatomy every guide state shares: 48px secondary glyph, translated title
  * and description, and at most a leading action plus Fetch. Fetch is
  * `contained` only when it stands alone — then it IS the path forward; next to
- * a leading action it steps back to `outlined` (the `SyncNowButton` contract).
+ * a leading action it steps back to `soft` (the `SyncNowButton` contract).
  */
 function GuideState({ icon, title, description, lead, sync }: GuideStateProps) {
   const { t } = useTranslation();
@@ -52,7 +52,7 @@ function GuideState({ icon, title, description, lead, sync }: GuideStateProps) {
       syncing={sync.syncing}
       onSync={sync.onSync}
       label={t('pipeline.fetchNow')}
-      variant={lead ? 'outlined' : 'contained'}
+      variant={lead ? 'soft' : 'contained'}
     />
   ) : null;
 

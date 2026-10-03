@@ -202,7 +202,8 @@ export function LlmConfigCard({ settings, saveLlm }: LlmConfigCardProps) {
           <Grid size={{ xs: 12, md: 6 }} sx={{ display: 'flex', alignItems: 'center' }}>
             {currentProviderDef.regUrl && (
               <Button
-                variant="outlined"
+                variant="soft"
+                color="primary"
                 size="small"
                 href={currentProviderDef.regUrl}
                 target="_blank"
@@ -233,10 +234,11 @@ export function LlmConfigCard({ settings, saveLlm }: LlmConfigCardProps) {
 
           <Grid size={{ xs: 12, md: 6 }} sx={{ display: 'flex', alignItems: 'center' }}>
             <Button
-              variant="outlined"
+              variant="soft"
+              color="primary"
               onClick={handleFetchModels}
               disabled={isFetchingModels || !draft.apiKey}
-              startIcon={isFetchingModels ? <CircularProgress size={16} /> : undefined}
+              startIcon={isFetchingModels ? <CircularProgress size={16} color="inherit" /> : undefined}
             >
               {isFetchingModels ? t('settings.fetchingModels') : t('settings.fetchModels')}
             </Button>
@@ -340,6 +342,7 @@ export function LlmConfigCard({ settings, saveLlm }: LlmConfigCardProps) {
               </Typography>
               <ToggleButtonGroup
                 exclusive
+                color="primary"
                 value={draft.prefMode}
                 onChange={(_e, val) => { if (val) setField('prefMode', val); }}
                 sx={{ gap: 1 }}

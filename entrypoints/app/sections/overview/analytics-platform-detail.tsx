@@ -76,7 +76,7 @@ export function AnalyticsPlatformDetail({
           value: formatNumber(platform.itemCount, locale),
         })}
         action={
-          <Button component={RouterLink} to={config.path} variant="outlined">
+          <Button component={RouterLink} to={config.path} variant="soft" color="primary">
             {t('dashboard.openPlatform')}
           </Button>
         }

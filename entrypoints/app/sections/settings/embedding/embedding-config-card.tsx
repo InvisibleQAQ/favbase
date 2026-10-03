@@ -150,7 +150,8 @@ export function EmbeddingConfigCard({ settings, saveEmbedding }: EmbeddingConfig
           <Grid size={{ xs: 12, md: 6 }} sx={{ display: 'flex', alignItems: 'center' }}>
             {currentDef.regUrl && (
               <Button
-                variant="outlined"
+                variant="soft"
+                color="primary"
                 size="small"
                 href={currentDef.regUrl}
                 target="_blank"

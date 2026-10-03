@@ -100,6 +100,7 @@ export function ExportCard() {
             exclusive
             onChange={(_, v) => v && setFormat(v)}
             size="small"
+            color="primary"
           >
             <ToggleButton value="json">JSON</ToggleButton>
             <ToggleButton value="csv">CSV (ZIP)</ToggleButton>
@@ -141,7 +142,8 @@ export function ExportCard() {
           </Typography>
 
           <Button
-            variant="outlined"
+            variant="soft"
+            color="primary"
             onClick={handleVault}
             disabled={busy !== null}
             sx={{ alignSelf: 'flex-start' }}

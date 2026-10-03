@@ -37,7 +37,8 @@ export function SaveActions({
     <>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
         <Button
-          variant="outlined"
+          variant="soft"
+          color="primary"
           onClick={onTest}
           disabled={testDisabled || testing}
           startIcon={testing ? <CircularProgress size={16} color="inherit" /> : undefined}

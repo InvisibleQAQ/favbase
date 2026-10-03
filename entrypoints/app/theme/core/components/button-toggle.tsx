@@ -33,6 +33,19 @@ const colorVariants = [
       },
     }),
   })) satisfies ToggleButtonVariants),
+  {
+    // favbase override: MUI inks a selected `primary` toggle with `primary.main`
+    // (coral reads 2.5:1 as text); `text.accent` is the brand text shade. The
+    // selected wash stays MUI's `main` at 8% / 16% hovered, under the 16% soft
+    // wash the accent already clears. Listed before the state variants so a
+    // disabled selected toggle still takes `action.disabled`.
+    props: (props) => props.color === 'primary',
+    style: ({ theme }) => ({
+      [`&.${toggleButtonClasses.selected}`]: {
+        color: theme.vars.palette.text.accent,
+      },
+    }),
+  },
 ] satisfies ToggleButtonVariants;
 
 const sizeVariants = [

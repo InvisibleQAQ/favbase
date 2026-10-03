@@ -8,17 +8,17 @@ export interface SyncNowButtonProps {
   onSync: () => void;
   /** Pre-translated button label — this component carries no i18n keys. */
   label: string;
-  /** 'contained' for the primary empty-state action, 'outlined' otherwise.
-   *  Color follows it: contained is brand `primary`, outlined stays `inherit`. */
-  variant?: 'contained' | 'outlined';
+  /** 'contained' when Fetch is the state's primary action, 'soft' when it is
+   *  secondary to a leading action. Both are brand `primary`. */
+  variant?: 'contained' | 'soft';
 }
 
 /** Manual "sync now" button used inside empty / not-logged-in states. */
-export function SyncNowButton({ syncing, onSync, label, variant = 'outlined' }: SyncNowButtonProps) {
+export function SyncNowButton({ syncing, onSync, label, variant = 'soft' }: SyncNowButtonProps) {
   return (
     <Button
       variant={variant}
-      color={variant === 'contained' ? 'primary' : 'inherit'}
+      color="primary"
       onClick={onSync}
       disabled={syncing}
       startIcon={

@@ -74,7 +74,8 @@ export function EmbeddingStatsPanel({
       </Grid>
 
       <Button
-        variant="outlined"
+        variant="soft"
+        color="primary"
         size="small"
         onClick={onRebuild}
         disabled={isRebuilding}

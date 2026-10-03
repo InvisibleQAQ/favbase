@@ -359,7 +359,8 @@ export function AgentBridgeCard() {
               />
               <Box>
                 <Button
-                  variant="outlined"
+                  variant="soft"
+                  color="primary"
                   disabled={controlsDisabled}
                   startIcon={
                     <Iconify
@@ -462,7 +463,8 @@ export function AgentBridgeCard() {
               </Typography>
               <Box>
                 <Button
-                  variant="outlined"
+                  variant="soft"
+                  color="primary"
                   disabled={!commandReady || saving}
                   startIcon={<Iconify icon="lucide:copy" width={20} />}
                   onClick={() => {

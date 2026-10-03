@@ -130,7 +130,7 @@ export function CollectionAnalyticsContent({
                 title={t('dashboard.emptyTitle')}
                 description={t('dashboard.emptyDesc')}
                 action={
-                  <Button component={RouterLink} to="/collections" variant="outlined">
+                  <Button component={RouterLink} to="/collections" variant="soft" color="primary">
                     {t('dashboard.openCollections')}
                   </Button>
                 }

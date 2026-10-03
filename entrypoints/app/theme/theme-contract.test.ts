@@ -3,6 +3,10 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { varAlpha } from 'minimal-shared/utils';
+import { chipClasses } from '@mui/material/Chip';
+import { toggleButtonClasses } from '@mui/material/ToggleButton';
+
 import type { ThemeContrast, ThemeColorPreset } from '@/lib/storage';
 
 import { COLOR_MODE_STORAGE_KEY } from './theme-provider';
@@ -31,6 +35,17 @@ function paletteOf(built: ReturnType<typeof createTheme>, scheme: (typeof SCHEME
   const palette = built.colorSchemes[scheme]?.palette;
   if (!palette) throw new Error(`missing ${scheme} scheme`);
   return palette;
+}
+
+/** A soft-variant alpha as the built scheme carries it (never a typed literal). */
+function softAlpha(
+  built: ReturnType<typeof createTheme>,
+  scheme: (typeof SCHEMES)[number],
+  key: 'bg' | 'hoverBg' | 'paletteHoverBg',
+): number {
+  const alpha = built.colorSchemes[scheme]?.opacity.soft[key];
+  if (typeof alpha !== 'number') throw new Error(`missing ${scheme} opacity.soft.${key}`);
+  return alpha;
 }
 
 /** WCAG 2.x relative luminance for the static theme hex values. */
@@ -74,20 +89,45 @@ function variantMatches(variant: Variant, ownerState: OwnerState): boolean {
   return Object.entries(variant.props).every(([key, value]) => ownerState[key] === value);
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 /**
- * Resolves a slot the way MUI does: the base style object, then every
- * `variants` entry whose `props` match `ownerState`, later entries winning.
- * Minimal writes nearly every override as a variant, so a plain lookup would
- * read `undefined` for radius, height or shadow.
+ * Per-property merge. Two variants that emit the same nested selector
+ * (`&.Mui-selected`, `&:hover`) become two CSS rules that cascade property by
+ * property; neither replaces the other wholesale.
  */
-function resolveStyle(component: string, slot: string, ownerState: OwnerState = {}): Record<string, unknown> {
+function mergeStyle(target: Record<string, unknown>, source: Record<string, unknown>): Record<string, unknown> {
+  const merged = { ...target };
+  for (const [key, value] of Object.entries(source)) {
+    const current = merged[key];
+    merged[key] = isPlainObject(current) && isPlainObject(value) ? mergeStyle(current, value) : value;
+  }
+  return merged;
+}
+
+/**
+ * The style objects a slot emits for `ownerState`, in cascade order: the base
+ * object, then every `variants` entry whose `props` match.
+ */
+function matchedStyles(component: string, slot: string, ownerState: OwnerState = {}): Record<string, unknown>[] {
   const override = (theme.components as Record<string, { styleOverrides?: Record<string, StyleValue> }>)[component]
     ?.styleOverrides?.[slot];
-  if (!override) return {};
+  if (!override) return [];
   const { variants, ...base } = callStyle(override, ownerState) as { variants?: Variant[] } & Record<string, unknown>;
-  return (variants ?? [])
-    .filter((variant) => variantMatches(variant, ownerState))
-    .reduce((acc, variant) => ({ ...acc, ...callStyle(variant.style, ownerState) }), base);
+  const matched = (variants ?? []).filter((variant) => variantMatches(variant, ownerState));
+  return [base, ...matched.map((variant) => callStyle(variant.style, ownerState))];
+}
+
+/**
+ * Resolves a slot the way MUI does: the base style object, then every
+ * matching variant, later entries winning per property. Minimal writes nearly
+ * every override as a variant, so a plain lookup would read `undefined` for
+ * radius, height or shadow.
+ */
+function resolveStyle(component: string, slot: string, ownerState: OwnerState = {}): Record<string, unknown> {
+  return matchedStyles(component, slot, ownerState).reduce(mergeStyle, {});
 }
 
 describe('theme token contract', () => {
@@ -108,6 +148,8 @@ describe('theme token contract', () => {
     expect(theme.vars.palette.shared.buttonOutlined).toMatch(/^var\(--palette-shared-buttonOutlined/);
     expect(theme.vars.opacity.soft.bg).toMatch(/^var\(--opacity-soft-bg/);
     expect(theme.colorSchemes.light?.opacity.soft.bg).toBe(0.16);
+    expect(theme.vars.opacity.soft.paletteHoverBg).toMatch(/^var\(--opacity-soft-paletteHoverBg/);
+    expect(theme.colorSchemes.dark?.opacity.soft.paletteHoverBg).toBe(theme.colorSchemes.light?.opacity.soft.paletteHoverBg);
   });
 
   it.each(SCHEMES)('%s text and action colors meet WCAG contrast', (scheme) => {
@@ -176,6 +218,32 @@ describe('theme token contract', () => {
     }
   });
 
+  // The selected `FilterChip` is a clickable filled primary chip: the same ink
+  // `contrastText` on the same `main`, and MUI hovers and focuses it to `.dark`
+  // exactly like the contained button (3.69 default / 2.26 preset1 / 4.06
+  // preset4 / 2.60 preset5). Both states have to resolve to a stage that clears
+  // 4.5 for every preset.
+  it.each(PRESETS)('%s filled primary chip keeps contrastText readable on hover and focus', (preset) => {
+    const clickable = resolveStyle('MuiChip', 'root', { variant: 'filled', color: 'primary', size: 'medium' })[
+      `&.${chipClasses.clickable}`
+    ] as Record<string, Record<string, unknown> | undefined> | undefined;
+    for (const [state, style] of [
+      ['hover', clickable?.['&:hover']],
+      ['focus-visible', clickable?.[`&.${chipClasses.focusVisible}`]],
+    ] as const) {
+      const stage = PRIMARY_STAGES.find((key) => theme.vars.palette.primary[key] === style?.backgroundColor);
+      if (!stage) throw new Error(`${state} background is not a primary stage: ${String(style?.backgroundColor)}`);
+      expect(stage, state).toBe('main');
+      for (const scheme of SCHEMES) {
+        const { primary } = paletteOf(themeFor(preset), scheme);
+        expect(
+          contrastRatio(primary.contrastText, primary[stage]),
+          `${preset} ${scheme} ${state}`,
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
   // docs/25 C-3 / C-5: a soft primary chip is `text.accent` on a 16% wash of
   // the preset's `main` over paper. Coral `primary.dark` would read 3.99:1 in
   // light; the derived accent clears 4.5 for all six presets.
@@ -184,6 +252,70 @@ describe('theme token contract', () => {
       const palette = paletteOf(themeFor(preset), scheme);
       const wash = blend(palette.primary.main, 0.16, palette.background.paper);
       expect(contrastRatio(palette.text.accent, wash), `${preset} ${scheme}`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  // 2026-10-02: secondary actions are `variant="soft"` + `color="primary"`, and
+  // the B站 card's transcribe / retry chips ride the same palette branch.
+  // Hovered, the wash rises to `opacity.soft.paletteHoverBg` (24%); the C-5 row
+  // above only covers rest. Minimal's 32% fails on `background.neutral` (coral
+  // dark 4.28, preset2 dark 4.30), and a chip on a hovered `CollectionCard`
+  // always sits on neutral — so neutral and the high-contrast light ground are
+  // grounds here, not just paper. Measured floor 4.58:1 (preset2 dark on
+  // neutral). The alpha is read from the scheme token the resolved button
+  // style names, never typed here.
+  it.each(PRESETS)('%s soft primary text meets WCAG contrast on its hover wash over every ground', (preset) => {
+    const soft = resolveStyle('MuiButton', 'root', { variant: 'soft', color: 'primary' });
+    const hover = soft['&:hover'] as Record<string, unknown> | undefined;
+    expect(soft.color).toBe(theme.vars.palette.text.accent);
+    expect(hover?.backgroundColor).toBe(
+      varAlpha(theme.vars.palette.primary.mainChannel, theme.vars.opacity.soft.paletteHoverBg),
+    );
+    const built = themeFor(preset);
+    const cases = SCHEMES.flatMap((scheme) => {
+      const palette = paletteOf(built, scheme);
+      const alpha = softAlpha(built, scheme, 'paletteHoverBg');
+      return [
+        { label: `${scheme} paper`, palette, ground: palette.background.paper, alpha },
+        { label: `${scheme} neutral`, palette, ground: palette.background.neutral, alpha },
+      ];
+    });
+    const highContrast = themeFor(preset, 'high');
+    const highPalette = paletteOf(highContrast, 'light');
+    cases.push({
+      label: 'high-contrast light ground',
+      palette: highPalette,
+      ground: highPalette.background.default,
+      alpha: softAlpha(highContrast, 'light', 'paletteHoverBg'),
+    });
+    for (const { label, palette, ground, alpha } of cases) {
+      const wash = blend(palette.primary.main, alpha, ground);
+      expect(contrastRatio(palette.text.accent, wash), `${preset} ${label}`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  // B站 card badges (2026-10-02): "has a transcript" is soft `info`, "searchable"
+  // soft `secondary`. They are never clickable, so only the 16% rest wash
+  // matters, but the card under them hovers to `background.neutral`. The ink is
+  // the resolved chip's own (`dark` in light, `light` in dark). Measured floors:
+  // info 4.66 (light, neutral), secondary 5.00 (dark, neutral).
+  it.each(['info', 'secondary'] as const)('soft %s status chip text meets WCAG contrast on paper and neutral', (key) => {
+    const chip = resolveStyle('MuiChip', 'root', { variant: 'soft', color: key, size: 'small' });
+    const darkSelector = Object.keys(theme.applyStyles('dark', { color: 'probe' }))[0];
+    expect(chip.color).toBe(theme.vars.palette[key].dark);
+    expect((chip[darkSelector] as Record<string, unknown> | undefined)?.color).toBe(theme.vars.palette[key].light);
+    expect(chip.backgroundColor).toBe(varAlpha(theme.vars.palette[key].mainChannel, theme.vars.opacity.soft.bg));
+    const inkStage = { light: 'dark', dark: 'light' } as const;
+    for (const scheme of SCHEMES) {
+      const palette = paletteOf(theme, scheme);
+      const alpha = softAlpha(theme, scheme, 'bg');
+      for (const ground of ['paper', 'neutral'] as const) {
+        const wash = blend(palette[key].main, alpha, palette.background[ground]);
+        expect(
+          contrastRatio(palette[key][inkStage[scheme]], wash),
+          `${key} ${scheme} on ${ground}`,
+        ).toBeGreaterThanOrEqual(4.5);
+      }
     }
   });
 
@@ -284,6 +416,102 @@ describe('theme geometry and component defaults', () => {
         | undefined;
       expect(hover?.backgroundColor, key).toBe(theme.vars.palette[key].main);
       expect(hover?.boxShadow, key).toBe(theme.vars.customShadows[key]);
+    }
+  });
+
+  // button-toggle.tsx favbase override: MUI inks a selected `primary` toggle
+  // with `primary.main` (coral 2.5:1 as text). Only `primary` is re-inked, and
+  // the state variants after it still grey out a disabled toggle.
+  it('inks a selected primary toggle with text.accent and leaves other colors to MUI', () => {
+    const selected = `&.${toggleButtonClasses.selected}`;
+    const disabled = `&.${toggleButtonClasses.disabled}`;
+    const ownerState = { color: 'primary', size: 'medium' };
+    const primary = resolveStyle('MuiToggleButton', 'root', ownerState);
+    expect(primary[selected]).toMatchObject({
+      color: theme.vars.palette.text.accent,
+      borderColor: 'currentColor',
+    });
+    // Same specificity, so order decides a selected + disabled toggle: the
+    // accent rule has to be emitted before the `action.disabled` one.
+    const colorOf = (style: Record<string, unknown>, key: string) => (style[key] as { color?: unknown } | undefined)?.color;
+    const emitted = matchedStyles('MuiToggleButton', 'root', ownerState);
+    const accentAt = emitted.findIndex((style) => colorOf(style, selected) === theme.vars.palette.text.accent);
+    const greyAt = emitted.findIndex((style) => colorOf(style, disabled) === theme.vars.palette.action.disabled);
+    expect(accentAt).toBeGreaterThanOrEqual(0);
+    expect(accentAt).toBeLessThan(greyAt);
+    for (const color of ['standard', 'info'] as const) {
+      const other = resolveStyle('MuiToggleButton', 'root', { color, size: 'medium' });
+      expect((other[selected] as Record<string, unknown>).color, color).toBeUndefined();
+    }
+  });
+
+  // global-styles-components.ts favbase override: a clickable soft palette
+  // chip (B站 transcribe / retry) hovers to the same 24% palette wash as the
+  // soft button. Keyboard focus is not overridden: the soft base re-emitted
+  // under `&.MuiChip-clickable` already shadows MUI's `.Mui-focusVisible`
+  // `.dark` rule (see chip.tsx). `resolveStyle` reads only favbase overrides,
+  // never MUI's own root variants, so that interaction is not testable here.
+  it('hovers a clickable soft palette chip on the palette hover wash', () => {
+    const clickable = `&.${chipClasses.clickable}`;
+    for (const key of colorKeys.palette) {
+      const wash = varAlpha(theme.vars.palette[key].mainChannel, theme.vars.opacity.soft.paletteHoverBg);
+      const chip = resolveStyle('MuiChip', 'root', { variant: 'soft', color: key, size: 'small' })[clickable] as
+        | Record<string, Record<string, unknown> | undefined>
+        | undefined;
+      expect(chip?.['&:hover']?.backgroundColor, `${key} hover`).toBe(wash);
+    }
+  });
+
+  // The palette wash is a favbase override; the grey `inherit` branch (soft
+  // inherit Button, unselected `FilterChip` = soft `default` Chip) keeps
+  // Minimal's `soft.hoverBg`.
+  it('keeps the grey soft hover on soft.hoverBg', () => {
+    const grey = varAlpha(theme.vars.palette.grey['500Channel'], theme.vars.opacity.soft.hoverBg);
+    const button = resolveStyle('MuiButton', 'root', { variant: 'soft', color: 'inherit' })['&:hover'] as
+      | Record<string, unknown>
+      | undefined;
+    expect(button?.backgroundColor).toBe(grey);
+    const chip = resolveStyle('MuiChip', 'root', { variant: 'soft', color: 'default', size: 'small' })[
+      `&.${chipClasses.clickable}`
+    ] as Record<string, Record<string, unknown> | undefined> | undefined;
+    expect(chip?.['&:hover']?.backgroundColor).toBe(grey);
+  });
+
+  // chip.tsx favbase override: a clickable filled palette chip (the selected
+  // `FilterChip`) stays on `main` when hovered or keyboard-focused, with the
+  // per-color shadow as the hover cue, like the contained button. `resolveStyle`
+  // reads only favbase overrides, never MUI's own root variants, so whether
+  // this beats MUI's `:hover` / `.Mui-focusVisible` `.dark` rules is not
+  // testable here. It was confirmed from the emitted CSS on 2026-10-02: the
+  // override renders as `.css-….MuiChip-clickable:hover` and
+  // `.css-….MuiChip-clickable.Mui-focusVisible` (three classes) against MUI's
+  // two, and the disabled `.Mui-disabled:not(.MuiChip-outlined)` rule (three)
+  // is emitted after it. That last order is what is asserted below.
+  it('keeps every clickable filled palette chip on main when hovered or focused', () => {
+    const clickable = `&.${chipClasses.clickable}`;
+    const focus = `&.${chipClasses.focusVisible}`;
+    const disabled = `&.${chipClasses.disabled}`;
+    type Nested = Record<string, Record<string, unknown> | undefined> | undefined;
+    for (const key of colorKeys.palette) {
+      const ownerState = { variant: 'filled', color: key, size: 'medium' };
+      const chip = resolveStyle('MuiChip', 'root', ownerState)[clickable] as Nested;
+      expect(chip?.['&:hover']?.backgroundColor, `${key} hover`).toBe(theme.vars.palette[key].main);
+      // `toBe` alone would pass with both sides `undefined`; pin the var first.
+      expect(theme.vars.customShadows[key], `${key} shadow token`).toMatch(/^var\(--customShadows-/);
+      expect(chip?.['&:hover']?.boxShadow, `${key} hover shadow`).toBe(theme.vars.customShadows[key]);
+      expect(chip?.[focus]?.backgroundColor, `${key} focus-visible`).toBe(theme.vars.palette[key].main);
+      // Same specificity as the disabled rule, so order decides a disabled chip.
+      const emitted = matchedStyles('MuiChip', 'root', ownerState);
+      const mainAt = emitted.findIndex(
+        (style) => (style[clickable] as Nested)?.['&:hover']?.backgroundColor === theme.vars.palette[key].main,
+      );
+      const greyAt = emitted.findIndex(
+        (style) =>
+          (style[disabled] as Nested)?.[`&:not(.${chipClasses.outlined})`]?.backgroundColor ===
+          theme.vars.palette.action.disabledBackground,
+      );
+      expect(mainAt, `${key} override emitted`).toBeGreaterThanOrEqual(0);
+      expect(mainAt, `${key} override before disabled`).toBeLessThan(greyAt);
     }
   });
 

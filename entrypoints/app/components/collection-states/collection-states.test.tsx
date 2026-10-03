@@ -5,7 +5,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { buttonClasses } from '@mui/material/Button';
+import { buttonClasses, getButtonUtilityClass } from '@mui/material/Button';
 
 import { ThemeProvider } from '../../theme/theme-provider';
 import { settingsPath } from '../../sections/settings/settings-nav';
@@ -60,14 +60,21 @@ function LocationProbe() {
   return <output data-testid="location">{useLocation().pathname}</output>;
 }
 
-/** Variant is read off MUI's own class constants, never hand-typed class strings. */
-function variantOf(element: Element): 'contained' | 'outlined' | 'other' {
+/**
+ * Variant is read off MUI's own class constants, never hand-typed class
+ * strings. `soft` is a theme variant, so `buttonClasses` has no key for it;
+ * MUI's own slot-class builder names it the way the Button root emits it.
+ */
+const SOFT_CLASS = getButtonUtilityClass('soft');
+
+function variantOf(element: Element): 'contained' | 'soft' | 'outlined' | 'other' {
   if (element.classList.contains(buttonClasses.contained)) return 'contained';
+  if (element.classList.contains(SOFT_CLASS)) return 'soft';
   if (element.classList.contains(buttonClasses.outlined)) return 'outlined';
   return 'other';
 }
 
-/** Contained actions are brand primary; outlined Fetch stays neutral (`inherit`). */
+/** Every guide-state action is brand primary: contained when it leads, soft when it follows. */
 function colorOf(element: Element): 'primary' | 'inherit' | 'other' {
   if (element.classList.contains(buttonClasses.colorPrimary)) return 'primary';
   if (element.classList.contains(buttonClasses.colorInherit)) return 'inherit';
@@ -190,7 +197,7 @@ describe('collection states', () => {
         />
       ),
     ],
-  ])('%s leads with the contained site link and steps Fetch back to outlined', (_name, ui) => {
+  ])('%s leads with the contained site link and steps Fetch back to soft primary', (_name, ui) => {
     const onSync = vi.fn();
     render(ui(onSync));
 
@@ -208,8 +215,8 @@ describe('collection states', () => {
 
     expect(fetch.tagName).toBe('BUTTON');
     expect(fetch.textContent).toBe('pipeline.fetchNow');
-    expect(variantOf(fetch)).toBe('outlined');
-    expect(colorOf(fetch)).toBe('inherit');
+    expect(variantOf(fetch)).toBe('soft');
+    expect(colorOf(fetch)).toBe('primary');
     act(() => fetch.click());
     expect(onSync).toHaveBeenCalledTimes(1);
   });
@@ -236,7 +243,7 @@ describe('collection states', () => {
       .toBe(settingsPath('connections/youtube'));
   });
 
-  it('adds an outlined Fetch after Settings when the credential was rejected', () => {
+  it('adds a soft primary Fetch after Settings when the credential was rejected', () => {
     const onSync = vi.fn();
     render(
       <NeedsConfigState
@@ -254,8 +261,8 @@ describe('collection states', () => {
     expect(variantOf(settings)).toBe('contained');
     expect(colorOf(settings)).toBe('primary');
     expect(fetch.textContent).toBe('pipeline.fetchNow');
-    expect(variantOf(fetch)).toBe('outlined');
-    expect(colorOf(fetch)).toBe('inherit');
+    expect(variantOf(fetch)).toBe('soft');
+    expect(colorOf(fetch)).toBe('primary');
 
     act(() => fetch.click());
     expect(onSync).toHaveBeenCalledTimes(1);

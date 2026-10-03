@@ -23,7 +23,7 @@ export function ErrorState({ title, message, retryLabel, onRetry }: ErrorStatePr
       title={title}
       description={message}
       action={
-        <Button variant="outlined" onClick={onRetry}>
+        <Button variant="soft" color="primary" onClick={onRetry}>
           {retryLabel}
         </Button>
       }

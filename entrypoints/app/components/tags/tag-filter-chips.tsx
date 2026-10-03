@@ -34,7 +34,13 @@ export function TagFilterChips({ tags, selectedIds, onToggle, onClear }: TagFilt
       showLessLabel={t('common.showLess')}
       headerExtra={
         selectedIds.length > 0 && (
-          <Button size="small" variant="text" onClick={onClear} sx={{ minWidth: 0, px: 1, py: 0 }}>
+          <Button
+            size="small"
+            variant="text"
+            color="primary"
+            onClick={onClear}
+            sx={{ minWidth: 0, px: 1, py: 0 }}
+          >
             {t('tags.clearFilter')}
           </Button>
         )

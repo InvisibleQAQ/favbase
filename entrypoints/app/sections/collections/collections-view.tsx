@@ -155,6 +155,7 @@ export function CollectionsView() {
               <Button
                 size="small"
                 variant="text"
+                color="primary"
                 onClick={() => setSelectedTagId(null)}
                 sx={{ minWidth: 0, px: 1, py: 0 }}
               >

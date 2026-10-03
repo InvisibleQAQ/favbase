@@ -17,7 +17,7 @@ typography, radius, or elevation values into local `sx`.
 | `core/palette.ts` | Minimal palette skeleton: channels, `action`, `divider` (grey 500 @ 0.2), `TableCell.border`, `shared` hairlines (`inputOutlined` .2 / `inputUnderline` .32 / `paperOutlined` .16 / `buttonOutlined` .32), `colorKeys` iteration order. Favbase adds `accentTextFor(primary, scheme)` + `createTextPalette(scheme, primary)` (the derived `text.accent`), one coral `primary` ramp shared by both schemes, and the `platform` palette — derived per scheme from `PLATFORM_META.palette` (`'ink'` resolves to that scheme's `text.primary`), never hand-listed |
 | `with-settings/color-presets.ts` | `primaryColorPresets: Record<ThemeColorPreset, …>` — `default` = `themeConfig.palette.primary`, preset1–5 = Minimal's five ramps; `pickContrastText(main)` chooses ink `#1F1B17` or white per WCAG (docs/25 D14: ink for default/1/4/5, white for 2/3). Preset ids come from `lib/storage/theme-settings.ts`; a missing key fails compilation |
 | `with-settings/update-core.ts` | `applySettingsToTheme(baseTheme, settingsState)`: swaps `primary` (channels) + `text` (via `createTextPalette`, so `text.accent` follows the preset) + `customShadows.primary` in both schemes; `contrast: 'high'` sets the light ground to grey 200 (`background.default` + channel) and both schemes' `customShadows.card` to `z1` (token-level stand-in for Minimal's `update-components.ts` body rule — Favbase's `MuiCssBaseline` function override cannot be merged with a second one). Pure; never mutates `baseTheme` |
-| `core/opacity.ts` | `theme.vars.opacity.*`: `switchTrack` / `inputUnderline` system alphas, `filled.commonHoverBg`, `outlined.border`, `soft.{bg,hoverBg,commonBg,commonHoverBg,border}` |
+| `core/opacity.ts` | `theme.vars.opacity.*`: `switchTrack` / `inputUnderline` system alphas, `filled.commonHoverBg`, `outlined.border`, `soft.{bg,hoverBg,paletteHoverBg,commonBg,commonHoverBg,border}`. `soft.paletteHoverBg` (0.24) is favbase's: the hover wash of a soft palette color; Minimal's `soft.hoverBg` (0.32) now only drives the grey `inherit` branch |
 | `core/typography.ts` | Unchanged Favbase scale: DM Sans Variable UI text, Barlow display; fixed 28/24/20/16/14/12px, zero letter spacing (docs/25 D8). The only page call site whose font size moves with the viewport is the Dashboard KPI figure (Minimal `h4`: DM Sans 700, 20px -> 24px from `md`, docs/31 Step 5); the exception is written at the call site and does not enter the theme. Theme-internal, input text also moves: 15px, 16px below `sm` (`core/components/text-field.tsx` `INPUT_TYPOGRAPHY`, a theme-owned Minimal port from docs/25 Step 1) |
 | `core/shadows.ts` | MUI 25-level elevation recolored to grey 500 (light) / black (dark) channel |
 | `core/custom-shadows.ts` | `z1…z24`, `card`, `dialog`, `dropdown`, per-color shadows. Both schemes cast; `card` is never `'none'` |
@@ -34,7 +34,9 @@ typography, radius, or elevation values into local `sx`.
 - `core/components/css-baseline.tsx` — whole file: tabular numerals, scrollbar, `::selection` (16% brand wash `varAlpha(primary.mainChannel, 0.16)` under `text.primary`), caret, `:focus-visible` ring (`primary.darker` / dark `primary.main`).
 - `core/components/typography.tsx` — `variantMapping: { subtitle1: 'p', subtitle2: 'p' }` (one page, one h1).
 - `core/components/button.tsx` — outlined / text `primary` ink is `text.accent`; border and hover wash follow `currentColor`. Contained palette buttons keep `main` on hover instead of MUI's `.dark` (2026-10-02): with an ink `contrastText`, `.dark` reads 3.69 (coral) / 2.26 (preset1) / 4.06 (preset4) / 2.60 (preset5), so hover now equals rest contrast for every color (error: 4.23 at both, white on `#E53935`, was 6.57 on `.dark` — the error ramp is sub-AA at rest, a token issue, not a hover one).
-- `core/mixins/global-styles-components.ts` — `softStyles(theme, 'primary')` text is `text.accent` (coral `dark` reads 3.99:1 on the 16% wash; C-3). Other colors keep Minimal's `dark` / dark-scheme `light`.
+- `core/components/button-toggle.tsx` — a selected `color="primary"` ToggleButton inks `text.accent` instead of MUI's `primary.main` (coral 2.5:1 as text). The selected wash stays MUI's `main` at 8% / 16% hovered (floor 5.46 / 5.15, preset2 dark). The override sits in `colorVariants`, before the state variants, so a disabled selected toggle still takes `action.disabled` (same specificity, order decides; emitted CSS checked 2026-10-02: MUI's `primary-main` rule, then this one).
+- `core/components/chip.tsx` — a clickable `filled` palette chip (the selected `FilterChip`) keeps `main` on `:hover` and `.Mui-focusVisible` instead of MUI's `.dark`, with `customShadows[color]` as the hover cue (2026-10-02, same fix and same numbers as the contained button: `.dark` under the ink `contrastText` reads 3.69 coral / 2.26 preset1 / 4.06 preset4 / 2.60 preset5). Nested under `&.MuiChip-clickable`, so it is three classes against MUI's two and wins regardless of order; the disabled `:not(.MuiChip-outlined)` rule is also three classes and is emitted after it, so a disabled chip stays grey (emitted CSS checked 2026-10-02). The hover shadow also outranks MUI's `:active` `shadows[1]` while pressed. An `onDelete`-only palette chip (no clickable class) still focuses to `.dark`; none exists in app.html.
+- `core/mixins/global-styles-components.ts` — `softStyles(theme, 'primary')` text is `text.accent` (coral `dark` reads 3.99:1 on the 16% wash; C-3). Other colors keep Minimal's `dark` / dark-scheme `light`. A soft **palette** color hovers to `opacity.soft.paletteHoverBg` (24%) instead of Minimal's `soft.hoverBg` (32%, 2026-10-02): at 32% the soft ink falls to 4.28 (coral dark) / 4.30 (preset2 dark) over `background.neutral`, which is where a clickable chip on a hovered `CollectionCard` sits; 24% floors at 4.58 (preset2 dark on neutral; coral dark 4.99). The hover step is subtler (16% -> 24%). The grey `inherit` branch (soft inherit Button, unselected `FilterChip`) keeps 32%.
 - `core/components/link.tsx` — `color: text.accent`.
 - `core/components/dialog.tsx` — `defaultProps { fullWidth, maxWidth: 'sm' }`, paper `width calc(100% - 32px)` / `maxHeight calc(100dvh - 32px)`, actions `flexWrap + gap 12` (Minimal uses sibling margins).
 - `core/components/tooltip.tsx` — `arrow: true, enterDelay: 400`; Minimal's arrowless `-4px` popper offset is not applied.
@@ -89,14 +91,31 @@ consumer is Minimal's own `core/components/avatar.tsx` surplus badge. Consumers:
 
 - Button: `color="inherit"`, `disableElevation`; sizes 30/36/48/56 (`xLarge`)
   via `--padding-y/x` CSS vars; `soft` variant; `contained inherit` inverts the
-  scheme (`filledStyles`). A primary action is `variant="contained"` +
-  `color="primary"` at the call site (preset `main` + `contrastText`, hover
-  stays on `main`); secondary outlined / text buttons keep the `inherit`
-  default; the inverted `contained inherit` skin is not used for primary
-  actions (user decision 2026-10-02; the default is deliberately not flipped —
-  that would ink every outlined / text default in `text.accent`).
+  scheme (`filledStyles`). Color is picked by role at the call site (user
+  decisions 2026-10-02): a primary action is `variant="contained"` +
+  `color="primary"` (preset `main` + `contrastText`, hover stays on `main`); a
+  secondary action is `variant="soft"` + `color="primary"` (16% `main` wash,
+  24% hovered, `text.accent` ink — outlined primary is not used, because its
+  light-scheme ink is the near-black `darker` stage under a faint border and
+  still reads black and white); an inline clear link is `variant="text"` +
+  `color="primary"`. Dialog dismissal and buttons inside a tinted Alert /
+  notice keep `inherit`. The inverted `contained inherit` skin is not used for
+  actions. The default is deliberately not flipped to `primary`: that would
+  re-ink dismissal and container-tinted buttons too.
+- ToggleButton: pass `color="primary"` on the `ToggleButtonGroup` (the group
+  hands it to every child); the selected toggle then inks `text.accent` on an
+  8% `main` wash (see Favbase overrides).
 - Chip: default `variant="soft"`, radius 8 (small) / 10 (medium); `filled
   default` is the ink block; outlined default border `shared.buttonOutlined`.
+  A clickable soft palette chip hovers on the 24% palette wash (see Favbase
+  overrides); keyboard focus keeps the rest wash plus the CssBaseline ring —
+  MUI's `.Mui-focusVisible` `.dark` paint is shadowed by the soft base
+  re-emitted under `&.MuiChip-clickable` (same specificity, later; see the
+  `chip.tsx` header). A clickable filled palette chip (selected `FilterChip`)
+  stays on `main` on hover and focus, hover adding `customShadows[color]`; this
+  one is an explicit override (see Favbase overrides), because its ink
+  `contrastText` fails on `.dark`. Colored chips are picked by meaning at the
+  call site (`ui-design-system.md` section 9).
 - Card radius `var(--card-radius, 16px)`, shadow `var(--card-shadow,
   customShadows.card)`; CardHeader 24/24/0 with `h6` title and `body2`
   subheader (`mt: 0.5`); CardContent 24.
@@ -129,17 +148,42 @@ when matching a Card. `50%` is reserved for circular/pill controls.
 
 - `theme-contract.test.ts` — `resolveStyle(component, slot, ownerState)` merges
   the slot's base style with every matching `variants` entry (function or
-  object `props`), so every locked value below reads the same way MUI does:
+  object `props`) **per property**, so two variants that emit the same nested
+  selector cascade instead of one replacing the other (shallow until
+  2026-10-02; no existing assertion depended on it). `matchedStyles` exposes
+  the same list in cascade order for assertions about order. Every locked
+  value below reads the same way MUI does:
   `shared` + `opacity` vars, radii 16/10/16/6/8/10, input heights from
   `INPUT_PADDING`, real dark card shadow, directional temporary-drawer shadow,
   mixin registration, defaults (`inherit` button, `soft` chip, Dialog `sm`,
   Tooltip arrow, CardHeader `sx`, Skeleton wave/rounded, Stack flex gap),
-  every contained palette button hovering on `main`.
+  every contained palette button hovering on `main`, a selected `primary`
+  ToggleButton inked `text.accent` (only `primary`; emitted before the
+  `action.disabled` state rule), every clickable soft palette chip hovering
+  on `opacity.soft.paletteHoverBg`, the grey soft hover (inherit button,
+  `default` chip) still on `soft.hoverBg`, and every clickable filled palette
+  chip on `main` for hover and focus-visible with `customShadows[color]` on
+  hover (emitted before the disabled rule). `resolveStyle` reads only the
+  favbase `styleOverrides`, never MUI's own root variants, so an interaction
+  between the two (such as the chip focus cascade, or the filled override
+  outranking MUI's `.dark` rules) is not testable here; both were confirmed
+  from emitted CSS on 2026-10-02.
   WCAG block runs `it.each` over the six presets on the **resolved**
   `createTheme({ settingsState })` palettes: `text.accent` vs both grounds and
   the high-contrast ground, `primary.contrastText` vs `primary.main` (D14),
   `contrastText` vs the contained-primary hover stage (resolved from the button
-  override, must be `main`), accent on the 16% soft wash (C-3/C-5), body text
+  override, must be `main`), `contrastText` vs the filled-primary chip's hover
+  and focus-visible stages (resolved from the chip override, both must be
+  `main`), accent on the 16% soft wash (C-3/C-5), accent on
+  the soft-primary button's hover wash over paper, `background.neutral` and
+  the high-contrast light ground (alpha read from the
+  `opacity.soft.paletteHoverBg` token the resolved style names; floor 4.58 at
+  preset2 dark on neutral, coral dark neutral 4.99 — the tightest brand pair;
+  setting the token back to 0.32 turns exactly those two cases red, 4.28 /
+  4.30), soft `info` / `secondary` status-chip ink on the 16% wash over paper
+  and neutral in both schemes (ink read from the resolved chip, `dark` / dark
+  scheme `light`; floors info 4.66 light neutral, secondary 5.00 dark
+  neutral), body text
   on the high-contrast ground (4.508), `palette[color].darker` on `palette[color].lighter` for all six
   colors — the `Label variant="inverted"` pair, floor 6.89:1 at success and
   7.95:1 for primary at preset4 (docs/25 Step 10; one pass covers both schemes

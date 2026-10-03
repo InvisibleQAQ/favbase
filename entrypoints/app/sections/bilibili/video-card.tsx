@@ -122,6 +122,9 @@ export function VideoCard({
 // ---------------------------------------------------------------------------
 // Action Bar (outside the link — it carries its own controls)
 // ---------------------------------------------------------------------------
+// Chips are colored by meaning, all on the theme's default `soft` skin:
+// actions (transcribe, retry) `primary`, "has a transcript" `info`,
+// "searchable" `secondary`. ui-design-system.md section 9.
 
 function ActionBar({
   state,
@@ -181,7 +184,7 @@ function ActionBar({
               label={t('transcribe.retry')}
               icon={<Iconify icon="solar:restart-bold" width={14} />}
               size="small"
-              variant="outlined"
+              color="primary"
               onClick={onTranscribe}
               disabled={disabled}
             />
@@ -200,14 +203,14 @@ function ActionBar({
           label={label}
           icon={<Iconify icon="solar:subtitles-bold-duotone" width={14} />}
           size="small"
-          variant="outlined"
+          color="info"
         />
         {indexed && (
           <Chip
             label={t('card.indexed')}
             icon={<Iconify icon="solar:database-bold-duotone" width={14} />}
             size="small"
-            variant="outlined"
+            color="secondary"
           />
         )}
       </CollectionCardRow>
@@ -230,7 +233,7 @@ function ActionBar({
         label={t('card.transcribe')}
         icon={<Iconify icon="solar:subtitles-bold-duotone" width={14} />}
         size="small"
-        variant="outlined"
+        color="primary"
         onClick={onTranscribe}
         disabled={disabled}
       />

@@ -70,7 +70,7 @@ function NotLoggedIn({ onRetry }: { onRetry: () => void }) {
       title={t('collections.notLoggedInTitle')}
       description={t('collections.notLoggedInDesc')}
       action={
-        <Button variant="outlined" onClick={onRetry}>
+        <Button variant="soft" color="primary" onClick={onRetry}>
           {t('common.retry')}
         </Button>
       }
