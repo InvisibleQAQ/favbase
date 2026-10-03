@@ -145,7 +145,7 @@ your first `ingestCollection` call.
 Read side — also shared:
 
 ```ts
-import { pagedItemsQuery, getPlatformLastSyncedAt } from '@/lib/database/collection-queries';
+import { pagedItemsQuery, getPlatformLastSyncedAt, type PagedItemRow } from '@/lib/database/collection-queries';
 import { escapeLike } from '@/lib/database/sql-utils';
 ```
 
@@ -159,9 +159,14 @@ sentence-only text like tweets. Either way a **leaf import**, not the
 and will break import-smoke).
 
 Also export `narrow<P>Meta(meta: unknown, fallbacks)` from this file. It is the
-single owner of the defensive `platform_meta` narrowing, shared by `mapRow` here
-and by the tagged-card adapter in `sections/`. Two copies of that narrowing is a
-defect, not a convenience.
+single owner of the defensive `platform_meta` narrowing. Export the whole
+`mapRow` too — `export function to<P>Item(row: PagedItemRow): <P>Item`, the
+envelope fields plus a spread of `narrow<P>Meta` — because the tagged-card
+adapter in `sections/` reuses that exact function (§7.2, `taggedCard`). Two
+copies of the narrowing, or of the envelope mapping around it, is a defect, not
+a convenience: the two read paths have drifted before (docs/32 Step 2's
+`dateAdded` fallback), and until docs/32 Step 8 five tagged cards each carried a
+line-for-line copy of their platform's `mapRow`.
 
 ### 4.3 Invariants you inherit and must not break
 
@@ -394,9 +399,9 @@ stays a one-line re-export whether your platform has child routes or not.
 | `use-<platform>.ts` | Thin adapter over `useCollectionLibrary`. Inject `queryFn` / `facetsFn` / `lastSyncedFn` / `syncFn = run<P>Sync` / `jobPlatform = jobPlatformForCollection(<platform>)` — it is the background-job namespace, not a free-form log label. A single-facet query is one module-level line, `const queryFn = facetQuery(get<P>Items, '<facetKey>')` (`entrypoints/app/hooks/facet-query.ts`): it maps the hook's `filter` to your query's facet key and drops a `null` filter / `''` search, and a misspelled key is a `tsc` error. Return the generic fields as they are — the view reads `items` / `filter` / `setFilter` / `facets` directly; there is no rename layer and no hand-written return interface (docs/32 Step 7). Add only what is genuinely the platform's own (X's cooldown and "N new this run"; bookmarks' route-controlled filter and mount sync). There is no error classifier to inject: `syncError` is already a `CollectionSyncError`, classified by base class (§4.1). **A `'credentials'` platform** returns `useCredentialGatedLibrary(<p>Credentials, config)` (`entrypoints/app/hooks/use-credential-gated-library.ts`) instead: it adds `configured` / `settingsLoading` and makes `sync` a silent no-op until configured. That gate is its own hook, never inside `useCollectionLibrary` (the generic tier reads no storage), and the resolver it takes is the adapter's — so the page gate, the run gate and `probeReady` cannot drift apart. Every injected function must be a stable reference (module-level or `useCallback`); they sit in effect dependency arrays. |
 | `<platform>-view.tsx` | Assembles `CollectionPageScaffold` + `useCollectionPipeline` + `useCollectionBreadcrumbs`. `copy` carries only the platform's own strings (`title`, `breadcrumbs`, `caption`, `searchPlaceholder`, `noMatches`, `syncErrorText`); the caption's "last synced" part is `common.lastSynced`. The guide states come from `components/collection-states/` — `EmptyLibraryState` (pass `site` when opening the platform's site is how the library fills), `NotLoggedInState` (site-session platforms) and `NeedsConfigState` (`settings: SettingsLeaf`, plus `sync` when the credential was rejected rather than missing) — and take an `IconifyName`, `LocaleKeys` and a `SiteAction` / settings leaf, never translated strings; a state shaped differently from those three (bookmarks' button-less empty state, bilibili's retry) stays local. Owns the i18n seam as data, not a switch: a module-level `SyncErrorCopy` (i18n keys: `auth`, optional `authRejected`, `rateLimited`, optional `rateLimitedUntil`) passed to the shared `syncErrorMessage` (`entrypoints/app/hooks/collection-sync-error-message.ts`). If the platform's `<P>RateLimitError` carries a `resetAt`, lock the Fetch button until it: `useCountdown((now) => rateLimitRemainingMs(syncError, now))` into `syncDisabled` / `syncDisabledLabel` (`pipeline.fetchAvailableIn`). |
 | `<platform>-card.tsx` | Composes the shared `CollectionCard` shell. |
-| `tagged-<platform>-card.tsx` | `TaggedItem` → your item shape, delegating narrowing to `narrow<P>Meta`. |
+| `tagged-<platform>-card.tsx` | One line: `export const Tagged<P>Card = taggedCard(<P>Card, '<prop>', to<P>Item);` (`entrypoints/app/components/tags/tagged-card.tsx`). `to<P>Item` is the `mapRow` your lib file exports (§4.2) — no envelope mapping is written here; `'<prop>'` is your card's item prop. A misspelled prop or a mapper that does not produce what the card takes is a `tsc` error at this call. |
 | `<platform>-grid-skeleton.tsx` | Shared `CardGridSkeleton` + `CollectionCardSkeleton`. |
-| chips component | Shared `CollapsibleChipRow` adapter, if the platform has Sources. |
+| chips | A single counted facet (a Creator or a Source — `name (count)`, an "All (total)" chip, single select) is `FacetChips` from `components/collection-states/`, passed `icon`, `title` (an i18n key), and `getKey` / `getName` accessors over your facet query's rows — no file of your own. A row shaped differently (a per-chip colour dot, no counts, a loading skeleton) composes `CollapsibleChipRow` itself. |
 | `CLAUDE.md` | **Mandatory.** Root `CLAUDE.md` rule: a directory you create gets its own `CLAUDE.md` in the same commit. |
 
 ### 7.3 What the scaffold already owns — do not reimplement

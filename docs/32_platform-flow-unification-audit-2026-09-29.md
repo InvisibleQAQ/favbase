@@ -1,6 +1,6 @@
 # 32 跨平台流程统一度审计与分步整改（2026-09-29）
 
-> 状态：**审计完成；D1、D2 已决（2026-09-29，§5.1、§5.2）；Step 1 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 1 落地记录）；D6 已决（用户 2026-09-30，按推荐）；Step 2 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 2 落地记录）；Step 3 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 3 落地记录）；Step 4 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 4 落地记录）；Step 5 已落地 2026-10-01（代码 + 单测；运行时验证待人工，见 §6 Step 5 落地记录）；Step 6 已落地 2026-10-01（代码 + 单测；运行时验证待人工，见 §6 Step 6 落地记录）；D3 已决（用户 2026-10-02，按推荐：删除）；Step 7 已落地 2026-10-02（代码 + 单测；运行时验证待人工，见 §6 Step 7 落地记录）；Step 8–9 均未实施**。执行任一 Step 前先读 §2 否决清单与 §5 对应决策；一次对话只做一个 Step。
+> 状态：**审计完成；D1、D2 已决（2026-09-29，§5.1、§5.2）；Step 1 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 1 落地记录）；D6 已决（用户 2026-09-30，按推荐）；Step 2 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 2 落地记录）；Step 3 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 3 落地记录）；Step 4 已落地 2026-09-30（代码 + 单测；运行时验证待人工，见 §6 Step 4 落地记录）；Step 5 已落地 2026-10-01（代码 + 单测；运行时验证待人工，见 §6 Step 5 落地记录）；Step 6 已落地 2026-10-01（代码 + 单测；运行时验证待人工，见 §6 Step 6 落地记录）；D3 已决（用户 2026-10-02，按推荐：删除）；Step 7 已落地 2026-10-02（代码 + 单测；运行时验证待人工，见 §6 Step 7 落地记录）；Step 8 已落地 2026-10-02（代码 + 单测；运行时验证待人工，见 §6 Step 8 落地记录）；Step 9 未实施**。执行任一 Step 前先读 §2 否决清单与 §5 对应决策；一次对话只做一个 Step。
 >
 > 起因：用户观察「接入新平台时，数据处理、备份、展示都高度统一，真正不同的只有数据获取和风控」，要求找出仍未统一的流程并给出分步整改。
 >
@@ -202,8 +202,8 @@
 
 ### 低-2 tagged card 外壳 ×6、facet chips ×3
 
-- 六个 `tagged-*-card.tsx` 组件壳相同，只有卡片组件、prop 名和 mapper 不同（例如 `tagged-repo-card.tsx:23-31` 对 `tagged-zhihu-card.tsx:23-31`）。
-- x / zhihu / youtube 的 chips 组件 props 接口相同，label helper 在三个文件的同一行号、同一写法 `${名称 || id} (${count})`，只有字段名不同（`author-chips.tsx:15-17`、`collection-chips.tsx:15-17`、`playlist-chips.tsx:15-17`）。
+- 六个 `tagged-*-card.tsx` 组件壳相同，只有卡片组件、prop 名和 mapper 不同（例如 `tagged-repo-card.tsx:23-31` 对 `tagged-zhihu-card.tsx:23-31`）。（**勘误 2026-10-02，Step 8 复核**：① 「只有 prop 名不同」意味着 §6 Step 8 原写的 `taggedCard(Card, mapItem)` 签名写不出来——六张卡接条目的 prop 是 `VideoCard.video`、`BookmarkCard.bookmark`、`RepoCard.repo`、`XCard.bookmark`、`YoutubeCard.video`、`ZhihuCard.favorite`，工厂必须多收一个 prop 键；② 复制比外壳大：github / x / zhihu / youtube / bookmarks 五个 tagged card 里的 mapper 与各自 lib 查询的 `mapRow` 逐行相同，只差 `item.itemId` ↔ `row.id`——`tagged-repo-card.tsx:11-20` ↔ `lib/github/github-sync-service.ts:391-407`、`tagged-tweet-card.tsx:11-20` ↔ `lib/x/x-sync-service.ts:336-353`、`tagged-zhihu-card.tsx:11-20` ↔ `lib/zhihu/zhihu-sync-service.ts:333-350`、`tagged-youtube-card.tsx:11-20` ↔ `lib/youtube/youtube-sync-service.ts:422-431`、`tagged-bookmark-card.tsx:12-20` ↔ `lib/bookmarks/bookmarks-sync-service.ts:386-402`（均为 Step 8 之前的行号）；Step 2 收的只是 meta decoder，外层 envelope 映射是同一漂移风险的另一半，§7「tagged card 31 → ~3」只有这五个 mapper 消失才成立。）
+- x / zhihu / youtube 的 chips 组件 props 接口相同，label helper 在三个文件的同一行号、同一写法 `${名称 || id} (${count})`，只有字段名不同（`author-chips.tsx:15-17`、`collection-chips.tsx:15-17`、`playlist-chips.tsx:15-17`）。（**勘误 2026-10-02**：§6 Step 8 原写「source facet chips」用词不对——`CONTEXT.md` 里 X 的作者是 **Creator**（_Avoid_: Source），**Source** 只指容器；三个 chips 里 x 是 Creator 维度，zhihu / youtube 才是 Source。共享组件因此按代码里已有的词叫 `FacetChips`。）
 - 骨架文件六份只有三种形态，但 `components/collection/CLAUDE.md` 已声明这是有意为之，**不动**。
 
 ### 低-3 守卫缝隙（并入相关 Step，不单列）
@@ -1491,9 +1491,231 @@
 ### Step 8 tagged card 外壳 + facet chips（低-2）
 
 - **改法**：
-  - 一个 `taggedCard(Card, mapItem)` 工厂，六个 `tagged-*-card.tsx` 缩成一行导出。**`CARD_ADAPTERS` 的形状不动**（docs/26 §0.2 第 1 条）。
-  - x / zhihu / youtube 三个 chips 合成一个 source facet chips；github 的语言色点、B站、书签的 chips 保留。
+  - 一个 `taggedCard(Card, mapItem)` 工厂，六个 `tagged-*-card.tsx` 缩成一行导出。**`CARD_ADAPTERS` 的形状不动**（docs/26 §0.2 第 1 条）。（**勘误 2026-10-02**：这个签名写不出来——六张卡接条目的 prop 名各不相同，落地为 `taggedCard(Card, prop, toItem)`；mapper 也不是 section 里的那份，而是 lib 导出的 `mapRow`。见 §3 低-2 勘误与下方落地记录。）
+  - x / zhihu / youtube 三个 chips 合成一个 source facet chips；github 的语言色点、B站、书签的 chips 保留。（**勘误 2026-10-02**：x 的维度是 Creator 不是 Source，共享组件叫 `FacetChips`。）
 - **判据**：`platform-completeness-contract` 的 `CARD_ADAPTERS` 对账照绿。
+
+#### Step 8 落地记录（2026-10-02）
+
+代码与单测已落地；运行时验证（六个平台的标签筛选网格与 `/collections` 聚合页卡片照常渲染、外链、编辑标签；x / zhihu / youtube 三条 chip 行照常筛选、展开收起）需要浏览器，**待人工**。判据都成立：
+
+- `CARD_ADAPTERS` 对账照绿（`tests/platform-completeness-contract.test.ts` 一行未改）。`CARD_ADAPTERS` 的对象字面量一字未改，只是值类型名 `AdapterProps` → `TaggedCardProps`（`sections/collections/collection-item-card.tsx:14`）；
+- 行数（`wc -l`）：github / x / zhihu / youtube / bookmarks 五个 tagged card 各 6 行，bilibili 29 行（Step 8 之前依次是 31 / 31 / 31 / 31 / 31 / 34）；工厂 `components/tags/tagged-card.tsx` 45 行；`components/collection-states/facet-chips.tsx` 56 行；三个旧 chips 文件（`author-chips` 39、`collection-chips` 44、`playlist-chips` 39）删除；三个 view x 180、zhihu 153、youtube 167（之前 176 / 149 / 160）；`collection-item-card.tsx` 32（之前 36）；
+- 五个 lib mapper 已导出，函数体与参数类型不变（`git diff` 只有改名、`export` 与两行 doc comment）；`entrypoints/` 非测试代码里零 envelope 映射副本——`sections/*/tagged-*` 里读行字段的只剩 bilibili 的 `row.platformMeta` / `row.title` / `row.platformItemId` / `row.authorName`；
+- 工厂内一个断言（`tagged-card.tsx:42`），六个调用点零断言；tsc 探针三类结果符合要求（见下）；
+- `entrypoints/` 全部文件（含 `.md`）零 `AuthorChips` / `CollectionChips` / `PlaylistChips`；`.ts` / `.tsx` 里零 `author-chips` / `collection-chips` / `playlist-chips`（`.md` 里只剩「原 … 已删」的说明）；`entrypoints/`、`lib/`、`tests/`、`packages/` 代码里零 `toRepoItem` / `toFavoriteItem` / `toVideoItem` / `AdapterProps`；
+- 两个新测试的证伪都红过，红态见下；
+- PRD E 所列现有测试零改动；
+- `pnpm compile` / `pnpm test` / `pnpm build` 全绿，manifest sha256 不变，bundle-contract 行 `14 modules / 947838 bytes`。
+
+**落在哪**：
+
+- **lib（A，D-a）**：五个 mapper 改名并导出，名字取 tagged card 原来在用的那组，顺带消掉 x / bookmarks 两个 `toBookmarkItem` 同名：
+  - `lib/github/github-sync-service.ts:393` `toRepoItem` → `toGithubRepoItem`（`mapRow:` 在 `:338`）；
+  - `lib/x/x-sync-service.ts:338` `toBookmarkItem` → `toXBookmarkItem`（`:262`）；
+  - `lib/zhihu/zhihu-sync-service.ts:335` `toFavoriteItem` → `toZhihuFavoriteItem`（`:276`）；
+  - `lib/youtube/youtube-sync-service.ts:424` `toVideoItem` → `toYoutubeVideoItem`（`:359`）；
+  - `lib/bookmarks/bookmarks-sync-service.ts:388` `toBookmarkItem` 不改名（`:220`）。
+  - 每个前面加两行 doc comment：「Row → `<Item>`; shared by the paged query and the tagged-card adapter (`taggedCard`), so the two read paths cannot drift.」
+  - **参数类型照旧**：youtube 本来就是 `PagedItemRow`，x / zhihu / bookmarks 是与它同形的七列内联类型，**github 是不含 `publishedAt` 的六列**。按参数逆变，六列版照样能传给 `toItem: (row: PagedItemRow) => T`（`pnpm compile` 与探针都过），所以不必「补齐」它；`lib/github/CLAUDE.md` 写明了这一点。
+- **工厂 `components/tags/tagged-card.tsx`（B，D-b、D-c）**：
+  - `TaggedCardProps { item: TaggedItem; onEditTags }`；`taggedCard<K extends string, T>(Card: ComponentType<Record<K, T> & { tags?; onEditTags? }>, prop: K, toItem: (row: PagedItemRow) => T): ComponentType<TaggedCardProps>`。
+  - 返回的组件由 `item` 构造 `PagedItemRow`（`id: item.itemId`，`:33`；其余六列原样），渲染 `<Card {...props} />`，`props = { [prop]: toItem(row), tags: item.tags, onEditTags } as CardProps<K, T>`（`:42`，唯一的断言：泛型计算键在 TS 里塌成索引签名，见下面第二个探针）。
+  - 零平台字面量、零平台 lib 导入；唯一的新导入是 `import type { PagedItemRow } from '@/lib/database/collection-queries'`（行契约，不是 drizzle / entity / `getDb`），在 `components/tags/CLAUDE.md` 写成具名例外。
+  - `components/tags/index.ts` 导出 `taggedCard` 与 `type TaggedCardProps`。
+- **六个 tagged card（C）**：五个是 import 三行 + 空行 + 一行 JSDoc + 一行 `export const Tagged<P>Card = taggedCard(<P>Card, '<prop>', to<P>Item);`，经 `../../components/tags` barrel 取工厂（section 消费者的统一 import 面）。bilibili 的 `toBiliFavVideo(row: PagedItemRow)` 留在本文件，函数体只把 `item.` 换成 `row.`，注释补一句为什么它没有 lib `mapRow`（夹内网格走远端 API，D4）；「No transcribe action bar」那句保留。六个导出名不变，view 与 `collection-item-card.tsx` 的 import 行零改动。
+- **`sections/collections/collection-item-card.tsx`（D-g）**：删本地 `AdapterProps`（以及随之无用的 `import type { TaggedItem }`），改 `import type { TaggedCardProps } from '../../components/tags'`。
+- **`components/collection-states/facet-chips.tsx`（D，D-d、D-e）**：`FacetChips<T extends { count: number }>`，props 照 PRD。渲染 `CollapsibleChipRow`：`icon={<Iconify icon={icon} width={20} />}`、`title={t(title)}`、`getKey` 原样、`getLabel` 是 `${getName(f) || getKey(f)} (${f.count})`（`:48`），`allLabel` / `showMoreLabel` / `showLessLabel` 与三份旧文件逐属性相同；`CollapsibleChipRow` 走叶文件 `../collection/collapsible-chip-row`。doc comment 写成平台无关的「一个 Creator 或 Source 维度，顺序由调用方的 facet 查询决定，本组件不排序」。`index.ts` 导出 `FacetChips` / `type FacetChipsProps`。i18n 零新增、零删除键。
+- **三个 view**：`<AuthorChips authors=…>` / `<CollectionChips collections=…>` / `<PlaylistChips playlists=…>` 换成 `<FacetChips icon title facets getKey getName …>`（x `:139`、zhihu `:111`、youtube `:123`），`totalCount` / `selected` / `onSelect` 照旧传 `libraryCount` / `filter` / `setFilter`；`FacetChips` 并进各自已有的 `components/collection-states` import（youtube 那行因此从单行变四行）。
+
+**先红后绿与实证**：
+
+- **tsc 探针（gate，改六个文件之前）**：先写工厂，再建 `entrypoints/app/sections/zz-tagged-probe.tsx`（放在 `sections/` 而不是 `components/tags/`：探针要 import 六个平台），跑 `npx tsc --noEmit -p tsconfig.json`，跑完删除。六个真实调用（bilibili 用探针内一份与最终版相同的 `toBiliFavVideo`）全部通过，恰好两个错误（拼错键、mapper 与卡片不配），都落在调用点的 `Card` 实参上（第 30 列），工厂内零错误。
+- **第二个探针证明断言删不掉**：`components/tags/zz-noassert-probe.tsx` 里放一份去掉 `as CardProps<K, T>` 的工厂副本，`tsc` 报（跑完删除）：
+  ```
+  entrypoints/app/components/tags/zz-noassert-probe.tsx(27,13): error TS2769: No overload matches this call.
+    Overload 1 of 2, '(props: CardProps<K, T>, context?: any): string | number | bigint | boolean | ReactElement<unknown, string | JSXElementConstructor<any>> | ... 4 more ... | undefined', gave the following error.
+      Type '{ tags: TagRef[]; onEditTags: (anchor: HTMLElement) => void; }' is not assignable to type 'Record<K, T>'.
+    Overload 2 of 2, '(props: CardProps<K, T>): string | number | bigint | boolean | ReactElement<unknown, string | JSXElementConstructor<any>> | ... 4 more ... | undefined', gave the following error.
+      Type '{ tags: TagRef[]; onEditTags: (anchor: HTMLElement) => void; }' is not assignable to type 'Record<K, T>'.
+  ```
+  计算键整个从对象类型里消失了，JSX spread 过不了；一个断言就够，没有用到 `NoInfer`、重载或第二个断言。
+- **最终态复跑探针**（六个文件改完之后）：探针 import 六个真实导出并赋给 `ComponentType<TaggedCardProps>[]`，另加三条错误用法——拼错键、mapper 与卡片不配、以及在带四个额外可选 prop 的 `VideoCard` 上配错 mapper。输出恰好三个错误（第 19 / 21 / 23 行），六个真实导出那行（第 15 行）零错误；跑完删除，`git status --untracked-files=all` 零 `zz-` 文件：
+  ```
+  entrypoints/app/sections/zz-tagged-probe.tsx(19,30): error TS2345: Argument of type '({ repo, tags, onEditTags }: RepoCardProps) => Element' is not assignable to parameter of type 'ComponentType<CardProps<"repos", GithubRepoItem>>'.
+    Type '({ repo, tags, onEditTags }: RepoCardProps) => Element' is not assignable to type 'FunctionComponent<CardProps<"repos", GithubRepoItem>>'.
+      Types of parameters '__0' and 'props' are incompatible.
+        Property 'repo' is missing in type 'CardProps<"repos", GithubRepoItem>' but required in type 'RepoCardProps'.
+  entrypoints/app/sections/zz-tagged-probe.tsx(21,30): error TS2345: Argument of type '({ repo, tags, onEditTags }: RepoCardProps) => Element' is not assignable to parameter of type 'ComponentType<CardProps<"repo", TagRef[] | GithubRepoItem | ((anchor: HTMLElement) => void) | undefined>>'.
+    Type '({ repo, tags, onEditTags }: RepoCardProps) => Element' is not assignable to type 'FunctionComponent<CardProps<"repo", TagRef[] | GithubRepoItem | ((anchor: HTMLElement) => void) | undefined>>'.
+      Types of parameters '__0' and 'props' are incompatible.
+        Type 'CardProps<"repo", TagRef[] | GithubRepoItem | ((anchor: HTMLElement) => void) | undefined>' is not assignable to type 'RepoCardProps'.
+          Types of property 'repo' are incompatible.
+            Type 'TagRef[] | GithubRepoItem | ((anchor: HTMLElement) => void) | undefined' is not assignable to type 'GithubRepoItem'.
+              Type 'undefined' is not assignable to type 'GithubRepoItem'.
+  entrypoints/app/sections/zz-tagged-probe.tsx(23,30): error TS2345: Argument of type '({ video, transcribeState, onTranscribe, onCancel, disabled, tags, onEditTags, }: VideoCardProps) => Element' is not assignable to parameter of type 'ComponentType<CardProps<"video", boolean | BiliFavVideo | TagRef[] | VideoTranscribeState | (() => void) | (() => void) | ((anchor: HTMLElement) => void) | undefined>>'.
+    Type '({ video, transcribeState, onTranscribe, onCancel, disabled, tags, onEditTags, }: VideoCardProps) => Element' is not assignable to type 'FunctionComponent<CardProps<"video", boolean | BiliFavVideo | TagRef[] | VideoTranscribeState | (() => void) | (() => void) | ((anchor: HTMLElement) => void) | undefined>>'.
+      Types of parameters '__0' and 'props' are incompatible.
+        Type 'CardProps<"video", boolean | BiliFavVideo | TagRef[] | VideoTranscribeState | (() => void) | (() => void) | ((anchor: HTMLElement) => void) | undefined>' is not assignable to type 'VideoCardProps'.
+          Types of property 'video' are incompatible.
+            Type 'boolean | BiliFavVideo | TagRef[] | VideoTranscribeState | (() => void) | (() => void) | ((anchor: HTMLElement) => void) | undefined' is not assignable to type 'BiliFavVideo'.
+              Type 'undefined' is not assignable to type 'BiliFavVideo'.
+  ```
+  读法：键拼错时 `K` 取实参 `'repos'`，卡片缺 `repo`，报在卡片上；mapper 不配时 `T` 退回从卡片 props 推出的并集，同样报在卡片上。三处都在调用点、都是 `Card` 实参的第 30 列。正确调用时 `K` / `T` 取 `prop` 与 `toItem` 的协变候选，`VideoCard` 的额外可选 prop 不会把 `K` 撑成并集（`TaggedVideoCard` 照过）。
+- **`tagged-card.test.tsx` 证伪**：临时把 `tagged-card.tsx:33` 的 `id: item.itemId` 改成 `id: item.platformItemId`，只跑该文件，红的恰好是「row」那一例（`1 failed | 1 passed`），「item prop / 透传」那例照绿。红态（只删了 `RUN` 横幅与 `Start at` / `Duration` 两行）：
+  ```
+   ❯ entrypoints/app/components/tags/tagged-card.test.tsx (2 tests | 1 failed) 20ms
+       × hands the mapper the items row: id is the itemId, the other six fields verbatim 16ms
+
+  ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+   FAIL  entrypoints/app/components/tags/tagged-card.test.tsx > taggedCard > hands the mapper the items row: id is the itemId, the other six fields verbatim
+  AssertionError: expected { id: 'native-id', …(6) } to strictly equal { id: 'item-uuid', …(6) }
+
+  - Expected
+  + Received
+
+  @@ -1,8 +1,8 @@
+    {
+      "authorName": "An author",
+  -   "id": "item-uuid",
+  +   "id": "native-id",
+      "originalUrl": "https://example.com/a",
+      "platformItemId": "native-id",
+      "platformMeta": {
+        "k": "v",
+      },
+
+   ❯ entrypoints/app/components/tags/tagged-card.test.tsx:71:38
+       69|     // Strict: exactly the seven `PagedItemRow` columns — no `itemId`,
+       70|     // `platform` or `tags` leaking into what the lib `mapRow` sees.
+       71|     expect(toItem.mock.calls[0]![0]).toStrictEqual({
+         |                                      ^
+       72|       id: 'item-uuid',
+       73|       platformItemId: 'native-id',
+
+  ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+   Test Files  1 failed (1)
+        Tests  1 failed | 1 passed (2)
+  ```
+- **`facet-chips.test.tsx` 证伪**：临时把 `facet-chips.tsx:48` 的 `${getName(f) || getKey(f)}` 改成 `${getName(f)}`，只跑该文件，红的恰好是「回退 key」一例（`1 failed | 3 passed`）。红态（同上裁剪）：
+  ```
+   ❯ entrypoints/app/components/collection-states/facet-chips.test.tsx (4 tests | 1 failed) 104ms
+       × falls back to the key when the name is empty 21ms
+
+  ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+   FAIL  entrypoints/app/components/collection-states/facet-chips.test.tsx > FacetChips > falls back to the key when the name is empty
+  AssertionError: expected ' (3)' to be 'bob-handle (3)' // Object.is equality
+
+  Expected: "bob-handle (3)"
+  Received: " (3)"
+
+   ❯ entrypoints/app/components/collection-states/facet-chips.test.tsx:104:37
+      102|     render();
+      103|
+      104|     expect(chips()[2]?.textContent).toBe('bob-handle (3)');
+         |                                     ^
+      105|   });
+      106|
+
+  ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+   Test Files  1 failed (1)
+        Tests  1 failed | 3 passed (4)
+  ```
+- **恢复的证据**：两次都是改前 `cp` 到 `/tmp`，证伪后拷回再删副本。两个源文件都是新文件（untracked），`git diff` 对它们无话可说；证据是拷回后 `grep` 到原行（`:33` 的 `id: item.itemId,`、`:48` 带 `|| getKey(f)`），两份测试随后 2/2、4/4 绿，`git status --untracked-files=all` 在这两个目录下只有预期的新文件、零残留副本。
+
+**默认决定**（PRD 已定，照做）：
+
+- **D-a lib 导出 `mapRow`**，tagged card 复用；B站的 mapper 留在 section，参数改 `PagedItemRow`。
+- **D-b 签名 `taggedCard(Card, prop, toItem)`**，六张卡的 prop 名不改。
+- **D-c 工厂住 `components/tags/tagged-card.tsx`**，从 tags barrel 导出；`PagedItemRow` 的类型导入在该目录 `CLAUDE.md` 写成具名例外。
+- **D-d `FacetChips` 住 `components/collection-states/`**；该目录 `CLAUDE.md` 加「`FacetChips` 不是状态」一节；scaffold 的具名例外名单不变（chips 经 `primaryCategory` slot 注入，scaffold 不 import 它）。
+- **D-e facet 类型不归一**，调用点传 `getKey` / `getName`。
+- **D-f 不新增守卫**。
+- **D-g `AdapterProps` → `TaggedCardProps`**，`CARD_ADAPTERS` 字面量不动。
+- **实施时补的默认**（PRD 未写，按最少代码取）：
+  - `FacetChips` 的测试单独成 `facet-chips.test.tsx`，不并进 `collection-states.test.tsx`：开工时后者带着另一任务（`10-02-primary-contained-buttons`）未提交的改动，并进去两个任务的 hunk 会在同一文件里交错（那个任务随后以 `94aee10` 提交，见偏离 6）。沿用同一个 `t` mock 与 Iconify mock，经 `./index` import（顺带证 barrel 导出）。
+  - `tagged-card.test.tsx` 直接 import 叶文件 `./tagged-card`：barrel 里的数据 hook 加载 `@/lib/tagging` 的值。
+  - 六个 tagged card 文件保留 `.tsx` 扩展名（已无 JSX），文件名与各处文档引用不变。
+
+**与 PRD 的偏离**：
+
+1. **五个 tagged card 是 6 行，不是「只剩 import 与一行导出」的 5 行（import 三行 + 空行 + 导出）**：各保留一行 JSDoc（「<平台> card adapter for TaggedItemGrid's renderCard prop.」，原文件就有）。判据 ≤ 8 成立。
+2. **`sections/collections/CLAUDE.md` 也改了**（PRD F 未列）：D-g 改了它描述的 `collection-item-card.tsx`，补一句值类型是 `ComponentType<TaggedCardProps>`、对象字面量形状不变。
+3. **三个平台 `CLAUDE.md` 的 chips 条目并进 view 那一行**，没有留一个不对应文件的条目：x / zhihu / youtube 的模块结构按文件列，旧 chips 文件删了，「作者 / 收藏夹 / 播放列表 chips 是共享 `FacetChips`」写在 `*-view.tsx` 条目末尾。
+4. **顺手勘误三处过期的 tagged card 描述**（都在本 Step 必改的行里）：x 与 zhihu 的 `CLAUDE.md` 写着「`publishedAt` 置 null（TaggedItem 无该字段）」，而 `TaggedItem.publishedAt` 早已存在、旧 adapter 也一直传 `item.publishedAt`；bilibili 的写着「platformMeta 取 cover/intro/… 缺失给默认值」，那是 Step 2 收进 `narrowBiliVideoMeta` 之前的说法。
+5. **`lib/github/CLAUDE.md` 多写一句**：`toGithubRepoItem` 的参数是不含 `publishedAt` 的六列，按参数逆变照样可传给 `taggedCard`，不要「补齐」（PRD A 要求参数类型一字不改，这句防后人顺手改）。
+6. **PRD 说工作树干净、HEAD `1453692`，实际不是**：开工时 `git status` 有另一任务（`10-02-primary-contained-buttons`）的 19 个未提交文件（主题按钮颜色、`sync-now-button`、`section-title-bar`、`collection-states.tsx` 等），其中 `components/collection-states/CLAUDE.md` 与 `components/collection/CLAUDE.md` 也是本 Step 必改的。本 Step 没碰那个任务的代码文件，两份 CLAUDE.md 只追加了自己的 hunk。本 Step 进行中那个任务以 `94aee10` 提交，只含它自己的 hunk（核对过：两份 CLAUDE.md 在 `94aee10` 里零 `FacetChips`，它的代码文件与这两份 CLAUDE.md 的 diff 行数都与开工时的工作树 diff 相同，只有 `theme/CLAUDE.md` 多改了两行），所以本 Step 的 diff 以 `94aee10` 为基，工作树里不再有别的任务的改动。下面的聚焦、`pnpm compile`、`pnpm test`、`pnpm build` 在 `94aee10` 之后又整轮重跑过一次，数字与之前相同。
+
+**行为变化与验证备注**：
+
+- **运行时行为零变化**（逐项对照 `git show HEAD:` 的六个 tagged card 与三个 chips）：
+  - github / x / zhihu / youtube：旧 adapter 的 mapper 与 lib `mapRow` 逐行相同，只差 `item.X` ↔ `row.X`；工厂构造的 `row` 里 `id = item.itemId`，其余六列就是 `item` 的同名字段，所以交给卡片的对象逐键同值。
+  - bookmarks：旧版 `narrowBookmarkMeta(item.platformMeta, item)`，新版 `narrowBookmarkMeta(row.platformMeta, row)`；fallback 只读 `authorName` / `publishedAt`，两者在 `row` 上同值。
+  - bilibili：函数体只换了参数名，读的四个字段在 `row` 上同值。
+  - `tags = item.tags`、`onEditTags` 原样，与旧版相同；卡片 props 恰好三个键（测试锁住）。
+  - 唯一可观察的差别在 React DevTools：六个 adapter 的内部函数名都是 `TaggedCard`，旧版各有自己的名字。组件身份仍是六个（每次 `taggedCard(...)` 调用返回一个新函数），聚合页混排网格不会跨平台复用状态。
+  - chips：`icon`（`<Iconify icon=… width={20} />`）、`title`（`t(key)`）、`items`、`getKey`（值相同，改由 view 传入）、`getLabel`（同一模板字符串）、`allLabel`、`selected`、`onSelect`、`showMoreLabel`、`showLessLabel` 逐属性相同；`collapsedCount` / `maxWidth` 照旧不传、吃默认值。
+- **manifest**：本 Step 不动 descriptor。`pnpm build` 后 `.output/chrome-mv3/manifest.json` 的 sha256 是 `053dd7bdf0da2ba2fa5ae8c67453ecc286b56394f5704585b38c3e34fde32ae5`，与 Step 4–7 相同。
+- **SW 体积**：bundle-contract 行是 `14 modules / 947838 bytes`，与 Step 6 / 7 相同（量过，不是推断；只比了计数）。SW 不 import 任何 sync-service 或 section。
+- **tagged card 现在经 barrel 加载 tags 的运行时图**：原先六个文件只 `import type { TaggedItem }`。能加载它们的测试只有 `sections/configuration-heading.test.tsx`（真实 view → scaffold → tags barrel，早已加载）与 `sections/collections/collections-view.test.tsx`（整个 mock 掉 `./collection-item-card`），两者一行未改即绿。
+- **测试**：
+  - 聚焦（`entrypoints/app/components` + `entrypoints/app/sections` + 五个 lib sync-service 测试 + contract + i18n-no-hardcoded + ui-vendor-boundaries + lib-import-smoke）67 个文件 418 例绿；改动之前在同一份代码（即 `94aee10` 的内容，当时尚未提交）上跑的基线是 65 / 412，差额恰好是两个新文件的 6 例；
+  - `pnpm compile` 绿；
+  - `pnpm test` 全量绿：主仓库 215 个文件 1733 例，`packages/favbase` 15 个文件 263 例，在 config 的 `maxWorkers: 8` 下一次跑过。比 Step 7 记录的 213 / 1720 多 2 个文件 13 例：本 Step 2 个文件 6 例，另 7 例来自 `94aee10`（另一任务）的 `theme/theme-contract.test.ts`（`it.each(PRESETS)` 六例 + 一例）；
+  - `pnpm build` 绿。
+
+**改了哪些现有测试**：无。PRD E 所列（五个 lib 查询测试、`collections-view.test.tsx`、`collection-page-scaffold.test.tsx`、`collapsible-chip-row.test.ts`、`tests/platform-completeness-contract.test.ts`）与其余全部一行未改即绿。**新增**：`entrypoints/app/components/tags/tagged-card.test.tsx`（2 例：`toItem` 收到的行 `toStrictEqual` 七列且 `id === itemId`；item prop 是 `toItem` 的返回值、`tags` / `onEditTags` 透传、props 恰好三个键）、`entrypoints/app/components/collection-states/facet-chips.test.tsx`（4 例：表头译文与 20px 图标 + All chip 居首、`name (count)`、名字为空回退 key、点 facet / All 的 `onSelect`）。
+
+**trellis-check 复核（2026-10-02）**：
+
+- **行为等价逐项对照**（`git show HEAD:`，用脚本比字节，不是目测）：
+  - 把 HEAD 五个 tagged card 的 mapper 返回体做 `item.itemId` → `row.id`、`item.X` → `row.X`（bookmarks 的 fallback 实参 `item` → `row`）替换，与现在 lib 导出的五个 mapper 的返回体逐字节相同；五个 lib mapper 的返回体与参数类型也与 HEAD 的 `toRepoItem` / `toBookmarkItem`（x）/ `toFavoriteItem` / `toVideoItem` / `toBookmarkItem`（bookmarks）逐字节相同。bilibili `toBiliFavVideo` 的返回体做同样替换后相同，签名只是 `(item: TaggedItem)` → `(row: PagedItemRow)`。
+  - 工厂构造的 `row` 七列取自 `item` 的同名字段（`id` 取 `itemId`）。`TaggedItem` 这七个字段的类型与 `PagedItemRow` 相同或更窄（`platformMeta: Record<string, unknown>` 对 `unknown`），所以 mapper 读到的值与旧版逐键相同。卡片 props 仍是 `[prop]` / `tags` / `onEditTags` 三个键，六个 prop 键（`video` / `bookmark` / `repo` / `bookmark` / `video` / `favorite`）与旧版 JSX 逐一相同。
+  - 三个 chip 调用点：`icon`（`mdi:twitter` / `simple-icons:zhihu` / `mdi:youtube`，宽 20）、`title`（`x.authorsTitle` / `zhihu.collectionsTitle` / `youtube.playlistsTitle`）、`getKey`（`authorHandle` / `collectionId` / `playlistId`）、label（旧 `${authorName || authorHandle} (${count})` 等于新 `${getName(f) || getKey(f)} (${f.count})`）、`allLabel` / `showMoreLabel` / `showLessLabel`，与删掉的三个文件逐属性相同；`totalCount` / `selected` / `onSelect` 照旧传 `libraryCount` / `filter` / `setFilter`。
+- **工厂接受条件**：`tagged-card.tsx` 唯一的断言在 `:42`（`:20` 的「as」在注释里），六个调用点零 `as` / `!` / `satisfies` / `@ts-`。独立重跑 tsc 探针（`entrypoints/app/sections/zz-check-tagged-probe.tsx`，`npx tsc --noEmit -p tsconfig.json`，跑完删除，`git status --untracked-files=all` 零 `zz-`）：第 18 行把六个真实导出赋给 `ComponentType<TaggedCardProps>[]`，第 19 行是一个正确的内联调用 `taggedCard(YoutubeCard, 'video', toYoutubeVideoItem)`，两行零错误；四条错误用法恰好四个 TS2345，都落在 `Card` 实参上，整个工程没有别的错误（输出截到 parameter type，箭头后是对应的调用）：
+  ```
+  zz-check-tagged-probe.tsx(20,34): error TS2345: … to parameter of type 'ComponentType<CardProps<"repos", GithubRepoItem>>'.   ← taggedCard(RepoCard, 'repos', toGithubRepoItem)
+  zz-check-tagged-probe.tsx(21,37): error TS2345: … to parameter of type 'ComponentType<CardProps<"repo", TagRef[] | GithubRepoItem | …   ← taggedCard(RepoCard, 'repo', toXBookmarkItem)
+  zz-check-tagged-probe.tsx(22,38): error TS2345: … to parameter of type 'ComponentType<CardProps<"favorite", TagRef[] | ZhihuFavoriteItem | …   ← taggedCard(ZhihuCard, 'favorite', toYoutubeVideoItem)
+  zz-check-tagged-probe.tsx(23,35): error TS2345: … to parameter of type 'ComponentType<CardProps<"video", XBookmarkItem>>'.   ← taggedCard(XCard, 'video', toXBookmarkItem)
+  ```
+  比上面的记录多验了两条（zhihu 卡上配 youtube mapper、x 卡上用别的平台的 prop 键）；记录原有的输出不改。
+- **独立复现了两次证伪**：
+  - `tagged-card.tsx:33` 改成 `id: item.platformItemId`：`1 failed | 1 passed (2)`，红的只有「row」那一例（`expected { id: 'native-id', …(6) } to strictly equal { id: 'item-uuid', …(6) }`）。
+  - `facet-chips.tsx:48` 去掉 `|| getKey(f)`：`1 failed | 3 passed (4)`，红的只有「回退 key」那一例（`expected ' (3)' to be 'bob-handle (3)'`）。
+  - 两个源文件都是 untracked，`git diff` 给不出基线：证伪前各 `cp` 到仓库外的备份目录并记下 sha256，拷回后 `cmp` 与备份逐字节相同、sha256 与改前相同（`tagged-card.tsx` `628f0746…`、`facet-chips.tsx` `e9d6bf0c…`），两份测试随后 2/2、4/4 绿，`git status --untracked-files=all` 只有四个预期的新文件。
+- **边界**：`components/tags/` 非测试文件零平台字面量、零 `@/lib/<platform>` 导入；`@/lib/database` 只有 `tagged-card.tsx` 的 `import type { PagedItemRow }`，外加 `tag-edit-popover` / `tagged-item-grid` / `use-item-tags` 三个原有的 `initDbProxy` 值导入，与该目录 `CLAUDE.md` 的说法一致。`components/collection/**` 非测试文件里的 `t(` 只在注释里。`FacetChips` import 的是叶文件 `../collection/collapsible-chip-row`。`components/collection/CLAUDE.md` 的「三个具名智能模块」一节与 `collection-page-scaffold.tsx` 零 diff。`CARD_ADAPTERS` 的对象字面量（`collection-item-card.tsx:14-21`）只换了值类型名。tracked 测试文件的 `git diff --stat` 为空。`94aee10` 恰好 19 个文件，其中两份 `CLAUDE.md` 零 `FacetChips` / `taggedCard`，当前工作树对这两份的 diff 只有本 Step 的 hunk——偏离 6 的这一半复核成立；「开工时工作树 diff 的行数」那一半在提交之后已无从复现。
+- **残留 grep**（排除 `.claude/**`）：`entrypoints/` 零 `AuthorChips` / `CollectionChips` / `PlaylistChips`；`.ts` / `.tsx` 零 `author-chips` / `collection-chips` / `playlist-chips`，`.md` 里 7 处都是「原 … 已删 / 取代」的说明。`entrypoints/`、`lib/`、`tests/`、`packages/` 的 `.ts` / `.tsx` 零 `toRepoItem` / `toFavoriteItem` / `toVideoItem` / `AdapterProps`；`lib/x`、`sections/x`、`tests/` 零 `toBookmarkItem` 代码引用，只剩 `lib/x/CLAUDE.md` 的「改名前叫 `toBookmarkItem`」。其余命中都在 docs/15、docs/16 的历史记录与 docs/32 本 Step 内。
+- **数字**：`wc -l` 与 `git show HEAD:` 复核了上文全部行数（五个 tagged card 6、bilibili 29、工厂 45、`FacetChips` 56、三个 view 180 / 153 / 167、`collection-item-card.tsx` 32；改前 31×5 / 34、176 / 149 / 160、36、旧 chips 39 / 44 / 39）；lib 行号 `:393/:338`、`:338/:262`、`:335/:276`、`:424/:359`、`:388/:220`，view 的 `:139` / `:111` / `:123`，`tagged-card.tsx:33` / `:42`、`facet-chips.tsx:48`，全对。
+
+**本轮修掉的**：
+
+1. **五个 `narrow*Meta` 的 JSDoc 还是 Step 8 之前的说法**：「shared by the query mapRow (below) and the section tagged-*-card adapter … Envelope fields stay at each call site」。现在 tagged card 不再直接调 `narrow*Meta`，envelope 只在导出的 mapper 里装配一次；五个 lib `CLAUDE.md` 已经改对，代码注释没跟上。改成「read through `to<P>Item` (below) — the mapRow both the paged query and the tagged-card adapter use. Envelope fields … are set there」（`github-sync-service.ts:366-371`、`x-sync-service.ts:292-298`、`youtube-sync-service.ts:389-396`、`zhihu-sync-service.ts:310-315`、`bookmarks-sync-service.ts:365-373`）。只动注释，每段行数不变，所以上文引用的 mapper 与 `mapRow:` 行号照旧成立；五个 lib 文件的 `git diff` 因此比「只有改名、`export` 与两行 doc comment」多一段注释 hunk。`lib/bilibili/video-eligibility.ts:24` 的「the tagged card adapter」仍然准确（`toBiliFavVideo` 确实直接调 `narrowBiliVideoMeta`），没动。
+2. **§3 低-2 勘误里 zhihu 的行号差一行**：HEAD 的 `toFavoriteItem` 是 `zhihu-sync-service.ts:333-350`（`:349` 是 `  };`，`:350` 才是闭合的 `}`）；原文照抄 PRD 的 `333-349`，已改。
+3. **tagged card 的行构成漏数了空行**：五个文件是 import 三行 + 空行 + JSDoc + 导出，共 6 行。§7 表与「落在哪」C 条原写「import 三行 + 一行 JSDoc + 一行」，偏离 1 原写「不是 4 行」（不带 JSDoc 是 5 行），三处已改。
+
+**核对过、无需改的**：顶部状态行；§6 Step 8 改法两条的勘误括注；§8 表 6–8 行；spec §4.2（`:161-169`）与 §7.2 的 tagged card 行（`:402`）、chips 行（`:404`），以及 §11 `t()` 行未动；`components/tags`、`components/collection-states`、`components/collection`、六个 `sections/*` 与 `sections/collections`、五个 `lib/*` 的 `CLAUDE.md`，根 `CLAUDE.md` 的 docs/32 条与两条索引行。「能加载 tagged card 的测试只有两份」也成立：`configuration-heading.test.tsx` 加载真实的 github / youtube view，`collections-view.test.tsx` mock 掉 `./collection-item-card`，契约测试只按 AST 读该文件。
+
+**仍然是已知缺口，不修**：
+
+- 运行时验证仍**待人工**。
+- D-f 不新增守卫：「tagged card 不得手写 envelope 映射」「一维 facet 不得另写 chips 文件」都没有机器守卫，靠行数判据与 review。工厂的类型只保证 mapper 产出卡片要的类型，不保证用的是 lib 那一份——section 里另写一份同类型的 mapper 照样过 `tsc`。
+- 聚焦基线 65 / 412 是实施时在 `94aee10` 的内容上量的，本轮在这个工作树上无法重建，只复核了改后的 67 / 418。
+- manifest 基线没有从 HEAD 重建，只比对了与 Step 4–7 记录相同的 sha256；bundle 只比了 bundle-contract 行的计数。
+- spec §11「`components/collection/**` 内 `t()`」那一行说翻译只住在 scaffold 可具名导入的三个模块里、「nowhere else」。字面上它没覆盖 `collection-states/` 里 scaffold 不导入的组件（Step 6 的三个引导状态、本 Step 的 `FacetChips`）；这句话管的是 scaffold 的导入图，含义没错，措辞早于本 Step，没改。
+
+**重跑**（在上面的注释改动之后；其后只改了 `.md`）：
+
+- 聚焦（`entrypoints/app/components` + `entrypoints/app/sections` + 五个 lib sync-service 测试 + contract + i18n-no-hardcoded + ui-vendor-boundaries + lib-import-smoke）67 个文件 418 例绿；
+- `pnpm compile` 绿；
+- `pnpm test` 全量绿：主仓库 215 个文件 1733 例，`packages/favbase` 15 个文件 263 例，一次跑过；
+- `pnpm build` 的 bundle-contract 行是 `14 modules / 947838 bytes`；`.output/chrome-mv3/manifest.json` 的 sha256 是 `053dd7bdf0da2ba2fa5ae8c67453ecc286b56394f5704585b38c3e34fde32ae5`。
 
 ### Step 9 查询片段（低-1）
 
@@ -1514,8 +1736,8 @@
 | 数据 hook | 129 | ~40（D3=删）/ ~110（D3=留）；**实测 34**（Step 7 落地 2026-10-02；Step 7 之前是 110） | Step 7 |
 | view | 194 | ~110 | Step 4 / 6 |
 | card | 94 | 94 | 平台特有，不动 |
-| tagged card | 31 | ~3 | Step 8 |
-| chips | 44 | 0 | Step 8 |
+| tagged card | 31 | ~3；**实测 6**（Step 8 落地 2026-10-02：import 三行 + 空行 + 一行 JSDoc + 一行 `taggedCard(ZhihuCard, 'favorite', toZhihuFavoriteItem)`；mapper 是 lib 导出的 `mapRow`，不再计入 app 侧） | Step 8 |
+| chips | 44 | 0；**实测 0**（Step 8 落地 2026-10-02：`collection-chips.tsx` 删除，view 里的 `<FacetChips>` 比原 `<CollectionChips>` 多 4 行，`zhihu-view.tsx` 149 → 153） | Step 8 |
 | skeleton | 6 | 6 | 有意保留 |
 | **合计** | **556** | **~283（-49%）** | |
 
@@ -1534,7 +1756,7 @@ lib 侧：平台 API 文件的重试 / 响应读取约减 30–40 行（Step 3�
 | 3 | 风控一节说明「机制在 `lib/http/`，数值与语义在平台」（已落地 2026-09-30：§4.1 Pagination 条、§2 守卫表（Five → Six）、§11 禁项行） | `lib/<platform>/` 禁 `setTimeout` 等待（`tests/platform-sleep-guard.test.ts`，AST 扫描 `new Promise` 参数里的 `setTimeout`，失败列 `file:line`） |
 | 4 | 错误类必须继承 `sync-errors.ts` 基类（已落地 2026-09-30：§4.1 错误类条、§7.2 `use-<platform>.ts` 与 `<platform>-view.tsx` 两行、§2 completeness contract 描述、§11 禁项行） | 平台错误类继承断言（completeness contract 的独立用例 + 探测器自检，AST 扫描，失败列 `file:line`）；`lib-import-smoke` 纳入新 leaf |
 | 5 | 新增「延迟正文」一节（已落地 2026-10-01：§4.4「Deferred content」，原 §4.4 Tests 顺延 §4.5；另改 §2 completeness contract 描述、§4.2 Chunking 行、§4.3 `'pending'` 条的交叉引用、§7.2 `use-<platform>.ts` 行、§11 禁项行） | `entrypoints/app/**`（比原写的 `sections/**` 宽）禁手写 job 命名空间：job-store 调用（`startJob` / `useJob` / `getJob` / `pauseJob` / `resumeJob` / `trackJobRun`）的第一参与 `jobPlatform` / `logTag` 属性，不得是字面量或同模块里绑到字面量的常量（AST 扫描，独立用例 + 探测器自检，失败列 `file:line`） |
-| 6–8 | §7 页面清单删去状态组件与 tagged 外壳两项（Step 6 已落地 2026-10-01：§7.2 view 行改为「状态组件从 `components/collection-states/` 取、`copy` 只传平台文案」，§7.3 加 scaffold 自持外壳文案一段，§11「`components/collection/**` 内 `t()`」行补具名例外（实施时补了 `library-gate` 与 chrome-copy 叶文件两个，2026-10-02 trellis-check 补上一直在用却未具名的 `components/tags/`，共三个）；tagged 外壳待 Step 8。另 `i18n-conventions.md` §2 加 `common.*` 一行） | `CARD_ADAPTERS` 对账不变；Step 6 不新增守卫（D-g） |
+| 6–8 | §7 页面清单删去状态组件与 tagged 外壳两项（Step 6 已落地 2026-10-01：§7.2 view 行改为「状态组件从 `components/collection-states/` 取、`copy` 只传平台文案」，§7.3 加 scaffold 自持外壳文案一段，§11「`components/collection/**` 内 `t()`」行补具名例外（实施时补了 `library-gate` 与 chrome-copy 叶文件两个，2026-10-02 trellis-check 补上一直在用却未具名的 `components/tags/`，共三个）；tagged 外壳待 Step 8。另 `i18n-conventions.md` §2 加 `common.*` 一行）。**Step 8 已落地 2026-10-02**：§4.2 的 `narrow<P>Meta` 段改为连整个 `mapRow`（`export function to<P>Item(row: PagedItemRow)`）一起导出、tagged card 复用；§7.2 `tagged-<platform>-card.tsx` 行改为一行 `taggedCard(<P>Card, '<prop>', to<P>Item)`；chips 行改为「一维带计数的 facet（Creator 或 Source）用 `components/collection-states/` 的 `FacetChips`，形状不同的自己组合 `CollapsibleChipRow`」，去掉不准确的「if the platform has Sources」 | `CARD_ADAPTERS` 对账不变；Step 6 不新增守卫（D-g）；Step 8 同样不新增（D-f），判据是行数与 `tsc` 探针 |
 | 7 | §7.2 `use-<platform>.ts` 行改写：不改名、无手写返回接口、view 直接读通用字段，`jobPlatform = jobPlatformForCollection(<platform>)`，单 facet 查询用 `facetQuery`，`'credentials'` 平台用 `useCredentialGatedLibrary(<p>Credentials, config)`；§7.2 `<platform>-sync-adapter.ts` 行加 `<p>Credentials(settings)`；§8 第 5 条改成「导出解析函数，run 门 / `probeReady` / 页面门三处读同一个，仍 unchecked」；§12 末段同步；§2 completeness contract 描述与 §11 job 命名空间行只剩 `jobPlatform`（已落地 2026-10-02） | job 命名空间守卫的 `JOB_NAMESPACE_PROPERTIES` 去掉 `'logTag'`（改名后 `entrypoints/app/**` 不再有这个键，`tsc` 也拒绝它）；自检表删 `LOG_TAG` 行、`` [`logTag`] `` 行改 `` [`jobPlatform`] ``；不新增守卫（D-f） |
 | 9 | 查询片段 builder 列入「shared read helpers」 | — |
 

@@ -1,7 +1,8 @@
 import type { ComponentType } from 'react';
 
 import type { CollectionItem, CollectionPlatform } from '@/lib/collections';
-import type { TaggedItem } from '@/lib/tagging';
+
+import type { TaggedCardProps } from '../../components/tags';
 
 import { TaggedVideoCard } from '../bilibili/tagged-video-card';
 import { TaggedBookmarkCard } from '../bookmarks/tagged-bookmark-card';
@@ -10,12 +11,7 @@ import { TaggedTweetCard } from '../x/tagged-tweet-card';
 import { TaggedYoutubeCard } from '../youtube/tagged-youtube-card';
 import { TaggedZhihuCard } from '../zhihu/tagged-zhihu-card';
 
-interface AdapterProps {
-  item: TaggedItem;
-  onEditTags: (anchor: HTMLElement) => void;
-}
-
-const CARD_ADAPTERS: Record<CollectionPlatform, ComponentType<AdapterProps>> = {
+const CARD_ADAPTERS: Record<CollectionPlatform, ComponentType<TaggedCardProps>> = {
   bilibili: TaggedVideoCard,
   github: TaggedRepoCard,
   bookmarks: TaggedBookmarkCard,

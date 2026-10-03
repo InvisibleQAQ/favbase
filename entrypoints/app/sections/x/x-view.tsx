@@ -4,6 +4,7 @@ import { useTranslation } from '@/lib/i18n/use-translation';
 import { CollectionConfigurationNotice } from '../../components/configuration-blocker';
 import {
   EmptyLibraryState,
+  FacetChips,
   NotLoggedInState,
   type SiteAction,
 } from '../../components/collection-states';
@@ -18,7 +19,6 @@ import {
 } from '../../hooks/collection-sync-error-message';
 import { formatCountdown, useCountdown } from '../../hooks/use-countdown';
 import { useXBookmarks } from './use-x-bookmarks';
-import { AuthorChips } from './author-chips';
 import { XCard } from './x-card';
 import { TaggedTweetCard } from './tagged-tweet-card';
 import { TweetGridSkeleton } from './tweet-grid-skeleton';
@@ -136,8 +136,12 @@ export function XView() {
       )}
       skeleton={<TweetGridSkeleton />}
       primaryCategory={x.libraryCount > 0 ? (
-        <AuthorChips
-          authors={x.facets}
+        <FacetChips
+          icon="mdi:twitter"
+          title="x.authorsTitle"
+          facets={x.facets}
+          getKey={(a) => a.authorHandle}
+          getName={(a) => a.authorName}
           totalCount={x.libraryCount}
           selected={x.filter}
           onSelect={x.setFilter}

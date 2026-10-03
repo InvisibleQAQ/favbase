@@ -8,3 +8,4 @@ export {
   type NeedsConfigStateProps,
 } from './collection-states';
 export { useCollectionChromeCopy, type CollectionChromeCopy } from './use-collection-chrome-copy';
+export { FacetChips, type FacetChipsProps } from './facet-chips';

@@ -273,7 +273,7 @@ export async function getFavorites(
     orderBy: sql`${items.publishedAt} DESC NULLS LAST`,
     page: query.page,
     pageSize: query.pageSize,
-    mapRow: toFavoriteItem,
+    mapRow: toZhihuFavoriteItem,
   });
 }
 
@@ -309,9 +309,9 @@ const ZHIHU_TYPES: readonly ZhihuItemType[] = ['answer', 'article', 'pin', 'zvid
 
 /**
  * Defensive platformMeta → ZhihuFavoriteItem field narrowing, the SINGLE source
- * of truth shared by the query mapRow (below) and the section tagged-zhihu-card
- * adapter. Envelope fields (id/platformItemId/title/originalUrl/publishedAt)
- * stay at each call site; authorName falls back to the row's own authorName.
+ * of truth, read through `toZhihuFavoriteItem` (below) — the mapRow both the
+ * paged query and the tagged-card adapter use. Envelope fields are set there;
+ * authorName falls back to the row's own authorName.
  */
 export type NarrowedZhihuMeta = Omit<
   ZhihuFavoriteItem,
@@ -330,7 +330,9 @@ export function narrowZhihuMeta(meta: unknown, fb: { authorName: string }): Narr
   };
 }
 
-function toFavoriteItem(row: {
+/** Row → `ZhihuFavoriteItem`; shared by the paged query and the tagged-card adapter
+ *  (`taggedCard`), so the two read paths cannot drift. */
+export function toZhihuFavoriteItem(row: {
   id: string;
   platformItemId: string;
   title: string;

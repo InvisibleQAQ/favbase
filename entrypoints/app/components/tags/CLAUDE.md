@@ -1,6 +1,6 @@
 # app/components/tags
 
-平台无关的标签 UI 子系统（app.html 内共享，同层先例 `components/iconify/`）。platform 全部为**参数**，本目录零平台字面量、零 `@/lib/bilibili`/`@/lib/github` 导入——平台知识归各 section 的卡片 adapter（`sections/bilibili/tagged-video-card.tsx`、`sections/github-stars/tagged-repo-card.tsx`）。数据一律经 `@/lib/tagging`（(platform, platformItemId) 寻址，零 drizzle/entity/getDb 导入）。
+平台无关的标签 UI 子系统（app.html 内共享，同层先例 `components/iconify/`）。platform 全部为**参数**，本目录零平台字面量、零 `@/lib/bilibili`/`@/lib/github` 导入——平台知识归各 section 的卡片 adapter，自 docs/32 Step 8 起它们是一行 `taggedCard(<P>Card, '<prop>', to<P>Item)`（`sections/<platform>/tagged-*-card.tsx`），平台知识只剩「哪张卡、哪个 prop、哪个 lib `mapRow`」三个实参。数据一律经 `@/lib/tagging`（(platform, platformItemId) 寻址，零 drizzle/entity/getDb 导入）。**唯一的 `@/lib/database` 类型导入例外**：`tagged-card.tsx` 的 `import type { PagedItemRow } from '@/lib/database/collection-queries'`——那是 lib 分页查询交给 `mapRow` 的行契约，只有类型，不是 drizzle / entity / `getDb`（`initDbProxy` 的值导入是另一回事，三个数据组件早就有）。
 
 ## 模块结构
 
@@ -11,11 +11,12 @@
 - `tag-edit-popover.tsx` — `TagEditPopover`（props 含 `platform`）+ `useTagEditState()`（记录 `{ platformItemId, anchorEl }`，每个网格单实例）。内容：当前标签 Chip（同样吃默认 soft，onDelete 解链）+ TextField（Enter 提交，IME composing 守卫，空白忽略），直接调 `addTagToPlatformItem`/`removeTagFromPlatformItem`（handler 内先 `await initDbProxy()` 防首屏点击竞态），busy 禁用，成功回调 `onChanged()`
 - `tag-filter-chips.tsx` — `TagFilterChips`：纯 props 筛选器，消费共享 `CollapsibleChipRow`（默认前 8 个，支持多选且收起时保留所有已选隐藏项）+ `headerExtra` 清除按钮；tag header icon 不自带品牌色，继承共享 `ChipRowShell` 的 `text.secondary`。**无已用标签时整体不渲染**（孤儿标签经 getAllUsedTags 天然隐身）
 - `tagged-item-grid.tsx` — `TaggedItemGrid { platform, tagIds, renderCard, skeleton, onTagsChanged? }`：标签筛选激活时的网格。`getItemsByTags(tagIds, platform)`（AND 语义、createdAt 降序、平台限定）加载 `TaggedItem`；**render-prop seam**：`renderCard(item, openTagEditor)` 由各 section 提供本平台卡片 adapter，本组件不知道卡片长什么样。内置单 `TagEditPopover` 实例（platform 透传）；编辑后重查本 grid——item 掉出筛选自然消失，此时 effect 自动关 popover 防 detached anchorEl——并上抛 `onTagsChanged`。订阅 `'item-tagged'`（按 `e.platform` 过滤）重查。骨架屏（`skeleton` prop）只在 tagIds 组合变化时重置；version 重查（编辑/事件）原位更新不闪骨架。空结果 `tags.noMatches` 走共享 `NoMatchesState`（与搜索/分类无匹配同一密度，`text.secondary` 非 disabled）；网格用共享 `CardGrid`/`CardGridItem`（`components/collection/`）
-- `index.ts` — barrel，section 消费者单一 import 面
+- `tagged-card.tsx` — `taggedCard(Card, prop, toItem)` 工厂（docs/32 Step 8）+ `TaggedCardProps { item: TaggedItem; onEditTags }`（`renderCard` 与 `/collections` 的 `CARD_ADAPTERS` 交给 adapter 的那组 props）。返回的组件把 `item` 拆回 `PagedItemRow`（`id: item.itemId`，其余六列原样），交给 `toItem`——**就是平台 lib 分页查询的那个 `mapRow`**（`toGithubRepoItem` / `toXBookmarkItem` / `toZhihuFavoriteItem` / `toYoutubeVideoItem` / `toBookmarkItem`，B站是 section 内的 `toBiliFavVideo`），所以标签网格与平台网格读同一份映射、不会再漂移——再以 `[prop]` 渲染 `Card`，`tags` / `onEditTags` 透传。`prop` 是卡片接条目的 prop 名（`repo` / `bookmark` / `video` / `favorite`，六张卡各不相同，所以签名必须多收这个键）。类型：`K extends string, T`，卡片 props 是 `Record<K, T> & { tags?; onEditTags? }`；拼错键或 mapper 与卡片不配都在**调用点**报 `tsc` 错（docs/32 Step 8 落地记录的探针）。函数体里唯一的断言是计算键对象 `as CardProps<K, T>`（泛型计算键在 TS 里塌成索引签名，去掉它 `<Card {...props} />` 报 TS2769），六个调用点零断言。测试 `tagged-card.test.tsx`（桩卡片：`toItem` 收到的行 `toStrictEqual` 七列且 `id === itemId`；item prop 是 `toItem` 的返回值、`tags` / `onEditTags` 透传、props 恰好三个键；把 `id` 改成 `item.platformItemId` 时第一例红，已证伪）
+- `index.ts` — barrel，section 消费者单一 import 面（含 `taggedCard` / `TaggedCardProps`）
 
 ## 约定
 
-- **平台无关铁律**：本目录禁止出现平台字面量与平台 lib 导入（prd 验收项，grep 可查）。平台 N 接入打标 = 传 platform 参数 + 提供 renderCard adapter，零标签逻辑复制
+- **平台无关铁律**：本目录禁止出现平台字面量与平台 lib 导入（prd 验收项，grep 可查）。平台 N 接入打标 = 传 platform 参数 + 一行 `taggedCard(<P>Card, '<prop>', to<P>Item)` 作 renderCard adapter（mapper 是平台 lib 导出的 `mapRow`），零标签逻辑复制、零 envelope 映射复制
 - **render-prop + 聚合 registry 分工**：平台页筛选仍用 `TaggedItemGrid.renderCard`；真实跨平台需求已在 `sections/collections/collection-item-card.tsx` 建穷尽 platform→TaggedCard registry，本共享目录仍保持零平台知识
 - **刷新双通道**：AI 自动打标走 `'item-tagged'` 事件（emit 在 tagging-service，零穿线）；手动编辑走显式 `onChanged → refresh` 链路（add/remove 不发事件）。消费 section 若 `useItemTags` 常驻不随筛选卸载（如 github-stars-view），TaggedItemGrid 的 `onTagsChanged` 必须同时 refreshItemTags——否则清除筛选后普通网格标签过期。**收藏页（github/x/zhihu）用 `useCollectionTags` 后此不变量已封在 hook 内**（`handleTagsChanged` 同刷两通道），无需各 view 自行记得；仅当直接手拼五件套（如未来非收藏页场景）时才需注意
 - **chip 变体统一**（docs/25 Step 8）：本目录的 Chip 一律不写 `variant`，让 `MuiChip.defaultProps` 的 soft 生效；筛选 chip 的选中态由 `components/collection/chip-row.tsx` 的 `FilterChip` 独家持有（filled primary）。`grep -rn 'variant="outlined"' entrypoints/app/components/tags` 应为零结果

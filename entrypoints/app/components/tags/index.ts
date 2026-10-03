@@ -5,3 +5,4 @@ export { useCollectionTags, type UseCollectionTagsReturn } from './use-collectio
 export { TagFilterChips } from './tag-filter-chips';
 export { TagRow, type TagRowProps } from './tag-row';
 export { TaggedItemGrid, type TaggedItemGridProps } from './tagged-item-grid';
+export { taggedCard, type TaggedCardProps } from './tagged-card';

@@ -259,7 +259,7 @@ export async function getBookmarks(
     orderBy: sql`${items.publishedAt} DESC NULLS LAST`,
     page: query.page,
     pageSize: query.pageSize,
-    mapRow: toBookmarkItem,
+    mapRow: toXBookmarkItem,
   });
 }
 
@@ -291,10 +291,10 @@ export async function getLastSyncedAt(db: FavbaseDb = getDb()): Promise<Date | n
 
 /**
  * Defensive platformMeta → XBookmarkItem field narrowing, the SINGLE source of
- * truth shared by the query mapRow (below) and the section tagged-tweet-card
- * adapter. Envelope fields (id/tweetId/title/originalUrl/publishedAt) stay at
- * each call site; text falls back to the row's title, authorName to the row's
- * own authorName.
+ * truth, read through `toXBookmarkItem` (below) — the mapRow both the paged
+ * query and the tagged-card adapter use. Envelope fields (id/tweetId/title/
+ * originalUrl/publishedAt) are set there; text falls back to the row's title,
+ * authorName to the row's own authorName.
  */
 export type NarrowedXMeta = Omit<
   XBookmarkItem,
@@ -333,7 +333,9 @@ export function narrowXMeta(
   };
 }
 
-function toBookmarkItem(row: {
+/** Row → `XBookmarkItem`; shared by the paged query and the tagged-card adapter
+ *  (`taggedCard`), so the two read paths cannot drift. */
+export function toXBookmarkItem(row: {
   id: string;
   platformItemId: string;
   title: string;

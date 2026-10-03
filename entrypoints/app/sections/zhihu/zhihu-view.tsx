@@ -3,6 +3,7 @@ import { useTranslation } from '@/lib/i18n/use-translation';
 import { CollectionConfigurationNotice } from '../../components/configuration-blocker';
 import {
   EmptyLibraryState,
+  FacetChips,
   NotLoggedInState,
   type SiteAction,
 } from '../../components/collection-states';
@@ -15,7 +16,6 @@ import {
   type SyncErrorCopy,
 } from '../../hooks/collection-sync-error-message';
 import { useZhihuFavorites } from './use-zhihu-favorites';
-import { CollectionChips } from './collection-chips';
 import { ZhihuCard } from './zhihu-card';
 import { TaggedZhihuCard } from './tagged-zhihu-card';
 import { ZhihuGridSkeleton } from './zhihu-grid-skeleton';
@@ -108,8 +108,12 @@ export function ZhihuView() {
       )}
       skeleton={<ZhihuGridSkeleton />}
       primaryCategory={zhihu.libraryCount > 0 ? (
-        <CollectionChips
-          collections={zhihu.facets}
+        <FacetChips
+          icon="simple-icons:zhihu"
+          title="zhihu.collectionsTitle"
+          facets={zhihu.facets}
+          getKey={(c) => c.collectionId}
+          getName={(c) => c.title}
           totalCount={zhihu.libraryCount}
           selected={zhihu.filter}
           onSelect={zhihu.setFilter}

@@ -17,13 +17,21 @@ Step 6 原文要「scaffold 给外壳文案默认值」「共享状态组件只�
   - `NotLoggedInState({ icon, title, description, site, syncing, onSync })`：站点会话缺失（x / zhihu），`site` 必填。x 的两种 auth（`missing` / `rejected`）由 **view** 选键传入，组件不认识 `reason`。
   - `NeedsConfigState({ icon, title, description, settings, sync? })`：要在设置页填的凭据缺失（github token、youtube key + 频道，不带 `sync`）或被拒（youtube `YoutubeAuthError`，带 `sync` 以便改完重试）。
 - `use-collection-chrome-copy.ts` — `useCollectionChromeCopy()` → `{ syncLabel, syncingLabel, loadFailed, retry, syncFailed(error) }`（`pipeline.fetchNow` / `pipeline.fetching` / `common.loadFailed` / `common.retry` / `common.syncFailed`）。**唯一消费方是 `CollectionPageScaffold`，且它直接 import 本叶文件**——经 barrel 会把 react-router、`settings-nav` 与 Iconify 拖进 scaffold 的模块图。本文件只依赖 `useTranslation`，以后也不要给它加别的 import。
-- `index.ts` — barrel：三个组件、`SiteAction`、三个 props 类型、`useCollectionChromeCopy` / `CollectionChromeCopy`。
+- `facet-chips.tsx` — `FacetChips<T extends { count }>({ icon, title, facets, getKey, getName, totalCount, selected, onSelect })`（docs/32 Step 8）：一维带计数的单选 facet 行，x 的作者（Creator）、zhihu 的收藏夹与 youtube 的播放列表（Source）共用，取代三份逐属性相同的 `author-chips` / `collection-chips` / `playlist-chips`。渲染共享 `CollapsibleChipRow`：20px `Iconify`、`t(title)`、label `${getName(f) || getKey(f)} (${f.count})`（名字为空回退 key）、All chip `${t('common.all')} (${totalCount})`、`common.showMore` / `common.showLess`。facet 形状不归一（docs/32 Step 8 D-e：`AuthorCount` / `ZhihuCollectionCount` / `PlaylistCount` 原样），调用方传 `getKey` / `getName` 两个访问器；顺序由调用方的 facet 查询决定，本组件不排序。不收 `getIcon`：今天没有消费者。
+- `index.ts` — barrel：三个组件、`SiteAction`、三个 props 类型、`useCollectionChromeCopy` / `CollectionChromeCopy`、`FacetChips` / `FacetChipsProps`。
+- `facet-chips.test.tsx` — 单独成文件（不并进 `collection-states.test.tsx`），沿用同一个 `t` mock 与 Iconify mock：表头译文与 20px 图标、All chip 在首位且是 `common.all (total)`、label 是 `name (count)`、名字为空回退 key、点 facet → `onSelect(key)`、点 All → `onSelect(null)`。去掉 `|| getKey(f)` 时「回退 key」一例红（已证伪）。
 - `collection-states.test.tsx` — 三个状态的动作区形状（按钮数、先后、`buttonClasses.contained` / `outlined` 及配套的 `colorPrimary` / `colorInherit`——contained 一律品牌主色、outlined 获取保持中性、站点链接属性、点击）、`NeedsConfigState` 落到 `settingsPath(leaf)`、hook 五个字段与传给 `t()` 的参数名（`t` mock 把参数拼成 `key|name=value`，所以证的是键与参数名，不是插值）、以及真实 zh-CN / en 里 `common.syncFailed` / `lastSynced` / `showMore` 确实带 `{{error}}` / `{{time}}` / `{{n}}`（直接 import 两个纯数据 locale 文件）。翻转变体规则时 4 例红、把 en 的 `{{error}}` 改名时 1 例红（均已证伪）。
 
 ## 导入方向
 
-- 本目录 → `../collection/state-box`、`../collection/sync-now-button`（**叶文件，不经 barrel**：barrel 带着 scaffold，scaffold 又 import 本目录的 hook 和 library-gate 的加载期 storage 读取；两个哑组件用不着这些）、`../iconify`、`../../sections/settings/settings-nav`（零值导入的纯数据表，先例 `configuration-blocker`）。
-- `components/collection/` → 本目录：只有 scaffold → `use-collection-chrome-copy.ts`。
+- 本目录 → `../collection/state-box`、`../collection/sync-now-button`、`../collection/collapsible-chip-row`（**叶文件，不经 barrel**：barrel 带着 scaffold，scaffold 又 import 本目录的 hook 和 library-gate 的加载期 storage 读取；三个哑组件用不着这些）、`../iconify`、`../../sections/settings/settings-nav`（零值导入的纯数据表，先例 `configuration-blocker`）。
+- `components/collection/` → 本目录：只有 scaffold → `use-collection-chrome-copy.ts`。`FacetChips` 由 view 构造、经 scaffold 的 `primaryCategory` slot 注入，scaffold 不 import 它，所以 `components/collection/CLAUDE.md` 的具名例外名单不变。
+
+## `FacetChips` 不是状态
+
+本目录按**角色**定义——`components/collection/` 的翻译半边，凡是「`components/collection/` 的哑组件 + 一层 `t()`」都住这里——不是按「页面状态」。`FacetChips` 要调 `t()`，所以进不了 `components/collection/**`；为一个组件再开目录是仪式（docs/32 Step 8 D-d）。下一节「刻意不进来的状态」只说三种引导状态的取舍，与 chip 行无关。
+
+形状不同的 chip 行同样留在各自 view，自己组合 `CollapsibleChipRow`：github `LanguageChips`（每个 chip 多一个语言色点 `getIcon`）、bookmarks `FolderChips`（无计数、`undefined` 表示全部）、B站 `FolderChips`（加载骨架 + 空态）。
 
 ## 刻意不进来的状态
 

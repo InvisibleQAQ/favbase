@@ -364,12 +364,12 @@ function readPath(meta: unknown): string {
 
 /**
  * Defensive narrowing of the `platform_meta` bookmarks-sync-service writes
- * (`BookmarkItemMeta`) — the SINGLE source of truth shared by the query mapRow
- * here and the section tagged card adapter, so the two read paths cannot drift
- * (they had: the card used to fall back to `null` for `dateAdded`, the query to
- * `publishedAt`). A missing / mistyped field falls back to the row's own
- * columns: `domain` to the author name (which sync writes as the domain),
- * `dateAdded` to `publishedAt` (which sync writes from the same timestamp).
+ * (`BookmarkItemMeta`) — the SINGLE source of truth, read through
+ * `toBookmarkItem` (below), the mapRow both the paged query and the tagged-card
+ * adapter use, so the two read paths cannot drift (they had: the card used to
+ * fall back to `null` for `dateAdded`, the query to `publishedAt`). A missing /
+ * mistyped field falls back to the row column sync writes from the same value:
+ * `domain` to the author name, `dateAdded` to `publishedAt`.
  */
 export function narrowBookmarkMeta(
   meta: unknown,
@@ -383,7 +383,9 @@ export function narrowBookmarkMeta(
   };
 }
 
-function toBookmarkItem(row: {
+/** Row → `BookmarkItem`; shared by the paged query and the tagged-card adapter
+ *  (`taggedCard`), so the two read paths cannot drift. */
+export function toBookmarkItem(row: {
   id: string;
   platformItemId: string;
   title: string;

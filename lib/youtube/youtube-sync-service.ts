@@ -356,7 +356,7 @@ export async function getPlaylistVideos(
     orderBy: desc(sql`${items.platformMeta}->>'addedAt'`),
     page: query.page,
     pageSize: query.pageSize,
-    mapRow: toVideoItem,
+    mapRow: toYoutubeVideoItem,
   });
 }
 
@@ -388,11 +388,11 @@ export async function getLastSyncedAt(db: FavbaseDb = getDb()): Promise<Date | n
 
 /**
  * Defensive platformMeta → YoutubeVideoItem field narrowing, the SINGLE source
- * of truth shared by the query mapRow (below) and the section
- * tagged-youtube-card adapter. Envelope fields (id/videoId/title/originalUrl/
- * publishedAt) stay at each call site; channelTitle falls back to the row's own
- * authorName. playlistId/playlistTitle live in platformMeta but are not view
- * fields, so they are not narrowed here.
+ * of truth, read through `toYoutubeVideoItem` (below) — the mapRow both the
+ * paged query and the tagged-card adapter use. Envelope fields (id/videoId/
+ * title/originalUrl/publishedAt) are set there; channelTitle falls back to the
+ * row's own authorName. playlistId/playlistTitle live in platformMeta but are
+ * not view fields, so they are not narrowed here.
  */
 export type NarrowedYoutubeMeta = Omit<
   YoutubeVideoItem,
@@ -419,7 +419,9 @@ export function narrowYoutubeMeta(
   };
 }
 
-function toVideoItem(row: PagedItemRow): YoutubeVideoItem {
+/** Row → `YoutubeVideoItem`; shared by the paged query and the tagged-card adapter
+ *  (`taggedCard`), so the two read paths cannot drift. */
+export function toYoutubeVideoItem(row: PagedItemRow): YoutubeVideoItem {
   return {
     id: row.id,
     videoId: row.platformItemId,

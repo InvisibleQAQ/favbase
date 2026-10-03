@@ -1,7 +1,11 @@
 import { formatDateTime } from '@/lib/i18n';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { CollectionConfigurationNotice } from '../../components/configuration-blocker';
-import { EmptyLibraryState, NeedsConfigState } from '../../components/collection-states';
+import {
+  EmptyLibraryState,
+  FacetChips,
+  NeedsConfigState,
+} from '../../components/collection-states';
 import { DashboardContent } from '../../layouts/dashboard';
 import {
   PipelineProgressStrip,
@@ -16,7 +20,6 @@ import {
   type SyncErrorCopy,
 } from '../../hooks/collection-sync-error-message';
 import { useYoutubePlaylists } from './use-youtube-playlists';
-import { PlaylistChips } from './playlist-chips';
 import { YoutubeCard } from './youtube-card';
 import { TaggedYoutubeCard } from './tagged-youtube-card';
 import { YoutubeGridSkeleton } from './youtube-grid-skeleton';
@@ -117,8 +120,12 @@ export function YoutubeView() {
       )}
       skeleton={<YoutubeGridSkeleton />}
       primaryCategory={yt.libraryCount > 0 ? (
-        <PlaylistChips
-          playlists={yt.facets}
+        <FacetChips
+          icon="mdi:youtube"
+          title="youtube.playlistsTitle"
+          facets={yt.facets}
+          getKey={(p) => p.playlistId}
+          getName={(p) => p.title}
           totalCount={yt.libraryCount}
           selected={yt.filter}
           onSelect={yt.setFilter}

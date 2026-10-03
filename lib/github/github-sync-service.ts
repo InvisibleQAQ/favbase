@@ -335,7 +335,7 @@ export async function getStarredRepos(
     orderBy: desc(sql`${items.platformMeta}->>'starredAt'`),
     page: query.page,
     pageSize: query.pageSize,
-    mapRow: toRepoItem,
+    mapRow: toGithubRepoItem,
   });
 }
 
@@ -365,9 +365,9 @@ export async function getLastSyncedAt(db: FavbaseDb = getDb()): Promise<Date | n
 
 /**
  * Defensive platformMeta → GithubRepoItem field narrowing, the SINGLE source of
- * truth shared by the query mapRow (below) and the section tagged-repo-card
- * adapter. Envelope fields (id/repoId/fullName/ownerLogin/htmlUrl) stay at each
- * call site; GitHub has no envelope-fallback fields.
+ * truth, read through `toGithubRepoItem` (below) — the mapRow both the paged
+ * query and the tagged-card adapter use. Envelope fields (id/repoId/fullName/
+ * ownerLogin/htmlUrl) are set there; GitHub has no envelope-fallback fields.
  */
 export type NarrowedGithubMeta = Omit<
   GithubRepoItem,
@@ -388,7 +388,9 @@ export function narrowGithubMeta(meta: unknown): NarrowedGithubMeta {
   };
 }
 
-function toRepoItem(row: {
+/** Row → `GithubRepoItem`; shared by the paged query and the tagged-card adapter
+ *  (`taggedCard`), so the two read paths cannot drift. */
+export function toGithubRepoItem(row: {
   id: string;
   platformItemId: string;
   title: string;
