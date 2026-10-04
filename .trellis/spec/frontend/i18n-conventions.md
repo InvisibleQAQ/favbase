@@ -435,7 +435,7 @@ When modifying i18n:
 | `lib/i18n/index.ts` | `t()` (+ plural), `formatCompactNumber()`, observable locale state, `setLocale()`, `subscribeLocale()`/`getLocaleSnapshot()`, `getResolvedLocale()` |
 | `lib/i18n/index.test.ts` | Unit tests: plural resolution, interpolation, `formatCompactNumber` |
 | `tests/i18n-no-hardcoded.test.ts` | CJK guard over `entrypoints/**/*.tsx` |
-| `lib/i18n/detect.ts` | `detectLocale()` based on `navigator.language` |
+| `lib/i18n/detect.ts` | `SUPPORTED_LOCALES` (the runtime list; `SupportedLocale` is derived from it) and `detectLocale()` based on `navigator.language`. Side-effect free, so tests may value-import it |
 | `lib/i18n/use-translation.ts` | `useTranslation()` React hook (`useSyncExternalStore` wrapper) |
 | `lib/i18n/locales/zh-CN.ts` | Chinese locale, **source of truth** for `LocaleKeys` type |
 | `lib/i18n/locales/en.ts` | English locale, typed as `Record<LocaleKeys, string>` |

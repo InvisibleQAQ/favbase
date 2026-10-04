@@ -9,6 +9,7 @@ import { Hero } from './sections/hero';
 import { AgentSkills } from './sections/agent-skills';
 import { ChatShowcase } from './sections/chat-showcase';
 import { HowItWorks } from './sections/how-it-works';
+import { ProductTour } from './sections/product-tour';
 import { PlatformPicker } from './sections/platform-picker';
 import { PlatformRequest } from './sections/platform-request';
 import { CapabilityMarquee } from './sections/capability-marquee';
@@ -37,6 +38,7 @@ export function WelcomeView() {
       <Box sx={{ position: 'relative', bgcolor: 'background.default' }}>
         <CapabilityMarquee />
         <HowItWorks />
+        <ProductTour />
         <ChatShowcase />
         <AgentSkills />
         <BilibiliShowcase />

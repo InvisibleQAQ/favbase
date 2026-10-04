@@ -708,6 +708,18 @@ const en: Record<LocaleKeys, string> = {
     'The chat agent decides what to retrieve and how many rounds to run, streams its answer as it goes, and hangs clickable source cards underneath.',
   'welcome.flow.step3.hint': 'This is the main event',
 
+  'welcome.tour.eyebrow': 'A look inside',
+  'welcome.tour.heading': 'Real screens,',
+  'welcome.tour.headingTail': 'real data',
+  'welcome.tour.desc':
+    "These are screenshots of the developer's own library, not mock-ups. Yours starts empty and grows into this as you collect.",
+  'welcome.tour.dashboard.desc':
+    'How much you have saved, from which platforms, and whose work you save most.',
+  'welcome.tour.collections.desc': 'Every platform in one list you can search and filter.',
+  'welcome.tour.github.desc': 'Starred repositories with their READMEs, filtered by language.',
+  'welcome.tour.x.desc': 'Bookmarked posts grouped by author, their text in the knowledge base.',
+  'welcome.tour.imageAlt': 'Screenshot of the {{title}} page',
+
   'welcome.chat.eyebrow': 'The main feature',
   'welcome.chat.heading': 'Chat with your',
   'welcome.chat.headingTail': 'knowledge base',

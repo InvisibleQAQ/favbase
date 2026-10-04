@@ -694,6 +694,17 @@ const zhCN = {
     '知识库对话自己决定检索什么、检索几轮，边想边答，答案下面挂着可点开的来源卡片。',
   'welcome.flow.step3.hint': '这就是主要功能',
 
+  'welcome.tour.eyebrow': '界面一览',
+  'welcome.tour.heading': '真实界面，',
+  'welcome.tour.headingTail': '真实数据',
+  'welcome.tour.desc':
+    '下面是开发者自己的收藏库截图，不是示意图。你的库从空开始，收录之后才会长成这样。',
+  'welcome.tour.dashboard.desc': '收藏了多少、来自哪些平台、谁的内容最多，一页看清。',
+  'welcome.tour.collections.desc': '所有平台的收藏汇进同一个列表，可搜索、可按平台筛选。',
+  'welcome.tour.github.desc': 'Star 过的仓库连同 README 一起收录，按语言筛选。',
+  'welcome.tour.x.desc': '书签推文按作者归类，正文进入知识库。',
+  'welcome.tour.imageAlt': '{{title}}页面截图',
+
   'welcome.chat.eyebrow': '主要功能',
   'welcome.chat.heading': '知识库',
   'welcome.chat.headingTail': '对话',

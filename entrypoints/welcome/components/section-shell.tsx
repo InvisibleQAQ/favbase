@@ -66,8 +66,9 @@ export function fadeTextGradient(theme: Theme): CSSObject {
 /**
  * Vertical rhythm for the page's content bands. A band with geometry of its own
  * brings its own wrapper and padding instead: the hero, the marquee,
- * how-it-works' sticky stack, and the closing Platform Request card, which has
- * no vertical padding at all (Minimal's advertisement band).
+ * how-it-works' sticky stack, the product tour's scroll gallery, and the
+ * closing Platform Request card, which has no vertical padding at all
+ * (Minimal's advertisement band).
  *
  * A call site overriding `py`/`pt`/`pb` must give the `md` value too: a scalar
  * lands in the base rule only and loses to this component's `md` media rule.

@@ -2,6 +2,8 @@
 
 用户可见文案集中在 `locales/`：`zh-CN.ts` 是 `LocaleKeys` 类型源，`en.ts` 以 `Record<LocaleKeys, string>` 保证键集合一致。React 组件通过 `useTranslation()` 订阅语言变化；非 React 调用经 `index.ts` 的 `t()`，禁止业务层直接拼接翻译文本。
 
+受支持的语言只有一份运行时清单：`detect.ts` 的 `SUPPORTED_LOCALES`，`SupportedLocale` 类型由它派生。需要枚举语言的代码（如 welcome 画廊的逐语言截图检查 `entrypoints/welcome/tour-images.test.ts`）读它，不另抄一份；`detect.ts` 是无副作用的叶模块，测试里可以直接 value-import，`index.ts` 不行（加载即读 storage）。
+
 ASR quota 文案只消费结构化 `ASR_QUOTA_EXCEEDED/resetAt`：自动转录 UI 使用 `autoTranscribe.quotaPaused*`，设置页使用 `settings.asr.groq*`；Groq 原始 429 message 只作 debug，不进入可见文案。
 
 Collection provider 阻塞统一使用 `configurationBlocker.*`。ASR 只在视频确实无可用官方字幕、状态机进入 `configuration_required` 且 resolver 无 key 时显示；Embedding/Tags 还必须有 ready coverage backlog。按钮深链 AI section 并携带 `resume=<platform>`；不得把空 ASR key 做成 Fetch 前置门。

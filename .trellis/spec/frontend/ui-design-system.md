@@ -221,6 +221,30 @@ scale with the viewport needs its own decision. (The theme's input text,
 15px and 16px below `sm` from `core/components/text-field.tsx`, is a
 theme-owned Minimal port from docs/25 Step 1, not a page call site.)
 
+> **Warning — a pixel offset in the reference can encode its type scale.** The
+> variants above are smaller than Minimal's and do not scale with the viewport,
+> so an offset tuned to Minimal's line box is wrong here. Found in welcome's
+> `ProductTour` (outside this spec's scope, same typography; docs/35 §7): the
+> source centres a 28px icon on an `h3` title with `mt: '10px'`, which is
+> (48 − 28) / 2 for Minimal's `h3` at `lg` (32px × 1.5). Here `h3` is
+> 20px × 1.3 = 26px, and the copied number put the icon 11px low (measured).
+>
+> ~~~tsx
+> // Wrong: number copied from $MIN/sections/home/home-highlight-features.tsx
+> <Iconify width={28} sx={{ mt: '10px' }} />
+>
+> // Correct: derived from the variant the icon sits beside ((26 − 28) / 2 = −1px)
+> <Iconify
+>   width={28}
+>   sx={(theme) => ({
+>     mt: `calc((calc(${theme.typography.h3.fontSize} * ${theme.typography.h3.lineHeight}) - 28px) / 2)`,
+>   })}
+> />
+> ~~~
+>
+> When porting, read every literal margin, `top` or height that sits beside
+> text as a function of a `theme.typography` variant, and recompute it.
+
 ## 6. Shape And Elevation
 
 `theme.shape.borderRadius = 8` is the base. Page code grades **down** from it
@@ -387,6 +411,35 @@ see below):
 --layout-dashboard-content-pb    64px
 --layout-transition-duration     120ms
 ~~~
+
+> **Warning — a ported full-viewport sticky stage sits under the header.** The
+> header is sticky and translucent, so a stage written as
+> `position: sticky; top: 0; height: 100vh` (Minimal's scroll-linked sections)
+> has its top 72px (64px below `md`) behind the header. Found in welcome's
+> `ProductTour` (outside this spec's scope, same shell variables; docs/35 §7):
+> at 1440×900 each item's title measured y = 37 under a header whose bottom
+> edge is 72. Minimal's own page overlaps the same way on a short viewport, so
+> reading the source does not reveal it.
+>
+> ~~~tsx
+> // Wrong: copied from $MIN/sections/home/home-highlight-features.tsx
+> { position: 'sticky', top: 0, height: '100vh' }
+>
+> // Correct: the stage starts where the header ends
+> {
+>   position: 'sticky',
+>   top: 'var(--layout-header-desktop-height)',
+>   height: 'calc(100vh - var(--layout-header-desktop-height))',
+> }
+> ~~~
+>
+> Then size what the stage holds from the height that is left, not from the
+> reference's breakpoint table alone: the reference's 1140×713 image, its
+> 114px title block, the 72px header and 24px of air above and below come to
+> 947px, taller than most laptop windows.
+> Verify in a built page, not by arithmetic: `getBoundingClientRect` of the
+> first and last element inside the stage against the header's bottom edge and
+> `innerHeight`, at 1440×900 and at one shorter viewport.
 
 Nav geometry belongs to `components/nav-section/styles/css-vars.ts` (the ported
 Minimal nav owns it; the retired `--layout-nav-item-height` /

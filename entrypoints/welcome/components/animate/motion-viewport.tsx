@@ -11,7 +11,8 @@ export type MotionViewportProps = ComponentProps<typeof MotionBox>;
  * the variant tree. Ported from Minimal `motion-viewport` for docs/31 Step 4.
  *
  * Only descendants that carry `variants` are driven by it. On this page that is
- * the section decoration in `components/svg-elements` and nothing else:
+ * the section decoration in `components/svg-elements` and the two-triangle
+ * mark under the product tour's title, nothing else:
  * `FadeIn` passes objects to `initial`/`whileInView`, not variant labels, so it
  * keeps its own observer and its own timing (docs/28 D6), inside a
  * `MotionViewport` or not.
