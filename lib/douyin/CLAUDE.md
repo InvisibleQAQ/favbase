@@ -2,9 +2,7 @@
 
 抖音收藏收录领域（第 7 个平台，docs/33）。同步登录用户的**全部收藏**（`aweme/listcollection`），`status === 1` 的公开收藏夹是 Source；正文 = 作品 `desc`，同步时即得。复用现有表（`platform='douyin'`），零新表零迁移。
 
-**状态：Step 1 + Step 2 已落地（2026-10-03，代码 + 单测；实机验证是 Step 3）**。判别符已翻（`COLLECTION_PLATFORMS` 第 7 项），`lib-import-smoke`、env 守卫（裸数值常量 + 未登记键）、sleep 守卫、completeness contract 的错误基类检查自此按 `COLLECTION_PLATFORMS` 自动覆盖本目录。本目录的 chrome 半边是 `douyin-tab.ts`（transport + 标签页解析，见下）；app 侧接线（Sync Adapter、断点 storage 读写、逐页派发处理 lane、页面）在 `entrypoints/app/sections/douyin/`，见该目录 `CLAUDE.md`。
-
-**已知缺陷，Step 3 首次真实账号全量入库之前必须先处理**：一页入库在写正文的中途断掉，该页还没轮到的条目停在 `'has_content'` 且没有 `plainText`（`lib/ingest/ingest.ts:364`、`:434-440`）；之后任何一次带 `content` 的 `ingestCollection` 调用都按**本次调用的** `textOf` 加已存 `plainText` 清扫全平台幽灵，都没有就落 `'no_content'` 且不再清扫（`:442-461`、`:143-145`）。本目录的 `textOf` 只认本页（`douyin-sync-service.ts:378`），所以中断页的条目只要不在下一次入库的那一页里，就永久无正文（insert-only，事后补不回来）。复核时用临时测试实跑确认；细节与自愈条件见 docs/33 §6「阻塞项」。
+**状态：Step 1 + Step 2 已落地（2026-10-03），Step 2.5 已落地（2026-10-04：每次运行至少清扫一次幽灵 + 接口序位，代码 + 单测）；实机验证是 Step 3**。判别符已翻（`COLLECTION_PLATFORMS` 第 7 项），`lib-import-smoke`、env 守卫（裸数值常量 + 未登记键）、sleep 守卫、completeness contract 的错误基类检查自此按 `COLLECTION_PLATFORMS` 自动覆盖本目录。本目录的 chrome 半边是 `douyin-tab.ts`（transport + 标签页解析，见下）；app 侧接线（Sync Adapter、断点 storage 读写、逐页派发处理 lane、页面）在 `entrypoints/app/sections/douyin/`，见该目录 `CLAUDE.md`。
 
 ## 为什么是注入的 transport（docs/33 D4）
 
@@ -76,15 +74,17 @@
 
 `syncDouyinCollections(transport, { backfill, onBackfill?, onPagePersisted?, onProgress?, control? })`（测试用 `syncDouyinCollectionsToDb(db, …)` + 注入 `pacer` / `now`）。一次运行的顺序：
 
-1. `collects/list` 全量 → 公开夹 → 一次 `ingestCollection({ sources, items: [] })`（空夹也是 Source）
+1. `collects/list` 全量 → 公开夹 → 一次 `ingestCollection({ sources, items: [], content })`（空夹也是 Source）。**这次调用无条件执行并带 `content`（D-g）**：它是本次运行保证有的那一次幽灵清扫，`textOf` 恒返回空串，文本取自已存 `plainText`；治愈的 id 与分页的走同一个出口（`newItemIds` + `onPagePersisted`）
 2. **头部段**：从 `'0'` 翻 listcollection，每页 `ingestCollection({ sources: [], links: [] })`
 3. **续传段**：仅当本次以断点开跑（`resumeCursor` 非空、未完成）
 4. 每个公开夹全量走 collects/video/list，入库并写 links（夹里有、全量列表还没拉到的照样入库）
 5. 返回 `{ fetched, inserted, folders, newItemIds }`——`fetched` 是各页收到的作品数之和，一条同时在全量列表和公开夹里会计两次（同知乎的 `total`）；进度回调 `(fetchedCount, page)` 报的也是这个累计数
 
 - **D-a 全部收藏条目不挂 Source**：X / GitHub 的合成 Source 在它们 `dimensions.source: null` 时无害；抖音的 Source 维度是收藏夹，合成「全部收藏」会在 chip 与 Dashboard 细分里冒出一个假夹，还和「全部」chip 重复。所以存在没有任何 link 的条目，`getDouyinItems` 照查（测试锁住）
-- **D-b 逐页入库 + 逐页回调**：每页 `onPagePersisted(result.contentPersisted)`（非空才调），app 侧逐条 `enqueueCollectionProcessingItem`、funnel 收 `newItemIds: []`——逐页入库下中途失败的运行已写进库的条目不会经 funnel 派发（funnel 只在成功时派发）
+- **D-b 逐页入库 + 逐页回调**：每次 `ingestCollection` 调用之后 `onPagePersisted(result.contentPersisted)`（非空才调；分页与运行开头那次清扫共用内部的 `report`），app 侧逐条 `enqueueCollectionProcessingItem`、funnel 收 `newItemIds: []`——逐页入库下中途失败的运行已写进库的条目不会经 funnel 派发（funnel 只在成功时派发）
 - 已知集合开跑时 `platformItemIds` 读一次，每页入库后并入（减去 `droppedItemIds`）；**整页**（剔除失效后非空）都已知才停，不用「首个已知 id 即停」——重新收藏的旧视频会顶到最前面压住新的
+- **D-g 每次运行至少清扫一次幽灵**（docs/33 Step 2.5）：一页在写 chunk 的中途断掉（关页、写库抛错），该页没轮到的条目停在 `'has_content'`，正文已随行落盘（`lib/ingest` 的不变量，D6）。其他平台每次同步都带 `content` 调一次 `ingestCollection`，所以每次都清扫；抖音的增量运行在头部首页整页已知时一页都不入库，所以清扫挂在第 1 步那次无条件调用上。少了它，幽灵要等到下一条新收藏才被切块、派发（两种情形各有一条测试：头部有新收藏 / 什么都没有）
+- **一页从哪来由一个参数说清**：`persist` / `ingestPage` 收 `PageOrigin = { kind: 'list', nextCursor } | { kind: 'folder', folder }`——列表页（头部段 + 续传段）写接口序位、不写 link；公开夹页写 link 与首见夹、序位为 null。别在它旁边再叠可空参数
 
 ## 断点状态机（设计 B：两个字段）
 
@@ -95,7 +95,7 @@
 - 续传段：从 `resumeCursor` 翻到底，每页推向更旧（只取更小者）。续传段只在本次以断点开跑时运行，所以 `fullWalk` 撞保险丝的那次运行**不**接着续传，下次运行再续
 - **D-e（仅续传段第一次请求，即携带存储断点的那次）**：F8（无失效 id）、F9，或 F10（返回的 cursor 不前进 / 回退——服务端没认这个断点，比如从头返回）→ 写回 `{ null, false }` 再抛原错误；下次全量走。16 位 cursor 跨天是否有效、失效时服务端怎么回应都 `[UNKNOWN]`，若按限流或普通错误处理，续传会永远卡死（UI 无重置入口），代价是多一次全量。**续传段第 2 页起**用的是本次刚从服务端拿到的 cursor，那里的 F8 / F9 多半是真风控、F10 是服务端分页本身出错，都按普通错误处理、断点留在最后一页成功入库之后——此时清空断点等于在被限流时安排一次约 115 页的全量重走（Step 1 复核时收窄到第一次请求，并经主会话决定纳入首请求 F10，测试锁住）。头部段的 F8 / F9 / F10 不动断点（头部段不传回调）
 - **存储断点在边界校验**：`resumeCursor` 经 `decodeCursor` 读入，不是纯数字串（存储损坏、旧格式）就当 `null`——等同 D-e，本次全量走；否则它会在游走里以 `BigInt` 的 `SyntaxError` 冒出来（测试锁住）
-- 中途抛错：已入库保留（insert-only），断点停在最后一页成功入库之后
+- 中途抛错：已入库保留（insert-only），断点停在最后一页成功入库之后。抛在一页入库**中间**（写 chunk 时）的，该页的行与正文已提交、断点还没越过它；没切块的条目由后面任意一次清扫治愈（D-g），不依赖那一页被重新拉到
 - 已知限制：非 `fullWalk` 的头部段若一天新增超过 `MAX_PAGES` 页（> 4000 条）撞保险丝，那一段之后不会被补上
 
 ## items 行映射
@@ -105,7 +105,8 @@
 - 作者 `platformAuthorId = author.sec_uid`（`uid` 会轮换）、`authorName = nickname`；**`sec_uid` 为空的条目剔除作者行，ingest 随之丢掉该条目**（同 X 剔除空 restId）
 - `publishedAt = create_time * 1000`（作品发布时间；抖音无逐条收藏时间，同知乎妥协）
 - `contentState`：`desc` 非空 `'chunked'`、空 `'no_content'`，**从不** `'pending'`；切块 `charSplit(text, { preferParagraph: false })`（叶子导入 `@/lib/embedding/char-split`）
-- `platform_meta`：`{ desc, authorName, authorSecUid, avatarUrl, coverUrl, durationMs, mediaKind, folderId, folderTitle }`——`durationMs` 毫秒（图文为 null），`folderId`/`folderTitle` 是**首见**公开夹、仅展示（从全量列表首见则为 null），筛选走 `item_sources`。不存 `statistics.play_count`（网页恒 0）
+- `platform_meta`：`{ desc, authorName, authorSecUid, avatarUrl, coverUrl, durationMs, mediaKind, folderId, folderTitle, listCursor, listIndex }`——`durationMs` 毫秒（图文为 null），`folderId`/`folderTitle` 是**首见**公开夹、仅展示（从全量列表首见则为 null），筛选走 `item_sources`。不存 `statistics.play_count`（网页恒 0）
+- **接口序位 `listCursor` / `listIndex`（D5，用户 2026-10-04 决定：存，排序不改）**：条目首次入库时它在全部收藏列表里的位置——`listCursor` 是该页响应返回的 cursor（`page.nextCursor`，末页为 `null`），`listIndex` 是它在 `page.awemes` 里的下标。**只写不读**：`narrowDouyinMeta` / `DouyinItem` 不带这两个字段，排序仍是 `publishedAt`。抖音不给逐条收藏时间，insert-only 下入库之后补不了，所以先存下来。已知缺口：首见于公开夹分页的条目两个都是 `null`，之后再出现在列表页也不回填（first-write-wins，测试锁住）；单页就到底的库 `listCursor` 全是 `null`；`listIndex` 数的是剔除失效作品、映射之后的下标；「cursor = 收藏时间」仍 `[UNKNOWN]`，所以字段名不带时间含义
 
 ## 查询
 

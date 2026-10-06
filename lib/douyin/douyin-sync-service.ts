@@ -90,7 +90,29 @@ interface DouyinItemMeta {
   /** First-seen public folder (display only); filtering goes through item_sources. */
   folderId: string | null;
   folderTitle: string | null;
+  /**
+   * Where the item sat in the all-favorites list when it was first inserted
+   * (docs/33 D5): the cursor its page's response returned (null on the last
+   * page) and its index in that page. Both null when the item was first seen
+   * in a public folder's page — first-write-wins, a later list page does not
+   * fill them in. Write-only today: nothing reads them and sorting stays on
+   * publishedAt. Whether the cursor is a favorite time is unknown, hence the
+   * neutral names.
+   */
+  listCursor: string | null;
+  listIndex: number | null;
 }
+
+/**
+ * Which kind of page an aweme arrived in. A page of the all-favorites list
+ * (head or resume segment) gives its items a list position and no Source; a
+ * public folder's page gives them the folder — as the link and as the
+ * first-seen display meta — and no position (its cursor is an offset, a
+ * different key).
+ */
+type PageOrigin =
+  | { kind: 'list'; nextCursor: string | null }
+  | { kind: 'folder'; folder: DouyinFolder };
 
 /**
  * Where the first full walk of the all-favorites list stopped. Stored by the
@@ -113,7 +135,10 @@ export type DouyinProgressCallback = (fetchedCount: number, page: number) => voi
 export interface SyncDouyinOptions {
   backfill: DouyinBackfillState;
   onBackfill?: (state: DouyinBackfillState) => void | Promise<void>;
-  /** platformItemIds whose content landed in this page's ingest — dispatch them now (D-b). */
+  /**
+   * platformItemIds whose content landed in one ingest call — a page's, or the
+   * run-opening sweep's (D-g: ghosts an earlier run left) — dispatch them now (D-b).
+   */
   onPagePersisted?: (platformItemIds: string[]) => void;
   onProgress?: DouyinProgressCallback;
   control?: CooperativeCheckpoint;
@@ -178,9 +203,10 @@ export interface DouyinFolderCount {
 
 /**
  * One sync run against the user's open douyin.com tab (the `transport`).
- * Order: public folders → Sources; the head of the all-favorites list; the
- * resumed backfill when one is pending; every public folder's items with
- * links. Throws what the API layer throws (`DouyinAuthError`,
+ * Order: public folders → Sources, in the call that also sweeps the ghosts an
+ * earlier run left (D-g); the head of the all-favorites list; the resumed
+ * backfill when one is pending; every public folder's items with links.
+ * Throws what the API layer throws (`DouyinAuthError`,
  * `DouyinRateLimitError`, `DouyinStatusError`, Error); pages persisted before
  * the throw stay persisted and the breakpoint already points past them.
  */
@@ -230,29 +256,40 @@ export async function syncDouyinCollectionsToDb(
     opts.onProgress?.(fetched, pages);
   };
 
-  const persist = async (awemes: DouyinRawAweme[], folder: DouyinFolder | null) => {
-    if (awemes.length === 0) return;
-    const result = await ingestPage(db, awemes, folder);
+  // The one exit for content that landed, whichever ingest call wrote it.
+  const report = (result: IngestResult) => {
     inserted += result.inserted.length;
     if (result.contentPersisted.length > 0) {
       newItemIds.push(...result.contentPersisted);
       opts.onPagePersisted?.(result.contentPersisted);
     }
+  };
+
+  const persist = async (awemes: DouyinRawAweme[], origin: PageOrigin) => {
+    if (awemes.length === 0) return;
+    const result = await ingestPage(db, awemes, origin);
+    report(result);
     const dropped = new Set(result.droppedItemIds);
     for (const aweme of awemes) if (!dropped.has(aweme.id)) known.add(aweme.id);
   };
 
   // 1. Public folders → Sources. An empty public folder is still a Source.
+  //    The call is unconditional and carries `content` (D-g): it is the run's
+  //    one guaranteed ghost sweep. An incremental run whose first head page is
+  //    wholly known ingests no page at all, and the items an earlier run left
+  //    without chunks would otherwise wait for the next new favorite. No text
+  //    is in hand here; the sweep re-chunks what the insert tx stored.
   const folders = await fetchPublicFolders(session);
-  if (folders.length > 0) {
+  report(
     await ingestCollection(db, {
       platform: PLATFORM,
       sources: folders.map((folder) => ({ platformSourceId: folder.id, title: folder.title })),
       authors: [],
       items: [],
       links: [],
-    });
-  }
+      content: { textOf: () => '', chunk: chunkDesc },
+    }),
+  );
 
   // 2. Head segment, from the newest favorite. A full walk (no breakpoint and
   //    never completed) does not stop at a known page and writes the cursor
@@ -265,7 +302,7 @@ export async function syncDouyinCollectionsToDb(
     if (!fullWalk && page.awemes.length > 0 && page.awemes.every((a) => known.has(a.id))) {
       return 'stop';
     }
-    await persist(page.awemes, null);
+    await persist(page.awemes, { kind: 'list', nextCursor: page.nextCursor });
     if (fullWalk && page.nextCursor !== null) {
       await setState({ resumeCursor: page.nextCursor, backfillDone: false });
     }
@@ -282,7 +319,7 @@ export async function syncDouyinCollectionsToDb(
       resumeFrom,
       async (page) => {
         countPage(page);
-        await persist(page.awemes, null);
+        await persist(page.awemes, { kind: 'list', nextCursor: page.nextCursor });
         if (page.nextCursor !== null) {
           await setState({ resumeCursor: olderCursor(state.resumeCursor, page.nextCursor), backfillDone: false });
         }
@@ -305,7 +342,7 @@ export async function syncDouyinCollectionsToDb(
   for (const folder of folders) {
     await walkFolderItems(session, folder.id, async (page) => {
       countPage(page);
-      await persist(page.awemes, folder);
+      await persist(page.awemes, { kind: 'folder', folder });
       return 'continue';
     });
   }
@@ -333,13 +370,19 @@ function originalUrlOf(aweme: DouyinRawAweme): string {
   return `https://www.douyin.com/${kind}/${aweme.id}`;
 }
 
+/** The desc is sentence-only text like a tweet: no paragraph preference. */
+function chunkDesc(text: string) {
+  return charSplit(text, { preferParagraph: false });
+}
+
 /** One page → one `ingestCollection` call. Sources are upserted once per run, so none here. */
 function ingestPage(
   db: FavbaseDb,
   awemes: DouyinRawAweme[],
-  folder: DouyinFolder | null,
+  origin: PageOrigin,
 ): Promise<IngestResult> {
   const descById = new Map(awemes.map((a) => [a.id, a.desc]));
+  const folder = origin.kind === 'folder' ? origin.folder : null;
   return ingestCollection(db, {
     platform: PLATFORM,
     sources: [],
@@ -352,7 +395,7 @@ function ingestPage(
         name: a.author.nickname || a.author.secUid,
         avatarUrl: a.author.avatarUrl || null,
       })),
-    items: awemes.map((a) => ({
+    items: awemes.map((a, index) => ({
       platformItemId: a.id,
       platformAuthorId: a.author.secUid,
       title: titleOf(a),
@@ -371,14 +414,12 @@ function ingestPage(
         mediaKind: a.mediaKind,
         folderId: folder?.id ?? null,
         folderTitle: folder?.title ?? null,
+        listCursor: origin.kind === 'list' ? origin.nextCursor : null,
+        listIndex: origin.kind === 'list' ? index : null,
       } satisfies DouyinItemMeta,
     })),
     links: folder ? awemes.map((a) => ({ platformItemId: a.id, platformSourceId: folder.id })) : [],
-    content: {
-      textOf: (id) => descById.get(id) ?? '',
-      // Sentence-only text like a tweet: no paragraph preference.
-      chunk: (text) => charSplit(text, { preferParagraph: false }),
-    },
+    content: { textOf: (id) => descById.get(id) ?? '', chunk: chunkDesc },
   });
 }
 

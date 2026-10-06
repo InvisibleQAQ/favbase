@@ -336,16 +336,18 @@ fetches everything and calls `ingestCollection` once at the end.
   keeps `{ resumeCursor, backfillDone }` under `local:douyin-backfill`; it has
   no reader outside its adapter, so it is a `local:` item, not a Platform Sync
   Record column. Validate the stored value at the lib boundary.
-- **Known defect, fix before relying on it**: an item declared `'chunked'` is
-  inserted as `'has_content'` and gets its text outside the transaction
-  (`lib/ingest/ingest.ts:364`, `:434-440`), so an interrupted page leaves
-  items with no stored `plainText`. The next call with `content` sweeps every
-  ghost of the platform with only its own `textOf` and the stored `plainText`
-  (`:442-461`) and settles the rest `'no_content'`, which is never swept again
-  (`:143-145`). A page-sized `textOf` therefore loses an earlier page's items
-  for good; a platform that fetches everything and ingests once usually hands
-  the next call a `textOf` that covers the same items. Douyin's
-  first real full sync waits on that fix (docs/33 §6).
+- **Sweep at least once per run.** A page cut short while its chunks are being
+  written leaves the items it did not reach at `'has_content'`. Their text is
+  not lost: `ingestCollection` stores a new item's text in the same
+  transaction as its row (docs/33 D6, `lib/ingest/CLAUDE.md`), so any later
+  call that carries `content` re-chunks them from `item_contents`, whatever
+  its own `textOf` covers — a page-sized `textOf` never knows an earlier
+  page's items. But the sweep only runs inside such a call, and an incremental
+  run whose first page is wholly known makes none. Give every run one
+  unconditional `ingestCollection` call with `content` (Douyin's is the Source
+  upsert that opens the run, `textOf: () => ''`) and send what it heals through
+  the same per-page dispatch (docs/33 D-g). Test both: a later run that ingests
+  a different page, and a later run that ingests no page at all.
 
 ## 5. Phase 2 — Flip the discriminator, harvest the TODO list
 

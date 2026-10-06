@@ -8,6 +8,7 @@ import { and, eq } from 'drizzle-orm';
 import * as schema from '@/lib/database/schema';
 import { runMigrations } from '@/lib/database/migrations';
 import type { FavbaseDb } from '@/lib/database';
+import { CUT_SHORT_MARKER, withChunkWritesCutShort } from '@/tests/ingest-test-support';
 
 // No storage mock: the service's load graph is storage-free by contract
 // (tests/lib-import-smoke.test.ts).
@@ -394,6 +395,44 @@ describe('youtube-sync-service (in-memory PGlite)', () => {
       .from(schema.itemSources)
       .where(eq(schema.itemSources.sourceId, source.id));
     expect(links).toHaveLength(1); // only vid-ok linked
+  });
+
+  // -------------------------------------------------------------------------
+  // Interrupted content phase (docs/33 D6)
+  // -------------------------------------------------------------------------
+
+  it('a sync cut short while writing content loses no text: the next sync heals the video it never reached', async () => {
+    // Longer than the 500-char slice platformMeta keeps: only item_contents
+    // can give the full description back.
+    const fullDescription = `${'b'.repeat(520)} The tail of the description.`;
+    const videos = [
+      makeVideo({ videoId: 'vid-70' }),
+      makeVideo({ videoId: 'vid-71', description: `${CUT_SHORT_MARKER} description of vid-71` }),
+      makeVideo({ videoId: 'vid-72', description: fullDescription }),
+    ];
+    // Content is written in input order: vid-70 lands, vid-71 fails on its
+    // chunk insert, vid-72 is never reached.
+    await expect(
+      withChunkWritesCutShort(pg, () =>
+        syncPlaylistsToDb(db, [makeBatch(makePlaylist('pl-a'), videos)]),
+      ),
+    ).rejects.toThrow();
+    expect((await getItem('vid-72')).contentState).toBe('has_content');
+
+    // The next full refetch: all three are known, so production skips their
+    // details (`needsDetails`) and they arrive as membership entries only —
+    // there is no description in hand for any of them.
+    const result = await syncPlaylistsToDb(db, [
+      makeBatch(makePlaylist('pl-a'), [], videos.map(toEntry)),
+    ]);
+
+    const unreached = await getItem('vid-72');
+    expect(unreached.contentState).toBe('chunked');
+    expect((await getContent(unreached.id))?.plainText).toBe(fullDescription);
+    const chunks = await getChunks(unreached.id);
+    expect(chunks.map((c) => c.chunkText).join('')).toContain('The tail of the description.');
+    // Healed videos reach the embed / tag lanes.
+    expect([...result.newItemIds].sort()).toEqual(['vid-71', 'vid-72']);
   });
 
   // -------------------------------------------------------------------------

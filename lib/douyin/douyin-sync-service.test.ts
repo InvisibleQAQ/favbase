@@ -8,6 +8,7 @@ import { and, eq } from 'drizzle-orm';
 import * as schema from '@/lib/database/schema';
 import { runMigrations } from '@/lib/database/migrations';
 import type { FavbaseDb } from '@/lib/database';
+import { CUT_SHORT_MARKER, withChunkWritesCutShort } from '@/tests/ingest-test-support';
 
 // No storage mock: the service's load graph is storage-free by contract
 // (tests/lib-import-smoke.test.ts covers lib/douyin once the discriminator
@@ -314,6 +315,9 @@ describe('douyin-sync-service (in-memory PGlite)', () => {
       mediaKind: 'video',
       folderId: null,
       folderTitle: null,
+      // One page, has_more 0: no next cursor; '11' is the page's first item.
+      listCursor: null,
+      listIndex: 0,
     });
 
     const note = await getItem('12');
@@ -616,6 +620,133 @@ describe('douyin-sync-service (in-memory PGlite)', () => {
     const { states, error } = await run(transport, DONE);
     expect(error).toBeNull();
     expect(states).toEqual([]);
+  });
+
+  // -------------------------------------------------------------------------
+  // List position (docs/33 D5): written at first insert, no reader yet
+  // -------------------------------------------------------------------------
+
+  async function positionOf(platformItemId: string) {
+    const meta = (await getItem(platformItemId)).platformMeta as Record<string, unknown>;
+    return { listCursor: meta.listCursor, listIndex: meta.listIndex };
+  }
+
+  it('D5: an item first seen in the all-favorites list records its page cursor and its index, in the head and the resume segment', async () => {
+    const PAGE2 = String(TOP - 1000); // cursor that fetches page 2 = [3, 4]
+    const world: World = {
+      favorites: favs(SIX),
+      intercept: failingAt(PAGE2, { kind: 'response', status: 403, text: '' }),
+    };
+    const first = await run(fakeDouyin(world).transport, FRESH);
+    expect(first.last).toEqual({ resumeCursor: PAGE2, backfillDone: false });
+    // Head page [1, 2]: the cursor its response returned, and the index in the page.
+    expect(await positionOf('1')).toEqual({ listCursor: PAGE2, listIndex: 0 });
+    expect(await positionOf('2')).toEqual({ listCursor: PAGE2, listIndex: 1 });
+
+    world.intercept = undefined;
+    const resumed = await run(fakeDouyin(world).transport, first.last);
+    expect(resumed.last).toEqual(DONE);
+    // Resume pages [3, 4] and [5, 6]; the last page returns no next cursor.
+    expect(await positionOf('3')).toEqual({ listCursor: PAGE3, listIndex: 0 });
+    expect(await positionOf('4')).toEqual({ listCursor: PAGE3, listIndex: 1 });
+    expect(await positionOf('5')).toEqual({ listCursor: null, listIndex: 0 });
+    expect(await positionOf('6')).toEqual({ listCursor: null, listIndex: 1 });
+  });
+
+  it('D5: an item first seen in a public folder has no list position, and a later list page does not backfill it', async () => {
+    const world: World = {
+      favorites: favs(['1', '2']),
+      folders: [
+        { id: '6910000000000000202', name: 'Public', status: 1, items: [rawAweme('99')] },
+      ],
+    };
+    await run(fakeDouyin(world).transport, FRESH);
+    expect((await getItem('99')).platformMeta).toMatchObject({ folderId: '6910000000000000202' });
+    expect(await positionOf('99')).toEqual({ listCursor: null, listIndex: null });
+
+    // '99' now shows up in the list under a new favorite: that page is
+    // ingested, but '99' is already stored and keeps its first-write meta.
+    world.favorites = [
+      { raw: rawAweme('5'), ts: TOP + 2000 },
+      { raw: rawAweme('99'), ts: TOP + 1000 },
+      ...world.favorites,
+    ];
+    const next = await run(fakeDouyin(world).transport, DONE);
+    expect(next.result).toMatchObject({ inserted: 1 });
+    expect(await positionOf('5')).toEqual({ listCursor: String(TOP + 1000), listIndex: 0 });
+    expect(await positionOf('99')).toEqual({ listCursor: null, listIndex: null });
+  });
+
+  // -------------------------------------------------------------------------
+  // Interrupted content phase (docs/33 D6, D-g)
+  // -------------------------------------------------------------------------
+
+  /**
+   * A finished library, then two new favorites on top whose page is cut short
+   * while writing content: '11' fails on its chunk insert, '12' is never
+   * reached. Returns the world as that run left it.
+   */
+  async function headPageCutShort(): Promise<World> {
+    const world: World = { favorites: favs(['1', '2', '3', '4']) };
+    await run(fakeDouyin(world).transport, FRESH);
+
+    world.favorites = [
+      { raw: rawAweme('11', { desc: `${CUT_SHORT_MARKER} desc 11` }), ts: TOP + 2000 },
+      { raw: rawAweme('12'), ts: TOP + 1000 },
+      ...world.favorites,
+    ];
+    const cut = await withChunkWritesCutShort(pg, () => run(fakeDouyin(world).transport, DONE));
+    expect(cut.error).not.toBeNull();
+    expect((await getItem('12')).contentState).toBe('has_content');
+    return world;
+  }
+
+  async function chunkCountOf(platformItemId: string): Promise<number> {
+    const item = await getItem(platformItemId);
+    const rows = await db
+      .select({ id: schema.itemChunks.id })
+      .from(schema.itemChunks)
+      .where(eq(schema.itemChunks.itemId, item.id));
+    return rows.length;
+  }
+
+  it('a page cut short while writing content loses no text: a later run that never ingests that page again heals it and dispatches it', async () => {
+    const world = await headPageCutShort();
+
+    // Two newer favorites fill the head page; the cut-short page comes next,
+    // is wholly known, and ends the head segment without being ingested.
+    world.favorites = [
+      { raw: rawAweme('14'), ts: TOP + 4000 },
+      { raw: rawAweme('13'), ts: TOP + 3000 },
+      ...world.favorites,
+    ];
+    const next = fakeDouyin(world);
+    const { result, error, persisted } = await run(next.transport, DONE);
+
+    expect(error).toBeNull();
+    expect(listCursors(next.requests)).toEqual(['0', String(TOP + 3000)]);
+    expect((await getItem('12')).contentState).toBe('chunked');
+    expect(await chunkCountOf('12')).toBe(1);
+    expect(persisted.flat().sort()).toEqual(['11', '12', '13', '14']);
+    expect([...(result?.newItemIds ?? [])].sort()).toEqual(['11', '12', '13', '14']);
+  });
+
+  it('D-g: a run that ingests no page still sweeps once: with nothing new and no folder, the cut-short page is healed and dispatched', async () => {
+    const world = await headPageCutShort();
+
+    const quiet = fakeDouyin(world);
+    const { result, error, persisted } = await run(quiet.transport, DONE);
+
+    expect(error).toBeNull();
+    // The head page is wholly known: no page reaches ingest in this run.
+    expect(listCursors(quiet.requests)).toEqual(['0']);
+    expect(result).toMatchObject({ fetched: 2, inserted: 0, folders: 0 });
+    for (const id of ['11', '12']) {
+      expect((await getItem(id)).contentState).toBe('chunked');
+      expect(await chunkCountOf(id)).toBe(1);
+    }
+    expect(persisted.map((ids) => [...ids].sort())).toEqual([['11', '12']]);
+    expect([...(result?.newItemIds ?? [])].sort()).toEqual(['11', '12']);
   });
 
   // -------------------------------------------------------------------------

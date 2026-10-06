@@ -441,8 +441,240 @@ describe('ingest module', () => {
     expect(await chunkCountOf(blank.id)).toBe(0);
   });
 
+  // ---------------------------------------------------------------------------
+  // Durable text (docs/33 D6): a new item's text is stored in the SAME
+  // transaction as its row, so 'has_content' always means "the text is stored".
+  // ---------------------------------------------------------------------------
+
+  /** Any write matching `event` on `table` raises while `fn` runs; the trigger is dropped after. */
+  async function whileForbidden<T>(table: string, event: string, fn: () => Promise<T>): Promise<T> {
+    await pg.exec(`
+      CREATE FUNCTION test_forbidden_write() RETURNS trigger
+      LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'forbidden write'; END $$;
+      CREATE TRIGGER test_forbidden_write
+      ${event} ON ${table}
+      FOR EACH ROW EXECUTE FUNCTION test_forbidden_write();
+    `);
+    try {
+      return await fn();
+    } finally {
+      await pg.exec(`
+        DROP TRIGGER test_forbidden_write ON ${table};
+        DROP FUNCTION test_forbidden_write();
+      `);
+    }
+  }
+
+  it('an interrupted content phase leaves the items it never reached with their text stored, and the next call heals them without textOf', async () => {
+    const input = collectionInput(
+      'ghost-durable',
+      ['ok-1', 'boom-2', 'unreached-3'],
+      (pid) => `  text of ${pid}  `,
+      (text) => {
+        if (text.includes('boom-2')) throw new Error('chunker died mid-run');
+        return [{ text }];
+      },
+    );
+    await expect(ingestCollection(db, input)).rejects.toThrow('chunker died mid-run');
+
+    // The item the content phase never got to: no chunks, but its (trimmed)
+    // text went in with its row.
+    const unreached = await stateOf('ghost-durable', 'unreached-3');
+    expect(unreached.state).toBe('has_content');
+    expect(await chunkCountOf(unreached.id)).toBe(0);
+    await expect(contentRowOf(unreached.id)).resolves.toEqual([
+      { plain_text: 'text of unreached-3', subtitle_source: null },
+    ]);
+
+    // The next call knows none of them (an incremental or page-sized sync):
+    // both ghosts heal from the stored text instead of settling at no_content.
+    const result = await ingestCollection(db, collectionInput('ghost-durable', [], () => ''));
+    expect([...result.healedItemIds].sort()).toEqual(['boom-2', 'unreached-3']);
+    expect([...result.contentPersisted].sort()).toEqual(['boom-2', 'unreached-3']);
+    const healed = await stateOf('ghost-durable', 'unreached-3');
+    expect(healed.state).toBe('chunked');
+    expect(await chunkCountOf(healed.id)).toBe(1);
+  });
+
+  it('writes the text of a new item once: the content phase does not rewrite item_contents', async () => {
+    const result = await whileForbidden('item_contents', 'BEFORE UPDATE', () =>
+      ingestCollection(db, collectionInput('ghost-once', ['a', 'b'], (pid) => `text of ${pid}`)),
+    );
+
+    expect(result.contentPersisted).toEqual(['a', 'b']);
+    const a = await stateOf('ghost-once', 'a');
+    expect(a.state).toBe('chunked');
+    await expect(contentRowOf(a.id)).resolves.toEqual([
+      { plain_text: 'text of a', subtitle_source: null },
+    ]);
+  });
+
+  it('a ghost healed from its stored text is re-chunked without rewriting item_contents', async () => {
+    await ingestCollection(
+      db,
+      collectionInput('ghost-stored', ['stored-1'], () => 'stored text', () => {
+        throw new Error('interrupt');
+      }),
+    ).catch(() => undefined);
+    expect((await stateOf('ghost-stored', 'stored-1')).state).toBe('has_content');
+
+    const result = await whileForbidden('item_contents', 'BEFORE UPDATE', () =>
+      ingestCollection(db, collectionInput('ghost-stored', [], () => '')),
+    );
+
+    expect(result.healedItemIds).toEqual(['stored-1']);
+    const healed = await stateOf('ghost-stored', 'stored-1');
+    expect(healed.state).toBe('chunked');
+    expect(await chunkCountOf(healed.id)).toBe(1);
+  });
+
+  it('a new declared-chunked item with blank text is inserted as no_content, with no interim state', async () => {
+    // Any UPDATE of an items row raises: the row must be born 'no_content'.
+    const result = await whileForbidden('items', 'BEFORE UPDATE', () =>
+      ingestCollection(db, collectionInput('ghost-direct', ['born-blank'], () => ' \n ')),
+    );
+
+    expect(result.inserted.map((i) => i.platformItemId)).toEqual(['born-blank']);
+    expect(result.contentPersisted).toEqual([]);
+    const blank = await stateOf('ghost-direct', 'born-blank');
+    expect(blank.state).toBe('no_content');
+    await expect(contentRowOf(blank.id)).resolves.toEqual([]);
+  });
+
+  it('stores text for more new items than one content batch holds', async () => {
+    const pids = Array.from({ length: 45 }, (_, i) => `batch-${i}`);
+    const result = await ingestCollection(
+      db,
+      collectionInput('ghost-batch', pids, (pid) => `text of ${pid}`),
+    );
+
+    expect(result.contentPersisted).toEqual(pids);
+    const { rows } = await pg.query<{ stored: number }>(
+      `SELECT count(*)::int AS stored FROM item_contents c
+       JOIN items i ON i.id = c.item_id WHERE i.platform = 'ghost-batch'`,
+    );
+    expect(rows[0].stored).toBe(45);
+    const last = await stateOf('ghost-batch', 'batch-44');
+    await expect(contentRowOf(last.id)).resolves.toEqual([
+      { plain_text: 'text of batch-44', subtitle_source: null },
+    ]);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Storable text (docs/33 Step 2.5 复核): Postgres `text` cannot hold U+0000.
+  // The module strips it wherever opaque text enters `item_contents`, BEFORE
+  // any emptiness check, so one bad text can no longer fail a write — which,
+  // with the text stored in the insert transaction, was the whole ingest.
+  // ---------------------------------------------------------------------------
+
+  async function chunkTextsOf(itemId: string) {
+    const rows = await db
+      .select({ text: schema.itemChunks.chunkText })
+      .from(schema.itemChunks)
+      .where(eq(schema.itemChunks.itemId, itemId))
+      .orderBy(asc(schema.itemChunks.chunkIndex));
+    return rows.map((row) => row.text);
+  }
+
+  it('NUL bytes in one new item\'s text do not roll the ingest back: they are stripped and every row lands', async () => {
+    // A UTF-16 README decoded as UTF-8 looks like this.
+    const result = await ingestCollection(
+      db,
+      collectionInput('nul-new', ['nul-before', 'nul-mid', 'nul-after'], (pid) =>
+        pid === 'nul-mid' ? ' R\u0000E\u0000A\u0000D\u0000M\u0000E\u0000 ' : `text of ${pid}`,
+      ),
+    );
+
+    expect(result.inserted.map((i) => i.platformItemId)).toEqual([
+      'nul-before',
+      'nul-mid',
+      'nul-after',
+    ]);
+    expect(result.contentPersisted).toEqual(['nul-before', 'nul-mid', 'nul-after']);
+    for (const pid of ['nul-before', 'nul-mid', 'nul-after']) {
+      expect((await stateOf('nul-new', pid)).state).toBe('chunked');
+    }
+    const mid = await stateOf('nul-new', 'nul-mid');
+    await expect(contentRowOf(mid.id)).resolves.toEqual([
+      { plain_text: 'README', subtitle_source: null },
+    ]);
+    // The chunker only ever sees the normalised text.
+    expect(await chunkTextsOf(mid.id)).toEqual(['README']);
+  });
+
+  it('a new declared-chunked item whose text is only NUL bytes is inserted as no_content', async () => {
+    const result = await ingestCollection(
+      db,
+      collectionInput('nul-blank', ['nul-only'], () => '\u0000 \u0000'),
+    );
+
+    expect(result.inserted.map((i) => i.platformItemId)).toEqual(['nul-only']);
+    expect(result.contentPersisted).toEqual([]);
+    const item = await stateOf('nul-blank', 'nul-only');
+    expect(item.state).toBe('no_content');
+    await expect(contentRowOf(item.id)).resolves.toEqual([]);
+  });
+
+  it('settleItemContent strips NUL bytes before it stores and chunks, and before it decides the text is blank', async () => {
+    const item = await seedItem('BV-SETTLE-NUL');
+    const chunked: string[] = [];
+
+    // NULs first, whitespace second: trimming first would leave the spaces
+    // that the NULs were shielding.
+    await expect(
+      settleItemContent(db, item.id, '\u0000 extracted\u0000 text \u0000', (text) => {
+        chunked.push(text);
+        return [{ text }];
+      }),
+    ).resolves.toBe(true);
+
+    expect(chunked).toEqual(['extracted text']);
+    await expect(contentRowOf(item.id)).resolves.toEqual([
+      { plain_text: 'extracted text', subtitle_source: null },
+    ]);
+    expect(await chunkTextsOf(item.id)).toEqual(['extracted text']);
+
+    // Nothing but NULs is blank text: no content row, 'no_content'.
+    const blank = await seedItem('BV-SETTLE-NUL-ONLY');
+    await expect(
+      settleItemContent(db, blank.id, '\u0000\u0000', (text) => [{ text }]),
+    ).resolves.toBe(false);
+    await expect(contentRowOf(blank.id)).resolves.toEqual([]);
+    await expect(
+      db.select({ state: schema.items.contentState }).from(schema.items).where(eq(schema.items.id, blank.id)),
+    ).resolves.toEqual([{ state: 'no_content' }]);
+  });
+
+  it('a ghost whose text from this call is only NUL bytes heals from its stored text', async () => {
+    await ingestCollection(
+      db,
+      collectionInput('nul-sweep', ['nul-ghost'], () => 'stored text', () => {
+        throw new Error('interrupt');
+      }),
+    ).catch(() => undefined);
+    expect((await stateOf('nul-sweep', 'nul-ghost')).state).toBe('has_content');
+
+    // This call's textOf has "text" for the ghost, but none of it is storable:
+    // that is blank, so the sweep must fall through to the stored plainText
+    // instead of settling the ghost at no_content.
+    const result = await ingestCollection(
+      db,
+      collectionInput('nul-sweep', [], () => '\u0000\u0000'),
+    );
+
+    expect(result.healedItemIds).toEqual(['nul-ghost']);
+    expect(result.contentPersisted).toEqual(['nul-ghost']);
+    const healed = await stateOf('nul-sweep', 'nul-ghost');
+    expect(healed.state).toBe('chunked');
+    await expect(contentRowOf(healed.id)).resolves.toEqual([
+      { plain_text: 'stored text', subtitle_source: null },
+    ]);
+    expect(await chunkTextsOf(healed.id)).toEqual(['stored text']);
+  });
+
   it('ghost sweep heals from textOf, then plainText, else settles no_content', async () => {
-    // Round 1: three ghosts by construction — interrupt after the first item.
+    // Round 1: interrupt after the first item. 'from-text' completes,
+    // 'from-plaintext' dies chunking with its text stored, 'hopeless' is blank.
     let calls = 0;
     await ingestCollection(
       db,
@@ -451,8 +683,6 @@ describe('ingest module', () => {
         ['from-text', 'from-plaintext', 'hopeless'],
         (pid) => (pid === 'hopeless' ? '' : `original ${pid}`),
         (text) => {
-          // Let 'from-plaintext' persist its item_contents then die chunking;
-          // 'from-text' dies before any content write (textOf consumed later).
           calls += 1;
           if (calls >= 2) throw new Error('interrupt');
           return [{ text }];
@@ -460,7 +690,10 @@ describe('ingest module', () => {
       ),
     ).catch(() => undefined);
 
-    // Manufacture the classic pre-fix ghost shape: claim 'chunked', drop chunks.
+    // Manufacture the classic pre-fix ghost shapes: every row claims 'chunked'
+    // ('hopeless' never had text anywhere), and 'from-text' loses both its
+    // chunks and its stored text — a ghost from before text was written with
+    // the row, which only a fresh textOf can heal.
     await db
       .update(schema.items)
       .set({ contentState: 'chunked' })

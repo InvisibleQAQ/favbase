@@ -8,6 +8,7 @@ import { and, eq } from 'drizzle-orm';
 import * as schema from '@/lib/database/schema';
 import { runMigrations } from '@/lib/database/migrations';
 import type { FavbaseDb } from '@/lib/database';
+import { CUT_SHORT_MARKER, withChunkWritesCutShort } from '@/tests/ingest-test-support';
 
 // No storage mock: the service's load graph is storage-free by contract
 // (tests/lib-import-smoke.test.ts). The DB path never embeds inline (D3).
@@ -233,6 +234,45 @@ describe('x-sync-service (in-memory PGlite)', () => {
 
     const kept = await getItem('30');
     expect(kept).toBeDefined();
+  });
+
+  // -------------------------------------------------------------------------
+  // Interrupted content phase (docs/33 D6)
+  // -------------------------------------------------------------------------
+
+  it('a sync cut short while writing content loses no text: the next sync heals the tweet it never reached', async () => {
+    // Content is written in input order: '70' lands, '71' fails on its chunk
+    // insert, '72' is never reached.
+    await expect(
+      withChunkWritesCutShort(pg, () =>
+        syncBookmarksToDb(db, [
+          makeTweet({ id: '70' }),
+          makeTweet({ id: '71', text: `${CUT_SHORT_MARKER} tweet 71` }),
+          makeTweet({ id: '72', text: 'tweet 72, never reached' }),
+        ]),
+      ),
+    ).rejects.toThrow();
+    expect((await getItem('72')).contentState).toBe('has_content');
+
+    // Production's next sync stops at the first known id (`syncBookmarks` →
+    // `shouldStop`), so its batch carries only what is newer: nothing here
+    // can hand '72' its text again.
+    const result = await syncBookmarksToDb(db, [makeTweet({ id: '73' })]);
+
+    const unreached = await getItem('72');
+    expect(unreached.contentState).toBe('chunked');
+    const contents = await db
+      .select({ plainText: schema.itemContents.plainText })
+      .from(schema.itemContents)
+      .where(eq(schema.itemContents.itemId, unreached.id));
+    expect(contents).toEqual([{ plainText: 'tweet 72, never reached' }]);
+    const chunks = await db
+      .select({ chunkText: schema.itemChunks.chunkText })
+      .from(schema.itemChunks)
+      .where(eq(schema.itemChunks.itemId, unreached.id));
+    expect(chunks).toEqual([{ chunkText: 'tweet 72, never reached' }]);
+    // Healed tweets reach the embed / tag lanes with the new one.
+    expect([...result.newItemIds].sort()).toEqual(['71', '72', '73']);
   });
 
   // -------------------------------------------------------------------------

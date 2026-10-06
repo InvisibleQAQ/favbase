@@ -1,6 +1,6 @@
 # 33 抖音收藏接入手册（2026-10-03）
 
-> 状态：**Step 0 已完成 2026-10-03**（调研 + 用户账号实测 + 决策 D1–D4 + 默认项）；**Step 1 已落地 2026-10-03（代码 + 单测，已复核）**，见 Step 1 节末「Step 1 落地记录」（断点状态收成两个字段，`restartBackfill` 删除；复核把 D-e 收窄为仅续传段第一次请求、并纳入该请求的 F10）；**Step 2 已落地 2026-10-03（代码 + 单测，未提交；SKILL.md 与 CLI 0.2.2 未发布）**，判别符已翻，见 Step 2 节末「Step 2 落地记录」（用户 2026-10-03 决定的三处偏离：job namespace 用平台 id、transport 进 `lib/douyin/` 独立 leaf、验证页与限流冷却两条文案）；**Step 3 待实施**，且首次真实账号全量入库之前有两项阻塞（§6 末「阻塞项」：幽灵清扫会把中断页的条目永久落 `no_content`；是否存接口序位由用户决定）。一次对话只做一个 Step；执行任一 Step 前先读 §1 决策、§2 否决清单、§3 铁律，再读该 Step 的八段。
+> 状态：**Step 0 已完成 2026-10-03**（调研 + 用户账号实测 + 决策 D1–D4 + 默认项）；**Step 1 已落地 2026-10-03（代码 + 单测，已复核）**，见 Step 1 节末「Step 1 落地记录」（断点状态收成两个字段，`restartBackfill` 删除；复核把 D-e 收窄为仅续传段第一次请求、并纳入该请求的 F10）；**Step 2 已落地 2026-10-03（代码 + 单测；已提交 `b6c6a54`，CLI 0.2.2 已发布）**，判别符已翻，见 Step 2 节末「Step 2 落地记录」（用户 2026-10-03 决定的三处偏离：job namespace 用平台 id、transport 进 `lib/douyin/` 独立 leaf、验证页与限流冷却两条文案）；**Step 2.5 已落地 2026-10-04（代码 + 单测，已复核，未提交）**，§6 末的两项阻塞关闭，见 Step 2.5 节末「Step 2.5 落地记录」（新条目的正文与 item 行同事务落盘、抖音每次运行至少清扫一次幽灵、接口序位 `listCursor` / `listIndex` 入库；复核发现含 NUL 字节的正文会让整次入库回滚，已在入库的文本边界剔除，D-h）；**Step 3 待实施**。一次对话只做一个 Step；执行任一 Step 前先读 §1 决策、§2 否决清单、§3 铁律，再读该 Step 的八段。
 >
 > 任务目录：`.trellis/tasks/10-03-douyin-public-favorites-platform/`（`prd.md` 记需求与决策，`research/` 五份调研是本文所有外部事实的出处）。接入契约：`.trellis/spec/frontend/platform-onboarding.md`。
 >
@@ -29,6 +29,8 @@
 | **D3** | **只用用户已打开的 douyin.com 标签页**。没有 → 空态 + 「打开抖音」按钮（X 先例）；每日自动同步只在存在可用抖音标签页时跑，否则静默跳过、不算尝试 | 用户 2026-10-03 | 扩展自己开后台标签页（后台签名是否被接受未知、页面自动播放很重、每天弹页面）；手动时自动开、自动时不开 |
 | **D4** | **页面 SDK 签名**：app.html 用 `chrome.scripting.executeScript({ target: { tabId }, world: 'MAIN', func, args })` 往抖音标签页注入一个 fetch 函数，签名由页面 SDK 自动补（`a_bogus` + `x-secsdk-web-signature`）。Chrome 文档已核实：promise 结果会被等待；`world` 自 Chrome 95（下限 117 内）；`func` 序列化、`args` 须可 JSON 序列化 | 用户 2026-10-03（看过「直连 403」的证据后批准）；实测 | 移植 `a_bogus` / websign；`webRequest` 抓包重放；SW 直连（见 §2） |
 | 默认项 | 新增 `scripting` 权限（偏离 spec §12「只多 host_permissions」，扩展未上线、无重新授权问题）；host permission `https://www.douyin.com/*` 追加在末尾；正文 = `desc`，同步时即得，`contentKind: 'post-text'`；排序 = 作品发布时间（抖音无逐条收藏时间，知乎同款妥协） | 用户 2026-10-03「其他默认都同意」 | — |
+| **D5** | **存接口序位，排序不改**：条目首次入库时把它在全部收藏列表里的位置写进 `platform_meta`——`listCursor`（该页响应返回的 cursor，末页为 `null`）与 `listIndex`（页内下标）。排序仍按作品发布时间，两个字段暂无读者。已知缺口：首见于公开夹分页的条目两个字段都是 `null`，first-write-wins 不回填；「cursor = 收藏时间」仍 `[UNKNOWN]`，所以字段名不带时间含义 | 用户 2026-10-04（insert-only：入库后补不了，只能清掉抖音数据全量重拉，约 20 分钟且多一次风控暴露） | 不存；存并立刻按收藏顺序排（基于未证实的假设，且要给 `sortKey` descriptor 加新格式） |
+| **D6** | **幽灵清扫修在共享管线的入库事务里**：新条目的 `item_contents.plainText` 与 item 行同事务写入，`'has_content'` ⇒ 正文已落盘成为不变量；sweep 现有的 `plainText` 回退从此恒成立，零平台接线 | 用户 2026-10-04（看过代码事实：不止抖音，X 遇已知 id 即停、YouTube 对已入库视频不再拉详情，两者的 `textOf` 同样覆盖不到上次留下的幽灵） | sweep 加 `textFromMeta` 回退 hook（YouTube 的 meta 只有截断简介，救不回全文；新平台要记得接）；只修抖音（症状补丁，X / YouTube 原样保留） |
 
 **写手册时由代码核对推出的设计默认项**（非用户决策，理由写在这里，后续 Step 不得无理由改回）：
 
@@ -40,6 +42,8 @@
 | D-d | 空 body 与 5xx / 不可达 / 注入超时**共用**一份重试预算（`MAX_RETRIES = 2`） | `withRetries` 一次调用一个跨原因计数器（`lib/http/retry.ts`）；为「空 body 只重试 1 次」单开计数器是为一个未测量的数字加机制 |
 | D-e | 断点 cursor 被拒时自愈：**仅续传段第一次请求（携带存储断点的那次，含它的瞬态重试）**，`status_code ≠ 0`、`aweme_list: null` + `has_more: 1`，或返回的 cursor 不前进 / 回退（F10）→ 写回 `{ resumeCursor: null, backfillDone: false }`，下次从 `cursor=0` 关闭「整页已知即停」一路走到 `has_more: 0`（Step 1 勘误：原写「置 `restartBackfill`」，该字段已删，见 Step 1 落地记录；Step 1 复核收窄：原写「只在续传段」，任一页都触发；Step 1 复核时主会话决定纳入首请求 F10） | 16 位 cursor 跨天是否仍有效、失效时服务端怎么回应都 `[UNKNOWN]`；若按限流或普通错误处理，续传会永远卡死。代价是多一次全量。只有第一次请求带的是**存储的** cursor：它返回的 cursor 不前进 / 回退，等于服务端没认这个断点，与被拒同类。续传段第 2 页起用的是本次刚从服务端拿到的 cursor，那里被拒多半是真风控，若也清断点，就是在被限流时安排一次约 115 页的全量重走 |
 | D-f | 页大小 20 | 实测 `count=30` 可用、`≥ 40` → `status_code: 5`（硬错误，不是截断）；20 是 jiji262 / f2 / dtk 的取值，离上限有余量；`count=10` 全量约 230 次签名，会越过 a_bogus 里「本页签名 < 140 次」的分桶（dtk 逆向，服务端是否打分 `[UNKNOWN]`） |
+| D-g | **每次运行至少清扫一次幽灵**：运行开头的 Source upsert 调用无条件执行并带 `content`（Step 2.5） | 其他平台每次同步都会带 `content` 调一次 `ingestCollection`，所以每次都清扫；抖音的增量运行在头部首页整页已知时一页都不入库，上次中断留下的幽灵会一直等到下一条新收藏才被切块、派发 |
+| D-h | **入库的文本边界剔除 U+0000**（主会话 2026-10-04 的默认决定，Step 2.5 复核）：不透明文本经 `lib/ingest` 进 `item_contents` 之前先剔除 U+0000 再 trim，且先于任何判空。共享管线的行为，对所有平台生效，不只抖音。不覆盖 `persistExistingItemContent`（chunk 是调用方备好的）与 `title` / `platform_meta` 里的 NUL | Postgres 的 `text` 存不了 U+0000，所以今天存得进去的正文一个字符都不变，变的只是今天会抛错的输入；正文与 item 行同事务（D6）之后，一条这样的正文会让整次入库回滚、每次同步都如此（github 的 UTF-16 README 是现成的触发源）。否决：按批 savepoint（那次同步仍然永远失败）；接受现状（带着回归上线） |
 
 ---
 
@@ -135,7 +139,7 @@ transport 自己**不抛**，把一切失败折成 `kind`；分类全部在 lib�
 | `publishedAt` | `create_time * 1000`（作品发布时间；无逐条收藏时间） |
 | `contentState` | `desc` 非空 `'chunked'`，空 `'no_content'`，**从不** `'pending'` |
 | 正文 / 切块 | `desc` / `charSplit(text, { preferParagraph: false })`（同 X，叶子导入 `@/lib/embedding/char-split`） |
-| `platform_meta` | 至少 `desc`、`authorName`、`authorSecUid`、`avatarUrl`、`coverUrl`、`durationMs`（`video.duration`，毫秒）、`mediaKind`（`'video' \| 'note'`）、首见 `folderId` / `folderTitle`（仅展示；筛选走 `item_sources`）。不存 `statistics.play_count`（网页恒 0） |
+| `platform_meta` | 至少 `desc`、`authorName`、`authorSecUid`、`avatarUrl`、`coverUrl`、`durationMs`（`video.duration`，毫秒）、`mediaKind`（`'video' \| 'note'`）、首见 `folderId` / `folderTitle`（仅展示；筛选走 `item_sources`）、接口序位 `listCursor` / `listIndex`（D5，Step 2.5：首次入库时所在列表页响应返回的 cursor（末页 `null`）与页内下标；首见于公开夹分页则两个都是 `null`；只写不读，排序不改）。不存 `statistics.play_count`（网页恒 0） |
 
 ### 4.4 失败形态 → 动作（按形态判）
 
@@ -289,7 +293,7 @@ pnpm test
 
 - `titleOf` 用 `.slice` 截断，可能切开一个代理对（emoji）——与 X（`lib/x/x-sync-service.ts:188`）同款，要改应各平台一起改。
 - `ORDER BY publishedAt DESC NULLS LAST` 没有并列决胜键，分页在同秒发布的作品之间不稳定——与 zhihu / x 同款。
-- 逐页 `ingestCollection` 每页都按平台全量重读 author / item id 映射并跑一次幽灵清扫，首次全量约 115 次；实际耗时留给 Step 3 记录。（Step 2 勘误：原写「正确性无影响」，不成立。声明 `'chunked'` 的条目在入库事务里先以 `'has_content'` 插入（`lib/ingest/ingest.ts:364`），正文与切块在事务之外逐条写（`:434-440`）；这一段中途断掉（关页、重载、写库抛错），该页还没轮到的条目就停在 `'has_content'`、没有 `item_contents.plainText`。之后**任何一次**带 `content` 的 `ingestCollection` 调用都清扫全平台幽灵（`:442-461`），文本先取本次调用的 `textOf`、再取已存 `plainText`，都没有就落 `'no_content'`；抖音的 `textOf` 只认本页（`lib/douyin/douyin-sync-service.ts:378`）。`'no_content'` 不在幽灵谓词里（`lib/ingest/ingest.ts:143-145`），条目再次出现时已是存量、不进 5a（`:436-438`），所以永久无正文。正文其实还在 `platform_meta.desc`，ingest 不读它。复核时用临时测试实跑确认（跑完已删），见 §6 末「阻塞项」。）
+- 逐页 `ingestCollection` 每页都按平台全量重读 author / item id 映射并跑一次幽灵清扫，首次全量约 115 次；实际耗时留给 Step 3 记录。（Step 2 勘误：原写「正确性无影响」，不成立。声明 `'chunked'` 的条目在入库事务里先以 `'has_content'` 插入（`lib/ingest/ingest.ts:364`），正文与切块在事务之外逐条写（`:434-440`）；这一段中途断掉（关页、重载、写库抛错），该页还没轮到的条目就停在 `'has_content'`、没有 `item_contents.plainText`。之后**任何一次**带 `content` 的 `ingestCollection` 调用都清扫全平台幽灵（`:442-461`），文本先取本次调用的 `textOf`、再取已存 `plainText`，都没有就落 `'no_content'`；抖音的 `textOf` 只认本页（`lib/douyin/douyin-sync-service.ts:378`）。`'no_content'` 不在幽灵谓词里（`lib/ingest/ingest.ts:143-145`），条目再次出现时已是存量、不进 5a（`:436-438`），所以永久无正文。正文其实还在 `platform_meta.desc`，ingest 不读它。复核时用临时测试实跑确认（跑完已删），见 §6 末「阻塞项」。）（2026-10-04：Step 2.5 已修——正文与 item 行同事务落盘，这里的行号指修复前的代码。）
 - `platformMeta.folderId` / `folderTitle` 几乎总是 `null`：编排顺序是先走全部收藏、后走收藏夹，条目首见几乎都来自全部收藏。这是改法第 5 条顺序的结果，不是 bug；Step 2 的卡片若要展示所属夹，应读 `item_sources` 而不是这两个字段。
 - `sec_uid` 为空的作品被 ingest 丢弃、永远不进已知集合，所以含它的那一页永远不是「整页已知」，增量头部段会多读一页。频率 `[UNKNOWN]`（失效作品本应已被抖音剔除），代价每次运行至多多一页，不改。
 
@@ -370,7 +374,7 @@ manifest diff 只允许两处：`host_permissions` **末尾**多 `https://www.do
 
 **判据**：验证五条全绿；manifest diff 恰好两处；无标签页时空态正确、每日自动同步静默跳过且不写记录（单测层面）；SKILL.md 与 CLI 版本按用户选的 (a) / (b) 处理完毕。
 
-#### Step 2 落地记录（2026-10-03，代码 + 单测；未提交，SKILL.md 与 CLI 0.2.2 未发布）
+#### Step 2 落地记录（2026-10-03，代码 + 单测；写下时未提交、CLI 0.2.2 未发布——之后已提交 `b6c6a54` 并发布，见「未做与延后」的发布一条）
 
 **做了什么**
 
@@ -434,14 +438,174 @@ manifest diff 只允许两处：`host_permissions` **末尾**多 `https://www.do
 
 **未做与延后**
 
-- **两项阻塞 Step 3 首次真实账号全量入库**（insert-only，事后补不回来），见 §6 末「阻塞项」：幽灵清扫会把中断页的条目永久落 `no_content`（Step 1 复核里那句已就地勘误）；是否存接口序位由用户决定。
+- **两项阻塞 Step 3 首次真实账号全量入库**（insert-only，事后补不回来），见 §6 末「阻塞项」：幽灵清扫会把中断页的条目永久落 `no_content`（Step 1 复核里那句已就地勘误）；是否存接口序位由用户决定。（2026-10-04：两项都由 Step 2.5 关闭。）
 - 翻判别符后已过期、本步按指示不动（都是手写副本，无守卫）：welcome 首屏三句「六个平台 / Six platforms」文案（`lib/i18n/locales/*.ts`）、`skills/favbase/INSTALL.md` 开头的平台枚举、README / README_zh_CN / PRODUCT.md 的平台清单。
 - 首次全量期间页面不重读：`useCollectionLibrary` 只在挂载时（`entrypoints/app/hooks/use-collection-library.ts:248-258`）与 sync job 的 `generation` 变大时（`:265-276`）重读 meta，没有订阅任何领域事件，`generation` 只在成功时加一（`entrypoints/app/hooks/background-jobs-store.ts:296`，失败分支 `:304` 不动）。所以约 20 分钟里库为空的页面一直是骨架屏，中途失败显示空库错误框（库里其实已有条目），重新挂载才恢复。延后。逐条派发仍是 adapter 里手拼 `{ jobPlatform, itemPlatform, itemId }`（同书签与 B 站），没有命名入口。
 - 冷却锁只在内存（job store 的 error）、只锁标题栏按钮（`entrypoints/app/components/collection/collection-page-scaffold.tsx:325`），刷新即解；错误相位的 Retry 直接是 `onSync`（`:271`），每日自动同步的 `probeReady` 也只看标签页，都不看它。平台守卫的目录集合仍由 `COLLECTION_PLATFORMS` 派生（翻判别符前看不见新目录），`permissions` 无黄金断言。均未做。
 - 守卫的块注释剥离盲区（偏离 5）：`lib/x/x-api.ts`、`lib/collections/platform-descriptor.ts`、`lib/permissions/host-access.ts` 今天就有（被藏起的行里暂无违规），修法是守卫按 AST 或 TypeScript scanner 剥注释——跨平台工具改动，留给独立任务。
 - `sdk-not-ready`、Argus 403、`DouyinStatusError` 等「非 auth、非限流」失败在 UI 上显示英文原文（`'unknown'` 分支，docs/32 Step 4 的既定设计）；「SDK 未就绪 → 刷新抖音标签页」是否值得一条本地化文案，等 Step 3 看它多常见。
-- **发布**：SKILL.md 改动即发布 commit（`packages/favbase/CLAUDE.md` Release）。本步只做了第 1 步（版本号），没有跑第 2–6 步；要么这次提交即当场发布（a），要么先不提交（b），由用户决定；推 `main` 之前必须发布 0.2.2。
+- **发布**：SKILL.md 改动即发布 commit（`packages/favbase/CLAUDE.md` Release）。本步只做了第 1 步（版本号），没有跑第 2–6 步；要么这次提交即当场发布（a），要么先不提交（b），由用户决定；推 `main` 之前必须发布 0.2.2。（2026-10-04 核对：已提交 `b6c6a54`「…; release favbase 0.2.2」，`npm view favbase version` 返回 `0.2.2`，`packages/favbase/package.json` 同号。）
 - `[UNKNOWN]`（Step 3 实机验证）：扩展 `executeScript` 注入的请求是否和 DevTools / CDP 一样被签名接受、后台标签页的签名是否被接受（§6）；抖音 CDN 封面 URL 是否带会过期的签名参数（过期后卡片只会回退字形，不会报错）；`executeScript` 回传 1.6 MB 页的实际耗时。
+
+---
+
+### Step 2.5 — 清掉 Step 3 的两项阻塞（幽灵清扫 + 接口序位）
+
+**目标**：首次真实账号全量入库之前处理掉 §6 末「阻塞项」两条。两条都是 insert-only 下入库之后补不回来的。
+
+**依赖**：Step 2 已落地；§1 的 D5 / D6（用户 2026-10-04）与 D-g。
+
+**文件**
+
+- 改：`lib/ingest/ingest.ts`、`lib/ingest/ingest.test.ts`、`lib/ingest/CLAUDE.md`
+- 改：`lib/douyin/douyin-sync-service.ts`、`lib/douyin/douyin-sync-service.test.ts`、`lib/douyin/CLAUDE.md`
+- 只加测试、不改实现：`lib/x/x-sync-service.test.ts`、`lib/youtube/youtube-sync-service.test.ts`
+- 文档：`lib/x/CLAUDE.md`、`lib/youtube/CLAUDE.md`（各有一句与事实不符的幽灵描述）、spec `platform-onboarding.md` §4.6 的「Known defect」、本文页头 / §4.3 / §6 / 本节落地记录、根 `CLAUDE.md` 的 docs/33 条目
+
+**改法**
+
+A. 正文与条目同事务落盘（D6，`lib/ingest/ingest.ts`）
+
+1. 入库事务内：对**本次新插入**、平台声明 `'chunked'`、且 `content.textOf(pid).trim()` 非空的条目，把 `item_contents { itemId, plainText, subtitleSource: null }` 与 item 行在同一个事务里写入。正文为空的直接以 `'no_content'` 入库，不再经 `'has_content'` 中转。调用不带 `content` 时行为不变。
+2. 正文行另设更小的批大小：正文可达 100 KB（`MAX_README_CHARS`），沿用 `INSERT_CHUNK_SIZE = 500` 会拼出 50 MB 的单条语句。
+3. phase 5a 只切块并落定状态，**不再重写** `item_contents`——否则每个新条目的正文写两遍，第二遍是 UPDATE。sweep 里文本取自已存 `plainText` 的分支同理。`settleItemContent` 的对外语义不变（书签提取照用）。
+4. sweep 的文本来源顺序不变（本次 `textOf` → 已存 `plainText` → `'no_content'`）。最后一档从此只对本次修复之前留下的幽灵可达。
+5. 不动：`IngestInput` / `IngestResult` 的形状、各平台 sync-service 的调用、`persistExistingItemContent`、github 的 `getReposNeedingReadme`（它仍负责修复之前留下的无正文幽灵）。
+6. 「`plain_text` 与 `subtitle_source` 一起写」照守：事务内的 insert 显式写 `subtitleSource: null`。
+
+B. 抖音每次运行至少清扫一次（D-g，`lib/douyin/douyin-sync-service.ts`）
+
+- 运行开头的 Source upsert 调用改为无条件执行并带 `content`（`textOf` 恒返回空串，文本来自已存 `plainText`）；它的 `contentPersisted` 走与分页相同的出口（`newItemIds` + `onPagePersisted`）。
+
+C. 接口序位（D5，同文件）
+
+- `DouyinItemMeta` 加 `listCursor: string | null`、`listIndex: number | null`。头部段与续传段的页写 `page.nextCursor` 与该条在 `page.awemes` 里的下标；公开夹分页两个都写 `null`（偏移 cursor 不是同一个键）。
+- `persist` / `ingestPage` 现在用 `folder: DouyinFolder | null` 区分「来自哪一种页」。加序位时改成一个判别参数，不要再叠第二个可空参数。
+- `narrowDouyinMeta` / `DouyinItem` 不加字段（零读者，排序不改）。
+
+**测试（先红后绿）**
+
+- `ingest.test.ts`：phase 5 中断后没轮到的条目停在 `'has_content'` **且** `plainText` 已在；下一次调用的 `textOf` 不认识它 → 被治愈并进 `healedItemIds` / `contentPersisted`（今天落 `'no_content'`）；成功入库的新条目正文只写一次；声明 `'chunked'` 但正文为空 → 直接 `'no_content'`、无 `item_contents` 行；现有幽灵用例（含「hopeless → `'no_content'`」）照过。
+- `x-sync-service.test.ts`、`youtube-sync-service.test.ts`：各在自己的同步入口复现「第一次写正文中途断掉 → 第二次同步的 `textOf` 覆盖不到」，修复前红。是否中招用失败的测试证，不凭读代码下结论。
+- `douyin-sync-service.test.ts`：一页写正文中途断掉 → 下次运行头部有新收藏（中断的那一页不重入库）→ 幽灵被治愈并经 `onPagePersisted` 派发；下次运行没有任何新收藏、也没有公开夹 → 仍被治愈并派发（D-g）；序位三条——列表页条目带 cursor 与下标、公开夹首见为 `null`、公开夹首见之后再出现在列表页仍为 `null`。
+- 证伪：每处修复撤掉 → 对应用例变红 → 还原。
+
+**验证**：`pnpm vitest run lib/ingest lib/douyin lib/x lib/youtube lib/zhihu lib/github lib/bookmarks lib/bilibili tests/lib-import-smoke.test.ts`；`pnpm compile`；`pnpm test`。
+
+**回滚**：revert 即可。无迁移、无 schema 变化；新代码写下的正文行与 `listCursor` / `listIndex` 都是旧代码读得了的形状。
+
+**判据**：§6 末「阻塞项」两条关闭；抖音 / X / YouTube 三处复现用例先红后绿；全量测试绿；上面列的文档同一次改动里更新。
+
+**不做**：不改排序；不给 YouTube 加幽灵重拉（正文同事务落盘之后不需要）；不回填已有数据（扩展未上线，库里是测试数据）。
+
+#### Step 2.5 落地记录（2026-10-04，代码 + 单测；已复核，未提交）
+
+**做了什么**
+
+- **A（`lib/ingest/ingest.ts`）**：入库事务新增 step 4b——本次新插入、声明 `'chunked'`、`textOf(pid).trim()` 非空的条目，`item_contents { itemId, plainText, subtitleSource: null }` 与 item 行同事务写入，批大小 `CONTENT_INSERT_CHUNK_SIZE = 20`（按 github 的 100 KB 上限算约 2 MB 一条语句；知乎正文没有长度上限，20 限的是行数）；正文为空的新条目直接以 `'no_content'` 入库。phase 5a 改走模块私有的 `chunkAndSettle`（重建 chunk 行 + 落定状态，不碰 `item_contents`）。sweep 的文本顺序不变：本次 `textOf` 仍经 `settleItemContent` 写入，已存 `plainText` 走 `chunkAndSettle` 原样重切。`persistItemContent` 收窄成只做 upsert，`settleItemContent` = `persistItemContent` + `chunkAndSettle`，对外语义不变。`IngestInput` / `IngestResult` 形状未动，x / youtube / zhihu / github / bookmarks / bilibili 的生产代码零改动。
+- **B（`lib/douyin/douyin-sync-service.ts`）**：第 1 步的 `ingestCollection` 无条件执行并带 `content: { textOf: () => '', chunk }`；「`inserted` 计数 + `newItemIds` + `onPagePersisted`」抽成 `report(result)`，分页与这次清扫共用。
+- **C（同文件）**：`DouyinItemMeta` 加 `listCursor` / `listIndex`；`persist` / `ingestPage` 的 `folder: DouyinFolder | null` 换成一个判别参数 `PageOrigin = { kind: 'list'; nextCursor } | { kind: 'folder'; folder }`。`narrowDouyinMeta` / `DouyinItem` / 排序未动。
+- **测试**：`ingest.test.ts` +5、`x-sync-service.test.ts` +1、`youtube-sync-service.test.ts` +1、`douyin-sync-service.test.ts` +4（另改一处既有 `toEqual`）；新增只给测试用的 `tests/ingest-test-support.ts`（落地时放在 `lib/ingest/` 下，复核后挪到 `tests/`）。
+- **文档**：`lib/ingest/ingest.ts` 头注释（GHOSTS 两条 → 三条）、`lib/ingest/CLAUDE.md`、`lib/douyin/CLAUDE.md`（删「已知缺陷」、第 1 步、D-g、`PageOrigin`、两个 meta 字段）、`lib/x/CLAUDE.md` 与 `lib/youtube/CLAUDE.md` 各一句幽灵描述、spec §4.6 的「Known defect」换成「Sweep at least once per run」、本文页头 / §4.3 / §6 / Step 2 记录里已过期的「未提交、未发布」/ Step 3 依赖。根 `CLAUDE.md` 由主会话改。
+
+**与 Step 2.5 正文的偏离**
+
+1. **新增 `tests/ingest-test-support.ts`**（「文件」一段没列；落地时放在 `lib/ingest/` 下，复核后挪到 `tests/`）。x / youtube / douyin 的同步入口注入不了 chunker，要在各自入口复现「写正文中途断掉」只能让写库失败：一个限定作用域的 PG 触发器让正文以 `CUT-SHORT` 开头的 chunk insert 抛错（照 `lib/bookmarks/bookmark-content-service.test.ts:251` 的写法）。三处要同一个东西，抽成一个 helper 而不是抄三份；运行时代码不 import 它。
+2. **「正文只写一次」不是先红用例**。HEAD 上它本来就绿——HEAD 也只写一次，只是写在事务外。它守的是修复的后半句：事务内 insert 加上之后，5a 若仍走 upsert 才会红（证伪 F2）。
+3. **`persistItemContent` 没删，收窄成只做 `item_contents` upsert**；新增私有 `chunkAndSettle`。正文只说「5a 只切块并落定状态」，没说怎么拆。留这个名字是因为根 `CLAUDE.md`、docs/29、docs/32 的记录都拿它指「不透明文本正文的写入方」，收窄后那些描述仍成立。
+4. **`textOf` 只对本次新插入的条目在事务里求值**（`!preExisting.has(pid)`）——存量条目的声明状态本来就被 `onConflictDoNothing` 丢掉。副作用：`textOf` 抛错现在让整次入库回滚（此前是行已提交、5a 才抛）。（复核补：不只是 `textOf` 抛错——step 4b 的正文 insert 被数据库拒收同样回滚整次调用；唯一已知会被拒的输入是 NUL 字节，已在文本边界剔除，见下方「Step 2.5 复核」第 1 条。）
+5. **sweep 的已存正文分支不再把 `subtitle_source` 重置为 `null`**（它不再写 `item_contents`）。带 `content` 的平台正文从来不是转录，该列本来就是 `null`；B 站不传 `content`，sweep 不跑。
+6. **一处既有用例的夹具注释改了，逻辑一行未动**：「ghost sweep heals from textOf, then plainText, else settles no_content」原注释说 `'from-text'`「dies before any content write」，与事实不符——它是第一条、完整写完，随后被手工删掉 chunk 与正文来制造「修复前的幽灵」。`'hopeless'` 现在以 `'no_content'` 出生，再被夹具强行改成 `'chunked'`，结论不变。
+7. **多一条正文没列的用例**：一次入库 45 条，跨过一个正文批次。
+8. **spec §4.6 没有另写 D5**：任务只让替换「Known defect」那一条；`PageOrigin` 与两个字段的 owner 是 `lib/douyin/CLAUDE.md`。
+9. 顺手把 `lib/ingest/CLAUDE.md` 里三处「6 个平台」改成 7（Step 2 漏改）。
+
+**先红证据**（新测试 + 未改的生产代码）：`pnpm vitest run lib/ingest lib/x/x-sync-service.test.ts lib/youtube/youtube-sync-service.test.ts lib/douyin/douyin-sync-service.test.ts` → 10 failed | 59 passed (69)。
+
+| 组 | 用例 | 红在哪 |
+|---|---|---|
+| ingest | 中断后没轮到的条目带着正文 | `item_contents` 行：期望 `text of unreached-3`，实得 `[]` |
+| ingest | 从已存正文治愈的幽灵不重写 `item_contents` | sweep 的 upsert 撞上 `BEFORE UPDATE` 触发器（`forbidden write`） |
+| ingest | 正文为空的新条目直接 `'no_content'` | `update "items" set "content_state"` 撞上 `BEFORE UPDATE` 触发器 |
+| x | 中断后下一次同步治愈没轮到的推文 | `'72'`：期望 `'chunked'`，实得 `'no_content'` |
+| youtube | 同上，视频 | `'vid-72'`：期望 `'chunked'`，实得 `'no_content'` |
+| douyin | 中断页不再入库、头部有新收藏 | `'12'`：期望 `'chunked'`，实得 `'no_content'` |
+| douyin | D-g：一页都不入库 | `'11'`：期望 `'chunked'`，实得 `'has_content'` |
+| douyin | D5 列表页序位 / D5 公开夹首见 / 行映射 `toEqual` | 三例：`listCursor` / `listIndex` 是 `undefined` |
+
+只做完 A 时再跑：ingest / x / youtube 全绿，douyin 剩 4 红（D-g 与 D5 三例）——「头部有新收藏」那条由 A 转绿，D-g 要等 B。
+
+三个陷阱，写夹具时都踩得到：① 没正文的幽灵是 chunk 写失败那条**之后**的条目，不是失败的那条——修复前 `persistItemContent` 先 upsert 正文再写 chunk，失败的那条自己有正文、今天就能自愈；② X 的第二次同步只传比已知 id 更新的推文、YouTube 的第二次同步把已知视频只当 membership entry 传，这是在模拟生产路径的 `shouldStop` / `needsDetails`，不是偷懒；③ 抖音的 D-g 必须从 `backfillDone: true` 的增量头部造——全量走的断点写在入库之后，中断页下次必被重拉、靠那一页自己的 `textOf` 就能自愈，看起来像没有问题。
+
+**证伪**（每次改一处、跑同一条命令、还原；全部对最终代码重跑过，还原后与备份逐字节相同）
+
+| # | 改动 | 变红 |
+|---|---|---|
+| F1 | 去掉事务内 insert，5a 改回 `settleItemContent`（= 修复前的写法） | 5 例：ingest 持久正文、x、youtube、douyin 两例 |
+| F2 | 保留事务内 insert，5a 改回 `settleItemContent` | ingest「只写一次」1 例 |
+| F3 | sweep 的已存正文分支改回 `settleItemContent` | ingest「不重写」1 例 |
+| F4 | 删掉 `else contentState = 'no_content'` | ingest 2 例（新增的「直接 `no_content`」+ 既有的「blank text settle at no_content」） |
+| F7 | 只插入第一批正文 | ingest「45 条」1 例 |
+| F5a | 抖音第 1 步改回 `if (folders.length > 0)` | D-g 1 例 |
+| F5b | 第 1 步无条件但不带 `content` | D-g 1 例 |
+| F5c | 第 1 步的结果不经 `report` | 2 例（两条中断用例的 `persisted` / `newItemIds` 少了治愈的 id） |
+| F6a | 列表页不写序位 | 3 例（行映射、D5 两例） |
+| F6b | 公开夹页也写 `listIndex` | D5 公开夹 1 例 |
+| F6c | 续传段不传 cursor | D5 列表页 1 例 |
+
+**验证**（2026-10-04）
+
+- `pnpm vitest run lib/ingest lib/douyin lib/x lib/youtube lib/zhihu lib/github lib/bookmarks lib/bilibili tests/lib-import-smoke.test.ts`：39 文件 / 473 例全过。
+- `pnpm compile`：通过（根 `tsc --noEmit` + `pnpm -r compile`）。
+- `pnpm test`：根 223 文件 / 1914 例、`packages/*` 15 文件 / 263 例全过，无偶发超时。
+- 没跑 `pnpm build`：无 manifest、无 app 侧改动。
+
+**发现、未改的**
+
+- **中断那一次调用里已经切完块的条目没人派发**。`ingestCollection` 在 5a 中途抛错，`contentPersisted` 随之丢掉：排在失败条目之前、已经 `'chunked'` 且有 chunk 行的条目不是幽灵，之后的清扫不会再报它们。embed lane 是整库 backlog drain，下一次成功同步会捡到；tag lane 只吃 id（`entrypoints/app/hooks/collection-processing-jobs.ts:108-109`），这些条目要等 LLM 配置保存触发的 tag backlog 才会打标。所有平台都这样，抖音每次中断至多一页减一条。Step 2.5 之前就有，不在范围内。
+- **第 1 步的清扫排在 `collects/list` 请求之后**（正文写的是「Source upsert 调用」）。那次请求失败的运行不清扫，幽灵等下一次请求成功的运行；正文都在库里，不丢。
+- **事务变大了**：一次入库的全部新正文现在在一个事务里。抖音每页 20 条无所谓；github / zhihu 首次同步可能是几千条（github 每条至多 100 KB，知乎没有上限）。数据量没变（此前是几千条独立的自动提交语句），实际耗时与内存没测 `[UNKNOWN]`。（复核补了一个下限数字与 RPC 期限的事实，见下方「Step 2.5 复核」第 5 条。）
+- **调用不带 `content` 而声明 `'chunked'`** 仍以 `'has_content'` 入库且没有正文（正文明写「行为不变」）。今天没有平台这样调；有的话，「`'has_content'` ⇒ 正文已落盘」对它不成立。
+- 根 `CLAUDE.md` 留给主会话：`lib/ingest` 索引行仍写「五平台 sync-service 共用」「`settleItemContent` 是不透明文本正文写入 + `content_state` 落定的唯一实现」（现在新条目的正文由入库事务写、状态由 `chunkAndSettle` 落定）；docs/33 条目仍写 Step 2「未发布」、Step 3 有两项阻塞。（复核时主会话已改这两行：索引行写「七个平台」「`settleItemContent` 是事务之外写正文并落定状态的唯一入口」，docs/33 条目写 Step 2 已提交已发布、Step 2.5 已落地。）
+
+**Step 2.5 复核（2026-10-04，trellis-check；仍未提交）**
+
+分两轮。第一轮只改了一处类型、几处注释与文档，把第 1、4 条作为待决定的发现报给主会话；主会话当天给了两个**默认决定（不是用户决策）**——第 1 条在入库的文本边界剔除 NUL（§1 的 D-h），第 4 条把 helper 挪到 `tests/`——第二轮照此落地。下面各条写的是落地后的状态。
+
+1. **已修（D-h）：数据库拒收的正文曾让整次入库回滚**。Postgres 的 `text` 存不了 NUL 字节（`\u0000`）。第一轮用临时测试实跑（跑完已删）：三条新条目 `a` / `nul` / `c`，`nul` 的正文是 `'R\u0000E\u0000A\u0000D'`，两边都抛 `invalid byte sequence for encoding "UTF8": 0x00`，但——
+   - HEAD（修复前）：错在 phase 5 那一条的 upsert，item 行已经提交：`a` = `'chunked'`、`nul` = `'has_content'`、`c` = `'has_content'`。
+   - Step 2.5 落地时（剔除 NUL 之前）：错在 step 4b 的事务内 insert，`items` 里这个平台**零行**——这一次调用的 source / author / item / link 全部回滚，而且每次同步都如此。
+   
+   两边都是每次同步必失败，差别在失败范围：HEAD 上库里看得到条目，Step 2.5 落地时一条都没有。只在正文里、不在 `title` / `platform_meta` 里的文本才有这个差别（那两处含 NUL 本来就让事务失败，同样实跑过：`title` 报同一个错，jsonb 的 `platform_meta` 报 `unsupported Unicode escape sequence`，都是零行；x / 抖音的正文同时在 meta 里）：主要是 github README——`fetchReadme` 用 `res.text()` 按 UTF-8 解码原始字节（`lib/github/github-api.ts:232`），UTF-16 的 README 解出来满是 `\u0000`，一个这样的仓库就让整次 Stars 同步入不了库；其次是知乎正文、YouTube description 第 500 个字符之后的部分。当时全仓库没有任何地方清洗 NUL；落地记录偏离第 4 条只提了 `textOf` 抛错，没有这一种。三种做法里（在写入边界剔除；按批 savepoint 把失败范围收回到那一批；接受并记为已知限制）主会话选了第一种，理由见 D-h。
+
+   **修法**（`lib/ingest/ingest.ts`）：模块私有的 `storableText(text)` = 剔除 U+0000 再 trim，用在不透明文本经本模块进 `item_contents` 的三处——step 3 里新条目的 `textOf` 结果、sweep 里本轮 `textOf` 的结果、`settleItemContent` 收到的文本。归一化先于任何判空：只剩 NUL 的正文是空正文，新条目直接 `'no_content'`，sweep 落到已存 `plainText` 分支。chunker 只见得到归一化后的文本。源码里只写转义 `'\u0000'`，没有字面 NUL 字符（三个文件按字节查过）。
+
+   **两处已知缺口，没有处理**：`persistExistingItemContent` 不归一化（chunk 是调用方备好的，只洗正文会让 chunk 行照样带着 NUL）；`title` / `platform_meta` 里的 NUL 仍让入库事务整体失败（HEAD 上也是）。
+
+   **先红**（新测试 + 未修的生产代码，`pnpm vitest run lib/ingest/ingest.test.ts`）：4 failed | 22 passed (26)，四例都红在 `invalid byte sequence for encoding "UTF8": 0x00`——
+
+   | 用例 | 红在哪 |
+   |---|---|
+   | 三条新条目、中间一条正文带 NUL → 三行都在、`plainText` 是 `README`、`'chunked'` | step 4b 的三行 insert 被拒，整次调用抛错 |
+   | 正文只有 NUL 的新条目 → 直接 `'no_content'`（任务没列，多加的一例：锁 step 3 的「先归一化再判空」） | 同上，单行 insert 被拒 |
+   | `settleItemContent`（书签提取那条路）→ 存的与切的都是 `extracted text`；只有 NUL 的文本 → `'no_content'`、无正文行 | `persistItemContent` 的 upsert 被拒 |
+   | 幽灵有已存正文、本轮 `textOf` 只返回 NUL → 从已存正文治愈 | sweep 把那串 NUL 当成正文，upsert 被拒 |
+
+   **证伪**（每次改一处、跑 `pnpm vitest run lib/ingest lib/bookmarks`、还原；还原后 sha256 与修复后的文件一致）：
+
+   | # | 改动 | 变红 |
+   |---|---|---|
+   | N1 | step 3 改回 `textOf(...).trim()` | 2 例（三条新条目、只有 NUL 的新条目） |
+   | N2 | `settleItemContent` 改回 `text.trim()` | 1 例（`settleItemContent`） |
+   | N3 | sweep 对未归一化的 `textOf` 判空（`fresh.trim()`） | 1 例（sweep：幽灵被落成 `'no_content'`，没从已存正文治愈） |
+   | N4 | `storableText` 不剔除、只 trim | 4 例全红 |
+   | N5 | `storableText` 先 trim 后剔除 | 2 例（只有 NUL 的新条目、`settleItemContent`——NUL 挡着的空白没被 trim 掉） |
+2. **`lib/ingest/ingest.ts` 一处类型**：事务里的 `let contentState: string` 收紧成 `'pending' | 'no_content' | 'has_content'`。`NewItem['contentState']` 是 `string`（列是 `text` + CHECK），所以原写法能编译，但拼错一个状态要到运行期的 CHECK 约束才报。
+3. **三处注释 / 两处相邻文档与代码不符，已改**：`CONTENT_INSERT_CHUNK_SIZE` 的注释与本记录原写「最坏约 2 MB」，只对有 100 KB 上限的 github 成立，知乎的 Markdown 没有上限；`IngestResult.inserted` 的注释「content persisted for these only」自幽灵清扫存在起就不成立；`lib/bookmarks/CLAUDE.md` 写「写正文 + 落定状态与 ingest phase 5 是同一个函数」，phase 5a 现在不经 `settleItemContent`，改成如实描述；`entrypoints/app/sections/douyin/CLAUDE.md` 的逐条派发一句补上「运行开头那次清扫治愈的条目也从 `onPagePersisted` 出来」；`lib/ingest/CLAUDE.md` 的已知 id 集合 builder 一句补上 douyin。
+4. **已挪：测试 helper 现在是 `tests/ingest-test-support.ts`**（主会话 2026-10-04 的默认决定，不是用户决策；先例是 `tests/platform-env-guard-contract.ts`）。落地时它在 `lib/ingest/` 下，是 `lib/` 里第一个文件名不带 `.test` 的测试专用文件：当时扫描 `lib/**` 非测试文件的守卫里只有 `tests/http-fetch-deadline-guard.test.ts` 会读到它（无 `fetch(`，通过），运行时代码零 import、进不了任何 bundle，所以这是位置问题不是缺陷。三个引用方（x / youtube / douyin 的 sync-service 测试）改成 `@/tests/ingest-test-support`；`lib/ingest/CLAUDE.md` 的模块结构不再列它，只留一行指路。
+5. **「事务变大了」补两个事实**：RPC 的 30 秒期限是**每次调用**一个（`lib/database/bridges/proxy-driver.ts:19`，`rpc-handler.ts` 在执行前校验 `deadlineAt`），不是每个事务一个，所以事务变长本身不会超时；受影响的是别的 context（Background 的只读代理、另一个 app.html 标签页）——事务开着时它们的请求在 handler 里排队，排过 30 秒就以 `expired before execution` 被拒。内存 PGlite 下量了一次下限（临时测试，已删）：3000 条新条目、正文共 4336 万字符（每条约 14 KB），从调用开始到事务提交约 1.2 秒。没量的是经 RPC 代理的序列化与提交时落 IndexedDB 的耗时。
+6. **其余核对无出入**：落地记录的先红（10 failed | 59 passed (69)，拿 HEAD 的两份生产文件重跑）、「只做完 A」（4 红）、证伪 11 行全部按原样复现，每次还原后两份生产文件的 sha256 与改动前一致。X / YouTube 两条新测试的第二次同步与生产路径同形（`fetchAllBookmarks` 遇已知 id 即停且不含该条，`needsDetails` 对已知 id 为假、只剩 membership entry）。七个平台的调用里，bookmarks / bilibili 不传 `content`，路径没变；github / x / zhihu / youtube / douyin 的 `textOf` 都是 `Map` 查表，抛不了错。读 `'has_content'` 或 `item_contents` 的地方（处理策略的三组谓词、embed / tag 候选、Chat 的 `getItemContent`、Obsidian 导出、书签提取的恢复条件）都不因正文提前落盘而变：`'has_content'` 既不是 embed / tag 候选也不算正文完成，书签不传 `content`。文中新增的 `file:line` 引用（`bookmark-content-service.test.ts:251`、`collection-processing-jobs.ts:108-109`）都对得上；`npm view favbase version` 返回 `0.2.2`。
+7. **验证**（第二轮，剔除 NUL 与挪 helper 之后）：`pnpm vitest run lib/ingest lib/douyin lib/x lib/youtube lib/zhihu lib/github lib/bookmarks lib/bilibili tests/lib-import-smoke.test.ts` 39 文件 / 477 例全过（第一轮 473，加「Storable text」四例）；`pnpm compile` 通过；`pnpm test` 根 223 文件 / 1918 例、`packages/*` 15 文件 / 263 例全过，无偶发超时（第一轮根 1914 例）。扫描 `lib/` 的守卫（fetch-deadline、sleep、env-constants、completeness contract、ui-vendor-boundaries、background-bundle-contract）另跑一遍，全过。
 
 ---
 
@@ -449,7 +613,7 @@ manifest diff 只允许两处：`host_permissions` **末尾**多 `https://www.do
 
 **目标**：在用户真实账号上确认整条链路在**生产条件**下成立，把 §6 的 `[UNKNOWN]` 逐条变成已知，按实测修正默认值。
 
-**依赖**：Step 2 已落地；§6 末「阻塞项」两条已处理（幽灵清扫已修、序位已由用户决定）；BrowserOS 已登录抖音。BrowserOS MCP 若连不上，用 CDP（端口见 `%LOCALAPPDATA%\BrowserClaw\User Data\.browseros\config.json` 的 `ports.cdp`）。先确认扩展是从哪个目录加载的（`chrome://extensions` target 里 `chrome.developerPrivate.getExtensionsInfo()` 的 `prettifiedPath`），装新构建前告诉用户。
+**依赖**：Step 2 与 Step 2.5 已落地（§6 末「阻塞项」两条由 Step 2.5 关闭：正文与条目同事务落盘 + 每次运行至少清扫一次；接口序位已入库）；BrowserOS 已登录抖音。装进浏览器的构建必须含 Step 2.5——序位是首次入库时写的，用旧构建跑过全量就只能清库重拉。BrowserOS MCP 若连不上，用 CDP（端口见 `%LOCALAPPDATA%\BrowserClaw\User Data\.browseros\config.json` 的 `ports.cdp`）。先确认扩展是从哪个目录加载的（`chrome://extensions` target 里 `chrome.developerPrivate.getExtensionsInfo()` 的 `prettifiedPath`），装新构建前告诉用户。
 
 **生产条件与 Step 0 实测的差别**：Step 0 的探测都在抖音标签页可能处于前台时做的；真实使用时 **app.html 在前台、抖音标签页在后台**，而且首次全量要 20 分钟。
 
@@ -488,10 +652,12 @@ manifest diff 只允许两处：`host_permissions` **末尾**多 `https://www.do
 | 整页失效作品时是否 `aweme_list: []` + `has_more: 1` + 非空 `disabled_item_ids` | F8 的分支 | 出现时补测试（推断自实测 #6） |
 | 抖音签名门禁规则继续变化（2026-08 → 09 至少变过两次） | 整条路线 | 持续：F3 的错误消息是第一信号 |
 
-**阻塞项（Step 3 首次真实账号全量入库之前；insert-only，入库之后补不回来）**
+**阻塞项（Step 3 首次真实账号全量入库之前；insert-only，入库之后补不回来）——两条都已由 Step 2.5 关闭（2026-10-04）**
 
-- **逐页入库会把中断页的条目永久落 `no_content`**（代码事实，复核时用临时测试实跑确认）。声明 `'chunked'` 的条目在入库事务里先以 `'has_content'` 插入（`lib/ingest/ingest.ts:364`），正文与切块在事务之外逐条写（`:434-440`）；中途断掉，该页还没轮到的条目没有 `item_contents.plainText`。之后任何一次带 `content` 的 `ingestCollection` 调用都清扫全平台幽灵（`:442-461`），文本只取本次调用的 `textOf` 与已存 `plainText`，都没有就落 `'no_content'`，且 `'no_content'` 不再被清扫（`:143-145`）、存量条目不进 5a（`:436-438`）。抖音的 `textOf` 只认本页（`lib/douyin/douyin-sync-service.ts:378`），所以：下次运行头部第一页若整页已知（不入库），幽灵暂时不动；只要头部有一条新收藏、或任一公开夹页入库，不在那一页的幽灵就永久无正文，之后再全量走也救不回。能自愈的只有一种情况：中断之后第一次带正文的调用恰好包含它（例如按断点重拉的正是那一页、且头部没有新收藏）。这一形态主要是逐页入库的问题：一次拉全量再入库一次的平台，下一次调用的 `textOf` 通常覆盖同一批条目。正文其实还在 `platform_meta.desc`，ingest 不读它。
-- Step 3 首次全量入库前由用户决定是否存接口序位（insert-only，事后只能清库重拉）。
+- **已解决**：新条目的正文与 item 行同事务落盘（D6），中断页没轮到的条目带着正文停在 `'has_content'`，之后任意一次清扫都能治愈；抖音每次运行开头无条件清扫一次（D-g）。抖音 / X / YouTube 各有一条在自己同步入口复现的测试，见 Step 2.5 落地记录。下面是修复前的事实，行号指修复前的 `ingest.ts`，留作记录。
+- **已解决**：用户 2026-10-04 决定存（D5），`listCursor` / `listIndex` 在首次入库时写入 `platform_meta`。
+- （修复前）**逐页入库会把中断页的条目永久落 `no_content`**（代码事实，复核时用临时测试实跑确认）。声明 `'chunked'` 的条目在入库事务里先以 `'has_content'` 插入（`lib/ingest/ingest.ts:364`），正文与切块在事务之外逐条写（`:434-440`）；中途断掉，该页还没轮到的条目没有 `item_contents.plainText`。之后任何一次带 `content` 的 `ingestCollection` 调用都清扫全平台幽灵（`:442-461`），文本只取本次调用的 `textOf` 与已存 `plainText`，都没有就落 `'no_content'`，且 `'no_content'` 不再被清扫（`:143-145`）、存量条目不进 5a（`:436-438`）。抖音的 `textOf` 只认本页（`lib/douyin/douyin-sync-service.ts:378`），所以：下次运行头部第一页若整页已知（不入库），幽灵暂时不动；只要头部有一条新收藏、或任一公开夹页入库，不在那一页的幽灵就永久无正文，之后再全量走也救不回。能自愈的只有一种情况：中断之后第一次带正文的调用恰好包含它（例如按断点重拉的正是那一页、且头部没有新收藏）。这一形态主要是逐页入库的问题：一次拉全量再入库一次的平台，下一次调用的 `textOf` 通常覆盖同一批条目。正文其实还在 `platform_meta.desc`，ingest 不读它。
+- （修复前）Step 3 首次全量入库前由用户决定是否存接口序位（insert-only，事后只能清库重拉）。
 
 ---
 
