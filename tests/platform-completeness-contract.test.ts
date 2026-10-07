@@ -499,8 +499,9 @@ describe('platform completeness contract', () => {
     // load — passes every line below. Spec §8 still has to be read by hand.
     //
     // One-directional on purpose: platform ⊆ Connections sections. That tab
-    // also carries 'agent-bridge', which is neither a platform nor a
-    // Collection Item holder (CONTEXT.md), so the reverse is not a defect.
+    // also carries 'agent-skills' (the Agent Bridge card), which is neither a
+    // platform nor a Collection Item holder (CONTEXT.md), so the reverse is
+    // not a defect.
     const connSections = SETTINGS_NAV.find((entry) => entry.tab === 'connections')
       ?.sections.map((section) => section.id);
     const settingsApi = declaredApiNames(sourceModule('lib/hooks/useSettings.ts'));
@@ -806,7 +807,6 @@ const JOB_STORE_CALLS = new Set([
   'getJob',
   'pauseJob',
   'resumeJob',
-  'trackJobRun',
 ]);
 /** Object properties that carry a background-job namespace. */
 const JOB_NAMESPACE_PROPERTIES = new Set(['jobPlatform']);

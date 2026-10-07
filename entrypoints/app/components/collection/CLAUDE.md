@@ -31,7 +31,7 @@
 - 同步失败横幅只在 `hasSyncError && libraryCount > 0` 时渲染（库空时走 sync-error phase）；文字色 `error.dark`（暗色 `error.light`），不用 `error.main`。
 - `breadcrumbs` 原样转给 `SectionTitleBar links`：scaffold 不构造也不翻译祖先路径。
 - slot 的 scope：`primary-category` scope 的区块在标签筛选接管时隐藏，`page` scope 常驻。
-- `progressBar` / `backgroundJobsBar` 两个 slot 与 `sync-progress-bar.tsx` / `background-jobs-bar.tsx` 是 pipeline 之前的遗留，已无调用方；新页面一律用 `pipeline`。
+- 同步 / 后处理进度只有 `pipeline` 一个 slot，不要再加独立的进度条或 job caption slot（旧 `progressBar` / `backgroundJobsBar` 就是这样变成死代码的）。
 
 ## 标题栏与面包屑
 

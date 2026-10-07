@@ -34,8 +34,6 @@ export { chunkSubtitleRows, type ChunkerOptions } from './chunker';
 export { charSplit, paragraphSplit } from './char-split';
 
 export {
-  persistItemChunks,
-  indexItemChunks,
   embedPlatformItem,
   rebuildPendingEmbeddings,
   embedPlatformBacklog,

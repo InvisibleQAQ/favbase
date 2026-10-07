@@ -15,6 +15,7 @@ import {
 } from './errors';
 import {
   toSqlVector,
+  replaceItemChunks,
   upsertChunkEmbeddings,
   semanticSearchChunks,
   getEmbeddingColumnDimensions,
@@ -23,6 +24,7 @@ import {
   clearAllEmbeddings,
   getEmbeddingStats,
 } from './vector-store';
+import type { ChunkInput } from './types';
 
 /** Initial column width created by migration v001. */
 const INITIAL_DIM = 1536;
@@ -73,6 +75,114 @@ describe('upsertChunkEmbeddings dimension guards', () => {
     await expect(
       upsertChunkEmbeddings(fakeDb, [{ chunkId: 'a', vector: [] }]),
     ).rejects.toBeInstanceOf(EmbeddingDimensionLimitError);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// replaceItemChunks — the one chunk-persistence path (called by lib/ingest)
+// ---------------------------------------------------------------------------
+
+describe('replaceItemChunks', () => {
+  let pg: PGlite;
+  let db: FavbaseDb;
+
+  beforeAll(async () => {
+    pg = await PGlite.create({ extensions: { vector, uuid_ossp, pg_trgm } });
+    await runMigrations(pg);
+    db = drizzle({ client: pg, schema }) as unknown as FavbaseDb;
+  });
+
+  afterAll(async () => {
+    await pg.close();
+  });
+
+  /** Fresh item per test — chunk assertions must not leak across tests. */
+  async function seedItem(platformItemId: string): Promise<string> {
+    const [author] = await db
+      .insert(schema.authors)
+      .values({ platform: 'test', platformAuthorId: `a-${platformItemId}`, name: 'A' })
+      .returning();
+    const [item] = await db
+      .insert(schema.items)
+      .values({
+        platform: 'test',
+        platformItemId,
+        authorId: author.id,
+        title: 'T',
+        authorName: 'A',
+        originalUrl: 'http://x',
+      })
+      .returning();
+    return item.id;
+  }
+
+  function getChunks(itemId: string) {
+    return db
+      .select()
+      .from(schema.itemChunks)
+      .where(eq(schema.itemChunks.itemId, itemId))
+      .orderBy(schema.itemChunks.chunkIndex);
+  }
+
+  const TIMED: ChunkInput[] = [
+    { text: 'chunk zero', startSec: 0, endSec: 12.5 },
+    { text: 'chunk one', startSec: 10, endSec: 30 },
+  ];
+
+  it('persists chunks with sequential index + timestamps and NULL embeddings', async () => {
+    const itemId = await seedItem('c-timed');
+
+    const inserted = await replaceItemChunks(db, itemId, TIMED);
+
+    expect(inserted).toHaveLength(2);
+    const rows = await getChunks(itemId);
+    expect(rows.map((r) => r.chunkIndex)).toEqual([0, 1]);
+    expect(rows.map((r) => r.chunkText)).toEqual(['chunk zero', 'chunk one']);
+    expect(rows[0].startSec).toBe(0);
+    expect(rows[0].endSec).toBe(12.5);
+    expect(rows[1].startSec).toBe(10);
+    expect(rows[1].endSec).toBe(30);
+    expect(rows.every((r) => r.embedding === null)).toBe(true);
+  });
+
+  it('stores NULL timestamps for non-timed chunks (text input)', async () => {
+    const itemId = await seedItem('c-untimed');
+
+    await replaceItemChunks(db, itemId, [{ text: 'article chunk' }]);
+
+    const rows = await getChunks(itemId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].startSec).toBeNull();
+    expect(rows[0].endSec).toBeNull();
+  });
+
+  it('re-chunking replaces the rows without residue or index conflicts', async () => {
+    const itemId = await seedItem('c-rechunk');
+    await replaceItemChunks(db, itemId, [
+      { text: 'old zero', startSec: 0, endSec: 1 },
+      { text: 'old one', startSec: 1, endSec: 2 },
+      { text: 'old two', startSec: 2, endSec: 3 },
+    ]);
+
+    await replaceItemChunks(db, itemId, [
+      { text: 'new zero', startSec: 0, endSec: 5 },
+      { text: 'new one', startSec: 5, endSec: 9 },
+    ]);
+
+    const rows = await getChunks(itemId);
+    expect(rows.map((r) => r.chunkIndex)).toEqual([0, 1]);
+    expect(rows.map((r) => r.chunkText)).toEqual(['new zero', 'new one']);
+  });
+
+  it('empty input clears the existing rows', async () => {
+    const itemId = await seedItem('c-empty');
+    await replaceItemChunks(db, itemId, TIMED);
+    expect(await getChunks(itemId)).toHaveLength(2);
+
+    const inserted = await replaceItemChunks(db, itemId, []);
+
+    expect(inserted).toEqual([]);
+    expect(await getChunks(itemId)).toHaveLength(0);
   });
 });
 

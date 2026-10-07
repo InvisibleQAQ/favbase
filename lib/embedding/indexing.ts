@@ -12,21 +12,20 @@ import {
   embeddingTraceError,
   type EmbeddingTraceDetails,
 } from './diagnostics';
-import { replaceItemChunks, upsertChunkEmbeddings } from './vector-store';
-import type { ChunkInput } from './types';
+import { upsertChunkEmbeddings } from './vector-store';
 
 const { items, itemChunks } = schema;
 
 /**
- * Content-agnostic indexing orchestrator. Knows nothing about platforms or
- * content types — it consumes `ChunkInput[]` produced by whatever chunker the
- * platform service chose (subtitle rows today, article text tomorrow).
+ * Content-agnostic embedding orchestrator. Knows nothing about platforms or
+ * content types — it reads the chunk rows `lib/ingest` persisted (via
+ * `replaceItemChunks`) and advances items from the durable 'chunked' seam to
+ * 'embedded'.
  *
- * Policy: chunking is free and always persisted ('chunked'). The compatibility
- * `indexItemChunks` path keeps embedding best-effort and stays 'chunked' on
- * Provider/persistence failure; job-owned `embedPlatformItem` instead requires
- * durable chunks and propagates operational failures. Dimension changes across
- * model switches live in `upsertChunkEmbeddings` (lazy column re-dimensioning).
+ * Policy: job-owned `embedPlatformItem` / `embedPlatformBacklog` require
+ * durable chunks and propagate operational failures; `rebuildPendingEmbeddings`
+ * is the settings-page safety net. Dimension changes across model switches
+ * live in `upsertChunkEmbeddings` (lazy column re-dimensioning).
  */
 
 export type IndexedContentState = 'chunked' | 'embedded';
@@ -82,12 +81,11 @@ function configTraceDetails(config: ResolvedEmbeddingConfig): EmbeddingTraceDeta
 }
 
 /**
- * Shared embed core for fresh indexing and backlog rebuild: embed the ordered
- * chunk texts, attach vectors by chunk id (the lazy dimension switch lives
- * inside `upsertChunkEmbeddings`), then advance the item to 'embedded'.
- * Throws on any failure — the caller decides the policy (`indexItemChunks`
- * swallows and stays 'chunked', `rebuildPendingEmbeddings` stops and
- * propagates).
+ * Shared embed core for the platform lanes and the backlog rebuild: embed the
+ * ordered chunk texts, attach vectors by chunk id (the lazy dimension switch
+ * lives inside `upsertChunkEmbeddings`), then advance the item to 'embedded'.
+ * Throws on any failure — the caller decides the policy (`embedPlatformBacklog`
+ * counts and continues, `rebuildPendingEmbeddings` stops and propagates).
  */
 async function embedChunks(
   db: FavbaseDb,
@@ -177,16 +175,6 @@ async function embedChunks(
   });
 }
 
-async function replaceAndMarkItemChunks(
-  db: FavbaseDb,
-  itemId: string,
-  chunks: ChunkInput[],
-) {
-  const inserted = await replaceItemChunks(db, itemId, chunks);
-  await setContentState(db, itemId, 'chunked');
-  return inserted;
-}
-
 async function getEmbeddableChunks(
   db: FavbaseDb,
   itemId: string,
@@ -196,46 +184,6 @@ async function getEmbeddableChunks(
     .from(itemChunks)
     .where(eq(itemChunks.itemId, itemId))
     .orderBy(asc(itemChunks.chunkIndex));
-}
-
-/** Persist a prepared content type's chunks and expose the durable `chunked` seam. */
-export async function persistItemChunks(
-  db: FavbaseDb,
-  itemId: string,
-  chunks: ChunkInput[],
-): Promise<'chunked'> {
-  await replaceAndMarkItemChunks(db, itemId, chunks);
-  return 'chunked';
-}
-
-/**
- * Rebuild the item's chunks and advance `content_state`:
- * chunks written → 'chunked'; embedding configured + succeeded → 'embedded'.
- * Chunk-write failures propagate (caller decides); embed failures never do.
- */
-export async function indexItemChunks(
-  db: FavbaseDb,
-  itemId: string,
-  chunks: ChunkInput[],
-  deps: IndexingDeps = defaultDeps,
-): Promise<IndexedContentState> {
-  const inserted = await replaceAndMarkItemChunks(db, itemId, chunks);
-  if (inserted.length === 0) return 'chunked';
-
-  try {
-    const config = await deps.getConfig();
-    if (!config.enabled) return 'chunked';
-
-    const ordered = [...inserted].sort((a, b) => a.chunkIndex - b.chunkIndex);
-    await embedChunks(db, itemId, ordered, config, deps.embed);
-    return 'embedded';
-  } catch (err) {
-    console.error(
-      `[embedding] Embed failed for item=${itemId}, staying at 'chunked':`,
-      err,
-    );
-    return 'chunked';
-  }
 }
 
 /**
@@ -408,8 +356,8 @@ export type RebuildOutcome =
  * `onProgress` fires once with `{ completed: 0, total }` up front (so the UI
  * can show the total immediately) and again after each finished item.
  *
- * Failure policy is the opposite of `indexItemChunks`: the first failing item
- * STOPS the loop and the error propagates (structured, no user copy — the UI
+ * Failure policy is the opposite of `embedPlatformBacklog`: the first failing
+ * item STOPS the loop and the error propagates (structured, no user copy — the UI
  * translates). Finished items keep 'embedded', the failing one stays
  * 'chunked', so re-running only picks up the remainder — the operation is
  * idempotent-resumable by construction. A dimension mismatch on the first

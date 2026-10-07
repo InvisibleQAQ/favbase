@@ -24,7 +24,7 @@ Embedding 领域层：chunker、durable chunk 持久化、向量存储与语义�
 - 暂停是 cooperative checkpoint：每条 item 之前检查，不中断进行中的请求与写入。
 - `onProgress` 是 `{ done, total, failed }`：查询后先报一次 `0/total`，之后每条结算报一次，单调且必达 `total`。
 - `item-embedded` 领域事件只在向量与 `content_state='embedded'` 都落库之后发。
-- `indexItemChunks`（落 chunk 后立即嵌入、失败停在 `'chunked'`）是兼容路径，生产代码没有调用方；新代码用 `embedPlatformItem` / `embedPlatformBacklog`。
+- 本目录不写 chunk：chunk 持久化只有 `lib/ingest` 调 `replaceItemChunks` 这一条路，嵌入入口只有 `embedPlatformItem` / `embedPlatformBacklog` / `rebuildPendingEmbeddings`。不要再加「落 chunk 后顺手嵌入」的组合函数（`indexItemChunks` 就是这样变成死代码的）。
 
 ## 向量维度
 

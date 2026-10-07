@@ -135,12 +135,6 @@ export interface CollectionPageScaffoldProps<T> {
   pipeline?: ReactNode;
   /** Pre-built provider configuration guidance, rendered directly after Search. */
   configurationNotice?: ReactNode;
-  /** Sync progress bar. Rendered only while syncing; omit for platforms without one. */
-  progressBar?: ReactNode;
-  /** Post-sync background-job captions (embed / tag progress). Rendered
-   *  unconditionally right after the progress bar — the node self-hides when it
-   *  has no running jobs. Optional; platforms without post-sync jobs omit it. */
-  backgroundJobsBar?: ReactNode;
 }
 
 /**
@@ -191,8 +185,6 @@ export function CollectionPageScaffold<T>({
   authFailedState,
   pipeline,
   configurationNotice,
-  progressBar,
-  backgroundJobsBar,
 }: CollectionPageScaffoldProps<T>) {
   // Per-platform library gate: while paused, the fetch button is disabled with
   // an explanatory tooltip (pause wins over any adapter cooldown label).
@@ -327,12 +319,11 @@ export function CollectionPageScaffold<T>({
         syncDisabledTooltip={gatePaused ? gate?.fetchBlockedHint : undefined}
       />
 
-      {/* New collection pages use one compact, idle-visible pipeline plus the
-          always-visible library-gate toggle. The strip gets `flex:1 minWidth:0`
-          (explicit — a flex item's min-width:auto would defeat its own
-          horizontal scrolling) and the button never shrinks or scrolls away.
-          The old slots remain a compatibility fallback while adapters migrate. */}
-      {pipeline != null ? (
+      {/* One compact, idle-visible pipeline plus the always-visible library-gate
+          toggle. The strip gets `flex:1 minWidth:0` (explicit — a flex item's
+          min-width:auto would defeat its own horizontal scrolling) and the
+          button never shrinks or scrolls away. */}
+      {pipeline != null && (
         <Box
           data-section="pipeline"
           sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3 }}
@@ -340,11 +331,6 @@ export function CollectionPageScaffold<T>({
           <Box sx={{ flex: 1, minWidth: 0 }}>{pipeline}</Box>
           <LibraryGateButton platform={platform} />
         </Box>
-      ) : (
-        <>
-          {syncing && progressBar}
-          {backgroundJobsBar}
-        </>
       )}
 
       {/* Sync failure banner (library still shows its persisted data). */}

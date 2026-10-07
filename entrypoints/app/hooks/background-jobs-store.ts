@@ -101,7 +101,6 @@ interface PendingRun {
 
 const jobs = new Map<string, BackgroundJob>();
 const listeners = new Set<() => void>();
-const trackedRunGroups = new Map<string, { active: number; error: unknown }>();
 const activeRunOwners = new Map<string, symbol>();
 const activeRunControls = new Map<string, PipelineRunControl>();
 const activeRunSettlements = new Map<string, Promise<void>>();
@@ -312,11 +311,11 @@ function beginRun(
 }
 
 /**
- * Dequeue-on-settlement. Runs in every run's settle continuation (startJob runs
- * AND trackJobRun groups), synchronously after the terminal setJob, so between
- * "key is free" and "next pending run occupies it" no external code can jump
- * the queue. If something re-occupied the key first (a synchronous listener),
- * the pending list stays intact — that run's own settlement drains it.
+ * Dequeue-on-settlement. Runs in every run's settle continuation,
+ * synchronously after the terminal setJob, so between "key is free" and "next
+ * pending run occupies it" no external code can jump the queue. If something
+ * re-occupied the key first (a synchronous listener), the pending list stays
+ * intact — that run's own settlement drains it.
  */
 function drainPending(key: string): void {
   if (jobs.get(key)?.running) return;
@@ -333,63 +332,6 @@ export function pauseJob(platform: string, kind: BackgroundJobKind): void {
 
 export function resumeJob(platform: string, kind: BackgroundJobKind): void {
   activeRunControls.get(keyOf(platform, kind))?.resume();
-}
-
-/**
- * Observe overlapping fire-and-forget promises as one lane. Unlike startJob,
- * this never dedupes work: it only keeps the job running until every tracked
- * promise for the platform+kind settles.
- */
-export function trackJobRun(
-  platform: string,
-  kind: Extract<BackgroundJobKind, 'embed' | 'tag'>,
-  run: Promise<unknown>,
-): void {
-  const key = keyOf(platform, kind);
-  let group = trackedRunGroups.get(key);
-  if (!group) {
-    group = { active: 0, error: null };
-    trackedRunGroups.set(key, group);
-    const existing = jobs.get(key);
-    setJob(key, {
-      platform,
-      kind,
-      phase: 'running',
-      running: true,
-      progress: null,
-      lastProgress: existing?.lastProgress ?? null,
-      error: null,
-      generation: existing?.generation ?? 0,
-    });
-  }
-  group.active += 1;
-
-  const settle = (error: unknown): void => {
-    const currentGroup = trackedRunGroups.get(key);
-    if (!currentGroup) return;
-    if (error != null && currentGroup.error == null) currentGroup.error = error;
-    currentGroup.active -= 1;
-    if (currentGroup.active > 0) return;
-
-    trackedRunGroups.delete(key);
-    const currentJob = jobs.get(key);
-    if (currentJob) {
-      setJob(key, {
-        ...currentJob,
-        phase: currentGroup.error == null ? 'completed' : 'failed',
-        running: false,
-        progress: null,
-        error: currentGroup.error,
-        generation:
-          currentGroup.error == null ? currentJob.generation + 1 : currentJob.generation,
-      });
-    }
-    // A tracked group can hold a key that queued startJob dispatches wait on
-    // (the 'bilibili:transcribe' key mixes observer and owner runs).
-    drainPending(key);
-  };
-
-  void run.then(() => settle(null), settle);
 }
 
 /** Subscribe to a single platform+kind job (null until first started). */

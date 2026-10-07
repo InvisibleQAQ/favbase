@@ -15,7 +15,7 @@ app.html 专用的共享 hooks 与页面运行时 job 调度（只跑在 Extensi
 - 排队只归 store：调用方不得用 `settled` promise 自造重试或排队循环。`settled` 结算于本次派发对应的那个 run。
 - 闸门 reader 经 `setJobGate` 注入，在 run **实际启动**时评估（含 pending 出队时）。命中时 job 照常创建、runner 照常启动，只是 born-paused，`started` 仍是 `true`——绝不能返回 `started:false`，否则排队中的工作会被结算成空。
 - 注册 reader 不触碰已在跑的 run（暂停它们靠 `library-gate` 的 fan-out）；reader 抛错按「未暂停」处理。
-- `trackJobRun` 只是不可控旧 Promise 的兼容 observer，不得用于需要暂停的 pipeline。
+- 进 store 的工作只有 `startJob` 一个入口：不要再加「观察一个外部 Promise」的旁路（旧 `trackJobRun` 就是这样的死代码），它绕过闸门与碰撞策略。
 - job 队列只活在当前 app.html，不要把它当持久恢复。
 
 ## 暂停状态机（`pipeline-run-control.ts`）
