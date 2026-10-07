@@ -436,7 +436,7 @@ const zhCN = {
   'pipeline.readme': 'README',
   'pipeline.embedding': '向量',
   'pipeline.tagging': '标签',
-  // Unified fetch button (all six platforms) — same operation as pipeline.fetch.
+  // Unified fetch button (every platform) — same operation as pipeline.fetch.
   'pipeline.fetchNow': '立即获取',
   'pipeline.fetching': '获取中...',
   // Per-platform library-gate toggle (pause/resume the whole KB pipeline).
@@ -659,7 +659,7 @@ const zhCN = {
   'welcome.hero.titleLine1': '把收藏',
   'welcome.hero.titleLine2': '变成知识库',
   'welcome.hero.subtitle':
-    '六个平台的收藏自动收录、切块入库、向量索引。然后你只要提问——答案带着来源，原文一点即达。',
+    '各平台的收藏自动收录、切块入库、向量索引。然后你只要提问——答案带着来源，原文一点即达。',
   'welcome.hero.ctaPrimary': '开始使用',
   'welcome.hero.ctaSecondary': '先看看能做什么',
   'welcome.hero.coreLabel': '本地知识库',
@@ -684,7 +684,7 @@ const zhCN = {
   'welcome.flow.step1.title': '收录收藏',
   'welcome.flow.step1.desc':
     '连上平台后增量抓取收藏条目：标题、作者、链接、正文一起进来。只增不删——原站取消收藏，你的历史仍然在。',
-  'welcome.flow.step1.hint': '六个平台共用一条收录管线',
+  'welcome.flow.step1.hint': '所有平台共用一条收录管线',
   'welcome.flow.step2.title': '整合为知识库',
   'welcome.flow.step2.desc':
     '正文切块、向量化，连同 AI 标签一起写进浏览器内的 PGlite + pgvector。全程本地，不经过任何服务器。',
@@ -784,7 +784,7 @@ const zhCN = {
   'welcome.request.heading': '没找到你的',
   'welcome.request.headingTail': '平台？',
   'welcome.request.desc':
-    '六个平台只是起点。告诉我们下一个该收录谁——去仓库开一个 issue，说不定下个版本就有。',
+    '现有平台只是起点。告诉我们下一个该收录谁——去仓库开一个 issue，说不定下个版本就有。',
   'welcome.request.cta': '去 GitHub 提需求',
 } as const;
 

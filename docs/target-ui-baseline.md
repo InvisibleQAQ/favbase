@@ -89,7 +89,7 @@ compared.
 
 - **[TARGET_FACT]** `entrypoints/app/main.tsx` uses `createHashRouter` and owns
   `/`, `/collections`, platform collection routes, `/chat`, and `/settings`.
-- **[TARGET_FACT]** The six platform leaves come from one
+- **[TARGET_FACT]** The platform leaves come from one
   `collectionPlatformRegistry`; the navigation does not maintain a copied
   second list.
 - **[TARGET_FACT]** The `/` route is Collection Analytics backed by real local

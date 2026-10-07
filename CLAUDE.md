@@ -56,6 +56,7 @@
 - 收录是 insert-only：重新同步不更新、不删除已入库的条目（`sources` 行除外）。规则的 owner 是 `lib/ingest/CLAUDE.md`。
 - Chat 与 Agent Bridge 共用同一套只读 Knowledge Tool（`lib/chat/tools.ts`），两边的工具集必须完全相同。
 - Platform Request 是指向 GitHub issue 的动作外链，不是平台，不得进 `collectionPlatformRegistry`。
+- 文案、注释、测试名、文档不写平台数量（「六个平台」「7 platforms」）：平台随时新增，数字必过期（用户决定 2026-10-07）。要列平台就指向 `COLLECTION_PLATFORMS`。没有守卫，靠 review。
 
 ### 对外契约
 
@@ -137,7 +138,7 @@
 - `entrypoints/`、`entrypoints/app/`、`entrypoints/app/{pages,utils,sections}/`、`entrypoints/app/sections/{overview,settings,settings/embedding,chat,collections}/`
 - `entrypoints/app/components/{label,empty-content,custom-breadcrumbs,custom-popover,scrollbar,snackbar,loading-screen,chart,iconify,settings,library-gate,configuration-blocker}/`
 - `entrypoints/welcome/`、`entrypoints/bilibili-video.content/` 及其 `components/`、`hooks/`
-- `scripts/`、`spikes/agent-bridge/`
+- `scripts/`
 
 ## 维护 CLAUDE.md
 

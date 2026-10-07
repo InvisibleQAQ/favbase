@@ -1,10 +1,10 @@
 # Set up favbase for this agent
 
 You are reading this because the user asked you to connect them to **favbase**,
-a local-first browser extension that turns what they save on social media
-(Bilibili favorites, GitHub stars, browser bookmarks, X bookmarks, Zhihu
-favorites, YouTube playlists) into a searchable knowledge base that never
-leaves their machine.
+a local-first browser extension that turns what they save across their
+platforms (video favorites, starred repositories, bookmarks, saved posts and
+playlists) into a searchable knowledge base that never leaves their machine.
+The installed skill lists the platforms the user's version supports.
 
 This document is a one-time setup guide, not the skill itself. Follow it once,
 end to end, then discard it: step 3 installs the actual favbase skill, and that

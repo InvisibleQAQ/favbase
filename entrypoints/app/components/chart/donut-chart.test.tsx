@@ -12,7 +12,7 @@ const STROKE = (24 / 200) * 100;
 const RADIUS = (100 - STROKE) / 2;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
-/** Six platform-shaped segments summing to 1, like a real snapshot. */
+/** Platform-shaped segments summing to 1, like a real snapshot (two of them zero). */
 function segments(): DonutSegment[] {
   return [
     { id: 'bilibili', share: 0.5, color: 'rgb(1, 1, 1)' },

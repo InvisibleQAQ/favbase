@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="420" viewBox="0 0 1200 420" role="img" aria-labelledby="title desc">
-  <title id="title">favbase turns favorites from six sources into a local knowledge base</title>
+  <title id="title">favbase turns favorites from your platforms into a local knowledge base</title>
   <desc id="desc">Bilibili Favorites, GitHub Stars, Browser Bookmarks, X Bookmarks, Zhihu Favorites, and YouTube Playlists flow into the yellow knowledge star held by the blue favbase squirrel.</desc>
   <defs>
     <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">

@@ -1,6 +1,6 @@
 # lib/ingest
 
-共享收藏收录管线：七个平台的 sync-service 只声明归一化行（sources / authors / items / links）与自己的 chunker，schema 知识与下列不变量由 `ingest.ts` 持有。写 sync service 之前把本文件读完。
+共享收藏收录管线：各平台的 sync-service 只声明归一化行（sources / authors / items / links）与自己的 chunker，schema 知识与下列不变量由 `ingest.ts` 持有。写 sync service 之前把本文件读完。
 
 ## Insert-only
 

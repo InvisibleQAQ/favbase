@@ -15,7 +15,8 @@ export interface TagRowProps {
 }
 
 /**
- * Compact tag chip row for cards: small outlined chips + trailing edit entry,
+ * Compact tag chip row for cards: small soft chips (the theme default) +
+ * trailing edit entry,
  * laid out by the card's own `CollectionCardRow` so its inset is the card's.
  * Render it OUTSIDE any CardActionArea so chips / the edit button don't
  * trigger the card's navigation click.

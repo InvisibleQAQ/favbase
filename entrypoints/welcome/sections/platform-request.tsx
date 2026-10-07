@@ -19,8 +19,8 @@ import { FloatLine, FloatPlusIcon } from '../components/svg-elements';
 const ROCKET_SRC = '/assets/illustrations/illustration-rocket-large.webp';
 
 /**
- * Platform Request (CONTEXT.md): closing outbound nudge — six platforms are a
- * starting point; ask for the next one on the issue tracker.
+ * Platform Request (CONTEXT.md): closing outbound nudge — today's platforms
+ * are a starting point; ask for the next one on the issue tracker.
  *
  * Minimal's `home-advertisement` card, ported as-is (docs/31 Step 2, user
  * decision 2026-09-27). That decision overturned two earlier ones: docs/28

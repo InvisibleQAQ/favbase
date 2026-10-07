@@ -2,11 +2,12 @@
  * Lib import-smoke contract (docs/20 HIGH-1, revised to MEDIUM).
  *
  * Loading a lib-layer module must not require runtime capabilities the module
- * never asked for. The concrete leak this guards: `@/lib/embedding` (barrel)
- * value-re-exports `./config` → `@/lib/storage` (barrel), whose `ui-state` /
- * `agent-bridge` items call `storage.defineItem` at module load, touching
- * `chrome.runtime`. (`settings.ts` defines its item lazily for exactly this
- * reason, so leaf imports of it stay clean.)
+ * never asked for. The leak that motivated it (since fixed): `@/lib/embedding`
+ * (barrel) value-re-exported `./config` → `@/lib/storage` (barrel), whose
+ * `ui-state` / `agent-bridge` items call `storage.defineItem` at module load,
+ * touching `chrome.runtime`. Today `config.ts` imports the `settings` leaf,
+ * which defines its item lazily for exactly this reason; this test is what
+ * keeps that shape from regressing.
  * Under vitest (happy-dom, no `chrome` global) that surfaces as asynchronous
  * unhandled rejections — not a synchronous throw — so a plain `import()`
  * "succeeding" proves nothing. This test captures `unhandledRejection` around

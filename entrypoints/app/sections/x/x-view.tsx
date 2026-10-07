@@ -28,7 +28,7 @@ const PLATFORM = 'x';
 // Deep-link to the bookmarks page: logged-out users get X's own login flow
 // first; logged-in users land there so the extension captures their session,
 // after which app.html's Sync button can pull the bookmarks. It leads both
-// the empty and the not-logged-in state, so Fetch steps back to outlined.
+// the empty and the not-logged-in state, so Fetch steps back to soft primary.
 const X_BOOKMARKS_SITE = {
   href: 'https://x.com/i/bookmarks',
   label: 'x.openBookmarksPage',

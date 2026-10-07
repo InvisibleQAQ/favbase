@@ -445,7 +445,7 @@ const en: Record<LocaleKeys, string> = {
   'pipeline.readme': 'README',
   'pipeline.embedding': 'Embed',
   'pipeline.tagging': 'Tags',
-  // Unified fetch button (all six platforms) — same operation as pipeline.fetch.
+  // Unified fetch button (every platform) — same operation as pipeline.fetch.
   'pipeline.fetchNow': 'Fetch now',
   'pipeline.fetching': 'Fetching...',
   // Per-platform library-gate toggle (pause/resume the whole KB pipeline).
@@ -673,7 +673,7 @@ const en: Record<LocaleKeys, string> = {
   'welcome.hero.titleLine1': 'Your favorites,',
   'welcome.hero.titleLine2': 'now answerable',
   'welcome.hero.subtitle':
-    'Six platforms, collected automatically, chunked into a local database and vector-indexed. Then you just ask — every answer carries its sources, one click from the original.',
+    'Favorites from all your platforms, collected automatically, chunked into a local database and vector-indexed. Then you just ask — every answer carries its sources, one click from the original.',
   'welcome.hero.ctaPrimary': 'Get started',
   'welcome.hero.ctaSecondary': 'See what it does',
   'welcome.hero.coreLabel': 'Local knowledge base',
@@ -698,7 +698,7 @@ const en: Record<LocaleKeys, string> = {
   'welcome.flow.step1.title': 'Collect what you saved',
   'welcome.flow.step1.desc':
     'Connect a platform and favbase pulls your saved items incrementally: title, author, link and body text together. Insert-only — unstar something upstream and your history stays put.',
-  'welcome.flow.step1.hint': 'One ingest pipeline shared by all six platforms',
+  'welcome.flow.step1.hint': 'One ingest pipeline shared by every platform',
   'welcome.flow.step2.title': 'Build the knowledge base',
   'welcome.flow.step2.desc':
     'Bodies get chunked, embedded and written — alongside AI tags — into PGlite + pgvector inside your browser. All local, no server in the path.',
@@ -800,7 +800,7 @@ const en: Record<LocaleKeys, string> = {
   'welcome.request.heading': "Don't see your",
   'welcome.request.headingTail': 'platform?',
   'welcome.request.desc':
-    'Six platforms are just the start. Tell us which one to collect next — open an issue on the repo.',
+    "Today's platforms are just the start. Tell us which one to collect next — open an issue on the repo.",
   'welcome.request.cta': 'Request it on GitHub',
 };
 

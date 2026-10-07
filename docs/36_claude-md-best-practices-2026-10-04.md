@@ -348,3 +348,11 @@
 - **过时的代码注释**：`sections/x/x-view.tsx:31`（写 outlined，实际是 soft）、`sections/youtube/youtube-view.tsx:44`（写 channel chips，实际是播放列表）、`welcome/sections/orbit-core.tsx:35`（写 six platform chips）、`components/tags/tag-row.tsx:18`、`packages/favbase/exit-codes.ts` 文件头（仍提 INSTALL.md 的表）、`tests/lib-import-smoke.test.ts` 文件头、`tests/platform-completeness-contract.test.ts` 里的 `'agent-bridge'`（section id 实际是 `agent-skills`）。
 - **疑似死代码**（只有 barrel 导出或测试在用，没有逐一验证）：`lib/embedding` 的 `indexItemChunks` / `persistItemChunks`，`components/collection` 的 `SyncProgressBar` / `BackgroundJobsBar`，`hooks` 的 `trackJobRun`。
 - **`spikes/agent-bridge` 的 runner 可能已跑不通**：`background.ts` 的 spike 分支用动态 `import()`，而 `scripts/check-background-bundle.mjs` 现在拒绝 SW 图里的任何动态 import。没有跑 build 验证。
+
+#### 处置（2026-10-07，任务 `.trellis/tasks/10-07-docs36-follow-ups-*`）
+
+- 缺陷：`doSync` 改为只看 `hasWebdavCredentials`，`enabled` 由 `scheduler.ts` 的每个自动触发点（含 alarm 回调）把关；无凭据返回与 `clearRemote` 相同的 `ok:false` / `unknown`。规则写进 `lib/sync/CLAUDE.md`。同文件另记一条残留缺口：同步进行中再点「立即同步」，`isSyncing` 早退仍返回 `ok:true`。
+- 过时注释：七处全部改正。`exit-codes.ts` 头注释原说 INSTALL.md 有退出码表，实际按 docs/30 D6-a 没有。
+- 疑似死代码：三组经 grep 确认只剩 barrel / 测试 / 注释引用，全部删除。`indexItemChunks` 的测试里只有它覆盖的 chunk 持久化用例迁到 `vector-store.test.ts`（直接测 `replaceItemChunks`），defaultDeps 用例改经 `rebuildPendingEmbeddings`；scaffold 的 `progressBar` / `backgroundJobsBar` 两个 slot 一并删除；`trackJobRun` 从契约测试的 `JOB_STORE_CALLS` 与 spec 的调用清单里移除。
+- spike：runner 确定跑不通（带 flag 构建时 SW 图里必有动态 `import()`，bundle 检查必拒）。用户决定删除整个目录与 `background.ts` 分支；ADR 0002 与 docs/21 的证据指针改为 `git show da2347a:spikes/agent-bridge/phase-0-result.json`。
+- 同一任务顺带执行用户 2026-10-07 的指示「不写平台数量」：改了 i18n 的 welcome 三句文案、`PRODUCT.md`、`lib/ingest/CLAUDE.md`、README SVG 的标题 / 描述、`docs/target-ui-baseline.md`、两处测试名与 `docs/ui-baseline/app-runtime-check.mjs` 写死的 `=== 6`；`skills/favbase/INSTALL.md` 的平台枚举改为不列（SKILL.md 与发版耦合，未动）。带日期的 `docs/NN` 落地记录是历史，没改。README SVG 里手绘的平台 pill 列表仍缺抖音，属于重绘，未做。

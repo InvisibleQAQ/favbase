@@ -18,7 +18,7 @@ favbase turns scattered social-media favorites into one searchable local knowled
 
 ## Positioning
 
-The claim a neighbor cannot truthfully copy: **six platforms unified into one library** (confirmed 2026-08-20). Not a bookmark manager for one site, not a read-later queue: one search box, one chat, one tag system over everything the user favorited anywhere. Supporting facts: local-first (PGlite + pgvector inside the browser, no favbase server, data leaves the machine only to the user's own LLM/embedding endpoint and optional WebDAV); content-level ingestion (subtitles, full text, README), not just links.
+The claim a neighbor cannot truthfully copy: **every platform's favorites unified into one library** (confirmed 2026-08-20). Not a bookmark manager for one site, not a read-later queue: one search box, one chat, one tag system over everything the user favorited anywhere. Supporting facts: local-first (PGlite + pgvector inside the browser, no favbase server, data leaves the machine only to the user's own LLM/embedding endpoint and optional WebDAV); content-level ingestion (subtitles, full text, README), not just links.
 
 ## Operating Context
 
@@ -30,7 +30,7 @@ The claim a neighbor cannot truthfully copy: **six platforms unified into one li
 
 ## Capabilities and Constraints
 
-- Platforms: Bilibili favorites, GitHub stars, browser bookmarks, X bookmarks, Zhihu favorites, YouTube public playlists. Adding a platform is a documented onboarding contract; the nav and aggregate page derive from one platform registry.
+- Platforms: the Collection Platforms listed in `lib/collections/platforms.ts` (`COLLECTION_PLATFORMS`); this file does not repeat the list. Adding a platform is a documented onboarding contract; the nav and aggregate page derive from one platform registry.
 - Insert-only ingestion (unstar/unfavorite upstream does not delete locally). Tags are AI-generated after sync plus manual CRUD. Export to JSON/CSV/Obsidian vault. WebDAV config sync (phase 1).
 - Chat is read-only over the local DB; tool calls and sources are shown.
 - Technical constraints that shape UI: MV3 CSP (`script-src 'self'`) forbids inline scripts; fonts are self-hosted (`@fontsource-variable/dm-sans`, `@fontsource/barlow`); icons are offline-registered Iconify sets; no external image/CDN dependency for the shell itself (thumbnails come from platforms and can fail to load).
@@ -56,7 +56,7 @@ Not binding (replaceable): the material-kit-react / Minimal UI grey ramp, second
 ## Product Principles
 
 1. Finding beats managing: the shortest path is from opening the page to opening the saved thing; status and configuration never stand between them.
-2. One library, six sources: platform identity is metadata on an item, not a different UI per platform.
+2. One library, many sources: platform identity is metadata on an item, not a different UI per platform.
 3. Useful without AI keys: browsing, filtering and keyword search must feel complete before any provider is configured; AI adds depth, it is not the gate.
 4. Honest about work in progress: long pipelines are visible, pausable and never alarming; numbers shown to the user agree with each other.
 5. Local and private by construction: nothing in the UI implies a cloud account, and every outbound endpoint is one the user configured.

@@ -82,7 +82,7 @@ describe('palette.background', () => {
 });
 
 describe('palette.platform', () => {
-  it.each(SCHEMES)('%s scheme maps exactly the six Collection platforms', (scheme) => {
+  it.each(SCHEMES)('%s scheme maps exactly the Collection platforms', (scheme) => {
     const keys = Object.keys(platform[scheme]).filter((key) => !key.endsWith('Channel'));
     expect(keys.sort()).toEqual([...COLLECTION_PLATFORMS].sort());
     for (const id of COLLECTION_PLATFORMS) {

@@ -5,10 +5,11 @@ import { DaemonError } from './daemon-client';
 
 /*
  * The one place a failure becomes an exit code and its stderr lines (docs/30
- * #2). The exit-code tables in SKILL.md and INSTALL.md are how an agent
- * handles errors, so each row has to fit every failure that lands in its code
- * (silent-failure guide, Gotcha 5); `exit-codes.test.ts` reconciles those two
- * tables and the npm README's with this module.
+ * #2). The exit-code tables in SKILL.md (for an agent) and the npm README (for
+ * a person) are how errors get handled, so each row has to fit every failure
+ * that lands in its code (silent-failure guide, Gotcha 5); `exit-codes.test.ts`
+ * reconciles both tables with this module. INSTALL.md carries no table: it is
+ * read from `main` ahead of the installed release (docs/30 #4, D6-a).
  *
  * The default is exit 1 (D3): a failure nobody gave a type is printed as
  * `favbase: <message>`, which every table reads as "show the user". Exit 2

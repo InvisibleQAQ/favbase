@@ -41,7 +41,7 @@ const SYNC_ERROR_COPY: SyncErrorCopy = {
 
 // ---------------------------------------------------------------------------
 // Main view: config gate + scaffold assembly (title bar + sync + search +
-// channel chips + video grid all owned by CollectionPageScaffold).
+// playlist chips + video grid all owned by CollectionPageScaffold).
 // ---------------------------------------------------------------------------
 
 export function YoutubeView() {

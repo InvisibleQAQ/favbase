@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" role="img" aria-labelledby="title desc">
   <title id="title">How favbase turns saved content into answers</title>
-  <desc id="desc">A conceptual three-step flow: collect from six supported sources, organize locally with chunks tags and vectors, then search or chat with links back to original sources.</desc>
+  <desc id="desc">A conceptual three-step flow: collect from the supported sources, organize locally with chunks tags and vectors, then search or chat with links back to original sources.</desc>
   <defs>
     <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
       <path d="M0 0L10 5L0 10Z" fill="#2F7CF6"/>

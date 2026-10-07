@@ -32,9 +32,10 @@ function spokeEnds(index: number) {
 }
 
 /**
- * The hero centerpiece: six platform chips orbiting a glowing local database.
- * Pure DOM/SVG — no image assets, so it themes itself in light and dark and
- * costs nothing to ship.
+ * The hero centerpiece: one chip per registry platform orbiting a glowing
+ * local database (spacing derives from the registry length, so a new platform
+ * joins the ring on its own). Pure DOM/SVG — no image assets, so it themes
+ * itself in light and dark and costs nothing to ship.
  */
 export function OrbitCore() {
   const { t } = useTranslation();
