@@ -1,39 +1,48 @@
-# Embedding 领域层
+# lib/embedding
 
-pgvector 向量存储 + 语义检索 + 配置解析 + RAG 数据准备（chunker/indexing）。domain 层，依赖 `lib/ai`（provider/client infra）+ `lib/database`（Drizzle RPC proxy）。Bilibili 由 `lib/ingest.persistExistingItemContent` 落 durable chunks，再由 `embedPlatformItem` 独立推进向量状态。
+Embedding 领域层：chunker、durable chunk 持久化、向量存储与语义检索、配置解析。provider 调用（`embed*`、连接测试）在 `lib/ai/embedding.ts`，本 barrel 只是 re-export。
 
-## 分层
+## 约束
 
-- infra（provider 工厂 / `embed*` / `testEmbeddingConnection`）在 `lib/ai/embedding.ts`，本 barrel re-export
-- domain（chunker / indexing 编排 / vector store / 语义检索 / config 解析）在本目录
+- **lib 层只能 leaf import**：平台 sync-service 与 `lib/ingest` 只许导入 `./char-split`、`./chunker`、`./vector-store`、`./types`，不得 value-import 本 barrel（它连带 `./indexing`、`./config`、`@/lib/ai` 的整张加载图）。守卫 `tests/lib-import-smoke.test.ts`。app.html 消费者用 barrel 合法。
+- `config.ts` 在 Background SW 的静态图上（Agent Bridge → `lib/chat`，SW 禁动态 `import()`）：settings 必须从 `@/lib/storage/settings` leaf 取，不走 `@/lib/storage` barrel。同一守卫。
+- `ChunkInput` 是 chunker 与持久化之间的唯一契约。时间戳只存列，不混入 `text`（会污染向量）。chunker 的选择是平台 / 内容类型知识，留在调用方。
+- 本目录零平台知识，资格规则只来自 `lib/collections/collection-processing-policy.ts`，不在这里重写（规则 owner 与守卫见 `lib/collections/CLAUDE.md`）。
+- vector store 是 `(db, …)` 纯函数，走现有 Drizzle RPC proxy，offscreen 与 proxy 两端通用；不引入第二套 RPC。查询向量以 `'[…]'::vector` 字符串参数过桥。
+- `replaceItemChunks` 的 returning 行数必须等于输入数，否则事务回滚：不许出现「写了零行却成功」。它自开事务，调用方不要再包事务（单连接 proxy 上嵌套死锁）。
+- `diagnostics.ts` 的 trace 只许带 allowlist 里的元数据（标识、阶段、计数、provider / model / 维度、耗时）；禁止正文、chunk 文本、向量、API key、请求头与请求体。诊断 sink 吞掉自身异常，不得改变控制流。
 
-## 模块结构
+## Embed lane（Processing Queue 的 lib 半边）
 
-- `types.ts` — `ChunkInput = { text, startSec?, endSec? }`：**chunker 与 indexing 之间的唯一契约**。任何内容类型的 chunker 产出 `ChunkInput[]` 即可接入 `indexItemChunks`；时间戳可选（图文平台 undefined → NULL），且**只存列不混入 text**（混入会污染向量）
-- `chunker.ts` — `chunkSubtitleRows(rows: SubtitleRow[], opts?) → ChunkInput[]`：字幕内容类型 chunker，零依赖纯函数。行级贪心打包：SubtitleRow 为原子单位（行内不切），默认 target 500 / max 700 / min 100 字符 / gap 2s / overlap 上限 150 字符（`ChunkerOptions` 可覆盖）。累计 ≥target 后在"行尾句末标点或行间 gap ≥2s"处闭合，≥max 硬闭合；新 chunk 带上一 chunk 末尾 1 整行 overlap（>150 字符跳过）；末尾残片 fresh 文本 <min 并入前一 chunk（去 overlap 防重复）；单行 >max 兜底先按标点再按字符硬切（子片共享该行时间戳）。**句末标点集 `。.!?！？;；…` 中英双覆盖是 load-bearing**：subtitle-processor normalize 把全角 `！？；` 转半角但 `。` 保持原样。chunk startSec=首行 start / endSec=末行 end
-- `char-split.ts` — `charSplit(text, { preferParagraph? }) → ChunkInput[]`：文本类内容（tweet / 知乎 Markdown / youtube description / github README）的字符级软切纯函数（docs/16 MEDIUM-4，收敛原 x/zhihu/youtube 三份逐字符近似拷贝）。短文本 1 chunk；长文本按 `MAX_CHARS=1500` 软切，边界回看 `LOOKBACK=300`：`preferParagraph:true`（zhihu/youtube/github）先看段落空行 `\n\n` 再句末标点，`false`（x，默认）仅句末标点，均无断则硬切。句末标点集 `。.!?！？;；…\n` 中英双覆盖（同 chunker.ts）。无时间戳（文本内容 → NULL start/end 列）。与 `chunkSubtitleRows` 分工：那个打包带时间戳的字幕行，这个切不透明字符串。**`paragraphSplit(text)`** = `charSplit(text, { preferParagraph: true })` 的具名 preset（docs/32 Step 5，收敛 github/zhihu/youtube/bookmarks 四处同形 lambda），给有段落结构的文本（Markdown、README、知乎回答、YouTube description、网页提取）；x 的推文刻意不用它（只在句末切）。按行为命名不叫「Markdown preset」：YouTube description 不是 Markdown
-- `indexing.ts` — 内容类型无关编排；Collection Item eligibility 来自 `lib/collections/collection-processing-policy.ts`。`persistItemChunks` 持久化 durable chunks；`embedPlatformItem` 先用 policy 排除不合资格 Item，再验证 chunk 行并读配置，零 chunk、DB、Provider 异常全部 reject，不得让外层 job 伪装 completed；`embedPlatformItem` / `embedPlatformBacklog` 只在向量与 `content_state='embedded'` 成功落库后发 `item-embedded` 领域事件。`embedPlatformBacklog(platform, deps?, onProgress?, control?)` 与全库 rebuild 均消费 policy 的 Embedding pending candidate（eligible + `'chunked'` + chunk 行）；候选选出后 chunk 消失也计失败，禁止正常 no-op；未配置静默 0/0，单条失败继续并计入 `progress.failed`，收尾 `failed>0` 抛错。可接收 `CooperativeCheckpoint`，每条 item 前暂停。
-- `config.ts` — `resolveEmbeddingConfig(settings)` 纯函数（镜像 `resolveAsrConfig`）：`UserSettings` → `{ providerId, apiKey, baseUrl, model, enabled, dimensions? }`。`dimensions`（可选维度裁剪）**单一来源 = 用户配置 `embeddingConfigs[providerId].dimensions`**，无 env 层、无 provider def 后备；仅有限数且 >0 才透出，否则 undefined（= 模型原生维度）。UI（设置页维度 Select，值恒为 `COMMON_EMBEDDING_DIMENSIONS` 预设之一或 undefined）走 `useSettings.currentEmbeddingDimensions`（raw），embed 消费者走 resolver 过滤值。**逐字段优先级：用户填写 `embeddingConfigs[providerId]`（非空即赢）> `.env.local`（`VITE_EMBEDDING_*`）> provider def**。env 只是"默认起点"，用户可覆盖且以用户为准。`providerId`：`settings.embeddingProvider`（`DEFAULT_SETTINGS` 已默认读 `VITE_EMBEDDING_PROVIDER`）> 合法 `VITE_EMBEDDING_PROVIDER` > `'openai'`（非法 env provider 忽略）；baseUrl/model 的 def 后备来自 resolved provider。**env 凭证包（`VITE_EMBEDDING_API_KEY/BASE_URL/MODEL`）描述的是单个 provider——`VITE_EMBEDDING_PROVIDER` 指定的那个**，整包 gate：仅当 `providerId === envProvider` 时三字段才取 env，否则 env 视为空串、回退 provider def（切到别的 provider 不会继承 gptgod 的 base/model/key，杜绝泄漏）。因 `DEFAULT_SETTINGS.embeddingProvider = VITE_EMBEDDING_PROVIDER || 'openai'`，新装 `providerId === envProvider` env 生效；用户切 provider 后不再匹配即断开（`import.meta.env` 构建期内联，改 `.env.local` 需重跑 build）。**无启用开关**：`enabled` 派生自 `!!apiKey`（解析出 key 即启用——契合"默认启用"，同时避免完全未配置时无谓 embed + 报错刷屏）。`getEmbeddingSettings()` 异步便利（getValue + resolve，非 React 消费者用）。**settings 从 `@/lib/storage/settings` leaf 取而非 barrel**：本模块在 Background SW 的静态图上（Agent Bridge `searchKnowledgeBase` → `lib/chat/retrieval`，SW 禁动态 `import()`），barrel 会连带求值 `ui-state`/`agent-bridge` 的 `defineItem`；leaf 的 `defineItem` 已改懒定义，故加载期零 chrome 触碰（`tests/lib-import-smoke.test.ts` 守）
-- `errors.ts` — `MAX_INDEXABLE_DIMENSIONS = 2000`（pgvector HNSW 索引硬上限，单一来源）+ `COMMON_EMBEDDING_DIMENSIONS = [256, 512, 768, 1024, 1536] as const`（主流模型常用维度/截断档位中 ≤ 上限的全部值，设置页维度 Select 的单一来源，`errors.test.ts` 守卫正整数/严格递增/≤上限不变量）+ 两个错误类：`EmbeddingDimensionError`（携 expected/actual，expected 构造时显式传入——batch 首向量维度或当前列维度，无 canonical 默认值）；`EmbeddingDimensionLimitError`（携 actual/limit，维度超出可索引范围 [1,2000] 时抛，提示换模型或裁剪维度）
-- `diagnostics.ts` — 临时 Embedding 诊断 Module：统一 `[embedding:trace]` 前缀、operation trace ID、metadata allowlist 与错误凭证脱敏。只允许平台/Item 标识、阶段、计数、Provider/model/dimensions 和耗时；禁止正文、chunkText、向量、API key、Authorization header、请求体。诊断 sink 必须吞掉自身异常，不得改变 Pipeline Run 控制流
-- `vector-store.ts` — `(db: FavbaseDb, ...)` 纯函数集，走现有 Drizzle RPC proxy（**不引入第二套 RPC**）：
-  - `toSqlVector(vec)` → `'[a,b,c]'`（纯，可单测）
-  - `replaceItemChunks(db, itemId, chunks)` — 事务 delete by item_id + 批量 insert（chunk_index 0 起顺序编号，写 start_sec/end_sec），返回 `ReplacedChunk[]`（id/chunkIndex/chunkText）供 embed 回填；空 chunks 只清空；非空输入的 returning 数必须与输入数一致，否则事务抛错回滚，禁止零-row trigger/异常 Adapter 制造假成功
-  - `getEmbeddingColumnDimensions(db)` — 读 `pg_attribute.atttypmod`（pgvector typmod 就是维度原值，无偏移；-1/缺失视为损坏抛 Error）。**当前列维度唯一真相在 pg catalog**，不在 WXT storage 维护副本
-  - `alterEmbeddingDimensions(db, N)` — 惰性维度切换 DDL：事务内 double-check 列维度（PGlite 单连接 + proxy 事务互斥，并发切换收敛为 no-op）→ 单条 `ALTER ... TYPE vector(N) USING NULL::vector(N)`（清空旧向量 + 换维度 + HNSW 索引自动重建三合一，实测见任务 research）→ `items.content_state` 'embedded'→'chunked' 回退。超范围 [1,2000] 抛 `EmbeddingDimensionLimitError`
-  - `upsertChunkEmbeddings(db, entries)` — UPDATE `item_chunks.embedding` WHERE id。**惰性自适应收敛点**：batch 内维度必须一致（不一致抛 `EmbeddingDimensionError`，调用方 bug）→ 超 2000 抛 `EmbeddingDimensionLimitError`（DDL 前拦截）→ 维度 ≠ 当前列维度先 `alterEmbeddingDimensions` 再落库。ALTER 与 UPDATE 之间的并发换维竞态由列类型天然兜底（pgvector 拒绝异维插入）
-  - `semanticSearchChunks(db, queryVec, { topK, minScore? })` — `ORDER BY embedding <=> $vec LIMIT topK`（cosine），`score = 1 - distance`，`minScore` 过滤。查询向量维度 ≠ 当前列维度抛 `EmbeddingDimensionError`（expected=列维度；查询向量来自当前模型天然匹配，不匹配 = 配置错乱，显式报错优于静默空结果）。向量作 `'[...]'::vector` 字符串参数（过 PortBridge 只是文本，RPC 安全）。返回 `{ chunkId, itemId, chunkText, score }[]`
-  - `deleteItemEmbeddings(db, itemId)` / `clearAllEmbeddings(db)` — 置 embedding NULL
-  - `getEmbeddingStats(db)` → `{ embeddedChunks, totalChunks }`
-- `index.ts` — barrel：re-export infra（from `@/lib/ai`）+ types + chunker + charSplit/paragraphSplit + indexing + config + errors + vector-store，单一 import 面。**注意 barrel 带 storage 副作用**：re-export `./config` → `@/lib/storage`，其模块加载期 `storage.defineItem` 会 eagerly `getItem`——**lib 层平台 sync-service 与共享 ingest 管线必须 leaf import**（`./char-split`、`./chunker`、`./vector-store`），不得 value-import 本 barrel；规则由 `tests/lib-import-smoke.test.ts` 可执行守卫（无 `chrome` 全局、无 mock 下 `import()` 零未处理 rejection，docs/20 高-1），不靠注释。type-only import barrel 无害（编译期擦除）。app.html 消费者（settings embedding 卡 / `collection-processing-jobs`）合法依赖 barrel
+队列、暂停状态与重试入口归 app 侧，见 `entrypoints/app/hooks/CLAUDE.md`；这里是 lib 一侧必须守住的契约。
 
-## 约定
+- 不要在本目录加全局 embed FIFO：同一平台的 lane 逐条串行，不同平台互不排队，否则一个未结算的请求会阻塞全部平台。单请求 deadline 归 `lib/ai/embedding.ts`。
+- `embedPlatformBacklog` 不收 id 列表，恒排空该平台的 pending candidate（eligible + `'chunked'` + 有 chunk 行）：零新增的同步也会清掉上次中断留下的积压。
+- 失败不许伪装成功：`embedPlatformItem` 遇零 chunk、DB 或 provider 异常一律 reject 给 job owner；backlog 单条失败继续，收尾 `failed > 0` 抛错；候选选出后 chunk 消失也计失败。
+- 失败的条目持久状态留在 `'chunked'`，所以重试就是再跑一次；设置页「重建向量」是手动兜底。
+- 未配置（解析不出 API key）是静默 `0/0`，不是失败：自动派发不能在没配 key 的环境里刷失败 job。
+- 暂停是 cooperative checkpoint：每条 item 之前检查，不中断进行中的请求与写入。
+- `onProgress` 是 `{ done, total, failed }`：查询后先报一次 `0/total`，之后每条结算报一次，单调且必达 `total`。
+- `item-embedded` 领域事件只在向量与 `content_state='embedded'` 都落库之后发。
+- `indexItemChunks`（落 chunk 后立即嵌入、失败停在 `'chunked'`）是兼容路径，生产代码没有调用方；新代码用 `embedPlatformItem` / `embedPlatformBacklog`。
 
-- Provider 并发：同一平台的 Collection Embed lane 逐 item 串行；不同平台不得在 `lib/embedding` 再套全局 FIFO，否则一个未结算请求会阻塞全部平台。`indexItemChunks` / backlog / rebuild 直接调用 provider；单请求 deadline 归 `lib/ai/embedding.ts`。
+## 向量维度
 
-- 两层解耦：chunker 选择是平台/内容类型知识；collection ingest 与 delayed content replacement 将 `ChunkInput[]` 交给 durable persistence seam。需要组合“落 chunk 后立即嵌入”的旧路径仍可用 `indexItemChunks`。Bilibili 在 app.html 编排层通过 `(platform, platformItemId)` 调 `embedPlatformItem`，不接触 DB uuid；文本类平台继续复用 `charSplit`
-- 失败策略：chunk 必做（本地零成本）；未启用 Embedding 在有 chunks 时停留 `'chunked'`，平台单条路径的 missing chunks/DB/Provider 失败 reject 给 job owner（持久状态仍保持 `'chunked'` 可重试）。六平台共享 Embed lane 单条失败继续并在收尾抛错；设置页「重建向量」为手动兜底
-- 诊断契约：`embedPlatformBacklog` / `embedPlatformItem` 记录 config、DB query、每个 Collection Item 的 Provider 与 persistence 开始/完成/失败及 operation 终态；同一 backlog 或单 Item 内共用 trace ID。Provider `started` 后无 `completed|failed` = 请求未结算；persistence `started` 后无终态 = DB 写入未结算
-- 维度惰性自适应（原"1536 锁"已移除）：列维度跟随当前模型——upsert 发现 batch 维度 ≠ 列维度时自动 re-dimension（旧向量清空 + 'embedded' 回退 'chunked'，换模型本就要全量重算，旧向量对新模型无意义）。任意 ≤2000 维 provider（gemini 768 / bge-m3 1024 / openai 1536 等）均可落库；>2000（如 text-embedding-3-large 3072 未裁剪）抛 `EmbeddingDimensionLimitError` 被 indexing catch 停 'chunked'——此时可在设置页配 `dimensions` 裁剪（config.ts `dimensions` + `lib/ai` `embeddingProviderOptions` 透传，openai v3 系 / gemini / 部分 openai-compatible 端点支持）。`testEmbeddingConnection` 带配置的 dimensions 探针，返回真实维度供 UI 对照 2000 上限展示成功/错误。Drizzle schema `{ dimensions: 1536 }` 是名义值（只喂 drizzle-kit，本项目不用），真相在 pg catalog
-- vector store 做成 `(db)=>` 纯函数：offscreen（`initDbMain`）/ proxy（`initDbProxy`）两端通用、可单测。DB 访问一律走 Drizzle query builder + 原生 `sql` 模板（`<=>` 检索用 `db.execute(sql\`...\`)`，读 `result.rows`）
-- 测试：`vector-store.test.ts` 用 in-memory PGlite（`PGlite.create` + vector/uuid_ossp/pg_trgm 扩展 + `runMigrations`）做 upsert/cosine 排序/minScore/stats/clear 往返 + 惰性维度切换端到端（1536→1024：atttypmod 变更、旧向量清空、'embedded' 回退、HNSW 索引存活、新维度检索、超限拒绝且列不动）；`toSqlVector` + 维度守卫（混合 batch / 超 2000 / 空向量）纯函数单测。`chunker.test.ts` 纯函数单测（标点双覆盖/gap 闭合/overlap/min 并入/超长兜底/时间戳）。`char-split.test.ts` 纯函数单测（合并原 x/zhihu/youtube 三份：空/短文/`preferParagraph` 双路径——段落优先 vs 仅句末、CJK 句断回退、硬切不丢内容、默认 false、无时间戳）。`indexing.test.ts` in-memory PGlite + 注入 `IndexingDeps`（落库/状态推进/embed 失败停 chunked/重建无残留/NULL 时间戳/config 含 dimensions 流过注入面）+ defaultDeps 路径（`vi.mock('@/lib/ai')` seam：断言 `embedTexts` 收到 `{ providerId, dimensions }`）。`rebuild.test.ts` in-memory PGlite + 注入 deps（happy path 全量重建 + 进度序列 0/2→1/2→2/2 / 失败即停 + 幂等续跑只处理剩余 / not-configured 不碰 DB / 空积压 total=0 / policy exclusion / 其他 content_state 与无 chunk 的 'chunked' 不触碰；rebuild 全表扫描故 afterEach 清 items+authors 防跨测试泄漏）。`embed-platform-backlog.test.ts` in-memory PGlite + 注入 deps（happy path createdAt 序、无 id 列表 / platform 圈定与 policy exclusion / direct Item policy exclusion / 非 'chunked' 与幽灵（无 chunk 行）经 candidate 排除且 total 不含 / 单条失败继续、收尾抛 `failed/total` / 未配置静默 0/0 / **onProgress `{done,total,failed}` 单调到 total**）。`config.test.ts` 覆盖 dimensions 解析（配置透出/未配 undefined/非法值过滤/按 provider 隔离）。provider 工厂映射 + `embeddingProviderOptions` 构建 + embed/embedMany providerOptions 透传 + 探针带 dimensions 测试在 `lib/ai/embedding.test.ts`。注意：测试文件需 `vi.mock('@/lib/storage')`（barrel 加载时触碰 chrome.runtime）
+- 列维度的唯一真相在 pg catalog（`getEmbeddingColumnDimensions` 读 `atttypmod`），不在 storage 里维护副本。Drizzle schema 的 `{ dimensions: 1536 }` 是名义值，别当真。
+- 维度惰性自适应，没有固定维度锁：`upsertChunkEmbeddings` 发现 batch 维度 ≠ 列维度时先 `alterEmbeddingDimensions`（清空旧向量、换列类型、`'embedded'` 回退 `'chunked'`）再落库——换模型本就要全量重算。
+- 上限是 `MAX_INDEXABLE_DIMENSIONS`（pgvector HNSW 的硬上限）：超限在 DDL 之前抛 `EmbeddingDimensionLimitError`，条目停在 `'chunked'`；修法是在设置页配 `dimensions` 裁剪。
+- 检索时查询向量维度 ≠ 列维度抛 `EmbeddingDimensionError`，不返回空结果：那是配置错乱，显式报错优于静默空结果。
+- `dimensions` 的唯一来源是用户配置 `embeddingConfigs[providerId].dimensions`，没有 env 层，也没有 provider def 后备。
+
+## 配置解析
+
+- 逐字段优先级：用户填写 > `.env.local` 的 `VITE_EMBEDDING_*` > provider def。
+- env 凭证包（API key / base URL / model）描述的是 `VITE_EMBEDDING_PROVIDER` 指定的那一个 provider，整包 gate：当前 provider 不是它时三个字段都不取 env，否则切换 provider 会继承别家的 key 与 base URL。
+- 没有启用开关：`enabled` 派生自「解析得出 API key」。
+- `import.meta.env` 构建期内联，改 `.env.local` 要重新 build。
+
+## Chunker 的坑
+
+- 句末标点集必须中英双覆盖（`。.!?！？;；…`）：字幕归一化把全角 `！？；` 转成半角，但 `。` 保持原样。
+- `chunkSubtitleRows` 以字幕行为原子单位，时间戳来自行；它的产物不能用 `charSplit` 重切。
+- `paragraphSplit` 给有段落结构的文本（Markdown、README、description、网页提取）；推文与抖音 `desc` 刻意用 `charSplit(preferParagraph: false)`，只在句末切。

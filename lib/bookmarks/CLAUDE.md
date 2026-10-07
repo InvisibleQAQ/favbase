@@ -1,26 +1,36 @@
 # lib/bookmarks
 
-浏览器书签收录领域（第三个平台，镜像 `lib/github/` 分层）。读本地 `chrome.bookmarks` 树 + PGlite 持久化 + 查询 + **内容提取管线**（后台 fetch 书签网页 → Defuddle 抽正文转 Markdown → `item_contents`/`item_chunks` 入库，contentState `pending→chunked/no_content`）。复用现有表（sources/authors/items/item_sources/item_contents/item_chunks，`platform='bookmarks'` 判别列），零新表零迁移。**首个无远程凭证平台**：书签是本地数据，故无 token/cookie、无 `validateCredential`、无 auth/rate-limit 错误类（平台接入契约的「凭证那半套」不适用，见 `.trellis/spec/frontend/platform-onboarding.md`）；内容提取需要 `<all_urls>` host 权限（见下方约定）。
+浏览器书签收录领域：读本地 `chrome.bookmarks` 树入库，再由提取管线抓书签网页 → Defuddle 转 Markdown → 切块。没有远程凭证，所以没有 auth / rate-limit 错误类，平台接入契约的凭证半边不适用（`.trellis/spec/frontend/platform-onboarding.md`）。
 
-## 模块结构
+## 信任边界（抓取与解析）
 
-- `bookmarks-api.ts` — 本地书签「API」层（无 DB 导入、无 UI 文案）：`readBookmarkTree()`（唯一 impure 入口，`browser.bookmarks.getTree()` → `flattenBookmarkTree`）。纯函数导出供单测：`flattenBookmarkTree(roots)`（DFS 扁平化为 `{folders, bookmarks}`——node 有 `children` 且无 `url` 为文件夹、有 `url` 为书签；跳过合成根 `'0'`，顶层容器 Bookmarks Bar/Other 成真实文件夹；非 http(s) 书签过滤掉；每条书签带**直接父文件夹 id**）、`normalizeUrl(url)`（去重键：host 小写 + 剥 `utm_*`/`ref`/`fbclid`/`gclid` 等追踪参 + 去非根路径尾斜杠；不可解析回退 trim 原串）、`isHttpUrl`、`extractDomain`（host 去 `www.`）。守护测试 `bookmarks-api.test.ts`
-- `bookmarks-sync-service.ts` — **DB schema 知识的唯一持有者**（`PLATFORM='bookmarks'`）。`syncBookmarks(control?)` 读取本地树后在 DB 写入前执行 cooperative checkpoint，再委托 `syncBookmarkTreeToDb`；后者维持 sources/authors/items/links 的 insert-only 归一化，正文仍由提取管线事后补。结果 `SyncBookmarksResult { totalBookmarks, syncedItems, folders, inserted }`——`inserted`（本轮新插入条目数，docs/32 Step 1 追加，空树 0）与 `totalBookmarks` 进 Platform Sync Record 的 `last_inserted`/`last_fetched`；与 `lib/x` 同名的 `SyncBookmarksResult` 刻意不改名（统一只发生在 app 侧 adapter 的 `PlatformSyncOutcome`，docs/32 附录 B）。查询由 `getBookmarks/getFolders` 持有。`narrowBookmarkMeta(meta, { authorName, publishedAt })` 是 items `platform_meta` 的**唯一 decoder**（docs/32 Step 2），外层 mapper `toBookmarkItem`（Row → `BookmarkItem`）自 docs/32 Step 8 起也导出：查询的 `mapRow` 与 `sections/bookmarks/tagged-bookmark-card.tsx`（`taggedCard(BookmarkCard, 'bookmark', toBookmarkItem)`）用同一个函数，`domain` 缺失回退 `authorName`、`dateAdded` 缺失回退 `publishedAt`（两者都由同步写成同值）；此前两份各写一遍、卡片那份把 `dateAdded` 回退成 `null`。`BookmarkItemMeta` 不导出（写侧 `satisfies` 在同文件），测试 `narrow-meta.test.ts`。提取队列同时领取 pending 与「已有 `item_contents`、缺 `item_chunks`」的历史幽灵行，后者直接从已存正文重建，不重抓网页；UI 零 schema 导入。
-- `bookmark-page-fetch.ts` / `bookmark-page-client.ts` — 网络信任边界：纯 fetch 模块持有 URL 预过滤、匿名 GET、统一 deadline（`lib/http/` 的 `fetchWithDeadline`，无平台私有超时常量）、content-type、5MB 上限、字符集探测与 `FetchPageResult`（体积/预扫/正文阈值与提取批次/间隔等数值常量经 `envNumber('VITE_BOOKMARKS_*', default)` 可配置——`lib/env.ts`，文档在 `.env.example`）；生产由 client 发 `FETCH_BOOKMARK_PAGE` 到 background SW 执行，app.html bundle 不含任意书签 URL 的 fetch 实现。底层 `fetchFn` 仅用于网络模块单测
-- `bookmark-content.ts` — Inert DOM extraction boundary: `extractMarkdown(html, url)` parses third-party HTML with `linkedom.parseHTML(html, globals)` and supplies a per-document no-layout `getComputedStyle`; never let linkedom's `defaultView` proxy fall through to the branded host `window.getComputedStyle`, and never assign through that proxy because its setter mutates `globalThis`. Defuddle then converts synchronously to Markdown. Network pure-function re-exports remain for compatibility, while production fetching belongs to the background client.
-- `bookmark-content-service.ts` — 串行提取/恢复 worker；优先消费 target 携带的已存正文，只在没有正文时 fetch。`saveBookmarkContent`（`bookmarks-sync-service.ts`）是 `lib/ingest` 的 `settleItemContent` 的薄包装——只绑定 `paragraphSplit` 与默认 db，写正文 + 落定 `chunked|no_content`；ghost sweep 里「本轮 `textOf` 给出文本」的分支调的是同一个函数（docs/32 Step 5），落定状态的那一半（模块私有的 `chunkAndSettle`）则是 ingest phase 5 全程共用——docs/33 Step 2.5 起新条目的正文随 item 行在事务里写，phase 5a 不再经 `settleItemContent`；返回 chunk 行是否真实落库，仅 `true` 可写入 `chunkedItemIds` 并触发 `onItemExtracted`；每条 durable `chunked|no_content` settled 后发 `item-content-updated`。`ExtractPendingOptions.control?: CooperativeCheckpoint`（`@/lib/collections` 纯类型）在**每条 item 领取前** `await checkpoint()`，暂停与 abort 都保持 item 边界语义。
+- 任意站点的 fetch 只在 background SW 执行。app.html 经 `lib/background/client.ts` 的 `sendBackgroundMessage({ type: 'FETCH_BOOKMARK_PAGE', url })` 请求，由 client 负责 envelope 与 `FetchPageResult` 的 runtime decode。
+- 禁止直接 `browser.runtime.sendMessage`，禁止把响应强转成 `FetchPageResult`；也不要在 app.html 侧直接调 `fetchBookmarkPage`（底层 `fetchFn` 只给网络模块单测用）。
+- 第三方 HTTP 响应必须在没有 Document 的 SW 里读，第三方 HTML 必须用 `linkedom` 的 inert DOM 解析。两半缺一不可：HTTP `Link` hints 在正文解析前就生效，HTML 里的 `<link>` / script / media 在解析阶段生效。
+- 提取 fetch 必须 `credentials: 'omit'`：`<all_urls>` host 权限下 fetch 默认携带用户 cookie。
+- `<all_urls>` 是已接受安装警告与 CWS 深审的决定（书签可以指向任意站点，SingleFile 先例）。
+- `linkedom.parseHTML` 必须传入自带的无布局 `getComputedStyle`：否则 linkedom 的 `defaultView` 代理会落到宿主的 `window.getComputedStyle`（branded 方法；inert 文档本来就没有布局和 computed style）。
+- 决不经 linkedom 的 `defaultView` 代理赋值：它的 setter 会改写 `globalThis`。
+- `extractMarkdown` 必须传 `url`：inert document 没有 base URL，相对链接靠 Defuddle 的 `url` 选项解析。
+- Defuddle 只用同步 `parse()`。`parseAsync` / `fetchAsyncVariables` 的站点 extractor 会去请求第三方 API，其中 B 站 extractor 还会回退到会串字幕的非 wbi `x/player/v2`（docs/29 §3「连带影响」）；换异步入口之前必须先处理。
+- Defuddle 对非文章页会回退成整个清洗后的 `<body>`，所以「无正文」靠字符阈值判定（SPA 壳、challenge 页、落地页）。
+- 调 Defuddle 前移除无法解析的 `application/ld+json` 节点（坏的 schema.org 数据会让 Defuddle 报控制台错误）；合法的 JSON-LD 保留。
+- `defuddle/full` 内嵌自己的 Turndown 规则，与 zhihu 的独立 `turndown` 依赖并存是依赖内嵌，不是 copy-paste，别去「去重」。
 
-## 约定
+## 同步与提取
 
-- Background 页面抓取消息必须使用 `lib/background/client.ts` 的 `sendBackgroundMessage({ type: 'FETCH_BOOKMARK_PAGE', url })`；client 负责 envelope 与 `FetchPageResult` runtime decode。禁止直接调用 `browser.runtime.sendMessage` 或把响应强转为 `FetchPageResult`，畸形响应按 `BackgroundProtocolError` 失败。
-
-- **共享骨架**：写侧走 `ingestCollection`（`lib/ingest/`，docs/16 HIGH-1——事务边界/insert-only/分批/id-map 均由管线持有）；读侧 `getBookmarks` 走 `pagedItemsQuery`，搜索走 `searchCondition`（本文件只声明可搜字段：title、`platform_meta->>'domain'`）、文件夹筛选走 `sourceMembership`——**先 search 后 folder**，顺序决定参数编号（均在 `lib/database/collection-queries.ts`，docs/32 Step 9）；`getFolders` 按 `createdAt`（树序）排、不计数，形状不同，不走 `sourceItemCounts`——本文件只留平台特有 filter/orderBy/mapRow，勿再拷贝；「上次同步」没有 lib 包装（`getLastSyncedAt` 已删）：app 侧 `useCollectionLibrary` 按 config 的 `platform` 直接读 Platform Sync Record
-- **Insert-only（与 B站/github 同 ADR）**：items/authors/item_sources 只 insert（`onConflictDoNothing`，first-write-wins），不 update 不 delete。重新同步（每次访问自动触发）只追加新书签；标题/元数据不刷新；删除的书签不删行；书签跨文件夹移动**保留双 link**（与 bilibili 一致）。唯一例外：`sources` 文件夹行 upsert 刷新 `title`/`platformMeta.path`/`lastFetchedAt`（文件夹重命名经此反映）。完整规则见 `lib/ingest/CLAUDE.md`（Insert-only 不变量）
-- **items 行映射**：`platformItemId=normalizedUrl`（稳定去重键，非 chrome 节点 id——节点 id 跨设备不稳定）、`title=bookmark.title`（空回退 url）、`authorName=domain`、`originalUrl=bookmark.url`、`publishedAt=new Date(dateAdded)`、`contentState='pending'`（等待内容提取；提取成功 → `'chunked'`（Markdown 落 `item_contents.plainText` + `paragraphSplit` 切块，经 `lib/ingest` 的 `settleItemContent`；返回值 = chunk 行是否写入，零 chunk 一律 `'no_content'`——`'chunked'` 不许无 chunk 行），永久失败（死链/4xx（429 除外）/非 HTML/空正文/内网 URL）→ `'no_content'`，瞬时失败（5xx/429/超时/网络）保持 `'pending'` 自愈。无内容刷新/重抓——与 github README 同 insert-only 快照 ADR）
-- **platformMeta 形状**（items）：`{ domain, dateAdded }`（dateAdded 为 ms epoch，与 publishedAt 冗余保无损）。favicon **不入库**，UI 用 MV3 本地 `_favicon` API 渲染（`sections/bookmarks/bookmark-card.tsx`）
-- **文件夹 = source**：`platformSourceId=chrome 文件夹节点 id`（profile 内稳定，1:1 对应本地 PGlite）；`platformMeta.path` 存全路径供展示/调试。删+重建文件夹得新 id → 新 source（旧的 insert-only 保留），MVP 可接受。**空文件夹跳过**（无直接书签的文件夹不建 source，含只含子文件夹者）
-- 运行位置：background SW 负责任意站点 fetch；app.html 只负责任务编排与 inert DOM 提取；经 RPC proxy 写 Offscreen PGlite
-- 权限：`bookmarks`（读树）+ `favicon`（本地图标）在静态 `permissions`；内容提取需静态 `host_permissions: ['<all_urls>']`（`wxt.config.ts` `bookmarkContentHostPermissions`，ADR：接受安装警告 + CWS 深审排队，SingleFile 先例；host 权限 fetch 默认携带用户 cookie，故提取 fetch 必须 `credentials:'omit'`）
-- HTML/网络信任边界：第三方 HTTP 响应必须在无 Document 的 background SW 读取，第三方 HTML 必须由 `linkedom` inert DOM 解析。只做其中一半仍会泄漏副作用：HTTP `Link` hints 发生在正文解析前，HTML `<link>`/script/media 属于解析阶段
-- defuddle 依赖：`defuddle/full`（~732KB，内嵌 Turndown 转换规则）与 zhihu 的独立 `turndown` 依赖并存（依赖内嵌非 copy-paste）；`linkedom` 提供无网络加载器的 DOM；书签页本身是 lazy route，两者落在该页 chunk
-- `extractMarkdown` 在调用 Defuddle 前移除无法解析的 `application/ld+json` 节点，避免第三方坏 schema.org 数据触发 Defuddle 控制台错误；合法 JSON-LD 保留。
+- 去重键是 `normalizeUrl` 的结果（即 `platformItemId`），不是 chrome 节点 id：节点 id 跨设备不稳定。
+- 文件夹 = Source，`platformSourceId` 是 chrome 文件夹节点 id（profile 内稳定）。删掉重建的文件夹得到新 id → 新 Source，旧的保留（已接受）。
+- 没有直接书签的文件夹不建 Source（含只含子文件夹的）；非 http(s) 书签在扁平化时就过滤掉。
+- 写侧走 `ingestCollection`，insert-only 不变量见 `lib/ingest/CLAUDE.md`：删除的书签不删行、标题不刷新、跨文件夹移动保留双 link。唯一 upsert 是 `sources` 文件夹行（`title` / `platformMeta.path` / `lastFetchedAt`，文件夹重命名经此反映）。
+- 新书签以 `'pending'` 入库等待提取。永久失败（死链、429 以外的 4xx、非 HTML、空正文、内网 URL）→ `'no_content'`；瞬时失败（5xx、429、超时、网络）保持 `'pending'`，下次再试。
+- 提取成功的正文不刷新、不重抓（insert-only 快照，有意决策）。
+- `'chunked'` 不许没有 chunk 行：`saveBookmarkContent` 返回 chunk 行是否真实落库，只有 `true` 才能进 `chunkedItemIds` 并触发 `onItemExtracted`；零 chunk 一律落 `'no_content'`。
+- 写正文并落定状态只经 `lib/ingest` 的 `settleItemContent`（`saveBookmarkContent` 是它的薄包装），不要在本目录另写一份。
+- 提取队列同时领取 pending 与「已有 `item_contents`、缺 `item_chunks`」的幽灵行；后者从已存正文重建，不重抓网页。
+- 提取 worker 串行；`control` 的 checkpoint 在每条 item 领取前执行，暂停与 abort 都保持 item 边界。每条落定后发 `item-content-updated`。
+- `getFolders` 按 `createdAt`（树序）排、不计数，形状与 `sourceItemCounts` 不同，刻意不走它。
+- `platformMeta` 形状：`{ domain, dateAdded }`（`dateAdded` 是 ms epoch）。唯一 decoder 是 `narrowBookmarkMeta`，唯一 Row mapper 是 `toBookmarkItem`（查询与 `sections/bookmarks` 的 tagged card 共用）。
+- decoder 的回退：`domain` 缺失回退 `authorName`，`dateAdded` 缺失回退 `publishedAt`（同步把两对都写成同值）；不要回退成 `null`。
+- favicon 不入库，UI 用 MV3 本地 `_favicon` API 渲染。
+- `SyncBookmarksResult` 与 `lib/x` 的同名类型刻意不改名：统一只发生在 app 侧 adapter 的 `PlatformSyncOutcome`。

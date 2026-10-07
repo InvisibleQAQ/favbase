@@ -1,7 +1,6 @@
 # lib/subtitle
 
-通用字幕共享类型（平台无关）。
+平台无关的字幕共享类型（`SubtitleRow` / `SubtitleSource` / `SubtitleResult`）。
 
-## 模块结构
-
-- `types.ts` — 通用字幕共享类型（平台无关）：SubtitleSource(`'official' | 'asr'`，按转录方法维度区分，不绑定平台/工具名), SubtitleRow(`{ start, end, text }`，通用字幕行), SubtitleResult(`{ status, rows, source?, error? }`，字幕获取结果)。所有层（bilibili/transcription/cache/offscreen/UI）统一从此模块导入
+- 所有层（平台、transcription、cache、offscreen、UI）都从这里导入，不各自重新定义。
+- `SubtitleSource` 按转录方法区分（`'official' | 'asr'`），不要加平台名或工具名（如 `'bilibili'` / `'groq'`）。

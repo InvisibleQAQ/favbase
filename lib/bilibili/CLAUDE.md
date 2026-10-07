@@ -1,39 +1,77 @@
 # lib/bilibili
 
-B站字幕获取 (Step 1 — 已完成，Bilitato 对齐)。双通道架构：Main World 脚本拦截优先，API 调用降级。
+B站领域层：公开收藏夹同步、字幕获取（Main World 拦截优先，API 降级）、转录落库 seam。字幕串行事故的完整诊断与证据在 `docs/29`。
 
-## 模块结构
+## 字幕获取与归属校验（`fetchSubtitle` / `ownsSubtitleUrl`）
 
-- `messaging.ts` — Bilibili 页面协议 Module：BiliMessageMap + per-type Zod decoder/encoder；postBiliMessage()（支持 defer 延迟）和 onBiliMessage()（返回 unsub，校验 `event.source`、字段、行数与总文本预算）。接受 legacy wire shape，并可附带 `channel:'favbase-bilibili'`/`protocolVersion:1`；同页 `postMessage` 不能认证发送者，只能做形状、路由和容量约束
-- `types.ts` — RawSubtitleItem, BiliAuthInfo, BiliFavFolder, BiliFavVideo, BiliFavOrder, BiliFavVideoListResponse, SubtitleTrack, DashAudioStream 等 bilibili 领域类型
-- `url-utils.ts` — 纯 URL 工具函数（零 chrome.* 依赖，Main World 安全）：extractBvid()（保留原始大小写）, extractPageNum(), isSubtitleCdnUrl()
-- `video-eligibility.ts` — **item `platform_meta` 形状**与失效视频规则的唯一 owner（docs/20 高-4 + 中-8，后者由 docs/32 Step 2 落地）：`BiliItemMeta`（`videos-sync.ts` 写入的七个字段，写侧 `satisfies BiliItemMeta`）+ `narrowBiliVideoMeta(meta)`（唯一 decoder：数字缺省 `0`、字符串缺省 `''`，`cnt_info` 逐字段收窄，缺失 `attr` 读成 `0` 即可处理——与 SQL 谓词同语义，所以同文件；`sections/bilibili/tagged-video-card.tsx` 只补信封字段，零内联 `typeof`，测试 `narrow-meta.test.ts`）；`INVALID_VIDEO_ATTR = 9`（B站收藏 API `attr` 协议事实，非可调参数，env guard 允许项）+ `isProcessableVideo(video)` 内存判定（卡片/手动转录/自动转录共用）+ `bilibiliDownstreamEligibleSql()` 同规则的 SQL predicate（`coalesce(platform_meta->>'attr','') <> $1`，attr 缺失视为可处理），由 `lib/collections/platform-eligibility.ts` 注册进共享 processing policy。`video-eligibility.test.ts` 用同一组 attr 夹具锁两者 parity（内存侧经 `narrowBiliVideoMeta` 读同一份 meta，decoder 的缺省值因此也被 SQL 谓词锁住）
-- `bilibili-api.ts` — B站 API 层深模块：内部 ENDPOINTS URL builder + 两个错误类（均继承 `lib/collections/sync-errors.ts` 的基类，docs/32 Step 4）：`BiliAuthError(message, reason)`——`'missing'` = `bili-sync-service.ts` 的 `checkAuth()` 本地无 SESSDATA，`'rejected'` = 过了那道门之后 API 仍回 `-101`；`BiliRateLimitError(message)`——`fetchFavFolders` / `fetchFavVideos` 收到 **HTTP 412**（风控拦截，07-24 事故那一种）即抛，`resetAt` 恒 null，UI 显示 `collections.rateLimited` 而不是 `Bilibili API HTTP 412`；其余非 2xx 仍是普通 `Error`。JSON 层风控码（HTTP 200 里的 `-352` / `-412`）是否出现 [UNKNOWN]，只认 HTTP 412；字幕 / cid 路径返回 status 对象不抛错，未动。`bili-sync-service.ts` re-export 两个类。请求统一走 `fetchWithDeadline`（`lib/http/`，全平台共用 deadline），且**一律 `credentials:'include'`、不手拼 `Cookie` header**（docs/29 Step 4，依据见下方「B 站认证」约定）。导出 getBiliAuth()（chrome.cookies 读 SESSDATA/DedeUserID；只作无网络的登录判定 + `mid` 来源，不进任何请求）, fetchFavFolders(auth)（收藏夹列表，`auth.mid` 定 `up_mid`；返回前经 `isPublicFolder` 滤掉私密夹——`attr` bit0 置位即私密，证据见 docs/29 §9.5，测试夹具用真实 attr 取值）, fetchFavVideos(mediaId, page, ps=20, order='mtime', keyword='')（收藏夹视频分页列表，`/x/v3/fav/resource/list`，`order`=`BiliFavOrder`(mtime/view/pubtime) 服务端全量降序排序；非空 `keyword` 追加 `&type=0&keyword=` 做当前夹标题搜索）, fetchSubtitle(bvid, cid)（字幕 API + CDN，Content Script 与 Background SW 同一调用。`need_login_subtitle:true` 且无轨道时 `console.warn` 后仍返回 `no_subtitle`（调用方照旧降级 ASR；UI 提示未做，docs/29 §8 Q4）。字幕列表走不签名的 `x/player/wbi/v2`：非 wbi 的 `x/player/v2` 会给已登录请求别的视频的 AI 字幕（docs/29 C1）。拉 CDN 前由 `ownsSubtitleUrl` 对响应里**每一条**轨道校验归属（`subtitle_url` 为空的跳过），不只是选中的那条：原始 AI 轨文件名是 `{aid}{cid}{md5}`——只比前缀 + 32 位 hex 尾巴、不按数字切分（md5 可能以数字开头），`aid` 缺失时这类声明了归属的名字 fail-closed；两类名字不声明归属、放行——不在 `/bfs/ai_subtitle/prod/` 下的 URL（上传者 CC 等；URL 换形状时校验会静默失效，docs/29 §7）与恰为 32 位 hex 的裸名（B 站对原始轨的机器翻译轨，docs/29 Step 1b）。任一轨声明属于别的视频即整批拒收：`console.error` 点名那条轨（不带 `auth_key`）后返回 `status:'error'`、不请求 CDN（错判代价是一次 ASR，漏判是数据损坏）。整表校验的理由：外来响应里被选中的中文轨可能恰是不声明归属的裸名翻译轨，只有旁边那条原始轨说出它是谁的；表里没有任何轨声明归属（只有裸名 / 上传者 CC）时整批放行，外来的也照收——放行裸名的残留，只在端点本身给错时才会发生，是否收紧待用户决定（docs/29 Step 1b「残留」、§7）。选轨规则不变（`lan_doc` 含「中文」优先，否则第一条）。测试 `bilibili-api.test.ts`（裸名夹具取自 docs/29 E1 真实文件名），同时锁住五个请求的 `credentials:'include'` + 无 `Cookie` 与公开夹过滤）, fetchCidByPageList(bvid, pageNum=1)（CID 获取）, fetchPlayUrl(bvid, cid)（DASH manifest）, extractBiliAudioUrl(bvid, cid)（DASH manifest 最优音频流 URL 提取，供 transcription-handlers.ts 注入 pipeline deps）
-- `bili-sync-service.ts` — Bilibili 领域同步深 Module。收藏浏览与入库分离：`fetchFavoriteVideosPage()` 仅返回 UI 请求页；`fetchAndSyncFolders(control?)` 在认证/网络前 checkpoint；`syncAllFavoriteVideos(folders, onProgress?, control?, onItemsPersisted?)` 把 checkpoint 与逐页 durable 新条目通知透传给 runner。内容路径以 `persistContentChunks(bvid, rows, source) → 'chunked'|null` 暴露 durable-chunks seam（零调用方的旧 `persistContent()` 组合入口已删，docs/20 中-5 第 1 步）；`source`（`'official'|'asr'`）作为 `persistExistingItemContent` 的第 6 个实参落进 `item_contents.subtitle_source`，与正文同一条 upsert 写入（docs/29 Step 5；此前只进一行 `console.info`，即缺陷 C6），`bili-sync-service.test.ts` 用 `it.each` 两个取值锁住透传；本文件只 leaf import `@/lib/embedding/chunker`，加载图 storage-free，由 `tests/lib-import-smoke.test.ts` 守卫。runner 的 `waitBetweenPages` 注入 `sleep(favoritePageDelayMs())`（`lib/http/backoff.ts`，docs/32 Step 3 起平台目录禁手写 `setTimeout` 等待，守卫 `tests/platform-sleep-guard.test.ts`）
-- `favorites-sync.ts` — 收藏夹 source 持久化 Adapter：`syncFavFoldersToDb(db, folders)` 通过 shared `ingestCollection` 刷新远端字段并保留本地完成标记；`getFavoriteVideoSyncBaseline()` 通过当前 source 的 `item_sources` 关联返回 BVID 集合 + 完成状态；`markVideoHistoryComplete()` 只在一个收藏夹完整同步成功后写 `platformMeta.videos_sync_complete`。为真实旧调用方保留 `Source[]` 返回。**仅由 bili-sync-service 内部调用**
-- `favorites-sync-runner.ts` — 可测试的分页同步策略 Module（结果 `FavoriteVideosSyncResult { fetchedCount, syncedCount, insertedCount }`；`insertedCount` 累加每次 `persist` 报告的新条目数，docs/32 Step 1 追加，进 Platform Sync Record 的 `last_inserted`）：全部收藏夹串行；缺少完成标记时强制全量回填；完成历史按 source-scoped BVID 大小写无关截断；每页 accepted 视频立即持久化，再同步发布其中真正 inserted 的视频；页间 7–10 秒随机抖动（`envNumber('VITE_BILIBILI_PAGE_DELAY_*', …)` 可配置——调小有 412 风控风险・07-24 事故；抖动公式复用 `lib/http/backoff.ts` 的 `jitteredDelayMs`）。后页失败保留前页且不写 history-complete；subscriber 异常不能失败 Fetch
-- `videos-sync.ts` — `syncFavVideosToDb(db, videos, platformSourceId)`：将 BiliFavVideo[] 归一化为 `ingestCollection` 输入，返回 `newItemIds = result.inserted.platformItemId`；新增 membership 不算新条目，不触发重复转录。insert-only、cross-folder link 与 dropped 规则由 shared ingest Module 持有
-- `bilibili-transcription-handler.ts` — B站平台转录 handler：`handleBiliTranscribe(msg, tabId, ctx, signal)` 完整处理 B 站转录请求（prepare → 组装 PipelineDeps → runTranscriptionPipeline → 进度/错误通知）。通过 `prepareBiliTranscription` 获取平台碎片，通过 `transcription-utils.ts` 共享 notifyTab/createTranscribeAudio。注册到 `transcription-handlers.ts` 的 `platformHandlers` registry
-- `transcribe-utils.ts` — `transcribeAndPersist(bvid, title, hooks)`：**落库前先过 videoId 闸门**——`response.data.videoId !== bvid` 即 `console.error` 打印「请求的是谁、回来的是谁」并返回 `TRANSCRIBE_VIDEO_ID_MISMATCH` 失败，不写 DB、不发事件、不启动后处理（拒写，不是 warn 后照写）。比对**逐字节**：BV 号是大小写敏感 base58，链路上无任何一段会折叠大小写，宽松比对只可能放过真实错配（`video-cache.ts`/`job-registry.ts` 的 `normalizeVideoId` lowercase 是已知缺陷，别照抄）。durable chunks 成功后发 `item-content-updated`，通过**必填**的 `hooks.startProcessing(bvid)` 获取独立 Embed/Tag ticket；Content Preparation durable 后立即返回，两个 ticket 都不得阻塞下一条 Transcript。Embed settlement 仅异步通知 `onIndexed`。领域层不 import app queue/store，也**零 value import** `@/lib/embedding`/`@/lib/tagging`（docs/20 中-5：原 `startProcessingDirectly` fallback 生产不可达，已删；`tests/lib-import-smoke.test.ts` 把本模块列为 storage-free 入口守卫）。`transcribe-utils.test.ts` 只 mock DB 与 `browser.runtime`，post-processing 用 fake ticket 注入
-- `transcription-coordinator.ts` — 手动转录纯 JS 协调器。构造器 `(startProcessing, trackRun?)`：`startProcessing` 必填（app 层传 `enqueueBiliCollectionProcessing`），`trackRun` 可选；coordinator 不 import app store。Transcript 先完成时卡片结束转录态，晚到的 `onIndexed` 再单独刷新 indexed 状态。
-- `auto-transcribe-adapter.ts` — B站单条转录 Adapter；`createBiliAutoTranscribeAdapter({ startProcessing })` 必填注入，把每条 durable bvid 交给 app 层 Embed/Tag inbox。本文件合法 import `@/lib/storage`（ASR 设置/quota pause），因此不在 import-smoke 清单内，其测试的 storage mock 是功能性的。无分页/pending 查询。缺 ASR 时先注册 `settingsStorage.watch` 再读初值，`resolveAsrConfig` 出现有效 key 后自动解除等待，避免 initial-read/watch 竞态；quota guard 按当前 provider 过滤
-- `bilibili-transcription-adapter.ts` — B站转录平台适配器：`prepareBiliTranscription(bvid, requestCid?)` 返回 `BiliTranscriptionContext`（`{ cid, fetchOfficialSubtitle, extractAudioUrl, postProcess }` 4 碎片）。内聚 bilibili-specific 转录准备逻辑（CID 解析、官方字幕 API 重试、DASH 音频 URL 提取、字幕后处理）。字幕重试循环（`SUBTITLE_RETRY_DELAYS`）重试的是**抛出的**异常与 `status:'error'`、耗尽返回 `null` 让管线落 ASR，形状与 `lib/http/retry.ts` 的 `withRetries` 不同，**不迁入**；docs/32 Step 3 只把两处等待换成 `sleep`。不读 auth：SW 的 fetch 自带 B 站 cookie jar（docs/29 E2），`getBiliAuth()` 与此路径无关。Background handler 通过此 adapter 获取平台碎片后组装 PipelineDeps，自身不直接 import bilibili-api/subtitle-processor
-- `subtitle-processor.ts` — processSubtitles() B 站特有四步管线：normalize -> filter（B 站交互关键词过滤：点赞/投币/一键三连等）-> filler removal -> deduplicate(Jaccard>0.85)。接受 B 站原始格式和 favbase 格式。每条字幕保持独立行，不合并。通过 PipelineDeps.postProcess 注入到平台无关的 pipeline，未来其他平台提供各自的 postProcess 实现
+- 字幕列表只走不签名的 `x/player/wbi/v2`。非 wbi 的 `x/player/v2` 会给已登录请求返回别的视频的 AI 字幕（docs/29 C1），任何调用点都不许换回去。
+- wbi/v2 目前不需要 WBI 签名；B 站日后对它返回 -352 / -403 才需要加。签名、rows 指纹、删掉 Content Script 的 API 降级等路径都已否决，清单与理由在 docs/29 §4，别重提。
+- 拉 CDN 前用 `ownsSubtitleUrl` 校验响应里的每一条轨道，不只是选中的那条：被选中的中文轨可能是不声明归属的翻译轨，只有旁边的原始轨说得出这份响应属于谁。
+- 归属标记有三态。原始 AI 轨文件名 `{aid}{cid}{md5}` 声明归属：只比前缀 + 32 位 hex 尾巴，不按数字切分（md5 可能以数字开头）；`aid` 缺失时这类名字 fail-closed。
+- 两类名字不声明归属、放行：不在 `/bfs/ai_subtitle/prod/` 下的 URL（上传者 CC）与恰为 32 位 hex 的裸名（机器翻译轨）。把裸名当外来会误拒所有翻译中文轨（docs/29 Step 1b）。
+- 任一轨声明属于别的视频即整批拒收：返回 `status:'error'`、不请求 CDN。错判的代价是一次 ASR，漏判是数据损坏；别降级成「仅日志」。日志点名那条轨时不带 `auth_key`。
+- 已知残留：响应里没有任何轨声明归属时整批放行，外来的也照收；B 站换 URL 形状时校验会静默失效（docs/29 Step 1b「残留」、§7）。
+- 比对键里的 `cid` 取自我们自己的请求，不取自响应（`aid` 只能从响应拿）：整份外来的响应也因此对不上。
+- `need_login_subtitle:true` 且无轨道时仍返回 `no_subtitle`（调用方照旧降级 ASR）；UI 提示未做（docs/29 §8）。
+- 字幕 / cid 路径返回 status 对象、不抛错；只有收藏夹接口抛 `BiliAuthError` / `BiliRateLimitError`。
+- `bilibili-transcription-adapter.ts` 的字幕重试循环重试的是抛出的异常与 `status:'error'`，耗尽返回 `null` 让管线落 ASR；形状与 `lib/http/retry.ts` 的 `withRetries` 不同，刻意不迁入。
+- 休眠的非 wbi 调用点：`defuddle` 的 B 站 extractor 在 wbi/v2 无轨道时回退 `x/player/v2`，只经异步入口 `parseAsync` / `fetchAsyncVariables` 可达，今天无人调用（docs/29 §3「连带影响」；`lib/bookmarks/CLAUDE.md`）。
+- 守护测试 `bilibili-api.test.ts`，夹具取自真实响应；改规则时别用自造的文件名。
 
-## 约定
+## B 站认证
 
-- 失效视频（attr=9）：Bilibili 比其他平台多一道转录流程，失效视频既不能转录也不能进 Embedding/Tagging。判定只许调用 `isProcessableVideo` / `bilibiliDownstreamEligibleSql`，禁止在 coordinator、auto-transcribe、UI 或共享 SQL 里裸写 `9`（契约守卫：`collection-processing-policy.ts` 零平台字面量）
-- BVID 规范化: `extractBvid()` 保留原始大小写（B站 API 区分大小写），`normalizeVideoId()`（`lib/cache/video-cache.ts`）在缓存层做纯 lowercase 规范化（平台无关，无 BV 正则）。storage key 格式 `vc:{platform}:{videoId}` 含平台命名空间；API 调用和消息传递保留原始大小写，比较时用 `.toLowerCase()` 做大小写无关匹配
-- Step 1 字幕获取: 双通道架构 — Main World 脚本（`bilibili-inject.content.ts`）拦截 fetch/XHR 被动捕获字幕优先，3s 超时降级到 Content Script 同源 API 调用
-- CID 获取: Main World 读取 `window.__INITIAL_STATE__` 优先（定期重发直到 content script 接收），降级到 `/x/player/pagelist` API（轻量，不需要 WBI 签名）。字幕列表端点 `x/player/wbi/v2` 同样不签名（docs/29 F8 实测 + yt-dlp 现行做法；B 站日后若对它返回 -352/-403 才需要签名）
-- postMessage 桥接: Main World -> Isolated World，通过 `lib/bilibili/messaging.ts` 统一收发。所有输入先 decode，畸形/未知消息只记录一次 warning 后丢弃，不进入字幕处理或缓存。BiliMessageMap、schema 和测试必须一起更新；消息流：`BILI_ROUTE_SWITCH`(bvid, 路由变化即时通知) → `BILI_SUBTITLE_HANDSHAKE`(bvid+cid, 800ms延迟) → `BILI_SUBTITLE_DATA`(字幕数据, defer 发送)。新增消息不能只改 TypeScript union
-- 字幕后处理: pipeline 通过 `PipelineDeps.postProcess` 注入平台特有的字幕后处理。B 站注入 `processSubtitles()`（四步管线，不合并，逐条独立）。Content Script 侧（useSubtitle）直接 import `processSubtitles`（同域，方向正确）
-- B 站认证: **所有 B 站请求一律 `credentials:'include'`，不手拼 `Cookie` header**（docs/29 Step 4）。登录态由浏览器的 cookie jar 提供：Content Script 与 `api.bilibili.com` 同站；app.html 与 Background SW 靠 B 站 host permission——docs/29 E2 实测 SW 的 fetch 连 init 都不传就已是登录态（F26）。所以显式 `credentials:'include'` 只是把这件事写成意图，不再押注「扩展上下文可设 forbidden header」这一 Chromium 特例。manifest 的 `cookies` 权限只服务 `getBiliAuth()`：`chrome.cookies.get()` 读 SESSDATA + DedeUserID、检查 expirationDate，用途只剩两个——无网络的登录判定（`bili-sync-service.ts` 的 `checkAuth()` → `BiliAuthError('Not logged in')`；daily auto-sync 的 `probeReady`）与 `fetchFavFolders` 的 `up_mid`。`fetchFavVideos` 不再收 auth，但它的两个调用方仍先 `await checkAuth()`（门，不是凭据，别当死代码删；`bili-sync-service.test.ts` 锁住）。收藏夹请求**必须保持登录态**：匿名 `list-all` 返回 `data: null`（docs/29 §9.5），`credentials:'omit'` 路线已否决
-- Bilibili 领域同步：`bili-sync-service.ts` 持有 Bilibili 查询与编排知识；共享写入不变量集中在 `lib/ingest`。app runtime 只能通过 `syncAllFavoriteVideos` 的 durable callback 消费新条目；service 不 import app job store，adapter 不反向抓 favorites page 或查 pending
-- 收藏夹视频同步：路由挂载只拉收藏夹列表，默认收藏夹的视频列表由普通浏览 hook 拉当前 UI 页；页面显式同步才遍历 remote folders，固定空关键词 `mtime`。每页 durable 写入后才取下一页；后页失败不会丢前页，但 Source 不标 history-complete，下一次 insert-only 重试安全。**只拉公开收藏夹**（用户 2026-09-22 决定，`CONTEXT.md` Flagged ambiguities）：私密夹在 `fetchFavFolders` 返回前就被滤掉，`fetchAndSyncFolders`、同步 runner 与页面都看不到它；过滤放 API 层而非 sync-service，因为「favbase 看得见哪些夹」是平台事实。两处已知残留：已同步进 DB 的私密夹条目不追溯（insert-only 也不会删）；手输 `#/collections/bilibili/<私密夹 id>` 仍能只读浏览该夹（`fetchFavoriteVideosPage` 只读不入库、UI 从不生成此类链接，`fetchFavVideos` 不加第二道过滤）
-- **Insert-only 视频同步（架构决策）**: items/authors/item_sources 三表 re-sync 只 insert（`onConflictDoNothing`）、不 update、不 delete——首次入库为准。取消收藏不删行、下架不改行、元数据变更不更新、跨夹移动保留双关联、失效视频（attr=9）首次入库照存。**禁止**给这三表加 upsert 或 sync 内 delete/diff 逻辑。有意例外：`sources` upsert（media_count 新鲜度）、`items.contentState`（转录状态机推进）、`item_contents`/`item_chunks`（重转录覆盖/重建）。完整规则见 `lib/ingest/CLAUDE.md`（Insert-only 不变量），守护测试 `videos-sync.test.ts`
-- RAG 数据准备（转录后）: app.html 两个转录入口经 `transcribeAndPersist` 单一 seam 完成“转录 → shared ingest existing-item replacement → enqueue app Embed/Tags lanes”。Bilibili Adapter 只选择 `chunkSubtitleRows`；shared ingest 落 plain text + timestamped chunks 到 `'chunked'`，Embedding 单独推进到 `'embedded'`，Tagging 只读 `item_contents`。B站视频页 content script 面板仍只存缓存不入库；重复转录覆盖 content、事务重建 chunks 并回退到 `'chunked'`
-- 自动转录遇 ASR 日额度时只暂停 Transcript session，保留当前及后续条目并在 reset 后重试；此前已 enqueue 的 Embed/Tags ticket 继续归 app 独立 lane，Adapter 不向 processing queue 传播 quota pause
-- 字幕获取流程（主路径）: interceptors.ts 拦截 fetch/XHR → sm.markCaptured() 解析+桥接 → postMessage SUBTITLE_DATA → useSubtitle 接收 → processSubtitles()
-- 字幕获取流程（降级路径）: extractBvid() → fetchCidByPageList() → fetchSubtitle(bvid, cid) → processSubtitles()（失败自动重试最多 2 次）。自 docs/29 Step 1 起与主路径同源（播放器的轨道列表同样来自 `x/player/wbi/v2`），降级另多一道归属校验
-- 字幕 CDN (`aisubtitle.hdslb.com`) 跨域但 CORS 允许，Content Script 可直接 fetch（带 `credentials: 'include'`）
+- 所有 B 站请求一律 `credentials: 'include'`，不手拼 `Cookie` header（docs/29 Step 4）。登录态来自 cookie jar：Content Script 与 `api.bilibili.com` 同站，app.html 与 Background SW 靠 host permission（docs/29 §9.5）。
+- `getBiliAuth()`（`chrome.cookies` 读 SESSDATA / DedeUserID）不进任何请求。用途只有两个：无网络的登录判定（`checkAuth()`、daily auto-sync 的 `probeReady`）与 `fetchFavFolders` 的 `up_mid`。
+- `fetchFavVideos` 不收 auth，但它的两个调用方（`fetchFavoriteVideosPage`、`syncAllFavoriteVideos`）仍先 `await checkAuth()`。那是门，不是凭据，别当死代码删：公开夹匿名可读，删掉它登出用户照样能浏览和同步。
+- 这道门由 `bili-sync-service.test.ts` 的两个「refuses to … without a Bilibili login」用例锁住。
+- 收藏夹请求必须保持登录态：匿名 `list-all` 返回 `data: null`（docs/29 §9.5）。`credentials: 'omit'` 路线已否决，别重提。
+- `BiliAuthError` 的 `'missing'` = 本地无 SESSDATA（`checkAuth()`），`'rejected'` = 过了那道门后 API 仍回 `-101`。
+- 收藏夹接口收到 HTTP 412（风控拦截）抛 `BiliRateLimitError`，`resetAt` 恒 null。JSON 层风控码（HTTP 200 里的 `-352` / `-412`）是否出现 [UNKNOWN]，目前只认 HTTP 412。
+
+## 收藏夹同步
+
+- 只做公开收藏夹（用户决定，`CONTEXT.md` Flagged ambiguities）：`fetchFavFolders` 在 API 层按 `attr & 1` 滤掉私密夹，下游都看不到它。过滤放 API 层而非 sync-service，因为「favbase 看得见哪些夹」是平台事实。
+- 已知残留两处：已入库的私密夹条目不追溯删除；手输 `#/collections/bilibili/<私密夹 id>` 仍能只读浏览（`fetchFavVideos` 不加第二道过滤，UI 从不生成这种链接）。
+- 写侧走 `ingestCollection`，insert-only 不变量见 `lib/ingest/CLAUDE.md`，守护测试 `videos-sync.test.ts`。本平台的有意例外：`sources` upsert、`items.contentState` 推进、`item_contents` / `item_chunks` 重转录重建。
+- 浏览与入库分离：`fetchFavoriteVideosPage` 只读当前 UI 页、不入库；只有显式同步才遍历全部公开夹（空关键词、`mtime` 序）。
+- 每页 durable 写入后才取下一页。后页失败保留前页，但该 Source 不写 `videos_sync_complete`；缺这个标记的夹下次强制全量回填（insert-only 使重试安全）。
+- `syncFavFoldersToDb` 刷新 Source 的远端字段时必须保留本地写的 `platformMeta.videos_sync_complete`。
+- 已完成历史的夹按该 Source 自己的 BVID 集合增量截断（source-scoped，大小写无关）：视频在别的夹里已入库不算已知。
+- 新增 membership 不算新条目：`newItemIds` 只含真正 inserted 的视频，否则会触发重复转录。
+- app runtime 只经 `syncAllFavoriteVideos` 的 durable callback 消费新条目，subscriber 抛错不能让 Fetch 失败。service 不 import app job store，adapter 不反查 favorites page 或 pending。
+- 页间延迟（`VITE_BILIBILI_PAGE_DELAY_*`，默认 7–10 s 抖动）调小有 HTTP 412 风控风险，出过事故。
+
+## 失效视频与 `platform_meta`
+
+- 失效视频（`attr=9`）既不能转录也不能进 Embedding / Tagging，但首次入库照存。判定只许调 `isProcessableVideo` / `bilibiliDownstreamEligibleSql`（`video-eligibility.ts`），别处禁止裸写 `9`。
+- 内存判定与 SQL 谓词必须同语义（缺失的 `attr` 视为可处理），由 `video-eligibility.test.ts` 用同一组夹具锁 parity；改一边必须改另一边。
+- `INVALID_VIDEO_ATTR` 是 B 站协议事实，不是可调参数：不经 `envNumber`（`tests/platform-env-constants-guard.test.ts` 的显式允许项）。
+- `video-eligibility.ts` 是 item `platform_meta` 形状的唯一 owner：写侧 `satisfies BiliItemMeta`，读侧只经 `narrowBiliVideoMeta`，调用方不写内联 `typeof`。
+
+## 转录落库
+
+- 入库只有 app.html 的两个转录入口，都经 `transcribeAndPersist` 这一个 seam；视频页 Content Script 面板只写字幕缓存、不入库。
+- `transcribeAndPersist` 落库前的 videoId 闸门是逐字节 `!==`，不匹配即拒写（不写 DB、不发事件、不启动后处理）。别放宽成大小写无关：BV 号是大小写敏感的 base58，宽松比对只会放过真实错配。
+- BV 号在 API 调用与消息传递里保留原始大小写（`extractBvid` 不折叠）。`lib/cache/video-cache.ts` 的 `normalizeVideoId` 与 `lib/background/job-registry.ts` 把 id 转小写是已知缺陷，别照抄。
+- `persistContentChunks(bvid, rows, source)` 的 `source`（`'official'|'asr'`）必须如实透传进 `item_contents.subtitle_source`，与正文同一条 upsert 写入（docs/29 Step 5）。它不是收藏夹那个 Source。
+- 重复转录覆盖 content、事务重建 chunks 并把状态退回 `'chunked'`。切块只用带时间戳的 `chunkSubtitleRows`。
+- 领域层不 import app queue / store，也零 value import `@/lib/embedding`、`@/lib/tagging`：Embed / Tag 经必填注入的 `startProcessing` 交给 app 层，没有 fallback。
+- `bili-sync-service.ts`、`transcribe-utils.ts` 的加载图必须 storage-free，守卫 `tests/lib-import-smoke.test.ts`。
+- `auto-transcribe-adapter.ts` 合法 import `@/lib/storage`（ASR 设置、quota pause），所以不在 import-smoke 清单里；它测试里的 storage mock 是功能性的，别当防御性 mock 删。
+- Content Preparation durable 后 `transcribeAndPersist` 立即返回：Embed / Tag ticket 不得阻塞下一条 Transcript，`onIndexed` 只是晚到的异步通知。
+- ASR 日额度耗尽只暂停 Transcript session；已 enqueue 的 Embed / Tags ticket 继续跑，adapter 不向 processing queue 传播 quota pause。
+- 缺 ASR 配置时，auto-transcribe adapter 先注册 `settingsStorage.watch` 再读初值；反过来有 initial-read / watch 竞态。
+- Background 转录 handler 只经 `prepareBiliTranscription` 拿平台碎片，不直接 import `bilibili-api` / `subtitle-processor`。
+
+## 页面桥与字幕后处理
+
+- `url-utils.ts`、`messaging.ts` 被 Main World 脚本 import，必须保持零 `chrome.*` / `browser.*` 依赖。
+- 同页 `postMessage` 认证不了发送者，`messaging.ts` 只能做形状、路由和容量约束：所有输入先 decode，畸形或未知消息丢弃，不进字幕处理或缓存。
+- 新增消息必须同时改 `BiliMessageMap`、Zod schema 和测试，不能只改 TypeScript union。decoder 要继续接受不带 `channel` / `protocolVersion` 的 legacy wire shape。
+- `processSubtitles` 是 B 站特有的后处理（过滤点赞、投币等交互话术），每条字幕保持独立行、不合并；经 `PipelineDeps.postProcess` 注入平台无关管线，别搬进 `lib/transcription`。
+
+## 指针
+
+- Main World 状态机与防串台守卫：`lib/bilibili/inject/CLAUDE.md`。
+- 平台目录的通用守卫（请求走 `fetchWithDeadline`、等待走 `sleep`、数值常量走 `envNumber`）：`lib/http/CLAUDE.md`、`lib/env.ts`。
+- 平台错误基类：`lib/collections/sync-errors.ts`。

@@ -1,12 +1,16 @@
-# 共享 Hooks
+# lib/hooks
 
-app.html 和 Content Script 共享的 React hooks。
+app.html 与 Content Script 共用的 React hooks。app.html 专用的 hook 在 `entrypoints/app/hooks/`，不放这里。
 
-## 模块结构
+## 约束
 
-- `useSettings.ts` — settings 读取 + 显式保存 hook（**无自动保存**——原 debounced 500ms/unmount flush/`updateLlm·updateAsr·updateEmbedding` discriminated union action/瞬时 `saved` flag 已随手动保存模型移除）。返回 `{ settings, loading, currentAsrApiKey, llmConfigured, saveLlm, saveAsr, saveEmbedding, saveGithub, saveYoutube }`（`llmConfigured` = `resolveLlmConfig(settings).enabled`，给 CS 面板的 AI 总结 Tab 判断是否已配大模型）：读取 = `settingsStorage.getValue()` + `watch` 外部变更；`saveXxx(draft)` 立即写入——**先重读存储再 merge**（不同 section 在不同 context 近同时保存不互相覆盖字段）+ 写 `configSavedAt[section] = Date.now()`（设置页持久「已保存」徽标数据源）。`currentAsrApiKey` 为 Content Script 面板保留（转录入口判断是否配了 key）。同文件导出 draft 类型 + 纯派生函数：`LlmDraft/AsrDraft/EmbeddingDraft/GithubDraft/YoutubeDraft` + `deriveLlmDraft/deriveAsrDraft/deriveEmbeddingDraft(settings, provider?)` + `deriveGithubDraft/deriveYoutubeDraft(settings)`——stored `UserSettings`（per-provider record + env fallback）→ 卡片可编辑的扁平 draft；ASR/Embedding derive 复用 `resolveAsrConfig`/`resolveEmbeddingConfig`（覆写 provider 字段调用），**Embedding 的 `dimensions` 取 raw 存储值**（不走 resolver 过滤，Select 反映真实存储；embed 消费者仍走 resolver 过滤作不变量）。**GithubDraft/YoutubeDraft 是平台凭证非 AI provider**：`provider` 恒为 `'github'`/`'youtube'`（仅满足 `useConfigDraft` 的 `T extends { provider: string }` 泛型约束），`saveGithub` 写 `githubToken` + `configSavedAt.github`；`saveYoutube` 写 `youtubeApiKey`/`youtubeChannel` + `configSavedAt.youtube`（channel 存原始输入——`@handle`/`UC...` ID/频道 URL，解析在 lib/youtube probe/sync 时）。draft 编辑/gating 状态机在 `entrypoints/app/sections/settings/use-config-draft.ts`（app.html 专用，不在本目录）
-- `useRetryCountdown.ts` — 共享 retryCountdown hook：`{ countdown, startCountdown(seconds), resetCountdown }`。由 Content Script 侧 `useTranscribe` 使用（app.html 侧 `TranscriptionCoordinator` 自建纯 JS 倒计时，不依赖此 hook）
+- UI 侧写 `UserSettings` 只经 `useSettings` 的 `save*`（另一个写入方是 SW 里的 WebDAV pull）；读取方（Content Script 面板等）只用 `settings` 与派生字段。
+- 没有自动保存：`save*(draft)` 是显式保存。draft 编辑与「测试连接后才能保存」的 gating 在 `entrypoints/app/sections/settings/use-config-draft.ts`，不在本目录。
+- `save*` 必须先重读存储再 merge：不同 section 可能在不同 context 近乎同时保存，拿 React state 里的快照写回会互相覆盖字段。
+- 每次保存都写 `configSavedAt[section]`：它既是设置页「已保存」徽标的数据源，也是 WebDAV 首配时钟的 seed（`lib/sync/CLAUDE.md`）。
+- 新增凭据型平台要在 `useSettings.ts` 加 `derive<Pascal>Draft` 函数声明和 `UseSettingsReturn` 上的 `save<Pascal>` 成员。守卫：`tests/platform-completeness-contract.test.ts`（按 AST 查声明，局部 `const` 不算）。
+- 新增 ASR / Embedding provider 只在 `lib/providers.ts` 加定义，不改本目录。
 
-## 约定
+## 坑
 
-- 设置持久化: `settingsStorage`（`lib/storage/settings.ts`），UserSettings 单对象存储在 `local:settings`。**写入只经 `useSettings.saveLlm/saveAsr/saveEmbedding`**（手动保存，测试连接 gating 在设置页 UI 层）；读取消费者（Content Script 面板等）只用 `settings`/`currentAsrApiKey`。ASR 配置结构化为 `asrConfigs: Record<string, { apiKey, model }>`，Embedding 同构 `embeddingConfigs: Record<string, { apiKey, baseUrl?, model?, dimensions? }>` + `embeddingProvider`（无 `embeddingEnabled` 开关，`enabled` 由 resolver 派生自 apiKey）。新增 ASR/Embedding provider 只需在 `providers.ts` 加定义。app.html 和 Content Script 都直接从 `@/lib/hooks/useSettings` 导入
+- `useRetryCountdown` 只给 Content Script 的 `useTranscribe` 用；app.html 的 `TranscriptionCoordinator` 自己做纯 JS 倒计时，不依赖 React hook。

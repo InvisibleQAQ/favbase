@@ -1,16 +1,21 @@
 # lib/transcription
 
-转录核心：Groq ASR 3 层管线（Content Script → Background SW → Offscreen Document）的类型、常量、客户端、音频处理与策略编排。
+转录核心（平台无关）：cache → 官方字幕 → ASR 的策略管线，加上 ASR 客户端、音频下载与错误模型。运行时三层：Content Script / app.html → Background SW → Offscreen Document（大音频分块）。
 
-## 模块结构
+## 约束
 
-- `types.ts` — 转录核心类型：TranscribeRequest（`{ type, platform, videoId, cid?, title }`，platform 驱动 handler 分发，videoId 平台无关命名）/TranscribeAbort（`{ type, videoId }`）, TranscribeResponse(success|failure；**success `data` 必带 `videoId`**——它是 `TranscribeRequest.videoId` 的回声，把「这段字幕」和「它属于哪个视频」在类型上绑死，消费方据此可以拒收不属于自己的字幕；比对必须逐字节，BV 号是大小写敏感 base58), TranscribeStage union, TranscribeStatusPush（`{ type, videoId, progress, stage, ... }`），TranscribeErrorCode + TranscribeErrorInfo（debug message 永不直接展示；rate limit 可携带 `retryAfter/resetAt/rateLimitKind/providerId`）+ createErrorInfo() + isTranscribeError()。纯数据错误模型，无类继承，IPC 天然兼容。内部引用 SubtitleRow/SubtitleSource from `lib/subtitle/types`
-- `constants.ts` — GROQ_MAX_AUDIO_BYTES(24MB), CHUNK_SECONDS(600), OVERLAP(4s), SAFETY_RATIO(0.72), PROGRESS 阶段映射, 超时常量
-- `groq-client.ts` — ensureGroqConnectivity(apiKey, baseUrl?)（6s pre-flight GET /models）+ requestGroqTranscription(blob, apiKey, model, signal?, baseUrl?)（FormData POST verbose_json+segment）+ mapTranscriptionToRows() + parseRetryAfter()。429 先解析 JSON：仅识别明确的 `audio seconds per day (ASD)` 为 `ASR_QUOTA_EXCEEDED`，普通/未知形状保持 `ASR_RATE_LIMIT`，并保留 provider/retry/reset 结构化事实；供应商原文只作 debug。baseUrl 可选参数支持多 ASR Provider（Groq/SiliconFlow），默认 Groq
-- `audio-extractor.ts` — 平台无关的音频下载：fetchAudioBlob(url, signal, onProgress)（streaming 下载，10% 粒度进度映射到 20-55%）。错误通过 createErrorInfo() 抛出。不含 B 站特定逻辑，音频 URL 提取已移至 bilibili-api.ts 的 extractBiliAudioUrl()
-- `audio-fingerprint.ts` — assertAudioNotReused(blob, bvid)（SHA-256 + LRU(30)，相同 hash 不同 bvid 拒绝）
-- `pipeline.ts` — TranscriptionPipeline 深模块：`runTranscriptionPipeline(request, deps, onProgress)` 编排完整转录策略（cache → official subtitle → ASR fallback → postProcess → cache save）。`PipelineDeps` 6 方法接口（`getAsrConfig`/`fetchOfficialSubtitle`/`transcribeAudio`/`cacheGet`/`cacheSave`/`postProcess`），转录策略的唯一真实来源。`postProcess` 通过 DI 注入平台特有的字幕后处理（B 站注入 `processSubtitles`，未来其他平台注入各自实现）。`AsrConfig`（apiKey/model/baseUrl）是 ASR 配置统一类型。`toErrorInfo()` 通过 `isTranscribeError()` 识别纯数据错误对象。**pipeline 是 `data.videoId` 的唯一 owner**：三个 success 出口（cache 命中 / 官方字幕 / ASR）全在这里，平台 handler 一律不自己盖章（每平台抄一行，忘了的那个正是最需要的那个）。盖的是**请求的** id——这一层没有更深的事实来源（cache/官方字幕/ASR 都按同一个 id 寻址），因此该字段的语义是「把 payload 绑到它的请求上」，cache 命中分支里 `videoId` 写在展开之后，请求 id 压过 cache 回来的任何东西。单测 `pipeline.test.ts`
+- `pipeline.ts` 的 `runTranscriptionPipeline` 是转录策略的唯一真实来源。平台差异只经 `PipelineDeps` 注入（官方字幕 fetcher、音频 URL 提取、`postProcess`、缓存读写），不在 pipeline 里写平台分支。
+- pipeline 是成功响应 `data.videoId` 的唯一 owner：三个 success 出口都在这里盖请求的 id，平台 handler 不自己盖。cache 命中分支里 `videoId` 必须写在展开之后，请求 id 压过 cache 回来的任何值。
+- 消费方用 `data.videoId` 拒收不属于自己的字幕时必须逐字节比对：BV 号是大小写敏感的 base58。
+- 错误是纯数据 `TranscribeErrorInfo`（无类继承，可过 IPC），用 `createErrorInfo()` / `isTranscribeError()`。`message` 是 debug 信息，永不直接展示；UI 按 `code` + `params` 翻译。
+- 429 只把明确的 `audio seconds per day (ASD)` 识别为 `ASR_QUOTA_EXCEEDED`，其余形状一律 `ASR_RATE_LIMIT`；供应商原文只作 debug。
+- ASR 配置（apiKey / model / baseUrl）只从 `resolveAsrConfig` 来。`groq-client.ts` 的 `baseUrl` 参数就是多 ASR provider 的接缝，不要为新 provider 另写 client。
+- 新增平台：建 `lib/<platform>/<platform>-transcription-handler.ts`（自己 prepare + 组装 deps + 调 pipeline），在 `lib/background/transcription-handlers.ts` 的 `platformHandlers` 注册一行。各平台 handler 完全独立，不抽共享 adapter 接口。
+- 新增 `TranscribeErrorCode` 要同步 wire schema（`lib/runtime-message/schemas.ts`）与两个 locale，规则在 `lib/i18n/CLAUDE.md`。
 
-## 约定
+## 坑
 
-- 转录总流程: `handleTranscribe` dispatcher 按 `msg.platform` 查 `platformHandlers` registry 分发到平台 handler。B 站路径：`handleBiliTranscribe` → `prepareBiliTranscription()` adapter 获取平台碎片（CID 解析 + 官方字幕 fetcher + 音频 URL 提取器 + postProcess；不读 auth，SW 的 fetch 自带 B 站 cookie jar，docs/29 Step 4） → 组装 PipelineDeps → pipeline 统一编排（cache → subtitle_check 官方字幕优先（含重试）→ ASR fallback（connectivity → extractAudioUrl(注入) → fetchAudioBlob → assertAudioNotReused → ≤24MB 直传 / >24MB Offscreen FFmpeg 分块）→ postProcess(注入) → cache save）。TranscribeRequest 消息携带 `platform` + `videoId`（平台无关命名），`cid` 可选（B 站 content script 有 cid 就传，app.html 不传由 adapter 解析）。ASR 配置（apiKey/model/baseUrl）统一由 `AsrConfig` 类型承载，`resolveAsrConfig` 是唯一真实来源。新增平台：(1) 创建 `lib/<platform>/<platform>-transcription-handler.ts`（各自 prepare + 组装 deps + 调 pipeline）(2) 注册到 `transcription-handlers.ts` 的 `platformHandlers` registry 一行。各平台 handler 完全独立，不共享 adapter 接口
+- `assertAudioNotReused`：同一音频 hash 配不同 videoId 即拒绝，防的是 SPA 跳转后拿到上一个视频的旧音频。别当成多余校验删掉。
+- 音频超过 `GROQ_MAX_AUDIO_BYTES` 才走 Offscreen FFmpeg 分块，否则直传。
+- `TranscribeRequest.cid` 可选：B 站 content script 有就传，app.html 不传、由 adapter 解析。
+- B 站的 prepare 不读 auth：SW 的 fetch 自带 B 站 cookie jar（docs/29 Step 4），不要再手拼 Cookie。

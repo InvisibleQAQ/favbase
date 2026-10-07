@@ -1,9 +1,17 @@
 # app/components/configuration-blocker
 
-Collection 页面 provider 配置阻塞智能模块。`CollectionConfigurationNotice` 订阅 `useSettings`，复用 ASR/Embedding/LLM resolver，把平台 `ProcessingCoverage` 与 Bilibili 权威 `configuration_required` phase 喂给共享的 `deriveConfigurationBlockers`（`@/lib/collections`）；settings 或 coverage 未就绪时不猜测。
+Collection 页面的 provider 配置阻塞横幅（`CollectionConfigurationNotice`）。智能模块：自带 i18n、`useSettings` 与 ASR / Embedding / LLM resolver，`components/collection/` 因此保持零 `t()`、零 resolver。
 
-- 形态 = **全宽横幅**（HEAD `75c42a2` 形态；docs/19 P0-1 的印章 chip + Popover 于 2026-08-20 被用户否决并恢复）：一个 `Alert severity="warning" variant="outlined"` 可同时呈现 ASR、Embedding、Tags 阻塞——标题 `configurationBlocker.title` + 每项一行文案 + 右侧「配置 …」文字链接。`role="status"`（显式覆盖 Alert 默认的 `role="alert"`——被动区域，页面加载时不得有 live alert 抢读屏）。色彩按 catalog-card token：底 `warning.lighter`（暗色 `varAlpha(warning.mainChannel, 0.16)`，`theme.applyStyles('dark')`）、边 `warning.light`、正文 `text.primary`、图标与链接 `text.accent`（链接走主题 `textPrimary` 覆盖）——无珊瑚文字、无白字珊瑚底、不用 `warning.main` 文字。
-- 每项链接 `/settings?section=<capability>&resume=<platform>`；只传结构化数据给共享 scaffold 的 `configurationNotice` slot（scaffold 把它固定放在搜索框之后）。
-- **判定规则自 2026-09-08 起不在本目录**：`deriveConfigurationBlockers` 已下沉到 `lib/collections/configuration-blockers.ts`，与 `getProcessingCoverage` Knowledge Tool 共用同一条规则——否则模型会把「provider 没配、永远不会动」说成「还在处理中，稍后再试」，与本横幅当面矛盾。本组件保留的是 i18n、provider resolution（`useSettings`）、Bilibili `configuration_required` phase 的接线，以及 `coverageStatus === 'ready' ? coverage : null` 这一层收窄——`coverageStatus` 是 app 侧的加载态，lib 只认 `coverage | null`。
-- 本目录仍拥有的只有 `asrBlocked` 的**取值**：它来自 Bilibili 状态机的 wait signal，空 key 本身不构成阻塞（故 Knowledge Tool 传 `asrBlocked: false`，只报 embedding/llm 两个）。Embed/Tags 的阈值判据**不复述在这里**——那是 `lib/collections/configuration-blockers.ts` 的活儿，在两处都写一遍就是它在其中一处腐掉的开始。
-- 本目录拥有 i18n 与 provider 知识；`components/collection/` 继续保持零 `t()`、零 resolver。测试拆两层：纯派生在 `lib/collections/configuration-blockers.test.ts`，渲染契约留 `collection-configuration-notice.test.tsx`（无 alert/一个 status + 文案与链接齐全 + settings loading 不猜；渲染包 `ThemeProvider`，因 sx 读 `theme.vars`）。
+## 约束
+
+- 判定规则不在本目录：`deriveConfigurationBlockers` 住 `lib/collections/configuration-blockers.ts`，与 `getProcessingCoverage` Knowledge Tool 共用。两处各写一份，模型就会把「provider 没配、永远不会动」说成「还在处理中」，与本横幅当面矛盾；Embed / Tags 的阈值不要在这里复述。
+- 本目录只拥有 `asrBlocked` 的取值：它来自 Bilibili 状态机的 `configuration_required` wait signal，空 key 本身不构成阻塞。
+- settings 或 coverage 未就绪时不猜测。传给 lib 的是 `coverageStatus === 'ready' ? coverage : null`：加载态是 app 侧概念，lib 只认 `coverage | null`。
+- 形态是全宽横幅，一个 `Alert` 同时列出所有阻塞项。印章 chip + Popover 的压缩形态被用户否决过，别重提（docs/19 P0-1）。
+- `role="status"` 显式覆盖 Alert 默认的 `role="alert"`：这是被动区域，页面加载时不得有 live alert 抢读屏。
+- 文字不用 `warning.main`、不用珊瑚色：正文 `text.primary`，图标与链接 `text.accent`。
+- 每项链接到设置页对应的 AI 叶子（`settingsPath('ai/<capability>')`）并带 `?resume=<platform>`。
+
+## 坑
+
+- 渲染测试要包 `ThemeProvider`：`sx` 读 `theme.vars`。

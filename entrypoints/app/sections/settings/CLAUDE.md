@@ -1,32 +1,80 @@
 # settings
 
-app.html 设置页面组件（共享 `SectionTitleBar` 路由 h1 + 顶部 Tab + 四个 panel：AI 配置/账号连接/通用/存储；每个 panel 内均为「左侧二级导航 rail + 右侧内容」两栏）。两级导航都是 **Minimal 下划线 Tabs**（docs/25 Step 7）：视觉全部来自 `theme/core/components/tabs.tsx` 的默认值（`variant: 'scrollable'`、`textColor`/`indicatorColor: 'inherit'` → 指示条 `currentColor` 墨色、横向 list gap 40/24、未选 `text.secondary` / 选中 `text.primary` semibold），两个组件本地只留 orientation、行对齐、`whiteSpace: nowrap`，以及顶部那条的整轨居中（用户 2026-09-08 决定，详见下方 `settings-tabs.tsx`）。标签绝不折行：溢出就横滑（zh-CN/en 长标签均不压缩）。`md+` 二级 rail 竖排，窄屏转横向。每个 active section 只渲染一个 `SettingsPanel`，禁止 Card 嵌套。**两级导航都是路由**（2026-09-16）：`/settings/<tab>/<section>`，URL 段就是 `settings-nav.ts` 里的 id，无映射层；tab 与 section 不再有任何 `useState`。
+app.html 设置页：顶部 Tab + 每个 tab 内「二级导航 rail + 右侧单个 `SettingsPanel`」。两级导航都是路由 `/settings/<tab>/<section>`。Embedding 区的独有约定在 `embedding/CLAUDE.md`。
 
-## 保存模型（三张 AI 配置卡 + GitHub/YouTube 连接卡共同约定）
+## 约束
 
-**无自动保存**。五卡（LLM/ASR/Embedding/GitHub/YouTube）编辑只改卡片内本地 draft（`useConfigDraft`），点「保存」才写 `settingsStorage`（`useSettings.saveLlm/saveAsr/saveEmbedding/saveGithub/saveYoutube`，立即写入 + 记录 `configSavedAt` 时间戳）。**保存被测试连接 gating**：`canSave = verified || (dirty && 连接字段未变)`。测试通过即可保存（含与存储相同的值——幂等重写并记录 `configSavedAt`，覆盖旧自动保存遗留/env 默认起点场景）；保存成功后 verified 签名清空，按钮回禁用态。连接相关字段（LLM: provider/apiKey/model/customBaseUrl/customProtocol；ASR: provider/apiKey——model 不算，/models 探针验不了模型名；Embedding: 全部字段含 dimensions）改动使既有测试结果失效（Alert 清除 + Save 回禁用）；非连接字段（LLM temperature/maxTokens/prefMode、ASR model）改动无需重测即可保存。**「测试→验证→保存」状态机整个在 `useConfigDraft` 内部**（isTesting/testResult/testError/isSaving + 签名捕获/过期清除/保存收尾），卡片只提供 `runTest`（卡片特有探针）+ `save`（+ 可选 `acceptResult`）并消费返回的 flow state。测试成功签名在测试**发起时**捕获（await 前），测试期间用户再编辑则旧签名不匹配新 draft、永不误判 verified（防 in-flight 竞态）。未保存草稿刷新/切卡即丢（有意为之，无未保存提示）。**保存结果走 toast**（docs/25 Step 5）：成功 `snackbar.saved`、失败 `snackbar.saveFailed`，两者都在 `useConfigDraft.handleSave` 内部发出，五张卡无需各自接线；`handleSave` 因此**不再 reject**（以前 `save` 抛错会顺着 `onClick={onSave}` 变成未处理 rejection 且屏幕上无任何反馈）。持久「已保存 + 时间」徽标来自 `settings.configSavedAt[section]`，刷新后仍在；从未手动保存过的 section 不显示。
+### 导航与路由
 
-## 模块结构
+- `settings-nav.ts` 的 `SETTINGS_NAV` 是两级导航唯一的穷举表：顶部 Tabs、rail、路由合法性、每个 tab 的默认 section 全从它派生。
+- URL 段就是 section id，没有映射层；id 必须是 kebab 且在 tab 内唯一（`settings-nav.test.ts`）。
+- 加一个设置项 = `SETTINGS_NAV` 加一行 + `settings-view.tsx` 的扁平 switch 加一个 case（漏接时 `tsc` 在 `never` 上点名）+ 双语 key。
+- `SETTINGS_NAV` 故意不放 `render`：各卡 props 互不相同，塞进去会把纯数据表变成 context 管道。
+- `settings-nav.ts` 必须保持零值导入（只 `import type`）：`tests/platform-completeness-contract.test.ts` 直接 import 它。
+- 从设置页之外链入一律用 `settingsPath(leaf)`，不手拼 `/settings/...`：改名或删掉 section 时 `tsc` 点名调用点，裸字符串会继续编译并静默落到默认叶子。
+- 视图零导航 state，tab / section 只来自 `useParams()`。切 tab 永远落该 tab 第一项，不记忆上次看的 section（用户决定：URL 是唯一事实源）。
+- 非法或缺省路径（`/settings`、裸 tab、未知段）的重定向一律 `<Navigate replace>`：push 会让后退键被弹回来再重定向，困在设置页。手点 tab / rail 才是 push。
+- `?resume=<CollectionPlatform>` 是一次性副作用参数，不是位置：经白名单解析，并随每次内部跳转保留在 query 里。
+- LLM / Embedding 保存成功后据 `resume` 恢复该平台的 Tags / Embed backlog，保存 reject 不派发；ASR 不走这里，由自动转录 watcher 恢复。
+- 旧 `/settings?section=llm|asr|embedding` 深链由 `legacySectionPath` 升级，只认这三个值。
+- 面包屑首项的 `href` 是路由相对的 `'/'`，不是 `'#/'`：`RouterLink` 自己补 `#`，写 `'#/'` 点了回不到首页。
 
-- `settings-view.tsx` — 设置页面主视图。路由标题复用 `SectionTitleBar`，并且是全仓库**第一个传 `links` 的消费者**（docs/25 Step 7）：`[{ name: t('breadcrumbs.home'), href: '/' }, { name: t('settings.title') }]` → 委托 `components/custom-breadcrumbs/` 渲染「首页 / 设置」路径 + 唯一 h1，末项自动 `aria-current="page"`。**首项 `href` 是路由相对的 `'/'`，不是 `'#/'`**——crumb 走 `RouterLink`，hash router 由它自己补 `#`（写 `'#/'` 会被当路径段，点了跳不回首页）。顶部 Tabs 的下外边距归 `SettingsTabs` 自己（无包裹 Box）；Grid 两列与导航轨道都带 `minWidth: 0`，390px 允许 tab 横滚而不截断。**tab/section 全部来自 `useParams()`**，视图零导航 state：`resolveSettingsRoute` 返回 `null`（`/settings`、裸 tab、非法段、旧 `?section=` 书签）时早退成 `<Navigate replace>` 落到规范叶子——重定向一律 `replace`，否则后退会被弹回来再重定向一次、困在设置页；手点 tab/rail 是 `navigate()` push，后退逐个回退 section。**切 tab 永远落该 tab 第一项**，不记忆上次看的 section（用户 2026-09-16 决定：URL 是唯一事实源，再加一份记忆 state 既不能分享也活不过刷新）。旧 `/settings?section=llm|asr|embedding` 深链由 `legacySectionPath` 升级成 `/settings/ai/<section>`（只认那三个 AI capability，它们是 `collection-configuration-notice.tsx` 唯一发出过的值）；可选 `resume=<CollectionPlatform>` 经过白名单解析，并且**保留在 query 里跟着每次内部跳转走**（它是一次性副作用参数，不是位置）。右列内容是一个对 `SettingsLeaf` 穷举的扁平 switch，漏接新 section 时 `tsc` 会在 `never` 上点名。LLM/Embedding 持久化成功后恢复该平台 Tags/Embed backlog，保存 reject 不派发；ASR 继续由自动转录 watcher 恢复。配置卡保存协议仍由 `useConfigDraft` 所有。
-- `settings-nav.ts` — **设置页两级导航的唯一穷举表**（2026-09-16）：`SETTINGS_NAV` 每项 = `{ tab, label, icon, sections: [{ id, label, icon }] }`，四个消费者全从它派生——顶部 `Tabs`、当前 tab 的 `SectionRail`、路由合法性、每个 tab 的默认 section（恒为 `sections[0]`）。**URL 段就是 id**，所以 id 必须是 kebab 且在 tab 内唯一（`settings-nav.test.ts` 锁）。导出 `SettingsLeaf`（`'ai/llm' | … | 'storage/webdav'`，由 `LeafOf<>` 分发式条件类型派生，**类型参数必须裸着**否则四个 tab 与九个 section 交叉成 36 个叶子）、`resolveSettingsRoute`、`settingsTabPath`（未知段返回 `null`，让调用方的回退链诚实）、`SETTINGS_DEFAULT_PATH`、`legacySectionPath`，以及给**外部链入方**用的 `settingsPath(leaf)`——它存在的理由是参数类型不是字符串拼接：改名/删掉某个 section 时 `tsc` 直接点名调用点，裸字符串则会继续编译、静默落到默认叶子（消费者：github/youtube 两个配置门空态共三处、`collection-configuration-notice.tsx` 的动态 `ai/${capability}`）。**故意不放 `render`**：卡片 props 互不相同（`saveLlm` 带 resume 副作用、`AgentBridgeCard` 无 props），塞进去会把纯数据表变成 context 管道，渲染留给视图的扁平 switch。本文件零值导入（只 `import type`），所以 `tests/platform-completeness-contract.test.ts` 直接 import 它对账 github/youtube 的 Connections section，不再解析 `ConnSection` 联合与 `connNavItems` 数组——那两份手写清单已被本表取代。加一个设置项 = 本表加一行 + 视图 switch 加一个 case（`tsc` 会点名）
-- `settings-panel.tsx` — active rail section 的唯一 surface owner：单层 `Card` + `CardHeader` + `CardContent`，标题显式为 `h2`/`h4` 视觉变体，描述为 theme-owned `body2`；七个设置卡、语言区和实际只在 Settings 消费的 `ExportCard` 均复用。CardHeader 的全局默认不承担页面标题语义。
-- `agent-bridge-card.tsx` — Connections 的 **Agent Skills** 卡（路由段 `agent-skills`，界面与导航标签都是 Agent Skills；**文件名、组件名、i18n key 前缀与域术语仍是 Agent Bridge**——UI 标签换的是用户词汇，不是 `lib/agent-bridge/` 那条数据通路，理由见 `CONTEXT.md` 的 Agent Bridge 词条与 Flagged ambiguities 首条）：经 `lib/storage` typed facade 读写开关/端口/配对 Token（域术语 Bridge Token）并 watch config/status；端口只在 `1..65535` 整数 blur/Enter 时提交，启用且无 token 时一次性生成 32-byte base64url token；每次成功配置写入后仅发 `AGENT_BRIDGE_CONNECT_NOW`，WebSocket 始终归 Background。`buildSetupCommand` 是唯一 setup 命令生成器（产出**裸 `favbase setup`**，不是 `npx`：SKILL.md 的 `allowed-tools: Bash(favbase:*)` 已把 agent 侧锁死成 PATH 上的 `favbase`，经 npx 配对会留下 agent 用不了的机器；`npm install -g favbase` 是命令区三步清单的第 1 步——原先三合一的 `commandsHint` 已拆成有序列表 `commandsStep1..3` + 单独的 `commandsTokenWarning` caption，命令本身保持单行以免踩 Windows PowerShell 5.1 不支持 `&&`），主操作与 bad-token Alert 的修复入口复用同一 clipboard handler（**复制结果走 toast**，docs/25 Step 5：`handleCopy(value)` 不再持任何复制反馈 state，按钮文案不再切「已复制」，成败分别发 `settings.agentBridge.copySuccess`/`copyFailed`）；token 默认遮罩。没有重试倒计时（bad-token 退避与 `nextRetryAt` 于 docs/30 #1 删除，扩展每个 alarm 周期照常重试，bad-token Alert 在重试的 `connecting` 期间保持不闪），`lastAuthFailureAt` 在恢复后仍保留为次要诊断信息；raw transport error 不进 UI，稳定 code 映射到 `settings.agentBridge.*`。
-- `use-config-draft.ts` — 三卡共享的 draft + 完整「测试→验证→保存」状态机（深模块）。纯函数层（可单测，见 `use-config-draft.test.ts`）：`connectionSignature(draft, connKeys)`（连接字段 JSON 签名，undefined→null 稳定序列化）+ `computeDraftGate(draft, savedActive, connKeys, verifiedSig) → { dirty, connectionDirty, verified, canSave }`。hook 层 `useConfigDraft<T, R>({ derive, connectionKeys, runTest, acceptResult?, save })`：`derive(provider?)` 由卡片传入（闭包 settings，`derive()` = 已保存 active 配置，`derive(p)` = provider p 的已保存值）；`runTest(draft) → Promise<R>` 卡片特有探针（throw 即 testError，权限拒绝也走 throw）；`acceptResult(r)`（默认恒 true）通过才记 verified；`save(draft)` 持久化。内部持 draft state + `touchedRef`——**外部 settings 变更仅在用户未编辑时重同步 draft**（不覆盖正在编辑的草稿）。**`derive` 必须引用稳定**（卡片侧用 `useCallback`，测试探针把它提到组件外）：它喂着一个 `[derive]` effect，每次 render 新建闭包 = `setDraft(derive())` 无限重渲染。**这个错误的症状不指向原因**——vitest 直接报 `Worker exited unexpectedly`，无堆栈、无组件名（docs/25 Step 5 实遇）；`setField`（同值 no-op 守卫——MUI Autocomplete 挂载时 `onInputChange('reset')` 不得误标 touched）/ `switchProvider(p)`（draft 重载 p 的已保存值）。内部行为（不再暴露 `connSig`/`markVerified`/`markSaved`）：`handleTest` await 前捕获签名（防 in-flight 编辑竞态）→ runTest → setTestResult → acceptResult 通过才 verified；connSig 变化 effect 清 testResult/testError（过期反馈不残留）；`handleSave` 成功后重置 touched + 清 verified 签名，并发 `snackbar.saved`；`save` reject 被吃掉换成 `snackbar.saveFailed`（draft 保持 touched 供重试），**handleSave 永不 reject**。返回 `{ draft, setField, switchProvider, handleTest, isTesting, testResult, testError, handleSave, isSaving, ...gate }`
-- `save-actions.tsx` — 共享操作行组件 `SaveActions`：测试连接按钮（soft `color="primary"`，次要动作，2026-10-02）+ 保存按钮（contained primary，`saveDisabled = !canSave`）+ 持久已保存徽标（`savedAt` 有值才渲染，`settings.savedAt` + `formatDateTime`）+ 条件 hint（`showTestHint` = 连接字段有改动未验证时显示 `settings.testBeforeSave` caption）。测试按钮文案固定 `settings.testConnection`/`testing`（五卡统一探针型测试流）
-- `settings-tabs.tsx` — 顶部 Tab 控件（Minimal `sections/account/account-layout.tsx` 的形态）：裸 MUI `Tabs`，**不传 `variant`/`scrollButtons`/indicator 覆盖**，只带 `sx={{ width: 'fit-content', maxWidth: 1, mx: 'auto', mb: { xs: 3, md: 5 } }}` 与每项 24px `Iconify` + `iconPosition="start"`；**整条轨道居中是本仓库对 Minimal 左对齐唯一的刻意偏离**（用户 2026-09-08 决定，`ui-design-system.md` §11 已校准）：已知代价是这条菜单脱离上方 `Settings` h1 与面包屑的左基线，用户已接受，**禁止按左对齐规范推回**；不用 `centered`（与主题的 `scrollable` 默认互斥，会告警且无效）也不用 `MuiTabs-list` 的 flex 居中（轨道溢出时左端滚不到）；**窄屏零断点分支靠的是旁边那个 `maxWidth: 1` 夹位，不是 `fit-content` 自己会退化**——「只有一个 scroll container 子元素的 flex 根会自行退化成 available 宽度」从未在真实浏览器量过，所以在量出来之前这个夹位是承重的，**禁止当冗余顺手删**（错了的后果是 390px 下首个 tab 停在容器外、点不到）；**二级 `section-rail.tsx` 不居中**（同日试过，用户实测无差别已回退）；`Tab` 上唯一 sx 是 `whiteSpace: 'nowrap'`（en 的 `Account connections` 宁可溢出横滑也不折两行）。滚动条由 MUI scrollable scroller 自己隐藏，滚动箭头是默认 auto（无溢出不渲染）。props `{ value, onChange, tabs, ariaLabel }`（items 由 settings-view 从 `settings-nav.ts` 翻译后注入，本组件仍是哑的）。新增 tab = `SETTINGS_NAV` 加一项 + 视图 switch 补它每个 section 的 case
-- `section-rail.tsx` — 通用二级导航 rail（泛型 `SectionRail<T extends string>` + `SectionRailItem<T>`，四个 tab 共用）：同样是裸 MUI `Tabs`，本地只拥有两件事——`useMediaQuery(down('md'))` 决定 `orientation`（`md+` vertical / 窄屏 horizontal，指示条随之落在右缘或底缘），以及竖排时 `Tab` 的 `justifyContent: 'flex-start'`（MUI 默认居中，每行都带图标时会排成参差的图标列；横排保持居中）。图标 24px 与顶部 Tab 同档。竖排时**这是竖向 Tabs 两形态里的「二级导航」那一支**（`ui-design-system.md` §11 Vertical Tabs 形态 a，docs/25 Step 10 定案）：只吃主题默认下划线，**不给选中态加洗底、与 Dashboard 图例的形态刻意不统一，禁止顺手统一**——把 8% 品牌洗底搬过来会与 `components/nav-section/` 的激活治法（同一洗底 + 同一 accent 墨）重影，把页内二级导航拉平成一级导航。props `{ value, onChange, items, ariaLabel }`。给某 tab 加区段：`SETTINGS_NAV` 里该 tab 的 `sections` 加一项（union、rail、路由、默认值一次到位）+ settings-view switch 加一个 case + 复用/新增双语 key
-- `llm-config-card.tsx` — LLM 配置卡片：Provider 选择（`switchProvider`）+ API Key（显隐）+ Get Key 链接 + Model（Autocomplete + 远程模型列表，用 draft 的 apiKey 即时调用不需保存）+ Custom 字段 + 高级设置（temperature/maxTokens/prefMode，非连接字段）+ `SaveActions`。draft 从 `deriveLlmDraft(settings, provider?)` 派生；`getProviderDef(draft.provider)` 反映 draft 而非已保存 provider。测试/保存走 `useConfigDraft`：`runTest` 闭包内 `ensure(有效 baseUrl)`（deny 则 `throw new Error(t(permissionErrorKey(reason)))` → 显示为 testError）+ `testLlmConnection`（R = `TestConnectionResult`），`save = saveLlm`。测试成功 Alert 渲染条件 `testResult && verified`（连接字段变化即消失）；provider 变化 effect 清 remoteModels（fetchModels 流程仍在卡内）。**host access 检查/恢复**：`useHostPermission()`，test/fetchModels 用同一 `ensure`；JSX 渲染 `{dialog}`
-- `asr-config-card.tsx` — ASR 配置卡片：Provider + API Key + Model（非连接字段）+ `SaveActions`。Groq draft 额外显示本地化 Free Plan 提示（每日 28,800 ASD = 8 音频小时）和账户专属 Groq Limits 外链；SiliconFlow 不显示。测试连接仍为 `testAsrConnection`，两 provider 均用静态 host permissions
-- `github-connection-card.tsx` — GitHub 账号连接卡（账号连接 tab 首卡，以 asr-config-card 为样板）：PAT 输入（显隐眼睛）+ `SaveActions`。**GitHub 是平台凭证非 AI provider**：draft = `GithubDraft`（`deriveGithubDraft`，`provider` 恒 `'github'` 仅满足 `useConfigDraft` 泛型约束，无 provider Select/`switchProvider`），连接字段 `['provider','token']`。测试连接 = `validateToken(dr.token)`（`lib/github/github-api`，GET /user），R = `GithubUser`——成功 Alert 展示 GitHub 头像（Avatar 作 Alert icon）+ login（`settings.github.testSuccess`）；**runTest 内做错误 i18n 映射**（lib 层错误只带英文 debug 文案）：`GithubAuthError` → `settings.github.invalidToken`，`GithubRateLimitError` → `settings.github.rateLimited(NoReset)`（带 `formatDateTime(resetAt)`）。`api.github.com` 在静态 host_permissions，**不需要** `useHostPermission`。字段下方灰底说明框（`varAlpha(grey 500Channel, 0.08)` Box，暗色模式安全）：标题 + 4 步创建指引（`settings.github.guideTitle`/`guideStep1-4`，步骤文案引导 repo+user scope——用户明确的产品决定，虽然公开仓库零 scope 即可）+ github.com/settings/tokens 外链（`settings.github.createToken`）。`save = saveGithub`（写 `githubToken` + `configSavedAt.github`）。locale key：`settings.github.*`
-- `youtube-connection-card.tsx` — YouTube 账号连接卡（账号连接 tab 第二卡，以 github 卡为样板；API key 形态——公开播放列表无 OAuth，见 `lib/youtube/CLAUDE.md`）：API 密钥（显隐眼睛）+ 频道输入（`@handle`/`UC...` ID/频道 URL，caption 先说明为什么要填——API 密钥不代表账号，必须指明收录哪个频道——再说明只收录公开列表）+ 灰底 4 步创建指引框（GCP 项目 → 启用 Data API v3 → 「创建凭据 → API 密钥」→ 粘贴+测试；`settings.youtube.guideStep1-4` + console.cloud.google.com 外链；标题下 `freeQuotaNote` caption 说明 API 免费/日配额 10,000 units）。**runTest = `resolveChannel(apiKey, channel)` 探针**（`lib/youtube/youtube-api`，channels.list 解析频道；R = `YoutubeChannelInfo`）——成功 Alert 展示频道头像+名（`settings.youtube.testSuccess`）。**runTest 内做错误 i18n 映射**：`YoutubeAuthError` → `invalidKey`；`YoutubeRateLimitError` → `rateLimited`（恒无 resetAt）；message 含 `channel not found` → `channelNotFound`。连接字段 `['provider','apiKey','channel']`。`save = saveYoutube`（写 `youtubeApiKey`/`youtubeChannel` + `configSavedAt.youtube`）。locale key：`settings.youtube.*`
-- `webdav-sync-card.tsx` — WebDAV 同步卡（存储 tab 第二区段）：启用开关（`enabled` 只关**自动**后台同步）+ url/username/password 三输入（失焦 `setWebdavConfig` 落盘，password 经 AES-GCM 混淆）+「立即同步」（先 `useHostPermission().ensure(url)` 检查/恢复必选 host access，再经 `sendBackgroundMessage({ type:'WEBDAV_SYNC_NOW' })` 给 SW）+ 状态区（态/最后同步/云端版本，watch `getSyncStatus`）+「清除远端数据」红色按钮（二次确认 Dialog → typed `WEBDAV_CLEAR_REMOTE`）。响应由 Background client 解码，畸形响应抛本地协议错误。**两个按钮的结果全走 toast**（docs/25 Step 5）：卡内已无 `localError` state 与它那个 Alert，成功 `snackbar.synced`/`snackbar.remoteCleared`，失败优先用具体的 `settings.sync.err.<code>`（含 https 预检与权限拒绝），无 errorCode 才回退 `snackbar.syncFailed`/`clearFailed`；`status.state === 'error'` 的 Alert 是持续态，**保留**。**同步引擎在 Background SW**（见 `lib/sync/CLAUDE.md`），本卡只做 UI + host access + 消息。locale key `settings.sync.*`
-- `permission-error.ts` — `permissionErrorKey(reason)`：host 授权 deny `reason` → `settings.permission.*` locale key（i18n seam UI 侧，LLM/Embedding/WebDAV 卡共用）
-- `use-host-permission.tsx` — `useHostPermission()` hook：粘合 `checkHostPermission` + `requestHostPermission`。`ensure(baseUrl)` 先检查静态必选 host access，缺失 HTTPS grant 时开恢复 Dialog，`browser.permissions.request` 推迟到「允许」点击（保住 transient user activation）；返回 `{ ensure, dialog }`
-- `embedding/` — Embedding/语义搜索配置区（四文件，卡片 + 两 hook + 展示组件）：
-  - `embedding-config-card.tsx` — 瘦身后的配置卡（字段编辑 + 测试 + 保存 + 组合下面三件）：**无启用开关**（`enabled` 由 `resolveEmbeddingConfig` 派生自 apiKey）。Provider + API Key（显隐）+ Base URL + 模型 + **向量维度 Select**（「自动」= `value="auto"` 哨兵 → `undefined`——不能用 `""`，MUI Select 把空串当"未选择"；预设 `COMMON_EMBEDDING_DIMENSIONS`）+ `SaveActions`。draft 从 `deriveEmbeddingDraft(settings, provider?)` 派生（resolver 值 + raw dimensions），**全部字段都是连接字段**（dimensions 影响探针返回维度）。测试/保存走 `useConfigDraft`：`runTest` 闭包内 `ensure(draft baseUrl)` + `testEmbeddingConnection`（探针带 draft 的 `dimensions`，返回维度反映真实落库维度；R = `TestEmbeddingResult`），`acceptResult = dim <= MAX_INDEXABLE_DIMENSIONS(2000)`——**超限探针不算验证**（存了也无法入库），显 `dimensionLimitError` error Alert；成功 Alert 渲染条件含 `verified`。单实例 `useHostPermission()`（`ensure` 传给 runTest 闭包与 rebuild hook，Dialog 唯一）；统计刷新接线 `rebuild().finally(refresh)`（两 hook 互不感知）。locale key：`settings.embedding.*`
-  - `use-embedding-stats.ts` — `useEmbeddingStats() → { stats, refresh }`：挂载加载统计（`initDbProxy()` 幂等 join main.tsx 的 in-flight init + `getEmbeddingStats`，mount cancelled guard），失败 console.error 返回 null；`refresh` 供重建后刷新
-  - `use-embedding-rebuild.ts` — `useEmbeddingRebuild({ settings, ensure }) → { isRebuilding, progress, outcome, error, rebuild }`：**rebuild 恒走已保存配置**（`resolveEmbeddingConfig(settings)`，与 indexing 同源），不看未保存 draft：先本地判 `!saved.enabled` → outcome not-configured（不为无法 embed 的 provider 弹恢复授权），再 `ensure(saved.baseUrl)` 检查/恢复 host access（deny → `t(permissionErrorKey(reason))`），最后 `initDbProxy()` + `rebuildPendingEmbeddings`（app.html context 直跑循环，失败即停可续跑）
-  - `embedding-stats-panel.tsx` — `EmbeddingStatsPanel` 纯展示（全 props 驱动）：向量索引统计两格 + 重建按钮（运行中禁用 + CircularProgress）+ `LinearProgress` + 进度文案 + 结果 Alert 三态（completed/not-configured/error）
+### 导航视觉（刻意决定，别顺手改）
 
-Embedding 统计运行时契约：`use-embedding-stats.ts` 订阅 durable `item-content-updated` / `item-embedded` 事件，以 100ms 窗口合并 DB 刷新；不得用临时 job progress 冒充 Indexed Vectors / Total Chunks。
+- 两级导航都吃主题默认的下划线 Tabs（`theme/core/components/tabs.tsx`），组件本地不传 `variant`、不覆盖指示条。
+- 标签绝不折行（`whiteSpace: 'nowrap'`），溢出就横滑，中英文长标签都不压缩。
+- `settings-tabs.tsx` 整条轨道居中是对 Minimal 左对齐的刻意偏离（用户决定，`.trellis/spec/frontend/ui-design-system.md` §11），代价是脱离 h1 的左基线，已接受，禁止推回左对齐。
+- 居中不能用 `centered`（与主题默认的 `scrollable` 互斥，告警且无效），也不能给 `MuiTabs-list` 做 flex 居中（溢出时左端滚不到）。
+- 同一处的 `maxWidth: 1` 是承重的，禁止当冗余删：窄屏靠它夹住 `fit-content`，删错的后果是 390px 下首个 tab 停在容器外、点不到。
+- `section-rail.tsx` 不居中。它保留 `useMediaQuery` 的两形态：`md+` 竖排、窄屏横排（`settings-navigation.test.tsx` 锁横排可滚）。
+- 竖排 `Tab` 保留 `justifyContent: 'flex-start'`：每行都带图标，MUI 默认居中会排成参差的图标列；横排保持居中。
+- 竖排 rail 只吃默认下划线、不加选中洗底，与 Dashboard 图例的竖向 Tabs 形态刻意不统一，禁止顺手统一（spec §11 Vertical Tabs）：洗底会与侧栏 `components/nav-section/` 的激活态重影，把页内二级导航拉平成一级导航。
+- 每个 active section 只渲染一个 `SettingsPanel`（标题是 h2），禁止 Card 嵌套；`sections/overview/export-card.tsx` 也复用它。
+
+### 保存模型（LLM / ASR / Embedding / GitHub / YouTube 五卡）
+
+- 无自动保存：编辑只改卡内 draft，点「保存」才写 `settingsStorage`。未保存草稿刷新或切卡即丢，有意为之，不加未保存提示。
+- 保存被测试连接 gating：`canSave = verified || (dirty && 连接字段未变)`。连接字段一改，既有测试结果失效；非连接字段改动无需重测即可保存。
+- 连接字段是各卡的 `*_CONNECTION_KEYS`。ASR 的 model 不算：`/models` 探针验不了模型名。
+- 「测试→验证→保存」状态机整个在 `use-config-draft.ts`，卡片只提供 `runTest` / `save` / 可选 `acceptResult`；不要在卡片里重建测试或保存状态。
+- 验证签名在测试发起时（await 之前）捕获：测试期间用户再编辑，旧签名对不上新 draft，不会误判 verified。
+- 外部 settings 变更只在用户未编辑时重同步 draft，不覆盖正在编辑的草稿。
+- `handleSave` 永不 reject：成功与失败的 toast 都在 hook 内发出，卡片不各自接线；失败时 draft 保持可重试。
+- 「已保存 + 时间」徽标是持续态，读 `configSavedAt[section]`，不进 toast。
+- lib 层错误只带英文 debug 文案；i18n 映射在卡片的 `runTest` 里做（按错误类；YouTube 另按 message 含 `channel not found`）。
+
+### 平台凭据链（GitHub / YouTube 连接卡）
+
+- `readiness: 'credentials'` 的平台必须有：`<platform>-connection-card.tsx`、`SETTINGS_NAV` connections 下同名的 section、`lib/hooks/useSettings.ts` 的 `derive<Pascal>Draft` / `save<Pascal>`、`configSavedAt` 键。守卫 `tests/platform-completeness-contract.test.ts`。
+- 守卫只证结构存在，不证接线正确：Sync Adapter 的 `probeReady` 读错 settings key、zod 条目加载时丢字段都照样绿。完整清单见 `.trellis/spec/frontend/platform-onboarding.md` §8，要人工读。
+- 连接卡是平台凭证，不是 AI provider：draft 的 `provider` 恒为平台 id，只为满足 `useConfigDraft` 的泛型约束，没有 provider 选择。
+- 连接卡走同一套「填写 → 测试 → 保存」：GitHub 的探针验 token，YouTube 的探针用 API 密钥解析频道。
+- YouTube 卡要填频道是因为 API 密钥不代表账号，必须指明收录哪个频道；只收录公开播放列表（`lib/youtube/CLAUDE.md`）。
+- GitHub 指引文案引导勾 repo + user scope 是用户的产品决定（公开仓库零 scope 即可），别"修正"。
+
+### host 权限
+
+- 请求用户自填地址的卡（LLM / Embedding / WebDAV）在发请求前先 `useHostPermission().ensure(url)`，测试与拉模型列表共用同一个 `ensure`；ASR / GitHub / YouTube 的域名在静态 host_permissions 里，不需要。
+- `browser.permissions.request` 必须留在恢复 Dialog 的「允许」点击里：那是新的用户手势，才有 transient user activation。
+
+### Agent Skills 卡（`agent-bridge-card.tsx`）
+
+- 界面与路由段叫 Agent Skills；文件名、组件名、i18n 前缀 `settings.agentBridge.*` 与域术语仍是 Agent Bridge（`CONTEXT.md`）。换的是用户词汇，不是那条数据通路，不要跟着 UI 改名。
+- `buildSetupCommand` 是唯一的 setup 命令生成器，产出裸 `favbase setup …`，不用 `npx`：SKILL.md 的 `allowed-tools: Bash(favbase:*)` 把 agent 锁在 PATH 上的 `favbase`，经 npx 配对会留下 agent 用不了的机器。
+- 复制的命令保持单行，不拼 `A && B`：Windows PowerShell 5.1 不支持 `&&`。`npm install -g favbase` 是三步清单的第 1 步，不进命令。
+- 卡片只写配置并发 `AGENT_BRIDGE_CONNECT_NOW`；WebSocket 与重试始终归 Background，别在这里开连接，也别加重试倒计时（bad-token 退避已整体删除，docs/30 #1）。
+- 端口只在 blur / Enter 且为合法整数时提交；raw transport error 不进 UI，只映射稳定 code。
+- 复制结果走 toast，按钮文案不切「已复制」。
+
+### WebDAV 卡
+
+- `enabled` 只关自动后台同步，「立即同步」不受它限制。
+- 同步引擎在 Background SW（`lib/sync/CLAUDE.md`）；本卡只做 UI + host access + typed 消息。
+- 两个按钮的结果走 toast，失败优先用具体的 `settings.sync.err.<code>`；`status.state === 'error'` 的 Alert 是持续态，保留，不改成 toast。
+
+## 坑
+
+- 传给 `useConfigDraft` 的 `derive` 必须引用稳定（`useCallback`，测试里提到组件外）：它喂一个 `[derive]` effect，不稳定就无限重渲染，而 vitest 只报 `Worker exited unexpectedly`，无堆栈、无组件名。
+- `setField` 的同值 no-op 守卫不能删：MUI Autocomplete 挂载时会发 `onInputChange('reset')`，不得把 draft 误标为已编辑。
+- `settings-view.tsx` 两个 Grid 列的 `minWidth: 0` 不能删：390px 下靠它让导航 Tabs 在列内横滑而不是被截断；这是布局行为，单测量不出来。
+- `SettingsLeaf` 的 `LeafOf<>` 类型参数必须裸着（分发式条件类型），否则 tab 与 section 交叉成笛卡尔积。

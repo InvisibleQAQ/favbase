@@ -1,67 +1,65 @@
 # app/components/collection
 
-平台 section 共享展示哑组件 + 页面级编排脚手架（app.html 内共享，同层先例 `components/tags/`、`components/iconify/`）。来源：`docs/14` HIGH-2（哑组件收敛）+ `docs/16` MEDIUM-3（`CollectionPageScaffold` 编排收敛）+ `docs/23` Phase 3（Minimal v7 primitives 收敛：h1 标题栏、24px grid、卡片行/骨架 owner、状态密度）。
+平台收藏页共享的展示哑组件 + 页面级编排 `CollectionPageScaffold` + 条目外壳 `CollectionCard`。平台接入（单列表形态）= scaffold + 用 `CollectionCard` 装配的卡片 + `CollectionCardSkeleton` 形态参数 + chips / 状态 / 文案；编排、卡片外壳与骨架不得再复制一份。
 
-**两级复用**：
-1. **哑组件**（state-box/section-title-bar/search-field/card-grid/chip-row/…）——纯展示，各 view 直接消费或经 scaffold 消费。
-2. **`CollectionPageScaffold`**（`collection-page-scaffold.tsx`）——六个平台共用的页面级编排。固定「标题/紧凑 pipeline → 搜索 → provider 配置提醒（可选）→ 业务操作（可选）→ 主分类 → 标签 → 次分类（可选）→ 列表」（HEAD `75c42a2` 堆叠；docs/19 P0-1 的三行压缩于 2026-08-20 被用户否决并恢复，只保留色彩与 `role=status`），并持有 tag 接线 + phase 阶梯 + 8-case 渲染 + 双 id 映射 + 主 grid popover/分页；平台只注入 adapter、文案和 slots。
-3. **`CollectionCard`**（`collection-card.tsx`）——六平台共用的条目外壳（docs/19 P0-2），平台卡片只装配内容，不允许第七份复制。链接之外的行用同文件的 `CollectionCardRow`，骨架用 `CollectionCardSkeleton`。
+## 铁律
 
-**docs/14 曾反对 `CollectionPageFrame` 大一统 frame**（理由：分支顺序有差异、消费方少 3）——`docs/16` 推翻此结论：分支顺序已被纯函数 `resolveCollectionPhase`（+ `collection-phase.test.ts`）消解，消费方涨到 4 且逐字同构。证据变了，结论跟着变。scaffold 接口偏宽（~26 props）但实现更深（隐藏 phase 顺序/双 id/tag 刷新不变量/双 popover 区分/5 个骨架区条件门），不是浅模块。**配置门早退（`configured`，docs/32 Step 7 起 github / youtube 同名，来自 `hooks/use-credential-gated-library.ts`）留在 view**——平台专属。平台状态（库空 / 未登录 / 需配置）自 docs/32 Step 6 起来自智能兄弟目录 `components/collection-states/`（`EmptyLibraryState` / `NotLoggedInState` / `NeedsConfigState`，平台只传图标、i18n 键、站点或设置页叶子），仍由 view 构造、经 slot 注入；scaffold 不认识它们。
+- 零平台字面量、零平台 lib 导入。
+- 零 `t()` 调用：所有文案由消费方翻译后经 props 传入。
+- 只消费 semantic token（`text.*` / `background.*` / `divider` / `action.*` / `varAlpha(channel)`），不散落 hex / rgba / 字号 / 圆角。状态文案不用 `text.disabled`（信息不是禁用）。
+- 垂直节奏 24px：标题栏、pipeline 行、同步失败横幅、搜索框、chip 行各自以 `mb: 3` 收尾，grid gap 也是 24。
 
-## 铁律（沿用 components/tags）
+## 边界例外
 
-- 零平台字面量（'bilibili'/'github'）、零平台 lib 导入（grep 可查，prd 验收项）
-- 零 `t()` 调用——所有文案（按钮 label、标题、占位符）由消费方翻译后经 props 传入
-- 只消费 semantic token（`text.*`/`background.*`/`divider`/`action.*`/`varAlpha(channel)`），禁止散落 hex/rgba/字号/圆角；状态文案不用 `text.disabled`（信息不是禁用）
-- **垂直节奏 24px**：标题栏、pipeline 行、同步失败横幅、搜索框、chip 行各自以 `mb: 3` 收尾，grid gap 也是 24——控制区读起来是一组
-- **边界例外（三个具名智能模块，只给 `collection-page-scaffold.tsx`）**：本目录文件自身仍不得出现 `t()`，但 scaffold 允许导入：
-  1. `components/tags/` 的 `useCollectionTags` / `TagFilterChips` / `TaggedItemGrid` / `TagEditPopover`（docs/16 MEDIUM-3 起 scaffold 持有 tag 接线）——形状与另两个不同：这些组件**自己渲染**带译文的 chip 行、标签网格与编辑 popover，不往本目录交字符串；
-  2. `components/library-gate/` 的 `LibraryGateButton` / `useCollectionGate`——进入本目录的只有预翻译字符串（`fetchBlockedHint`）与布尔（`paused`）；
-  3. `components/collection-states/use-collection-chrome-copy.ts` 的 `useCollectionChromeCopy`（docs/32 Step 6，用户 2026-10-01 决定）——进入本目录的只有五个预翻译外壳文案（获取按钮两态、错误态标题与重试、同步失败横幅的拼法）。**直接 import 叶文件，不经 `collection-states` barrel**：barrel 会把 react-router、设置页路由表与 Iconify 拖进 scaffold 的模块图。
+三个具名智能模块，只给 `collection-page-scaffold.tsx` import；本目录文件自身仍不得出现 `t()`：
 
-  翻译发生在那三个目录内。不得把例外扩大成在哑组件里直接调 `t()`，也不得给第四个模块开口子而不在这里具名。（docs/32 Step 6 之前这里只具名了 `library-gate`，`tags` 是 scaffold 早就在用、却从未列入的那一个，2026-10-02 trellis-check 补上。）
+1. `components/tags/` 的 `useCollectionTags` / `TagFilterChips` / `TaggedItemGrid` / `TagEditPopover`——它们自己渲染带译文的 chip 行、标签网格与编辑 popover，不往本目录交字符串。
+2. `components/library-gate/` 的 `LibraryGateButton` / `useCollectionGate`——进入本目录的只有预翻译字符串与布尔。
+3. `components/collection-states/use-collection-chrome-copy.ts` 的 `useCollectionChromeCopy`——进入本目录的只有预翻译的外壳文案。直接 import 叶文件，不经 `collection-states` barrel：barrel 会把 react-router、设置页路由表与 Iconify 拖进 scaffold 的模块图。
 
-## 模块结构
+翻译发生在那三个目录内。不得把例外扩大成在哑组件里直接调 `t()`，也不得给第四个模块开口子而不在这里具名。
 
-- `state-box.tsx` — `StateBox`（`data-state-box`）：所有页面共用的虚线状态面（空态/错误/无匹配一个密度）。**自 docs/25 Step 3 起是 `components/empty-content/` 的薄适配层**：`EmptyContent filled` 提供 tinted 底 + 1px dashed 边 + 16px 圆角 + 文案排版，`StateBox` 只持有页面级的盒子（默认 `minHeight` 320、`py: 4`）与 `data-state-box` 句柄。props 契约未变：`icon`（ReactNode，调用方控制颜色；建议 48px）/ `title`（`subtitle1` 的 `p`，永不是 heading）/ `description`（`body2` `text.secondary` maxWidth 400）/ `action` + `children` 逃生口（与 action 同槽渲染，仍是根的直接子元素）。测试 `state-box.test.tsx` 零改动通过
-- `section-title-bar.tsx` — `SectionTitleBar`（`data-section="title"`）：路由标题块 = `h1` 变体（Barlow 700 / 28px，页面唯一 h1，loading 时传 Skeleton）+ **标题下方**的 caption（`data-slot="caption"`，`body2` `text.secondary`）+ 右侧一个 medium contained `color="primary"` 动作（品牌主色 `main` 底 + 预设的 `contrastText`，hover 仍是 `main`，36px；2026-10-02 起，此前吃主题默认 `inherit` 是深墨反色块）；`mb: 3`。三件套 `onSync/syncLabel/syncingLabel` 全可选：传 `onSync` 才渲染按钮（三态：syncing 时 CircularProgress+syncingLabel+disabled，否则 restart 图标+syncLabel）。六平台按钮文案统一为 `pipeline.fetchNow`/`pipeline.fetching`（自 docs/32 Step 6 起由 scaffold 经 `useCollectionChromeCopy` 传入，view 不再传）。**可选禁用门 `syncDisabled?`/`syncDisabledLabel?`/`syncDisabledTooltip?`**：`syncDisabled` 时按钮硬禁用（`disabled=syncing||syncDisabled`）+ 显示 `syncDisabledLabel`（缺省回退 `syncLabel`）；`syncDisabledTooltip` 存在时用 Tooltip 包裹（disabled Button 需 `<span>` wrapper）解释禁用原因——闸门暂停走 tooltip（label 保持「立即获取」），X 冷却走 `syncDisabledLabel` 倒计时。**docs/25 Step 3 新增可选 `links?: BreadcrumbsLinkProps[]`**：传了就委托 `components/custom-breadcrumbs/` 渲染「祖先路径 + h1 + caption + action」，末项自动是 `aria-current="page"` 的当前页；不传维持原有 h1 + caption 堆叠（`href` 写路由相对的 `'/'` 而非 `'#/'`）。**docs/25 Step 8 起七个收藏页全部走 `links` 分支**：六平台页 + 聚合页 `/collections`，祖先由 `hooks/use-collection-breadcrumbs.ts` 从导航注册表派生；不传 `links` 的堆叠分支只剩非收藏路由使用。两条路径的 `data-section="title"`、`data-slot="caption"`、单 h1、action 槽一致。测试 `section-title-bar.test.tsx`（单 h1 / caption 在标题下 / medium contained primary / 三态 / tooltip wrapper / links 分支的 nav + aria-current）
-- `search-field.tsx` — `SearchField`：全宽搜索框，高度由主题的 medium 单行 outlined 输入目标（56px，docs/25 D11）决定，本文件不写尺寸；`placeholder` 同时作为 `aria-label`（可访问名）；`eva:search-fill` adornment（`text.secondary`）。受控（value+onChange）或禁用占位（disabled）两态；自带 `mb: 3`，可选 `sx` 在其后合并覆盖（scaffold 不传）。测试 `search-field.test.tsx`
-- `card-grid.tsx` — `CardGrid`（container spacing `CARD_GRID_SPACING = 3`，24px）+ `CardGridItem`（断点 xs12/sm6/md4/lg3 唯一事实源 `CARD_GRID_SIZE`）+ `CardGridPagination`（居中分页，totalPages≤1 返回 null）+ `CardGridSkeleton({ card })`（grid-of-8 外壳，卡片形态由各平台传 `CollectionCardSkeleton`）
-- `chip-row.tsx` — `ChipRowShell`（icon+subtitle2 加粗标题头部 + 可选 `headerExtra`（如清除按钮）+ flexWrap chip 行容器；header icon 统一由 `data-slot="icon"` 以 `text.secondary` 着色，平台不得局部指定品牌/主色；自带 `mb: 3`，可选 `sx` 在其后合并覆盖）+ `FilterChip`（选中 = 珊瑚印章 filled primary + 深墨 contrastText / **未选不写 `variant`，吃主题默认 soft**（docs/25 Step 8；Step 1 换血后 `MuiChip.defaultProps.variant = 'soft'`，写 `outlined` 才是覆盖）+ 可选 `maxWidth` 省略号截断 + 可选 `icon`（如语言色点））。`collapsible-chip-row.tsx` 的展开/收起 chip **刻意保留 `outlined`**：它是行上的动作，不是又一个可选值，注释在源码里
-- `collection-card.tsx` — 三个导出：
-  - `CollectionCard`：条目外壳。props 全结构化、零 `t()`、零平台字面量：`href?`（真实 `<a target=_blank rel=noopener noreferrer>`，中键/Ctrl 可用；无 href 或 `disabled` 时渲染 div）、`media?: { src?, alt, fallbackIcon, aspect: '16/9'|'1/1'|'none', overlay? }`（`16/9` 顶部全宽封面；`1/1` 72px 方缩略图放在**标题/正文块右侧、header 行之下**——识别行（头像+作者）永远独占整个内容宽度，缩略图绝不与它同行（2026-08-20 浏览器复核修正）；`none` 不渲染；`onError` → 隐藏 img 显示平台字形占位，底 `background.neutral` 两模式可用；`overlay` 放 `CoverBadge` 时长/播放量角标）、`header?`（头像+作者行）、`title`（`subtitle2` → `p`，`titleLines` 2|3 clamp + `title` tooltip）、`body?`（描述/摘要）、`meta?` + `date?`（外壳用 `grid-template-columns: 1fr auto`，日期 `noWrap` + `title` 永不被挤压，颜色 `text.secondary`）、`stats?` + `stamp?`（计数行 + 行尾平台/类型印章）、`tags?`（**链接之外**；缺省整行不渲染）、`footer?`（链接之外的平台操作栏，如 B站转录）。外壳统一：内容块 `data-slot="content"` `p: 3`（与主题 `MuiCardContent` 24px 同节奏）；`height: 1` 等高；MUI `MuiCard` 主题统一 `var(--card-radius, 16px)` 圆角 + 两色 scheme 都是真实 `customShadows.card`（docs/25 Step 1，dark 不再 hairline）；整卡 hover = `background.neutral`（shortest 时长）、隐藏 CardActionArea 自带 focusHighlight、**focus ring 内缩 2px**（卡片 `overflow: hidden` 会裁掉 CssBaseline 的外扩 ring）；`disabled` = `data-disabled` + neutral 底 + 媒体去色降透明 + 标题 `text.secondary`——**不再整卡 opacity**（正文对比度不得降到 disabled 档，docs/23 §7.10）。`CoverBadge { align }`：caption 字号黑 scrim 白字角标，圆角 `0.75`（6px，docs/25 Step 8——4px 在 16px 卡里读成方块）
-  - `CollectionCardRow { children, sx? }`（`data-slot="row"`）：链接之外行（标签行、B站操作栏）的**唯一内边距 owner**（`px: 3, pb: 2`，flex wrap gap 8）；`TagRow` 与 `sections/bilibili/video-card.tsx` ActionBar 的各形态都用它，不再各写 `px/pb`
-  - `CollectionCardSkeleton { media?, header?, lines? }`（`data-collection-card-skeleton`）：与真实卡片同解剖的骨架——同内边距、同媒体槽（`16/9` 顶部 / `1/1` 右侧 72 方块 / `none`）、可选头像行、N 行文字 + 一行 meta。六平台骨架文件只选形态参数，不再自画 Card/高度
-  - 测试 `collection-card.test.tsx`（锚点/禁用 data 属性与可读标题/空行不渲染/日期格/破图回退/tags+footer 在链接外/`CollectionCardRow` 在 Card 直下且不在 `<a>` 内/骨架各媒体形态的槽位顺序）
-- `collapsible-chip-row.tsx` — `CollapsibleChipRow<T>`：所有高基数分类/tag 筛选的共享折叠契约。默认显示前 8 项，超过后提供展开/收起；支持可选 All chip、单选或多选 selected keys、可选 item icon；收起时所有已选隐藏项都补渲保持可达。文案由消费方预翻译传入，组件零 `t()`。新增平台的分类筛选必须复用此组件，不得全量 map `FilterChip`；一维带计数的单选 facet 直接用 `components/collection-states/` 的 `FacetChips`（它就是本组件 + 一层 `t()`，docs/32 Step 8），形状不同的（色点、无计数、加载骨架）才自己组合本组件。
-- `error-state.tsx` — `ErrorState { title, message, retryLabel, onRetry }`：48px `error.main` danger-triangle + StateBox + 一个 soft `color="primary"` 重试按钮（次要动作，2026-10-02）。query/sync 失败共用（github/x/zhihu/overview）
-- `no-matches-state.tsx` — `NoMatchesState { message }`：`StateBox` 只带 `description`（`text.secondary`，非 disabled）。搜索/分类无匹配与 `TaggedItemGrid` 标签无匹配共用同一密度；`message` 平台特有名词由调用方传（`t('x.noMatches')` 等），维持零 `t()`
-- `sync-now-button.tsx` — `SyncNowButton { syncing, onSync, label, variant?='soft' }`：空态/未登录态内的手动获取按钮（三态 restart 图标 / CircularProgress+disabled）。**自 docs/32 Step 6 起唯一消费方是 `components/collection-states/`**：label 恒为 `t('pipeline.fetchNow')`，变体由那里按规则推出——状态里还有前导动作（打开站点 / 前往设置）时 `soft`，获取是唯一动作时 `contained`（获取即主路径）。**两种变体都是 `color="primary"`**（2026-10-02）：`contained` 是品牌实色块，`soft` 是 16% 品牌洗底 + `text.accent` 字（次要动作）。变体联合 `'contained' | 'soft'`（原 `'outlined'` 已删，渲染出什么就叫什么）
-- `pipeline-progress-strip.tsx` — `PipelineProgressStrip`：单行、可横向滚动的 micro-segment strip；已知正分母显示整数百分比，未知/零分母不伪造百分比，Fetch 可用显式 lifecycle `100%` 保留本次完成值。**纯展示，无段级控件**——暂停/继续收敛到 per-platform 闸门按钮（`components/library-gate/`，由 scaffold 持有）；外边距（mb）由 scaffold 的 pipeline 行统一持有，strip 自身无 mb。只渲染预翻译 label 与判别状态，零平台知识、零 `t()`。文字色契约：活动段 `text.accent`、失败 `error.dark`（暗色 `error.light`）、其余 `text.secondary`——珊瑚与 `error.main` 只落在进度条填充（色块），不做文字。
-- `sync-progress-bar.tsx` / `background-jobs-bar.tsx` — 旧 slot 的兼容展示模块；六个平台 Collection view 已迁移到 pipeline，不得用于新页面。
-- `collection-page-scaffold.tsx` — `CollectionPageScaffold<T>`（页面级编排，非哑组件）。`pipeline?` 位于标题后且常驻（`data-section="pipeline"` 行 = strip `flex:1 minWidth:0` + 闸门按钮，`mb: 3`）；`configurationNotice?` 是预构造 React slot，固定紧跟 Search，scaffold 不读取 provider 配置、不调用 `t()`。scaffold 内部读 `useCollectionGate(platform)`；旧 `progressBar/backgroundJobsBar` 仅作未迁移调用方 fallback。数据/phase/tag/grid 与 `page|primary-category` scope 语义不变。**`CollectionPageCopy.breadcrumbs?`（docs/25 Step 8）原样转给 `SectionTitleBar links`**——scaffold 不构造也不翻译祖先路径，只搬运；`copy.title` 与末项文案由 view 各自负责一致。**文案分两半（docs/32 Step 6）**：`CollectionPageCopy` 只剩平台文案 `title` / `breadcrumbs?` / `caption?` / `searchPlaceholder` / `noMatches` / `syncErrorText`；七处调用点逐字相同的外壳文案（获取按钮两态、两个错误态的标题与重试、同步失败横幅）由 scaffold 经 `useCollectionChromeCopy` 自取，`syncLabel`/`syncingLabel`/`loadFailed`/`retry`/`syncFailedBanner` 五个字段已删（不是改可选：没有调用方会覆盖）。横幅由 scaffold 拼 `chrome.syncFailed(copy.syncErrorText)`（`common.syncFailed`），仍只在 `hasSyncError && libraryCount > 0` 时渲染。同步失败横幅文字色 `error.dark`（暗色 `error.light`），`mb: 3`，不用 `error.main`。契约测试用哨兵文案 mock 该 hook，断言标题栏、两个错误态与横幅都读它。契约测试 `collection-page-scaffold.test.tsx` 锁定 title → pipeline → search → notice → operation → primary → tags → secondary → content 顺序。
-- `index.ts` — barrel，消费方单一 import 面
+## Scaffold
 
-**分支链**：8 分支 phase 顺序（tag-filtered→query-error→auth-failed→sync-error→skeleton→empty-library→no-matches→grid）由纯函数 `resolveCollectionPhase`（`app/hooks/collection-phase.ts`）持有并单测锁定；`CollectionPageScaffold` 消费它并映射到哑组件 + 平台 slot。**两套 popover**：主 grid popover 在 scaffold；`tag-filtered` phase 的 popover 封在 `TaggedItemGrid` 内部（scaffold 该 phase 不渲染主 popover）。**github 无 auth-failed**：省略 `authFailedState` slot，scaffold 在该 phase 回退渲染 `emptyState`（无 token 的配置门已在 view 早退，phase 不可达）。
+- 区块顺序固定：标题 → pipeline → 搜索 → 配置提醒 → 业务操作 → 主分类 → 标签 → 次分类 → 列表（`collection-page-scaffold.test.tsx` 锁定）。三行压缩布局被用户否决过，别重提（docs/19 P0-1）。
+- phase 顺序归纯函数 `resolveCollectionPhase`（`entrypoints/app/hooks/collection-phase.ts`），scaffold 只把 phase 映射到哑组件与平台 slot；不要在 scaffold 或 view 里另写分支。
+- 配置门早退（凭据未配置）留在 view，不进 scaffold；早退页面仍用 `SectionTitleBar` 保住单 h1。
+- 平台状态（库空 / 未登录 / 需配置）由 view 构造、经 slot 注入，scaffold 不认识它们。省略 `authFailedState` 时该 phase 回退渲染 `emptyState`。
+- 两套 popover：主 grid 的 popover 在 scaffold；`tag-filtered` phase 的 popover 封在 `TaggedItemGrid` 内，该 phase scaffold 不渲染主 popover。
+- `configurationNotice` 是预构造的 slot：scaffold 不读 provider 配置。
+- `CollectionPageCopy` 只放各平台不同的文案。逐字相同的外壳文案（获取按钮两态、错误态标题与重试、同步失败横幅）由 scaffold 经 `useCollectionChromeCopy` 自取，不要加回 copy 字段。
+- 同步失败横幅只在 `hasSyncError && libraryCount > 0` 时渲染（库空时走 sync-error phase）；文字色 `error.dark`（暗色 `error.light`），不用 `error.main`。
+- `breadcrumbs` 原样转给 `SectionTitleBar links`：scaffold 不构造也不翻译祖先路径。
+- slot 的 scope：`primary-category` scope 的区块在标签筛选接管时隐藏，`page` scope 常驻。
+- `progressBar` / `backgroundJobsBar` 两个 slot 与 `sync-progress-bar.tsx` / `background-jobs-bar.tsx` 是 pipeline 之前的遗留，已无调用方；新页面一律用 `pipeline`。
 
-## 消费方（各平台 section adapter）
+## 标题栏与面包屑
 
-- `sections/bilibili/`（B站）：bilibili-view（scaffold adapter + 服务端 keyword 搜当前夹 + 转录/排序 slots；排序三选作为 `secondaryCategory` 独占一行）、folder-chips（ChipRowShell+FilterChip，保留 loading 骨架/空态逻辑）、video-grid-skeleton（CardGridSkeleton + `CollectionCardSkeleton media="16/9"`）、video-card 的 ActionBar 各形态包在 `CollectionCardRow`
-**scaffold 消费方（六平台）**：
-- `sections/github-stars/`：github-stars-view（**消费 `CollectionPageScaffold`**；配置门早退渲染共享 `NeedsConfigState`（`connections/github`）；emptyState = 共享 `EmptyLibraryState`；无 authFailedState → 回退 emptyState；progressBar determinate；RepoGridSkeleton = CardGridSkeleton + `CollectionCardSkeleton header lines=3`）、language-chips（CollapsibleChipRow，All chip+色点逻辑）
-- `sections/x/`：x-view（**消费 `CollectionPageScaffold`**；无配置门；emptyState = 共享 `EmptyLibraryState` + `site`；authFailedState = 共享 `NotLoggedInState`，两种 auth 由 view 选键；progressBar 恒 indeterminate）、作者 chips = 共享 `FacetChips`（`components/collection-states/`，docs/32 Step 8；原 author-chips 已删）、tweet-grid-skeleton（`header lines=3`）
-- `sections/zhihu/`：zhihu-view（**消费 `CollectionPageScaffold`**；无配置门；emptyState = 共享 `EmptyLibraryState`（无 `site`）；authFailedState = 共享 `NotLoggedInState`；progressBar indeterminate）、收藏夹 chips = 共享 `FacetChips`（原 collection-chips 已删）、zhihu-grid-skeleton（`header lines=3`）
-- `sections/youtube/`：youtube-view（**消费 `CollectionPageScaffold`**；配置门早退与 authFailedState 都是共享 `NeedsConfigState`（`connections/youtube`，后者带 `sync`）；emptyState = 共享 `EmptyLibraryState`；progressBar indeterminate）、播放列表 chips = 共享 `FacetChips`（原 playlist-chips 已删）、youtube-grid-skeleton（`media="16/9"`）
-- `sections/bookmarks/`：bookmark-grid-skeleton（`header lines=2`）
+- 标题是页面唯一的 h1。传 `links` 时委托 `components/custom-breadcrumbs/`，不传时是 h1 + caption 堆叠；两条路径的 `data-section="title"`、`data-slot="caption"`、单 h1、action 槽必须一致。
+- crumb 的 `href` 写路由相对路径（`'/'`），不写 `'#/'`。
+- 收藏路由的祖先由 `entrypoints/app/hooks/use-collection-breadcrumbs.ts` 派生，view 不手写 crumb（`tests/platform-completeness-contract.test.ts` 逐平台断言 view 调用了它）。末项文案与加不加级的规则在 `entrypoints/app/hooks/CLAUDE.md`。
+- 禁用的获取按钮要解释原因时，Tooltip 必须包一层 `<span>`（disabled Button 不触发事件）。闸门暂停走 tooltip、label 不变；冷却走 `syncDisabledLabel` 倒计时。
 
-**平台特有 slot**：
-- `sections/bilibili/`：AutoTranscribe 与服务端排序均为 `primary-category` scope；标签结果接管时自隐。AutoTranscribe idle 态返回 null（不占行）。
-- `sections/bookmarks/`：正文提取为 page scope；标题栏与其他平台同构显示「立即获取」按钮（挂载自动同步保留，`startJob` 去重使按钮与 auto-sync 互不冲突）。
-- `components/tags/`：tagged-item-grid（`NoMatchesState` 空态 + CardGrid）、tag-filter-chips、tag-row（`CollectionCardRow`）
+## 卡片
 
-**Phase 5 已收敛**：`sections/collections/collections-view.tsx` 的 mixed grid 加载态消费 `CollectionCardSkeleton`；github/youtube 配置门早退页面用 `SectionTitleBar` 保留单 h1；chip 行头部图标颜色归 `ChipRowShell` 单一 owner。测试见 `chip-row.test.tsx`、`sections/collections/collections-view.test.tsx` 与 `sections/configuration-heading.test.tsx`。
+- `CollectionCard` 的 `tags` 与 `footer` 渲染在链接之外，防误触跳转。链接之外的行一律用 `CollectionCardRow`——它是这些行内边距的唯一 owner，别处不写 `px` / `pb`。
+- `1/1` 缩略图放在标题 / 正文块右侧、header 行之下：识别行（头像 + 作者）永远独占整个内容宽度，缩略图不得与它同行。
+- `disabled` 不做整卡 opacity：正文对比度不得降到 disabled 档，只对媒体去色降透明、标题降到 `text.secondary`。
+- focus ring 内缩 2px：卡片 `overflow: hidden` 会裁掉外扩的 ring。
+- 骨架用 `CollectionCardSkeleton` 选形态参数，与真实卡片同解剖；平台骨架文件不自画 Card 与高度。
+- `CARD_GRID_SIZE` 是卡片网格断点的唯一事实源。
 
-**面包屑（docs/25 Step 8）**：收藏路由的祖先一律 `首页 → 收藏夹 → 平台`，由 `hooks/use-collection-breadcrumbs.ts` 从 `collection-platform-registry.ts` 派生，view 不手写 crumb。末项文案取**导航名**（`nav.*`），因此它可能与页面 h1 不逐字相同（聚合页 h1「全部收藏」/ 末项「收藏夹」）；bilibili 的 `collections.sidebarTitle` 已对齐 `nav.bilibiliFavorites`。bilibili 详情页（`/collections/bilibili/:mediaId`）多一级收藏夹名（夹名因此从 caption 移除，不同屏重复）；**bookmarks 的 `:folderId` 不加级**——那是带「全部」chip 的可选筛选，不是必经层级。`tests/platform-completeness-contract.test.ts` 逐平台断言其 view 调用了该 hook。
+## Chips
 
-平台 N 接入（单列表形态）= `CollectionPageScaffold` + `CollectionCard` 装配的平台卡片 + `CollectionCardSkeleton` 形态参数 + chips/状态组件/文案，编排、卡片外壳与骨架零复制。
+- `FilterChip` 未选态不写 `variant`，吃主题默认 soft（写 `outlined` 才是覆盖）；选中态是 filled primary，归它独家持有。
+- `collapsible-chip-row.tsx` 的展开 / 收起 chip 刻意保留 `outlined`：它是行上的动作，不是又一个可选值。
+- 高基数的分类 / tag 筛选必须复用 `CollapsibleChipRow`，不得全量 map `FilterChip`；收起时已选的隐藏项要补渲保持可达。一维带计数的单选 facet 直接用 `components/collection-states/` 的 `FacetChips`。
+- chip 行头部图标颜色归 `ChipRowShell`（`text.secondary`），平台不得局部指定品牌色或主色。
+
+## 其它哑组件
+
+- `StateBox` 是 `components/empty-content/` 的薄适配层；标题是 `<p>`，永不是 heading。空态 / 错误 / 无匹配共用同一个密度。
+- `SearchField` 不写尺寸，高度由主题的输入框目标决定；`placeholder` 同时是它的可访问名。
+- `PipelineProgressStrip` 纯展示、无段级控件：暂停 / 继续归 `components/library-gate/`，由 scaffold 放在 pipeline 行尾。它自身不带 `mb`，外边距归 scaffold 的 pipeline 行。未知或零分母不伪造百分比。
+- strip 的文字色：活动段 `text.accent`、失败 `error.dark`（暗色 `error.light`）、其余 `text.secondary`。珊瑚与 `error.main` 只做进度条填充，不做文字。
+- `SyncNowButton` 的唯一消费方是 `components/collection-states/`；变体只有 `contained` / `soft`，由那里按规则选。

@@ -1,26 +1,24 @@
 # sections/bookmarks
 
-浏览器书签收藏页（显示名固定为 `Browser Bookmarks` / `浏览器书签`，路由为 `/collections/bookmarks` + `/collections/bookmarks/:folderId`）。消费共享 `CollectionPageScaffold`，固定顺序：标题/系统状态（含统一「立即获取」按钮）→ 搜索 → 配置提醒横幅（若有）→ 正文提取进度面板 → 文件夹主分类 → 标签 → 卡片列表。同步挂载时自动触发一次（`startJob` 去重使按钮与 auto-sync 互不冲突）；**同步成功后自动链式启动正文提取**（2026-07-26 推翻 `5a04c87` 的「手动提取」决策——控制面收敛为统一获取按钮 + per-platform 闸门，暂停/继续经 `pauseLibrary('bookmarks')`，不再有平台私有启停按钮）。
+浏览器书签收藏页（`/collections/bookmarks` + `/collections/bookmarks/:folderId`）。共享骨架（scaffold、`useCollectionLibrary`、Platform Sync funnel）的规则见 `entrypoints/app/hooks/CLAUDE.md` 与 `entrypoints/app/components/collection/CLAUDE.md`；这里只记书签页的不同之处。
 
-**面包屑**（docs/25 Step 8）：`useCollectionBreadcrumbs('bookmarks')` → `首页 / 收藏夹 / 浏览器书签`。**`:folderId` 不进面包屑**——文件夹是带「全部」chip 的可选筛选，不是必经层级（对比 bilibili：那里强制重定向到某个夹，夹是层级）。
+## 约束
 
-## 模块结构
+- 路由是文件夹的唯一事实源：`folderId` 经 `controlledFilter` 注入，`useBookmarks` 的返回类型刻意去掉 `filter` / `setFilter`（受控模式下 `setFilter` 是 no-op），chip 点击走 `navigate`。
+- 文件夹是带「全部」chip 的可选筛选，不是必经层级（bilibili 相反）：`:folderId` 不进面包屑，默认路由也不自动跳到第一个文件夹（docs/25 Step 8）。
+- 挂载即同步，是各平台里唯一不等按钮的：本地数据，无凭据、无限流。`startJob` 去重让它与获取按钮、daily 协调器互不冲突。这个触发留在 `use-bookmarks.ts`，不进共享 hook。
+- 同步成功后自动链式启动正文提取（`startBookmarkExtraction`）。没有平台私有的启停按钮，提取面板只展示进度；暂停 / 继续只归 per-platform 闸门。
+- 链式调用在 funnel 成功返回之后、funnel 之外：抓书签网页不是联系平台，不属于 Platform Sync。
+- adapter 用动态 `import('./use-bookmark-extraction')`，别改成静态：adapter 被 app 根的 daily registry 静态引用，静态 import 会把 defuddle / linkedom 拖进启动 chunk。
+- adapter 交给 funnel 的 `newItemIds` 恒为 `[]`，funnel 因此只补跑 embed 积压：提取只领 `'pending'`，早前中断留下的 `'chunked'` 未嵌条目只能靠这条 lane。
+- 提取是独立的 `extract` job，不与元数据的 `sync` job 互相去重。每条正文落盘后立刻 enqueue embed / tag，不等整轮结束——`'chunked'` 条目不会被再次领取，中途关页会留下永不处理的条目。
+- 库空用本地无按钮的 `EmptyState`，不用共享 `EmptyLibraryState`：挂载时已经同步过，库空表示一条 http(s) 书签都没有，而不是「从未同步」（docs/32 Step 6 D-c）。
+- 同步错误没有凭据 / 限流两类，view 把原始 `message` 原样显示，不走 `syncErrorMessage`。
+- favicon 走 MV3 本地 `_favicon` 端点（`bookmark-display.ts`，manifest 的 `favicon` 权限），不要换成第三方 favicon 服务：那会把用户的书签域名泄露出去。
+- `FolderChips` 不迁到共享 `FacetChips`：形状不同（无 per-chip 计数，选中态来自路由）。
 
-- `bookmarks-view.tsx` — scaffold Adapter：常驻 pipeline 为 Fetch → Extraction → Embedding/Tagging 并行，段装配/标签/coverage key 经共享 `useCollectionPipeline`（`app/hooks/`，docs/20 中-7）——本 view 注入默认 progress 的 Fetch runtime（本地书签无 `fetchedCount`）、`extraction` content 段（`extraction.extractJob`）与 `extraRefreshKey: extraction.running`；Search 后注入共享 provider Configuration Blocker notice。coverage/runtime、统一获取按钮、文件夹、卡片和 page-scope operation 不变。`copy` 只传平台文案（`syncErrorText` 是同步错误的原始 `message`），外壳文案与同步失败横幅由 scaffold 自取（docs/32 Step 6；原来无错误时传 `''` 的横幅分支随之消失，横幅本就只在 `hasSyncError && libraryCount > 0` 时渲染）；caption 的「上次同步」用 `common.lastSynced`。
-- `bookmark-extraction-panel.tsx` — 正文提取 operation adapter：**纯进度展示**（无 start/pause/resume 按钮）。idle/running/pausing/paused 文案 + favicon/进度条；pausing/paused 直接镜像共享 job phase（闸门驱动），复用 `bookmarks.extractionPausing/extractionPaused` key。
-- `use-bookmark-extraction.ts` — 正文提取使用独立 `bookmarks:extract` job，不与挂载触发的元数据 `bookmarks:sync` 互相去重；`startBookmarkExtraction()` 是自动链式的目标（sync runner 与每日 auto-sync registry 都调它）。runner 把 `startJob` 的 cooperative checkpoint 透传给 `extractPendingBookmarks`（每条领取前 checkpoint → 闸门可暂停/继续、born-paused 生效）；原 bespoke AbortController 暂停模块（`bookmark-extraction-control.ts`）已删除，phase 从 job phase 派生，`lastProgress` 兜底改用 `job.lastProgress`（job store 完成时保留末次 progress，失败 run 回退上一次成功值——面板同时进入 error 展示，可接受）。每条 durable content 成功后立即 enqueue 共享 Embed/Tags 双 lane，Extraction 不等待两 lane 完成。job 命名空间是模块级 `JOB_PLATFORM = jobPlatformForCollection(PLATFORM)`（docs/32 Step 5，契约测试禁字面量；今天派生值恰为 `'bookmarks'`），`itemPlatform` 用 `PLATFORM`。这是 spec `platform-onboarding.md` §4.4「延迟正文」的模板实现。
-- `bookmarks-sync-adapter.ts` — 共享 Sync Adapter（audit #6）：`runBookmarksSync(onProgress, control)` 单点定义「书签同步成功意味着什么」——本地书签树同步（无凭据，所以每次都是一次尝试）经 `hooks/platform-sync.ts` 的 funnel `runPlatformSync(platform, control, sync)`（docs/32 Step 1：记尝试 → 同步 → 成功先派发 embed/tag lanes 再记成功 / 失败记失败并原样 rethrow；job namespace 在 funnel 内经 `jobPlatformForCollection` 派生），回报 `{ fetched: totalBookmarks, inserted, newItemIds: [] }`：空 ids = funnel 只派发 **backlog embed lane**（提取只领 `'pending'`，早前中断留下的 `'chunked'` 未嵌积压靠这条批处理 lane 重试）；**funnel 成功返回之后**才链式 `startBookmarkExtraction()`（抓网页不是联系平台，不进 closure；恢复 `5a04c87` 删掉的链路，控制面归闸门；动态 import 保持 defuddle/linkedom worker 不进 App 启动 chunk）。手动页面 runner 与 daily registry 引用**同一函数**。契约测试 `bookmarks-sync-adapter.test.ts`；另导出 `bookmarksAutoSyncPolicy`（daily 触发策略：本地数据恒就绪），app 根 `collection-platform-auto-sync.ts` 将其与 Sync Adapter 配对进 daily registry（docs/20 高-3）
-- `use-bookmarks.ts` — 共享 `useCollectionLibrary` 的薄 adapter（docs/20 中-6；不再自带 debounce / 分页取消 / generation 主循环；59 行，docs/32 Step 7）：模块级 `queryFn = facetQuery(getBookmarks, 'folderId')`（`filter → folderId`，`null` filter / `''` search 省略），`facetsFn = getFolders`、`platform = PLATFORM`（模块级 `const PLATFORM = 'bookmarks'`，`JOB_PLATFORM` 也由它派生；「上次同步」由共享 hook 按它读 Platform Sync Record，lib 包装 `getLastSyncedAt` 已删，docs/32 Step 9）、`syncFn = runBookmarksSync`、`jobPlatform = JOB_PLATFORM`（= `jobPlatformForCollection(PLATFORM)`，job 命名空间，docs/32 Step 5）。**返回通用字段不改名**（view 读 `items`/`facets`），返回类型 `UseBookmarksReturn = Omit<UseCollectionLibraryReturn<…>, 'filter' | 'setFilter'>`——刻意不暴露 filter：路由是 folder 的唯一事实源，受控模式下 `setFilter` 是 no-op（docs/32 Step 7 起由 `Omit` 派生，不再手写字段表）。错误分类不注入（docs/32 Step 4）：`syncError` 是共享 `CollectionSyncError`，本地浏览器数据既无凭据也无限流，只会是 `unknown`，view 把它的 `message` 原文放进横幅与错误态——与改前逐字相同，零新键。路由 `folderId` 经 `controlledFilter: folderId ?? null` 受控注入（undefined = 「全部」；换 folder 由共享 hook 在 render 期回第 1 页，无废查询）。挂载 `useEffect(() => sync())` 留在 adapter（触发策略归 adapter），`startJob('bookmarks','sync')` 与 daily 协调器 / 获取按钮去重。单测 `use-bookmarks.test.tsx`（remount 去重 / extraction 链 / backlog 派发 / route→folder 映射与换 folder 回页 1）。
-- `folder-chips.tsx` — 文件夹 chip 行：共享 `CollapsibleChipRow`（folder icon + `bookmarks.foldersTitle`，icon 继承 shared secondary 色）——「全部 (N)」chip（选中态 = 无 folderId；`common.all` 在代码里拼数，与其余四个平台同写法，渲染逐字不变——原来把 `({{count}})` 烤进字符串的 `bookmarks.allFolders` 已删，docs/32 Step 6；展开/收起 `common.showMore`/`showLess`）+ 各文件夹（**无 per-chip 计数**，bilibili 风纯名称）。点击 = `onSelect(folderId|undefined)` 驱动 navigate
-- `bookmark-card.tsx` — 书签卡片 = 共享 `CollectionCard` 装配：`header` favicon（Avatar rounded 20px，MV3 本地 `_favicon` API `chrome.runtime.getURL('/_favicon/?pageUrl=…&size=32')`，无图回退 bookmark icon）+ domain caption；`title` 2 行 clamp；`date` `formatDateTime(dateAdded)`（外壳右格 noWrap）；`tags`（共享 `TagRow`，外壳保证在链接之外；undefined 时整行不渲染）。`BookmarkCardProps { bookmark, tags?, onEditTags? }`。`href = url` 真实锚点新标签打开（不再 `window.open`）。`useTranslation()` 订阅保证 locale 切换 re-render 格式化输出
-- `tagged-bookmark-card.tsx` — 一行 `TaggedBookmarkCard = taggedCard(BookmarkCard, 'bookmark', toBookmarkItem)`（`components/tags/` 的工厂，docs/32 Step 8）：TaggedItemGrid `renderCard` 与 `/collections` `CARD_ADAPTERS` 的书签 adapter。mapper 就是 `lib/bookmarks/bookmarks-sync-service.ts` 分页查询导出的 `toBookmarkItem`（url 取 `originalUrl`，`domain`/`dateAdded` 经 `narrowBookmarkMeta`），标签网格与文件夹网格读同一份映射——此前本文件手抄一份，`dateAdded` 回退还分叉过（docs/32 Step 2）
-- `bookmark-grid-skeleton.tsx` — `BookmarkGridSkeleton`：共享 `CardGridSkeleton` 外壳（grid-of-8）+ 共享 `CollectionCardSkeleton`（`header` 行 + 两行文字，匹配书签卡片形态），view 与 TaggedItemGrid（`skeleton` prop）共用
+## 指针
 
-## 约定
-
-- 排序固定 dateAdded 降序（MVP 无排序控件）；platformMeta 形状见 `lib/bookmarks/CLAUDE.md`
-- 三种非常态：库空（本地 `EmptyState` 无按钮，48px secondary glyph——挂载已同步过且一条 http(s) 书签都没有，不是「从未同步」，所以刻意不用共享 `EmptyLibraryState`，docs/32 Step 6 D-c）/ 同步失败（ErrorState+retry=sync）/ 筛选无结果（NoMatchesState）；虚线框为共享 `StateBox`
-- 路由/导航：`main.tsx` 路由 `collections/bookmarks` + `collections/bookmarks/:folderId` + `nav-config.tsx` Collections children 叶子（`nav.bookmarks`）；叶 active 判定见 `components/nav-section/nav-active.ts`（`isNavItemActive` 段边界匹配，平台叶 `deepMatch: true`，`:folderId` 详情路由归属 bookmarks 叶）。默认 `/collections/bookmarks`=「全部」，无 auto-nav 到首个文件夹（不同于 bilibili）
-- 搜索限定当前选中文件夹（folderId + search 同时传 `getBookmarks`）；「全部」时搜全库
-- 标签/Embedding：成功提取后逐条立即 enqueue，避免 run 末批处理制造 orphan；独立 `bookmarks:embed|tag` lane 串行领取 item 并在领取前 checkpoint，暂停互不影响。
-- icon：`solar:bookmark-bold-duotone`（nav/卡片回退）+ `solar:folder-with-files-bold-duotone`（文件夹 chip），`icon-sets.ts` 离线注册
+- `use-bookmark-extraction.ts` 是 `.trellis/spec/frontend/platform-onboarding.md` §4.4「Deferred content」的模板实现。
+- `platform_meta` 形状与正文提取管线：`lib/bookmarks/CLAUDE.md`。
+- 测试：`use-bookmarks.test.tsx`、`bookmarks-sync-adapter.test.ts`、`use-bookmark-extraction.test.ts`。

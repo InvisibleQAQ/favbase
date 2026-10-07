@@ -1,65 +1,61 @@
 # lib/chat
 
-Chat（Agentic RAG 知识库助手）平台无关 lib 层，供 app.html `sections/chat` 消费。
+Chat（Agentic RAG 知识库助手）的平台无关 lib：hybrid 检索、Knowledge Tool、agent 循环、多会话持久化。app.html 的 `sections/chat` 与 Background 的 Agent Bridge 都消费它。
 
-## 当前状态（P1 + P2 + P3 + P4 + P5）
+## 约束
 
-`config.ts`（LLM 解析）+ `retrieval.ts` / `rrf.ts` / `types.ts`（Hybrid 检索核心）+ `tools.ts` / `prompts.ts` / `agent.ts`（agent 循环 + 工具）+ `history.ts`（多会话持久化，PGlite `chat_conversations`）已落地。
+- 检索面（`retrieval.ts` / `tools.ts` / `agent.ts`）对知识库表只读：只发 `SELECT`。唯一写入是 `history.ts` 写 chat 自有表 `chat_conversations`（`docs/adr/0001`）。
+- Chat 与 Agent Bridge 共用同一套 Knowledge Tool（`chatTools`），任何一边都不得有另一边没有的工具（`CONTEXT.md` Relationships）。`chatTools` 的 key 就是模型看到的工具名。
+- 读写函数显式吃 `db`，工具经 `experimental_context` 取（`contextDb`），不调 `getDb()`：Agent Bridge 在 SW 里注入只读 proxy，测试注入内存 PGlite。
+- 新工具的 inputSchema：`.describe()` 放 `z.object(...)` 链尾、字段 snake_case、`platform` 用 `z.enum(COLLECTION_PLATFORMS)`、返回值把关键字段拍平到顶层。
+- Chat 复用主 LLM 配置（`config.ts`），刻意不设独立的 chat provider 设置。
+- prompt 走原生 tool-calling，不叠加 `Thought:/Action:` 文本模板。prompt 是模型指令不是 UI 文案，中文不走 i18n。
 
-## 读写铁律（2026-07 收窄）
+## Service Worker 可达（`tools.ts` / `retrieval.ts` 被 Agent Bridge tool registry 静态加载）
 
-chat 检索面（`retrieval.ts` / `tools.ts` / `agent.ts`）对知识库表**只读**——只发 `SELECT` / `db.execute(sql\`SELECT ...\`)`，绝不 insert/update/delete/DDL。唯一写入是 `history.ts` 落 chat 自有表 `chat_conversations`（会话持久化，见下），不触碰任何知识库表。
+- 禁止动态 `import()`：HTML 规范不许 `ServiceWorkerGlobalScope` 用它，Chrome 直接 reject，Vite 的 preload 包装又把它报成误导性的 `window is not defined` / `document is not defined`。所有依赖一律静态 import。
+- 只走 leaf、不走 barrel：`@/lib/database/schema`、`@/lib/collections/processing-coverage` 与 `configuration-blockers`、`@/lib/storage/settings` 与 `resolve`、`@/lib/tagging/tag-queries`。database / collections barrel 会把 PGlite 打进 `background.js`。
+- 这类错误 `pnpm test` 全绿、`pnpm build` 才炸。守卫：`tests/agent-bridge-background-bundle-contract.test.ts`（源码层）、`scripts/check-background-bundle.mjs`（产物层）。
+- `conversation-runtime.ts` 对 `./agent` 的动态 import 是刻意的（纯所有权测试不该加载 WXT storage 模块图）；它只跑在 app.html，不得进入 SW 可达图。
 
-## 模块结构
+## 模型可见面
 
-- `config.ts` — chat LLM 解析。`resolveChatModel(settings: UserSettings): { enabled: true; model: LanguageModel } | { enabled: false }`。**复用主 LLM 配置**：`deriveLlmDraft(settings)`（`lib/hooks/useSettings`）→ `createLanguageModel(...)`（`@/lib/ai`），不新增设置 UI。`enabled = !!apiKey`（活动 provider 无 key 即 false，供 view 渲染空态）。纯派生，无存储副作用、无硬编码 key。
-- `types.ts` — 检索共享契约：`FusedHit`/`RrfOptions`、`RetrievalItem`（`{ id, title, url, platform }`——来源卡片直接开 `url`，无 item 级内部详情路由，故不带 platform-native id）、`RetrievalHit`（`{ chunkId, chunkText, score, item }`）、`HybridRetrieveOptions`（`topK`/`minScore`/`platform`/`tagId`）、`RetrievalDeps`（注入 `embedQuery`，测试免网络）。
-- `rrf.ts` — `reciprocalRankFusion(lists: string[][], opts?: { k?, topK? }): FusedHit[]` 纯函数（零 IO，可单测）。`score = Σ 1/(k+rank)`，**只用排名不用原始分**（融合 cosine 与 word_similarity 两种不同量纲的健壮之道），k 默认 60；列表内同 id 只计首次；`score DESC` + `id ASC` 确定序；`topK` 截断。
-- `retrieval.ts` — `hybridRetrieve(db, query, opts?, deps?): Promise<RetrievalHit[]>`。两臂并行：
-  - **语义臂** = `embedQuery(query)`（默认 `getEmbeddingSettings`→`createEmbeddingModel`→`embedText`，与索引期同模型保证维度一致；`@/lib/embedding/config` 必须 **静态 import**——Service Worker 不允许动态 `import()`（HTML 规范禁止 `ServiceWorkerGlobalScope` 用 `import()`），Agent Bridge 在 SW 里执行这条路径；storage 侧的代价由 `lib/storage/settings.ts` 的懒 `defineItem` + 走 `@/lib/storage/settings` leaf 抵消）→ `semanticSearchChunks`。未配置 embedding（`embedQuery` 返回 `null`）或**维度漂移**（`EmbeddingDimensionError`）时静默降级为仅关键词臂，绝不抛。
-  - **关键词臂** = `item_chunks.chunk_text` 上 `ILIKE '%'||escapeLike(q)||'%' ESCAPE '\'`（GIN `gin_trgm_ops` 加速的精确子串召回）+ `ORDER BY word_similarity(q, chunk_text) DESC`（排名）。
-  - RRF 融合两臂 chunkId 排名 → topK → 回连 `items`（`platform`/`tagId` 过滤在 SQL 里，且在 RRF 截断**之前**，严格过滤不会被全局 topK 饿死）。空白 query / 无候选 → `[]`。
+- 平台清单与 content kind 清单一律派生（`PLATFORM_LIST`、`CONTENT_KIND_LIST`、`CHAT_SYSTEM_PROMPT`），不得手写：手写清单会让 zod enum 接受新平台、而文本仍只说旧的，模型永不按新平台过滤。
+- 清单用平台 id 不用显示名：显示名是 `entrypoints/app/` 侧的 `LocaleKeys`，`lib/` 引不到。
+- 工具的盲区（读不到的状态、刻意不做的能力、不可知的分母）必须写进 description / system prompt，并写明模型下一步该做什么；只写在代码注释里等于没写（`.trellis/spec/guides/silent-failure-thinking-guide.md` Gotcha 2）。
+- 盲区守卫要从工具实际调用的函数派生再对账文本，不手写限制清单。模型面守卫全部放在 `tools.test.ts` 一个文件里，别拆到 `prompts.test.ts`。
+- `top_k` 的范围与默认值只有 `tools.ts` 三个不导出常量一处事实源，zod 链与 describe 串都由它们拼。唯一手写副本是 SKILL.md 的 `--limit <1-20>`，由 `tests/agent-bridge-cli-aliases.test.ts` 对账。
+- `retrieval.ts` 自己的 `DEFAULT_TOP_K` 是库默认值，模型看不到（工具总是显式传 `topK`）。
+- `getItemContent` 的 `found`（有已提取正文）不得改义：已发布 CLI 捆绑的 SKILL.md 描述的就是它，扩展与 CLI 各自发版。新状态只能纯追加字段（如 `item_exists`）。
+- `getItemContent` 收到非 uuid 的 id 时让 Postgres 抛错、工具报错，刻意不兜底。
+- `getProcessingCoverage` 存在的理由：`searchKnowledgeBase` 的 `count: 0` 有三种成因（真没收藏 / 还在处理 / provider 没配所以永远不会处理），要给三种回答。
+- `getProcessingCoverage` 的 `blockers` 走共享的 `deriveConfigurationBlockers`，与 Collection 页横幅同一条规则，别另写一份。
 
-## Service Worker 禁止动态 import（2026-08-31）
+## 检索
 
-`lib/chat` 的模块被 Background Agent Bridge 的 Knowledge Tool registry 静态加载。**Service Worker 里不能出现动态 `import()`**：HTML 规范禁止 `ServiceWorkerGlobalScope` 使用 `import()`，Chrome 直接 reject；Vite 的 `__vitePreload` 包装层又会在 `vite:preloadError` 上报里把这条 rejection 变成误导性的 `window is not defined` / `document is not defined`。历史上 `listTags`（`@/lib/tagging/tag-queries`）与 `searchKnowledgeBase`（`@/lib/embedding/config`）就是因此在外部 agent 侧全线失败，只有无动态 import 的 `getItemContent` 能用。
+- 关键词臂只能用 trigram + `ILIKE`：PGlite 没有 `tsvector` 与中文分词，做不了 BM25，别「升级」成全文检索。
+- 关键词排名用 `word_similarity` 不用 `similarity()`：短 query 对长 CJK chunk，后者分数低到无法排序（实测 0.105 对 0.4）。
+- RRF 只用排名不用原始分：cosine 与 `word_similarity` 量纲不同，别改成加权分数。
+- `platform` / `tagId` 过滤写在 SQL 里、且在 RRF 截断之前，否则严格过滤会被全局 topK 饿死。
+- 语义臂在未配置 embedding 或维度漂移（`EmbeddingDimensionError`）时静默降级为仅关键词臂，绝不抛。
 
-两道守卫：源码层 `tests/agent-bridge-background-bundle-contract.test.ts`（`lib/chat/tools.ts` / `lib/chat/retrieval.ts` / `lib/agent-bridge/tool-registry.ts` 不得含 `import(`），产物层 `scripts/check-background-bundle.mjs`（SW 可达模块图零动态 `import()`）。
+## 会话
 
-## 关键词臂的 PGlite 约束结论（已代码验证，见 research/retrieval-design.md）
+- `agent.ts` 必须显式传 `stopWhen: stepCountIs(N)`：AI SDK v6 默认 `stepCountIs(1)`，不设就是工具调用后不作答的单步。
+- 持久化的 `modelMessages`（含 tool-call / tool-result 轮次）是唯一事实源；display 气泡与来源卡片在加载时由 `conversation-runtime.ts` 重建，不另存。
+- `saveConversation` 存全量、不裁剪。滑窗 `trimMessages` 只在喂模型处调用（`conversation-runtime.ts`）。
+- `trimMessages` 会丢弃窗口开头的非 user 消息：脱离 tool-call 的孤立 tool-result 会被部分 provider 拒绝。
+- `conversation-runtime.ts` 是会话异步所有权的唯一 owner：单调 generation 让过期的 load / stream / finally 无权提交。
+- 主动 `stop` 不撤销 owner，partial answer 仍折回原会话并持久化；switch / new / 删除当前会话才撤权并 abort。
+- 同一会话的 save / delete 串行，delete tombstone 保证删除是最终 mutation。守卫：`conversation-runtime.test.ts`。
 
-- `pg_trgm` **已装且可用**：`lib/database/migrations/v001-init.ts:7` `CREATE EXTENSION` + `:130/:131` 两个 `gin_trgm_ops` GIN 索引。`similarity()` / `word_similarity()` / `%` / `ILIKE` 实测全部可用。
-- **无** `tsvector` / 中文分词（`zhparser`/`pgroonga`）——故关键词臂只能 trigram/ILIKE，**非** BM25。
-- 排名用 `word_similarity` 而非 `similarity()`：实测短 query 对长 CJK chunk，`similarity('…机器学习…','机器学习')=0.105`（弱）vs `word_similarity=0.4`（对，非对称最佳子串匹配）。二者皆 pg_trgm 函数，`word_similarity` 是本场景技术正解（对 prd「优先 similarity」的有据偏离）。
+## 已知缺口
 
-## Agent 循环 + 工具（P3）
+- `getProcessingCoverage` 的 `blockers` 不穷举：`asrBlocked` 恒为 `false`（ASR 阻塞的判据是 bilibili 状态机的 wait signal，这里拿不到），正文卡在未配置的转录 provider 上时它是空的。description 已写明，改动时不得删。
+- `acquisition.total` 恒为 `null`（远端总数不可知），description 写明不得声称同步完整。
+- 语义臂因维度漂移降级时（provider 已配置，查询向量与列维度不符）只在 SW console 打一条 warn，模型与外部 agent 都看不到：`blockers` 只抓得到「embedding provider 没配」那一种。`docs/27` Step 3 只剩这一项与 chunk 级计数未做。
 
-- `tools.ts` — AI SDK v6 `tool()` 定义，纯对象 registry `chatTools = { searchKnowledgeBase, getItemContent, listTags, getProcessingCoverage }`（**key 即模型看到的 tool 名**，prompt/描述用同名交叉引用）。DB handle 经 `streamText` 的 `experimental_context` 注入，tool `execute(input, { experimental_context })` 里 `contextDb(...)` 取 `db`（缺则抛，`ChatToolContext` 契约共享给 `agent.ts`）。**全部只读**（SELECT）。`tools.ts` / `retrieval.ts` 的 schema value import 必须走 `@/lib/database/schema` leaf；Background Agent Bridge 会静态加载工具 registry，若走 database barrel 会把 PGlite 打进 `background.js`。**同一条规则也适用于 `@/lib/collections` barrel**（2026-09-08 实测踩到）：该 barrel 经 `collections-query` 拖 drizzle + `@/lib/database`，所以 coverage 工具必须直接取 `@/lib/collections/processing-coverage` 与 `@/lib/collections/configuration-blockers` 两个 leaf。第一版走了 barrel，`pnpm test` 全绿而 `pnpm build` 才炸（`Background module graph contains PGlite markers: pglite.wasm, Postgres tried to execute, DatabaseRpcHandler`）——现已由 `tests/agent-bridge-background-bundle-contract.test.ts` 在源码层提前拦下。inputSchema 遵循 course 规则：`.describe()` 放 `z.object(...)` 链尾、`platform` 用 `z.enum(COLLECTION_PLATFORMS)`、字段 snake_case、返回把关键字段拍平到顶层。
-  - **模型看到的平台清单一律派生，不得手写**（docs/26 Step 1）：`tools.ts` 的 `PLATFORM_LIST = COLLECTION_PLATFORMS.join('/')` 供五处文本（`searchKnowledgeBase`/`getProcessingCoverage` 的 description + 三处 `.describe()`）复用；`CONTENT_KIND_LIST` 同理，从 `PLATFORM_DESCRIPTORS[p].contentKind` 去重派生给 `getProcessingCoverage` 的 description。手写清单会让 `z.enum(COLLECTION_PLATFORMS)` 接受新平台、而 prompt 仍告诉模型只有旧的那几个，Chat 与 Agent Bridge 于是永不按新平台过滤（docs/26 附录 A 第 3 条；该条已从 platform-onboarding.md §9 收走）。用 **id 不用显示名**：显示名是 `entrypoints/app/` 侧的 `LocaleKeys`，`lib/` 不得 import，且模型自己会把「B站」映射成 `bilibili`。
-  - `searchKnowledgeBase`：包 `hybridRetrieve`。字段 `query`(必填) / `platform`?(enum) / `tag_id`? / `top_k`?(`TOP_K_MIN`-`TOP_K_MAX`，默认 `DEFAULT_TOP_K`)。返回 `{ count, results: [{ item_id, title, url, platform, chunk_text, score }] }`。描述强制"回答收藏内容问题前必须先调用"。**`top_k` 的范围与默认值只有这三个常量一处事实源**（docs/27 Step 6，三者都不导出）：zod 链与模型可见的 describe 串都由它们拼出；CLI 不持有任何副本（`AliasFlag.help` 从未被 `--help` 渲染，已按 D9 删除），唯一手写副本是 SKILL.md 的 `--limit <1-20>`（shipped markdown 引不到常量），由 `tests/agent-bridge-cli-aliases.test.ts` 对账 `describeTools()` 产出的 `top_k.minimum`/`maximum`——describe 串也在那里查，因为它只在 zod 链继续用常量时才诚实。`retrieval.ts` 自己的 `DEFAULT_TOP_K` 是 `hybridRetrieve` 的库默认值，本工具总是显式传 `topK`，模型看不到它。
-  - `getItemContent`：字段 `item_id`(来自 search 结果)。一条 `items LEFT JOIN item_contents`（`item_contents.item_id` 是 PK 兼级联 FK，每项至多一行正文；`plain_text` NOT NULL，故 join 出 null 只可能是「无正文行」），返回 `{ found, item_exists, item_id, content }`。**`found` 语义不变**（有已提取正文）——已发布的 `favbase@0.1.0` 捆绑的 SKILL.md 描述的就是它，扩展与 CLI 各自发版，改义会让旧 SKILL.md 撒谎；**`item_exists` 是 docs/27 Step 6 纯追加**：此前 id 写错与「存在但还没正文」同为 `found:false`，模型只能猜。description 按 Gotcha 2 写明两态**与下一步**：`item_exists=false` = id 错了，回 searchKnowledgeBase 重取，绝不说「用户没收藏」；`item_exists=true` 且 `found=false` = 有项无正文，用片段/标题作答，问进度用 getProcessingCoverage。非 uuid 的 id 让 Postgres 抛错 → 工具报错（CLI exit 3），语义已准确，不处理。
-  - `listTags`：包 `getAllUsedTags(platform?)`。字段 `platform`?(enum)。返回 `{ count, tags: [{ id, name, count }] }`；`tagging/tag-queries` leaf 走**静态 import**（同上：SW 禁动态 `import()`），leaf 本身不 import tagging/database barrel，故 `chatTools`/Agent Bridge registry 仍不加载 tagging 写路径或 PGlite。
-  - `getProcessingCoverage`：包 `getAllProcessingCoverage(db)`（省略 `platform`，一条 `GROUP BY`）或 `getProcessingCoverage(platform, db)`。字段 `platform`?(enum)。返回 `{ platforms: [{ platform, acquisition, content: { done, total, kind }, embedding, tagging, blockers }] }`。**它存在的唯一理由**：`searchKnowledgeBase` 的 `count: 0` 有三种成因——用户真没收藏 / 收藏了还在处理 / 收藏了但 provider 没配所以永远不会处理——三者要给三种回答，而前两者都会被模型说成「稍后再试」。`content.kind` 取 `PLATFORM_DESCRIPTORS[p].contentKind`（派生，非手写），让模型说「已转录」而不是「已完成正文获取」；`blockers` 走共享的 `deriveConfigurationBlockers`（`@/lib/collections`），与 Collection 页横幅同一条规则，故 UI 与模型不会对「为什么这个阶段不动」给出互相矛盾的解释。`asrBlocked` 恒传 `false`——ASR 阻塞的判据是 bilibili 状态机的 wait signal，Knowledge Tool 没有状态机上下文（PRD D4 明确记录的限制）。**这条限制必须写进 description**：`blockers` 因此不是穷举的，正文卡在未配置的转录 provider 上时它是空的，而模型会把空 `blockers` 读成「还在处理，稍后再试」——正是本工具要消灭的那句话。故描述明说 `blockers` 只判定 `embedding`/`llm` 两项、`content.done` 长期不动时同样要指向设置页（`tools.test.ts` 的 honesty 守卫按**派生出的** capability 集合对账，ASR 哪天真接上，文本不跟着改就会红）。`acquisition.total` 恒为 `null` 且描述里写明「不得声称同步完整」。三个 provider resolver（`settingsStorage` / `resolveEmbeddingConfig` / `resolveLlmConfig`）同样必须**静态 import**。
-- `prompts.ts` — 契约式（非人设）system prompt。稳定前缀 `CHAT_SYSTEM_PROMPT`（平台清单同样派生自 `COLLECTION_PLATFORMS`，理由同上；7 条硬规则：须先检索/基于结果作答并标注来源/无结果如实说/不足则追问/只读边界/不臆造/Markdown 输出，原生 tool-calling **不叠加** "Thought:" 文本模板）+ 动态后缀 `buildContextSuffix({ now })`（注入当天 ISO 日期，模型不知"今天"）。prompt 是模型指令非 UI 文案，含中文合规（i18n 守卫只扫 `entrypoints/**`）。
-- `agent.ts` — `createChatStream({ model, messages: ModelMessage[], db, now, abortSignal? })` 包 `streamText({ model, system: prefix+suffix, messages, tools: chatTools, stopWhen: stepCountIs(8), temperature: 0.3, experimental_context: { db }, abortSignal })`。**必须显式 `stopWhen: stepCountIs(8)`**（v6 默认 `stepCountIs(1)` 单步陷阱）。返回 `StreamTextResult` 供 hook 消费 `fullStream`。
+## 指针
 
-## 多会话持久化（P4，2026-07 迁至 PGlite）
-
-- `conversation-runtime.ts` — Conversation 异步运行所有权 Module，也是并发测试 Surface。对外提供不可变 snapshot + `subscribe` 以及 load/new/switch/delete/send/stop 命令；单调 generation 让 stale load/stream/catch/finally 无权提交，stream 的 Conversation id、model messages、draft 与 sources 都是 run-local 快照。主动 `stop` 不撤销 owner，故 partial answer 仍折回原 Conversation；switch/new/active-delete 才撤权并 abort。持久化只接收捕获的 `ChatConversation`，同 id 的 save/delete 经 mutation lane 串行，delete tombstone 保证删除是最终 mutation。生产 Store Adapter 复用 `history.ts` + `initDbProxy()`，LLM Adapter 懒加载 `agent.ts`，避免纯 ownership 测试触发 WXT storage 模块图。
-
-- `history.ts` — 会话 CRUD over PGlite `chat_conversations` 表（每会话一行，`model_messages` jsonb **全量**存储；entity 见 `lib/database/entities/chat-conversations.ts`，迁移 v005）。CRUD 显式 `db: FavbaseDb` 首参（镜像 `retrieval.ts` 仓库模式，亦是 in-memory PGlite 测试的前提）。
-  - `ChatConversation = { id: string; title: string; modelMessages: ModelMessage[]; createdAt: number; updatedAt: number }`（域类型不变，时间戳 ms epoch number；行映射 `rowToConversation` 做 timestamptz Date ↔ number 转换）。**持久 `modelMessages`（模型态，含 tool-call/tool-result 轮次）为唯一事实源**——display 气泡 + 每条 assistant 的来源卡片都在加载时由 `conversation-runtime.ts` 重建。`id` 用 `crypto.randomUUID()`（app.html 可用）。
-  - CRUD：`listConversations(db)`（`updatedAt` 降序）/ `loadConversation(db, id)` / `saveConversation(db, conv)`（`onConflictDoUpdate` upsert，**不 trim 存全量**——滑窗职责移到喂模型处；update 路径 v001 `updated_at` 触发器刷新时间戳）/ `createConversation()`（新空会话，未落盘）/ `deleteConversation(db, id)`。
-  - `deriveTitle(modelMessages)` — 从首条 user 消息取文本、折叠空白、截断 40 字（`modelMessageText` 兼容 string / text-part 数组两种 content）。
-  - `trimMessages(messages, max=MAX_MESSAGES=40)` — 滑动窗口：取末 `max` 条后**丢弃开头非 user 消息**，使窗口从 user 轮开始，避免模型看到孤立的 tool-result 脱离其 tool-call（部分 provider 会拒绝）。**调用点在 `use-chat-agent.send` 喂 `createChatStream` 前**（模型上下文预算），存储层不裁剪。
-- 来源卡片跳转策略、tool-call 四态富渲染见 `sections/chat/CLAUDE.md`。
-
-## 测试
-
-- `conversation-runtime.test.ts` — fake Conversation Store/stream Adapter 的确定性并发契约：load 乱序、stale stream 不串写、旧 finally 不清新运行、save/delete 最终顺序、主动 stop 在有 partial answer 或首 token 前都保留并持久化当前 Conversation。
-- `rrf.test.ts` — 纯函数：空输入 / 单列表 1/(k+rank) / 多列表重叠累加 / 分数并列 id 升序 / k 影响 / topK 截断 / 列表内重复 id 只计首次。
-- `retrieval.test.ts` — in-memory PGlite（`PGlite.create` + vector/uuid_ossp/pg_trgm + `runMigrations`，同 `vector-store.test.ts` 搭法）：blank query→[] / 仅关键词臂（`embedQuery`→null）/ 两臂融合（注入 oneHot 向量 + minScore，双臂命中 chunk 居首）/ 维度不匹配降级不抛 / 平台过滤 / 标签过滤 / 无匹配→[] / 不选非命中 chunk。所有测试注入 `embedQuery`，故 storage 不入图、无需 mock。
-- `tools.test.ts` — `vi.mock('./retrieval')` + `vi.mock('@/lib/tagging/tag-queries')`（免网络）+ 三个 provider resolver mock（`vi.hoisted` 的 `providerState` 驱动 blocker 臂），`getItemContent` 与 `getProcessingCoverage` 走真 in-memory PGlite：search 拍平结构 + 过滤透传 + top_k 默认 8 + platform enum 约束（`inputSchema.safeParse`）；getItemContent 三态（有正文 / id 不存在 / 存在无正文——后者自带 `beforeAll` 补一条无正文 bilibili 条目，coverage 块不断言 bilibili 计数，故不受影响；旧的单表查询在这一例上红，已验证）+ **状态旗标守卫**（旗标从真实返回值里反射出布尔键，每个都须以 `<flag>=false` 出现在模型面文本；下一步按**引出该状态的那一句**查——`item_exists=false` 句须含 `searchKnowledgeBase`、`found=false` 句须含 `getProcessingCoverage`。整段匹配对前者是空转（首句与 schema describe 本就提到 searchKnowledgeBase，删掉「重新取 id」那句仍绿，trellis-check 2026-09-23 实测）；再加一个非空反向断言防反射空转）；listTags 拍平 + 参数透传。经 fake `ToolExecutionOptions`（`experimental_context: { db }`）调 `execute`。`getProcessingCoverage` 覆盖：六平台全在场（含从未同步过的）/ `content.kind` 逐平台等于 descriptor（断言本身派生，不手写 kind 表）+ 一条显式钉住 bilibili 是 `transcript`（这个映射就是本功能存在的理由）/ `acquisition.total` 处处为 `null` / provider 关掉时 blocker 带正确 `pending`、开着时为空 / `asr` 永不出现在 capability 里 / `platform` 收窄到单条。它自带 `beforeAll` 补一条 github 条目并用 `afterEach` 复位 `providerState`——外层 fixture 无 `afterEach` 清理，数据跨例累积。
-  **外加 `model-facing platform list` 守卫**：四处工具文本 + `CHAT_SYSTEM_PROMPT` 五个面一起查，「提到任一平台就必须提到全部平台」（`getItemContent` 一个都不提是合法的）+ 枚举面逐平台在场（`platformAware` 由 `inputSchema.shape` 反射得出而非手写，并配反向断言钉住那三个工具名，否则反射一坏整个循环就空转通过）。同一 describe 里还有 **content kind 守卫**：`getProcessingCoverage` 的模型面必须提到每个 `contentKind`——同一失效模式挪一个字段，手写 kind 表会和手写平台表一样静默腐掉。以及 **honesty 守卫**：本功能的两条限制（`blockers` 不穷举 / `acquisition.total` 不可知）只以散文形式活在 description 里，删掉不会有任何别的东西报错，故这里按 `deriveConfigurationBlockers` 实际产出的 capability 集合（同样传 `asrBlocked: false`）逐个对账，并钉住 `content.done` / `acquisition.total` 两个 token。五个面在同一个文件里查是刻意的——一条规则拆两个文件，就是它在被遗忘的那半边里腐掉。
-- `prompts.test.ts` — `buildContextSuffix` 含注入 ISO 日期且随日期变化；`CHAT_SYSTEM_PROMPT` 含 `searchKnowledgeBase` 及"来源/没找到/只读/追问"关键硬规则词。平台清单的派生断言不在这里，在 `tools.test.ts`（见上）。
-- `history.test.ts` — CRUD 走真 in-memory PGlite（同 `retrieval.test.ts` 搭法：`PGlite.create` + vector/uuid_ossp/pg_trgm + `runMigrations`，无任何 storage/proxy mock）：空态 / save+load 时间戳往返 / **save 不 trim（>MAX_MESSAGES 全量存取）** / upsert 不重复 / 降序 list / delete + 纯函数 `deriveTitle`（首 user 消息 / 折叠空白 / 截断 / 无 user→'' / text-part 数组）+ `trimMessages`（cap 内不动 / 超 cap 取末段且首条为 user / 丢弃开头孤立 tool-result）。
+- 来源卡片跳转、tool-call 四态渲染：`entrypoints/app/sections/chat/CLAUDE.md`。
+- Agent Bridge 的 tool registry 与协议：`lib/agent-bridge/CLAUDE.md`。

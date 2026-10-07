@@ -1,27 +1,27 @@
-# Tagging 领域层
+# lib/tagging
 
-AI 标签：转录/收藏同步完成后自动打标 + 标签 CRUD（UI 消费）。深模块，tags/item_tags schema 知识的唯一持有者。依赖 `lib/ai`（createLanguageModel）+ `lib/database`（Drizzle RPC proxy）。LLM 管线首个落地场景（`generateObject` 用法为后续 LLM 总结铺路）。
+AI 标签：内容落库后自动打标 + 标签 CRUD。`tags` / `item_tags` 的 schema 知识只在本目录；全部操作以 `(platform, platformItemId)` 寻址，调用方不接触 DB uuid，也不 import drizzle / entity。
 
-## 模块结构
+## 约束
 
-- `tag-queries.ts` — 无 storage/LLM/write 依赖的只读 tag query leaf；Agent Bridge 的 `listTags` 延迟加载此文件，禁止经 `index.ts`/`tagging-service.ts` 拉入写路径
-- `config.ts` — `resolveTaggingConfig(settings)`：**薄别名，实体是 `lib/storage/resolve.ts` 的 `resolveLlmConfig`**（与 `lib/summary/config.ts`、`useSettings.llmConfigured` 共用同一份解析：用户填写 > env > provider def）。**无开关**：`enabled` 派生自 apiKey+model 可解析，未配置时钩子静默 no-op。`getTaggingConfig()` 异步便利（非 React 消费者用）
-- `prompt.ts` — `TaggingInput { title, author?, description?, content? }`：**内容类型无关 DTO，禁止 import 平台类型**——未来文章/GitHub 仓库直接复用。`buildTaggingPrompt(input, existingTags)` 纯函数（hamhome 式防重指令：优先复用已有标签、不生成语义重复新标签）。常量：MAX_TAGS=5 / MAX_CONTENT_CHARS=2000（正文截头）/ MAX_EXISTING_TAGS=50（喂 prompt 上限）。**JSON 字样是硬约束不可删**：openai-compatible provider 走 `response_format: json_object`，OpenAI 规范要求 prompt 必须含 "json" 否则 400；且该模式下 Zod schema 不发给模型，输出结构 `{"tags": [...]}` 只能靠 prompt 传达（system prompt + 要求第 5 条，`tagging.test.ts` 有防回归断言）
-- `tagger.ts` — `generateTags(config, input, existingTags)`：按 `supportsSchemaDelivery(providerId, customProtocol)`（`lib/ai`）能力分叉——true（openai/claude/gemini/openrouter/custom+claude）走 `generateObject({schema: tagsSchema})`（schema 真正下发）；false（deepseek/zhipu/kimi/modelscope/custom+openai）走 `generateObject({output:'no-schema'})` + `tagsSchema.parse` 客户端校验（schema 为 null 消除 SDK responseFormat 警告，请求体仍 `response_format: json_object`，prompt 是唯一 schema 载体）。Zod schema `tags: z.array(z.string()).max(5)`，温度 0.2。抛错不吞（失败语义由 service 层决定；no-schema 路径非法结构抛 ZodError，同语义）。`normalizeTags(raw)`：trim + Set 去重 + 截 5，prompt 规则之外的代码层兜底
-- `tagging-service.ts` — 核心服务，全部以 (platform, platformItemId) 寻址（调用方不接触 DB uuid）：
-  - `tagPlatformItem(platform, platformItemId, deps?)` → `'tagged'|'skipped'|'failed'`：单 Item 管线入口，消费 `lib/collections/collection-processing-policy.ts` 的 Tags pending candidate（eligible + `chunked|embedded` + 无 tag），never throws、已有链接幂等跳过、失败保持未打标。`TaggingDeps { db, getConfig, generate }` 可注入测试。prompt 的「简介」（`TaggingInput.description`）从 `PLATFORM_DESCRIPTORS[platform].descriptionField` 指名的 meta key 读（bilibili `intro`、github `description`，其余 `null` 即不传；非字符串或空串也不传）；`platform` 参数仍是 `string`，未注册平台经 `isCollectionPlatform` 判为无简介。本模块不写任何平台名或字面 meta key（docs/32 Step 2；此前只读 B站 `meta.intro`，GitHub 无 README 的仓库因此只剩标题和 owner）。
-  - `tagNewItems(platform, platformItemIds, deps?, onProgress?, control?)` → `void`：串行逐条 `await tagPlatformItem`，继承 never-throws/幂等/未配置静默语义，单条失败不中断后续；每条 item 前执行 cooperative checkpoint，当前 LLM/DB 工作不中断。`onProgress({done,total})` 从 0 单调到输入总数，`skipped|failed` 同样推进。app 层共享 Tags lane 持有队列和暂停状态，lib 不 import store。
-  - `tagPlatformBacklog(platform, deps?, onProgress?, control?)` → `void`：provider 保存后的平台积压入口。未配置先报 `0/0` 且不查 DB；已配置直接消费与单 Item 路径相同的 Tags pending candidate，再复用 `tagNewItems` 的串行/checkpoint/progress/幂等语义；Tags 可用 title/metadata/content，不要求 chunk 行。
-  - `getAllUsedTags(platform?, db?)` → `UsedTag[]`（含 count，降序）：`platform` 接受单个平台或平台数组；inner join item_tags——**孤儿 tag（链接全删）自然隐身，无需清理任务**；tag 行本身保留。传过滤值时列表与计数限定这些平台的 items（页面级筛选 chips，计数真实）；省略 = 全库（`tagPlatformItem` 内部喂 prompt 用全库——LLM 应跨平台复用标签名，不分叉重复）。`/collections` 必须传 `COLLECTION_PLATFORMS`，避免未知持久化平台的标签进入聚合筛选
-  - `getTagsForPlatformItems(platform, ids, db?)` → `Record<platformItemId, TagRef[]>`：卡片页批量查询
-  - `getItemsByTags(tagIds, platform?, db?)` → `TaggedItem[]`：**AND 语义**（group by item + having count(distinct tagId)=N，多选收窄），跨收藏夹（标签是知识库维度非文件夹维度），createdAt 降序。传 `platform` 时结果限定该平台（页面级标签网格）；省略 = 跨平台。`TaggedItem` 保留 `originalUrl` + `publishedAt`，平台卡片 adapter 不重新派生 URL/日期
-  - `addTagToPlatformItem` / `removeTagFromPlatformItem` — 手动编辑：新名字自动建 tag（复用同名行），空白名/未知 item 返回 null；remove 只解链不删 tag 行
-- `index.ts` — barrel，单一 import 面
+- `tag-queries.ts` 是只读 leaf（零 storage / LLM / 写路径依赖）：Background SW 里的 `listTags` Knowledge Tool 静态 import 它，禁止让它经 `index.ts` / `tagging-service.ts` 拉入写路径。守卫 `tests/agent-bridge-background-bundle-contract.test.ts`。
+- prompt 里的「JSON」字样是硬约束，不可删：openai-compatible provider 走 `response_format: json_object`，OpenAI 规范要求 prompt 含 "json"，否则 400。守卫 `tagging.test.ts`。
+- 同一模式下 schema 不发给模型，输出结构 `{"tags": [...]}` 只能靠 prompt 传达，改 schema 要同时改 prompt。
+- `generateTags` 按 `supportsSchemaDelivery`（`lib/ai`）分叉：schema 发得出去的 provider 用 `generateObject({ schema })`，其余用 `output: 'no-schema'` + 客户端 Zod 校验。别统一成一条路径。
+- `TaggingInput` 是内容类型无关的 DTO，禁止 import 平台类型。
+- 本目录非测试文件零平台知识：不写带引号的平台 id，不按字面 key 读 `meta` / `platformMeta`。「哪个 meta key 是简介」读 `PLATFORM_DESCRIPTORS[platform].descriptionField`。规则 owner 与守卫见 `lib/collections/CLAUDE.md`。
+- `TaggedItem.platformMeta` 整列透传给卡片 adapter 不受上一条限制：那是列引用，不是读 key。
+- 资格规则只来自 `lib/collections/collection-processing-policy.ts` 的 Tags pending candidate（eligible + `chunked|embedded` + 无 tag）；Tags 不要求 chunk 行。
+- `tagPlatformItem` never throws：返回 `'tagged' | 'skipped' | 'failed'`，已有链接幂等跳过，失败保持未打标；`item-tagged` 事件只在成功时发。`generateTags` 自己抛错不吞，失败语义由 service 层决定。
+- 没有启用开关：`enabled` 派生自 LLM 配置可解析（`lib/storage/resolve.ts` 的 `resolveLlmConfig`，与总结共用）。未配置时静默 no-op，backlog 报 `0/0` 且不查 DB。
+- `tagNewItems` 串行逐条，单条失败不中断；每条之前执行 cooperative checkpoint，不中断进行中的 LLM / DB 工作。队列与暂停状态归 app 层的 Tags lane，lib 不 import store。
+- `onProgress` 从 0 单调到输入总数，`skipped` / `failed` 同样推进。
+- 喂给 prompt 的已有标签取全库，不按平台过滤：LLM 应跨平台复用标签名。页面级筛选才传 `platform`。
+- 聚合页（`/collections`）调 `getAllUsedTags` 必须传 `COLLECTION_PLATFORMS`，否则未知持久化平台的标签会进入筛选。
+- `getItemsByTags` 是 AND 语义且无分页；需要分页的列表用 `lib/collections` 的 `getCollectionItems({ tagId })`。
+- 孤儿 tag 靠 inner join 自然隐身，不需要清理任务；remove 只解链，不删 tag 行。
+- `tags` / `item_tags` 不受 insert-only 规则约束，但打标必须幂等（upsert + `onConflictDoNothing`）。`tags.name` 全局唯一（单用户，无 userId）。
 
-## 约定
+## 坑
 
-- **接缝枚举（均在 app.html/可读 storage 的 context）**：x/github/zhihu/youtube 的 `newItemIds` 批量 enqueue；bookmarks 每条提取成功后 enqueue；Bilibili 每条 durable transcription enqueue，Embed/Tag ticket 都只异步观察，不阻塞下一条 Transcript。六平台都经 `collection-processing-jobs.ts` 的独立串行 Tags lane 执行；lib/tagging 不反向依赖平台或 app store。
-- **零平台知识**：`lib/tagging/**` 非测试文件不得出现带引号的平台 id、对 `meta`/`platformMeta` 的字面 key 读取、SQL 里的字面 JSON 路径 key；平台差异（例如哪个 meta key 是简介）写进 `lib/collections/platform-descriptor.ts`，这里按变量读。守卫：`tests/platform-completeness-contract.test.ts` 的「keeps platform knowledge out of shared modules」，逐条列 `file:line`。`TaggedItem.platformMeta` 整列透传给卡片 adapter 不受限（那是列引用，不是读 key）
-- UI 消费者走 service 高层操作，零 drizzle/entity/getDb 导入（同 `bili-sync-service` 约定）。标签 UI 集中在共享模块 `entrypoints/app/components/tags/`（platform 参数化，见该目录 CLAUDE.md）
-- 存储：`tags`（name 全局唯一，单用户无 userId）+ `item_tags`（复合 PK，双 FK cascade），schema 在 `lib/database/entities/`，迁移 `v004-tags.ts`。新表不受 insert-only ADR 约束，但打标幂等（upsert + onConflictDoNothing）
-- 测试：`tagging.test.ts` 纯函数（config 解析/prompt 构建/normalizeTags）+ `generateTags` 能力分叉（`vi.hoisted` mock `ai` 的 `generateObject`，断言 no-schema/schema 参数与 Zod parse 兜底）；`tagging-service.test.ts` in-memory PGlite（同 `videos-sync.test.ts` 基建）+ 注入 `TaggingDeps`，覆盖幂等/同名复用/未配置静默/失败无残留/existingTags 与 content 传参/简介按 `descriptionField` 取（B站 intro、GitHub description 无 README 也传、YouTube meta description 不传、空串/非字符串不传）/孤儿隐身/AND 筛选/`tagNewItems` 批量（逐条调用/空批 no-op/单条失败不中断/**onProgress 0/total→total 且 total=ids.length + 'skipped' 项亦进度**）/platform 过滤（单平台与平台数组计数限定、getItemsByTags 结果限定、originalUrl 透传）/手动编辑往返/'item-tagged' 事件（成功发一次、skip/fail 不发）。测试文件需 `vi.mock('@/lib/storage')`（barrel 加载时触碰 chrome.runtime）
+- 本目录的测试要 `vi.mock('@/lib/storage')`：`config.ts` 走 storage barrel，加载时触碰 `chrome.runtime`。

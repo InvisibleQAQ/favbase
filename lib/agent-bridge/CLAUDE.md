@@ -1,104 +1,71 @@
 # Agent Bridge
 
-This directory owns the transport-neutral wire contract, the adapter to Chat's
-read-only Knowledge Tools, and the Background SW connection lifecycle. The Node
-CLI package (`packages/favbase`) consumes only the protocol leaf; extension storage is exposed by
+Owns the transport-neutral wire contract (`protocol.ts`), the adapter that exposes Chat's
+read-only Knowledge Tools to agents (`tool-registry.ts`), and the Background SW connection
+lifecycle (`client.ts`, `scheduler.ts`). The Node side is `packages/favbase`; extension storage is
 `lib/storage/agent-bridge.ts`.
-
-## Modules
-
-- `protocol.ts` — strict `favbase-agent-bridge` v1 envelope, all seven message
-  payload schemas, shared error codes, and `DEFAULT_AGENT_BRIDGE_PORT` (`17836`).
-  This is a leaf bundled by `packages/favbase` and may depend only on Zod.
-- `tool-registry.ts` — derives agent-facing tool descriptors (JSON Schema 2020-12) from `chatTools`
-  and validates every call with the owning Zod schema before execution. Tool
-  names, descriptions, and schemas must never be copied here. The surface is
-  **four** tools since `getProcessingCoverage` landed (2026-09-08); it grows
-  purely by `chatTools` growing, which is the point — `CONTEXT.md` requires Chat
-  and the Agent Bridge to expose exactly the same set. Everything this
-  module reaches loads in the Background Service Worker, where the HTML spec
-  forbids dynamic `import()` — so `chatTools` and its `tag-queries` /
-  `embedding/config` / settings-resolver / Collection-coverage dependencies must be statically imported — and, for the same graph reason, through **leaves rather than barrels**: `@/lib/collections` and `@/lib/database` both drag PGlite in. Deferring them
-  used to make `listTags` and `searchKnowledgeBase` fail with a misleading
-  `window is not defined` (Vite's `__vitePreload` masking Chrome's rejection);
-  guarded by `tests/agent-bridge-background-bundle-contract.test.ts` and
-  `scripts/check-background-bundle.mjs`.
-- `client.ts` — `BridgeTransport` seam + production `WebSocketTransport` and the
-  connection state machine. Open sends hello; token-matched welcome authenticates;
-  ping/call dispatch return pong/result. DB acquisition is injected and lazy.
-- `scheduler.ts` — Background-only `0.5`-minute alarm (30 seconds on Chrome 120+;
-  Chrome 116–119 clamp it to 60 seconds), config watch, startup compensation, and
-  `connectNow()`. Disable clears the alarm and closes the client. The daemon's
-  hello wait must cover the older browser's 60-second effective period.
-  `connectNow()` only saves the wait for the next alarm; every path calls the
-  same `tryConnect()`.
 
 ## Contracts
 
-- Unknown message types, wrong channel/version, and malformed payloads decode
-  to `null`; there is no legacy unversioned Agent Bridge wire shape.
-- **"Strict" means no field is additive on the WebSocket.** Every envelope and
-  payload is `z.strictObject`. Add even an optional field to `hello` and an
-  older daemon decodes `null` and closes with `1002 invalid-message`; the
-  extension records `connection-closed`, not a version error. In the opposite
-  direction, a newer daemon's message fails the extension's decoder as
-  `protocol-error`. The one exception is `tools.result.result`, which is free
-  JSON, so a Knowledge Tool's output can grow (`getItemContent.item_exists`,
-  docs/27 Step 6). The only additive diagnostics path is daemon → CLI `/status`,
-  because `normalizeStatus` in `packages/favbase/daemon-client.ts` keeps just the
-  fields it knows. Getting a new extension-side field to the daemon requires
-  gating on `welcome.serverVersion`, and that is version negotiation.
-- `reject: version` is reserved: no daemon sends it, so
-  `settings.agentBridge.errorVersion` cannot be reached. Which side its advice
-  should blame is `[UNKNOWN]` until a v2 design exists (docs/27 Step 6 item 3).
-- `AgentBridgeToolCallError` distinguishes `unknown-tool` from `invalid-args`.
-  Tool execution failures remain untouched for the transport layer to map.
-- Both production modules are enrolled in `tests/lib-import-smoke.test.ts` and
-  must load without a `chrome` global or mocks.
-- The Node package imports `protocol.ts` through the reviewed relative path and
-  must never import `tool-registry.ts`; Knowledge Tool facts stay extension-owned.
-- **No authentication backoff** (docs/30 #1, user decision 2026-09-27). A
-  refused token is retried on the next alarm like any other failure. The fix
-  for it -- `favbase setup` replacing the daemon that holds the old token --
-  happens where the client cannot see it, so an exponential backoff (docs/24
-  Step 1-4 had one, 30 s doubling to 5 min) only kept the repaired pairing
-  locked out past doctor's 75-second wait. A hello costs the loopback daemon
-  one rejection, and it logs a run of same-reason rejections once. Don't add a
-  backoff back without also giving `setup` a way to lift it.
-- Every bad-token failure persists `lastAuthFailureAt`, and a valid welcome
-  preserves it: otherwise a successful recovery would erase the only
-  extension-side evidence. A welcome echoing another token counts as a
-  rejected token.
-- Every way a connection ends goes through `disconnect()`, bad-token included,
-  and it drops the connection **before** the storage await. The daemon sends
-  `reject` and closes at once, so the close event can arrive while the
-  rejection is still being written; it then finds no current connection and
-  cannot overwrite `bad-token` with `connection-closed` (docs/30 #7, fixed by
-  this shape rather than separately).
-- The `connecting` write keeps `lastError`: a failure is retried on every
-  alarm, and clearing it would blink the settings card's error and its repair
-  button each time. `close()` (disable, reconfigure) clears it.
-- Port/token changes close the old transport before reconnecting. Connection
-  identity guards prevent late callbacks from changing replacement state.
-- Explicit close waits for an in-flight connect attempt to settle before writing
-  the final disabled/disconnected status; a delayed storage write cannot restore
-  stale `connecting` state after the socket is gone.
-- `AGENT_BRIDGE_CONNECT_NOW` only asks the scheduler to run `tryConnect()` now;
-  extension pages never open the WebSocket themselves.
-- Remote close and transport error also route through `disconnect()`, so every
-  path that abandons a connection also closes its transport.
+- `protocol.ts` is a leaf bundled into the npm CLI: it may depend only on Zod. `packages/favbase`
+  imports it by relative path and must never import `tool-registry.ts`; Knowledge Tool facts stay
+  extension-owned.
+- `tool-registry.ts` derives every descriptor from `chatTools` and validates calls with the owning
+  Zod schema. Never copy a tool name, description or schema here: Chat and the Agent Bridge must
+  expose exactly the same set (`CONTEXT.md`), so the surface grows only by `chatTools` growing.
+  `tool-registry.test.ts` pins the list.
+- **"Strict" means no field is additive on the WebSocket.** Every envelope and payload is
+  `z.strictObject`, and error codes and reject reasons are `z.enum`. A new optional field or enum
+  member makes an older daemon decode `null` and close with `1002`; the extension records
+  `connection-closed`, not a version error. A newer daemon's message fails here as
+  `protocol-error`.
+- Published CLIs keep their strict decoder for good, and the extension is the side that updates
+  on its own. Sending anything new therefore needs gating on `welcome.serverVersion`, which is
+  version negotiation: design it, do not slip it in (docs/30 #5, undecided).
+- Two things may grow: `tools.result.result` is free JSON, so a Knowledge Tool's output can add
+  fields; and daemon -> CLI `/status`, because `normalizeStatus` in
+  `packages/favbase/daemon-client.ts` keeps only the fields it knows.
+- `reject: version` is reserved: no daemon sends it, so `settings.agentBridge.errorVersion` cannot
+  be reached. Which side its advice should blame is `[UNKNOWN]` until a v2 design exists.
+- Decoding fails closed: an unknown type, wrong channel/version or malformed payload is `null`.
+  There is no legacy unversioned wire shape.
+- `AgentBridgeToolCallError` covers only `unknown-tool` and `invalid-args`. Leave tool execution
+  failures unwrapped; the transport layer maps them.
 
-## Tests
+## Connection lifecycle
 
-- `protocol.test.ts` — message registry completeness, encode/decode, constants,
-  failure result variant, and malformed-envelope rejection.
-- `tool-registry.test.ts` — the exact Knowledge Tool surface (four tools, pinned
-  by name and by count from one `KNOWLEDGE_TOOL_NAMES` list so a duplicate key
-  cannot slip past the names), JSON Schema Draft 2020-12, validated rejection,
-  and DB context forwarding.
-- `client.test.ts` — fake transport hello/welcome/call/ping/close, stable error
-  mapping, malformed frames, bad-token retried on the next attempt (error kept
-  while `connecting`), welcome token mismatch, the reject-then-close race,
-  retained authentication-failure history, and reconfiguration race.
-- `scheduler.test.ts` — enable/disable, alarm/startup/connect-now routing, and
-  disabled means zero Agent Bridge alarms.
+- Extension pages never open the WebSocket. `AGENT_BRIDGE_CONNECT_NOW` only asks the scheduler to
+  run now, and `connectNow()` only saves the wait for the next alarm: every path calls the same
+  `tryConnect()`.
+- The alarm period is 0.5 minutes: 30 s on Chrome 120+, clamped to 60 s on Chrome 116-119. The
+  daemon's hello wait (`packages/favbase/bridge-server.ts`) must cover the 60 s case; only
+  comments tie the two constants together. Disabled means zero Agent Bridge alarms.
+- **No authentication backoff** (user decision, docs/30 #1). A refused token is retried on the
+  next alarm like any other failure. The repair -- `favbase setup` replacing the daemon that
+  holds the old token -- happens where the client cannot see it, so a backoff only kept a
+  repaired pairing locked out. Do not add one back without giving `setup` a way to lift it.
+- Every bad-token failure persists `lastAuthFailureAt`, and a valid welcome preserves it: it is
+  the only extension-side evidence left after a recovery. A welcome echoing another token counts
+  as a rejected token.
+- Every way a connection ends goes through `disconnect()`, bad-token included. It drops the
+  connection **before** the storage await: the daemon sends `reject` and closes at once, and the
+  late close event must find no current connection, or it overwrites `bad-token` with
+  `connection-closed`.
+- The `connecting` write keeps `lastError`. Failures are retried on every alarm, and clearing it
+  would blink the settings card's error and repair button each time. `close()` (disable,
+  reconfigure) clears it.
+- Port or token changes close the old transport before reconnecting, and connection-identity
+  checks keep late callbacks from touching the replacement.
+- Explicit close waits for an in-flight connect attempt to settle before it writes the final
+  status; otherwise a delayed write restores a stale `connecting` after the socket is gone.
+
+## Traps
+
+- Everything reachable from `tool-registry.ts` -- `chatTools` and what it depends on -- lands in
+  the Service Worker module graph, so it must be imported statically and through leaves, not
+  barrels. The rules and their two guards are owned by `entrypoints/CLAUDE.md`.
+- A deferred import there fails as a misleading `window is not defined` (Vite's `__vitePreload`
+  masks Chrome's rejection), and vitest cannot see it: run `pnpm build`. Extend
+  `tests/agent-bridge-background-bundle-contract.test.ts` when a new import link appears.
+- `protocol.ts` and `tool-registry.ts` are enrolled in `tests/lib-import-smoke.test.ts`: they must
+  load with no `chrome` global and no mocks.

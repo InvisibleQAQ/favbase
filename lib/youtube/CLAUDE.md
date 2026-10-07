@@ -1,34 +1,38 @@
 # lib/youtube
 
-YouTube 公开播放列表收录领域（第六个平台，多 source 形态镜像 `lib/zhihu/` 分层）。MVP = 经官方 Data API v3 拉取用户**自己创建的公开播放列表**及其视频（全量重拉 + insert-only 去重）+ PGlite 持久化 + 查询 + description 切块。复用现有表（sources/authors/items/item_sources/item_contents/item_chunks，`platform='youtube'` 判别列），零新表零迁移。
+YouTube 公开播放列表收录领域：经官方 Data API v3 拉取某个频道自己创建的公开播放列表及其视频，description 作正文入库。
 
-**认证是 API key 形态（无 OAuth）**：公开数据只需用户自备的 Data API 密钥（GCP 项目 → 启用 Data API v3 → 创建 API 密钥），每个请求带 `key=` query 参数。`youtubeApiKey` + `youtubeChannel`（原始输入：`@handle` / `UC...` 频道 ID / 频道 URL）存 `UserSettings`（`useSettings.saveYoutube` 写入），解析在 probe/sync 时进行。**范围边界**：`playlists.list?channelId=` 只返回该频道用户创建的公开列表；私密/未列出需 OAuth（本任务已删除）；「已保存的他人播放列表」官方 API 无端点（OAuth 也拿不到）。旧 BYO OAuth 实现（youtube-auth.ts + token 存储 + identity 权限）已整体移除（当时未提交过，**git 历史无副本**——若未来要私有数据需按 07-17 任务 research 重新实现）。
+## 认证与范围
 
-## 模块结构
+- 认证是 API key，没有 OAuth：用户自备 Data API 密钥，每个请求带 `key=`。`youtubeApiKey` + `youtubeChannel`（原始输入：`@handle`、`UC…` 频道 ID 或频道 URL）存 `UserSettings`，频道解析在 probe / sync 时做。
+- API key 不代表账号，所以必须另填频道。`playlists.list?channelId=` 只返回该频道用户创建的公开列表，这正好是产品范围。
+- 拿不到的：私密 / 未列出列表（需 OAuth）、「已保存的他人播放列表」（官方 API 无端点，OAuth 也拿不到）、Watch Later（`WL` 对 API 返回 400）。
+- 没有可恢复的 OAuth 实现：旧的 BYO OAuth 版本从未提交，git 历史里没有副本，manifest 也没有 `identity` 权限。要私有数据得从头实现。
+- 只有配了 key 才发请求，所以 `YoutubeAuthError` 的 reason 恒为 `'rejected'`（400 / 403 的 `keyInvalid`）。
+- 配额或限流（403 的 quota 类 reason，或 429）→ `YoutubeRateLimitError`，`resetAt` 恒 null：Google 不给 reset header，配额在太平洋时间午夜重置。
+- 没有瞬时错误重试，429 / 5xx 直接抛。这是刻意没加的：属于风控语义的行为变化，要单独决定（docs/32 Step 3）。
 
-- `youtube-api.ts` — Data API v3「API」层（无 DB 导入、无 UI 文案，请求统一走 `fetchWithDeadline`——`lib/http/` 全平台共用 deadline）。认证 = apiKey 直传（`buildUrl` 统一拼 `key=`）：
-  - `parseChannelInput(raw) → { kind: 'id'|'handle', value } | null` 纯函数：剥 youtube.com URL 前缀（含 `channel/` 段），`UC` + 22 字符判 ID，其余按 handle（`@` 可选，API 两者都收）。守护测试 `youtube-api.test.ts`
-  - `resolveChannel(apiKey, input)` — `channels.list?id=/forHandle=` → `{channelId, title, avatarUrl}`。兼作设置卡「测试连接」探针。**channels.list 零匹配时 200 响应整个缺 `items` 键**（唯一豁免盲信防御的端点，`allowMissingItems`）→ 无匹配抛 `channel not found` Error
-  - `fetchPlaylists(apiKey, channelId)` — `playlists.list?channelId=` 串行分页 → `YoutubePlaylist { playlistId, title, itemCount }[]`（API key 只见公开列表，正好是产品范围）
-  - `fetchPlaylistItems(apiKey, playlistId, {needsDetails?, onPage?})` — playlistItems 串行分页 → `{ entries, videos }`。**membership 与详情分离**：`entries`（`PlaylistEntry { videoId, addedAt, videoPublishedAt }`）对每条都产出（已知视频也要 link）；`videos.list` 详情批填只对过 `needsDetails` 谓词的 id（跨列表/跨 DB 去重是调用方的集合）。详情响应缺失的视频（已删除/私享）产出 entry 无 video，下游自然跳过。页间 200ms 礼貌延迟（quota 充裕：1 unit/次、10k/天；`PAGE_SIZE`/`PAGE_DELAY_MS` 等数值常量经 `envNumber('VITE_YOUTUBE_*', default)` 可配置——`lib/env.ts`，文档在 `.env.example`，`PAGE_SIZE=50` 是 API 硬上限调大必坏）
-  - **全量重拉，无增量**：playlistItems 是**位置序**（用户可插任意位置/重排），stop-on-known-id 不安全（旧 LL 时间序才成立）——幂等靠 insert-only
-  - 结构化错误（继承 `lib/collections/sync-errors.ts` 的基类，docs/32 Step 4）：400/403 reason 含 `keyInvalid`（或 body 含 "API key not valid"）→ `YoutubeAuthError(…, 'rejected')`（只有配了 key 才发请求，所以恒 `rejected`）；403 reason ∈ {quotaExceeded, rateLimitExceeded, userRateLimitExceeded, dailyLimitExceeded} 或 429 → `YoutubeRateLimitError(resetAt=null)`（**Google 无 reset header**，quota 太平洋时间午夜重置）；其余非 2xx → `Error` 附 body 前 300 字符（`textSnippet`，`lib/http/response-body.ts`）。**无瞬时错误重试**——429/5xx 直接抛，docs/32 Step 3 刻意没加（那是风控语义的行为变化，要单独决定）
-  - **HTTP 200 决不盲信**（X 07-16 教训）：200 + 非 JSON body（`parseJsonBody(rawBody, 'YouTube API 200')`——body 在状态码判断**之前**就读了，400/403 要从中取 reason，所以 helper 收字符串不收 `Response`）/ 无 `items` 数组 → 抛带 body snippet 的 Error（channels.list 豁免见上），绝不吞成空数组（`items: []` 是合法零结果，放行）
-  - 纯函数导出供单测：`parseIso8601Duration('PT1H2M3S'→3723)`（含 P#D 天分量、P0D 直播占位、不可解析 → 0）、`parseChannelInput`。守护测试 `youtube-api.test.ts`
-- description 切块用共享 `paragraphSplit`（= `charSplit(text, { preferParagraph: true })` 的具名 preset，docs/32 Step 5；`lib/embedding/char-split.ts`，docs/16 MEDIUM-4——原 `youtube-chunker.ts` 已删并入）：`preferParagraph:true` 边界优先级 段落空行（`\n\n`）> 句末标点（中英双覆盖）> 硬切，`MAX_CHARS=1500` 回看 300。无时间戳（NULL start/end 列）。守护测试 `lib/embedding/char-split.test.ts`
-- `youtube-sync-service.ts` — **DB schema 知识的唯一持有者**（`PLATFORM='youtube'`）。`syncYoutubePlaylists({apiKey, channel}, onProgress?, control?)` 把 cooperative checkpoint 贯穿频道解析、播放列表分页、逐列表和视频分页，在领取下一页/列表前暂停；当前请求与最终 DB 写入不中断。`syncPlaylistsToDb` 仍持有跨列表首见去重、sources/authors/items/links/content 的 shared ingest 归一化。`newItemIds` 由 app 侧 Sync Adapter 经 Platform Sync funnel enqueue 共享 Embed/Tags lanes，本 wrapper 不 import tagging/embedding。进度仍为 `YoutubePlaylistsProgress { playlistIndex, playlistCount, fetchedCount }`；查询由 `getPlaylistVideos/getPlaylistCounts` 持有；详情补拉的跳过集合 = `platformItemIds`（DB 已存）∪ 本轮已拉。
+## API 的坑
 
-## 约定
+- 全量重拉，没有增量：playlistItems 是位置序（用户可以插到任意位置或重排），stop-on-known-id 不安全；幂等靠 insert-only。
+- `channels.list` 零匹配时，200 响应整个缺 `items` 键。它是唯一豁免「无 `items` 数组即抛」的端点（`allowMissingItems`），无匹配抛 `channel not found`。
+- 其余端点 HTTP 200 决不盲信：非 JSON body 或无 `items` 数组即抛带 body 片段的 Error，绝不吞成空数组；`items: []` 是合法的零结果。
+- 响应 body 在状态码判断之前就读出来（400 / 403 要从中取 reason），所以 `parseJsonBody` 收的是字符串；不要改成传 `Response`。
+- membership 与详情分离：`fetchPlaylistItems` 对每一条都产出 entry（已入库的视频也要建 link），`videos.list` 详情只对过 `needsDetails` 的 id 拉。
+- 详情响应里缺失的视频（已删除、私享）只有 entry 没有 video，下游自然跳过，不是错误。
+- `PAGE_SIZE` 默认值就是 API 硬上限，经 env 调大必坏。
+- `playlistItems.snippet.publishedAt` 的官方语义就是「加入列表的时间」，即 `addedAt`（排序键）；视频自己的发布时间是 `videoPublishedAt`。
 
-- **共享骨架**：写侧走 `ingestCollection`（`lib/ingest/`，docs/16 HIGH-1——事务边界/insert-only/分批/id-map/两段式 content 均由管线持有）；读侧 `getPlaylistVideos` 走 `pagedItemsQuery`，播放列表筛选走 `sourceMembership`、搜索走 `searchCondition`（本文件只声明可搜字段：title、`platform_meta->>'description'`），`getPlaylistCounts` 走 `sourceItemCounts` 再映射成 `playlistId`，已存视频集合走 `platformItemIds`（均在 `lib/database/collection-queries.ts`，docs/32 Step 9）——本文件只留平台特有 filter/orderBy/mapRow，勿再拷贝；「上次同步」没有 lib 包装（`getLastSyncedAt` 已删）：app 侧 `useCollectionLibrary` 按 config 的 `platform` 直接读 Platform Sync Record
-- **Insert-only（与全平台同 ADR）**：items/authors/item_sources 只 insert（`onConflictDoNothing`，first-write-wins），不 update 不 delete。重新同步只追加新视频/新 link；metadata 不刷新；从列表移除不删行。唯一例外：`sources` 每列表一行 upsert 刷新 `title`/`lastFetchedAt`（列表改名会跟进，zhihu 同款）
-- **多列表 membership（zhihu 形态）**：视频出现在 N 个列表 = 1 item + N link；platformMeta 的 `playlistId`/`playlistTitle`/`addedAt` 是**首见**归属仅供展示/排序，筛选一律走 item_sources
-- **content_state='chunked' + 延迟 embed（D3）**：description 即内容，非空 → 全文写 `item_contents` + `paragraphSplit` 切块 → chunk 行写成后才置 `'chunked'`（事务内中间态 `'has_content'`，正文与 item 行同事务落盘 + 幽灵同步自愈，见 `lib/ingest/CLAUDE.md`。全量重拉手里**没有**已入库视频的 description——`needsDetails` 对已知 id 不再拉详情，`platformMeta.description` 只是 500 字符的截断片段——所以幽灵靠 sweep 从已存 `plainText` 重切；docs/33 Step 2.5 之前这类幽灵没有已存正文，会被永久落 `no_content`，`youtube-sync-service.test.ts` 有一条复现），**不 inline embed**——同步收尾 embed lane 排空平台积压（**触发在 app 侧 Sync Adapter 的 Platform Sync funnel 经 `startJob`**，非本 wrapper，docs/32 Step 1），设置页「重建向量」为手动兜底；空 description → `'no_content'`（**不用 `'pending'`**——那会喂给 auto-transcribe）。同步后 ILIKE 即可搜；语义检索在自动 embed 完成后可用
-- **items 行映射**：`platformItemId=videoId`、`title`（空回退 videoId）、`authorName=channelTitle`（上传者，非列表所有者）、`authorId → platform_author_id=channelId`、`originalUrl=https://www.youtube.com/watch?v=<id>`、`publishedAt=videoPublishedAt`（视频发布时间，非加入时间）
-- **platformMeta 形状**（items，写入方即本目录）：`{ description(截断 500 字符，全文在 item_contents), channelId, channelTitle, thumbnailUrl, durationSeconds, viewCount, likeCount, addedAt, videoPublishedAt, playlistId, playlistTitle }`（camelCase；addedAt/videoPublishedAt 为 ISO 字符串）。缩略图取 medium > high > default。视图字段（不含 playlistId/playlistTitle）的防御式收窄由本目录导出的 `narrowYoutubeMeta(meta, { authorName })` 单点持有；整个 mapper 也只有一份：本文件导出 `toYoutubeVideoItem`（Row → `YoutubeVideoItem`，docs/32 Step 8），分页查询的 `mapRow` 与 section `tagged-youtube-card`（`taggedCard(YoutubeCard, 'video', toYoutubeVideoItem)`）用的是同一个函数
-- **`narrowYoutubeMeta` 导出**（sync-service）：`narrowYoutubeMeta(meta: unknown, fb: { authorName }): NarrowedYoutubeMeta`（= `Omit<YoutubeVideoItem, envelope>`）。channelTitle 缺失或**空串**回退 `fb.authorName`；playlistId/playlistTitle 非视图字段故不收窄。envelope（id/videoId/title/originalUrl/publishedAt）只由 `toYoutubeVideoItem` 装配
-- **addedAt 语义（已确定，非 spike）**：`playlistItems.snippet.publishedAt` 官方定义即 "date added to playlist"——普通播放列表语境下无歧义（旧 LL likedAt 的 `[UNKNOWN → spike]` 随模型替换消失）。排序键
-- 权限：`youtubeHostPermissions`（仅 `https://www.googleapis.com/*`）静态 `host_permissions`（`wxt.config.ts`）。**无 identity 权限、无 oauth2.googleapis.com**——随 OAuth 移除
-- 运行位置：**仅 app.html 页面 context**（手动同步按钮 → RPC proxy 写 Offscreen PGlite）。远程 + 有配额 → 手动按钮，决不 auto-on-mount
-- 边缘：频道零公开列表时不写任何 sources 行；「上次同步」读 Platform Sync Record（docs/32 Step 1），空库的成功同步也记 `last_success_at`，不再与「从未同步」混同
-- 未覆盖（Out of Scope，见 PRD）：私密/未列出列表、已保存的他人列表（无官方端点）、Watch Later（`WL` 对 API 返回 400）、官方字幕/转录管线、inline embedding
+## 入库
+
+- 写侧走 `ingestCollection`，insert-only 不变量见 `lib/ingest/CLAUDE.md`：从列表移除不删行、metadata 不刷新，唯一 upsert 是 `sources` 每列表一行（`title` / `lastFetchedAt`，列表改名会跟进）。
+- 视频出现在 N 个列表 = 1 item + N link。`platformMeta` 的 `playlistId` / `playlistTitle` / `addedAt` 是首见归属，只供展示与排序；按列表筛选一律走 `item_sources`。
+- `authorName` 是上传者频道，不是列表所有者；`publishedAt` 是视频发布时间，不是加入时间。
+- `platformMeta.description` 只是截断片段，全文在 `item_contents`。已入库的视频不再拉详情，所以幽灵条目没有可重拉的正文，只能靠 ingest 的 sweep 从已存 `plainText` 重切（`lib/ingest/CLAUDE.md`；`youtube-sync-service.test.ts` 有复现用例）。
+- 空 description → `'no_content'`。不要用 `'pending'`：那会把条目喂给 auto-transcribe。
+- 同步不 inline embed：embed / tag lane 由 app 侧 Sync Adapter 经 Platform Sync funnel 派发。本目录不 import tagging / embedding。
+- 频道零公开列表时不写任何 `sources` 行；这种成功同步仍会记进 Platform Sync Record，不等于「从未同步」。
+- 共享查询片段在 `lib/database/collection-queries.ts`，勿在本目录再拷贝。
+- `platformMeta` 形状：`{ description, channelId, channelTitle, thumbnailUrl, durationSeconds, viewCount, likeCount, addedAt, videoPublishedAt, playlistId, playlistTitle }`（两个时间是 ISO 字符串）。
+- 唯一 decoder 是 `narrowYoutubeMeta`，唯一 Row mapper 是 `toYoutubeVideoItem`（分页查询与 `sections/youtube` 的 tagged card 共用）。decoder 不收窄 `playlistId` / `playlistTitle`（不是视图字段）；`channelTitle` 缺失或空串回退 `authorName`。
+- 不做：官方字幕 / 转录管线。

@@ -1,25 +1,41 @@
 # lib/background
 
-Background Service Worker dispatcher 层：消息路由、平台转录分发、缓存 handler、PortBridge 数据库中继。
+Background Service Worker 的消息层：typed 消息协议与路由、各领域的瘦 handler、转录 / 总结任务登记、PGlite 的 Port 中继。入口接线在 `entrypoints/background.ts`（`entrypoints/CLAUDE.md`）。
 
-## 模块结构
+## 运行在 Service Worker 里
 
-- `entrypoints/background.ts` — Background SW wiring：必须使用 `defineBackground({ type: 'module', main() })`；Agent Bridge 静态复用 Chat/AI 依赖时，WXT 单文件 IIFE 曾生成悬空 `init_locales()` 并在 PortBridge 可服务前令 SW 崩溃。`createBackgroundContext()` 工厂函数创建深模块（两个 `createJobRegistry()` 实例——转录 + 总结，各自内聚 controller/tabVideoId/activeVideoIds；外加 sessionTabMap 转录 session→tab），并注入 Agent Bridge scheduler 的 `connectNow`。Agent Bridge client 在首个工具调用时执行 `initReadDbProxy(ensureOffscreen)`；该只读 leaf 使用 `drizzle-orm/pg-proxy`，禁止 value-import `drizzle-orm/pglite` 或 database barrel，否则完整 PGlite 会进入 Background module graph。连接、alarm 和 storage watch 全在 SW。`onMessage` 交给 `lib/background/dispatcher.ts` 先 decode、校验 sender，再由 `routes.ts` 路由到 handler。有状态 handler 统一签名 `(msg, sender, ctx)`，无状态 handler 签名 `(msg)`。onInstalled/onStartup 确保 Offscreen 存活；onInstalled 额外在 `details.reason === 'install'` 时调 `openWelcomePage()` 弹首装引导页（自身带 onboarding 闸门，见 `app-handlers.ts`）。**`captureXTokens` webRequest 监听器在此注册**（filter 由 domain descriptor 的 `PLATFORM_DESCRIPTORS.x.hostPermissions` 派生，今为 `*://x.com/*`，docs/32 Step 3；import 走 `@/lib/collections/platform-descriptor` 文件，禁走 `@/lib/collections` barrel——它经 `collections-query` 把 drizzle 拖进 SW；observational，为 app.html `getXAuth()` 捕获认证；X 浮层删除后仍保留——app.html 同步全靠它）。Phase 0 spike 条件分支只用于探针构建，生产构建由 Vite 消除
-- `job-registry.ts` — `createJobRegistry()`：per-tab 的 AbortController + tab→videoId + 全局 activeVideoIds 去重三件套。转录与总结**各持一份实例**（互不干扰：取消总结不会中断转录）。从 `createBackgroundContext` 里提取，消除两套任务复制同样三个方法。**`finish(tabId, controller)` 必须回传 `start` 给的那个 controller**：取消后立刻重开时，旧任务的 `finally` 晚于新任务注册，无条件释放会把活着的任务注销掉（后续 abort 失效 + 去重失守）——controller 不匹配即 no-op。单测 `job-registry.test.ts` 覆盖去重/换视频释放/重复 abort/陈旧 finish
-- `summary-handlers.ts` — `handleSummarize`（`ctx.startSummary` 去重 → `summarizeVideo`，`onPartial` 经 `ctx.sendToTab` 推 `SUMMARY_STATUS`，finally `finishSummary`）/ `handleSummarizeAbort`（委托 `ctx.abortSummary`）/ `handleGetSummaryCache`（只读探针，委托 `loadCachedSummary`，永不触发 LLM）。**LLM 调用必须落在 SW**：MV3 content script 的 fetch 受宿主页 CORS 约束，host_permissions 对 CS 不放行；代价是 AI SDK 进入 Background ESM module graph，大小由 `scripts/check-background-bundle.mjs` 的 2 MiB graph gate 约束。策略全在 `lib/summary`，本文件只做消息层
-- `types.ts` — BackgroundContext 深模块接口：`startTranscription(tabId, videoId)` 返回 AbortController（同 videoId 已有 in-flight 返回 null 去重）/ `abortTranscription(tabId)` / `finishTranscription(tabId, controller)`（controller 归属校验，见 `job-registry.ts`）/ `getVideoIdForTab(tabId)` / `registerChunkSession` / `unregisterChunkSession` / `resolveProgressTarget(sessionId)` + `sendToTab` / `ensureOffscreen` / `connectAgentBridge`。零 Map/transport 暴露。**07-20：X 同步 session→tab 映射（`registerXSyncSession`/`unregisterXSyncSession`/`resolveXSyncTab`）已删（浮层按钮移除）**
-- `messages.ts` — Background SW 消息注册表：BgClientMessage（TranscribeRequest/Abort + GetVideoCacheRequest/CacheSubtitleRequest + SummarizeRequest/SummarizeAbort/GetSummaryCacheRequest + OpenAppPageRequest + FetchBookmarkPageRequest + AgentBridgeConnectNowRequest）, BgInternalMessage（OffscreenProgressMessage）, BgMessage union。从各领域模块导入成员类型后组合；`FETCH_BOOKMARK_PAGE` 把任意站点 fetch 隔离到无 Document 的 SW，避免第三方 HTTP Link preload/modulepreload 污染 app.html CSP；`AGENT_BRIDGE_CONNECT_NOW` 只委托 scheduler，页面不持有 WebSocket
-- `agent-bridge-handlers.ts` — `AGENT_BRIDGE_CONNECT_NOW` 的瘦 handler，等待 `ctx.connectAgentBridge()` 后返回可序列化 `{ success: true }` ACK；禁止用 `void` 充当 Chrome runtime 线协议响应。连接幂等、开关和重试仍归 `lib/agent-bridge`。
-- `port-bridge.ts` — PortBridge 双向 Chrome Port 中继：app.html → Background SW → Offscreen（3-hop 架构）。监听 `favbase-db` channel，为每个 Extension Page 连接创建到 Offscreen 的中继，指数退避重连（200ms-5s，最多 20 次）。Must 在 module load time 同步初始化（MV3 SW 要求）
-- `transcription-handlers.ts` — 平台分发层（瘦 dispatcher）：`platformHandlers: Record<string, PlatformHandler>` registry 按 `msg.platform` 分发到对应平台 handler。`handleTranscribe`：platform lookup → dedup 检查（`ctx.startTranscription`）→ 委托平台 handler → 清理（`ctx.finishTranscription`）。零平台模块直接 import（通过 registry 间接引用）。`handleTranscribeAbort` 委托 `ctx.abortTranscription`。`handleOffscreenProgress` 通过 `ctx.resolveProgressTarget` 精确路由（sessionId 无法解析时 warn + 丢弃）。re-export `notifyTab`/`createTranscribeAudio`/`MessageSender` from `transcription-utils.ts`
-- `transcription-utils.ts` — 平台无关的转录共享工具：`notifyTab(ctx, tabId, videoId, ...)` 构建 TranscribeStatusPush 并发送到 tab，`createTranscribeAudio(tabId, ctx, extractAudioUrl)` 平台无关 ASR 基础设施工厂（connectivity + download + fingerprint + direct/chunked + offscreen 会话管理），`extractAudioUrl` 由各平台 handler 注入。从 `transcription-handlers.ts` 和 `bilibili-transcription-handler.ts` 提取，消除循环依赖
-- `cache-handlers.ts` — handleGetVideoCache + handleCacheSubtitle，纯函数签名 `(msg)`，委托 lib/cache/video-cache.ts
-- `app-handlers.ts` — `handleOpenAppPage(msg)`：打开/聚焦 app.html 标签页并导航到 `msg.hash`（如 `'#/settings'`），镜像 popup 跳板的 open-or-focus 逻辑（`tabs.query` URL pattern 忽略 fragment，裸 app.html URL 匹配任意 hash 路由）。Content Script 无 `browser.tabs` 权限，CS 面板的「打开设置页」入口经此消息委托 background。**`openWelcomePage()`**（非消息 handler，由 `background.ts` 的 `onInstalled` 在 `reason === 'install'` 时直接调）：打开首装引导页 welcome.html，**自带闸门 `onboardingStorage` 有值即 no-op**——unpacked 扩展每次 reload 都报 `'install'`，只靠 reason 会在整个开发期反复弹标签页；已有 welcome 标签页则只聚焦不新开。见 `entrypoints/welcome/CLAUDE.md`
-- `jobs-badge.ts` — 工具栏任务 badge 清道夫（单测 `jobs-badge.test.ts`）：badge 由 app.html 写（`entrypoints/app/hooks/use-jobs-badge.ts`），但 badge 文本是会话级持久、任务却随页面死——SW 只负责一件事：`tabs.onRemoved` + SW 冷启动时 `sweepJobsBadge()`，查无 app.html 标签页即清空 badge+title。**`sweepJobsBadge(closedTabId)` 必须排除正在关闭的 tab**：onRemoved 触发时 `tabs.query` 可能仍返回该 tab，不排除会在「最后一个 app 页关闭」这个唯一要紧的时刻跳过擦除。自家 chrome-extension:// URL 的 `tabs.query({url})` 免 `tabs` 权限（与 `app-handlers.ts` 同模式）。`initJobsBadgeJanitor()` 由 `background.ts` 在 SW 启动时调
-- `bookmark-handlers.ts` — `handleFetchBookmarkPage(msg)`：在 background SW 校验 URL（拒绝 localhost/内网/非 HTTP(S)）后委托 `lib/bookmarks/bookmark-page-fetch.ts`；响应为结构化 `FetchPageResult`，不把 Response/Headers 跨消息传输
-- ~~`x-handlers.ts`~~ — **已删（07-20）**：X 书签同步曾经的 bg 中转（服务 x.com 浮层按钮，CS→bg→offscreen→tab 路由）。浮层按钮移除后，X 同步统一走 app.html 页面 context 直接 `syncBookmarks`，无需 bg 中转。仅保留 `captureXTokens` webRequest 监听器（在 `background.ts`）供 app.html `getXAuth()` 用
+- SW 接线规则归 `entrypoints/CLAUDE.md`：`background.ts` 必须 `type: 'module'`、PortBridge 与 listener 在 module load time 同步注册、SW 模块图零 PGlite（不走 database / collections barrel）且零动态 `import()`。本目录的 handler 都在这张图上，加 import 前先读它。
+- LLM 调用必须落在 SW：content script 的 fetch 受宿主页 CORS 约束，`host_permissions` 对 CS 不放行。代价是 AI SDK 进了 SW 模块图。
+- SW 的 `fetch()` 自己设置的 Referer 会被 Chrome MV3 剥离。bilivideo CDN 需要的 Referer / Origin 只能靠 `public/rules.json` 的 `declarativeNetRequest` 静态规则。
 
-## 约定
+## 消息协议
 
-- Background 消息桥: Content Script/App/Offscreen → Background 先经 `lib/background/client.ts` 编码，入口 `lib/background/dispatcher.ts` 对 `unknown` decode 并校验扩展 sender；实际 handler 路由集中在 `routes.ts`。响应由 client 按 message type 解码，畸形响应抛 `BackgroundProtocolError`；需要确认完成的 command 必须返回 JSON 可序列化 ACK，不能把进程内 `void` 当线协议值。Background → Content Script 的 `TRANSCRIBE_STATUS`/`SUMMARY_STATUS` push 必须经 `encodeBackgroundPush`，订阅方经 `onBackgroundPush` 解码，畸形 push 丢弃。消息 schema 集中在 `message-protocol.ts`，使用 keyed registry 覆盖 13 个入站 discriminator、响应和 push；`TRANSCRIBE_AUDIO` 的成功响应里 `data.videoId` **必填**（不是可选）——它是请求 videoId 的回声，消费方落库前据此拒收不属于自己的字幕，设成可选等于把闸门重新变成永远放行；`channel:'favbase-background'`/`protocolVersion:1` 可选，legacy 消息仍接受。未知 type、非法字段、错误 sender 静默拒绝。新增消息必须同时更新 `messages.ts`、protocol registry、`routes.ts`、typed client 和 contract test。Database Port RPC 仍走 `port-bridge.ts`，不并入 Background message protocol
-- CDN 请求头: `declarativeNetRequest` 静态规则（`public/rules.json`）在网络栈层面为 bilivideo 域名设置 `Referer: https://www.bilibili.com/` + `Origin`。Background SW 的 fetch() 自身设置的 Referer 会被 Chrome MV3 剥离，必须用 declarativeNetRequest
+- 发送方一律经 `client.ts` 编码；入口 `dispatcher.ts` 对 `unknown` 先 decode 并校验扩展 sender，再交给 `routes.ts`。
+- 新增消息必须五处一起改：`messages.ts`、`message-protocol.ts` 的 registry（请求与响应 schema）、`routes.ts`、typed client、contract test（`message-protocol.test.ts`）。
+- 响应由 client 按 message type 解码，畸形响应抛 `BackgroundProtocolError`。调用方不得对 `sendMessage` 的结果做裸类型断言。
+- 需要确认完成的 command 必须返回 JSON 可序列化的 ACK（如 `{ success: true }`），不能把进程内的 `void` 当线协议值。
+- Background → tab 的 push 必须经 `encodeBackgroundPush`，订阅方经 `onBackgroundPush` 解码；畸形 push 丢弃。
+- 未知 type、非法字段、错误 sender 一律静默拒绝。envelope 的 `channel` / `protocolVersion` 是可选的兼容元数据，不带它们的旧消息仍要接受。
+- `TRANSCRIBE_AUDIO` 成功响应里的 `data.videoId` 必填：它是请求 videoId 的回声，消费方落库前据此拒收不属于自己的字幕。改成可选等于闸门永远放行。
+- Database Port RPC 走 `port-bridge.ts`，不并入本消息协议（`lib/database/bridges/CLAUDE.md`）。
+
+## Handler
+
+- handler 只做消息层，策略留在领域 lib。有状态 handler 签名 `(msg, sender, ctx)`，无状态 `(msg)`。`BackgroundContext` 不暴露 Map 或 transport。
+- 转录与总结各持一份 `createJobRegistry()` 实例，互不干扰（取消总结不会中断转录）。
+- `finish(tabId, controller)` 必须回传 `start` 给的那个 controller。取消后立刻重开时，旧任务的 `finally` 晚于新任务注册，无条件释放会把活着的任务注销掉。
+- 平台转录 handler 经 `transcription-handlers.ts` 的 `platformHandlers` 按 `msg.platform` 分发。平台 handler 只能 import `transcription-utils.ts`，import `transcription-handlers.ts` 会成环。
+- Offscreen 进度消息的 sessionId 解析不到目标 tab 时，warn 后丢弃。
+- `FETCH_BOOKMARK_PAGE` 把任意站点的 fetch 隔离在没有 Document 的 SW 里：第三方响应的 HTTP Link preload / modulepreload 会污染 app.html 的 CSP。
+- `handleFetchBookmarkPage` 先校验 URL（拒 localhost、内网、非 HTTP(S)）。响应是结构化结果，不跨消息传 `Response` / `Headers`。
+- `AGENT_BRIDGE_CONNECT_NOW` 只委托 scheduler，页面不持有 WebSocket。连接幂等、开关、重试归 `lib/agent-bridge/CLAUDE.md`。
+- WebDAV 的两条消息只转给 SW 里的同步引擎，规则归 `lib/sync/CLAUDE.md`。
+- `OPEN_APP_PAGE` 存在是因为 content script 没有 `browser.tabs`。`tabs.query({ url })` 的 pattern 忽略 fragment，且查自家 `chrome-extension://` URL 不需要 `tabs` 权限。
+- `openWelcomePage()` 自带闸门（`onboardingStorage` 有值即 no-op）：unpacked 扩展每次 reload 都报 `reason === 'install'`，只看 reason 会在开发期反复弹页。
+- `captureXTokens` 的 webRequest 监听器必须保留（在 `background.ts` 注册）：X 浮层已删，但 app.html 的 X 同步全靠它拿认证。filter 由 `PLATFORM_DESCRIPTORS.x.hostPermissions` 派生，不手写域名。
+- 工具栏任务 badge 由 app.html 写，SW 只当清道夫（没有 app.html 标签页时清空）。`sweepJobsBadge(closedTabId)` 必须排除正在关闭的 tab：`onRemoved` 触发时 `tabs.query` 可能仍返回它。
+
+## 指针
+
+- 跨 runtime 协议的共享 schema 片段：`lib/runtime-message/CLAUDE.md`。
+- 总结策略：`lib/summary/CLAUDE.md`。转录管线：`lib/transcription/CLAUDE.md`。

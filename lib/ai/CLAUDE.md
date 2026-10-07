@@ -1,18 +1,38 @@
 # Vercel AI SDK 集成层
 
-Provider factory + 测试连接 + 模型列表获取 + Embedding 客户端。为 app.html 设置页面、AI 标签（`lib/tagging`）、AI 总结（`lib/summary`）、语义搜索 embedding 提供基础设施。
+LLM / Embedding 的 provider factory、连接测试、模型列表。设置页、AI 标签、AI 总结、Chat、语义检索共用，对外 import 面是 `@/lib/ai`。
 
-## 模块结构
+## 约束
 
-- `index.ts` — LLM 三函数 + `supportsSchemaDelivery()` + ASR 测试 + re-export embedding。`createLanguageModel(options)` 根据 `def.sdkType` 选择 AI SDK 构造器（openai/anthropic/google/openai-compatible），custom provider 特殊处理 `customProtocol`；openai-compatible 分支把 `def.supportsJsonSchema` 透传给 `createOpenAICompatible({ supportsStructuredOutputs })`。`testLlmConnection()` 通过 `generateText()` 验证连接。`testAsrConnection({providerId, apiKey})` 原生 fetch `GET {def.baseUrl}/models` + Bearer 验证 key 有效性与可达性（两 ASR provider 均 OpenAI 兼容；真实转录探针需要音频文件，models 端点免费即时——**只验凭证不验模型名**，故设置页 ASR 卡的 model 字段不算连接字段）。`fetchAvailableModels()` 原生 fetch 调用 `{baseUrl}/models`，`buildAuthHeaders()` 和 `resolveModelsEndpoint()` 均基于 `sdkType` 分支。末尾 re-export `./embedding` 全部 public API（`@/lib/ai` 单一 import 面）
-- `embedding.ts` — Embedding provider/client infra（与 `createLanguageModel` 同级）。`createEmbeddingModel({providerId,apiKey,baseUrl?,model})` 按 `EmbeddingProviderDef.sdkType` 分支到 `.textEmbeddingModel(model)`（openai→`@ai-sdk/openai`，gemini→`@ai-sdk/google`，其余→`@ai-sdk/openai-compatible` Bearer header）。`embedText(model,text,options?)`（AI SDK `embed`，空串拒绝）/ `embedTexts(model,texts,options?)`（`embedMany`，空数组短路），`options?: EmbedOptions = { providerId, dimensions? }` — 不传 dimensions 即模型原生维度（列维度惰性跟随模型，见 `lib/embedding`）。`embeddingProviderOptions(providerId, dimensions?)` 按 sdkType 构建 per-call providerOptions 透传维度裁剪（Matryoshka）：openai → `{ openai: { dimensions } }`（进 `/embeddings` body，仅 v3 系生效）；google → `{ google: { outputDimensionality } }`（尾部截断）；openai-compatible → `{ [providerId]: { dimensions } }`（**已验证** `@ai-sdk/openai-compatible@2.0.51` 解析 `providerOptions[config.provider.split('.')[0]]`，而 `createOpenAICompatible({name})` 的 provider = `${name}.embedding`，故 key 就是本项目 providerId；第三方端点是否尊重 `dimensions` 字段取决于各家实现）；无效值（undefined/≤0/非有限数）返回 undefined 不透传（与 `resolveEmbeddingConfig` 同规则双保险）。`testEmbeddingConnection(options: TestEmbeddingOptions)` → `{success,message,dimensions}`（embed 探针串，**探针带上配置的 dimensions**——返回维度必须反映真实落库维度，供 UI 对照 2000 HNSW 上限）
-- `lib/providers.ts` — Provider 元数据唯一真实来源，被 ai/hooks/storage 共用。SdkType + LLMProviderDef + ASRProviderDef + EmbeddingProviderDef 类型定义，LLM_PROVIDER_IDS / ASR_PROVIDER_IDS / EMBEDDING_PROVIDER_IDS（`as const`）为 Provider ID 唯一真实来源。LLM_PROVIDERS(9个) + ASR_PROVIDERS(2个) + EMBEDDING_PROVIDERS(6个：openai/gemini/zhipu/siliconflow/ollama/custom，**每个含 sdkType**) 纯数据定义，getProviderDef / getAsrProviderDef / getEmbeddingProviderDef 类型安全查找。sdkType 驱动 AI SDK 构造器选择。`LLMProviderDef.supportsJsonSchema?` 能力位：端点接受 `response_format: json_schema`（仅 openrouter true，未设 = 保守 json_object）。deepseek defaultModel 为 `deepseek-v4-flash`（旧 `deepseek-chat` 别名 2026-07-24 退役）
+- `lib/providers.ts` 是 Provider id 与元数据的唯一事实源。`sdkType` 驱动全部分支（SDK 构造器、认证 header、models 端点），不要按 provider id 另开分支。
+- custom provider 的 `sdkType` 静态为 `openai-compatible`；LLM 侧 `customProtocol === 'claude'` 时在运行时改走 anthropic。
+- AI SDK 没有 model listing API：模型列表与 ASR 探针走原生请求。
+- `testAsrConnection` 只验凭证与可达性（`GET /models`），不验模型名，所以设置页 ASR 卡的 model 字段不算连接字段。
+- 总结（`lib/summary`）走 `streamText` 纯文本流加自定义协议，刻意不走 `generateObject`；协议段内的 JSON 由客户端 Zod 校验。
 
-## 约定
+## 结构化输出（`generateObject`）
 
-- Embedding 请求可靠性：`embedText` / `embedTexts` 统一 60s abort deadline；`embedTexts` 不覆盖 `maxParallelCalls`，由 provider 的 `supportsParallelCalls` / `maxEmbeddingsPerCall` 能力决定单批调度。跨平台并发归各自 Collection Embed lane，不设全局 FIFO。
+- 能力位 `LLMProviderDef.supportsJsonSchema` 表示端点接受 `response_format: json_schema`，未设即保守的 `json_object`。
+- 能力位只能经 `createOpenAICompatible({ supportsStructuredOutputs })` 在 provider 级生效：`languageModel(id, config)` 的第二参数被 `@ai-sdk/openai-compatible` 实现丢弃。
+- 能力矩阵：只有 openrouter 开（网关对不支持的上游静默降级，不 400）。
+- DeepSeek、ZhiPu 官方只接受 `json_object`，发 `json_schema` 直接 400。
+- kimi 部分模型支持，但 Zod 生成的 `$schema` 键会破坏它的 constrained decoding，所以不开。modelscope、custom 能力未知，不开。
+- `supportsSchemaDelivery(providerId, customProtocol?)` 判定 Zod schema 是否真的发给了模型：custom 仅 claude 协议为 true；原生 sdkType（openai / anthropic / google）为 true；openai-compatible 看能力位。
+- 调用方必须按它分叉（样板 `lib/tagging/tagger.ts`）：true 用 `generateObject({ schema })`；false 用 `generateObject({ output: 'no-schema' })` 加客户端 Zod parse 兜底。
+- `'no-schema'` 分支的 schema 为 null，不会触发 SDK 的 responseFormat 警告，请求体仍带 `response_format: json_object`。
+- `json_object` 模式下 schema 不发给模型，prompt 是唯一的 schema 载体；OpenAI 规范还要求 prompt 含 "json" 字样。调用方的 prompt 必须自带 JSON 格式说明（样板 `lib/tagging/prompt.ts`）。
+- 守卫：`ai.test.ts`（能力矩阵）。
 
-- AI SDK Provider 映射: `LLMProviderDef.sdkType` / `EmbeddingProviderDef.sdkType` 驱动全部分支。openai → `@ai-sdk/openai`，anthropic → `@ai-sdk/anthropic`，google → `@ai-sdk/google`，openai-compatible → `@ai-sdk/openai-compatible`。custom provider 的 sdkType 静态为 `openai-compatible`，LLM 侧 `customProtocol==='claude'` 时运行时覆盖为 anthropic。测试连接：LLM 用 `generateText()`，embedding 用 `embed()` 探针；模型列表用原生 fetch（AI SDK 无 model listing API），认证 header 由 `buildAuthHeaders(sdkType, apiKey)` 统一构建
-- 结构化输出（`generateObject`）: **per-provider 能力位方案**——`LLMProviderDef.supportsJsonSchema` 驱动 `createOpenAICompatible({ supportsStructuredOutputs })`（provider 级是 @2.0.51 唯一生效入口，`languageModel(id, config)` 第二参数被实现丢弃）。仅 openrouter 开启（网关原生接受 json_schema，对不支持的上游静默降级不 400）；DeepSeek/ZhiPu 官方仅 `json_object`（发 json_schema 直接 400）、kimi 部分模型支持但 Zod 生成的 `$schema` 键破坏其 constrained decoding、modelscope/custom 能力未知（2026-07 查证）。`supportsSchemaDelivery(providerId, customProtocol?)` 判定"Zod schema 是否真正下发给模型"：custom → `protocol==='claude'`；native sdkType（openai/anthropic/google）→ true；openai-compatible → 能力位。调用方（`lib/tagging/tagger.ts`）按此分叉：true → `generateObject({schema})`；false → `generateObject({output:'no-schema'})` + 客户端 `tagsSchema.parse` 兜底——schema 为 null 不触发 SDK responseFormat 警告，请求体仍 `response_format: json_object`。`json_object` 模式下 Zod schema 不发给模型且 OpenAI 规范要求 prompt 必须含 "json" 字样，调用方需在 prompt 中自带 JSON 格式说明（参见 `lib/tagging/prompt.ts`）。能力矩阵单测：`ai.test.ts`
-- Embedding 维度：无 canonical 常量（原 `EMBEDDING_DIMENSIONS=1536` 及 openai 系 dimensions pin 已移除）。向量列维度跟随当前模型，惰性切换 + HNSW 2000 上限守卫（`MAX_INDEXABLE_DIMENSIONS`）在 `lib/embedding/`（vector store / 语义检索）实现。用户可选配置 `dimensions` 裁剪（`embeddingConfigs[id].dimensions`，经 `resolveEmbeddingConfig` 过滤后由 `embeddingProviderOptions` 按 sdkType 透传），解决 text-embedding-3-large 原生 3072 > 2000 的场景
-- LLM 总结: 已落地在 `lib/summary/`（B 站面板 AI 总结 + 章节分段）。走 `streamText` 纯文本流 + 自定义输出协议，不走 `generateObject`——JSON 只出现在协议段内，由 `lib/summary/protocol.ts` 用 Zod 客户端校验，与本文件「prompt 是唯一 schema 载体」原则一致。`prefMode`（quality/efficiency）仍无消费者：总结恒用合并单次调用
+## Embedding
+
+- 没有 canonical 维度常量：向量列维度跟随当前模型，惰性切换与 HNSW 维度上限在 `lib/embedding/CLAUDE.md`。
+- 用户可选的 `dimensions` 裁剪按 sdkType 透传：openai 进 `{ openai: { dimensions } }`（仅 v3 系模型生效），google 进 `outputDimensionality`。
+- openai-compatible 的 providerOptions key 是本项目的 providerId：SDK 取 `config.provider.split('.')[0]`，而 `createOpenAICompatible({ name })` 的 provider 是 `${name}.embedding`。第三方端点是否尊重 `dimensions` 取决于各家实现。
+- 无效的 `dimensions`（undefined、`<= 0`、非有限数）不透传，与 `resolveEmbeddingConfig` 同规则。
+- `testEmbeddingConnection` 的探针必须带上配置的 `dimensions`：返回的维度要等于真实落库维度，UI 拿它对照索引上限。
+- `embedText` / `embedTexts` 共用同一个 abort deadline。`embedTexts` 不覆盖 `maxParallelCalls`，单批调度由 provider 自身能力决定。
+- 跨平台并发归各自的 Collection Embed lane，这里不设全局 FIFO。
+
+## 已知缺口
+
+- 设置项 `prefMode`（quality / efficiency）没有任何消费者：总结恒用合并的单次调用。

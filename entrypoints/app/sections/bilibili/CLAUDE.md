@@ -1,32 +1,56 @@
 # bilibili
 
-app.html B站收藏夹页面 adapter，消费共享 `CollectionPageScaffold`。固定顺序：面包屑 + 28px route h1 + 计数·上次同步 + 立即获取（收藏夹名自 docs/25 Step 8 起在面包屑末项，不再进 caption）→ pipeline 行（strip + 闸门）→ 全宽搜索框 → 配置提醒横幅（若有待配置项）→ 自动转录（仅运行/完成/配额时占一行）→ 收藏夹 chips → 标签 → 服务端排序行 → 视频列表。（docs/19 P0-1 三行压缩于 2026-08-20 被用户否决并恢复堆叠；docs/23 Phase 5 统一状态与 chip header。）
+app.html B站收藏夹页（`/collections/bilibili[/:mediaId]`）的平台 adapter：夹内浏览、显式同步、手动与自动转录。页面编排必须经共享 `CollectionPageScaffold`；scaffold、pipeline hook、面包屑 hook 的通用约定见 `entrypoints/app/components/collection/CLAUDE.md` 与 `entrypoints/app/hooks/CLAUDE.md`，这里只写 B站独有的。
 
-**面包屑**（docs/25 Step 8）：`useCollectionBreadcrumbs('bilibili', 夹名)` → `首页 / 收藏夹 / B 站收藏夹 / <夹名>`；夹名因此**从 caption 移除**，不同屏重复。夹名优先取自 folders 列表（深链时回退 `useBiliFavVideos` 的 `folderTitle`），空则退回三级。无夹 fallback 页传 `useCollectionBreadcrumbs('bilibili')`。`collections.sidebarTitle` 的中文已对齐 `nav.bilibiliFavorites`（「B 站收藏夹」），末项与 h1 才不打架。
+## 约束
 
-## 模块结构
+### 浏览（远端 API，不读本地库）
 
-- `bilibili-view.tsx` — 页面 Adapter：通过共享 pipeline 展示 Fetch/Transcription/Embedding/Tagging——段装配/标签/coverage key 经共享 `useCollectionPipeline`（`app/hooks/`，docs/20 中-7），夹内页与 fallback 页共用本地 `transcriptionStage(label, transcribeJob)` 作 content 段，夹内页以 `extraRefreshKey` 附加 `autoTranscribe.running`/`activeBvid`/`transcribeJob.generation`，fallback 页只附加 `transcribeJob.generation`；Fetch 完成保留本次总数 + 100%，四阶段 runtime 统一读 background job phase（Transcription 段经 `backgroundJobRuntime(useJob('bilibili','transcribe'))`——自动批转录与手动单视频共用该 job key，闸门暂停时 strip 正确显示 paused；纯展示，段级暂停控件已下线——运行控制归 scaffold 尾部的 per-platform 闸门按钮 `components/library-gate/`）。获取按钮文案统一 `pipeline.fetchNow`/`pipeline.fetching`（两处 scaffold 调用点：夹内页 + 无夹 fallback 页，fallback 页 Transcription 段同样读 job）。认证门隐藏 strip，禁止用 `indexing` 冒充 Tagging。错误文案（docs/32 Step 4）：模块级 `SYNC_ERROR_COPY`（`auth: collections.notLoggedInTitle`、`rateLimited: collections.rateLimited`）经共享 `syncErrorMessage`；夹内页的 `queryError`（浏览错误）与两页的同步横幅都先翻译再喂 scaffold，所以 412 风控显示「触发 B 站限流」而不是 `Bilibili API HTTP 412`；B站不报 reset，无按钮锁。标题、服务端搜索、换夹 remount 与 operation scope 不变。两处 `copy` 只传平台文案，获取按钮两态、错误态标题与重试、同步失败横幅由 scaffold 自取（docs/32 Step 6）；caption 的「上次同步」用 `common.lastSynced`；搜索防抖 `SEARCH_DEBOUNCE_MS` import 自 `hooks/use-collection-library.ts`（唯一定义）。
-- `video-grid-skeleton.tsx` — `VideoGridSkeleton`：共享 `CardGridSkeleton` 外壳（grid-of-8）+ 共享 `CollectionCardSkeleton`（`media="16/9"`、两行文字，与真实卡片同内边距/同轨道），由 scaffold 的普通列表 phase 与 `TaggedItemGrid` 共用
-- `folder-chips.tsx` — 横向收藏夹过滤器：共享 `ChipRowShell`（camera icon + `collections.foldersTitle`，icon 继承 shared secondary 色）承载 loading / 空两态，有夹时走共享 `CollapsibleChipRow`（展开/收起 `common.showMore`/`showLess`），本文件保留内容逻辑——loading 骨架 chip / folders 为空以 `text.secondary` 显示 `collections.noFolders` / 点击 = `onSelect(folder.id)`（驱动 navigate）。**不显示 per-chip 视频数**（纯名称，选中夹计数在标题 caption）
-- `bilibili-sync-adapter.ts` — 共享 Sync Adapter（audit #6）：`runBilibiliSync(onProgress, control, {preferFolderId?, onFolders?})` 单点定义「B站同步成功意味着什么」——先 `checkAuth()`（读 cookie、零网络；未登录在 **funnel 之前**抛原 `BiliAuthError`，不算尝试、不写记录，页面未登录态照旧靠这个错误类识别，docs/32 §5.2），再把 `fetchAndSyncFolders` + `orderFolders`（`preferFolderId` 把路由选中 Source 移到 Fetch producer 首位；缺省 = API 自然序，即 daily auto 路径）+ 动态 import `runBiliStreamingSync`（转录 runtime 不进 App 启动 chunk）整段放进 经 `hooks/platform-sync.ts` 的 funnel `runPlatformSync(platform, control, sync)`（docs/32 Step 1：记尝试 → 同步 → 成功先派发 embed/tag lanes 再记成功 / 失败记失败并原样 rethrow；job namespace 在 funnel 内经 `jobPlatformForCollection` 派生），回报 `{ fetched: fetchedCount, inserted: insertedCount, newItemIds: [] }`：空 ids = funnel 只派发 backlog embed lane（逐条转录自行 enqueue，批处理 lane 只重试早前中断留下的 `'chunked'`，手动/自动同源）。`onFolders` 供手动页镜像 folders/loginState。手动 runner 与 daily registry 引用**同一函数**。契约测试 `bilibili-sync-adapter.test.ts`；另导出 `bilibiliAutoSyncPolicy`（daily 触发策略：`getBiliAuth()` 非 null 即就绪），app 根 `collection-platform-auto-sync.ts` 将其与 Sync Adapter 配对进 daily registry（docs/20 高-3）
-- `use-bili-fav-folders.ts` — B站收藏夹 hook（错误经共享 `classifyCollectionSyncError`：`auth` → `loginState='not_logged_in'`，其余存为 `CollectionSyncError`——`error` 自 docs/32 Step 4 起不再是字符串，同步错误优先、否则挂载加载错误，auth 从不进 `error`）：mount 只 `fetchAndSyncFolders()`，不扫 historical pending；**挂载拉夹列表不是 Platform Sync**（不经 adapter/funnel，不算尝试），所以它刷 `sources.lastFetchedAt` 不再压掉当天的自动全量同步（docs/32 §5.2 修回 07-26 `:30`）。`lastSyncedAt` 自 docs/32 Step 1 起读 Platform Sync Record（`getPlatformLastSyncedAt('bilibili', …)`，effect 依赖 `syncJob.generation`——只在成功时 bump），跨刷新保留；view caption 用 `formatDateTime`（原 `toLocaleTimeString` 只显示时刻，会把上周的同步显示成「10:32」）。手动 Fetch 的 `bilibili:sync` runner 只调 `runBilibiliSync`（传 `preferFolderId=路由选中夹` + `onFolders` 镜像 state）；优先级属于 Fetch producer，Transcript 不维护第二套排序。`bilibili:sync` job 跨 remount 去重并注入 checkpoint
-- `video-card.tsx` — 视频卡片 = 共享 `CollectionCard`（`components/collection/`）装配：`media` 16/9 封面（`//` 协议补 https；破图/无图回退 `solar:video-library-bold-duotone` 占位）+ `overlay` 两枚 `CoverBadge`（左播放量、右时长）+ `title` 2 行 clamp（不再单行 noWrap）+ `meta` UP主 + `date` 收藏时间（`formatFavTime`：同年显示 MM-DD，跨年显示 N年前，自然年判断）+ `tags`（共享 `TagRow`，外壳保证在链接之外；undefined 时整行不渲染）+ `footer` 底部操作栏（转录/状态标记/进度，外壳保证在链接之外；每种形态都包在共享 `CollectionCardRow` 里，内边距归卡片外壳，本文件不再写 `px/pb`）。`href` = `https://www.bilibili.com/video/{bvid}` 真实锚点新标签打开（不再 `window.open`）。失效视频（`!isProcessableVideo(video)`，判定归 `lib/bilibili/video-eligibility.ts`，本目录不再导出 `INVALID_ATTR`）`disabled` 灰显、无 href、无操作栏无标签行。操作栏三态：来源标记（CC 官方/ASR Chip，`state.indexed` 时并列"已索引"Chip（`card.indexed`，database 图标）——content_state='embedded' 才显示）、转录按钮、进度条（LinearProgress + stage 文字 + 取消按钮；转录完成后本地索引期间 stage='indexing' 显示 `stage.indexing`"正在建立索引…"）。**Chip 按语义着色**（2026-10-02，spec `ui-design-system.md` §9 的表）：全部吃主题默认 soft（不写 `variant`），转录 / 重试（可点的动作）`color="primary"`，CC/ASR 来源 `info`（有字幕这一状态），已索引 `secondary`（可检索这一状态；`success` 因 3.69 不过 4.5 被否）。可点 chip 的 hover 洗底由主题持有（24% `paletteHoverBg`，卡片 hover 到 `background.neutral` 时仍 ≥ 4.58；键盘焦点保持静止洗底 + CssBaseline 焦点环，无焦点覆盖）。`video-card.test.tsx` 用 `chipClasses` 常量锁四个 chip 的颜色、`soft`、非 `outlined` 与可点性
-- `tagged-video-card.tsx` — `TaggedVideoCard = taggedCard(VideoCard, 'video', toBiliFavVideo)`（`components/tags/` 的工厂，docs/32 Step 8）：TaggedItemGrid `renderCard` 与 `/collections` `CARD_ADAPTERS` 的 B 站卡片 adapter。mapper `toBiliFavVideo(row: PagedItemRow)` **留在本文件**——其余五个平台的 mapper 是 lib 分页查询导出的 `mapRow`，而 B 站没有本地分页查询（夹内网格走远端 API，docs/32 D4），无可共用——把 `items` 行映射回 `BiliFavVideo` 最小形状复用 VideoCard：`platform_meta` 收窄委托 `narrowBiliVideoMeta`（`lib/bilibili/video-eligibility.ts`，唯一 decoder），本文件只补 `title`/`bvid`/`upper.name` 与 `id`/`mid`/`face` 占位。不传 `transcribeState`（无操作栏——标签筛选网格是知识库视图非夹内视图），`tags` + `onEditTags` 由工厂透传。**adapter 知识归 adapter**：`BiliFavVideo` 类型导入只在本文件，共享模块零平台导入
-- `use-bili-fav-videos.ts` — 收藏夹视频浏览 hook（错误经共享 `classifyCollectionSyncError`：`auth` → `loginState`，其余 `error: CollectionSyncError`，412 即限流，docs/32 Step 4）：调用 fetch-only `bili-sync-service.fetchFavoriteVideosPage(mediaId, page, order, keyword)` 获取当前 UI 页，不写库、不污染全量同步基线；goToPage、服务端排序/搜索与 `fetchIdRef` 过期响应保护保持不变
-- `use-video-transcribe.ts` — 手动转录薄 hook；`bilibili:transcribe` 仍独立，Embedding/Tagging 通过 `bilibili-processing-adapter.ts` 入共享双 lane，不观察已启动 Promise。
-- `bilibili-processing-adapter.ts` — app/lib 边界薄 Adapter：把单个 bvid enqueue 到共享处理 inbox，返回独立 Embed/Tag ticket；领域层因此不依赖 app job store。
-- `auto-transcribe-runtime.ts` — 模块级 pipeline 单例 + `runBiliStreamingSync(folders, onProgress?, control?)`。每个 Fetch producer 懒建一个 session：首个 durable 新条目启动唯一 `bilibili:transcribe` job，后页 append，同步成功/失败都在 finally close；Fetch 不 await Transcript。多个 producer 只在 Transcript lane 串行，Fetch 不被锁。session 派发用 `startJob(..., 'queue')`——手动转录占 job key 时由 job store 排队、settlement 后自动接续（原 `while(true)` 重派发循环已删，audit 2026-08-17 #7）
-- `use-auto-transcribe.ts` — 单例 pipeline 的纯 `useSyncExternalStore` 订阅；无 mount 查询、start、stop、dispose side effect
-- `auto-transcribe-bar.tsx` — 纯进度展示，自持 `mb`（scaffold 的 operation slot 不加间距）。**idle 返回 null**——pipeline strip 的 Transcribe 段已承载覆盖率，空面板不再占一行（docs/19 P0-1）；`done/cancelled` 一条 `role="status"` 摘要行（图标 + 标题 + 统计 chips）；`quota_paused` 一条 `role="status"` 警示行（**不是 alert**）；running 才展开为缩略图 + 当前视频 + `h3` 计数 + 进度条的面板。缺 ASR 的条目由共享 runtime 停放，后续有官方字幕的视频仍继续处理；页面统一 `CollectionConfigurationNotice` 消费 `AutoTranscribeState.asrBlocked`，不在进度条重复绘制 warning。阶段文字用 `text.accent`，占位底 `background.neutral`。
+- 夹内网格走远端 API 分页（docs/32 D4）：`use-bili-fav-videos.ts` 只调 fetch-only 的 `fetchFavoriteVideosPage`，不写库、不污染全量同步基线。别改成本地优先；重开的触发条件是浏览路径第一次观察到 412。
+- 所以 B站没有 lib 分页查询与 `mapRow`：`toBiliFavVideo` 留在 `tagged-video-card.tsx`，其余平台的 mapper 是 lib 导出的，这里没有可共用的。
+- 视频排序：服务端排序，不做客户端排序（`order` 一路传到 `fetchFavVideos`）。显式增量同步有意固定 `mtime` + 空关键词：其他排序或搜索结果会破坏「遇到旧条目即截断」的语义。
+- 视频搜索：服务端搜索（`keyword` 同一条链路），只影响 UI 浏览，不影响全量同步。
+- 只做公开收藏夹：私密夹由 `lib/bilibili` 在 API 层过滤（见 `lib/bilibili/CLAUDE.md`），页面不要自己再判，也不要绕过。
+- 失效视频的判定与 `platform_meta` 的收窄归 `lib/bilibili/video-eligibility.ts`（`isProcessableVideo` / `narrowBiliVideoMeta`），本目录不自己读 `attr`。
 
-## 约定
+### 同步
 
-- B 站收藏夹：页面编排必须经 `CollectionPageScaffold`，路由、默认跳首夹和服务端搜索语义不变。主分类标题使用 `collections.foldersTitle`，页面标题使用 `collections.sidebarTitle`，禁止当前收藏夹名冒充页面标题。
-- Phase 5 状态：登录失败、空收藏夹、未选收藏夹全部消费 `StateBox` 的结构化 `icon/title/description/action`；图标 48px secondary，不在平台页自画 heading/gap。三者**刻意留在本地**，不迁 `components/collection-states/`（docs/32 Step 6 D-c）：`NotLoggedIn` 的动作是「重试」（夹内页重试视频查询、fallback 页重试同步）而不是打开站点 + 获取，`EmptyFolderState` 无图标无按钮，`SelectFolderState` 是 240 高。
-- B 站视频持久化: 显式同步经 `runBiliStreamingSync` 调用 `syncAllFavoriteVideos`，每页 `syncFavVideosToDb` 完成后只发布 `result.inserted` 对应视频。普通浏览只 fetch 当前 UI 页且不入库；新增 membership 不重复转录。insert-only 不更新已有记录，`content_state='pending'`
-- 视频排序: 服务端排序，不做客户端排序。`SortControl`（`role="group"` + `aria-pressed` 文字按钮，选中 = 8% 品牌洗底 `varAlpha(primary.mainChannel, 0.08)`（hover 加深到 16%）+ `text.primary` 600 + 主色图标，**不用主色做文字**）作为 scaffold `secondaryCategory` 独占一行（标签之后、列表之前，自带 `mb: 2`）；`order` 参数贯穿 `SortControl` → `useBiliFavVideos.order` → `fetchFavoriteVideosPage` → `fetchFavVideos`；显式增量同步有意固定 `mtime` + 空关键词，避免 `view`/`pubtime`/搜索结果破坏旧条目截断语义
-- 视频搜索: 服务端搜索。`keyword` 贯穿 scaffold `SearchField` → `BilibiliView` → `BilibiliCollectionPage` → `useBiliFavVideos.keyword` → `fetchFavoriteVideosPage` → `fetchFavVideos`；只影响 UI 浏览，不影响全量同步。切换收藏夹同步清空 input+keyword/ref
-- RAG 索引 UI: 转录成功且 chunks durable 后，`transcribeAndPersist` enqueue 共享双 lane 并立即返回；Embed/Tags 都不阻塞下一条 Transcript。视频卡片可短暂显示 stage='indexing'，转录结束后先退出 transcribing；晚到的 `onIndexed('embedded')` 独立刷新已索引标记。coordinator `setVideos` 仍并行 `getEmbeddedBvids` 预加载，`video-card.tsx` 渲染"已索引"Chip。i18n key：`stage.indexing`/`autoTranscribe.indexing`/`card.indexed`（zh/en 齐全）
-- 标签 UI: 状态与 phase 编排由 `CollectionPageScaffold` 内部的 `useCollectionTags`/`TaggedItemGrid` 持有，本 section 只提供 `PLATFORM = 'bilibili'`、`getTagId(video.bvid)` 和卡片 adapter。筛选**跨收藏夹**、多选 **AND 语义**；激活时 scaffold 隐藏 `primary-category` scope 的 AutoTranscribe/Sort，并以标签结果替换普通列表。只有转录+索引过的视频才有 AI 标签，大部分卡片无标签是正常态。
-- job 命名空间（docs/32 Step 5）：本目录所有 `startJob`/`useJob` 第一参与 `jobPlatform:` 都是 `jobPlatformForCollection(PLATFORM)` 派生的模块级 `JOB_PLATFORM`（`view`/`use-bili-fav-folders`/`bilibili-processing-adapter` 同时保留 `PLATFORM = 'bilibili'` 给面包屑、pipeline、scaffold、`getPlatformLastSyncedAt`、`itemPlatform`；`auto-transcribe-runtime`/`use-video-transcribe` 只要命名空间，不留 `PLATFORM`）。今天派生值恰为 `'bilibili'`，所以上文的 `bilibili:transcribe` / `bilibili:sync` 运行时键不变；手写字面量由 `tests/platform-completeness-contract.test.ts` 按 AST 禁止。转录写入（`persistExistingItemContent`）是 spec `platform-onboarding.md` §4.4「延迟正文」的流式变体
+- 「B站同步成功意味着什么」只在 `bilibili-sync-adapter.ts` 的 `runBilibiliSync` 定义一处；手动 runner 与 daily auto-sync registry 引用同一个函数。
+- `runBilibiliSync` 先 `checkAuth()`（读 cookie、零网络）再进 funnel `runPlatformSync`：未登录在 funnel 之前抛 `BiliAuthError`，不算一次尝试、不写 Platform Sync Record（docs/32 §5.2）。页面的未登录态就靠这个错误类识别。
+- 它回报 `newItemIds: []` 是故意的：逐条转录自己 enqueue embed/tag，funnel 只需派发 backlog lane。
+- `auto-transcribe-runtime` 在 adapter 里动态 import：转录 runtime 不进 App 启动 chunk。
+- 挂载时拉夹列表（`use-bili-fav-folders.ts` 的 `fetchAndSyncFolders()`）不是 Platform Sync：不经 adapter/funnel、不算尝试。别把它接进 funnel，否则每次打开页面都会占掉当天的自动全量同步名额。mount 也不扫历史 pending。
+- 路由选中的夹经 `preferFolderId` 排到 Fetch producer 首位；优先级只属于 Fetch，Transcript 不维护第二套排序。
+- 持久化是 insert-only：只把 `result.inserted` 对应的视频发布去转录，新增 membership 不重复转录。
+- 「上次同步」读 Platform Sync Record，caption 用 `formatDateTime`：只显示时刻会把上周的同步显示成「10:32」。
+
+### 转录与处理 lane
+
+- Fetch 不 await Transcript；多个 Fetch producer 只在 Transcript lane 串行，Fetch 不被锁。
+- 转录 session 用 `startJob(..., 'queue')` 派发：手动转录占着 `transcribe` job key 时由 job store 排队并自动接续，不要写重派发循环。
+- 自动批转录与手动单视频共用同一个 `transcribe` job key；pipeline strip 的 Transcription 段读这个 job，闸门暂停时才会正确显示 paused。禁止用 `indexing` 冒充 Tagging 段。
+- `use-auto-transcribe.ts` 是单例 pipeline 的纯 `useSyncExternalStore` 订阅：不得加 mount 查询或 start / stop / dispose 副作用。
+- 转录成功且 chunks durable 后 enqueue Embed / Tag 双 lane 并立即返回，两者都不阻塞下一条 Transcript；卡片的「已索引」标记由晚到的回调独立刷新。
+- Embed / Tag 经 `bilibili-processing-adapter.ts` 进共享处理 inbox：它是 app/lib 边界，领域层因此不依赖 app 的 job store。
+- job 命名空间一律是 `jobPlatformForCollection(PLATFORM)` 派生的 `JOB_PLATFORM`，不手写 `'bilibili'`；守卫 `tests/platform-completeness-contract.test.ts`。
+- 转录写入是 `.trellis/spec/frontend/platform-onboarding.md` §4.4「延迟正文」的流式变体。
+
+### 错误与状态
+
+- 错误先经共享 `classifyCollectionSyncError`，再用 `syncErrorMessage(…, SYNC_ERROR_COPY)` 翻译后才喂 scaffold（浏览错误与同步横幅都是）：412 风控显示限流文案，而不是原始 HTTP 文本。
+- `auth` 变体走 `loginState`，从不进 `error`。B站不报 reset 时间，所以没有限流按钮锁。
+- `NotLoggedIn` / `EmptyFolderState` / `SelectFolderState` 三态刻意留在本地，不迁 `components/collection-states/`（docs/32 Step 6 D-c）：未登录的动作是「重试」而不是打开站点 + 获取，空夹无图标无按钮，未选夹高度不同。它们仍消费 `StateBox`，不自画 heading。
+- 认证门隐藏 pipeline strip。
+
+### 刻意的 UI 决定
+
+- 页面 h1 固定 `collections.sidebarTitle`，主分类标题 `collections.foldersTitle`；当前夹名只出现在面包屑末项，不进 caption、不冒充页面标题。
+- 页面各区块保持纵向堆叠；压成三行的方案已被用户否决（docs/19 P0-1），别重提。
+- 收藏夹 chip 只显示名称，不显示每个夹的视频数。
+- `auto-transcribe-bar.tsx` 在 idle 时返回 null：pipeline strip 的 Transcribe 段已承载覆盖率。配额暂停是 `role="status"`，不是 alert。
+- 缺 ASR 的提醒由页面的 `CollectionConfigurationNotice` 统一出，进度条不重复画 warning；缺 ASR 的条目被停放，后续有官方字幕的视频仍继续处理。
+- 进度条自持下边距：scaffold 的 operation slot 不加间距。
+- 排序控件的选中态是 8% 品牌洗底 + `text.primary`，不用主色做文字。
+- 视频卡 Chip 按语义着色（`.trellis/spec/frontend/ui-design-system.md` §9）：可点动作 `primary`、CC/ASR 来源 `info`、已索引 `secondary`；`success` 对比度不过 4.5，已否决。`video-card.test.tsx` 锁。
+- 视频卡的操作栏与标签行必须在链接之外（由 `CollectionCard` 外壳保证）；失效视频灰显、无链接、无操作栏。
+- 标签筛选跨收藏夹、多选 AND 语义；标签结果网格是知识库视图，卡片不传 `transcribeState`（无操作栏）。只有转录并索引过的视频才有 AI 标签，大部分卡片无标签是正常态。

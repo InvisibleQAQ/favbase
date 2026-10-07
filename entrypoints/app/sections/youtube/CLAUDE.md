@@ -1,23 +1,19 @@
 # sections/youtube
 
-YouTube 公开播放列表收藏页（`/collections/youtube`，扁平单集合无详情路由，第六个平台）。视觉结构对齐 X/知乎收藏页：28px route h1 + 计数 + lastSynced + 同步按钮 → pipeline 行（strip + 闸门）→ 全宽搜索框 → 配置提醒横幅（若有）→ 播放列表 chips → 卡片 grid（xs12/sm6/md4/lg3）+ Pagination。**数据一律从 PGlite 经 `lib/youtube/youtube-sync-service` 查询方法读取（UI 零 drizzle 导入），不直读 Data API**；同步（`syncYoutubePlaylists`）在 app.html context 跑，经 RPC proxy 写 Offscreen PGlite。**凭据是 API key 形态（无 OAuth）**：`youtubeApiKey`/`youtubeChannel` 在 `UserSettings`（设置页「账号连接」的 `youtube-connection-card` 填写+测试，见 `sections/settings/CLAUDE.md`），「未配置」是**单一同步维度**（`youtubeCredentials(settings)` 同步判定、页面读 `configured`——旧双门禁的异步授权探针随 OAuth 移除）。
+YouTube 公开播放列表收藏页（`/collections/youtube`，播放列表经 chips 筛选，无详情路由）。共享骨架（scaffold、`useCollectionLibrary`、Platform Sync funnel、状态组件）的规则见 `entrypoints/app/hooks/CLAUDE.md` 与 `entrypoints/app/components/collection-states/CLAUDE.md`；这里只记 YouTube 的不同之处。
 
-**面包屑**（docs/25 Step 8）：`useCollectionBreadcrumbs('youtube')` → `首页 / 收藏夹 / YouTube 播放列表`，同时传给 `copy.breadcrumbs` 与 **配置门早退分支（共享 `NeedsConfigState`）的 `SectionTitleBar links`**（配置门与加载后同路由同路径，`sections/configuration-heading.test.tsx` 断言）。
+## 约束
 
-## 模块结构
+- 凭据是 API key + 频道（无 OAuth），在设置页 Connections 的 YouTube 卡填写。`youtube-sync-adapter.ts` 导出的 `youtubeCredentials(settings)` 是「是否已配置」的唯一判定：adapter 的 run 门、`youtubeAutoSyncPolicy.probeReady` 与页面门（`useCredentialGatedLibrary`）必须读同一个函数。
+- 未配置时 adapter 在 Platform Sync funnel 之前静默 return：不算尝试、不写 Platform Sync Record。
+- 配置门早退分支先渲染带面包屑的 `SectionTitleBar`，再渲染 `NeedsConfigState`：早退与加载后是同一条路由，必须保持唯一 h1 和同一条面包屑。守卫 `sections/configuration-heading.test.tsx`。
+- 密钥被拒（`YoutubeAuthError`）也用 `NeedsConfigState`，但多传 `sync`：用户改完设置回来可以就地重试。
+- Google 不报限流 reset，所以没有 `rateLimitedUntil` 文案，也不锁获取按钮；限流文案复用 `settings.youtube.rateLimited`，不造 `youtube.*` 副本。
+- 同步只由按钮触发，不在挂载时跑：有配额的远程端点，而且每次都是全量重拉（播放列表是位置序，没有增量游标）。
+- 同一视频属于多个播放列表时，会出现在每个所属列表的 chip 下；chips 计数之和大于总数不是 bug。
 
-- `youtube-view.tsx` — scaffold Adapter；常驻 pipeline 为 Fetch → Embedding/Tagging 并行（无 content 段），段装配/标签/coverage key 经共享 `useCollectionPipeline`（`app/hooks/`，docs/20 中-7），本 view 只传 `backgroundJobRuntime(syncJob, fetchedCountProgress)`；Search 后注入共享 provider Configuration Blocker notice；YouTube 连接配置整页门仍优先，但先渲染 `SectionTitleBar` 保留 route 单 h1。runtime、phase、设置跳转、错误翻译与标签职责不变。状态组件来自 `components/collection-states/`（docs/32 Step 6）：未配置与密钥被拒都是 `NeedsConfigState`（`settings="connections/youtube"`，后者多带 `sync` 以便改完重试），库空 = `EmptyLibraryState`（获取 contained）；`copy` 只传平台文案，外壳文案由 scaffold 自取；caption 的「上次同步」用 `common.lastSynced`。播放列表 chips 是共享 `FacetChips`（`components/collection-states/`，docs/32 Step 8：`icon="mdi:youtube"` + `youtube.playlistsTitle`，`getKey` = `playlistId`、`getName` = `title`，「列表名 (count)」、名字为空回退 id，顺序是 `getPlaylistCounts` 给的计数降序；原 `playlist-chips.tsx` 已删），库空时 view 隐藏整行。
-- `youtube-sync-adapter.ts` — 共享 Sync Adapter（audit #6）：`runYoutubePlaylistsSync(onProgress, control)` 单点定义「YouTube 同步成功意味着什么」——settings apiKey/channel 解析（`youtubeCredentials(settings)`：两者都非空才返回 `{ apiKey, channel }`，否则 `null`；本文件导出，`youtubeAutoSyncPolicy.probeReady` 与页面门读同一个函数，docs/32 Step 7；`null` 即静默 no-op）、进度 `YoutubePlaylistsProgress`（类型在 lib）、整段 `syncYoutubePlaylists` 经 `hooks/platform-sync.ts` 的 funnel `runPlatformSync(platform, control, sync)`（docs/32 Step 1：记尝试 → 同步 → 成功先派发 embed/tag lanes 再记成功 / 失败记失败并原样 rethrow；job namespace 在 funnel 内经 `jobPlatformForCollection` 派生），回报 `{ fetched: entries, inserted, newItemIds }`；缺配置在 funnel 之前 return，不算尝试。手动页面 `syncFn` 与 daily registry 引用**同一函数**。契约测试 `youtube-sync-adapter.test.ts`；另导出 `youtubeAutoSyncPolicy`（daily 触发策略：apiKey 与 channel 都已配置），app 根 `collection-platform-auto-sync.ts` 将其与 Sync Adapter 配对进 daily registry（docs/20 高-3）
-- `use-youtube-playlists.ts` — 数据 hook（34 行，docs/32 Step 7 / Step 9）：`return useCredentialGatedLibrary(youtubeCredentials, config)`——配置门在共享 wrapper（`app/hooks/use-credential-gated-library.ts`，与 github 同一个：无配置时 `sync()` 静默 no-op，`configured`/`settingsLoading` 给 view 的配置门），判定函数是 adapter 导出的 `youtubeCredentials`。本文件只注入模块级 `queryFn = facetQuery(getPlaylistVideos, 'playlistId')`（addedAt 降序服务层固定）、`facetsFn=getPlaylistCounts`、`platform = PLATFORM`（模块级 `const PLATFORM = 'youtube'`，`JOB_PLATFORM` 也由它派生；「上次同步」由共享 hook 按它读 Platform Sync Record，lib 包装 `getLastSyncedAt` 已删，docs/32 Step 9）、`syncFn=runYoutubePlaylistsSync`、`jobPlatform = JOB_PLATFORM`（错误分类不注入：`syncError` 是共享 `useCollectionLibrary` 按基类分类好的 `CollectionSyncError`，原 `classifyYoutubeSyncError` 已删，docs/32 Step 4）；**不改名、无手写返回接口**，view 直接读 `items`/`filter`/`setFilter`/`facets`/`configured`。同步**手动按钮触发，绝不 auto-on-mount**——远程有配额端点；每次同步全量重拉（playlistItems 位置序无增量游标，insert-only 幂等）
-- `youtube-card.tsx` — 视频卡片 = 共享 `CollectionCard` 装配：`media` 16/9 缩略图（lazy；无图/破图回退 `mdi:youtube` 占位，底 `background.neutral` 暗色安全）+ `overlay` 右下角 `CoverBadge` 时长（共享 `formatDuration`（`app/utils/`，h:mm:ss/m:ss），黑色 scrim 双模式恒定；`durationSeconds<=0` 不渲染——直播/缺数据）；`title` 2 行 clamp；`meta` 频道名（上传者）；`date` `formatDateTime(addedAt)`（外壳右格 noWrap）；`stats` play icon+`formatCompactNumber(viewCount)`；`tags`（共享 `TagRow`，外壳保证在链接之外；undefined 时整行不渲染）。`href = originalUrl` 真实锚点新标签打开（不再 `window.open`）。`useTranslation()` 订阅保证 locale 切换 re-render 格式化输出
-- `tagged-youtube-card.tsx` — 一行 `TaggedYoutubeCard = taggedCard(YoutubeCard, 'video', toYoutubeVideoItem)`（`components/tags/` 的工厂，docs/32 Step 8）：TaggedItemGrid `renderCard` 与 `/collections` `CARD_ADAPTERS` 的 YouTube 卡片 adapter。mapper 就是 `lib/youtube/youtube-sync-service.ts` 分页查询导出的 `toYoutubeVideoItem`（originalUrl / publishedAt 原样，meta 经 `narrowYoutubeMeta`），本文件零 envelope 映射
-- `youtube-grid-skeleton.tsx` — 共享 `CardGridSkeleton` 外壳 + 共享 `CollectionCardSkeleton`（`media="16/9"` + 两行文字，匹配卡片形态）
+## 指针
 
-## 约定
-
-- 页面顺序由共享 scaffold 固定为标题/系统状态 → 搜索 → 配置提醒 → 播放列表主分类 → 标签 → 列表；本目录只提供 adapter。
-- 排序固定 addedAt 降序（`platformMeta->>'addedAt'` ISO 字典序，服务层固定，MVP 无排序控件）；chips 筛选走 item_sources（跨列表视频在每个所属列表 chip 下都可见）；platformMeta 形状见 `lib/youtube/CLAUDE.md`
-- 四种空/异常态：未配置（SectionTitleBar + 共享 `NeedsConfigState` 整页短路，引导设置）/ 密钥无效（共享 `NeedsConfigState` 带 `sync`，content phase）/ 库空（共享 `EmptyLibraryState` 引导同步）/ 同步失败（ErrorState+retry）；状态 glyph 统一 48px secondary，双动作组允许窄屏换行，虚线框为共享 `StateBox`
-- 路由/导航：`main.tsx` 路由 `collections/youtube`（**无 `:id` 详情路由**——扁平单集合）+ `nav-config.tsx` Collections children 叶子（`nav.youtubePlaylists`）；叶 active 判定见 `components/nav-section/nav-active.ts`（`isNavItemActive` 段边界匹配，平台叶 `deepMatch: true`）
-- AI 后处理由 `youtube-sync-adapter.ts` 把 `newItemIds` 交回 Platform Sync funnel，由 funnel 派发（手动/自动两触发同源），共享 `youtube-playlists:embed|tag` 串行 lanes；Fetch worker 接收同一个 cooperative checkpoint。
-- i18n：平台特有文案 key 在 `youtube.*`（zh/en 齐全，`youtube.count` 带 `.one` 复数变体，`youtube.noMatches` 保留平台名词）；通用 / 同文案走共享 `common.*`（`retry` / `loadFailed`，以及 docs/32 Step 6 收进来的 `lastSynced` / `syncFailed` / `showMore` / `showLess` / `all` / `goToSettings`——平台前缀副本已删，新平台不得再造），获取按钮走 `pipeline.fetchNow`（`common.syncNow` 已删）；限流文案复用 `settings.youtube.rateLimited`（恒无 resetAt 变体）；错误文案是 view 模块级 `SYNC_ERROR_COPY`（`youtube.authFailedTitle` / `settings.youtube.rateLimited`）交给共享 `syncErrorMessage`；Google 不报 reset，故无按钮锁；无硬编码 CJK
+- `platform_meta` 形状、全量重拉与多列表 membership：`lib/youtube/CLAUDE.md`。
+- Connections 卡：`entrypoints/app/sections/settings/CLAUDE.md`。
+- 测试：`youtube-sync-adapter.test.ts`。

@@ -1,37 +1,52 @@
-# Cross-platform Collections Query
+# lib/collections
 
-跨平台收藏只读领域层。消费规范化收藏表，向 app.html 提供分页条目与完整 Collection Analytics 快照；UI 不接触 Drizzle schema，也不解释 `platform_meta`。
+跨平台收藏只读领域层（分页查询、Collection Analytics、Processing Coverage），兼平台判别符与注册表之家。UI 经这里读数据，不接触 Drizzle schema，也不解释 `platform_meta`。
 
-## 模块结构
+## 平台注册表
 
-- `platforms.ts` — `COLLECTION_PLATFORMS` / `CollectionPlatform` / `isCollectionPlatform`，持久化平台判别符的唯一白名单
-- `platform-descriptor.ts` — **Platform Descriptor 的领域半边**（docs/26 Step 2）：`PLATFORM_DESCRIPTORS` 穷举七字段（`jobPlatform` / `readiness` / `hostPermissions` / `sortKey` / `dimensions` / `contentKind` / `descriptionField`），`PlatformReadiness`、`PlatformSortKey`、`PlatformDimensions`、`PlatformContentKind` 四个类型也住这里。`contentKind` 是该平台「正文」的英文语义 id（`transcript`/`readme`/`page-text`/`post-text`/`body-text`/`description`），**不是本地化显示名**——显示名是 app 侧 `LocaleKeys`，`lib/` 引不到（ADR 0004 D3）；它存在的理由是让 Knowledge Tool 说得出「已转录 1100 个」而不是「已完成正文获取」，同时不必在工具描述里手写六平台散文（那会撞 `lib/chat/tools.test.ts` 的「不得出示部分平台清单」守卫）；`mapPlatforms(source, project)` 是全部派生注册表共用的唯一投影 helper（也吃 app 侧 `PLATFORM_META`）。`dimensions` 一个字段吃掉原来的三张表，`source: null` 显式表示该平台无 Source；`dimensions.meta: { kind, field } | null` 是直接读 `platform_meta` 某个字符串字段的那一格维度（今天只有 github `{ kind: 'language', field: 'language' }`，单格不做数组）。job namespace（`jobPlatform`）：bilibili / bookmarks / douyin 直接用平台 id，github / x / zhihu / youtube 仍是历史别名（统一它们未做；抖音这一格由用户 2026-10-03 决定取 `'douyin'`：bilibili / bookmarks 已是同名先例，不再给平台 id 发明第二个名字）。`descriptionField: string | null` 是「`platform_meta` 里哪个 key 存着**不在** Content 里的简介」（bilibili `'intro'`、github `'description'`，其余 `null`——youtube 的 meta 虽有 `description` key，但那是 Content 的截断片段，所以也是 `null`；字段名不叫 `description` 正是为此）。这两格存在的理由是让共享模块（tagging、analytics）读平台 meta 时不写平台名、不写字面 key（docs/32 Step 2，守卫见下方约定）。`hostPermissions` 有两个消费方：`wxt.config.ts` 拼 manifest，`entrypoints/background.ts` 的 X webRequest filter 读 `PLATFORM_DESCRIPTORS.x.hostPermissions`（docs/32 Step 3；直接 import 本文件，不走 barrel）——改 x 的这一格同时改 manifest 与捕获范围。**两条铁律**：① 值导入只允许 `./platforms`（`wxt.config.ts` 在 Node 侧按相对路径加载本文件建 `host_permissions`，其余一律 `import type`）；② **`index.ts` barrel 不得 re-export 本文件的符号**（barrel 另一头是 `collections-query`，拖 drizzle + `@/lib/database`；descriptor 一旦从 barrel 出口，welcome.html 与 Node 构建配置就得加载 PGlite 才读得到它）。这条管的是 **barrel 的出口面，不是本文件的消费者**：barrel 内部的模块照常 import descriptor，`collection-analytics` / `platform-sort-keys` / `processing-coverage` 三处都在 import，铁律 ① 保证不会反向流回来。UI 半边（`title`/`icon`/`palette`/`hint`/`childRoutes`）在 `entrypoints/app/collection-platform-registry.ts`，因为它的类型是 app 侧的，而 `lib/` 不得依赖 `entrypoints/`
-- `platform-sort-keys.ts` — `PLATFORM_SORT_KEYS` 由 descriptor 的 `sortKey` 派生 + re-export `PlatformSortKey` 类型；导出名与类型不变，`collections-query` 与 barrel 零改动
-- `collections-query.ts` — `getCollectionItems`：限定平台注册项，标题/作者 ILIKE 搜索（`searchCondition`，`lib/database/collection-queries.ts`，docs/32 Step 9），全局分页；按 `COLLECTION_PLATFORMS` 遍历 `PLATFORM_SORT_KEYS` 生成绑定参数的排序 `CASE`（无日期条目置后并以 `createdAt`/id 稳定排序）；分页后批量加载 tags
-- `analytics-types.ts` — `CollectionAnalyticsDimensionKind` 的定义处（纯类型，零 import）。拆出来是为了让消费者能命名维度而不拖 `collection-analytics.ts` 的 drizzle + `getDb` + 六张表；`collection-analytics.ts` re-export 它，`@/lib/collections` barrel 与全部现有消费者路径不变
-- `collection-analytics.ts` — `getCollectionAnalytics`：一次返回去重 Item Count、Used Tags、Tagged Items、六平台构成、Top Tags 和平台原生维度；补齐零平台、稳定排序并限制榜单长度。维度直接读 `PLATFORM_DESCRIPTORS[p].dimensions`（`ranked`/`author`/`source`/`meta`），本文件不再持有维度表。meta 维度（GitHub 语言）由 descriptor 的 `dimensions.meta` 驱动：对每个 `meta !== null` 的平台跑一次 `metaDimensionRows`，平台与 key 都是绑定参数；值先在子查询里只投影一次再外层 `GROUP BY`——`platform_meta->>$n` 若在 SELECT/GROUP BY/ORDER BY 各写一遍，Postgres 看到的是三个不同参数、三个不同表达式，会报「must appear in the GROUP BY clause」
-- `platform-eligibility.ts` — `PLATFORM_DOWNSTREAM_ELIGIBILITY: Record<CollectionPlatform, SQL | null>`，穷举登记每个平台的 downstream eligibility predicate（`null` = 无专属排除；bilibili 取 `lib/bilibili/video-eligibility.ts` 的 `bilibiliDownstreamEligibleSql()`）。规则归平台 owner，本表只登记，契约测试按 AST 对账每个平台的显式键（抖音 `null`）
-- `collection-processing-policy.ts` — Collection processing stage SQL facts 的唯一 Implementation：可选 platform scope、按 registry 注入的 per-platform downstream eligibility（scoped 取该平台 predicate，未知平台字符串仍 eligible；unscoped 把每条 predicate 放宽为 `platform <> X OR eligible(X)` 后合取）、Content/Embedding/Tags 的 `total`/`done` 与 pending candidate。第三参数默认 `PLATFORM_DOWNSTREAM_ELIGIBILITY`，调用方零改动、不可能忘注入；源码不含任何平台字面量/字面 meta key（契约守卫，见下方约定的共享模块清单）。Coverage 和各 worker Adapter 不重写资格规则。
-- `processing-coverage.ts` — `getProcessingCoverage(platform, db?)`：单次平台聚合返回 acquisition/content/embedding/tagging 的 Item 级覆盖率，只消费 processing policy，React 不接触 schema/SQL。`getAllProcessingCoverage(db?)`：**一条 `GROUP BY platform`** 覆盖全部平台，给一次要报告整库的调用方（`getProcessingCoverage` Knowledge Tool）——逐平台读六次等于六次全表扫描，而 db 在 offscreen 后面时还是六次 RPC 往返；未持久化任何条目的平台不在结果集里，按零快照补齐。两个 reader 共用 `coverageColumns(policy)` + `toCoverage(row)`。**import 约束**：`getDb` 必须取 `@/lib/database/db-state`、`FavbaseDb` 取 `@/lib/database/db-types`，**不得走 `@/lib/database` barrel**——barrel re-export `./db`，而 `./db` 值导入 PGlite 与 `DatabaseRpcHandler`；本文件自 `getProcessingCoverage` Knowledge Tool 落地起可从 Background SW 到达，走 barrel 会让 `scripts/check-background-bundle.mjs` 直接 fail 掉构建（源码层守卫在 `tests/agent-bridge-background-bundle-contract.test.ts`）。**同一约束沿传递闭包展开**：`configuration-blockers` / `collection-processing-policy` / `platform-eligibility` / `bilibili/video-eligibility` 也在这张图上，四个文件里的 `@/lib/database` 必须保持 `import type`（同一守卫 `it.each` 逐个查）——type import 会被擦除，删掉那一个 keyword 不会，而唯一的信号是一次 54 MB 构建报出一条不点名任何文件的错。**不变量**：downstream eligibility 只能待在 `count(*) filter` 里，**不得提到 `WHERE`**——`acquired` 数的是 scope 内每一行，失效的 B 站视频确实被拉取过，把 eligibility 提到 `WHERE` 会把它们从「已拉取」里静默扣掉（`processing-coverage.test.ts` 有专项断言，实测提上去两例转红）。unscoped policy 把每条规则放宽成 `platform <> X OR eligible(X)`，正是 GROUP BY 需要的语义。
-- `configuration-blockers.ts` — `deriveConfigurationBlockers`：「已持久化的活儿在等一个没人配的 provider」这条规则的唯一实现（纯函数，只吃 coverage + 四个 boolean，零 i18n、零 React）。原先住在 `entrypoints/app/components/configuration-blocker/`，现由 Collection 页横幅与 `getProcessingCoverage` Knowledge Tool 共用——否则模型会把「provider 没配、永远不会动」说成「还在处理中，稍后再试」。`asrBlocked` 是平台状态机的 wait signal（空 key 本身不构成阻塞），Knowledge Tool 没有状态机上下文故传 `false`，只报 `embedding`/`llm` 两个。
-- `cooperative-checkpoint.ts` — 领域 worker 只依赖的最小暂停协议 `{ checkpoint(): Promise<void> }`；app runtime 持有状态机，lib 不反向依赖 React/store。
-- `sync-errors.ts` — 平台拒绝的两种形状（docs/32 Step 4）：`PlatformAuthError`（`reason: AuthFailReason = 'missing' | 'rejected'`）与 `PlatformRateLimitError`（`resetAt: Date | null`），均 `abstract`、基类不设 `name`（子类各自显式 `this.name`，生产构建会压缩类名）。六平台的 `*AuthError` / `*RateLimitError`（含 `BiliRateLimitError`）全部继承它们，app 侧 `classifyCollectionSyncError` 只按基类分类、不认识任何平台；哪个响应算 auth / 限流、`resetAt` 从哪来仍归平台 `*-api.ts`。**`reason` 规则**：`'rejected'` 只在 favbase 请求前已确认自己持有凭据（PAT、API key、捕获到的 X 会话、本地存在且未过期的 SESSDATA）而平台拒绝时用，其余一律 `'missing'`——知乎从不在本地查登录态，所以恒 `'missing'`（完整规则在该文件 doc comment）。**两条铁律**：① 零 import（连 type import 都没有）；② **不进 `index.ts` barrel**，一律按文件路径 import——`bilibili-api.ts` 把它带进 Background SW 图，barrel 会拖进 drizzle 让 `check-background-bundle.mjs` 失败。守卫：`tests/platform-completeness-contract.test.ts` 的继承用例（AST 扫 `lib/<platform>/`，含探测器自检）+ `tests/lib-import-smoke.test.ts`；测试 `sync-errors.test.ts` 用每个平台的**真实**错误类逐个断言继承（抖音自 docs/33 Step 2 起在内）、`name`、`reason`/`resetAt`
-- `platform-descriptor.test.ts` — descriptor 形状：平台顺序、每平台至少一个 origin、`jobPlatform` 唯一（同名会让两平台共用一条 job lane），以及 **`hostPermissions` flatMap 的黄金顺序**（manifest 契约：已装 MV3 扩展的 `host_permissions` 一变就要用户重新授权）
-- `collection-analytics.test.ts` — in-memory PGlite 守护六平台维度、membership 与 item 计数差异、未知平台排除、标签口径和排名稳定性
-- `collections-query.test.ts` — in-memory PGlite 守护混合排序、平台过滤、搜索转义、分页和标签水合
-- `index.ts` — 公共导出面
+- `COLLECTION_PLATFORMS`（`platforms.ts`）是持久化平台判别符的唯一白名单，未知 platform 不进入任何聚合结果。新平台先加它，`tsc` 与契约测试再点名其余缺口（流程见 `.trellis/spec/frontend/platform-onboarding.md`）。
+- 平台事实分两份 descriptor，别合并（`docs/adr/0004`）：领域半边在 `platform-descriptor.ts`，UI 半边在 `entrypoints/app/collection-platform-registry.ts`——后者的类型是 app 侧的，而 `lib/` 不得依赖 `entrypoints/`。
+- **`platform-descriptor.ts` 的值导入只允许 `./platforms`**，其余一律 `import type`：`wxt.config.ts` 在 Node 侧按相对路径加载它来拼 `host_permissions`。守卫 `platform-descriptor.test.ts`。
+- **`index.ts` barrel 不得 re-export `platform-descriptor.ts` 的符号**：barrel 另一头是 `collections-query`（drizzle + `@/lib/database`），descriptor 一从 barrel 出口，welcome.html 与 Node 构建配置就得加载 PGlite 才读得到它。
+- 上一条管的是 barrel 的出口面，不是 descriptor 的消费者：barrel 内的模块照常 import 它。出口面没有自动守卫——`tests/lib-import-smoke.test.ts` 只证 descriptor 自身加载干净。
+- 派生表（如 `PLATFORM_SORT_KEYS`）一律经 `mapPlatforms` 从 descriptor 投影，不手写第二张平台表。
+- `hostPermissions` 的 flatMap 顺序是 manifest 契约：已装 MV3 扩展的 `host_permissions` 一变就要用户重新授权。黄金顺序锁在 `platform-descriptor.test.ts`。
+- `PLATFORM_DESCRIPTORS.x.hostPermissions` 同时是 `entrypoints/background.ts` 的 X webRequest filter：改这一格同时改 manifest 与捕获范围。
+- `jobPlatform` 必须唯一（同名会让两个平台共用一条 job lane）。bilibili / bookmarks / douyin 用平台 id，github / x / zhihu / youtube 是历史别名、未统一；不再给平台 id 发明第二个名字（用户决定）。
+- `descriptionField` 只填「**不在** Content 里的简介」的 meta key：youtube 的 meta 有 `description`，但那是 Content 的截断片段，所以填 `null`。
+- `dimensions.author` / `source` / `meta.kind` 必须是 `dimensions.ranked` 的成员或 `null`，否则 Dashboard 细分卡静默留空（契约测试守）。`source: null` 显式表示该平台没有 Source。
+- 新平台必须在 `PLATFORM_DOWNSTREAM_ELIGIBILITY`（`platform-eligibility.ts`）显式声明，无排除写 `null`。排除规则的 SQL 定义在 `lib/<platform>/`，与内存判定同 owner，本表只登记。
 
-## 约定
+## 共享模块零平台知识
 
-- 新平台必须先加入 `COLLECTION_PLATFORMS`，再补 app 侧元数据与卡片 adapter；未知 platform 不进入聚合结果
-- 新平台必须在 `PLATFORM_DESCRIPTORS` 声明七个领域字段（排序键、host permissions、维度、正文语义 id、简介 key 都在其中）；删掉任一平台键由 `satisfies Record<CollectionPlatform, PlatformDescriptor>` 在对象字面量上报错并指名平台。派生表（`PLATFORM_SORT_KEYS` 等）不再手写
-- descriptor 的 `dimensions.author` / `dimensions.source` / `dimensions.meta.kind` 必须是 `dimensions.ranked` 的成员或 `null`（契约测试守），否则 Dashboard 细分卡会静默留空
-- **共享模块零平台知识**（docs/32 Step 2）：`collection-analytics.ts`、`collection-processing-policy.ts`、`collections-query.ts`（以及 `lib/tagging/**`、`lib/embedding/**`、`lib/chat/**`、`lib/export/**`）不得出现带引号的平台 id、对 `meta`/`platformMeta` 的字面 key 读取（`meta.k`、`meta['k']`、`{ k } = meta` 解构）、SQL 文本里的字面 JSON 路径 key（`->>'language'`，`->`/`#>`/`#>>` 同理）；平台差异写进 descriptor，共享模块按变量读（`->>${field}`）。守卫是 `tests/platform-completeness-contract.test.ts` 的独立用例，按 AST 逐条列 `file:line`。本目录其余文件（`platforms.ts`/`platform-descriptor.ts`/`platform-eligibility.ts`）是注册表，写平台字面量是它们的本职，故不整目录扫描。守卫按名字认 meta：装 descriptor 数据的局部变量别叫 `meta`；反过来，别名（`const m = row.platformMeta; m.k`）不追踪，这是已知缺口
-- 新平台必须在 `PLATFORM_DOWNSTREAM_ELIGIBILITY` 显式声明（无排除写 `null`）；平台专属排除的 SQL 必须定义在 `lib/<platform>/` 并与内存判定同 owner，禁止把平台 JSONB 字段或业务数值写进 `collection-processing-policy.ts`
-- 时间字段只在本 module 解释，禁止在 React 中抓多平台页面后客户端 merge/sort（会破坏全局分页）
-- `collections-query.ts` 的排序 SQL 必须从声明表生成；平台判别符、JSON 字段名、格式正则都使用绑定参数，不得把平台/字段字面量拼进 SQL
-- 查询参数始终绑定，LIKE 输入必须经 `escapeLike`（搜索条件走 `searchCondition`，转义在它里面）；UI 通过 `getCollectionItems` 读取，零 entity/getDb 导入
-- `CollectionItemsQuery.tagId` 是可选单标签 SQL 条件，必须在 count/order/limit/offset 前过滤；不得改用无分页的 `getItemsByTags`
-- analytics 来源榜单按 `item_sources` membership 计数，总量/平台构成按 `items` 计数；Top Tags 按 distinct item-tag link，Used Tags 排除孤立标签
-- Processing Coverage 只描述已持久化且符合阶段资格的 Collection Items，不代表远端同步完整度；Embedding=`embedded/(chunked+embedded)`，Tagging=至少一个 tag/(chunked+embedded)。Coverage 的 state-based total 不等于 worker candidate：Embedding candidate 还必须有 durable chunks，Tags candidate 不要求 chunks。
-- cooperative pause 只能放在“领取下一项/下一页”边界；当前网络请求、provider 调用和 DB 写入必须先完整收尾，禁止把它伪装成取消。
+- `collection-analytics.ts`、`collection-processing-policy.ts`、`collections-query.ts`，以及 `lib/tagging/**`、`lib/embedding/**`、`lib/chat/**`、`lib/export/**`，不得出现：带引号的平台 id、对 `meta` / `platformMeta` 的字面 key 读取、SQL 文本里的字面 JSON 路径 key。
+- 平台差异写进 descriptor，共享模块按变量读（`->>${field}`）；平台专属的 JSONB 字段或业务数值不得写进 `collection-processing-policy.ts`。
+- 守卫：`tests/platform-completeness-contract.test.ts` 的「keeps platform knowledge out of shared modules」。
+- 该守卫按名字认 meta：装 descriptor 数据的局部变量别叫 `meta`。别名（`const m = row.platformMeta; m.k`）不追踪，是已知缺口。
+- `platforms.ts` / `platform-descriptor.ts` / `platform-eligibility.ts` 是注册表，写平台字面量是本职，不在扫描范围。
+
+## 查询与 SQL
+
+- 跨平台排序与分页只在 SQL 里做：禁止在 React 里抓多平台页面后客户端 merge / sort，那会破坏全局分页。时间字段只在本目录解释。
+- 排序 `CASE` 从 `PLATFORM_SORT_KEYS` 生成；平台判别符、JSON 字段名、格式正则都走绑定参数，不把字面量拼进 SQL。
+- `CollectionItemsQuery.tagId` 必须在 count / order / limit / offset 之前进 SQL；不得改用无分页的 `getItemsByTags`。
+- LIKE 输入必须转义：搜索条件走 `lib/database/collection-queries.ts` 的 `searchCondition`。
+- meta 维度查询里 `platform_meta->>$n` 只在子查询投影一次、外层再 `GROUP BY`：同一表达式在 SELECT / GROUP BY / ORDER BY 各写一遍会成为三个不同的绑定参数，Postgres 报「must appear in the GROUP BY clause」。
+- 计数口径：来源榜单按 `item_sources` membership，总量与平台构成按 `items`；Top Tags 按 distinct item-tag link，Used Tags 排除孤立标签。
+
+## Processing Coverage 与处理策略
+
+- `collection-processing-policy.ts` 是各阶段资格规则（`total` / `done` / pending candidate）的唯一实现；coverage 与各 worker 只消费它，不重写。
+- Coverage 只描述已持久化且符合阶段资格的条目，不代表远端同步完整度。state-based `total` 不等于 worker candidate：Embedding candidate 还要求有 chunk 行，Tags candidate 不要求。
+- downstream eligibility 只能待在 `count(*) filter` 里，不得提到 `WHERE`：`acquired` 数的是 scope 内每一行，提上去会把失效的 B 站视频从「已拉取」里静默扣掉。守卫 `processing-coverage.test.ts`。
+- **Background SW 图上的 import 约束**：`processing-coverage.ts` 的 `getDb` 取 `@/lib/database/db-state`、`FavbaseDb` 取 `@/lib/database/db-types`，不得走 `@/lib/database` barrel（它值导入 PGlite）。
+- 同一约束沿传递闭包展开：`configuration-blockers.ts`、`collection-processing-policy.ts`、`platform-eligibility.ts` 与 `lib/bilibili/video-eligibility.ts` 里的 `@/lib/database` 必须保持 `import type`。
+- 违反上两条时唯一的运行信号是构建期 `scripts/check-background-bundle.mjs` 报一条不点名文件的错。源码层守卫是 `tests/agent-bridge-background-bundle-contract.test.ts`；往这张图上加新 import 时把新边也加进去。
+- `deriveConfigurationBlockers` 是「已持久化的活儿在等一个没人配的 provider」的唯一实现，Collection 页横幅与 `getProcessingCoverage` Knowledge Tool 共用——否则模型会把「永远不会动」说成「还在处理中」。Knowledge Tool 没有平台状态机上下文，`asrBlocked` 传 `false`。
+
+## 平台错误基类与暂停协议
+
+- `sync-errors.ts` 零 import（连 type import 都没有）、不进 barrel、按文件路径 import：`bilibili-api.ts` 把它带进 Background SW 图。
+- 每个平台的 `*AuthError` / `*RateLimitError` 必须继承这里的基类，app 侧只按基类分类。守卫 `tests/platform-completeness-contract.test.ts`、`tests/lib-import-smoke.test.ts`。
+- `reason: 'rejected'` 只在 favbase 请求前已确认自己持有凭据而平台拒绝时用，其余一律 `'missing'`（知乎、抖音从不在本地查登录态，恒 `'missing'`）。
+- cooperative pause（`cooperative-checkpoint.ts`）只能放在「领取下一项 / 下一页」的边界：进行中的网络请求、provider 调用与 DB 写入必须完整收尾，它不是取消。lib 不反向依赖 React / store。

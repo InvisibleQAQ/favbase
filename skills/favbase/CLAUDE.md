@@ -1,96 +1,59 @@
 # favbase Agent Skill
 
-`SKILL.md` is the single source bundled into `favbase` and installed for
-Claude Code/Codex. It documents commands and recovery behavior; it never reads
-the collection itself. The one other way out is `npx skills add
-InvisibleQAQ/favbase -g` (root README; `docs/adr/0003` amendment 2026-09-27),
-which copies **this file as it stands on `main`**. So `main`'s SKILL.md must
-always be the one the latest npm release bundles: **edit it only in a release
-commit, published in the same sitting** (`packages/favbase/CLAUDE.md`,
-Release, which owns the rule). An edit that lands ahead of npm gives every npx
-user a copy doctor calls `stale`, describing a CLI they do not have. The root
-`.gitattributes` pins this file to LF for the same reason: the skills tool
-git-clones this repository, and a clone under `core.autocrlf=true` would be
-CRLF, i.e. `stale`. It copies this whole directory, so this file and
-INSTALL.md land in the user's skill folder too.
+Two files, two readers. `SKILL.md` is the Skill: the single source, bundled into the `favbase` CLI
+and installed for Claude Code / Codex. `INSTALL.md` is the **Agent Setup Guide** (`CONTEXT.md`,
+`docs/adr/0005`) and is NOT a Skill.
 
-`INSTALL.md` is the **Agent Setup Guide** (CONTEXT.md; `docs/adr/0005`) and is
-NOT a Skill: it is fetched over the network from `main` by an agent that has
-nothing installed yet, walks it through `npm install -g favbase`, then **stops**
-and asks the user to paste the pairing command from Settings > Connections >
-Agent Skills. It must never construct a `favbase setup` command of its own --
-the Bridge Token exists only inside the running extension. Its published URL
-(`lib/repo.ts` `AGENT_SETUP_GUIDE_URL`) is a public contract: users paste it
-into their own prompts, so this path and the `main` branch cannot move.
-`tests/agent-bridge-cli-aliases.test.ts` reconciles the file's path, settings
-section name, package name, setup command shape and default port, and fails on
-a runnable setup command. It also fails on any `exit <n>` / `exit code <n>`:
-this file is read from `main` while `npm install -g favbase` installs the last
-release, so it may only say what holds for every published version (docs/30
-#4, D6-a; `docs/adr/0005` amendment). Its exit-code table was the part that
-did not: rows had to be checked by hand against two versions, and in 0.2.0 an
-unwritable skill file read as "Chrome closed". For failures it now defers to
-what ships with the installed CLI -- the SKILL.md step 4 writes, `favbase
-doctor`, `favbase --help` -- plus one rule for the pasted setup command.
+## SKILL.md
 
-`SKILL.md`'s frontmatter carries `metadata.version`, the `favbase` release it
-ships in (the Agent Skills spec has no top-level `version` field; `metadata`
-values are strings, so it is quoted). It must equal
-`packages/favbase/package.json`'s `version`, and
-`tests/agent-bridge-cli-aliases.test.ts` fails when it does not: bump both in
-the same release commit. doctor still compares copies byte for byte; it does
-not read this field.
+- Edit it only in a release commit, published in the same sitting (owner:
+  `packages/favbase/CLAUDE.md`, `## Release`). `npx skills add InvisibleQAQ/favbase -g` copies the
+  file as it stands on `main`, and doctor compares copies byte for byte: an edit that lands ahead
+  of npm gives every npx user a `stale` copy describing a CLI they do not have.
+- The root `.gitattributes` pins it to LF for the same reason: the skills tool git-clones this
+  repository, and a clone under `core.autocrlf=true` would be CRLF, i.e. `stale`.
+- `metadata.version` must equal `packages/favbase/package.json`'s `version`; bump both in the
+  release commit. It sits under `metadata` and is quoted because the Agent Skills spec has no
+  top-level `version` and `metadata` values are strings. doctor does not read it.
+- Much of its prose is a hand-written copy of extension or CLI facts (platform lists, the
+  `--limit` range, one synopsis line per alias, the exit-code table, quoted CLI lines). Shipped
+  markdown cannot derive, so tests reconcile it: reword freely, but keep the shape a test anchors
+  on or change the test with it. Guards: `tests/agent-bridge-cli-aliases.test.ts`, and
+  `exit-codes.test.ts`, `cli-main.test.ts`, `cli-main-doctor.test.ts` in `packages/favbase`.
+- The frontmatter `description`'s platform list is what an agent selects the skill by. A platform
+  missing there means the agent never reaches for favbase when the user asks about it.
+- No guard: Workflow step 4's `item_exists` / `found` meanings mirror `getItemContent`'s
+  description in `lib/chat/tools.ts`. Change both or neither.
+- The exit-code table is the agent's error handling, and `packages/favbase/exit-codes.ts` decides
+  which failure lands in which row. The test checks anchors only: when a failure changes code,
+  reread the row as an agent would (silent-failure guide, Gotcha 5).
+- Reconnect copy uses the CLI's `EXTENSION_LATENCY_HINT` verbatim. Never promise `~35 s`, claim
+  every browser reconnects within 30 seconds, or include a real token.
+- **Update notices** must keep telling the agent to finish the request, relay the notice, and
+  never run `npm install` or `install-skill` itself: upgrading is the user's action, and a bare
+  `install-skill` would write every agent's copy.
+- Self-reference: an agent holding an older copy cannot read an instruction added now. A new
+  instruction only helps once the next release has made that copy stale.
 
-Keep exit codes and prerequisites aligned with `packages/favbase`. The
-`--limit <min-max>` synopsis is contract-checked against the live `top_k`
-schema (`packages/favbase/CLAUDE.md`, Boundaries), and each `favbase <alias>`
-synopsis line -- here and in the npm README -- must name exactly the alias's
-flags from `commands.ts`, and a positional placeholder exactly when it takes
-one (docs/30 #13; same test file). Keep one synopsis line per alias. Workflow step 4's
-`item_exists` / `found` meanings mirror `getItemContent`'s description in
-`lib/chat/tools.ts` and have **no** guard: change both or neither.
+## INSTALL.md
 
-The exit-code table is the agent's error handling (silent-failure guide,
-Gotcha 5), and `packages/favbase/exit-codes.ts` is the one place that decides
-which failure lands in which row (docs/30 #2).
-`packages/favbase/exit-codes.test.ts` reconciles every row of this table and
-the npm README's with it: the same codes, and each agent row's action. Exit 1 recognises a usage error by the CLI's closing line
-`Run favbase --help for usage.` (fix the command, don't send the user to
-`favbase setup`); any other exit-1 message goes to the user as is, because it
-names the fix -- `favbase setup`, a path favbase could not write -- or at
-least what went wrong (exit 1 is also where a failure without a type lands).
-Exit 2 runs `favbase doctor` and acts on its `troubleshooting` list -- there
-whatever fails since docs/30 #3, with the failed step's problem first -- and
-retries once when it reports ok (a timeout). The row used to add "or its
-stderr message when it prints no report" for 0.2.1's doctor, which printed one
-line on a daemon failure; docs/30 #4 dropped it, because this copy reaches
-users only as the latest release ships it (bundled, or `main`'s copy under the
-release rule above), and the test refuses it back. Exit 3 names exactly the codes the agent fixes itself
-(`invalid-args`, `unknown-tool`); every other goes to the user.
-`packages/favbase/cli-main.test.ts` checks the usage line quoted here is the
-one the CLI prints. The same file checks that this file and the npm README both carry
-`--args-file <path>`, the form the CLI's failed-`--args` error points at
-(Windows PowerShell 5.1 strips the JSON's double quotes). Reconnect
-copy must use the CLI's canonical wording, verbatim -- `cli-main-doctor.test.ts`
-compares this file against `EXTENSION_LATENCY_HINT`: an already connected
-extension skips alarm waiting; cold reconnect is about 30 seconds on Chrome 120+
-or 60 seconds on Chrome 116-119; longer failures run `favbase doctor`. Never
-promise `~35 s`, claim every browser reconnects within 30 seconds, or include a
-real token.
+- An agent with nothing installed yet fetches it from `main` by raw URL (`AGENT_SETUP_GUIDE_URL`
+  in `lib/repo.ts`). Users paste that URL into their own prompts, so this path and the `main`
+  branch cannot move.
+- It is read from `main` while `npm install -g favbase` installs the last release, so it may only
+  say what holds for every published version: no exit codes, no CLI behaviour. For failures it
+  defers to what ships with the installed CLI (the installed SKILL.md, `favbase doctor`,
+  `favbase --help`).
+- After installing the CLI it must **stop** and ask the user to paste the pairing command from
+  Settings > Connections > Agent Skills. It must never contain a runnable `favbase setup` command
+  of its own: the token exists only inside the running extension.
+- Guard: `tests/agent-bridge-cli-aliases.test.ts`.
 
-The **Update notices** section quotes the CLI's update notice with `<latest>` /
-`<version>` placeholders; `packages/favbase/cli-main.test.ts` checks that quote
-(and the npm README's) against the line the CLI really prints, so reword the
-code and both quotes together (docs/27 Step 2). It tells the agent to finish
-the request, then relay the notice and doctor's skill-copy lines, and never to
-run `npm install` or `install-skill` itself (docs/27 D13): upgrading is the
-user's action, a bare `install-skill` would write every agent's copy (D11 treats
-one missing side as deliberate), and the skill already loaded for the session
-would not change anyway. Mind the self-reference: an agent holding an **older**
-copy of this file cannot read an instruction added now; a new instruction here
-only helps once the next release has made this version stale.
+## Both files
 
-Both files here are read by a user or an agent, so they follow the CLI's
-user-facing vocabulary (`packages/favbase/CLAUDE.md`, Boundaries): **Agent
-Skills** for the settings section, **pairing token** for the secret. The domain
-names -- Agent Bridge, Bridge Token -- stay in code and in notes like this one.
+- `npx skills add` copies this whole directory, so this file and INSTALL.md land in the user's
+  skill folder too.
+- Both are read by a user or an agent, so they use the user-facing vocabulary: **Agent Skills**
+  for the settings section, **pairing token** for the secret (owner:
+  `packages/favbase/CLAUDE.md`, `## Boundaries`). Agent Bridge and Bridge Token stay in code and
+  in notes like this one.

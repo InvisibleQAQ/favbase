@@ -1,40 +1,39 @@
 # lib/zhihu
 
-知乎收藏收录领域（第五个平台，镜像 `lib/x/` 分层）。MVP = 拉取当前登录用户的**全部公开收藏夹**及其条目 + 正文 turndown 转 Markdown + PGlite 持久化 + 查询 + Markdown 切块。复用现有表（sources/authors/items/item_sources/item_contents/item_chunks，`platform='zhihu'` 判别列），零新表零迁移。
+知乎收藏收录领域：拉取当前登录用户的全部公开收藏夹及其条目，正文经 turndown 转 Markdown 入库。
 
-**认证 bilibili 式（cookie 直读，无捕获）**：扩展 context fetch 带 `credentials:'include'` + `wxt.config.ts` 的 `zhihuHostPermissions`（`https://www.zhihu.com/*` + `https://api.zhihu.com/*`），浏览器自动附带用户真实知乎会话 cookie（z_c0/d_c0/__zse_ck）。无 webRequest 捕获、无 chrome.cookies、无 Connections 卡、无 session key。收藏夹相关 API 不校验 x-zse-96 签名（RSSHub 实证，任务 research/zhihu-api.md）；唯一特殊 header 是 v4 items 端点的 `x-api-version: 3.0.91`。**Referer 无法从 fetch 设置（forbidden header）也未做 DNR 改写**——扩展请求无 referrer 到达，X 平台先例证明该画像可接受；若实测知乎硬要求 Referer，加 `public/rules.json` DNR 规则（见 spec 的 DNR design decision）`[UNKNOWN 待实测]`。
+## 认证与请求
 
-## API 链路（全 GET，串行）
+- 认证是 cookie 直读：扩展 context 的 fetch 带 `credentials: 'include'` + host permission，浏览器自动附带知乎会话 cookie。无 webRequest 捕获、无 `chrome.cookies`、无 Connections 卡、无 session key。
+- favbase 从不在请求前检查知乎登录态，所以 `ZhihuAuthError` 的 reason 恒为 `'missing'`。
+- 收藏夹相关 API 不校验 `x-zse-96` 签名；唯一特殊 header 是 v4 items 端点的 `x-api-version`。
+- Referer 从 fetch 设不了（forbidden header），也没做 DNR 改写。知乎是否硬要求 Referer [UNKNOWN，待实测]；若是，加 `public/rules.json` 的 DNR 规则。
+- `/api/v4/me` 的 200 响应是否总带 `url_token` [UNKNOWN]；缺失时抛 Error，不猜。
+- 只收公开收藏夹：`is_public` 为 `false` / `0` 的夹被过滤。该字段的形态未证实，缺失时按公开处理。
+- 严格串行 + 页间抖动。不要抄 RSSHub 的 `Promise.all` 并发：403 限流真实存在。
+- 403 是反爬的主要形态，不重试，直接抛 `ZhihuRateLimitError`；知乎没有 reset header，`resetAt` 恒 null。429 与 5xx 经 `withRetries` 共用一份预算。
+- `fetchZhihuJson` 刻意不把 `control` 传给 `withRetries`：分页调用方每页已 checkpoint 一次，传进去就翻倍（`zhihu-api.test.ts` 的「fetchCollectionItems cooperative control」锁住）。
+- HTTP 200 决不盲信：200 + 非 JSON body（challenge HTML）、`error` body 或无 `data` 数组，一律抛带 body 片段的 Error，绝不吞成空数组。
+- 条目分页的停止条件有三重（`paging.is_end`、`totals`、空页），收藏夹列表防御式跟随 `paging.next`；别精简成一个条件。
+- 全量重拉，没有增量 stop-on-known-id。
 
-1. `GET www.zhihu.com/api/v4/me` → 当前用户 `url_token`（401 → `ZhihuAuthError`；200 无 url_token → 抛 Error `[UNKNOWN：RSSHub 只读 name，url_token 存在性待实测]`）
-2. `GET api.zhihu.com/people/{url_token}/collections` → 公开收藏夹列表（`is_public === false/0` 过滤，字段形态未证实故默认公开；防御式跟随 `paging.next` 分页，RSSHub 未分页）
-3. `GET www.zhihu.com/api/v4/collections/{id}/items?offset&limit=20` → 条目，`paging.is_end`/`totals`/空页三重停止条件，offset 步进 20
+## 归一化与入库
 
-## 模块结构
+- `platformItemId = '{type}:{id}'`：answer / article / pin / zvideo 四种类型的 id 命名空间互相独立，裸 id 会碰撞。
+- 四种类型各取哪个字段作标题、URL、正文、时间，只在 `zhihu-api.ts` 的 `mapCollectionItem`；新类型加在那里。
+- 未知 type、缺 id、缺 content 的条目返回 null 跳过（知乎随时可能加类型），不要抛错中断同步。作者缺失回退 `anonymous`。
+- `publishedAt` 是内容自身的 updated / created 时间，不是收藏时间：web v4 items 不给收藏时间。
+- zvideo 与空正文 → `'no_content'`。不要用 `'pending'`：那会把条目喂给 auto-transcribe。
+- 写侧走 `ingestCollection`，insert-only 不变量见 `lib/ingest/CLAUDE.md`：取消收藏不删行，条目跨夹收藏 = 1 item + N link，唯一 upsert 是 `sources` 收藏夹行（`title` / `lastFetchedAt`）。
+- 同步不 inline embed：chunk 写成即 `'chunked'`，embed / tag lane 由 app 侧 Sync Adapter 经 Platform Sync funnel 派发。本目录不 import tagging / embedding。
+- 共享查询片段在 `lib/database/collection-queries.ts`，勿在本目录再拷贝。
+- `platformMeta` 形状：`{ type, excerpt, authorName, avatarUrl, thumbnailUrl, collectionId, collectionTitle }`。`collectionId` / `collectionTitle` 是首见归属，只供卡片展示；按收藏夹筛选一律走 `item_sources`。
+- 唯一 decoder 是 `narrowZhihuMeta`（未知 type 回退 `answer`），唯一 Row mapper 是 `toZhihuFavoriteItem`（分页查询与 `sections/zhihu` 的 tagged card 共用）。
 
-- `zhihu-api.ts` — fetch 层（无 DB 导入、无 UI 文案，请求统一走 `fetchWithDeadline`——`lib/http/` 全平台共用 deadline）。结构化错误（继承 `lib/collections/sync-errors.ts` 的基类，docs/32 Step 4）：401/code 100/101 → `ZhihuAuthError(…, 'missing')`（favbase 从不在请求前检查知乎登录态，所以恒 `missing`）；403（反爬主形态，**不重试**）/429 重试耗尽 → `ZhihuRateLimitError`（知乎无 reset header，`resetAt` 恒 null）；5xx 指数退避 `MAX_RETRIES=5`。**HTTP 200 决不盲信**（X 07-16 教训）：200 + 非 JSON body（challenge HTML）/ `error` body / 无 `data` 数组 → 抛带 body 前 300 字符的 Error，绝不吞成空数组。防限流：严格串行 + 页间 `BASE_DELAY_MS=1000 + Math.random()*JITTER_MS(500)` 抖动（RSSHub 的 Promise.all 并发**有意不抄**——403 限流真实存在）。数值常量（页大小/延迟/重试/翻页保险丝）全部经 `envNumber('VITE_ZHIHU_*', default)` 可配置（`lib/env.ts`，文档在 `.env.example`）；sleep/抖动/退避机制共享自 `lib/http/backoff.ts`（原与 x 逐行复制的实现已合并）。重试循环与响应读取同样共享（docs/32 Step 3）：`fetchZhihuJson` 的函数体是 `withRetries({ maxRetries: MAX_RETRIES }, attempt)`（`lib/http/retry.ts`），429 / 5xx 返回 `retryAfter(transientBackoffMs, …)`、共用一份预算，403 仍直接抛不重试；**刻意不传 `control`**——分页调用方每页 checkpoint 一次，`zhihu-api.test.ts`「fetchCollectionItems cooperative control」锁两页两次，传进去就变四次；body 片段与非 JSON 解析走 `lib/http/response-body.ts`（本文件不再有私有 `bodySnippet`，`JSON.stringify(json)` 的形状错误片段也经 `textSnippet`）。纯函数导出供单测：`mapCollection`、`mapCollectionItem`（4 类型归一化，见下）、`buildCollectionItemsUrl`、`stripHtmlToText`、`stripImageSizeSuffix`（zhihu-markdown 复用，勿在别处再抄）。`fetchAllFavorites(onProgress?)` 组合 me → collections → 每夹条目，进度回调 `(fetchedCount, collectionIndex, collectionCount)`
-- `zhihu-markdown.ts` — `htmlToMarkdown(html)`（turndown 单例）：懒加载图 `data-actualsrc/data-original` 优先 + 尺寸后缀剥离（`_720w.jpg → .jpg`）+ data-URI 占位图回退 alt（公式 LaTeX）、`noscript` 重复图移除、`link.zhihu.com/?target=` 外链解包（`unwrapZhihuRedirect` 导出）。转换失败降级 `stripHtmlToText` 不中断同步。**turndown 依赖 DOM**：app.html 用真实 document，vitest 下用其内置 domino——**不要放进 background SW 执行路径**
-- Markdown 切块用共享 `paragraphSplit`（= `charSplit(text, { preferParagraph: true })` 的具名 preset，docs/32 Step 5；`lib/embedding/char-split.ts`，docs/16 MEDIUM-4——原 `zhihu-chunker.ts` 已删并入）：`preferParagraph:true` 边界优先级 段落空行（`\n\n`）> 句末标点（`。.!?！？;；…\n`，中英双覆盖）> 硬切，`MAX_CHARS=1500` 回看 300。无时间戳（图文 → NULL start/end 列）
-- `zhihu-sync-service.ts` — **DB schema 知识的唯一持有者**（`PLATFORM='zhihu'`）。`syncFavorites(onProgress?, control?)` 把 cooperative checkpoint 贯穿收藏夹列表、逐夹和逐页抓取，在领取下一页/收藏夹前暂停；当前请求与最终 DB 写入不中断。`syncFavoritesToDb` 仍持有跨夹去重、Markdown 转换与 shared ingest 归一化。`newItemIds` 由 app 侧 Sync Adapter 经 Platform Sync funnel enqueue 共享 Embed/Tags lanes，本 wrapper 不 import tagging/embedding。查询仍由 `getFavorites/getCollectionCounts` 持有。
+## 坑
 
-## 4 种条目类型归一化（`mapCollectionItem`，research §3.2）
-
-| type | title | url（确定性构造） | 正文 | 时间（秒） | 缩略图 |
-|---|---|---|---|---|---|
-| answer | question.title | `/question/{qid}/answer/{id}` | content HTML | updated_time | — |
-| article | title | `zhuanlan.zhihu.com/p/{id}` | content HTML | updated | image_url |
-| pin | excerpt_title 兜底分段文本截断 | `/pin/{id}` | 分段数组拼 HTML（text 原样/image `<img>`/video 封面/link `<a>`） | created | 首个 image/video 封面 |
-| zvideo | title | `/zvideo/{id}` | **无**（no_content） | updated_time | video.url 封面 |
-
-未知 type / 缺 id / 缺 content → 返回 null 跳过（知乎随时可能加类型）。作者缺失回退 `{id:'anonymous', name:'anonymous'}`。
-
-## 约定
-
-- **共享骨架**：写侧走 `ingestCollection`（`lib/ingest/`，docs/16 HIGH-1——事务边界/insert-only/分批/id-map/两段式 content 均由管线持有，不变量见 `lib/ingest/CLAUDE.md`）；读侧 `getFavorites` 走 `pagedItemsQuery`，收藏夹筛选走 `sourceMembership`、搜索走 `searchCondition`（本文件只声明可搜字段：title、authorName、`platform_meta->>'excerpt'`），`getCollectionCounts` 走 `sourceItemCounts` 再映射成 `collectionId`（均在 `lib/database/collection-queries.ts`，docs/32 Step 9）——本文件只留平台特有 filter/orderBy/mapRow，勿再拷贝；「上次同步」没有 lib 包装（`getLastSyncedAt` 已删）：app 侧 `useCollectionLibrary` 按 config 的 `platform` 直接读 Platform Sync Record
-- **Insert-only（与全平台同 ADR）**：items/authors/item_sources 只 insert（`onConflictDoNothing`，first-write-wins）。取消收藏不删行；条目跨夹收藏 = 1 item + N link（对齐 bookmarks 文件夹模型）。唯一例外：`sources` 收藏夹行 upsert 刷新 `title`/`lastFetchedAt`
-- **content_state**：answer/article/pin（有正文）→ Markdown 落 `item_contents.plainText` + `paragraphSplit` 切块 → chunk 行写成后才置 `'chunked'`（事务内中间态 `'has_content'` + 幽灵同步自愈——全量重拉手握正文顺手补写，见 `lib/ingest/CLAUDE.md`；**不 inline embed**，D3——同步收尾 embed lane 排空平台积压（**触发在 app 侧 Sync Adapter 的 Platform Sync funnel 经 `startJob`**，非本 wrapper，docs/32 Step 1），设置页「重建向量」为手动兜底）；zvideo/空正文 → `'no_content'`（**不用 `'pending'`**——那会喂给 auto-transcribe）
-- **items 行映射**：`platformItemId = '{type}:{id}'`（类型间 id 命名空间独立，防碰撞）、`title`（api 层保证非空，多级兜底）、`authorName`、`originalUrl`=构造的 web URL、`publishedAt = createdAt*1000`（web v4 items **无收藏时间**，用内容自身 updated/created 兜底——PRD 已决策）
-- **platformMeta 形状**（items，写入方即本目录）：`{ type, excerpt, authorName, avatarUrl, thumbnailUrl, collectionId, collectionTitle }`（camelCase；collection 二字段是**首见**归属仅供卡片展示，筛选走 item_sources）。防御式收窄由本目录导出的 `narrowZhihuMeta(meta, { authorName })` 单点持有；整个 mapper 也只有一份：本文件导出 `toZhihuFavoriteItem`（Row → `ZhihuFavoriteItem`，docs/32 Step 8），分页查询的 `mapRow` 与 section `tagged-zhihu-card`（`taggedCard(ZhihuCard, 'favorite', toZhihuFavoriteItem)`）用的是同一个函数
-- **`narrowZhihuMeta` 导出**（sync-service）：`narrowZhihuMeta(meta: unknown, fb: { authorName }): NarrowedZhihuMeta`（= `Omit<ZhihuFavoriteItem, envelope>`）。type 经 `ZHIHU_TYPES` 白名单回退 `answer`；authorName 缺失回退 `fb.authorName`（空串保留）。envelope（id/platformItemId/title/originalUrl/publishedAt）只由 `toZhihuFavoriteItem` 装配
-- 运行位置：**仅 app.html 页面 context**（手动同步按钮 → RPC proxy 写 Offscreen PGlite）。无浮层按钮、无 offscreen 委托、无 background 消息
-- 未覆盖（Out of Scope，见 PRD）：私密收藏夹（`is_public` 过滤掉）、他人收藏夹、知乎页浮层按钮、类型双维筛选、inline embedding、增量 stop-on-known-id
+- `zhihu-markdown.ts` 的 turndown 依赖 DOM（app.html 用真实 document，vitest 用它内置的 domino）：不要把它放进 background SW 的执行路径。同步因此只在 app.html 页面 context 跑。
+- `htmlToMarkdown` 转换失败时降级为 `stripHtmlToText`，不中断同步。
+- 知乎正文 HTML 的怪癖都在 `zhihu-markdown.ts` 处理：图片真实地址在懒加载属性里且带尺寸后缀，公式是 data-URI 占位图（LaTeX 在 alt），`noscript` 里有重复图，外链包了一层 `link.zhihu.com/?target=`。
+- 剥图片尺寸后缀只用 `zhihu-api.ts` 导出的 `stripImageSizeSuffix`，不要在别处再抄一份。
+- 不做：私密收藏夹、他人的收藏夹。

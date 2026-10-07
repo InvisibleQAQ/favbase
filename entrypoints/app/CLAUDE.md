@@ -1,17 +1,35 @@
-# Extension Page Dashboard (app.html)
+# Extension Page Dashboard（app.html）
 
-MUI v9 Dashboard，视觉语言自 docs/25（Step 0–10，2026-09-01 至 09-04）起是 **Minimal Dashboard v7.7.0 全套 + Favbase 品牌 token**（coral primary 及六色预设、六平台色、派生 `text.accent`）。docs/19 的「目录卡片库」是它的前身，视觉结论已被 docs/25 §3.1 逐条推翻（仍生效的保留项见 §3.2：`data-*` 词表、heading outline、焦点契约、平台色 ≥3:1、固定 type scale、零 CDN）。token 见 `theme/CLAUDE.md`，条目外壳见 `components/collection/CLAUDE.md`；方向契约以 HTML 注释写在 `index.html` `<body>` 首子节点。使用 `createHashRouter`（Chrome 扩展页面不支持路径路由）。路由结构：`/`(只读 Collection Analytics Dashboard), `/collections`(跨平台聚合页，支持 `?tag=<uuid>` 单标签深链), `/collections/bilibili`(B站收藏夹概览), `/collections/bilibili/:mediaId`(B站收藏夹视频列表), `/collections/github`(GitHub Stars 收藏页), `/collections/bookmarks`(浏览器书签「全部」), `/collections/bookmarks/:folderId`(书签按文件夹), `/collections/x`(X/Twitter 书签，扁平单集合无详情路由), `/collections/zhihu`(知乎收藏，收藏夹经 chips 筛选无详情路由), `/collections/youtube`(YouTube 公开播放列表，播放列表经 chips 筛选无详情路由), `/collections/douyin`(抖音收藏，公开收藏夹经 chips 筛选无详情路由；请求经用户已打开的抖音标签页发出), `/chat`(知识库对话助手，Minimal chat 卡片), `/settings/:tab?/:section?`(设置页两级导航全部是路由，如 `/settings/connections/agent-skills`；段名就是 section id，穷举表 `sections/settings/settings-nav.ts`，`/settings` 与裸 tab 由视图 `replace` 重定向到该 tab 首项)。多平台模式：`/collections` 聚合所有平台注册条目；每个平台保留独立 `/collections/<platform>` 路由 + 对应 section。
+MUI v9 Dashboard，视觉语言是 Minimal Dashboard v7.7.0 + Favbase 品牌 token。主题规则在 `theme/CLAUDE.md`，条目外壳在 `components/collection/CLAUDE.md`，shell 在 `layouts/CLAUDE.md`。
 
-## 模块结构
+## 路由与启动
 
-- `main.tsx` — 入口：fire-and-forget `initDbProxy()` 建立 DB RPC 连接；首次 React render 前 `Promise.all` 并行 await `loadNavigationData()` 与 `getThemeSettings()`（`@/lib/storage`，失败记录错误并回退 `DEFAULT_THEME_SETTINGS`），再创建 Hash Router；渲染树为 `<StrictMode><SettingsProvider initialState={themeSettings}><RouterProvider/></SettingsProvider></StrictMode>`——`SettingsProvider`（`components/settings/`，docs/25 Step 2）包在 router 外，因为 `App` 是 router `Component` 没有 props 通道；`App.tsx` 内的 `ThemeProvider` 经 leaf context 可选读取它。全部平台路由（基础 `/collections/<platform>` + Bilibili `:mediaId`/Bookmarks `:folderId` 子路由）由 `collection-platform-pages.ts` 的 `collectionPlatformRoutes` 一次 spread 展开，`main.tsx` 对嵌套路由零知识、不含任何平台专属路由行（契约测试守卫）；lazy 页面加载 + LoadingFallback
-- `collection-platform-pages.ts` — app 侧每个平台的 lazy page Adapter（`COLLECTION_PAGE_LOADERS`，重值不进 descriptor）；`COLLECTION_PAGE_CHILD_ROUTES` 自 docs/26 Step 2 起由 `PLATFORM_META.childRoutes` 派生（bilibili `[':mediaId']`/bookmarks `[':folderId']`，扁平平台显式 `[]`），导出名与形状不变；`collectionPlatformRoutes` 由 `COLLECTION_PLATFORMS.flatMap` 派生基础路由 + 子路由（同一 Page，基础在前）。契约测试检查 import、页面文件、`childRoutes` 为显式数组字面量、main 的 spread，并禁止 `main.tsx` 出现 `collections/<platform>` 字面量
-- `collection-platform-auto-sync.ts` — app 侧每个平台的每日自动同步 Adapter 聚合表（docs/20 高-3，2026-08-22）：`AUTO_SYNC_PLATFORM_BY_COLLECTION: Record<CollectionPlatform, AutoSyncDefinition>`，每条 = `{ runSync: run<P>Sync, ...<p>AutoSyncPolicy }`——平台共享 Sync Adapter 与其旁边声明的触发策略（`sections/<p>/<p>-sync-adapter.ts` 导出）配对，纯聚合、零同步语义；`AUTO_SYNC_PLATFORMS` 由其派生，`jobPlatform` 经 `jobPlatformForCollection` 派生（契约测试禁止手写）。类型 `AutoSyncPolicy`/`AutoSyncDefinition`/`AutoSyncPlatform` 归 `hooks/use-daily-auto-sync.ts`；聚合点放 app 根而非 `hooks/`，因为 `hooks/` 不得反向 import `sections/`（契约测试守卫）。声明顺序 = 协调器评估顺序。单测 `collection-platform-auto-sync.test.ts`
-- `load-navigation.ts` — app 启动时读取一次 `onboardingStorage`，校验持久化平台判别符并调用 `createNavData`；读取失败记录错误并回退 canonical 导航，保证 app 继续启动。偏好由 welcome 写一次，故不 watch
-- `collection-platform-registry.ts` — **Platform Descriptor 的 app 半边**（docs/26 Step 2）：`PLATFORM_META: Record<CollectionPlatform, CollectionPlatformMeta>` 穷举五字段——`title`/`icon`（导航元数据）、`palette`（品牌身份色，`'ink'` = 黑标品牌走该 scheme 的 `text.primary`；hex 值的 provenance 注释在本文件，改值必须重跑 dataviz validator）、`hint`（welcome picker 一行文案）、`childRoutes`（详情子路由段）。消费者：`collectionPlatformRegistry`（导航，只取 title/icon）、`theme/core/palette.ts`、`welcome/sections/platform-picker.tsx`、`collection-platform-pages.ts`、`layouts/dashboard/background-jobs-indicator.tsx`。领域半边（`jobPlatform`/`readiness`/`hostPermissions`/`sortKey`/`dimensions`）在 `lib/collections/platform-descriptor.ts`——这里放不下的原因是 `LocaleKeys`/`IconifyName` 是 app 侧类型，而 `lib/` 不得依赖 `entrypoints/`。导航 factory 与聚合页 platform chips 的唯一事实源；用户偏好不得重排本 registry。需要按判别符取单个平台的消费者（chat 来源卡、analytics 构成图例与细分卡）用同文件导出的 `collectionPlatformById`（`ReadonlyMap`），**不要各自 `new Map(collectionPlatformRegistry.map(...))`**。判别符顺序来自 `@/lib/collections/platforms`（**必须走这个纯模块，不走 `@/lib/collections` barrel**——barrel 经 `collections-query` 把 drizzle + `@/lib/database` 拖进静态图，welcome.html 复用本 registry 但根本不碰数据库）
-- `App.tsx` — 根组件：ThemeProvider + Outlet + `SettingsDrawer`（外观抽屉挂在 router root，跨路由不卸载，开合状态是 `components/settings` context 的内存态，docs/25 Step 4） + `Snackbar`（`components/snackbar/`，docs/25 Step 5；全 app 唯一 toast region，同样挂 router root 以免路由切换删掉未读的 toast）；顶层调用 `useDailyAutoSync(AUTO_SYNC_PLATFORMS)`（`hooks/use-daily-auto-sync.ts`；registry 来自 `collection-platform-auto-sync.ts`，hook 无默认 registry——app 根拥有平台表，hook 只消费）——每日首次打开 app.html（mount + tab 切回可见）自动同步所有「就绪」平台，闸门读 Platform Sync Record 的 `last_attempt_at`（per-platform，当天任何一次尝试——手动或自动、成败与否——都占掉当天名额，docs/32 D2）。首次 mount 另发一次 typed `AGENT_BRIDGE_CONNECT_NOW`，只要求 Background scheduler 跳过下个 30 秒轮询；失败仅记录诊断、不阻断 app，WebSocket/开关/重试仍归 Background
-- `global.css` — 全局样式：DM Sans Variable + Barlow 字体导入 + baseline reset（含 `ul` 去项目符号，nav 依赖）+ 主题切换 View Transition 的 `::view-transition-*(root)` 伪元素规则（供 `theme/mode-transition.ts` 的圆形揭示动画用——消费者是外观抽屉的 Mode 三选与共享的 `layouts/components/theme-mode-button.tsx`——后者同时挂在 app Header 与 welcome 顶栏）
+- 只能用 `createHashRouter`：Chrome 扩展页面的 URL 不支持路径路由。
+- 平台路由（`/collections/<platform>` 与详情子路由）只由 `collection-platform-pages.ts` 的 `collectionPlatformRoutes` 展开，子路由段来自 `PLATFORM_META.childRoutes`。`main.tsx` 不得出现 `collections/<platform>` 字面量或平台专属路由行。守卫：`tests/platform-completeness-contract.test.ts`。
+- 新增非平台页面：`pages/` 加 lazy 组件 + `main.tsx` 路由 + `layouts/nav-config.tsx` 导航项。新增平台走 `.trellis/spec/frontend/platform-onboarding.md`，不手改 `main.tsx`。
+- 设置页两级导航全部是路由（`/settings/:tab?/:section?`），段名就是 section id，穷举表在 `sections/settings/settings-nav.ts`；`/settings` 与裸 tab 由视图 `replace` 重定向到该 tab 首项。
+- `/collections` 支持 `?tag=<uuid>` 单标签深链（Dashboard 的热门标签链到它）。
+- `main.tsx` 在首次 render 前 await 导航数据与主题设置（否则先闪一下默认预设）；两者读取失败都回退默认值，app 必须照常启动。`initDbProxy()` 是 fire-and-forget。
+- `SettingsProvider` 包在 router 外：`App` 是 router `Component`，没有 props 通道传预读的初始状态。
+- `SettingsDrawer` 与 `Snackbar` 挂在 router root（`App.tsx`）：跨路由不卸载，切路由不会删掉未读的 toast。
+- `App.tsx` 首次 mount 发一次 `AGENT_BRIDGE_CONNECT_NOW`，只是让 Background scheduler 跳过下一次轮询，失败只记诊断。WebSocket、开关、重试都归 Background，不要在 app 里开 Agent Bridge 连接。
+- onboarding 平台偏好由 welcome 写一次、启动时读一次，不 watch。
 
-## 约定
+## 平台注册表
 
-- Extension Page (app.html): MUI v9 + Emotion CSS-in-JS + `createHashRouter`。Chrome 扩展页面 URL 不支持路径路由，必须用 hash router。**v9 无 system props**：`Box`/`Stack`/`Typography`/`Grid`/`Link` 上的布局与颜色一律进 `sx`（`alignItems`/`flexWrap`/`color` 等直写会被 tsc 拒绝；唯一例外 `Typography color="text.secondary"` 类型通过但不生效，同样禁止，写 `sx={{ color: 'text.secondary' }}`）。**v9 的 slot 类名不要手打字符串**：`MuiTabs-flexContainer` 在 v6 就改名成 `MuiTabs-list`，v9 已无前者，手写它得到的是不报错的死 CSS（仓库曾有两处：Dashboard 图例行的 `gap` 与设置页 `segmentedTabsSx` 的 4px 行间距，都从未生效；docs/25 Step 6 改常量、Step 7 连文件一起删，现零命中）；用 `tabsClasses.list` 这类 `*Classes` 常量，改名时编译期就炸。主题系统基于 `minimal-shared` 工具库（`varAlpha`/`createPaletteChannel`）+ `@iconify/react` 图标；`theme/core/` 自 docs/25 Step 1 起是 Minimal v7.7.0 的移植（一文件一组件覆盖），Step 2 追加六色预设与外观设置。8px base shape、Minimal 中性 ramp、组件 defaults 和 Card/overlay elevation 均由 `theme/` 单一 owner 提供，页面仅消费 `theme.vars.*`；局部半径用 0.5/0.75/1 单位，向上的档位（Card/Dialog base×2 = 16、Popover/Menu base×1.25 = 10、Skeleton 16）同样归主题，页面不要自己写。新增页面：在 `pages/` 添加 lazy 组件 + `main.tsx` 路由配置 + `nav-config.tsx` 导航项
+- `collection-platform-registry.ts` 的 `PLATFORM_META` 是 Platform Descriptor 的 app 半边，领域半边在 `lib/collections/platform-descriptor.ts`。分两份是因为 `LocaleKeys` / `IconifyName` 是 app 侧类型，而 `lib/` 不得依赖 `entrypoints/`（`docs/adr/0004`）。
+- 它必须从纯模块 `@/lib/collections/platforms` 取判别符，不走 `@/lib/collections` barrel：barrel 会把 drizzle 与 `@/lib/database` 拖进静态图，而 welcome.html 复用本 registry、根本没有数据库。
+- 按判别符取单个平台用导出的 `collectionPlatformById`，不要各自 `new Map(collectionPlatformRegistry.map(...))`。
+- registry 顺序是导航与聚合页平台 chips 的事实源，用户偏好不得重排它。
+- 重值不进 descriptor：lazy page（`collection-platform-pages.ts` 的 `COLLECTION_PAGE_LOADERS`）与 Sync Adapter（`collection-platform-auto-sync.ts`）各自是穷举的 `Record<CollectionPlatform, …>`。
+- daily auto-sync 聚合表放在 app 根而不是 `hooks/`，因为 `hooks/` 不得 import `sections/`。表内 `jobPlatform` 经 `jobPlatformForCollection` 派生、不手写；声明顺序 = 协调器评估顺序。
+
+## UI 约定
+
+- MUI v9 无 system props：`Box` / `Stack` / `Typography` / `Grid` / `Link` 上的布局与颜色一律进 `sx`。`Typography color="text.secondary"` 类型通过但不产生样式，同样禁止。
+- slot 类名不要手打字符串，用 `tabsClasses.list` 这类 `*Classes` 常量：`MuiTabs-flexContainer` 早已改名，手写得到的是不报错的死 CSS。
+- 色板、字号、半径、阴影、组件 defaults 归 `theme/` 单一 owner，页面只消费 `theme.vars.*`；页面局部半径只用 0.5 / 0.75 / 1 单位。
+- 重量级 UI 依赖各有唯一入口（`sonner` → `components/snackbar/`，`simplebar-react` → `components/scrollbar/`），app.html 不引入 `motion`。守卫：`tests/ui-vendor-boundaries.test.ts`。
+- docs/19 的视觉结论已被 docs/25 §3.1 推翻；仍生效的保留项（`data-*` 结构词表、heading outline、焦点恢复契约、平台色 ≥ 3:1、固定 type scale、零 CDN）在 docs/25 §3.2。
+- `global.css` 的 `ul` reset（去项目符号与缩进）不能删：`components/nav-section/` 的列表自己不设 `list-style`，靠它。
+- `index.html` `<body>` 首子节点的 HTML 注释是视觉方向契约，改视觉语言时同步它。

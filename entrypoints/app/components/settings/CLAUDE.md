@@ -1,29 +1,22 @@
 # app/components/settings
 
-Minimal Dashboard `components/settings` 的移植：数据层 docs/25 Step 2（2026-09-01），抽屉 UI docs/25 Step 4（2026-09-02）。去掉 font / fontSize / direction / navLayout / navColor / **mode**——mode 归 MUI `ThemeProvider` 的 `favbase-color-mode`，不进 `local:themeSettings`（D13）；2026-09-06 起 mode 只有 light/dark 两态、默认亮色，**本目录不再有任何模式 UI**，唯一控件是 header 的 `layouts/components/theme-mode-button.tsx`。与 `components/library-gate/` 同档：**智能组件目录**，允许 storage-backed hook 与 `t()`（`components/collection/` 的零 storage / 零 `t()` 铁律不适用）。
+外观设置（对比度 / 紧凑 / 六色预设）的 context 与抽屉，Minimal `components/settings` 的移植。智能组件目录：允许 storage-backed hook 与 `t()`。
 
-## 模块结构
+## 约束
 
-- `types.ts` — re-export `ThemeSettings` / `ThemeColorPreset` / `ThemeContrast`（类型来自 `@/lib/storage`，值形状归 `lib/storage/theme-settings.ts`）；`SettingsContextValue { state, canReset, onReset, setState(partial), setField<K>(name, value), openDrawer, onCloseDrawer, onToggleDrawer }`（字段名照 Minimal，Step 4 抽屉零改名）；`SettingsProviderProps { initialState, children }`
-- `context/settings-context.ts` — `createContext<SettingsContextValue | undefined>(undefined)`。**leaf 契约**：只 import `react` 与类型。`theme/theme-provider.tsx` 直接 import 这个文件做可选读取（`use(SettingsContext)`），welcome.html 与 20 个裸渲染 `<ThemeProvider>` 的测试因此不会被拖进 storage
-- `context/settings-provider.tsx` — `SettingsProvider({ initialState, children })`：`useState(initialState)` 持内存态；`useEffect` 订阅 `watchThemeSettings`（回声/相同值不 setState）；`setState(partial)` 以 ref 镜像的**最新已应用值**合并（ref 在 React 提交前就更新，连续快速修改两个不同字段不会互相覆盖）——相同值 no-op，否则本地立即更新 + 恰好一次 `setThemeSettings(next)`（失败只 `console.error`）；`setField(name, value)` = 单字段 `setState`；`onReset` = `setState(DEFAULT_THEME_SETTINGS)`；`canReset = !isSameThemeSettings(state, DEFAULT)`；drawer 三件套 `openDrawer / onToggleDrawer / onCloseDrawer` 是纯内存态、不持久化。value 经 `useMemo`，以 React 19 `<SettingsContext value>` 提供
-- `context/use-settings-context.ts` — `useSettingsContext()`：无 provider 时抛 `useSettingsContext must be used inside SettingsProvider`。抽屉与其他 app.html 消费者用这个严格版
-- `context/index.ts` / `index.ts` — barrel（`export type * from './types'`）
-- `drawer/settings-drawer.tsx` — 右侧 temporary Drawer，宽 360、paper 走 `paperStyles` + 90% ground wash、`role="dialog"` + `aria-label`=`settingsDrawer.title`；`Scrollbar` 包内容。头部 = 标题（`h6`/`component="h2"`）+ Reset（`solar:restart-bold` + `Badge` dot）+ 关闭。选项自上而下：Contrast / Compact（两列 `BaseOption` 开关卡）→ Presets（`LargeBlock` + 六色）。**没有 Mode 块**（2026-09-06 删；`system` 已从产品移除，light/dark 是 header 按钮的活，再放一份就是同一功能的两个入口）。**没有 Minimal 的 `defaultSettings` 可见性映射**：选项集是固定的。开合状态是 context 内存态，不持久化
-- `drawer/presets-options.tsx` — 六个色板 tile：`solar:siderbar-bold-duotone` 字形染预设色（Minimal 的做法——让颜色演示它真正要干的活；手册写的「圆点」未采用），选中额外加 8% 同色底。`aria-label` 走 `settingsDrawer.preset*`（六色里有两个蓝，必须有名字而不是序号）
-- `drawer/base-option.tsx` — 开关卡：整张卡是控件（`role="switch"` + `aria-checked` + `aria-label`），里面的 MUI `Switch` 是装饰（`aria-hidden` + `tabIndex={-1}` + `pointerEvents: none`），保证一个 tab stop 一个可读名
-- `drawer/styles.tsx` — `LargeBlock`（浮动标签兼 per-block reset）+ `OptionButton`（Presets 的 tile；曾与 Mode 块共用，后者已删）。不移植 `SmallBlock`（无嵌套选项组）、`font-options`/`nav-layout-option`/`fullscreen-button`/`icons.tsx`（改用 `components/iconify` 离线图标，见铁律 4）
+- 配色模式不归这里：mode 归 MUI `ThemeProvider`（`favbase-color-mode`），不进 `local:themeSettings`。产品只有 light / dark 两态、默认亮色，`system` 已移除；唯一开关是 header 的 `layouts/components/theme-mode-button.tsx`。抽屉里不要加 Mode 块（同一功能两个入口）。
+- Reset 与红点只管本目录的设置：重置不得改配色模式，红点直接读 context 的 `canReset`。
+- `context/settings-context.ts` 是 leaf：只 import `react` 与类型。`theme/theme-provider.tsx` 直接 import 它，用 `use(SettingsContext)` 可选读取。
+- 不要把 `theme-provider.tsx` 改成会抛错的 `useSettingsContext()`：welcome.html 刻意不挂 `SettingsProvider`，许多测试也裸渲染 `ThemeProvider`。welcome 不得 import 本目录（守卫 `tests/ui-vendor-boundaries.test.ts` 的 `IMPORT_BOUNDARY_RULES`）。
+- app.html 内的其他消费者用严格版 `useSettingsContext()`（无 provider 抛错）。
+- `SettingsProvider` 在 `main.tsx` 包在 `RouterProvider` 外，并注入启动时读好的 `initialState`：`App` 是 router `Component`，没有 props 通道；首帧即已保存的预设，不闪默认色。
+- 一次用户动作 = 一次 storage 写。`setState` 以 ref 镜像的最新值合并并判等（连续改两个字段不互相覆盖）；storage `watch` 的回声与其他标签页的重复值被 `isSameThemeSettings` 吞掉，不重渲染、不回写。
+- 抽屉开合是 context 内存态，不持久化；抽屉挂在 `App.tsx`（router root），跨路由不卸载。
+- `compactLayout` 的语义归 `layouts/dashboard/content.tsx`（on = 内容列收窄到 `lg`，off = 用页面自己的 cap）；`contrast` / `primaryColor` 由 `theme/with-settings/update-core.ts` 消费。
+- `BaseOption` 整张卡是控件（`role="switch"`），里面的 MUI `Switch` 是装饰（`aria-hidden`、无 tab stop）：一个 tab stop 一个可读名。
+- 预设色板的 `aria-label` 用颜色名不用序号：六色里有两个蓝。
+- 抽屉图标一律走 `components/iconify` 离线图标，不移植 Minimal 的 `icons.tsx`。
 
-## 契约
+## 坑
 
-- **初值由 `main.tsx` 注入**：bootstrap 时 `Promise.all([loadNavigationData(), getThemeSettings()])`，`SettingsProvider` 包在 `RouterProvider` 外（`App.tsx` 是 router `Component`，无 props 通道；`ThemeProvider` 仍在 `App.tsx` 内，语义 = Minimal 的 Settings 外层 / Theme 内层）。首帧即已保存的预设，不闪默认色
-- **一次用户动作 = 一次 storage 写**：`setState` 基于 ref 镜像判等，storage `watch` 回声与另一 app.html tab 的重复值都被 `isSameThemeSettings` 吞掉，不重渲染、不回写
-- `ThemeProvider` 通过 leaf context 可选读取；抽屉等消费者用会抛错的 `useSettingsContext()`。不要把 `theme-provider.tsx` 改成抛错版——welcome 复用它
-- `compactLayout` 的语义由 `layouts/dashboard/content.tsx` 决定：on → 内容列收窄到 `lg`，off → 用页面自己传的 cap（默认 `false`，即视觉与 Step 4 之前一致）；`contrast` / `primaryColor` 由 `theme/with-settings/update-core.ts` 消费
-- 抽屉挂载点是 `App.tsx`（router root，跨路由不卸载），`SettingsButton` 在 header 里经 context 的 `onToggleDrawer` 开合、红点直接读同一个 context 的 `canReset`（**不折叠配色模式**——它不是抽屉选项）；两者不共享 ref，焦点归还交给 MUI Modal 默认的 restore-focus——`ui-design-system.md` §12 那套「显式 ref + `disableRestoreFocus` + 手动 blur」只适用于触发器与抽屉同组件的情形（`NavMobile`、chat history），这里改为**断言结果**：关闭后焦点回触发器、容器无 `aria-hidden` 残留
-
-## 测试
-
-`drawer/settings-drawer.test.tsx`（5 例，与下面同一个 `wxt/utils/storage` seam + identity `t()`）：开合与 `role="dialog"`/`aria-label` + 关闭后的焦点归还与 `aria-hidden` 清理（§12 scope）、preset 落一次真实写入、contrast/compact 各落一次写入、抽屉里无任何按钮提到 mode 且操作不碰 `favbase-color-mode`、Reset 回默认设置并让 dot 消失且**不改配色**（`useSettingsReset` 删除前那条 `onResetAll` 会偷改，这两例就是钉死它不回来）。
-
-`context/settings-provider.test.tsx`（happy-dom，`createRoot` + `act`，全部渲染包在 `<StrictMode>` 内与 `main.tsx` 一致——写入/渲染计数在双调用 effect 下同样成立；只 mock `wxt/utils/storage`，真实 `lib/storage/theme-settings.ts` facade 参与）：初值不写 storage / `setField` 恰好一次写 / 相同值 no-op 不渲染 / `onReset` 回默认并持久化 / 外部 watch 变更被采纳并 canonicalize 且不回写 / 回声不重渲染 / drawer 三件套 / 裸 `ThemeProvider` = coral 而 preset2 provider 内 = `#7635dc` 且 `text.accent` 派生 / `useSettingsContext` 无 provider 抛错。
+- 触发器（header 的 `SettingsButton`）与抽屉不在同一组件、不共享 ref，焦点归还交给 MUI Modal 默认的 restore-focus。`.trellis/spec/frontend/ui-design-system.md` §12 的「显式 ref + `disableRestoreFocus`」只适用于触发器与抽屉同组件的情形，别套过来。

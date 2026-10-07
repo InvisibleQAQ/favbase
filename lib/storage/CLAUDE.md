@@ -1,20 +1,40 @@
 # Storage
 
-Storage 统一管理目录（barrel `index.ts` re-export 全部 public API，import 路径 `@/lib/storage` 不变）。
+WXT storage 的统一管理目录，对外 import 面是 `@/lib/storage`。每个 key 的含义写在 `keys.ts` 的注释里；这里只记 owner 规则与坑。
 
-## 模块结构
+## 约束
 
-- `keys.ts` — STORAGE_KEYS 静态 key 注册表 + STORAGE_PREFIXES 动态 key 前缀注册表（`videoCache: 'vc:'` 字幕、`videoSummary: 'vs:'` AI 总结），新增 key/前缀先在此检查冲突。（Chat 会话历史已于 2026-07 迁至 PGlite `chat_conversations` 表，`chatConversations` key 随之删除——无存量数据，无迁移代码；见 `lib/chat/CLAUDE.md`）
-- `settings-schema.ts` — Settings Module 的纯 canonicalization Implementation（无 WXT 副作用）：`UserSettings`、经 env 枚举校验的 `DEFAULT_SETTINGS`、`canonicalizeSettings(unknown)` 与 `SettingsValidationError`。缺失已知字段按当前默认补齐；已出现但非法的枚举/数值/nested record 整体拒绝；未知顶层字段、未知 provider key 与合法附加字段保留以支持跨版本 whole-config 往返。旧平铺 ASR 四字段在同一入口迁到 `asrConfigs`，当前 structured provider 值优先。`dimensions` 在这里只拒绝非有限或 `<=0` 的不可发送值，超过索引上限的可发送值继续由 Embedding 层显式报错。
-- `settings.ts` — 私有 `storage.defineItem<unknown>`（**懒定义**：WXT 在 `defineItem` 当场就会读一次值来预热 init mutex，从而触碰 `chrome.runtime`；改为首次使用时才定义，使「仅 import 本模块」不再要求任何 runtime 能力——Background Agent Bridge tool registry 必须静态 import 到这条链上，Service Worker 无法用动态 `import()` 规避，见 `tests/lib-import-smoke.test.ts`）+ 对外 `settingsStorage` facade。`getValue` 只返回 canonical `UserSettings`（损坏存量记录诊断后退回 fresh defaults）；`setValue` 写前 canonicalize，非法值不触碰 raw storage；`watch` 只发布 canonical 值。`migrateSettingsIfNeeded()` 仅负责把检测到的旧 ASR 存量回写成 canonical 形状，正常缺字段读取不回写，避免无语义变化推进 WebDAV LWW 时钟。另保留 `getAsrSettings()` 与 pure resolver re-export。
-- `resolve.ts` — **纯 resolver 集合，零 wxt storage 依赖**：`getEnvApiKey` / `getEnvModel` / `resolveLlmConfig(settings)` / `resolveAsrConfig(settings)`。从 `settings.ts` 提取的原因是后者把 `wxt/utils/storage` 拖进模块图（历史上还在加载期调 `storage.defineItem` 触碰 chrome.runtime，**现已改懒定义**，但依赖本身仍在，且 barrel 还会额外求值 `ui-state` / `agent-bridge` 的 eager item），领域层 config（`lib/tagging/config.ts`、`lib/summary/config.ts`）只要纯计算，从这里 import 就不必在测试里 stub storage barrel。`settings.ts` 原样 re-export，`@/lib/storage` 仍是对外默认 import 面（例外：`lib/embedding/config.ts` 走 `@/lib/storage/settings` leaf——barrel 会连带求值 `ui-state` / `agent-bridge` 的 `defineItem`，而它在 Background SW 的静态图上）。`resolveLlmConfig` 是**当前选中 LLM 的唯一真实来源**（user > env > provider def，`enabled` 派生自 apiKey+model），tagging / summary / `useSettings.llmConfigured` 共用
-- `ui-state.ts` — sidebarPinnedStorage（`local:sidebarPinned`，布尔值，默认 true）+ localeStorage（`local:locale`）+ `asrQuotaPauseStorage`（`local:asr-quota-pause`，nullable `{ providerId, resetAt }`，只作 ASR 自动转录重启 guard）（原 `xLastSyncStorage`（`local:x-last-sync`）已于 docs/32 Step 1 删除：「本次新增 N」与冷却锚点改读 PGlite 的 Platform Sync Record，六平台同一来源；扩展未上线，残留的旧 key 无人读取，不做迁移）+ **onboardingStorage**（`local:onboarding`，`storage.defineItem<OnboardingState | null>`，fallback `null`）：首装引导结果 `{ completedAt: number; platforms: CollectionPlatform[] }`。`null` = 从未完成 welcome.html，**这是安装时弹引导页的唯一闸门**（unpacked 扩展每次 reload 都报 `onInstalled reason 'install'`，光看 reason 会在开发期反复弹页）。`platforms` 是 **Onboarding Platform Preference**：只决定引导 CTA 落地与 app Collections 子叶优先级，绝不 gating；所有平台始终可见可用。只由 welcome 页写一次，app 首次 render 前读取一次且不 watch。`CollectionPlatform` 从 `@/lib/collections/platforms` 取（纯判别符模块，不牵进 DB）+ **libraryGateStorage**（`local:library-gate`，`storage.defineItem<CollectionPlatform[]>`，fallback `[]`）：知识库构建闸门，存**暂停中的平台列表**而非「每平台布尔」——`[]` 天然等于「全部运行」，第 7 个平台接入无需补默认值。只由 app.html 门面 `entrypoints/app/hooks/library-gate.ts` 读写（该门面持同步镜像，因为派发 job 的 `startJob` 不是 React）；本文件只存值，闸门语义与 jobPlatform 映射都在门面里 + **douyinBackfillStorage**（`local:douyin-backfill`，`storage.defineItem<DouyinBackfillState>`，fallback `{ resumeCursor: null, backfillDone: false }` = 从未完成、从头全量走；docs/33 Step 2）：抖音「全部收藏」首次全量游走停在哪里，下次运行先补头部再从断点续到底。类型只 `import type` 自 `@/lib/douyin/douyin-sync-service`（擦除，sync-service 不进本文件的图）；值原样存，`lib/douyin` 在自己的边界校验（非纯数字 cursor 读作 `null`）。**唯一读写方是 `entrypoints/app/sections/douyin/douyin-sync-adapter.ts`**；设备本地状态，WebDAV 只同步 settings + locale，无需排除。随 barrel 进入 Background SW 图（`app-handlers` 经 barrel 取 `onboardingStorage`），和其余 eager item 一样只是一个未读取的定义
-- `theme-settings.ts` — app.html 主题设置（docs/25 Step 2，D13）：`local:themeSettings`，形状 `ThemeSettings = { primaryColor: ThemeColorPreset; contrast: ThemeContrast; compactLayout: boolean }`，`THEME_COLOR_PRESETS = ['default','preset1'…'preset5']`（六个预设 id 的**单一事实源**，`entrypoints/app/theme/with-settings/color-presets.ts` 以 `Record<ThemeColorPreset, …>` 承接，漏一个编译失败）、`THEME_CONTRASTS = ['default','high']`、冻结的 `DEFAULT_THEME_SETTINGS`（coral / default / `compactLayout: false`）。**值本体不带 `version`**（WXT `defineItem` 原生 `version` + `migrations` 可事后追加）。`canonicalizeThemeSettings(unknown)` 用 zod 逐字段 `.catch()` 回退：非对象整体回退默认，非法预设/对比度/非布尔各自回退、其余字段保留，永不 throw。eager `themeSettingsStorage` + typed facade `getThemeSettings()`（canonicalize）/ `setThemeSettings()` / `watchThemeSettings(cb)`（canonicalize 后发布）/ `isSameThemeSettings(a, b)`（三字段值比较，供 provider 回声去重）。**明暗模式不在这里**——归 MUI `ThemeProvider` 的 `favbase-color-mode` localStorage key（`public/theme-init.js` 首帧预注入依赖它）。单测 `theme-settings.test.ts`
-- `agent-bridge.ts` — Agent Bridge config/status facade：`local:agent-bridge` 默认关闭，端口由 `envNumber('VITE_AGENT_BRIDGE_PORT', DEFAULT_AGENT_BRIDGE_PORT)` 解析；`local:agent-bridge-status` 持连接状态、最近成功时间/错误，以及成功握手也不清除的 `lastAuthFailureAt` 事故痕迹（认证失败次数/`nextRetryAt` 随 bad-token 退避于 docs/30 #1 删除，旧记录里残留的这两个键无人读取，不做迁移）。typed get/watch 在边界补齐旧存量缺失字段；UI 与 scheduler 只能经 typed API 访问。
-- `index.ts` — barrel re-export（含 canonicalization Interface）+ runStorageMigrations()（统一迁移入口，background.ts 只调这一个函数）
+- `keys.ts` 是命名空间的唯一事实源（`STORAGE_KEYS` 静态 key、`STORAGE_PREFIXES` 动态前缀）。新增 key 或前缀先在这里查冲突。
+- WXT 的 import 固定为 `wxt/utils/storage`，不是 `wxt/storage`。
+- `runStorageMigrations()` 是唯一的持久迁移入口，`entrypoints/background.ts` 只调它。
+- WebDAV 只同步 settings 与 locale，其余 key 都是设备本地状态。
+- 不要在这里加会话或同步记录类的 key：Chat 会话在 PGlite 的 `chat_conversations`，同步时间与「本次新增」在 PGlite 的 Platform Sync Record（`lib/database/CLAUDE.md`）。
 
-## 约定
+## Settings
 
-- 存储: `lib/storage/` 目录统一管理（import 路径 `@/lib/storage`）。普通实体可直接使用 WXT `storage.defineItem`；Settings 必须经过 `settingsStorage` facade，禁止公开或绕过 raw item。WXT import 固定为 `wxt/utils/storage`（非 `wxt/storage`）。`keys.ts` 是命名空间唯一真实来源：`STORAGE_KEYS` 管理静态 key，`STORAGE_PREFIXES` 管理动态 key 前缀。非 React 消费者用 `getAsrSettings()`，React 消费者通过 `useSettings` 操作 `settingsStorage`；远端/导入路径复用 `canonicalizeSettings`，不得强转 `UserSettings`。`runStorageMigrations()` 是统一持久迁移入口。
-- ASR quota guard 只保存 provider + reset timestamp，不保存或恢复 page-runtime 转录/Embedding/Tagging 队列；读取方必须与当前 `settings.asrProvider` 匹配，避免切换 provider 后被旧 guard 阻塞
-- 主题设置的读写方只有两个：`entrypoints/app/main.tsx` 在首次 render 前 `getThemeSettings()` 读一次（与 `loadNavigationData()` 并行，失败回退 `DEFAULT_THEME_SETTINGS`）注入 `SettingsProvider initialState`；`entrypoints/app/components/settings/context/settings-provider.tsx` 持内存副本、`watchThemeSettings` 订阅跨 context 变更并在用户改动时 `setThemeSettings`。其他模块不得直接读写 `themeSettingsStorage`
+- Settings 只能经 `settingsStorage` facade 读写，raw item 不公开、不得绕过。远端与导入路径复用 `canonicalizeSettings`，不得把外来数据强转成 `UserSettings`。
+- facade 两个方向都 canonicalize：读到损坏的存量记录退回默认值；写入的非法值不落盘。
+- `canonicalizeSettings` 的规则：缺失的已知字段补当前默认；已出现但非法的枚举、数值、nested record 整体拒绝；未知顶层字段与未知 provider key 保留。
+- 保留未知字段是为了跨版本 whole-config 往返（WebDAV），别当成脏数据清掉。
+- `dimensions` 在这里只拒绝发不出去的值（非有限或 `<= 0`）；超过索引上限的值由 Embedding 层显式报错。
+- `migrateSettingsIfNeeded()` 只回写检测到的旧 ASR 平铺字段。正常的缺字段读取不回写：无语义变化的写入会推进 WebDAV 的 LWW 时钟。
+- `resolveLlmConfig` 是「当前选中 LLM」的唯一来源（user > env > provider def），tagging、summary、设置页共用，别另写解析。
+
+## Service Worker 模块图
+
+- `settings.ts` 的 `defineItem` 刻意懒定义，别改回模块级：WXT 在 `defineItem` 当场就读一次值，会触碰 `chrome.runtime`，而本模块在 Background Agent Bridge tool registry 的静态图上（SW 不能用动态 `import()` 规避）。守卫：`tests/lib-import-smoke.test.ts`。
+- SW 静态图上的模块走 leaf（`@/lib/storage/settings`、`@/lib/storage/resolve`），不走 barrel：barrel 会连带求值 `ui-state` / `agent-bridge` / `theme-settings` 的 eager `defineItem`。
+- `resolve.ts` 必须保持零 wxt storage 依赖。只要纯计算的领域层 config（`lib/tagging/config.ts`、`lib/summary/config.ts`）从它 import，测试里就不必 stub storage。
+- `ui-state.ts` 对平台与领域模块只 `import type`，不把 sync-service 或 DB 带进 storage 的模块图。
+
+## Owner（谁可以读写）
+
+- 主题设置（`local:themeSettings`）：只有 `entrypoints/app/main.tsx`（首次 render 前读一次）与 `entrypoints/app/components/settings/context/settings-provider.tsx`，其他模块不得直接读写。
+- 明暗模式不在主题设置里：它归 MUI `ThemeProvider` 的 `favbase-color-mode` localStorage key，`public/theme-init.js` 的首帧预注入依赖它。
+- 主题设置的值刻意不带 `version` 字段（WXT `defineItem` 原生支持 version + migrations，可事后追加）。`canonicalizeThemeSettings` 逐字段回退、永不 throw。
+- 知识库闸门（`local:library-gate`）：只由 `entrypoints/app/hooks/library-gate.ts` 读写，闸门语义在那里。存「暂停中的平台列表」而不是每平台布尔，`[]` 即全部运行，接新平台不用补默认值。
+- 抖音断点（`local:douyin-backfill`）：唯一读写方是 `entrypoints/app/sections/douyin/douyin-sync-adapter.ts`。值原样存，校验在 `lib/douyin` 自己的边界。
+- Onboarding（`local:onboarding`）：只由 welcome 页写一次，app 首次 render 前读一次、不 watch。`null` 是安装时弹引导页的唯一闸门；`platforms` 只影响落地路由与侧栏优先级，绝不 gating。详见 `entrypoints/welcome/CLAUDE.md`。
+- Agent Bridge config / status：UI 与 scheduler 只能经 `agent-bridge.ts` 的 typed get / watch（它在边界补齐旧存量缺失的字段）。`lastAuthFailureAt` 是事故痕迹，成功握手也不清除。
+- ASR quota guard（`local:asr-quota-pause`）：只存 provider 与 reset 时间，不保存也不恢复转录队列。读取方必须核对当前 `settings.asrProvider`，否则切换 provider 后会被旧 guard 阻塞。
+- X 认证 header、WebDAV 三个 key 的 owner：`lib/x/CLAUDE.md`、`lib/sync/CLAUDE.md`。

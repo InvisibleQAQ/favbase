@@ -1,31 +1,37 @@
-# i18n
+# lib/i18n
 
-用户可见文案集中在 `locales/`：`zh-CN.ts` 是 `LocaleKeys` 类型源，`en.ts` 以 `Record<LocaleKeys, string>` 保证键集合一致。React 组件通过 `useTranslation()` 订阅语言变化；非 React 调用经 `index.ts` 的 `t()`，禁止业务层直接拼接翻译文本。
+自研的轻量 i18n（无外部库）。`locales/zh-CN.ts` 是 `LocaleKeys` 的类型源，`en.ts` 以 `Record<LocaleKeys, string>` 锁住键集合。React 侧用 `useTranslation()`，非 React 侧用 `index.ts` 的 `t()`。
 
-受支持的语言只有一份运行时清单：`detect.ts` 的 `SUPPORTED_LOCALES`，`SupportedLocale` 类型由它派生。需要枚举语言的代码（如 welcome 画廊的逐语言截图检查 `entrypoints/welcome/tour-images.test.ts`）读它，不另抄一份；`detect.ts` 是无副作用的叶模块，测试里可以直接 value-import，`index.ts` 不行（加载即读 storage）。
+## 约束
 
-ASR quota 文案只消费结构化 `ASR_QUOTA_EXCEEDED/resetAt`：自动转录 UI 使用 `autoTranscribe.quotaPaused*`，设置页使用 `settings.asr.groq*`；Groq 原始 429 message 只作 debug，不进入可见文案。
+- 新增或删除 key 必须同时改 `zh-CN.ts` 和 `en.ts`，键集合不一致 `tsc` 会红。
+- seam 在 UI 边界：lib 层只传结构化数据（错误码 + params、stage + stageParams、`reason`），不调 `t()`、不拼翻译文本；由 UI 层翻译。
+- 语言切换靠 `useTranslation()` 订阅驱动 re-render。组件里只要用到模块级 `t`（`import { t } from '@/lib/i18n'`，供模块级 helper 用）、`formatCompactNumber` 或 `formatDateTime`，就必须在组件内调一次 `useTranslation()`，否则切换语言后不刷新。纯 JSX 组件直接 `const { t } = useTranslation()`。
+- 复数：`t(key, { count })` 依次找 `{key}.{category}` → `{key}.other` → base key。要区分单复数的 key 定义 base（即 other 语义）+ `{key}.one`，且 zh 与 en 都要有 `.one`（zh 的 `.one` 与 base 同值）：`LocaleKeys` 从 zh 推导，zh 没有的 key en 也不能有。
+- 受支持语言只有一份运行时清单：`detect.ts` 的 `SUPPORTED_LOCALES`（`SupportedLocale` 由它派生）。要枚举语言的代码读它，不另抄一份。
+- 供应商与传输层的原始错误信息只作 debug，不进可见文案。UI 只消费结构化 code（`ASR_QUOTA_EXCEEDED` + `resetAt`、`AgentBridgeStatus` 的 state / error code、WebDAV 的 `invalid-settings` / `incompatible-version`），未知错误映射成通用的可恢复提示。
+- 新增转录错误码要同时补 `error.<CODE>` 的 zh / en，否则用户看到裸 key（`t()` 回退到 key，别处不会红）。守卫：`index.test.ts` 的 `transcribe error codes`。
+- 显示名调整只改文案值，不改 key、路由、数据库 `platform` 或任务 ID；`bookmarks.*`、`x.*` 这类命名空间是稳定的。
 
-Collection provider 阻塞统一使用 `configurationBlocker.*`。ASR 只在视频确实无可用官方字幕、状态机进入 `configuration_required` 且 resolver 无 key 时显示；Embedding/Tags 还必须有 ready coverage backlog。按钮深链 AI section 并携带 `resume=<platform>`；不得把空 ASR key 做成 Fetch 前置门。
+## 文案规则
 
-WebDAV Settings 拒绝使用结构化 `invalid-settings` / `incompatible-version`，对应 `settings.sync.err.*` 双语键；文案必须明确本地 Settings 未被覆盖或需要升级，raw validation detail 只作 debug，不进入翻译键。
+- 一级导航 Analytics 在中英文下都显示 `Analytics`（`nav.dashboard`）。
+- 浏览器书签平台名固定「浏览器书签」/ `Browser Bookmarks`，`nav.bookmarks` 与 `bookmarks.title` 必须一致；X 平台名固定「X 书签」/ `X Bookmarks`，两个平台不得合并。普通名词 bookmark / 书签按语境翻译，不机械替换成平台名。
+- B 站页面标题用 `collections.sidebarTitle`，主分类标题用 `collections.foldersTitle`，不可混用。
+- 收藏页处理条的共享短标签统一放 `pipeline.*`，由 view 翻译后传给零 `t()` 的共享组件（`entrypoints/app/components/collection/CLAUDE.md`）。
+- 「从平台拉取收藏」只有一个说法：获取 / Fetch。`backgroundJobs.kind.sync` 与 `pipeline.fetch` 文案必须一致；各平台获取按钮统一用 `pipeline.fetchNow` / `pipeline.fetching`，不加 per-platform 的 `*.sync` / `*.syncing`，不引入第二个「同步」说法。
+- 知识库闸门按钮固定 `pipeline.pauseLibrary` / `pipeline.resumeLibrary`；段级暂停控件（`pipeline.control.*`）已下线，不得复活。
+- provider 配置阻塞提示统一用 `configurationBlocker.*`；何时显示归 `entrypoints/app/components/configuration-blocker/CLAUDE.md`。
+- WebDAV 拒绝远端 Settings 的文案（`settings.sync.err.*`）必须说明本地设置未被覆盖，或需要升级。
+- Agent Bridge（`settings.agentBridge.*`）：可见文案里配对密钥固定叫「配对 Token」/ pairing token（代码与域术语仍是 Bridge Token），不写成 API key；不出现 Bridge / daemon 这类实现词，用户要照敲的字面命令（如 `favbase doctor`）除外。
+- Agent Bridge 轮询文案必须同时写 Chrome 120+ 约 30 秒与 116–119 约 60 秒，不得笼统承诺 30 秒。bad-token 文案只给 setup 这一步修复动作：`favbase setup` 自己会替换持旧 token 的 daemon，不要再加 `daemon restart`。
 
-Agent Bridge 设置页使用 `settings.agentBridge.*`；连接状态只消费 `AgentBridgeStatus` 的稳定 state/error code，未知或 runtime 原始错误统一映射为可恢复的本地连接提示，不把 raw transport message 暴露给用户。`lastAuthFailure` 是成功恢复后仍保留的历史痕迹（`retryIn` 倒计时键随退避于 docs/30 #1 删除）；bad-token 文案必须给出 setup 修复动作，且只给这一步——`favbase setup` 自己会替换持旧 token 的 daemon，不再追加 `daemon restart`。配对密钥在**用户可见文案**里固定称为「配对 Token」/ "pairing token"（域术语与代码里仍是 Bridge Token），不得写成 API key/provider key；同理 UI 文案不出现 "Bridge"/"daemon" 这类实现词，只有用户要照敲的字面命令（如 `favbase doctor`）例外；轮询文案必须同时说明 Chrome 120+ 约 30 秒与 116–119 约 60 秒，不得笼统承诺 30 秒。
+## 坑
 
-## 平台命名
-
-- Analytics 一级导航在中英文环境都显示为 `Analytics`；只改 `nav.dashboard` 的文案值，稳定键和 `/` 路由保持不变。
-- Bilibili 页面标题使用 `collections.sidebarTitle`，主分类标题使用 `collections.foldersTitle`；两者职责不可混用。
-- Bilibili 全量同步进度使用 `collections.bilibiliSyncProgress`，插值固定包含累计条目、收藏夹序号/总数/标题和页码/总页数；中英文键集合必须同步。
-- 本地浏览器书签平台显示名固定为 `Browser Bookmarks` / `浏览器书签`；`nav.bookmarks` 与 `bookmarks.title` 必须一致，后台任务提示复用 `nav.bookmarks`。
-- X 平台显示名固定为 `X Bookmarks` / `X 书签`，不得与浏览器书签平台合并。
-- `bookmarks.*`、`x.*` 是稳定翻译键命名空间；显示名调整不改键、路由、数据库 platform 或任务 ID。
-- Collection 页面紧凑处理条统一使用 `pipeline.*`。全局任务提醒的 `extract` kind 与 pausing/paused phase 使用 `backgroundJobs.*`；共享 collection UI 只收预翻译 label，不调用 `t()`。`backgroundJobs.kind.sync` 与 `pipeline.fetch` 指同一件事（从平台拉取收藏），文案必须一致（获取 / Fetch），不得再引入第二个「同步」说法——六平台的获取按钮统一 `pipeline.fetchNow`（立即获取 / Fetch now）+ `pipeline.fetching`（获取中... / Fetching...），旧的 per-platform `*.sync/*.syncing` 与 `common.syncNow` 已删除。知识库闸门按钮固定 `pipeline.pauseLibrary` / `pipeline.resumeLibrary`（暂停/继续构建知识库），暂停中获取按钮的禁用提示为 `pipeline.fetchBlockedByPause`；段级暂停控件（`pipeline.control.*`）已下线，不得复活。
-- 普通名词 `bookmark` / `书签` 按语境翻译，不机械替换为平台显示名。
+- `index.ts` 加载即读写 `chrome.storage`（`localeStorage.getValue()` + `watch`）。没 mock storage 的测试不要 value-import `@/lib/i18n`；只需要语言清单时 import 无副作用的叶模块 `detect.ts`。
+- 缺失的 key 只在 DEV 下 `console.warn`，生产直接显示裸 key。
+- 硬编码守卫 `tests/i18n-no-hardcoded.test.ts` 只扫 `entrypoints/**/*.tsx` 里的 CJK（剥注释后），行内 `// i18n-ignore` 豁免单行。英文硬编码文案没有守卫，项目也没有 linter，只能靠 review。
 
 ## 验证
 
-- 修改 locale 后运行 `pnpm.cmd test -- lib/i18n/index.test.ts` 与 `pnpm.cmd compile`。
-- `index.test.ts` 通过公开 `t()` 覆盖双语平台名、插值、复数和数字格式化。
-- 转录错误码的可翻译性由 `index.test.ts` 的 `transcribe error codes` 守：清单从 `transcribeErrorSchema` 的 wire enum **派生**（TS union 在运行时枚举不出来），并用一对类型断言把 wire enum 与 `TranscribeErrorCode` 锁成同一集合——任一边多出成员即 `tsc` 报错。新增错误码必须同时补 `error.<CODE>` 的 zh/en（en 是 `Record<LocaleKeys, string>`，zh 少写编译就红），否则用户看到的是裸 key。
-- Dashboard 与聚合标签筛选的所有可见文案使用 `dashboard.*` / `allCollections.*`；`overview-view.tsx` 不再享有硬编码守卫豁免。
+- 改 locale 后跑 `pnpm vitest run lib/i18n/index.test.ts` 与 `pnpm compile`（`pnpm test -- <path>` 不行：参数会落到脚本末尾的 `pnpm -r test` 上，根目录仍跑全量）。

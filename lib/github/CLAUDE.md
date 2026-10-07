@@ -1,19 +1,20 @@
 # lib/github
 
-GitHub Star 收录领域（第二个平台，镜像 `lib/bilibili/` 分层）。MVP = 一键全量拉取 starred repos + 新仓库 README markdown 入库切块 + PGlite 持久化 + 查询。复用现有表（sources/authors/items/item_sources/item_contents/item_chunks，`platform='github'` 判别列），零新表零迁移。
+GitHub Star 收录领域：全量拉取 starred repos，新仓库的 README markdown 作正文入库。
 
-## 模块结构
+## 约束
 
-- `github-api.ts` — GitHub REST API 层：`fetchAllStarred(token, onProgress?)`（`GET /user/starred?per_page=100&sort=created&direction=desc` + `Accept: application/vnd.github.star+json`，star+json 的 `{starred_at, repo}` 摊平为 `GithubStarredRepo`；首页 Link header `rel="last"` 定总页数，逐页拉取带 `(page, totalPages, fetchedCount)` 进度回调，页间 100ms 延迟（`lib/http/backoff.ts` 的 `sleep`，docs/32 Step 3 起平台目录禁手写 `setTimeout` 等待，守卫 `tests/platform-sleep-guard.test.ts`）；`PER_PAGE`/`PAGE_DELAY_MS` 等数值常量经 `envNumber('VITE_GITHUB_*', default)` 可配置——`lib/env.ts`，文档在 `.env.example`，`PER_PAGE=100` 是 API 硬上限调大必坏）、`fetchReadme(token, fullName)`（`GET /repos/{fullName}/readme` + `Accept: application/vnd.github.raw+json` → 原始 markdown；404 → `null`（无 README 是正常状态），其他非 OK 走结构化错误）、`validateToken(token)`（`GET /user` → `{login, avatarUrl}`，设置页测试连接）、`parseLinkHeader(header)`（纯函数，导出供单测）。结构化错误（继承 `lib/collections/sync-errors.ts` 的基类，docs/32 Step 4）：401 → `GithubAuthError(…, 'rejected')`（只有带 token 才发请求，所以恒 `rejected`）；403 且 X-RateLimit-Remaining=0 → `GithubRateLimitError`（携带 `resetAt`，GitHub 页的「立即获取」按钮锁到该时刻）。无瞬时错误重试（docs/32 Step 3 刻意没加，要单独决定）。lib 层零 UI 文案（i18n seam 在 UI 边界）。请求统一走 `fetchWithDeadline`（`lib/http/`，全平台共用 deadline）
-- `github-sync-service.ts` — **DB schema 知识的唯一持有者**（`PLATFORM = 'github'`）。`syncStars(token, onProgress?, onReadmeProgress?, control?)` 按 Stars 分页 → `getReposNeedingReadme` 差集（新仓库 ∪ 幽灵仓库——「声明 content 但零 chunk 行」，README 补拉是「无回填」ADR 的 bug 修复例外）→ README 串行抓取（仓间 `README_DELAY_MS` 同样走 `sleep`）→ DB 写入推进；Stars 每页与 README 每仓领取前执行 cooperative checkpoint，当前请求不中断。README 单仓失败仍降级为 no-content，健康的已入库仓库仍不重拉。`SyncStarsResult.newItemIds`（含自愈 id）由 app 侧 Sync Adapter 交给 Platform Sync funnel enqueue 共享 Embed/Tags lanes；`SyncStarsResult.total`/`inserted`（本轮新插入仓库数，docs/32 Step 1 追加）进 Platform Sync Record 的 `last_fetched`/`last_inserted`；本目录不 import storage/tagging/embedding barrel。查询仍由 `getStarredRepos/getLanguageCounts` 持有。
-
-## 约定
-
-- **共享骨架**：写侧走 `ingestCollection`（`lib/ingest/`，docs/16 HIGH-1——事务边界/insert-only/分批/id-map 均由管线持有）；读侧 `getStarredRepos` 走 `pagedItemsQuery`，搜索走 `searchCondition`（本文件只声明可搜字段：title、`platform_meta->>'description'`），`getReposNeedingReadme` 的已存仓库集合走 `platformItemIds`（均在 `lib/database/collection-queries.ts`，docs/32 Step 9）——本文件只留平台特有 filter/orderBy/mapRow，勿再拷贝；「上次同步」没有 lib 包装（`getLastSyncedAt` 已删）：app 侧 `useCollectionLibrary` 按 config 的 `platform` 直接读 Platform Sync Record
-- **Insert-only（与 B站同 ADR）**：items/authors/item_sources 只 insert（`onConflictDoNothing`，first-write-wins），不 update 不 delete。重新同步只追加新 star 的仓库；metadata 不刷新；unstar 不删行（知识资产保留）。唯一例外：`sources` 单行（`platformSourceId='stars'`）upsert 刷新 `lastFetchedAt`。完整规则见 `lib/ingest/CLAUDE.md`（Insert-only 不变量）
-- **platformMeta 形状**（items，写入方即本目录，读取方按此解读）：`{ description, language, stargazersCount, forksCount, topics, pushedAt, starredAt, ownerAvatarUrl }`（camelCase；starredAt/pushedAt 为 ISO 字符串）。防御式收窄由本目录导出的 `narrowGithubMeta(meta)`（`unknown`→带默认值成品）单点持有；整个 mapper 也只有一份：本文件导出 `toGithubRepoItem`（Row → `GithubRepoItem`，docs/32 Step 8），分页查询的 `mapRow` 与 section `tagged-repo-card`（`taggedCard(RepoCard, 'repo', toGithubRepoItem)`）用的是同一个函数——改形状只此一处
-- **`narrowGithubMeta` 导出**（sync-service）：`narrowGithubMeta(meta: unknown): NarrowedGithubMeta`（= `Omit<GithubRepoItem, envelope>`），全字段 `typeof` 收窄，无 envelope fallback。envelope（id/repoId/fullName/ownerLogin/htmlUrl）只由 `toGithubRepoItem` 装配（参数类型是不含 `publishedAt` 的六列，比 `PagedItemRow` 窄，按参数逆变照样可传给 `taggedCard`——不要「补齐」它）
-- token 来源：`UserSettings.githubToken`（`lib/storage/settings.ts`），由调用方（UI hook）读出后作参数传入，本目录不 import `@/lib/storage`
-- 运行位置：app.html 页面 context，经 RPC proxy 写 Offscreen PGlite（与 bilibili 同步一致）
-- **content_state（zhihu 同规则）**：有 README 的新仓库 → markdown 落 `item_contents.plainText`（截头 `MAX_README_CHARS`）+ `paragraphSplit`（= `charSplit(preferParagraph:true)`，docs/32 Step 5）切块 → chunk 行写成后才置 `'chunked'`（事务内中间态 `'has_content'`，见 `lib/ingest/CLAUDE.md` 幽灵消除；**不 inline embed**，D3——同步收尾由 app 侧 `github-sync-adapter.ts` 经 Platform Sync funnel 派发 embed lane 排空平台积压，设置页「重建向量」为手动兜底）；无 README（404）或拉取失败 → `'no_content'`（**不用 `'pending'`**——那会喂给 auto-transcribe）。**回填边界**：诚实 `no_content` 的仓库永不补拉（insert-only 快照，有意决策）；只有幽灵仓库（bug 产物）会经 `getReposNeedingReadme` 补拉自愈
-- host 权限：`https://api.github.com/*` 已在 `wxt.config.ts` 静态 `host_permissions`
+- token 由调用方读出后作参数传入。本目录不 import `@/lib/storage`，也不 import tagging / embedding barrel：加载图必须 storage-free（守卫 `tests/lib-import-smoke.test.ts`）。
+- 只有带 token 才发请求，所以 `GithubAuthError` 的 reason 恒为 `'rejected'`（401）。403 且 `X-RateLimit-Remaining` 为 0 → `GithubRateLimitError`，带 `resetAt`（页面的获取按钮锁到该时刻）。
+- 没有瞬时错误重试。这是刻意没加的，要单独决定（docs/32 Step 3）。
+- `PER_PAGE` 默认值就是 API 硬上限，经 env 调大必坏。
+- 收藏时间 `starredAt` 只有带 `Accept: application/vnd.github.star+json` 才有（响应元素变成 `{ starred_at, repo }`）；去掉这个 Accept，排序键就没了。
+- `fetchReadme` 的 404 返回 `null`：没有 README 是正常状态，不是错误。单仓 README 拉取失败降级为 no-content，不让整次同步失败。
+- 写侧走 `ingestCollection`，insert-only 不变量见 `lib/ingest/CLAUDE.md`：unstar 不删行、metadata 不刷新，唯一 upsert 是 `sources` 的 `'stars'` 单行。共享查询片段在 `lib/database/collection-queries.ts`，勿在本目录再拷贝。
+- 回填边界（有意决策）：诚实 `no_content` 的仓库永不补拉，健康的已入库仓库也不重拉——insert-only 快照。
+- 唯一例外是幽灵仓库（声明有 content 但零 chunk 行，bug 的产物）：`getReposNeedingReadme` 把它们与新仓库一起补拉 README 自愈。这是「无回填」的 bug 修复例外，不要推广成通用回填。
+- 没有 README 或拉取失败 → `'no_content'`。不要用 `'pending'`：那会把条目喂给 auto-transcribe。
+- 同步不 inline embed：`newItemIds`（含自愈的 id）由 app 侧 `github-sync-adapter.ts` 经 Platform Sync funnel 派发 embed / tag lane。
+- `platformMeta` 形状：`{ description, language, stargazersCount, forksCount, topics, pushedAt, starredAt, ownerAvatarUrl }`（两个时间是 ISO 字符串）。
+- 唯一 decoder 是 `narrowGithubMeta`，唯一 Row mapper 是 `toGithubRepoItem`（分页查询与 `sections/github-stars` 的 tagged card 共用），改形状只此一处。
+- `toGithubRepoItem` 的参数是不含 `publishedAt` 的六列，比 `PagedItemRow` 窄；按参数逆变照样能传给 `taggedCard`，不要「补齐」它。

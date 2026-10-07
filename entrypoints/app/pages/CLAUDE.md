@@ -1,16 +1,6 @@
 # app/pages
 
-页面组件（lazy loaded）。
+路由的 lazy 页面组件：每个文件只 re-export 一个 `sections/` view，不放逻辑。
 
-## 模块结构
-
-- `dashboard.tsx` → `sections/overview/overview-view.tsx`（只读 Collection Analytics：`SectionTitleBar` h1 + 四张 KPI 卡 + 平台构成（零依赖 SVG 环图 + 图例即选择器）/ 平台细分主从视图 + 热门标签；docs/25 Step 6 起是卡片形态，但**字段只来自 `CollectionAnalyticsSnapshot`**——无任务进度、无队列、无趋势曲线）
-- `settings.tsx` → `sections/settings/settings-view.tsx`（设置：顶部分段 Tab — AI 配置/账号连接/通用设置/存储管理）
-- `collections.tsx` → `sections/collections/collections-view.tsx`（六平台条目全局排序、平台筛选、搜索、分页）
-- `bilibili.tsx` → `sections/bilibili/bilibili-view.tsx`（B站收藏夹 sidebar+grid 单页布局）
-- `github-stars.tsx` → `sections/github-stars/github-stars-view.tsx`（GitHub Stars 收藏页：语言 chips + 仓库卡片 grid）
-- `bookmarks.tsx` → `sections/bookmarks/bookmarks-view.tsx`（浏览器书签收藏页：文件夹 chips + 书签卡片 grid）
-- `x.tsx` → `sections/x/x-view.tsx`（X/Twitter 书签收藏页：作者 chips + 推文卡片 grid + 手动同步）
-- `zhihu.tsx` → `sections/zhihu/zhihu-view.tsx`（知乎收藏页：收藏夹 chips + 4 类型卡片 grid + 手动同步）
-- `youtube.tsx` → `sections/youtube/youtube-view.tsx`（YouTube 公开播放列表收藏页：播放列表 chips + 视频卡片 grid + 手动同步）
-- `chat.tsx` → `sections/chat/chat-view.tsx`（Chat 一级页：Agentic RAG 知识库助手，多会话 rail + 流式回答 + 来源卡片，只读 PGlite）
+- 平台页必须直接从 `../sections/...` import 它的 view，且调用 `useCollectionBreadcrumbs` 的就是那个 view 文件：`tests/platform-completeness-contract.test.ts` 顺着 `COLLECTION_PAGE_LOADERS` → page 的第一个 `../sections/` import 去找它，中间加一层包装文件就会红。
+- 平台页的注册在 app 根的 `collection-platform-pages.ts`，不在 `main.tsx`。

@@ -1,23 +1,20 @@
 # sections/github-stars
 
-GitHub Stars 收藏页（`/collections/github`），视觉结构对齐 B站收藏页（`sections/bilibili/`）：28px route h1 + 计数 + lastSynced + 同步按钮 → pipeline 行（strip + 闸门）→ 全宽搜索框 → 配置提醒横幅（若有）→ 语言 chips → 卡片 grid（xs12/sm6/md4/lg3）+ Pagination。**数据一律从 PGlite 经 `lib/github/github-sync-service` 查询方法读取（UI 零 drizzle 导入），不直读 GitHub API**；同步（`syncStars`）在 app.html context 跑，经 RPC proxy 写 Offscreen PGlite。
+GitHub Stars 收藏页（`/collections/github`）。共享骨架（scaffold、`useCollectionLibrary`、Platform Sync funnel、状态组件）的规则见 `entrypoints/app/hooks/CLAUDE.md` 与 `entrypoints/app/components/collection-states/CLAUDE.md`；这里只记 GitHub 的不同之处。
 
-**面包屑**（docs/25 Step 8）：`useCollectionBreadcrumbs('github')` → `首页 / 收藏夹 / GitHub Stars`，同时传给 `copy.breadcrumbs` 与 **配置门早退分支（共享 `NeedsConfigState`）的 `SectionTitleBar links`**——配置门和加载后的页面是同一条路由，必须同一条路径（`sections/configuration-heading.test.tsx` 断言）。
+## 约束
 
-## 模块结构
+- `github-sync-adapter.ts` 导出的 `githubCredentials(settings)` 是「是否已配置」的唯一判定：adapter 的 run 门、`githubAutoSyncPolicy.probeReady` 与页面门（`useCredentialGatedLibrary`）必须读同一个函数。
+- 无 token 时 adapter 在 Platform Sync funnel 之前静默 return：不算尝试、不写 Platform Sync Record。
+- 配置门早退分支先渲染带面包屑的 `SectionTitleBar`，再渲染 `NeedsConfigState`：早退与加载后是同一条路由，必须保持唯一 h1 和同一条面包屑。守卫 `sections/configuration-heading.test.tsx`。
+- 没有 auth 相位（传给 scaffold 的 `authFailed` 恒为 `false`）：无 token 走配置门，token 被拒按普通同步失败显示。
+- 同步是两相位（Stars → README）共用一个 sync job：进入 README 相位时 view 把 Fetch 段提前标成完成（`settledFetchRuntime`），README 段只在自己的相位里显示进度。这个特例是 GitHub 专属，留在 view，不要搬进共享 `useCollectionPipeline`。
+- GitHub 会报限流 reset：带 `resetAt` 时标题栏获取按钮锁到那一刻。锁只在内存里，刷新即解。
+- 同步错误文案复用 `settings.github.*`（与设置页 token 测试同一套语义），不造 `githubStars.*` 副本。
+- `language-colors.ts` 里的 hex 是数据常量（linguist 语言色，亮暗两个 scheme 都不变），不受「颜色只走主题 token」约束，别替换成 palette。
+- `LanguageChips` 不迁到共享 `FacetChips`：形状不同（chip 带语言色点）。
 
-- `github-stars-view.tsx` — scaffold Adapter；常驻 pipeline 为 Fetch → README → Embedding/Tagging 并行，段装配/标签/coverage key 经共享 `useCollectionPipeline`（`app/hooks/`，docs/20 中-7），本 view 只注入 Fetch runtime 与 `readme` content 段——readme 相位把 Fetch 段提前 settle（`settledFetchRuntime`）的两相位特例是 github 专属，留在 view；`syncing` 仍按 sync job 传给 hook 以驱动 acquisition 再查询。Search 后注入共享 provider Configuration Blocker notice；token 整页配置门仍优先，但先渲染 `SectionTitleBar` 保留 route 单 h1。状态组件来自 `components/collection-states/`（docs/32 Step 6）：无 token = `NeedsConfigState`（`mdi:github`、`githubStars.noTokenTitle/Desc`、`settings="connections/github"`），库空 = `EmptyLibraryState`（`mdi:star`，获取 contained）；`copy` 只传平台文案（标题、搜索占位、无匹配、`syncErrorText`），获取按钮两态、错误态标题与重试、同步失败横幅由 scaffold 自取；caption 的「上次同步」用 `common.lastSynced`。Fetch/README/runtime、phase、标签职责不变。错误文案是模块级 `SYNC_ERROR_COPY`（`settings.github.invalidToken` / `rateLimitedNoReset` / `rateLimited`）交给共享 `syncErrorMessage`，不写 switch；GitHub 报 reset，所以限流带 `resetAt` 时标题栏「立即获取」经 `useCountdown` + `rateLimitRemainingMs` 锁到该时刻，label 为 `pipeline.fetchAvailableIn` 倒计时（docs/32 Step 4；锁只在内存 job store，刷新即解锁）。
-- `github-sync-adapter.ts` — 共享 Sync Adapter（audit #6）：`runGithubStarsSync(onProgress, control)` 单点定义「github 同步成功意味着什么」——settings token 解析（`githubCredentials(settings)`：token 或 `null`，本文件导出，`githubAutoSyncPolicy.probeReady` 与页面门 `useCredentialGatedLibrary` 读同一个函数，docs/32 Step 7；`null` 即静默 no-op）、Stars/README 两阶段进度映射（`ReadmePhaseProgress` 携带 `fetchedCount` 供 view 保留 Fetch 完成值）、同步收尾把 `{ fetched: total, inserted, newItemIds }` 交回 funnel——整段 `syncStars` 经 `hooks/platform-sync.ts` 的 funnel `runPlatformSync(platform, control, sync)`（docs/32 Step 1：记尝试 → 同步 → 成功先派发 embed/tag lanes 再记成功 / 失败记失败并原样 rethrow；job namespace 在 funnel 内经 `jobPlatformForCollection` 派生）；无 token 在 funnel 之前 return，不算尝试、不写 Platform Sync Record（`'github-stars'` job namespace 与领域 platform `'github'` 分离）。手动页面 `syncFn` 与 daily auto-sync registry 引用**同一函数**；进度类型（`SyncProgress` 等）在此定义。契约测试 `github-sync-adapter.test.ts`；另导出 `githubAutoSyncPolicy`（daily 触发策略：settings token 存在即就绪），app 根 `collection-platform-auto-sync.ts` 将其与 Sync Adapter 配对进 daily registry（docs/20 高-3）
-- `use-github-stars.ts` — 数据 hook（32 行，docs/32 Step 7 / Step 9）：`return useCredentialGatedLibrary(githubCredentials, config)`——token 门在共享 wrapper（`app/hooks/use-credential-gated-library.ts`：无 token 时 `sync()` 静默 no-op，`configured`/`settingsLoading` 给 view 的配置门），判定函数是 adapter 导出的 `githubCredentials`，与 adapter 的 run 门、`probeReady` 同一个。本文件只注入模块级 `queryFn = facetQuery(getStarredRepos, 'language')`、`facetsFn = getLanguageCounts`、`platform = PLATFORM`（模块级 `const PLATFORM = 'github'`，`JOB_PLATFORM` 也由它派生；「上次同步」由共享 hook 按它读 Platform Sync Record，lib 包装 `getLastSyncedAt` 已删，docs/32 Step 9）、`syncFn = runGithubStarsSync`、`jobPlatform = JOB_PLATFORM`；**不改名、无手写返回接口、不 re-export 进度类型**，view 直接读通用字段（`items`/`filter`/`setFilter`/`facets`/`configured`）。错误分类不在本 hook——`syncError` 是共享 `useCollectionLibrary` 按基类分类好的 `CollectionSyncError`（docs/32 Step 4）。
-- `language-chips.tsx` — 语言 chip 行：共享 `CollapsibleChipRow`（github icon + `githubStars.languagesTitle`，header icon 继承 shared secondary 色），本文件保留内容逻辑——「全部 (N)」chip（`common.all` 拼数，展开/收起 `common.showMore`/`showLess`）+ 各语言(count)（服务层已按数量降序），chip icon 为数据色点 `LanguageDot`。库空时由 view 隐藏整行
-- `repo-card.tsx` — 仓库卡片 = 共享 `CollectionCard` 装配：`header` owner 头像（Avatar 24px，无图回退 GitHub icon）+ `ownerLogin` caption；`title` full_name 2 行 clamp；`body` description 2 行 clamp；`meta` 语言色点+名；`date` `formatDateTime(starredAt)`（外壳右格 noWrap）；`stats` `mdi:star`+`formatCompactNumber(star数)`；`tags`（共享 `TagRow`，外壳保证在链接之外；undefined 时整行不渲染）。`RepoCardProps { repo, tags?, onEditTags? }`。`href = htmlUrl` 真实锚点新标签打开（不再 `window.open`）。`useTranslation()` 订阅保证 locale 切换 re-render 格式化输出
-- `tagged-repo-card.tsx` — 一行 `TaggedRepoCard = taggedCard(RepoCard, 'repo', toGithubRepoItem)`（`components/tags/` 的工厂，docs/32 Step 8）：TaggedItemGrid `renderCard` 与 `/collections` `CARD_ADAPTERS` 的 GitHub 卡片 adapter。mapper 就是 `lib/github/github-sync-service.ts` 分页查询导出的 `toGithubRepoItem`（htmlUrl 取 `originalUrl`，meta 经 `narrowGithubMeta`），本文件零 envelope 映射
-- `language-colors.ts` — 常见语言 → GitHub linguist 品牌色小色表（TS/JS/Python/Go/Rust/Java/C/C++ 等，未知回退灰）。**数据常量非主题色**（双模式恒定，同 flagpack 国旗色值），不受「禁止 raw hex」约束
+## 指针
 
-## 约定
-
-- 页面顺序由共享 scaffold 固定为标题/系统状态 → 搜索 → 配置提醒 → 语言主分类 → 标签 → 列表；本目录只提供 adapter。
-- 排序固定 starred_at 降序（MVP 无排序控件）；platformMeta 形状见 `lib/github/CLAUDE.md`
-- 三种空态：无 token（共享 `NeedsConfigState`，引导设置）/ 库空（共享 `EmptyLibraryState`，引导同步）/ 同步失败（ErrorState+retry，标题与重试文案归 scaffold）；虚线框为共享 `StateBox`（`components/collection/`，`varAlpha(grey['500Channel'], 0.24)` 暗色安全边框，全平台统一）
-- 路由/导航：`main.tsx` 路由 `collections/github` + `nav-config.tsx` Collections children 叶子（`nav.githubStars`）；叶 active 判定见 `components/nav-section/nav-active.ts`（`isNavItemActive` 段边界匹配，平台叶 `deepMatch: true`）
-- AI 后处理由 `github-sync-adapter.ts` 在 sync 收尾 enqueue `github-stars:embed|tag` 共享 lanes（手动/自动两触发同源）；view 只通过 `backgroundJobRuntime` 适配 phase 与百分比（纯展示；暂停/继续走闸门按钮）。
+- `platform_meta` 形状、README 拉取：`lib/github/CLAUDE.md`。
+- 测试：`github-sync-adapter.test.ts`。

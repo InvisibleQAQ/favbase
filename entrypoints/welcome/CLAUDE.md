@@ -1,100 +1,77 @@
 # welcome (welcome.html)
 
-首装引导页（WXT unlisted page，目录内 `index.html` → 产物 `welcome.html`）。一条纵向叙事：Hero → 能力 pill 双行 → 三步 sticky 叠卡（收录 → 知识库 → 提问）→ 真实界面画廊（四张 app.html 截图，随页面滚动横向移动）→ Chat 主功能演示 → Agent Skills → B 站 CS 面板演示 → 平台多选 + 进入 app.html → Platform Request 深色 CTA 卡 → 页尾 Footer。
+首装引导页（WXT unlisted page）：一条纵向叙事，末尾的平台选择是进入 app.html 的唯一出口。外壳、Hero 几何与 `components/animate/` 是 Minimal v7.7.0 默认路由（`MainLayout` + `HomeView`）的移植。
 
-外壳自 2026-09-08 起是 Minimal v7.7.0 默认路由（`MainLayout` + `HomeView`）的移植：`layout.tsx` 吃 `app/layouts/core` 三件套，Hero 换 Minimal 的负 margin 几何 + 钉住淡出 + 四层视差，`components/animate/` 是移植进来的 motion 原语层。**决策与拒绝清单在 `docs/28`**——「为什么没抄 HeroBackground / LazyMotion / AnimateText」这类问题在那里有答案，别对着参考源重问一遍。
+## 触发与出口（onboarding 闸门）
 
-## 触发与出口
+- 闸门是 `onboardingStorage`（`local:onboarding`）有没有记录，不是 `onInstalled` 的 reason：unpacked 扩展每次 reload 都报 `'install'`，只看 reason 会在开发期反复弹标签页。`openWelcomePage()`（`lib/background/app-handlers.ts`）有记录即 no-op。
+- 记录只由 `use-onboarding-exit.ts` 的 `exit(picked)` 写（`{ completedAt, platforms }`），随后 `location.replace` 到 app.html：`replace` 把 welcome 从 history 抹掉，返回键不会回到引导。
+- 写失败照常跳转（代价只是引导多出现一次），不能把用户困在本页。守卫 `use-onboarding-exit.test.tsx`。
+- 没有 Skip 入口：picker 是唯一出口，零选择也能提交（`exit([])` → Dashboard）。守卫 `layout.test.tsx`。
 
-- **触发**：`entrypoints/background.ts` 的 `onInstalled` 在 `details.reason === 'install'` 时调 `openWelcomePage()`（`lib/background/app-handlers.ts`）。**真正的闸门是 `onboardingStorage`**，不是 reason——unpacked 扩展每次 reload 都报 `'install'`，只看 reason 会在整个开发期反复弹标签页
-- **出口**：`use-onboarding-exit.ts` 的 `exit(picked)` 先写 `onboardingStorage`（`{ completedAt, platforms }`），再 `location.replace(app.html + landingHash)`。用 `replace` 而非 `assign`：复用当前标签页且把 welcome 从 history 抹掉，返回键不会把用户重新拽回引导
-- **没有独立跳过入口**：用户从平台选择区进入 app；零选择仍允许提交 `exit([])`，写完成记录并落到 Dashboard
+## 平台选择的语义
 
-## 平台选择的语义（重要）
+- `platforms` 是 **Onboarding Platform Preference**（根 `CONTEXT.md`）：只决定落地路由与侧栏 Collections 子叶的先后，**不做任何 gating**。所有平台始终可见可用，聚合页与 daily auto-sync 不读它。
+- app.html 只在首次 render 前读一次（`entrypoints/app/load-navigation.ts`），不 watch、不改全局 registry。
+- 落地规则在 `landing.ts`：按 registry 序的首个选择需要凭据 → `#/settings`，否则 → `#/collections/<platform>`，零选择 → 裸 app.html。点击顺序是噪声。
 
-`local:onboarding` 的 `platforms` 是 **Onboarding Platform Preference**（领域定义见根 `CONTEXT.md`），**只影响落地路由与 Collections 子叶优先级，不做任何 gating**：所有平台始终可见可用，`/collections` 聚合与 `useDailyAutoSync` 不读它。`app.html` 在首次 render 前由 `load-navigation.ts` 读取一次，`nav-config.tsx#createNavData` 按 registry 稳定分区为「选中在前、未选在后」，两组内部都保持 registry 顺序；不 watch、不修改全局 registry。
+## 约束
 
-CTA 落地规则在 `landing.ts`（纯函数 + `landing.test.ts`）：
+- `motion` 只许 `entrypoints/welcome/**` import（守卫 `tests/ui-vendor-boundaries.test.ts` 的 `VENDOR_RULES`）；app.html 与 Content Script 不加动画依赖。
+- 不上 `LazyMotion`：`bilibili-showcase.tsx` 的 `layoutId` 逼 `domMax`，总收益只有 1.4 KB（docs/28 §3.2）。移植 Minimal 组件时 `m` 一律改 `motion`。
+- 不得 import `app/layouts/components` 的 barrel 与 `app/components/settings`：welcome 刻意不挂 `SettingsProvider`。顶栏控件按叶文件 import（同一测试的 `IMPORT_BOUNDARY_RULES`）。
+- 跨入口引用写绝对路径 `@/entrypoints/app/...`；方向只有 welcome → app，app 不反向 import welcome。
+- 图标只用 `entrypoints/app/components/iconify/icon-sets.ts` 注册过的名字：未注册的走网络加载，MV3 CSP 下不显示。移植 Minimal 组件时逐个核对。
+- 本页没有 `<Snackbar/>`（`sonner` 被锁在 app 侧）：反馈在本地做，如 `agent-skills.tsx` 的三态复制按钮。
+- `document.documentElement.lang` 只在 `welcome-view.tsx` 同步；`lib/i18n` 与 Content Script 共用，不能碰宿主页的 lang。
+- 演示内容是示意：不放看起来像统计的数字（首装时库是空的，任何数字都是假的）。唯一例外是 `product-tour.tsx` 的真实截图。
+- 全页唯一可执行的出口是 `agent-skills.tsx` 那条可复制指令（内插 `lib/repo.ts` 的 `AGENT_SETUP_GUIDE_URL`）。不出示任何 `npm` / `favbase setup` 命令：配对要 Bridge Token，首装时还不存在（`docs/adr/0005`）。
+- 版本号与许可（`v{version} · GPL-3.0`）全产品只在 `footer.tsx` 露出，守卫 `layout.test.tsx`。footer 刻意零新外链。
+- `capability-marquee.tsx` 的平台 pill 是手写的，刻意不从 registry 派生（docs/26 D5）；漏平台由 `tests/platform-completeness-contract.test.ts` 报红。
+- Platform Request 是动作外链，不是平台，不进 registry（根 `CONTEXT.md`）。
 
-- `normalizePicks` — 去重 + 排成 registry 顺序（点击顺序是噪声）
-- `WELCOME_READINESS_BY_PLATFORM` — 三种就绪形态 `credentials` / `login` / `local`，自 docs/26 Step 2 起由 `lib/collections/platform-descriptor.ts` 的 `readiness` 派生（`WelcomeReadiness` 是 `PlatformReadiness` 的别名，导出名不变）；`needsCredentials(platform)` 与 picker readiness 都从此 Adapter 读，新增平台不能静默落入默认分支
-- `needsCredentials(platform)` — `github`/`youtube` 需要 token/key，其余靠浏览器登录态或本地读取
-- `landingHash(picked)` — 首个（registry 序）选择需要凭证 → `#/settings`；否则 → `#/collections/<platform>`；零选择 → 裸 app.html（dashboard）
+## 向 Minimal 借鉴（先读 docs/28 §3 拒绝清单）
 
-想加平台开关就得改 registry + nav + daily auto-sync 三处并给老用户默认全开，属于产品级改动，不在本页职责内。
+- 已拒绝、别再提：`HeroBackground`（同心圆虚线与 `OrbitCore` 的轨道圆打架）、`animate-text`（逐字 `inline-block`，无空格的中文整句会成为一个不可折行的词）、`renderIcons`（本页已有 OrbitCore / marquee / picker 三处在列平台）、`animate-count-up`、Pricing / Testimonials / FAQs 等销售页段落。
+- `components/animated-text.tsx` 只切到词层，正是为了中文能按字折行，别换成 Minimal 的实现。
+- 对 Minimal 的刻意偏离，别「对齐回去」：Hero 保留 Grid 左文右 `OrbitCore` 分栏而非居中单列栈（docs/28 D4）、背景保留 Aurora（D5）、顶栏跟 app.html 一样用 `disableElevation`（D3）。
+- `platform-request.tsx` 是 Minimal `home-advertisement` 深色 CTA 卡的原样移植，视觉分量不再让位于 picker 的主 CTA（docs/31 Step 2 推翻了 docs/28 §3.4 对它的拒绝）。它不走 `WelcomeSection`、零纵向 padding，描述色固定 `grey.500`（深色卡不随配色变）。
+- 火箭插图是 Minimal 资源的原字节拷贝，再分发许可 [UNKNOWN]，用户已知情接受。
 
-## 模块结构
+## 标题（owner：`components/section-shell.tsx`）
 
-- `index.html` / `main.tsx` — 入口。`main.tsx` 复用 app 的 `ThemeProvider` + `global.css`（字体 + reset），再叠 `welcome.css`；外层 `MotionConfig reducedMotion="user"` 让全页 motion 组件统一尊重系统「减弱动效」。**它只管声明式 `animate`**：`style` 绑定的 MotionValue（scroll-linked parallax / scale）不受其约束，须在组件里用 `useReducedMotion()` 手动 gate（现有：hero、capability-marquee、how-it-works、product-tour）
-- `welcome.css` — 只放 sx 表达不了的东西：两个 aurora 色值 CSS var（`[data-color-scheme='dark']` 覆盖，与 `public/theme-init.js` 的属性同源；它们是 `radial-gradient` 的 stop，由 `background` 消费）+ `.fb-caret` 流式光标 keyframes + `scroll-behavior: smooth`（包在 `prefers-reduced-motion: no-preference` 里）。**标题渐变已不在这里**——`.fb-headline` 与它那两套硬编码 hex 的 CSS var 于 2026-09-08 删除，改由 `section-shell.tsx` 的 `headlineGradient(theme)` 吃 palette token（2026-09-27 起它只剩 hero 用，section 标题走 `fadeTextGradient`，docs/31 Step 3）
-- `layout.tsx` — **页面外壳，顶栏与 Footer 的 owner**。`LayoutSection`（无 sidebar 分支，它自带）+ `HeaderSection`（`leftArea` = `BrandMark tagline`、`rightArea` = `TopBarActions`）+ `MainSection` + `footerSection`，外挂 `ScrollProgress`（`zIndex: appBar + 2`，压在 header 的 `--layout-header-zIndex` = appBar+1 之上）与 `BackToTopButton`。按叶 import `@/entrypoints/app/layouts/core/*`（该目录无 barrel）。`disableElevation` 跟 app.html 一致：静止透明、滚动后淡入 blur + divider、无椭圆阴影——用户从 welcome 点进 app 是连续动作，顶栏不该变。**无 Skip Intro 入口**（有测试守着）；Minimal 的 `SignInButton`/`Purchase`/`SettingsButton`/`NavDesktop`/`NavMobile` 全部不移植，理由见 docs/28 §2.1。`LayoutSection` 顺带修掉一个现存 bug：它注入 `html { scroll-padding-top: var(--layout-header-*-height) }`，Hero 那两个锚点 CTA 跳过去不再被顶栏压掉 64px，`TOP_BAR_HEIGHT` 手算常量随之删除
-- `footer.tsx` — 页尾。照 Minimal `HomeFooter` 的形状（居中、`py: 5`、品牌 + 一行 caption），caption 是 `v{version} · GPL-3.0`。**这两项全产品零露出**，footer 停印就是彻底消失（有测试守着）。版本读 `browser.runtime.getManifest().version`（模块作用域读一次）。**刻意零新外链**——repo 链接本页已两处（header `GithubButton` + `PlatformRequest` 的 issue 按钮）
-- `welcome-view.tsx` — 段落装配，包在 `WelcomeLayout` 里；并订阅 `useTranslation().locale` 同步 `document.documentElement.lang`（a11y。**只准在 welcome 入口做**——`lib/i18n` 共享给 Content Script，绝不能改宿主页的 lang）。Hero 之后的段落**必须**包在 `position: relative` + `bgcolor` 的 Box 里：Hero 的内层在 `md+` 是 `position: fixed`，没有这层它会浮在下方内容之上（Minimal `HomeView` 用 `Stack` 做同一件事）
-- `layout.test.tsx` — 外壳契约：无 Skip Intro（picker 是唯一出口且接受空选择）+ footer 印着版本与许可
-- `landing.ts` / `landing.test.ts` — 落地路由纯函数与派生 readiness Adapter（见上）
-- `tour-images.ts` / `tour-images.test.ts` — 画廊截图的清单，纯模块（无 React、无 motion，与 `landing.ts` 同类）：`TOUR_PAGES`（`dashboard` / `collections` / `github` / `x`，顺序即展示顺序）、`TOUR_SCHEMES`（`light` / `dark`）与 `tourImageSrc(page, scheme, locale)` → `/assets/images/welcome/tour-<page>-<scheme>-<locale>.webp`（`<locale>` 就是 `SupportedLocale` 的 id，没有映射表）。测试对 `public/assets/images/welcome/` 做双向检查：页面 × 配色 × `SUPPORTED_LOCALES`（`lib/i18n/detect.ts` 的运行时清单，不是手抄的副本）的每个文件都在，目录里也没有清单产不出来的 `tour-*` 文件；把一张图改名后两条都红、改回后都绿，已验证
-- `use-onboarding-exit.ts` / `use-onboarding-exit.test.tsx` — 写记录 + 跳转，返回 `{ exit, leaving }`（`leaving` 禁用 CTA 防重复点）。写失败只 console.error 后照常跳转——记录写不上最多让引导多出现一次，不能把用户困在这页（此行为有测试守着）
+- 标题着色只在这里定义：`Headline ink="brand"` 的 coral 渐变只给 hero；section 标题是中性实色 + 尾词淡出；`white` 只给 `platform-request.tsx` 的深色卡（docs/31 Step 3）。
+- `how-it-works.tsx` 的步骤大号数字与中性尾词必须共用 `fadeTextGradient`；它与 `ctaGlowShadow` 都是定义一次的共享外观 helper，别再手写。
+- 字号用 `clamp`，不许换成 `variant="h1"/"h2"`：本仓库的主题阶梯被刻意压小（h1 平 28px、h2 平 24px），换过去 section 标题会缩 25–57%（docs/28 §4 E2）。
+- 中性尾词保持 `inline-block`，别改回 inline：inline 渐变按行切片，折到下一行的词只分到渐变末段，成了淡色孤字（docs/31 Step 3 D-d，用户看过截图后决定）。
+- `fadeTextGradient` 去掉了 Minimal 叠的 `opacity: 0.4`，`SectionCaption` 用 `text.secondary` 而非 `text.disabled`：都是为对比度的刻意偏离。
+- `Headline` 默认渲染 `h2`；全页唯一的 `h1` 在 `hero.tsx`，渐变留在每行的 `span` 上（挂到 h1 会横跨两行，且 `background-clip: text` 在 transformed 子元素上有渲染 glitch）。
+- 调用点覆盖 `WelcomeSection` 的 `py`/`pt`/`pb` 必须带 `md` 键：标量只进 base 规则，md 起输给组件自己的媒体查询。
 
-### components/
+## 动画
 
-- `motion-box.tsx` — `MotionBox` / `MotionButtonBase` 唯一定义处。React 的 `onDrag`/`onAnimationStart` 等 DOM handler 类型与 motion 同名 props 冲突，故用 `MotionSafe<P>` 把它们从 MUI 侧 Omit 掉；`MotionSafeBoxProps` 导出给 `FadeIn` 复用。**新段落要动画元素就 import 这里，别再各自 `motion.create(Box)`**
-- `animate/` — **从 Minimal `components/animate/` 移植的 motion 原语层**（358 行；docs/28 那一轮是 314 行，docs/31 Step 4 追加 `motion-viewport.tsx`）：`variants/`（`varFade` 十方向全表 / `varContainer` 固定 stagger / `transitionEnter`·`transitionExit` 曲线）+ `MotionContainer`（挂载即播的 stagger 父，用于 Hero 首屏）+ `MotionViewport`（进入视口 30% 才播的 stagger 父，docs/31 Step 4 追加，**只驱动 `svg-elements` 的装饰线与 `product-tour.tsx` 标题下的双三角标记**——`FadeIn` 给 `initial`/`whileInView` 的是对象不是 variant label，不进 variant 树；删掉了 Minimal 的 `disableAnimate` + `useMediaQuery(smDown)` 分支：它在 600px 处把渲染元素在 `m.div` / `div` 之间切换，React 会卸载重建整段内容，picker 丢选择、chat demo 重播）+ `ScrollProgress`（只有 linear，见下）+ `BackToTopButton`。三条统一改动：`framer-motion` → `motion/react`、`m` → `motion`（**不上 `LazyMotion`**——`bilibili-showcase` 的 `layoutId` 逼 `domMax`，总收益 1.4 KB，docs/28 §3.2 有数字）、`Box component={m.div}` → `MotionBox`。`ScrollProgress` 裁掉了 circular / portal / RTL / 调用方传 `progress`（本仓库无 `direction` 支持，进度来源只有文档滚动一处）。**`motion` 只允许 `entrypoints/welcome/**` import**，守卫 `tests/ui-vendor-boundaries.test.ts` 的 `VENDOR_RULES`
-- `svg-elements.tsx` — **段落装饰线**（docs/31 Step 4，2026-09-28，用户决定逐段对照 Minimal 源文件）：Minimal `sections/home/components/svg-elements.tsx` 五个组件的逐值移植——`FloatLine`（默认横线 / `vertical` 竖线，`x2`/`y2` 从 0% 画到 100%）/ `FloatPlusIcon` / `FloatTriangleLeftIcon` / `FloatTriangleDownIcon` / `FloatDotIcon`（`MotionBox component="span"`）。全部**只在 ≥1440px 显示**（`breakpoints.up(1440)`，照 Minimal；1366/1280 笔记本上整步不可见，用户已接受），`grey.500`、虚线 3、线 `opacity 0.24`；根元素默认 `aria-hidden`（Minimal 没有）；曲线吃 `transitionEnter()`（与 Minimal 模块内的 `transition` 常量逐值相同）。**本身没有触发器**：只带 `initial`/`animate` variants，由外层 `MotionViewport` 传播。`FloatXIcon`（只有 pricing 用）与 `CircleSvg`（不受 1440 门控、居中在 Container 里，搬进来会落在正文后面）不移植，理由见 docs/31 §4 Step 4 D-a
-- `brand-mark.tsx` — 图标 + wordmark，`tagline` opt-in。header 传 `tagline`、footer 不传（否则页尾重复页首）
-- `fade-in.tsx` — `FadeIn`（`whileInView` + `once: true`，接 delay/duration/x/y）。曲线与默认时长吃 `animate/variants/transition` 的 `transitionEnter()`，与 `varFade` 同源不会漂（`WELCOME_EASE` 已删）。`x`/`y` **刻意保持自由取值**：`varFade` 是固定方向 + 单个 distance，表达不了「向上且向左」，套一层 `(x,y) → 方向` 映射比这两个内联对象更多代码（docs/28 §4 E1）。**有意节奏的段落用它**（hero 的 0.1/0.2/0.34/0.46 阶梯、两个 showcase 的分镜）；同质列表该用 `MotionContainer` + `varContainer`（固定 50ms，加删元素不用手算）
-- `feature-list.tsx` — `FeatureList({ items: LocaleKeys[], startDelay? })`：✓ 打头的要点列表，从左侧依次滑入。chat 与 bilibili 两个 showcase 共用，**别再各自手抄一遍 FadeIn + checkmark + Typography**
-- `animated-text.tsx` — 逐字滚动点亮段落。按空白切词、每个词包 `inline-block`：拉丁词不会断在字母中间，中文没有空格自成一「词」、占满行宽后按字自然折行
-- `magnet.tsx` — 磁吸指针跟随（spring 回弹）。偏移量存 `useSpring` MotionValue 而非 React state：pointermove 每帧都来，用 state 会把被包裹的整棵子树（Hero orbit ≈20 个 motion 节点）每帧重渲一次。`useReducedMotion()` 为真时直接不订阅 pointermove——「跟着鼠标跑」没有可降级的静态版本
-- `orbit-core.tsx` — Hero 主视觉：六个平台 chip 绕本地数据库核心公转。纯 DOM/SVG 零图片，自动跟随明暗主题。旋转层与 chip 内层**同周期反向自转**（`SPIN_SECONDS`）保证图标始终正立；chip 位置全靠 `--fb-orbit-r`（写成显式断点块而非 sx 响应式对象——自定义属性不在 sx 已知 style key 里）；平台元数据直接吃 `collectionPlatformRegistry`，加平台自动进环
-- `section-shell.tsx` — `WelcomeSection`（内容段的统一纵向节奏 `py: {xs:10, md:20}` + Container；`lines` 传本段装饰线，渲染成 `section > MotionViewport > lines + Container`——照 Minimal 各段，线是 Container 的兄弟、以 `position: relative` 的 section 为定位基准，始终包 `MotionViewport`；hero / marquee / how-it-works / product-tour / platform-request 自带外层与 padding、不走它；调用点覆盖 `py`/`pt`/`pb` 必须带 `md` 键，标量只进 base 规则、在 md 起输给它的媒体查询）/ `SectionCaption`（section 标题上方那一行：Minimal `SectionCaption` 的移植，裸 `overline` + `text.secondary`，无药丸无图标无 motion；渲染成块，不是 Minimal 的 `span`——那里它是 flex item 被 blockify，这里在 `FadeIn` 的块级 div 里，inline span 会吃父级行高 strut、比自身 18px 高）/ `Eyebrow`（带图标的小药丸，只剩 how-it-works 卡内提示一个消费者；section caption 走 `SectionCaption`，2026-09-27 起。`icon` 必填——无图标的圆点分支随 section caption 一起失去全部消费者，同日删除）/ `Headline`（`hero` 与 `section` 两档 **clamp** 字号；**默认渲染 `h2`** 保文档大纲，传 `component` 改层级或降为 `span`；字距/行高按 locale 分档——zh `letterSpacing:0` + `lineHeight:1.12`，en 保持 `-0.03em`/`0.98`，避免满框的 CJK 字形被负字距挤压、在 overflow-hidden reveal 下被裁边）/ `fadeTextGradient(theme)` / `ctaGlowShadow(theme)`（后两个都是「定义一次，别再手写」的共享外观 helper）
-  - **`Headline` 三种墨色**（`ink`，2026-09-27，docs/31 Step 2 加 `white`、Step 3 改三态）：默认 `neutral` 是 Minimal 的 section 标题——主体 `text.primary` 实色，尾词（`tail`）走 `fadeTextGradient`；`brand` 套 `headlineGradient`，只给 hero；`white` 是纯 `common.white`，只给 `platform-request.tsx` 的 grey.900 深色卡用（尾词白 → 40% 白淡出，照 Minimal advertisement 标题）——亮色下另两种墨色都从深灰起笔，落在 grey.900 上等于看不见。三种墨色收成一张 `INKS` 表（每种一对 head / tail 样式），组件里没有墨色分支。**`brand` 不收 `tail`**，由 `HeadlineInk` 联合类型在编译期挡住（品牌渐变整句铺开，尾词淡出叠在上面没有定义；`section-shell.test.tsx` 的 `@ts-expect-error` 锁这条）。首尾拼接归 `Headline`，两种收 tail 的墨色共用：en 插一个空格、zh 不插，两个翻译半句都不带分隔符；用按 locale 插的文本节点，不用 Minimal 的 `ml: 1`（advertisement 标题）或写死在前半句里的空格（section 标题），换行落在两段之间时行首不留缩进，中文也不多出一道缝。尾词的盒子各随其源：中性尾词照 Minimal `SectionTitle` 是 `inline-block`，接不上前半句时整块换行、渐变完整；白色尾词照 Minimal advertisement 是 inline。**中性尾词别改回 inline**（docs/31 Step 3 D-d，2026-09-28 用户看过截图后决定）：inline 能逐词折行，但背景按 `box-decoration-break: slice` 在各行片段间接续铺开，折下去的那一截只分到渐变末段，单独成行、接近 20% 收笔色（「右边多 ▏一块」「while you ▏watch」）。`display` 写在 `INKS.neutral.tail`，不进 `fadeTextGradient`（步骤数字是块级元素）。`section-shell.test.tsx` 锁 white 与默认墨色的拼接，并锁默认墨色就是 `neutral`（与 `ink="neutral"` 渲染出同一个 emotion class、与 `brand` 不同；先红后绿都已验证）
-  - **`Headline` 的字号不许换成 `variant="h1"/"h2"`**：本仓库的 typography 在 docs/25 Step 1 移植时刻意压小并去掉了 `responsiveFontSizes`（h1 是平的 28px、h2 平的 24px，对 dashboard 标题栏正合适，对 landing 大标题远远不够）。Minimal 自己的 h1 跑 40→64px，正是这两个 clamp 已经在近似的东西。换过去会把 section 标题压掉 25–57%（docs/28 §4 E2）
-  - **`fadeTextGradient(theme)` 与 `headlineGradient(theme)` 各管一种标题着色**（2026-09-27 起，docs/31 Step 3 推翻 docs/28 D8 的「保 coral」）：`fadeTextGradient`（导出）是 `text.primary` → 20% 的 `to right` 淡出，走 palette 变量、暗色无需分支，neutral 尾词与 `how-it-works` 的步骤大号数字共用；**去掉了 Minimal 叠在上面的 `opacity: 0.4`**——favbase 的尾词是含义词，叠上后起笔只剩约 2.4:1。`headlineGradient`（模块私有，只剩 `INKS.brand` 一个消费者）是 hero 的 coral 渐变，取 palette token（light `grey.800`→`grey.700`→`primary.main`，dark 经 `applyStyles` 换成 `common.white`→`grey.400`→`primary.light`），取代了 `welcome.css` 时代的 `.fb-headline` class + 六个硬编码 hex。hero 彩色、section 中性是 Minimal 自己的分法。**步骤数字与尾词必须同源**——步骤数字在 `.fb-headline` 时代直接挂 class、绕过组件，那正是它们能漂的原因（docs/28 E3）
+- `MotionConfig reducedMotion="user"`（`main.tsx`）只管声明式 `animate`；`style` 绑定的 MotionValue（滚动视差 / 缩放）不受它约束，必须在组件里用 `useReducedMotion()` 手动 gate。
+- 动画元素从 `components/motion-box.tsx` 取 `MotionBox` / `MotionButtonBase`，别各自 `motion.create(...)`。
+- 有意节奏的段落用 `FadeIn`（手排 delay，`x`/`y` 自由取值，`varFade` 装不进它，docs/28 §4 E1）；同质列表用 `MotionContainer` + `varContainer`。
+- `MotionViewport` 不得恢复 Minimal 的 `smDown` 分支：它在 600px 处切换渲染元素类型，React 会卸载重建整段，picker 丢选择、chat demo 重播。
+- 装饰线（`components/svg-elements.tsx`）只在 ≥1440px 显示，自身没有触发器，由外层 `MotionViewport` 的 variant 传播驱动，别给线挂 `whileInView`。
+- 反过来，`MotionViewport` 里任何带 `variants` 的后代都会被它一起驱动；内容动画继续用 `FadeIn`（对象形 `initial`/`whileInView`，不进 variant 树）。
+- 新段落要线：传 `WelcomeSection lines`；自带外层的段写成 `section（position: relative）> MotionViewport > renderLines() + Container`，线是 Container 的兄弟。
+- 每段的 `renderLines` 写在本段文件里、偏移照对应的 Minimal 源文件，不抽共享（`product-tour` 与 `platform-picker` 的线相同，重复已知并接受）。`FloatXIcon`、`CircleSvg` 不移植（docs/31 §4 Step 4 D-a）。
+- `hero.tsx` 的 `spent` gate（滚过后 `visibility: hidden`）不可删：钉住层是 `position: fixed`，`opacity: 0` 仍会让 Aurora 的 blur 圆与 orbit 动画节点持续合成（docs/28 §5）。`useScrollPercent` 的 `Math.floor` 同样承重。
+- `hero.tsx` 的 `ScrollHint` 必须留在钉住层内：挪到层外它会随页面滚走，和它指向的（钉在视口的）内容分离。
+- `how-it-works.tsx` 的 84vh 槽只是滚动跑道，必须 `alignItems: 'flex-start'`，否则卡片被 stretch 成大片空白。
 
-### sections/
+## product-tour.tsx（真实截图画廊）
 
-- `top-bar-actions.tsx` — 顶栏右侧三控件（由 `layout.tsx` 作为 `HeaderSection` 的 `rightArea` 消费），**全部是共享叶**，按叶文件 import `@/entrypoints/app/layouts/components/{theme-mode-button,language-popover,github-button}`，**不走 barrel**（barrel 带 `settings-button` → settings context → storage，welcome 不该被拖进去）。**这条有守卫**：`tests/ui-vendor-boundaries.test.ts` 的 `IMPORT_BOUNDARY_RULES`（barrel 与 `app/components/settings` 双禁、叶文件放行，并反向断言 welcome 确实按叶消费着控件）。本文件只剩一个 flex Box 的装配。
-  沿革：最早直接复用 dashboard 的 `HeaderActions`；docs/25 Step 4 app.html 把主题控制搬进外观抽屉（需要 welcome 刻意不挂的 `SettingsProvider`），主题药丸只好落成本文件私有的 `styled(Switch)`；2026-09-05 light/dark 回到 app Header，药丸随之删除、换成共享的 `ThemeModeButton`（单个图标按钮，与相邻两个控件同尺寸同 hover），`favbase-color-mode` 键与 View Transition 圆形揭示都没变；2026-09-08 顶栏壳本身换成移植的 `HeaderSection`，本文件从「被 `top-bar.tsx` 挂在右侧」变成「被 `layout.tsx` 填进 slot」，内容未动
-- `hero.tsx` — 100vh 首屏，几何取自 Minimal `home-hero`：`md+` 用 `mt: calc(var(--layout-header-desktop-height) * -1)` 把顶栏那行吃回来（所以是真 100vh，没人需要手算高度）+ `height:100vh`/`minHeight:760`/`maxHeight:1440`，**内层 `position: fixed`** 让内容钉在视口、随滚动 `opacity` 淡出，另有四层 spring 视差（y1 = eyebrow+h1、y2 = 副文案、y3 = CTA 行、y4 = OrbitCore）。布局**保留 Grid 左文右 orbit 分栏**，不改 Minimal 的居中单列栈——它用居中栈是因为没有产品主视觉可放，`OrbitCore` 是 favbase 唯一一眼说清产品形状的东西。视差与淡出只在 `mdUp && !reduceMotion` 生效。内容：aurora 双色斑（motion 慢漂）+ 文案 stagger + `OrbitCore` + 滚动提示（`ScrollHint` 必须在钉住层**内**，否则它会与它指向的内容分离）。两个 CTA 是纯 `href="#welcome-picker"` / `"#welcome-flow"` 锚点（本页无 router，交给 CSS 平滑滚动 + `LayoutSection` 注入的 `scroll-padding-top`）。标题是全页**唯一的 h1**：外层 `Box component="h1"`，两行各自 `FadeIn component="span"`（reveal mask）包 `Headline component="span" ink="brand"`（全页唯一带品牌色的标题，docs/31 Step 3）——渐变留在每行，挂到 h1 上会横跨两行改变观感，且 background-clip:text 在 transformed 子元素上有渲染 glitch
-  - **`spent` gate 不是可选的**：`percent >= 100` 时钉住层加 `visibility: 'hidden'`。fixed 之后元素永远 onscreen，Aurora 那两个 `filter: blur(48px)` 大圆与 orbit 约 20 个动画节点会**持续参与合成**；`visibility: hidden` 让浏览器跳过整棵子树，`opacity: 0` 不会。Minimal 不付这个代价是因为它的 hero 背景是静态的（docs/28 §5）
-  - `useScrollPercent` 的 `Math.floor` 是承重的：它把每个滚动帧收敛成「每整数百分点最多一次 setState」，整屏约 100 次 re-render 而非每帧一次
-- `capability-marquee.tsx` — 双行反向 pill 跑马灯，**由页面滚动驱动**（`useScroll` + `useTransform`）而非 CSS 无限循环：读者停下它就停，不跟正文抢注意力。行内容三倍复制保证两端不露白，两侧 `maskImage` 渐隐。`useReducedMotion()` 为真时不绑 `style={{x}}`，pill 行静止
-- `how-it-works.tsx` — 三步 sticky 叠卡。`useScroll` 测整栈进度，每张卡 `1 - (total-1-index) * 0.04` 目标缩放做景深；卡内右侧 `StepGlyph`（rows / grid / bubble 三种抽象装饰）。sticky 在 `md+` 生效，窄屏退化为普通堆叠；reduce-motion 时不绑 `style={{scale}}`，卡片全尺寸堆叠。`84vh` 的槽只是叠卡的滚动跑道，槽设 `alignItems: 'flex-start'` 让卡片保持内容高度——默认 stretch 会把卡片拉满 84vh，内容只占上面三分之一（2026-09-27 修复）。装饰线照 Minimal `home-hugepack-elements`（左三角 + 竖线）：`MotionViewport` 只包线与标题 Container、叠卡 Container 在外，标题区 30% 可见就画，而不是等约 2800px 的整段 30% 可见；竖线 `height: 100%` 一路陪着叠卡——Minimal 两个滚动画廊的 sticky 底不透明、把脊线盖住，这里的 84vh 卡槽透明，接受（docs/31 Step 4 D-g）
-- `product-tour.tsx` — **真实界面画廊**（2026-10-03，用户决定；决策与采集记录在 `docs/35`）。四张 app.html 的真实截图（仪表盘 / 全部收藏 / GitHub Stars / X 书签）排成一行，页面向下滚动时这一行横向移动；全页唯一出示产品本身而不是 mock 的段落。Minimal `home-highlight-features` 的逐值移植：`section`（`pt: {xs:10, md:20}`，`id="welcome-tour"`）> `MotionViewport` > 线 + 标题 Stack（`useClientRect` 量它的 `left`，画廊第一张图与标题左缘对齐），后接 `ScrollableContent`——`ScrollRoot` 的高度取内容行的 `scrollWidth`（这段高度就是滚动跑道，`minHeight: 100vh`），里面是 sticky 的 `ScrollContainer`，`ScrollContent` 这一行的 `x` 由跑道的 `scrollYProgress` 经 spring（`damping 16` / `mass 0.12` / `stiffness 80`）驱动，进度不在两端时 `data-scrolling="true"` 把这一行垂直居中。图宽 `{ xs: 480, sm: 640, md: 800, lg: 1140, xl: 1280 }`、阴影 `-40px 40px 80px`，间距与断点全是源文件的数；几何上另有三处有意偏离源文件，列在九条替换之后。源文件里 favbase 没有对应物的九处做了替换，文件头注释逐条列出、落点各有一行：
-  1. `framer-motion` / `m` → `motion/react` / `motion`，不上 `LazyMotion`
-  2. 标题是 `SectionCaption` + `Headline tail` + 一段描述，各包 `FadeIn`（写法同 picker），不用 Minimal 的 `SectionTitle`
-  3. 标题下的双三角 `SvgIcon` 保留（`component={motion.svg}` + `varFade('inDown', { distance: 24 })`，由 `MotionViewport` 驱动），加 `aria-hidden`
-  4. 装饰线是源文件的三个标记。picker 的线与它相同：picker 在 docs/31 Step 4 借的就是这个文件的线。重复已知并接受，不抽共享
-  5. `ITEMS` 由 `tour-images.ts` 的页面清单映射（`Record<TourPage, …>`，清单加页而这里没补就编译不过）：仪表盘与聚合页的标题取各自页面 `h1` 的 key（`dashboard.title` / `allCollections.title`），GitHub 与 X 的图标和标题取 `PLATFORM_META`，不另抄一份
-  6. 图是一个 `role="img"` 的背景图盒子（`aspectRatio: '16 / 10'`，亮色 URL + `applyStyles('dark')` 换暗色 URL，locale 取 `useTranslation().locale`，`aria-label` 是 `welcome.tour.imageAlt`），不是每种配色一个图片元素。背景图盒子没有固有宽度，宽度写在条目根上（下面「三处偏离」第 3 条），带阴影的框与图占满条目；源文件给五张色板图准备的那层 flex 行随之去掉，每个条目只有一张图
-  7. sticky 底色用 `home-hugepack-elements` 的中性 ramp（`[0, 0.25, 0.5, 0.75, 1]` → `background.default`、`neutral` ×3、`default`），不用源文件的五个 `primaryColorPresets` 渐变（那是该段自己的主题，welcome 也不挂 `SettingsProvider`）。stop 是 CSS 变量，motion 在变量之间直接跳变、不插值，过渡靠 `ScrollContainer` 上的 `transition: background-color`；**别为了让它插值改成 `theme.palette.*` 的 hex**，那会把配色冻在渲染那一刻
-  8. 去掉 RTL 分支（本仓库没有 `direction` 支持）
-  9. reduce-motion：`useReducedMotion()` 为真时渲染 `StackedContent`，没有跑道、没有 sticky、不绑任何 MotionValue，四个条目在 `Container` 里纵向排，图占满宽度。两个分支是两个组件而不是一个组件里的条件：`useScroll` 的 target ref 一直不挂载会触发它的 invariant
+- 全页唯一出示产品本身而非 mock 的段落，Minimal `home-highlight-features` 的逐值移植。九处替换与三处几何偏离逐条写在文件头与落点注释里，封顶宽度的算术在 `stuckItemMaxWidth` 的注释。
+- 三处几何偏离（钉住区在顶栏下方并按剩余高度封顶条目宽度 / 图标对齐标题行 / 宽度写在条目根上）修的是实测缺陷，别还原成源文件（docs/35 §7）。
+- 只放仪表盘 / 全部收藏 / GitHub Stars / X 书签四页；哪些页面不能公开、怎么重截见 docs/35。图在 `public/assets/images/welcome/`，增删改名必须同步 `tour-images.ts`（守卫 `tour-images.test.ts`）。
+- 代码不得依赖截图里有什么：图会按同名文件原位重截。
+- section 根与 sticky 容器的任何祖先都不能加 `overflow: hidden / auto / scroll`，否则 sticky 失效（`layout.tsx` 根上的 `overflowX: 'clip'` 不建滚动容器，不在此列）。
+- sticky 底色的 stop 是 CSS 变量，motion 在变量之间跳变、不插值，过渡靠 `ScrollContainer` 的 `transition`。别为了插值改成 `theme.palette.*` 的 hex，那会把配色冻在渲染那一刻。
+- reduce-motion 分支是独立组件 `StackedContent`，不是同一组件里的条件：`useScroll` 的 target ref 一直不挂载会触发它的 invariant。
 
-  **几何上三处有意偏离源文件**（2026-10-03，都是构建后的页面在 1440×900 / 960×800 / 390×800 实测出的缺陷，落点各有注释）：
-  1. **钉住区在顶栏下方，条目宽度按剩余高度封顶。** 源文件是 `top: 0` + `height: 100vh`，条目多高由图决定、在 100vh 里居中：1440×900 下条目约 827px（文字块 114 + 图 713），标题整程压在 72px 的半透明顶栏下面。本页在用户窗口的任意尺寸下打开，多数是笔记本，所以让图让位。`ScrollContainer` 改成 `top: var(--tour-header-height)` + `height: calc(100vh - var(--tour-header-height))`（变量由它自己定义：`md` 以下取 `--layout-header-mobile-height`，`md` 起取 `--layout-header-desktop-height`，断点跟 `WelcomeLayout` 的 `layoutQuery`）；条目根加 `maxWidth: stuckItemMaxWidth(theme)` =（100vh − 顶栏 − 标题一行 − 标题与说明的间距 − 说明一行 − 文字块下边距 − 上下各 `spacing(3)` 留白）× 16 / 10。`md` 起即 `(100vh − 234px) × 1.6`：900 高 → 1065.6px，640 高 → 649.6px；视口够高时（lg 档 ≥ 947px、xl 档 ≥ 1034px）封顶值大于宽度表，尺寸就是源文件的。行高取 `theme.typography`、间距取 `theme.spacing`，并与条目 `sx` 共用 `TEXT_GAP` / `TEXT_MB` 常量，封顶值不会和它所依据的布局各说各的。留白是 `STUCK_AIR = 3` 这一个常量：没有它，被封顶的条目会正好填满钉住区，标题贴着顶栏下沿、图贴着窗口底；它同时吸收预算没算进去的两样——说明折成两行多出的 24px、图标高出标题行的 1px。设成 0 时 `md` 起是 `(100vh − 186px) × 1.6`，1440×900 下 1140 不被封顶，但条目上下各只剩 0.75px。条目根带 `data-slot="tour-item"`，是运行时测量的落点。`ScrollRoot` 的高度来自 `useClientRect` 的 `scrollWidth`，这个 hook 在 window `resize` 时重量，所以随视口高度变化的宽度与跑道长度保持一致
-  2. **图标对齐标题行。** 源文件的 `mt: '10px'` 是把 28px 图标居中在 Minimal lg 档的 `h3` 行上（32px × 1.5 = 48px）；本仓库 `h3` 是 20px × 1.3 = 26px，照搬会低约 10px。改成 `calc((标题一行高 − 28px) / 2)`（现值 −1px），随主题走
-  3. **宽度写在条目根上，文字在条目内折行。** 源文件把宽度写在图片元素上，文字行取 max-content，说明比图宽时条目被撑宽（600px 以下，仪表盘那条英文说明约 600px，图 480px）。现在条目根带宽度表（画廊里再加第 1 条的封顶），文字 `Stack` 是 `flex: 1` + `minWidth: 0`。条目宽度从此只由 CSS 决定，字体加载完成或切换语言都不会改变那一行的 `scrollWidth`
+## 新增段落
 
-  **代码不得依赖截图里有什么**：图会按同名文件原位重截。section 根与 sticky 容器的任何祖先都不能加 `overflow: hidden / auto / scroll`，否则 sticky 失效（`layout.tsx` 根上的 `overflowX: 'clip'` 不建滚动容器，不在此列）
-- `chat-showcase.tsx` — **主功能演示**。`useInView(once)` 触发脚本化播放：提问 → tool call（转圈 → ✓ 命中 N 条）→ 打字机流式作答 → 来源卡片 stagger。phase 常量 + 定时器数组，`useReducedMotion` 时直接跳到终态（流式动画没有「慢一点」的降级）。面板 `minHeight` 按终态尺寸给足，避免播放中把页面顶下去。装饰线照 Minimal `home-minimal`（上下各一个 `+` 与横线 + 竖线，两条横线落在 160px 的上下 padding 里）；那段的 section `overflow: hidden` 与 Grid `zIndex: 9` 不带过来——前者为 720px 图片溢出、后者为压过 `CircleSvg`，这里都没有（docs/31 Step 4 D-h）
-- `agent-skills.tsx` — Agent Skills 段落（2026-09-17）：同一个本地知识库，改由用户自己的 coding agent 来问。**主体就是那一条可复制的指令**（`welcome.agentSkills.prompt` 内插 `lib/repo.ts` 的 `AGENT_SETUP_GUIDE_URL`），不画演示 mock——上下两屏各已有一段脚本化演示，第三块会被当成装饰，把这屏唯一真能用的东西稀释掉。**刻意不出示任何 `npm` / `favbase setup` 命令**：配对要 Bridge Token，而首装时开关还没开、token 还不存在，印出来的命令必然是用户只能用来失败的占位符；安装流程归 URL 背后的 Agent Setup Guide（`skills/favbase/INSTALL.md`），它会停下来让用户去设置卡取真命令，理由见 `docs/adr/0005`。复制反馈是本地的三态按钮（`idle`/`copied`/`failed` + 2s 回弹 + 视觉隐藏的 `aria-live`）——welcome 没挂 `<Snackbar/>`，`sonner` 也被 `VENDOR_RULES` 锁在 `app/components/snackbar/**`；`visuallyHidden` 样式是手写的，本仓库的 MUI 构建不带那个 helper。剪贴板会被拒绝或缺席，所以 catch 分支照实说"复制失败"（命令仍是可选中的文本）。装饰线照 Minimal `home-testimonials`（脊上叠两个下三角 + 竖线）
-- `bilibili-showcase.tsx` — B 站视频页 CS 面板演示：左侧播放器骨架 + 右侧面板 mock（字幕 / AI 总结双 tab，`layoutId` 让选中胶囊滑动）。入场 2.8s 后自动切到总结 tab 展示第二种能力，但 `pickedRef` 记录真人点击后不再自动切。tab 行 `role="tablist"`、`TabButton` 带 `role="tab"`/`aria-selected` + `Mui-focusVisible` 焦点环；播放器进度条动画走 `scaleX`（`transformOrigin: left`）而非 `width`，不逐帧 relayout。装饰线照 Minimal `home-integrations`（脊上一列圆点 + 竖线）；那两个 14px 圆点写了 `opacity: 0.24` 却渲染成 0.12——Stack 的 `'& span'` 后代规则特异性更高，Minimal 里也是这样，照搬不修，截图量到 0.12 不是回归
-- `platform-picker.tsx` — 六平台多选卡（`collectionPlatformRegistry` 驱动）+ 就绪态标签（`readinessFor()`：需密钥 / 用登录态 / 开箱即用）+ 进入按钮。CTA 文案与 caption 随选择数变化（`welcome.picker.selected` 走复数 key）。卡片未选中态边框 `2px solid transparent`（选中亮 primary；宽度恒定防 layout shift），键盘焦点走 `Mui-focusVisible` 环；readiness 文字 `text.secondary` 保对比度。装饰线照 Minimal `home-highlight-features`（`+` + top 80 横线 + 竖线，都在 160px 顶部 padding 里）
-- `platform-request.tsx` — 页尾 Platform Request 引导（`welcome.request.*`），外跳 `lib/repo.ts` 的预填 new-issue URL（`target="_blank"`）；它是动作外链不是平台，不进 registry（领域定义见根 `CONTEXT.md`）。**2026-09-27 起是 Minimal `home-advertisement` 深色 CTA 卡的原样移植**（docs/31 Step 2，用户决定；推翻了 docs/28 §3.4 对 Advertisement 的拒绝与本段原先「刻意克制、不抢上方 picker 主 CTA」的约束——它的视觉分量不再让位于主 CTA）：grey.900 底（两种配色都是）+ 36px 网格底纹 + grey.800 边框 + 右上光斑，md 起图左文右、xs 纵排居中；火箭插图 `public/assets/illustrations/illustration-rocket-large.webp` 是 Minimal 资源原字节拷贝（仓库第一张 Minimal 位图，再分发许可 [UNKNOWN]，用户已知情接受），纯装饰 `alt=""`，4s 无限漂浮由全页 `MotionConfig` 管 reduce-motion。替换点：标题走 `Headline ink="white"` + `tail`（i18n 拆 `heading` / `headingTail`）；Minimal 没有描述段，本页保留并固定 `grey.500`（深色卡不随配色变，`text.secondary` 会变）；只有**一个** `contained primary` 按钮（本段只有这一个动作，保留外链图标，无 `ctaGlowShadow`）；Minimal 卡片 `sx` 里的 `spacing: 5` 是无效 CSS，未抄。装饰线照 Minimal `home-advertisement`（docs/31 Step 4）：脊线接上一段、止于卡片中线下 64px，中线一条满宽横线 + `+`；横线从卡片后面穿过，所以 Container 补了 Minimal 的 `position: relative` + `zIndex: 9`（线是它的兄弟、仍以 section 为定位基准）；`renderLines` 照源文件放在组件之后。**间距也照 Minimal：本段不走 `WelcomeSection`、不在页面节奏里**，是自己的 `section` + `Container maxWidth="lg"`、零纵向 padding——上方间距是 picker 的底部留白，下方是 footer 的 `py: 5`。原先套 `WelcomeSection` + `pt: 0`，而 `pt: 0` 自加这段（99526f5）起在 md 以上从没生效：`WelcomeSection` 的响应式 `py` 是媒体查询规则，标量覆盖只落进 base 规则，被它盖掉（1440 宽实测 160px，picker 与卡片之间空出 320px）
-
-### hooks/
-
-- `use-typewriter.ts` / `use-typewriter.test.tsx` — `useTypewriter(text, active, msPerChar)` → `{ visible, done }`。`active` 变假会回卷；`useReducedMotion` 时一次到底；跑完清 interval（测试用 `vi.getTimerCount()` 断言不空转）
-
-## 约定
-
-- **文案全走 i18n**：`lib/i18n/locales/{zh-CN,en}.ts` 的 `welcome.*` 段。`tests/i18n-no-hardcoded.test.ts` 扫 `entrypoints/**/*.tsx` 拦 CJK 硬编码，新增段落必须双语补齐
-- **跨入口复用写 `@/entrypoints/app/...`**（绝对路径）。本页是项目里第一个跨 entrypoint 引用 app 共享代码的地方（此前只有 `@/lib/...`）：从 `sections/` 用相对路径要写成 `../../app/...`，深度一变就得改，绝对路径更稳。方向单一——welcome → app，app 永不反向 import welcome
-- 图标只用 `entrypoints/app/components/iconify/icon-sets.ts` 里注册过的名字——未注册会走网络加载，MV3 CSP 下直接不显示。移植 Minimal 组件时尤其要查：`BackToTopButton` 上游用的 `solar:double-alt-arrow-up-bold-duotone` 没注册，已换成 `eva:arrow-ios-upward-fill`
-- **`motion` 只属于本入口**（根 `CLAUDE.md` 铁律，2026-09-08 起有守卫）：`tests/ui-vendor-boundaries.test.ts` 的 `VENDOR_RULES` 把 `motion` 的 owner 定为 `entrypoints/welcome`，app.html 与 Content Script 保持纯 MUI + CSS。构建后可复验——app.html 引用的 chunk 里 `framerAppearId`/`MotionConfigContext`/`createMotionComponent` 应零命中
-- **向 Minimal 借鉴前先读 `docs/28`**：那里有逐条带理由的拒绝清单（`HeroBackground` 619 行 + 360 KB webp、`LazyMotion`、`AnimateText`、`animate-count-up`、九个未用 variants、Pricing/Testimonials/FAQs 那些销售页段落、`renderIcons` 的第四份平台清单）。**不看就照抄参考源，会把已经论证过不要的东西搬回来**
-- **welcome 里唯一的可执行出口是 `agent-skills.tsx` 那条指令**，其余一律不放命令：安装命令的真源是设置卡（给人，自带 token）与 `skills/favbase/INSTALL.md`（给 agent），这里不做第三份
-- 演示内容是**示意，不是真数据**：不要在这页放看起来像统计的数字（收藏数、用户数、准确率），首装时数据库是空的，任何数字都是假的。**唯一的例外是 `product-tour.tsx`**：它放的是开发者自己收藏库的真实截图，并在 `welcome.tour.desc` 里照实说明；其余段落仍是 mock，仍不放统计数字。图在 `public/assets/images/welcome/`，文件名 `tour-<page>-<scheme>-<locale>.webp`（四页 × 亮 / 暗 × `zh-CN` / `en`，共 16 张）；哪些页面没放、怎么重截，见 `docs/35_welcome-real-screenshots-2026-10-03.md`
-- **装饰线只在 ≥1440px 显示、由 `MotionViewport` 的 variant 传播驱动**（docs/31 Step 4）：新段落要线就传 `WelcomeSection lines`，自带外层的段照 Minimal 写 `section（position: relative）> MotionViewport > renderLines() + Container`，线是 Container 的兄弟。**别给线自己挂 `whileInView`**——线只带 variants，触发器是 `MotionViewport`；反过来，`MotionViewport` 里任何带 `variants` 的后代都会被它一起驱动，内容动画继续用 `FadeIn`（对象形 `initial`/`whileInView`，不进 variant 树）。每段的 `renderLines` 写在本段文件里、偏移照对应的 Minimal 源文件，不抽共享配方（各段照各自的源文件；只有 `product-tour` 与 `platform-picker` 的三个标记相同，原因见 `product-tour.tsx` 条目第 4 点，重复已知并接受）
-- 新增段落：`sections/` 加文件 → `welcome-view.tsx` 装配 → 动画元素从 `components/motion-box` 取 `MotionBox` → 文案补双语 key
+`sections/` 加文件 → 装配进 `welcome-view.tsx` 里 Hero 之后那个 `position: relative` + 不透明底的 Box（Hero 内层在 md+ 是 `position: fixed`，出了这层会被它盖住）→ 文案补 `welcome.*` 双语 key。

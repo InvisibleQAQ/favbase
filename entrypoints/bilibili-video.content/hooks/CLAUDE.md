@@ -1,16 +1,20 @@
 # bilibili-video.content/hooks
 
-B站视频页面板 UI 数据流与状态管理 hooks
+面板的数据流与状态 hooks（视频检测 / 字幕 / 转录 / AI 总结）。
 
-## 模块结构
+## 约束
 
-- `useVideoDetect.ts` — 通过 onBiliMessage() 订阅 BILI_ROUTE_SWITCH（SPA 导航重置）+ BILI_SUBTITLE_HANDSHAKE（bvid/cid 解析，cid=0 时不锁定 resolved 等待后续重发），3s 超时降级到 fetchCidByPageList API
-- `useSubtitle.ts` — 三层数据流：(1) GET_VIDEO_CACHE 缓存优先加载 (2) onBiliMessage() 拦截通道 (3) fetchSubtitle API 降级 + 重试。所有成功获取的字幕通过 CACHE_SUBTITLE 消息写入 Background 缓存。跨 tab 同步通过 `onVideoCacheChange(bvid, cb)` 订阅（`lib/cache/video-cache.ts` 封装 key 格式）。返回 { rows, loading, status, error, source, cached }。API 降级自 docs/29 Step 1 起与拦截通道同源（`x/player/wbi/v2`，且另有归属校验、外来 AI 轨道被拒收），两个通道都只可能给出本视频的轨道（选中的语言轨可能不同），`resolved` 先到先得的竞态因此不再有正确性含义——刻意不加仲裁（docs/29 Step 2：让后到的拦截结果覆盖只会多一次面板重渲染）
-- `useTranscribe.ts` — 转录状态管理：`sendBackgroundMessage({ type:'TRANSCRIBE_AUDIO', platform:'bilibili', videoId:bvid, cid, title })` → `onBackgroundPush('TRANSCRIBE_STATUS', ...)` 监听推送（匹配 `m.videoId`）→ 已解码结果/错误。useRetryCountdown 共享倒计时。SPA 切换时自动重置（bvidRef staleness guard：Promise 回调检查 bvidRef.current 是否仍匹配，防止视频 A 的转录结果写入视频 B）。官方字幕优先 → ASR 降级策略由 Background handler 层统一管理
+- 字幕缓存是共享的，下游按 bvid 无条件信任：`CACHE_SUBTITLE` 写进去的行会被转录管线的缓存命中（`lib/transcription/pipeline.ts`）直接投递进 DB。这里只允许写两个来源：bvid 匹配的拦截通道，或 `lib/bilibili/bilibili-api.ts` 的 `fetchSubtitle`。
+- 不要在 content script 里绕过 `fetchSubtitle` 自己请求字幕，尤其是非 wbi 的 `x/player/v2`：已登录请求会拿到别的视频的 AI 字幕。`fetchSubtitle` 走 `x/player/wbi/v2` 并校验轨道归属（docs/29）。
+- `useSubtitle` 里拦截通道与 API 降级「先到先得」的竞态刻意不加仲裁：两个通道都只可能给出本视频的轨道，竞态没有正确性含义（docs/29 Step 2）。
+- 发消息统一用 `lib/background/client.ts` 的 `sendBackgroundMessage` / `onBackgroundPush`（响应与 push 已解码，协议错误进现有失败状态），禁止对响应做裸 `as` 断言。
+- 已知缺口：`useTranscribe` / `useSummary` 在 bvid 切换时发的 `*_ABORT` 仍是裸 `browser.runtime.sendMessage`（fire-and-forget、不读响应），新代码别照抄。
+- 所有异步回调都要过 staleness 守卫（`bvidRef` / `isStale`）：SPA 切视频后，视频 A 的结果不得落到视频 B 的面板。
+- `useSummary` 只在 `generating` 时接受 `SUMMARY_STATUS` 推送，防止已取消 / 已完成后被迟到的推送覆盖；`GET_SUMMARY_CACHE` 是只读探针，永不触发 LLM。
+- 总结不经消息通道传字幕：background 直接读字幕缓存（rows 有几十 KB）。
+- 「官方字幕优先 → ASR 降级」的策略归 Background handler，hooks 不做决策。
 
-- `useSummary.ts` — AI 总结状态机（镜像 useTranscribe）：bvid 变化时先通过 typed Background client 发 `SUMMARIZE_ABORT` 旧视频 → 重置 → 发 `GET_SUMMARY_CACHE` 只读探针（命中即展示，永不触发 LLM）。`generate()`/`regenerate()` 走同一个 `run(force)` 发 `SUMMARIZE_VIDEO`；订阅 `onBackgroundPush('SUMMARY_STATUS', ...)` 刷新流式 Markdown（**仅在 generating 时接受**，防止已取消/已完成后被迟到的推送覆盖）。全部回调经 `isStale(bvid)` 守卫，SPA 切视频后旧结果不会落到新视频面板。字幕不由本 hook 传——background 直接读字幕缓存，避免几十 KB 的 rows 走消息通道
+## 坑
 
-## 约定
-
-- 无字幕降级: useSubtitle 返回 no_subtitle（网络异常也降级为 no_subtitle 而非 error）→ App 显示 TranscribeButton（status 为 no_subtitle 或 error 时均展示）→ 用户点击 → TRANSCRIBE_AUDIO（含 `platform:'bilibili'`）→ Background dispatcher 按 platform 分发到 `handleBiliTranscribe`（adapter 准备平台碎片 → 组装 PipelineDeps → pipeline 统一编排）→ 结果回写 SubtitleView
-- Runtime 消息：hooks 不直接调用 `browser.runtime.sendMessage`，统一使用 `lib/background/client.ts` 的 `sendBackgroundMessage`/`onBackgroundPush`；响应和 push 已在 client 解码，协议错误进入现有失败状态，不允许裸 `as TranscribeResponse`/`as SummaryResponse`
+- 握手里 `cid = 0` 时不要锁定 resolved，要等后续重发；握手超时才降级到 `fetchCidByPageList`。
+- 字幕获取的网络异常降级为 `no_subtitle` 而不是 `error`；`App.tsx` 在两种状态下都展示转录按钮。
