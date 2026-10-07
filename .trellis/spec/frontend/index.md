@@ -20,7 +20,7 @@ This directory contains guidelines for frontend development. Fill in each file w
 
 | Guide | Description | Status |
 |-------|-------------|--------|
-| Directory Structure | **Not created.** Module ownership lives in the root `CLAUDE.md` directory index plus each directory's own `CLAUDE.md` (`entrypoints/app/CLAUDE.md` for the app tree). docs/25 iron rule 5 cites this file; read those two instead | Not created |
+| Directory Structure | **Not created.** Read the tree itself for layout. Which directory owns which rule is listed in the root `CLAUDE.md` section "目录 CLAUDE.md"; each directory's own `CLAUDE.md` holds that owner's constraints and pitfalls, not a file inventory (`entrypoints/app/CLAUDE.md` for the app tree). docs/25 iron rule 5 cites this file; read those two instead | Not created |
 | Component Guidelines | **Not created.** Component patterns are enforced per owner directory (`components/*/CLAUDE.md`) and, for shared app UI, by `ui-design-system.md` | Not created |
 | Hook Guidelines | **Not created.** See `entrypoints/app/hooks/CLAUDE.md` and `lib/hooks/CLAUDE.md` | Not created |
 | State Management | **Not created.** Storage keys and their owners are in `lib/storage/CLAUDE.md`; page state machines in their section `CLAUDE.md` | Not created |

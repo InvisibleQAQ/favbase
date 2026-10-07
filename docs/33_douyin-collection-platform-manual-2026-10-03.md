@@ -306,7 +306,7 @@ pnpm test
 **依赖**：Step 1 已提交。**本 Step 含一次对外发布，必须由用户决定**：
 
 - `tests/agent-bridge-cli-aliases.test.ts` 在 `COLLECTION_PLATFORMS` 加入 `douyin` 的那一刻就会红，除非 `skills/favbase/SKILL.md` 的**两份**平台清单（`<platform>` 句 + frontmatter `description`）都加上抖音。
-- 而 `packages/favbase/CLAUDE.md:403` 规定：**改 SKILL.md 的 commit 就是发布 commit**——同 commit 递增 `packages/favbase/package.json` 的 `version` 与 SKILL.md 的 `metadata.version`（先 `npm view favbase version` 确认下一个号，今天本地是 0.2.1），并在同一次坐下来时按该文件 Release 第 2–6 步发布（npm 2FA，只有用户能做）。
+- 而 `packages/favbase/CLAUDE.md` 的 Release 一节规定：**改 SKILL.md 的 commit 就是发布 commit**——同 commit 递增 `packages/favbase/package.json` 的 `version` 与 SKILL.md 的 `metadata.version`（先 `npm view favbase version` 确认下一个号，今天本地是 0.2.1），并在同一次坐下来时按该文件 Release 第 2–6 步发布（npm 2FA，只有用户能做）。
 - 两条路，用户选：**(a)** Step 2 的 commit 即发布 commit，用户当场发布；**(b)** Step 2 做完先不提交，等用户准备好发布再一起提交。不存在「先提交、以后再发」——那正是 Release 一节记录的违规。
 
 **文件**：不在这里抄注册表清单（spec §5：手抄的清单会腐烂）。按 spec §5 的方法让机器生成待办：
@@ -668,3 +668,12 @@ C. 接口序位（D5，同文件）
 - 先例：`lib/zhihu/`（login + 多 Source + `is_public`）、`lib/x/`（调用方传入认证、增量停止、限流锁）、`lib/bilibili/favorites-sync-runner.ts`（7 + 3 s 节奏）、`entrypoints/app/sections/bookmarks/use-bookmark-extraction.ts`（逐条 `enqueueCollectionProcessingItem`）
 - 共享机制：`lib/http/{backoff,retry,response-body,fetch-with-deadline}.ts`、`lib/env.ts`、`lib/collections/sync-errors.ts`、`entrypoints/app/hooks/{platform-sync,use-countdown,use-daily-auto-sync,collection-processing-jobs}.ts`
 - 发布规则：`packages/favbase/CLAUDE.md` Release 一节
+
+---
+
+## 附：迁自根 CLAUDE.md 的落地摘要（2026-10-06 快照）
+
+> 这一段原先写在根 `CLAUDE.md` 的「关键文档」一节，每个会话都全量加载。2026-10-06 按 docs/36 精简根文件时
+> 逐字迁到这里，之后不再同步维护；与正文冲突时以正文为准。
+
+**抖音收藏接入手册（第 7 个平台）**（2026-10-03，**Step 0 已完成：调研 + 用户账号实测 + 决策；Step 1 / Step 2 已落地并提交 2026-10-03（CLI 0.2.2 已发布）；Step 2.5 已落地 2026-10-04（代码 + 单测，清掉 Step 3 的两项阻塞）；Step 3 待实施**，任务目录 `.trellis/tasks/10-03-douyin-public-favorites-platform/`）。三条从代码里看不出来的事实：① 自 2026-08-16/17 起抖音三个收藏接口都要求页面 SDK 签名，扩展直连 → `403 ArgusSecurityPlugin`，所以请求经 `chrome.scripting.executeScript({ world: 'MAIN' })` 注入用户**已打开**的 douyin.com 标签页、由页面 SDK 自动补签（D3 / D4，实测 22 次请求无一被签名门禁拒绝；`douyin-api` / `douyin-sync-service` 只认注入的 transport、加载图零 chrome，`chrome.*` 只在 `lib/douyin/douyin-tab.ts`）；② 用户原话「先只做公开收藏」在抖音上不可执行（只有收藏夹标公开 / 私密，全部收藏无逐条可见性，账号级开关读不到），**用户决定同步全部收藏、公开收藏夹作 Source**——这是对 B 站 / 知乎「私密夹视频不是 Collection Item」的有意偏离（D1）；③ 2026-08 曾有一版从未提交的抖音实现（SW 直连 + webRequest 捕获 msToken），它带的「禁止页面上下文降级」约束被 D4 有意推翻，`.env.local` 的 8 个 `VITE_DOUYIN_*` 死键是它的遗留，Step 1 替换。防限流：页大小 20（实测上限 30–39）、5 s + 0–3 s 页间隔、每 25 页休 1–3 min、逐页入库 + 断点续传 + 逐条派发处理 lane、403 / 429 不在请求层重试（§4）。Step 2 改 SKILL.md 平台清单 = 一次 CLI 发版（`packages/favbase/CLAUDE.md` Release），由用户决定当场发布还是暂不提交。**Step 1 落地要点（2026-10-03）**：`lib/douyin/` 领域层建成并测绿，判别符未翻；断点状态收成两个字段 `{ resumeCursor, backfillDone }`——手册的第三个字段 `restartBackfill` 删除（「全量走」= `!backfillDone && resumeCursor === null`，D-e 写回 `{ null, false }` 即可；按手册字面还会在「首页入库后、写回断点前中断」时让回填永远完不成），手册 6 处同步勘误；复核把 D-e 收窄为**仅续传段第一次请求**（携带存储断点的那次——之后的页用的是本次刚拿到的 cursor，被拒多半是真风控，清断点等于在被限流时安排一次全量重走），并经主会话决定把该请求的 F10（返回的 cursor 没越过断点 = 服务端没认它）也纳入 D-e，另补了 listcollection 非首页 cursor 回到 `0` 的 F10 与存储断点的边界校验；节奏器放进 `withRetries` 的 attempt（重试也计数、也等页间隔）；验证码检测的字符串值匹配不进入条目列表。偏离与证据在 docs/33 Step 1 落地记录。**Step 2.5 落地要点（2026-10-04，用户当日两项决定）**：D6——幽灵清扫的缺陷修在共享管线里，新条目的 `item_contents.plainText` 与 item 行同事务写入（`'has_content'` ⇒ 正文已落盘），phase 5 只切块并落定状态；此前写 chunk 中途断掉、下次同步的 `textOf` 又覆盖不到的条目会永久落 `'no_content'`，抖音（逐页入库）、X（遇已知 id 即停）、YouTube（已入库视频不再拉详情）都中招，三个平台各有一条在自己同步入口复现的测试，X / YouTube 的生产代码未改。D5——存接口序位、排序不改：`platform_meta` 加只写不读的 `listCursor` / `listIndex`。D-g（设计默认项）——抖音每次运行开头无条件清扫一次幽灵。D-h（复核时主会话的默认决定，不是用户决策）——正文经 `lib/ingest` 进 `item_contents` 之前先剔除 U+0000 再 trim，**对所有平台生效**：Postgres 的 `text` 存不了它，而正文进了入库事务之后，一条这样的正文会让整次入库回滚（github 的 UTF-16 README 是现成的触发源）；不覆盖 `persistExistingItemContent` 与 `title` / `platform_meta` 里的 NUL。执行任一 Step 前先读该文 §1–§3

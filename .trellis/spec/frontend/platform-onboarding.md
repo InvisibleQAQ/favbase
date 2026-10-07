@@ -483,7 +483,7 @@ stays a one-line re-export whether your platform has child routes or not.
 | `tagged-<platform>-card.tsx` | One line: `export const Tagged<P>Card = taggedCard(<P>Card, '<prop>', to<P>Item);` (`entrypoints/app/components/tags/tagged-card.tsx`). `to<P>Item` is the `mapRow` your lib file exports (§4.2) — no envelope mapping is written here; `'<prop>'` is your card's item prop. A misspelled prop or a mapper that does not produce what the card takes is a `tsc` error at this call. |
 | `<platform>-grid-skeleton.tsx` | Shared `CardGridSkeleton` + `CollectionCardSkeleton`. |
 | chips | A single counted facet (a Creator or a Source — `name (count)`, an "All (total)" chip, single select) is `FacetChips` from `components/collection-states/`, passed `icon`, `title` (an i18n key), and `getKey` / `getName` accessors over your facet query's rows — no file of your own. A row shaped differently (a per-chip colour dot, no counts, a loading skeleton) composes `CollapsibleChipRow` itself. |
-| `CLAUDE.md` | **Mandatory.** Root `CLAUDE.md` rule: a directory you create gets its own `CLAUDE.md` in the same commit. |
+| `CLAUDE.md` | **Mandatory.** Platform directories are the named exception in the root `CLAUDE.md` maintenance rules (other new directories get one only when they carry a constraint the code does not show). Write what is different or surprising about this platform — constraints, pitfalls, deliberate decisions — not a file inventory and not a landing log. |
 
 ### 7.3 What the scaffold already owns — do not reimplement
 
@@ -668,8 +668,7 @@ The credentials-chain guard deliberately covers neither.
 - [ ] both Platform Descriptors (§6.1, §6.2) and the four heavy-value registries (§6.3) declare your platform
 - [ ] the manifest diff adds only your own `host_permissions` and any documented API permission (§12)
 - [ ] `lib/<platform>/CLAUDE.md` and `entrypoints/app/sections/<platform>/CLAUDE.md` written
-- [ ] root `CLAUDE.md` directory index gains both entries
-- [ ] `entrypoints/app/CLAUDE.md` route list gains the new route
+- [ ] root `CLAUDE.md` opening paragraph (platform count and id list) names the new platform — its directory index covers `lib/<platform>/` and `sections/<platform>/` generically, so it needs an entry only if the section directory is not named after the platform id
 - [ ] zh-CN **and** en locale keys complete (`en.ts` is `Record<LocaleKeys, string>`, so a missing English key is a compile error — a key missing from *both* is not)
 - [ ] every §9 row walked by hand and either done or consciously N/A
 - [ ] `package.json` `version` bumped if this ships to the Chrome Web Store

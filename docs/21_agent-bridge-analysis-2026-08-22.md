@@ -269,3 +269,12 @@ Envelope：`{ channel: 'favbase-agent-bridge', protocolVersion: 1, id: string, t
 - 参考项目：https://github.com/hangwin/mcp-chrome · https://github.com/MiguelsPizza/WebMCP · https://github.com/microsoft/playwright-mcp · https://github.com/microsoft/playwright/tree/main/packages/extension · https://github.com/BrowserMCP/mcp · https://github.com/ChromeDevTools/chrome-devtools-mcp · https://github.com/coddingtonbear/obsidian-local-rest-api · https://github.com/karakeep-app/karakeep/tree/main/apps/mcp · https://github.com/adeze/raindrop-mcp · https://github.com/readwiseio/readwise-mcp · https://github.com/electric-sql/pglite
 - Claude in Chrome 退场证据：https://code.claude.com/docs/en/chrome · anthropics/claude-code #34364 #27178 #25091 #23828 #23526 #23739
 - Agent 侧：https://code.claude.com/docs/en/mcp.md · https://code.claude.com/docs/en/skills.md · https://code.claude.com/docs/en/plugins.md · https://agentskills.io · https://modelcontextprotocol.io
+
+---
+
+## 附：迁自根 CLAUDE.md 的落地摘要（2026-10-06 快照）
+
+> 这一段原先写在根 `CLAUDE.md` 的「关键文档」一节，每个会话都全量加载。2026-10-06 按 docs/36 精简根文件时
+> 逐字迁到这里，之后不再同步维护；与正文冲突时以正文为准。
+
+Agent Bridge 分析/决策/设计/路线（Phase 0–4 已完成）；**2026-08-28 起外部面改为 Skill-first（`docs/adr/0003`）**：检索仍在 SW 内复用 `chatTools`、传输仍是扩展出站 WS（ADR 0002），但 Node 侧是 `favbase` CLI + 自启 daemon 而非 MCP；docs/21 的 Q5/Q9/Q10 与 §6.6 已被 ADR 0003 取代；术语 Agent Bridge / Knowledge Tool / Bridge Token / Bridge Daemon / favbase CLI 在 `CONTEXT.md`

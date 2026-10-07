@@ -1,7 +1,7 @@
 # CLAUDE.md 最佳实践：Anthropic 官方资料汇总与本仓库对照
 
 > 2026-10-04。本文做两件事：汇总有出处的最佳实践，量出本仓库与它的差距。
-> 不含整改方案；§9.4 列的是整改前要先定的事。方括号里的代号（如 `[D-mem]`）对应 §11 的来源清单。
+> 调研部分不含整改方案；§9.4 列的是整改前要先定的事。整改已于 2026-10-06 落地，记录在 §12。方括号里的代号（如 `[D-mem]`）对应 §11 的来源清单。
 
 ## 0. 调研口径
 
@@ -307,3 +307,44 @@
 | `[V-magda]` | https://ivanmagda.dev/posts/fixing-40k-claude-md-warning-monorepo/ | 2026-04-13 |
 
 原文存档在本机 `C:/Users/18368/AppData/Local/Temp/search-master/` 下的 `claude-md-best-practices-official/` 与 `claude-md-best-practices-practitioner/` 两个目录。它们在临时目录里，需要长期保留请另存。
+
+## 12. 整改记录（2026-10-06）
+
+用户指示「精简所有 CLAUDE.md，按最佳实践去改」，一次做完。任务目录 `.trellis/tasks/10-06-claude-md-slimming/`，取舍标准写在它的 `prd.md`。动手前重新抓了 `memory` 与 `best-practices` 两页，§2–§4 的关键引文仍逐字命中。
+
+### 12.1 结果
+
+| 项 | 整改前 | 整改后 |
+|---|---|---|
+| 根 `CLAUDE.md` | 104.8 KB / 183 行，最长一行 11,388 字符 | 14.4 KB / 151 行，最长一行 236 字符 |
+| 79 个嵌套文件合计 | 631.6 KB | 266.7 KB |
+| 80 个文件合计 | 736.3 KB | 281.2 KB |
+| 行数最多的文件 | 447 行（`packages/favbase/CLAUDE.md`） | 185 行（同一个文件） |
+| 最长的单行 | 11,388 字符 | 283 字符 |
+
+整改前按 git blob 计，整改后按工作区计，与 §9.1 的口径略有出入。改动只涉及 80 个 `CLAUDE.md`、13 份 docs、2 份 spec，零代码改动。
+
+### 12.2 §9.4 六项的处置
+
+1. **落地记录归谁**：根文件「关键文档」里 12 段长摘要逐字追加到了各自 doc 的末尾（标题「附：迁自根 CLAUDE.md 的落地摘要」），根文件每份 doc 只留一行「动什么之前先读它」。同一节里 6 段测试与配置文件的描述没有迁，内容在测试文件自身和 spec 里；原文见 `git show 37eff88:CLAUDE.md`。嵌套文件里删掉的落地叙事同样没有迁，原文见 `git show 37eff88:<path>`。
+2. **全局规则**：根文件新增「维护 CLAUDE.md」一节，作为全局「文档即代码」在本仓库的执行口径。用户 2026-10-07 采纳新口径；`~/.claude/CLAUDE.md` 的「改代码必须同步更新目录 CLAUDE.md（没有就建）」由用户自行改写为「只记代码里看不出来的约束、坑和刻意决定；出现新约束、新坑或旧条目失效时才更新；没有这类内容的目录不建文件」（该文件不在仓库里，本次会话无权改它）。
+3. **嵌套文件留到哪一级**：没有删除或合并任何文件，全部原位精简。可并入上一级的候选：`entrypoints/app/pages`、`entrypoints/app/utils`、`lib/subtitle`、`lib/runtime-message`、`entrypoints/bilibili-video.content/components`。
+4. **横切约定**：没建 `.claude/rules/`。`.claude/` 整个被 gitignore，要用得先加 `!.claude/rules/`。i18n 的机制细节下沉到 `lib/i18n/CLAUDE.md`，根文件留六条规则。
+5. **`omitClaudeMd`**：未动。
+6. **基线**：`/context`、`/status`、`/doctor` 是交互命令，没有跑；整改前后的 token 数都没有实测值。
+
+### 12.3 做法
+
+- 根文件由主会话重写。
+- 79 个嵌套文件分给 10 个并行的子 agent，按同一份取舍标准重写。每个文件先查入站指针（代码注释、测试注释、spec 里「见 X/CLAUDE.md」的地方），保留条目里点名的文件、符号、测试都用 grep 核对过。
+- 再由 3 个独立的 check agent 对照 HEAD 原文审计遗漏：恢复了 7 条被误删的约束，纠正了 9 处写错或写过头的陈述。
+- 因精简而失效的指针已改指：`platform-onboarding.md` 三处、`.trellis/spec/frontend/index.md` 一处、docs/32、docs/33、docs/35 各一处。历史落地记录里带行号的引用（如 docs/20、docs/25）记的是当时的状态，没有改。
+
+### 12.4 核对代码时的发现（都没有改代码）
+
+重写时逐条对代码核对，旧文件里与代码不符的说法约 60 处，已在各文件里改正。下面几项落在代码侧，留给后续任务：
+
+- **缺陷**：WebDAV 开关关闭时点「立即同步」，`doSync`（`lib/sync/sync-engine.ts:145`）用 `isConfigSyncable` 判定后直接返回 `{ ok: true }`，设置卡照样提示已同步。`sync-config-storage.ts:56` 的 JSDoc 写的是「立即同步只需凭据」，`hasWebdavCredentials` 在自己文件之外没有调用方。
+- **过时的代码注释**：`sections/x/x-view.tsx:31`（写 outlined，实际是 soft）、`sections/youtube/youtube-view.tsx:44`（写 channel chips，实际是播放列表）、`welcome/sections/orbit-core.tsx:35`（写 six platform chips）、`components/tags/tag-row.tsx:18`、`packages/favbase/exit-codes.ts` 文件头（仍提 INSTALL.md 的表）、`tests/lib-import-smoke.test.ts` 文件头、`tests/platform-completeness-contract.test.ts` 里的 `'agent-bridge'`（section id 实际是 `agent-skills`）。
+- **疑似死代码**（只有 barrel 导出或测试在用，没有逐一验证）：`lib/embedding` 的 `indexItemChunks` / `persistItemChunks`，`components/collection` 的 `SyncProgressBar` / `BackgroundJobsBar`，`hooks` 的 `trackJobRun`。
+- **`spikes/agent-bridge` 的 runner 可能已跑不通**：`background.ts` 的 spike 分支用动态 `import()`，而 `scripts/check-background-bundle.mjs` 现在拒绝 SW 图里的任何动态 import。没有跑 build 验证。

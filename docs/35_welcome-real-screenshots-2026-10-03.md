@@ -116,7 +116,7 @@ worktree 的构建装不进浏览器（已加载的是主仓库的 `.output`）�
 | 条目图标中心相对标题中心 | 全部 | 低 11px | 0 |
 | 条目文字块宽度（截图宽 480） | 390×800 | 602 | 436，说明折两行 |
 
-对应的三处偏离（算术在 `entrypoints/welcome/CLAUDE.md` 的 `product-tour.tsx` 条目）：
+对应的三处偏离（算术在 `entrypoints/welcome/sections/product-tour.tsx` 里 `stuckItemMaxWidth` 的注释）：
 
 1. 粘住区从顶栏下方开始，截图宽度按剩余高度封顶，上下各留 24px。1440×900 下截图是
    1066×666；视口高度到 947px 才是源文件的 1140×713。Minimal 自己的截图也是 16:10，矮视口下

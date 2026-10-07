@@ -534,3 +534,12 @@ zhihu/youtube 改 leaf，删三处过期 offscreen 注释，删 x 冗余 mock，
 本项目的共享骨架已经足够好，且比初版认定的更好：post-processing 语义、pipeline builder、完整性契约都已经是单一 owner。初版高估了三项（高-1 的 offscreen 前提被证伪、高-2 的方案已是现状、高-3 的语义复制不成立），低估了一项（高-4 的 owner 倒置），并把一项已解决的事当待办（中-7）。
 
 修正后的主线只有两条：**把 Bilibili 的平台事实收回 `lib/bilibili`**（中-5 → 高-4/中-8），**用可执行 contract 取代注释维持的 import 规则**（高-1）。其余是小修。先做巨型 registry 或万能 hook 的方向错误判断不变。
+
+---
+
+## 附：迁自根 CLAUDE.md 的落地摘要（2026-10-06 快照）
+
+> 这一段原先写在根 `CLAUDE.md` 的「关键文档」一节，每个会话都全量加载。2026-10-06 按 docs/36 精简根文件时
+> 逐字迁到这里，之后不再同步维护；与正文冲突时以正文为准。
+
+多平台架构深化审计（2026-08-22 修正版：9 条发现逐条源码复核 + 无 mock import 冒烟实证；修订后主线是中-5→高-4/中-8 收回 Bilibili 平台事实、高-1 用 import-smoke contract 取代注释规则；offscreen 不加载任何平台 sync。**高-1 已落地 2026-08-22**（`tests/lib-import-smoke.test.ts` + zhihu/youtube/bilibili 改 leaf + 六处防御性 storage mock 删除）；**中-5 已全部落地 2026-08-22**：`persistContent`/`startProcessingDirectly` 删除，`startProcessing` seam 改必填（coordinator 构造器 `(startProcessing, trackRun?)`），`lib/bilibili` 零 `@/lib/embedding`/`@/lib/tagging` value import，`transcribe-utils` 进 import-smoke 清单；`auto-transcribe-adapter.test.ts` 的 storage mock 是功能性的，保留。**中-6 已落地 2026-08-22**：`useCollectionLibrary` 加唯一受控 seam `controlledFilter?: string | null`（render 期回页 1，`setFilter` no-op），`use-bookmarks.ts` 改薄 adapter（路由 folderId 受控注入 + 挂载 `sync()` 留 adapter）；`autoSyncOnMount`/metaLoading 延后经复核不需要（phase 阶梯 `syncingEmpty` 已锁 skeleton）。**高-2（嵌套路由登记）已落地 2026-08-22**：`COLLECTION_PAGE_CHILD_ROUTES` 穷举表 + `main.tsx` 零平台路由行；**高-3（修订为中）已落地 2026-08-22**：daily auto-sync registry 搬至 app 根 `entrypoints/app/collection-platform-auto-sync.ts`，`jobPlatform` 派生，六 adapter 导出 `<p>AutoSyncPolicy`，`hooks/` 零 `sections/` import；**高-4 已落地 2026-08-22**：失效视频规则收回 `lib/bilibili/video-eligibility.ts`（常量 + 内存判定 + SQL predicate + parity test），共享 policy 按穷举 registry `lib/collections/platform-eligibility.ts` 注入、零平台字面量；**中-7（修订为低）已落地 2026-08-22**：实际重复点是 6 处（github/x/zhihu/youtube/bookmarks + bilibili 两页）而非 4 处，`useCollectionPipeline`（`entrypoints/app/hooks/use-collection-pipeline.ts`）+ `collectionPipelineStages`/`fetchedCountProgress` 收编 stages 数组、`pipeline.*` 标签翻译与 coverage refresh key，view 只注入 Fetch runtime 与 content 段；中-8 的 `narrow*Meta` 已由 docs/32 Step 2 落地 2026-09-30：`narrowBookmarkMeta` 在 `lib/bookmarks/bookmarks-sync-service.ts`、`narrowBiliVideoMeta` + `BiliItemMeta` 在 `lib/bilibili/video-eligibility.ts`）

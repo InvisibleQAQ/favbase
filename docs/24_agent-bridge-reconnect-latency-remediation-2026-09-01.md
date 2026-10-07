@@ -451,3 +451,12 @@ Step 2 做完之后，「有扩展连着的 daemon 不自灭」已经成立，`F
 - `docs/adr/0002-agent-bridge-extension-outbound-websocket.md`
 - `docs/adr/0003-agent-bridge-skill-first-cli-daemon.md`
 - `docs/21_agent-bridge-analysis-2026-08-22.md`
+
+---
+
+## 附：迁自根 CLAUDE.md 的落地摘要（2026-10-06 快照）
+
+> 这一段原先写在根 `CLAUDE.md` 的「关键文档」一节，每个会话都全量加载。2026-10-06 按 docs/36 精简根文件时
+> 逐字迁到这里，之后不再同步维护；与正文冲突时以正文为准。
+
+Agent Bridge 重连延迟整改方案。Step 0 已用 bad-token 黑盒实验定因；Step 1-4 已于 2026-09-01 落地：显式 connect-now 穿透自动退避、已认证 peer 阻止 daemon idle 自灭、75 秒 hello wait 覆盖旧 Chrome 的 60 秒 alarm、daemon/扩展双视角保留认证失败痕迹并由 doctor/设置页诚实呈现。**Step 1 的 bad-token 指数退避（连同 `'user'` 穿透、`authFailureCount`/`nextRetryAt` 与设置卡倒计时）已于 2026-09-27 被 docs/30 #1 整体删除**（D2-b），`lastAuthFailureAt` 保留。v1 wire protocol 未改，Step 5 默认常连策略与 Step 6 Offscreen 迁移仍待评估。

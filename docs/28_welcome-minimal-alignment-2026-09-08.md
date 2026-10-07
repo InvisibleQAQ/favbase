@@ -233,3 +233,12 @@ Minimal 无感是因为它的 `HeroBackground` 是静态 SVG + 图片（`initial
 - **截图基线未挂**：Chrome 未带 `--remote-debugging-port`，与 docs/25 Step 10 同一处境。Hero 钉住层 + 淡出 + 四层视差的实机观感、`visibility` gate 的实际生效点，都需人工复核。
 - `Texts` 描边字在 CJK 下的表现仍是 `[UNKNOWN]`（§3.1），因为整条被拒绝，没有实测的必要。
 - `capability-marquee` / `platform-picker` / `feature-list` 这三处同质列表**尚未**换成 `MotionContainer` + `varContainer`（D6 的后半）。原语已就位、`FadeIn` 手排 delay 仍工作，是纯增量优化而非未完成的接线。留待下轮，或在有人真的往这三处加删元素时顺手做。
+
+---
+
+## 附：迁自根 CLAUDE.md 的落地摘要（2026-10-06 快照）
+
+> 这一段原先写在根 `CLAUDE.md` 的「关键文档」一节，每个会话都全量加载。2026-10-06 按 docs/36 精简根文件时
+> 逐字迁到这里，之后不再同步维护；与正文冲突时以正文为准。
+
+**welcome.html 向 Minimal v7.7.0 默认路由（`MainLayout` + `HomeView`）看齐的决策记录**（2026-09-08，一次做完一个 commit）。不是分步手册，只记从代码里看不出来的部分：§1 十条决策（档位 = 骨架 + 语言，段落清单不变）·§2 适配矩阵（layout / Hero 六特征 / animate 原语 / section 语言）·**§3 拒绝清单（本文存在的主要理由）**·§4 三处执行时勘误·§5 hero 钉住层的合成开销·§6 守卫·§7 验证·§8 未做。拒绝清单要点：`HeroBackground`（619 行 + 360 KB webp）因同心圆虚线语汇与 `OrbitCore` 轨道圆打架而不移植（**体积不是理由**，360 KB 对 17.5 MB 的 zip 是 +2%）；`LazyMotion` 不上——`bilibili-showcase` 的 `layoutId` 是 layout animation 只在 `domMax` 里，4.6+28=32.6 KB vs 全量 34 KB，**总收益 1.4 KB**，代价是 5 个文件 `motion`→`m` 且 `strict` 下漏一处就运行时炸；`animate-text.tsx` 不移植——它 `line.split(' ')` 再 `word.split('')` 每层都 `inline-block`，中文整句无空格会成为一个不可折行的 word；`renderIcons` 不抄——favbase 已有三处在列六平台清单（`OrbitCore`/`CapabilityMarquee`/`PlatformPicker`）。三处勘误已回写：`varFade` 装不进 `FadeIn`（方向枚举 vs 自由 x/y，改为只收 easing 曲线这一处重复）·**「改吃 `variant h1/h2`」不成立**（本仓库 typography 在 docs/25 Step 1 刻意压小并去掉 `responsiveFontSizes`，h1 平 28px / h2 平 24px，换过去会把 section 标题压掉 25–57%，`clamp` 保留）·漏掉 `how-it-works.tsx:224` 直接挂 `className="fb-headline"` 的步骤大号数字，顺手把渐变收成 `section-shell.tsx` 的 `headlineGradient(theme)` 共享 helper（D8 的「保 coral / 药丸」两半 2026-09-27 被 docs/31 Step 3 推翻，该 helper 从此只给 hero）
