@@ -223,7 +223,7 @@ Envelope：`{ channel: 'favbase-agent-bridge', protocolVersion: 1, id: string, t
 `--enable-unsafe-extension-debugging` + CDP `Extensions.loadUnpacked` 加载。
 `run-phase-0.ps1` 只修改临时复制的 manifest，删除 `<all_urls>`、
 `localhost`、`127.0.0.1` host pattern；正式 `wxt.config.ts` 未改。
-原始证据为 `spikes/agent-bridge/phase-0-result.json`，共 19 个事件、0 个错误。
+原始证据为 `spikes/agent-bridge/phase-0-result.json`，共 19 个事件、0 个错误（目录已于 2026-10-07 删除，见 `git show da2347a:spikes/agent-bridge/phase-0-result.json`）。
 
 | 验证项 | 实测结果 | 判定 |
 |---|---|---|

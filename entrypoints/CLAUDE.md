@@ -39,6 +39,4 @@ This file owns the Service Worker wiring rules; the message layer is in
   (run by `pnpm build`; `pnpm test` alone can stay green) and the source-level
   `tests/agent-bridge-background-bundle-contract.test.ts`, which only covers
   the import links it lists.
-- The dynamic import in the `VITE_AGENT_BRIDGE_SPIKE` branch exists only in
-  probe builds; Vite removes it from production builds. Do not copy it.
 - Only the Agent Bridge scheduler's `connectNow` crosses `BackgroundContext`.
