@@ -36,14 +36,25 @@ vi.mock('./webdav-client', () => ({
   }),
 }));
 
+const CONFIG = {
+  enabled: true,
+  url: 'https://dav.example.test',
+  username: 'user',
+  password: 'password',
+};
+
+const configMocks = vi.hoisted(() => ({
+  getWebdavConfig: vi.fn(),
+}));
+
+// Module-level `storage.defineItem` in the real module needs chrome.runtime,
+// so the predicate is restated here (one line) instead of importing the
+// original. `isConfigSyncable` is deliberately absent: the engine must not
+// reach for it — `enabled` is the scheduler's business.
 vi.mock('./sync-config-storage', () => ({
-  getWebdavConfig: vi.fn(async () => ({
-    enabled: true,
-    url: 'https://dav.example.test',
-    username: 'user',
-    password: 'password',
-  })),
-  isConfigSyncable: vi.fn(() => true),
+  getWebdavConfig: configMocks.getWebdavConfig,
+  hasWebdavCredentials: (config: { url: string; username: string; password: string }) =>
+    !!config.url && !!config.username && !!config.password,
 }));
 
 vi.mock('./sync-meta-storage', () => ({
@@ -68,6 +79,8 @@ describe('doSync settings pull', () => {
     mocks.seedConfigClockIfUnset.mockReset();
     mocks.setSyncStatus.mockReset();
     mocks.expectPulledHashes.mockReset();
+    configMocks.getWebdavConfig.mockReset();
+    configMocks.getWebdavConfig.mockResolvedValue(CONFIG);
 
     mocks.client.ensureDirectory.mockResolvedValue(undefined);
     mocks.client.putJSON.mockResolvedValue(undefined);
@@ -152,5 +165,43 @@ describe('doSync settings pull', () => {
     expect(mocks.adoptPulledConfig).not.toHaveBeenCalled();
     expect(mocks.expectPulledHashes).not.toHaveBeenCalled();
     consoleError.mockRestore();
+  });
+});
+
+describe('doSync gating', () => {
+  beforeEach(() => {
+    for (const mock of Object.values(mocks.client)) mock.mockReset();
+    mocks.setSyncStatus.mockReset();
+    mocks.setSyncStatus.mockResolvedValue(undefined);
+    mocks.getSyncMeta.mockResolvedValue({
+      localConfigUpdatedAt: 1,
+      lastKnownConfigHash: 'local-hash',
+      syncVersion: 'local-version',
+      lastSyncTime: 0,
+    });
+    mocks.seedConfigClockIfUnset.mockResolvedValue(undefined);
+    mocks.patchSyncMeta.mockResolvedValue(undefined);
+    mocks.client.ensureDirectory.mockResolvedValue(undefined);
+    mocks.client.putJSON.mockResolvedValue(undefined);
+    // Empty remote: no sys lock, no config → the run is a plain push.
+    mocks.client.getJSON.mockResolvedValue(null);
+    mocks.settingsStorage.getValue.mockResolvedValue(DEFAULT_SETTINGS);
+    mocks.localeStorage.getValue.mockResolvedValue('en');
+  });
+
+  it('runs a manual sync while automatic sync is switched off', async () => {
+    configMocks.getWebdavConfig.mockResolvedValue({ ...CONFIG, enabled: false });
+
+    await expect(doSync()).resolves.toEqual({ ok: true });
+    expect(mocks.client.ensureDirectory).toHaveBeenCalledTimes(1);
+    expect(mocks.client.putJSON).toHaveBeenCalledWith(CONFIG_PATH, expect.anything());
+  });
+
+  it('refuses without credentials instead of reporting a sync that never ran', async () => {
+    configMocks.getWebdavConfig.mockResolvedValue({ ...CONFIG, password: '' });
+
+    await expect(doSync()).resolves.toMatchObject({ ok: false, errorCode: 'unknown' });
+    expect(mocks.client.ensureDirectory).not.toHaveBeenCalled();
+    expect(mocks.setSyncStatus).not.toHaveBeenCalled();
   });
 });

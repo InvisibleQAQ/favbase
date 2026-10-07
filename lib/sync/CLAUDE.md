@@ -29,6 +29,7 @@ WebDAV 双向同步领域。第一期只同步配置（`UserSettings` + locale�
 - 远端 envelope 无效 → 视为无远端；envelope 有效但 version 不兼容或 Settings 非法 → 抛 typed error（`incompatible-version` / `invalid-settings`）并保留本地配置。绝不能把后者降级成「无远端」，那会 push 覆盖云端。
 - 首配时钟从 `settings.configSavedAt` 的最大值 seed，不用 `now`：第二台设备首配时应 pull 第一台的配置，而不是覆盖它。
 - `doSync` 永不抛：失败落状态并返回 `SyncResult`；拿到锁之后失败要 best-effort 释放，否则锁要等超时才能被夺。
+- 两级闸门：`doSync` 只看凭据（`hasWebdavCredentials`），所以开关关闭时「立即同步」照常跑；`enabled` 由 scheduler 的每个自动触发点各自用 `isConfigSyncable` 把关，alarm 回调也要在触发时重查（关开关前已 arm 的 debounce alarm 仍会响）。别把 `enabled` 塞回 `doSync`。
 - 只支持 https：http 在设置卡预检拦下；host access 的检查与恢复归 `lib/permissions/CLAUDE.md`。
 - 错误出本目录只带 `WebdavErrorCode`，文案由 UI 翻译（`settings.sync.err.*`）。
 
@@ -36,7 +37,7 @@ WebDAV 双向同步领域。第一期只同步配置（`UserSettings` + locale�
 
 - `crypto.ts` 是混淆不是加密（固定 key + 随机 IV，只为不让 password 明文躺在 storage 里）；解密失败回退当明文，兼容混淆之前写入的值。传上 WebDAV 的 `config.json` 仍含明文 API Key。
 - `ensureDirectory` 对「已存在」和拒绝重复 MKCOL 的服务器（坚果云等）只 warn 不抛，别改成严格。
-- 已知缺口：设计是两级闸门——`isConfigSyncable`（enabled + 凭据）只管自动触发，手动同步只需 `hasWebdavCredentials`。但 `doSync` 实际用的是 `isConfigSyncable`：开关关闭时「立即同步」什么都不做却返回 `ok: true`，`hasWebdavCredentials` 没有别的调用方。
+- 已知缺口：同步进行中再收到 `WEBDAV_SYNC_NOW`，`doSync` 的 `isSyncing` 早退返回 `ok: true`，设置卡会弹「已同步」。
 
 ## 指针
 

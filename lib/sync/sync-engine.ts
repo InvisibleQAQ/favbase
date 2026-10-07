@@ -7,7 +7,7 @@ import {
   RemoteConfigVersionError,
 } from './sync-schema';
 import { decideConfigSync, canAcquireLock, hashConfig } from './sync-logic';
-import { getWebdavConfig, isConfigSyncable } from './sync-config-storage';
+import { getWebdavConfig, hasWebdavCredentials } from './sync-config-storage';
 import {
   getSyncMeta,
   patchSyncMeta,
@@ -137,12 +137,17 @@ async function syncConfig(client: WebdavClient, now: number): Promise<void> {
  * Run one full sync. Safe to call from alarms, startup catch-up, or the UI
  * "Sync now" button. Never throws — always resolves to a SyncResult and writes
  * the UI-facing status.
+ *
+ * Gates on credentials only. `enabled` belongs to the scheduler's automatic
+ * triggers (see scheduler.ts); a manual "Sync now" runs with the switch off.
  */
 export async function doSync(): Promise<SyncResult> {
   if (isSyncing) return { ok: true };
 
   const config = await getWebdavConfig();
-  if (!isConfigSyncable(config)) return { ok: true };
+  if (!hasWebdavCredentials(config)) {
+    return { ok: false, errorCode: 'unknown', errorDetail: 'incomplete config' };
+  }
 
   isSyncing = true;
   const now = Date.now();
@@ -204,7 +209,7 @@ export async function doSync(): Promise<SyncResult> {
 export async function clearRemote(): Promise<SyncResult> {
   if (isSyncing) return { ok: false, errorCode: 'locked' };
   const config = await getWebdavConfig();
-  if (!config.url || !config.username || !config.password) {
+  if (!hasWebdavCredentials(config)) {
     return { ok: false, errorCode: 'unknown', errorDetail: 'incomplete config' };
   }
   try {

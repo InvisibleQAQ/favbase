@@ -11,7 +11,8 @@ import {
 
 /**
  * Background auto-sync triggers (Background SW only). Three sources, all gated
- * on `enabled` (doSync itself no-ops when disabled):
+ * on `enabled` here — doSync only checks credentials, so the manual "Sync now"
+ * works with the switch off:
  *   1. periodic  — chrome.alarms every 30 min (MV3 SWs sleep; setTimeout can't).
  *   2. on-change — local settings/locale edit → debounced 5-min alarm.
  *   3. startup   — if ≥30 min since last sync, catch up on SW wake.
@@ -21,7 +22,7 @@ import {
 export function initWebdavSyncScheduler(): void {
   browser.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === ALARM_PERIODIC || alarm.name === ALARM_DEBOUNCE) {
-      void doSync();
+      void autoSync();
     }
   });
 
@@ -54,6 +55,16 @@ async function onLocalConfigChanged(): Promise<void> {
     // Re-creating the same-named alarm resets its delay → debounce.
     await browser.alarms.create(ALARM_DEBOUNCE, { delayInMinutes: DEBOUNCE_MINUTES });
   }
+}
+
+/**
+ * An automatic trigger firing: re-check `enabled` at fire time, because a
+ * debounce alarm armed before the user flipped the switch off still fires.
+ */
+async function autoSync(): Promise<void> {
+  const config = await getWebdavConfig();
+  if (!isConfigSyncable(config)) return;
+  await doSync();
 }
 
 async function startupCatchUp(): Promise<void> {
