@@ -320,8 +320,9 @@ run before the platform exists anywhere else.
 ### 4.6 Per-page persistence with a resumable backfill (douyin)
 
 Only when one full sync is long enough that losing it to a failure is not
-acceptable (Douyin: ~115 paced pages, ~20 minutes). Every other platform
-fetches everything and calls `ingestCollection` once at the end.
+acceptable (Douyin: a paced walk of the whole favorites list, roughly
+2 minutes per 100 favorites — docs/33 Step 3). Every other platform fetches
+everything and calls `ingestCollection` once at the end.
 
 - **Persist each page as it arrives** — one `ingestCollection` call per page.
 - **Dispatch per page, not through the funnel.** The funnel only dispatches

@@ -14,9 +14,10 @@
  *
  * Unlike x / zhihu, every page is persisted as it arrives (`ingestCollection`
  * per page) and the caller hears each page's content-persisted ids
- * (`onPagePersisted`, D-b): a first full sync takes ~20 minutes, and a run
- * that fails half way must neither lose what it fetched nor leave items that
- * are chunked but never dispatched to the embed / tag lanes. Where the first
+ * (`onPagePersisted`, D-b): a first full sync is paced at roughly 2 minutes
+ * per 100 favorites (docs/33 Step 3), and a run that fails half way must
+ * neither lose what it fetched nor leave items that are chunked but never
+ * dispatched to the embed / tag lanes. Where the first
  * full walk stopped is a two-field breakpoint the caller stores (design B,
  * `lib/douyin/CLAUDE.md`).
  *

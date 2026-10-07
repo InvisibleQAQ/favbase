@@ -7,7 +7,7 @@
 - 每个请求都注入到用户自己已打开、已登录的 www.douyin.com 标签页里发，由页面 SDK 签名（docs/33 D3 / D4）。favbase 从不自己开、刷新、导航或激活抖音标签页；页面上的「打开抖音」只是用户自己点的普通链接。凭据没有 UI，无 Connections 卡。
 - 标签页门在 Platform Sync funnel **之前**：`findDouyinTab()` 为 null 就抛 `DouyinAuthError('missing')`——不联网就能判定，不算尝试、不写 Platform Sync Record（docs/32 §5.2）。标签页开着但没登录只有发了请求才知道，那在 funnel 里，算一次尝试。
 - `douyinAutoSyncPolicy.probeReady` 必须和前门、transport 用同一个解析器 `findDouyinTab`（docs/33 D-c）：被丢弃或加载中的标签页不能烧掉当天的自动同步名额。未登录对自动同步是静默完成（`isSilentError`）。
-- 处理 lane 在 adapter 里逐页派发，交给 funnel 的 `newItemIds` 恒为 `[]`（docs/33 D-b）：首次全量约 20 分钟，而 funnel 只在成功时派发，第 80 页失败不能留下 79 页已入库却永不处理的条目。
+- 处理 lane 在 adapter 里逐页派发，交给 funnel 的 `newItemIds` 恒为 `[]`（docs/33 D-b）：首次全量每百条约 2 分钟（docs/33 Step 3 实测），而 funnel 只在成功时派发，第 80 页失败不能留下 79 页已入库却永不处理的条目。
 - `onPagePersisted` 派发的 `itemId` 是 platformItemId（`aweme_id`），不是 `items.id`。
 - 断点 `douyinBackfillStorage` 在 funnel 内读取，每次变化都写回；断点语义见 `lib/douyin/CLAUDE.md`。
 - 同步只由按钮触发，不在挂载时跑：需要用户的抖音标签页，首次全量很慢。

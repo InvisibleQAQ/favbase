@@ -1,6 +1,6 @@
 # 33 抖音收藏接入手册（2026-10-03）
 
-> 状态：**Step 0 已完成 2026-10-03**（调研 + 用户账号实测 + 决策 D1–D4 + 默认项）；**Step 1 已落地 2026-10-03（代码 + 单测，已复核）**，见 Step 1 节末「Step 1 落地记录」（断点状态收成两个字段，`restartBackfill` 删除；复核把 D-e 收窄为仅续传段第一次请求、并纳入该请求的 F10）；**Step 2 已落地 2026-10-03（代码 + 单测；已提交 `b6c6a54`，CLI 0.2.2 已发布）**，判别符已翻，见 Step 2 节末「Step 2 落地记录」（用户 2026-10-03 决定的三处偏离：job namespace 用平台 id、transport 进 `lib/douyin/` 独立 leaf、验证页与限流冷却两条文案）；**Step 2.5 已落地 2026-10-04（代码 + 单测，已复核，未提交）**，§6 末的两项阻塞关闭，见 Step 2.5 节末「Step 2.5 落地记录」（新条目的正文与 item 行同事务落盘、抖音每次运行至少清扫一次幽灵、接口序位 `listCursor` / `listIndex` 入库；复核发现含 NUL 字节的正文会让整次入库回滚，已在入库的文本边界剔除，D-h）；**Step 3 待实施**。一次对话只做一个 Step；执行任一 Step 前先读 §1 决策、§2 否决清单、§3 铁律，再读该 Step 的八段。
+> 状态：**Step 0 已完成 2026-10-03**（调研 + 用户账号实测 + 决策 D1–D4 + 默认项）；**Step 1 已落地 2026-10-03（代码 + 单测，已复核）**，见 Step 1 节末「Step 1 落地记录」（断点状态收成两个字段，`restartBackfill` 删除；复核把 D-e 收窄为仅续传段第一次请求、并纳入该请求的 F10）；**Step 2 已落地 2026-10-03（代码 + 单测；已提交 `b6c6a54`，CLI 0.2.2 已发布）**，判别符已翻，见 Step 2 节末「Step 2 落地记录」（用户 2026-10-03 决定的三处偏离：job namespace 用平台 id、transport 进 `lib/douyin/` 独立 leaf、验证页与限流冷却两条文案）；**Step 2.5 已落地 2026-10-04（代码 + 单测，已复核；已提交 `2aa77c5`，2026-10-06）**，§6 末的两项阻塞关闭，见 Step 2.5 节末「Step 2.5 落地记录」（新条目的正文与 item 行同事务落盘、抖音每次运行至少清扫一次幽灵、接口序位 `listCursor` / `listIndex` 入库；复核发现含 NUL 字节的正文会让整次入库回滚，已在入库的文本边界剔除，D-h）；**Step 3 已实施 2026-10-07（真实账号实机验证；代码只改了文案与注释里误读的「20 分钟 / 2299」，节奏常量未动；清单 6 的隔天半边待 2026-10-08）**，见 Step 3 节末「Step 3 落地记录」——账号实际 466 条收藏，Step 0 的「2299」是误读；两轮全量 + 中断续传全部通过，app.html 全程后台也未被强节流。一次对话只做一个 Step；执行任一 Step 前先读 §1 决策、§2 否决清单、§3 铁律，再读该 Step 的八段。
 >
 > 任务目录：`.trellis/tasks/10-03-douyin-public-favorites-platform/`（`prd.md` 记需求与决策，`research/` 五份调研是本文所有外部事实的出处）。接入契约：`.trellis/spec/frontend/platform-onboarding.md`。
 >
@@ -177,7 +177,7 @@ transport 自己**不抛**，把一切失败折成 `kind`；分类全部在 lib�
 | `VITE_DOUYIN_COOLDOWN_MS` | 1800000 | F4 / F5 / F8 的 `resetAt` |
 | `VITE_DOUYIN_TITLE_MAX_CHARS` | 140 | 标题截断（同 X 的 140） |
 
-**一次运行的所有请求共用一个节奏器**（三个接口一条串行链）：第一个请求前不等，之后每个请求前等页间隔，每满 `REST_EVERY_PAGES` 次再加一次休息。节奏器的 `sleep` / `random` 可注入，测试不真等。预计：首次全量 115 页 × 6.5 s + 4 次休息 ≈ 20 min；每日增量通常 1–2 页。
+**一次运行的所有请求共用一个节奏器**（三个接口一条串行链）：第一个请求前不等，之后每个请求前等页间隔，每满 `REST_EVERY_PAGES` 次再加一次休息。节奏器的 `sleep` / `random` 可注入，测试不真等。预计：首次全量 115 页 × 6.5 s + 4 次休息 ≈ 20 min；每日增量通常 1–2 页。（Step 3 实测勘误：「115 页」来自误读的 2299；真实账号 466 条 = 27 页 + 1 次夹列表，28 次请求、1 次休息，8 min 31 s，页间隔 10.9–13.7 s——见 Step 3 落地记录。）
 
 ---
 
@@ -498,7 +498,7 @@ C. 接口序位（D5，同文件）
 
 **不做**：不改排序；不给 YouTube 加幽灵重拉（正文同事务落盘之后不需要）；不回填已有数据（扩展未上线，库里是测试数据）。
 
-#### Step 2.5 落地记录（2026-10-04，代码 + 单测；已复核，未提交）
+#### Step 2.5 落地记录（2026-10-04，代码 + 单测；已复核，已提交 `2aa77c5`，2026-10-06）
 
 **做了什么**
 
@@ -568,7 +568,7 @@ C. 接口序位（D5，同文件）
 - **调用不带 `content` 而声明 `'chunked'`** 仍以 `'has_content'` 入库且没有正文（正文明写「行为不变」）。今天没有平台这样调；有的话，「`'has_content'` ⇒ 正文已落盘」对它不成立。
 - 根 `CLAUDE.md` 留给主会话：`lib/ingest` 索引行仍写「五平台 sync-service 共用」「`settleItemContent` 是不透明文本正文写入 + `content_state` 落定的唯一实现」（现在新条目的正文由入库事务写、状态由 `chunkAndSettle` 落定）；docs/33 条目仍写 Step 2「未发布」、Step 3 有两项阻塞。（复核时主会话已改这两行：索引行写「七个平台」「`settleItemContent` 是事务之外写正文并落定状态的唯一入口」，docs/33 条目写 Step 2 已提交已发布、Step 2.5 已落地。）
 
-**Step 2.5 复核（2026-10-04，trellis-check；仍未提交）**
+**Step 2.5 复核（2026-10-04，trellis-check；随 `2aa77c5` 提交）**
 
 分两轮。第一轮只改了一处类型、几处注释与文档，把第 1、4 条作为待决定的发现报给主会话；主会话当天给了两个**默认决定（不是用户决策）**——第 1 条在入库的文本边界剔除 NUL（§1 的 D-h），第 4 条把 helper 挪到 `tests/`——第二轮照此落地。下面各条写的是落地后的状态。
 
@@ -635,22 +635,77 @@ C. 接口序位（D5，同文件）
 
 **判据**：清单 1–9 全部有记录；§6 每条 `[UNKNOWN]` 标为「已证实 / 已证伪 / 仍未知 + 原因」；落地记录写进本文。
 
+#### Step 3 落地记录（2026-10-07，真实账号实机验证；代码只改文案与注释，未提交）
+
+**现场**
+
+- BrowserOS 0.50.5（Chromium 151）；`browseros-neo` MCP 连不上，全程走 CDP 9110。favbase 以 UNPACKED 从主 checkout 的 `.output/chrome-mv3` 加载（`chrome.developerPrivate.getExtensionsInfo().prettifiedPath`），served chunk `app-DBI-Eeul.js` 与构建一致，构建含 Step 2.5（chunk 内有 `listCursor`），manifest 含 `scripting` 与 `https://www.douyin.com/*`。没重装。
+- 同一个账号（Step 0 的「喜欢」217 → 今天 234），无收藏夹。`chrome.storage.local` 开工时没有任何 `douyin*` 键，这个 profile 从未同步过抖音。无 LLM / embedding key（`local:settings` 未写、`.env.local` 的 `VITE_EMBEDDING_*` 全空），Agent Bridge `disabled`。
+- 抖音标签页是我**以用户身份**经 CDP `PUT /json/new` 开的 `https://www.douyin.com/user/self?showTab=favorite_collection`（登录态：`sessionid` 有效至 2026-11-23），不是扩展开的（D3 不变）。
+- 时区注记：本机本地时间 = UTC−4（UI 的「6:49 AM」= 10:49Z）。下面全部用 Z。
+
+**观测方法与它的偏差**
+
+- 不给抖音标签页挂持久 CDP debugger：debugger 附着的标签页 Chrome 不冻结、不丢弃，会把清单 1–3 要测的「后台标签页」条件测没。改为对 app.html 每 5 s 一次**一次性** `Runtime.evaluate`（连上即断），读 `local:douyin-backfill`、`<main>` 文字（`Fetch N/--`、错误文案）、`chrome.tabs.query` 里抖音标签页的 `active / frozen / discarded / audible`、`document.visibilityState`。页间隔分辨率 ±5 s。库里的形状经 `chrome.runtime.connect({ name: 'favbase-db' })` 发只读 SQL。
+- **app.html 两轮全程 `hidden`**（BrowserOS 窗口先被遮挡、后被最小化；94 个采样 0 个 `visible`），所以清单 2 的「app.html 在前台」没测到，测到的是比它更苛刻的全后台条件；可见态页间隔没有对照数。
+- 没有抖音标签页的 `frozen` 为真的采样。
+
+**清单结果**
+
+| # | 结果 | 证据 |
+|---|---|---|
+| 1 注入 | **通过** | 两轮 + 增量共约 60 次请求全部从后台标签页（`hidden`、`audible: false`、`frozen: false`）发出，HTTP 200 / `status_code: 0`，F2–F10 一个都没出现。「另一个窗口」：增量那次先用 `chrome.windows.create({ tabId })` 把抖音标签页挪进第二个未聚焦窗口（`state: 'minimized'` 被 BrowserOS 忽略，落成 `normal`），2 次请求照常。挪窗口是我作为测试者用扩展 API 做的，不是 favbase 代码 |
+| 2 首次全量 | **通过**，但账号只有 **466 条** | run1：attempt 10:40:31Z → success 10:49:02Z，**8 min 31 s**；28 次请求 = 1 `collects/list` + 27 页；第 25 次请求后休息 141 s（配置 60–180 s）；去掉休息 **13.7 s / 请求**。fetched 466 = inserted 466；每页 14–20 条，26 页 520 个槽位出 464 条 ≈ 56 条失效作品被服务端剔除；末页 2 条 `has_more: 0`。进度 `Fetch N/--` 正常，终态 `Fetch 466/-- 100%`。**触发源不是按钮**：我用 `chrome.tabs.update({ active: true })` 激活 app.html 产生了一次 `visibilitychange`，`useDailyAutoSync` 重新评估，`probeReady` 看到刚开的抖音标签页为真，当天首次自动同步就跑了——这正是 D3 的生产路径 |
+| 3 app.html 后台 | **通过**（意外全程覆盖） | 两轮 app.html 从头到尾 `hidden`，隐藏满 5 分钟后（run1 10:45:31Z 起）页间隔 10–15 s 与之前相同，没出现每分钟一次的强节流。推断原因：每页的 `sleep` 由 `executeScript` / 数据库 RPC 的消息任务续上，定时器嵌套计数被重置，不满足 intensive throttling 的链式条件（推断，未在可见态对照）。实测 **10.9–13.7 s / 页** vs 节奏器 5–8 s：每页多出 4–7 s，来源 `[UNKNOWN]`（候选：隐藏页 1 Hz 定时器对齐 ≤ 1 s；每页 20 条入库事务 + 20 次 `chunkAndSettle` 的 RPC 往返，`relaxedDurability: false` 每次 fsync；1.6 MB 响应跨 `executeScript` 的结构化克隆）。按本次观测，不需要加「同步期间保持本页在前台」的提示（可见态没量到，结论限于「后台也跑得完、慢不到数量级」） |
+| 4 签名计数分桶 | **仍未知** | 单页面生命周期最多 28 次（run1），同一标签页累计 30 次；账号规模到不了 140 |
+| 5 增量 | **通过** | 10:53:08Z → 10:53:17Z，2 次请求（`collects/list` + 1 页），20 条整页已知即停，fetched 20 / inserted 0，断点不变 |
+| 6 断点续传 | **当天半边通过；隔天半边待 2026-10-08** | 用户 2026-10-07 批准清库：SQL 删 `items` 466（级联 chunks / contents / links）、`authors` 355、`platform_sync_records` 1、`local:douyin-backfill`。run2 11:41:16Z 启动（Fetch now）→ 11:43:17Z 在 fetched 210 时关闭抖音标签页 → 11:43:48Z 报错「Load failed: Douyin listcollection: request did not complete: no usable www.douyin.com tab (closed, discarded or still loading)」+ Retry（31 s = 3 次 attempt 各一次页间隔 + 2 次退避，`MAX_RETRIES = 2`）。库 210 条（209 `chunked` + 1 `no_content`，**0 `has_content`**），11 页，断点 = 最后一页入库的 cursor `1775096845565559`（「先入库、后写 cursor」成立），sync record `failure`。重开标签页点 Retry：头部 1 页 20 条整页已知即停 → 从**存储的** cursor 续传，服务端接受（D-e 未触发），16 页到 `has_more: 0` → `{ null, true }`；fetched 276 / inserted 256；库 466，形状与 run1 逐字段一致（26 个 cursor + 末页 `null`，最老 cursor `1745302482389181` 相同）→ **listcollection 的 cursor 序列是确定性的** |
+| 7 无标签页 | **通过**（自动同步的跳过只能间接） | 关掉标签页点 Fetch now → 「Sync failed: A logged-in Douyin tab is needed」+ 引导文案，Platform Sync Record 的 `last_attempt_at` 未变（不算尝试）；空库 + 无标签页 → 同一状态 + 「Open Douyin」按钮。每日自动同步的静默跳过没法再实测：当天名额已被 10:40Z 的尝试占掉；`probeReady` 与前门共用 `findDouyinTab`，由单测守 |
+| 8 下游 | **部分** | 处理 lane 显示「Configuration required：463 items are waiting for embeddings / AI tags」（无 key 时静默 0/0，符合 `lib/embedding/CLAUDE.md`）；Chat 检索与 `favbase search --platform douyin` **未验证**：无 LLM key、Agent Bridge disabled |
+| 9 manifest | **未观测** | unpacked 开发安装不弹权限提示。现 manifest 已有 `<all_urls>`，相对上一版新增的只有 `scripting`（Chrome 文档：无警告文案）→ 推断商店更新不会要求重新授权，`[UNKNOWN]` 直到走一次商店更新 |
+
+**基线勘误**：Step 0 记的「『搜索你收藏的作品』旁数字 2299」是**第一张作品卡片的点赞数**（DOM class `author-card-user-video-like`；今天同一位置是 9815，而库里是 466 条）。收藏页与四个接口都不给收藏总数，`listcollection` 没有 total。由此 §0 / §4.5 / 附录里的「2299 条」「115 页 ≈ 20 min」、`douyin-api.ts` 里 `MAX_PAGES` 的注释、UI 文案「首次全量获取约需 20 分钟」、spec §4.6 与 `sections/douyin/CLAUDE.md` 的「约 20 分钟」都是建立在误读上的估算。实测节奏：约每 100 条 1.8–2.5 分钟（含长休息摊销）。
+
+**§6 更新**：见下表（已就地改）。
+
+**改了什么**（用户 2026-10-07 决定：按量描述，不保留固定分钟数；节奏常量不动）
+
+- UI 文案「首次全量获取约需 20 分钟」/「The first full fetch takes about 20 minutes」（`douyin.notLoggedInDesc` / `douyin.emptyDesc`，zh + en）→「首次全量按抖音的节奏分页获取，每百条约 2 分钟」/「paced page by page, roughly 2 minutes per 100 favorites」。
+- 同一误读派生的注释与文档：`douyin-api.ts` 的 `MAX_PAGES` 注释（「2299 / 20 ≈ 115」）、`.env.example` 与 `.env.local` 里 `VITE_DOUYIN_MAX_PAGES` 的注释行、`douyin-sync-service.ts` 与 `use-douyin-favorites.ts` 的头注释、`sections/douyin/CLAUDE.md` 第 10 条、spec §4.6 的「~115 paced pages, ~20 minutes」。本文 §0 / §4.5 / 附录里的「2299」「≈ 20 min」是 Step 0 当时的记录，保留原文，以本记录的「基线勘误」为准。
+
+**发现、未改**（留给用户决定）
+
+- 自动同步在用户完全看不见 app.html 的情况下跑完了整轮：行为正确，但用户零感知（toast 规则不进持续状态）。是否需要在收藏页之外露出「正在首次全量」的信号，产品决定。
+- 每页多出的 4–7 s 开销没定位。要压缩首次全量时长，先量入库事务与 `chunkAndSettle` 的 RPC 耗时，不要动节奏器（D2）。
+- 两轮 cursor 逐页相同、单调递减、形如 16 位微秒时间戳 → 「cursor = 收藏时间」可信度上升，但没有独立的收藏时间来源，仍不算证实；D5 的字段名不改。
+- `MAX_PAGES = 200` 对 466 条绰绰有余；按设计它是失控保险丝而非容量上限，超过约 4000 条收藏的账号首次全量会分多次运行（撞保险丝静默返回，下次续）。这次没验证到那条路径。
+- Step 1 落地时在 `.env.local` 登记的 `VITE_DOUYIN_*` 块没动（本次没有任何默认值被实测推翻）。
+
+**隔天测试的前置（2026-10-07 收工时的状态，用户批准）**
+
+- 今天的续传把断点写成了 `{ null, true }`，照这个状态明天只跑头部段、永远不会发出存储的 cursor，跨天那条 `[UNKNOWN]` 测不到。所以收工前把断点**种回去**：`local:douyin-backfill = { resumeCursor: '1750715303706934', backfillDone: false }`（run1 第 25 页响应返回的 cursor；两轮序列确定性，所以它是真实中断留下的断点的忠实替身）。库里的 466 条没动。
+- 抖音标签页已关（我开的那个）。明天先开一个登录的 douyin.com 标签页，再去 app.html 点 Fetch now——注意 app.html 一旦从 hidden 变 visible 且当天名额空着，`useDailyAutoSync` 会先于按钮自动开跑，先把采样器挂上。
+- 预期 4 次请求：`collects/list` + 头部 1 页（整页已知即停）+ 从隔夜 cursor 续传 2 页到 `has_more: 0`。**被接受** → 断点 `{ null, true }`、sync record `success`、fetched ≈ 38、inserted 0；**被拒**（F8 无失效 id / F9 / F10）→ D-e：断点 `{ null, false }`、sync record `failure`、错误消息带 body 片段，下一次运行是全量重走（约 28 次请求）。两种结果事后都能从存储 + `platform_sync_records` 读出。
+- 测完把 §6 的「16 位 cursor 跨天」一行与清单 6 收口，任务才算完。
+
+**脚本**：`%TEMP%\fbcdp\dy\`（scratch，不入仓库）：`poll.mjs`（一次性采样器）、`sql-check.js` / `after-cut.js`（只读 SQL）、`clear-douyin.js`（清库，只在用户批准后用过一次）、`plant-breakpoint.js`（种断点）、`run1.log` / `run2.log`（采样原文）。
+
 ---
 
 ## 6. 未知与风险
 
-| `[UNKNOWN]` | 影响 | 在哪一步解决 |
+| `[UNKNOWN]` | 影响 | 状态（Step 3，2026-10-07） |
 |---|---|---|
-| 扩展 `executeScript` 注入的请求是否和 DevTools / CDP 一样被签名接受 | 路线成立与否 | Step 3 第 1 条 |
-| 后台标签页产出的签名是否被接受 | 同上 | Step 3 第 1 条 |
-| 页面内 fetch 的风控阈值、冷却时长 | 默认节奏是否够保守 | Step 3 第 2 条（只观察，不压测） |
-| 隐藏 app.html 的定时器节流幅度 | 首次全量耗时 | Step 3 第 3 条 |
-| a_bogus 签名计数分桶是否被打分 | 长时间运行的失败率 | Step 3 第 4 条 |
-| 16 位 cursor 跨天是否有效 | 断点续传；D-e 兜底 | Step 3 第 6 条 |
-| 收藏夹 `status` 0 / 1 映射（单源）、`states` / `is_normal_status` 语义 | 公开夹 chip | 用户建一公一私两个夹后实测（Step 3 可顺带） |
-| 收藏接口上验证码 / 412 / `filter_list` 的真实样本 | 分类器覆盖面 | 错误消息带原始片段，出现时补测试 |
-| 整页失效作品时是否 `aweme_list: []` + `has_more: 1` + 非空 `disabled_item_ids` | F8 的分支 | 出现时补测试（推断自实测 #6） |
-| 抖音签名门禁规则继续变化（2026-08 → 09 至少变过两次） | 整条路线 | 持续：F3 的错误消息是第一信号 |
+| 扩展 `executeScript` 注入的请求是否和 DevTools / CDP 一样被签名接受 | 路线成立与否 | **已证实**：约 60 次注入请求全部 `status_code: 0`，零 Argus / Sign Invalid |
+| 后台标签页产出的签名是否被接受 | 同上 | **已证实**：全部请求都从 `hidden` 标签页发出，含另一个未聚焦窗口里的 |
+| 页面内 fetch 的风控阈值、冷却时长 | 默认节奏是否够保守 | **仍未知（未触发）**：一天约 60 次请求、默认节奏下无任何风控形态；阈值没碰到，按设计不压测 |
+| 隐藏 app.html 的定时器节流幅度 | 首次全量耗时 | **已证实无强节流**：app.html 全程 hidden 仍 10.9–13.7 s / 页，隐藏超 5 分钟不变；每页比节奏器多出的 4–7 s 来源仍未知，可见态对照没量到 |
+| a_bogus 签名计数分桶是否被打分 | 长时间运行的失败率 | **仍未知**：单页面生命周期最多 28 次，远低于 140 |
+| 16 位 cursor 跨天是否有效 | 断点续传；D-e 兜底 | **存了约 2 分钟的 cursor 仍被接受**（续传段第一次请求用存储 cursor，且两轮序列确定性）；**跨天待 2026-10-08**——前提是今天收工前把断点种回去（见 Step 3 落地记录末「隔天测试的前置」），否则明天只跑头部段、什么也测不到 |
+| 收藏夹 `status` 0 / 1 映射（单源）、`states` / `is_normal_status` 语义 | 公开夹 chip | **仍未知**：账号无收藏夹，`collects/list` 仍是 `null` 形态 |
+| 收藏接口上验证码 / 412 / `filter_list` 的真实样本 | 分类器覆盖面 | **仍未知**：未出现 |
+| 整页失效作品时是否 `aweme_list: []` + `has_more: 1` + 非空 `disabled_item_ids` | F8 的分支 | **仍未知**：失效作品以 14–19 条 / 页的形式零散出现（26 页约 56 条），没有整页失效的样本 |
+| 抖音签名门禁规则继续变化（2026-08 → 09 至少变过两次） | 整条路线 | 持续：F3 的错误消息是第一信号；2026-10-07 仍成立 |
 
 **阻塞项（Step 3 首次真实账号全量入库之前；insert-only，入库之后补不回来）——两条都已由 Step 2.5 关闭（2026-10-04）**
 

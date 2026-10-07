@@ -16,7 +16,7 @@ const queryFn = facetQuery(getDouyinItems, 'folderId');
  * Thin adapter over the shared collection-library state machine. Rows come
  * from PGlite via douyin-sync-service — no API reads. The sync is a manual
  * button, never auto-on-mount: it needs the user's own douyin.com tab and a
- * first full run takes about 20 minutes.
+ * first full run is paced at roughly 2 minutes per 100 favorites.
  */
 export function useDouyinFavorites() {
   return useCollectionLibrary({

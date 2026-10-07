@@ -46,7 +46,7 @@ const PAGE_DELAY_JITTER_MS = envNumber('VITE_DOUYIN_PAGE_DELAY_JITTER_MS', 3_000
 const REST_EVERY_PAGES = envNumber('VITE_DOUYIN_REST_EVERY_PAGES', 25);
 const REST_MIN_MS = envNumber('VITE_DOUYIN_REST_MIN_MS', 60_000);
 const REST_JITTER_MS = envNumber('VITE_DOUYIN_REST_JITTER_MS', 120_000);
-/** Runaway fuse: pages per walk segment (2299 favorites / 20 ≈ 115). */
+/** Runaway fuse: pages per walk segment (≈ 4000 favorites at 20 per page; the 2026-10-03 "2299" baseline was a misread, see docs/33 Step 3). */
 const MAX_PAGES = envNumber('VITE_DOUYIN_MAX_PAGES', 200);
 /** One budget shared by 5xx, unreachable and empty-200 retries (docs/33 D-d). 403 / 429 never retry. */
 const MAX_RETRIES = envNumber('VITE_DOUYIN_MAX_RETRIES', 2);
