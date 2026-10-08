@@ -1,6 +1,6 @@
 # 37 抖音字幕与转录接入手册（2026-10-08）
 
-> 状态：**草案；Step 0 已完成 2026-10-08（用户账号、BrowserOS neo 实测，只读）**——网页 aweme 对象有 `cla_info` 字段但 136 个样本全空，v1 「优先 AI 字幕」半边改为**直接 ASR**（`fetchOfficialSubtitle: async () => null`，不写 `douyin-subtitle.ts`）；另发现纯音轨 `video.bit_rate_audio[]`，D-g 据此修订。证据在 Step 0 落地记录与任务目录 `research/douyin-step0-subtitle-media-probe-2026-10-08.md`；**Step 1 已完成 2026-10-08（内容模型翻转 + 领域层；代码 + 单测，已复核，未提交）**，按任务目录 `info.md` 执行，其 §0 四条裁决（D6 的 desc 也空 → `'no_content'`、`decodeDetail` 空 payload 抛冷却错误、`pickAudioSourceUrls` 三级全拼、入库门用 D-f 谓词）是对本文的有意偏离，见 Step 1 节末「Step 1 落地记录」。§1 的 D1–D7 是待用户确认的决策（每条带推荐项）；D-a 起是写手册时由代码核对推出的设计默认项。一次对话只做一个 Step；执行任一 Step 前先读 §1 决策、§2 否决清单、§3 铁律，再读该 Step 的八段。
+> 状态：**草案；Step 0 已完成 2026-10-08（用户账号、BrowserOS neo 实测，只读）**——网页 aweme 对象有 `cla_info` 字段但 136 个样本全空，v1 「优先 AI 字幕」半边改为**直接 ASR**（`fetchOfficialSubtitle: async () => null`，不写 `douyin-subtitle.ts`）；另发现纯音轨 `video.bit_rate_audio[]`，D-g 据此修订。证据在 Step 0 落地记录与任务目录 `research/douyin-step0-subtitle-media-probe-2026-10-08.md`；**Step 1 已完成 2026-10-08（内容模型翻转 + 领域层；代码 + 单测，已复核，commit 3f3babe）**，按任务目录 `info.md` 执行，其 §0 四条裁决（D6 的 desc 也空 → `'no_content'`、`decodeDetail` 空 payload 抛冷却错误、`pickAudioSourceUrls` 三级全拼、入库门用 D-f 谓词）是对本文的有意偏离，见 Step 1 节末「Step 1 落地记录」。§1 的 D1–D7 是待用户确认的决策（每条带推荐项）；D-a 起是写手册时由代码核对推出的设计默认项。一次对话只做一个 Step；执行任一 Step 前先读 §1 决策、§2 否决清单、§3 铁律，再读该 Step 的八段。
 >
 > 任务目录：`.trellis/tasks/10-08-douyin-transcription-subtitle-first-asr-fallback-tagging-reuse-bilibili-flow/`。前置手册：`docs/33`（抖音收藏接入，Step 0–3 已落地）、`docs/04`（B站转录管线）、`docs/29`（B站字幕串台事故与归属校验）。
 >
@@ -233,7 +233,7 @@ Coverage 的 content 段（`collection-processing-policy.ts:102-105`）：视频
 
 **判据**：上面全绿；`lib/douyin/CLAUDE.md` 写明「视频 `'pending'`、图文 `'chunked'`」与 D6 的退回规则；B站的落库行为由既有测试证明未变。
 
-#### Step 1 落地记录（2026-10-08，代码 + 单测；未提交）
+#### Step 1 落地记录（2026-10-08，代码 + 单测；commit 3f3babe）
 
 执行稿是任务目录 `info.md`（主会话读完代码后写的逐文件规格），与本文冲突处以它的 §0 为准。范围：只动 `lib/`、`tests/`、三份目录 `CLAUDE.md`、`CONTEXT.md`、本记录与 `prd.md`；`entrypoints/`、`.env.*`、库、`pnpm build` 都没碰。
 
@@ -296,7 +296,7 @@ Coverage 的 content 段（`collection-processing-policy.ts:102-105`）：视频
 - 根 `CLAUDE.md` 的目录索引里 `lib/transcription/` 一行原只写「管线」（复核时已补半句，见下）。`lib/ingest/CLAUDE.md` 未动：`persistExistingItemContent` 与 `settleItemContent` 的用法都在它许可的范围内。
 - `docs/37` §4.1 表的「落库 seam」与「字幕缓存」等行描述的是 Step 2 / 3 的接线，本 Step 不改。
 
-**Step 1 复核（2026-10-08，trellis-check；仍未提交）**
+**Step 1 复核（2026-10-08，trellis-check；随 3f3babe 提交）**
 
 逐条核对 `info.md` §1.1–§1.6 与 §0 四条裁决、§3 铁律 3–7、import 边界、五个守卫：代码与落地记录一致，零缺陷。改了四处文档、加了一例测试：
 
@@ -305,7 +305,7 @@ Coverage 的 content 段（`collection-processing-policy.ts:102-105`）：视频
 3. `lib/douyin/CLAUDE.md`：两条多事实的 bullet 各拆开（`getDouyinPendingVideos` / `markDouyinError`；`pickAudioSourceUrls` 的三级列表 / 纯音轨顺序不可改 / `url_list` 是对象）。
 4. `douyin-media.test.ts` +1：`classifyResponse` → `decodeDetail` 整条链对 detail body 成立（`has_more` / 列表键的形状检查在分页解码器里，不在 `classifyResponse`）——Step 1 的 16 例都是手工拼的 envelope，没有一例走过 Step 2 handler 真正会走的路径；读代码确认能过，加一例锁住。
 5. 复核发现、未改：`persistDouyinTranscript` 对「空转录 + 空 desc」调 `settleItemContent(db, id, '', …)`，空文本下 `chunkAndSettle` 不换 chunk、不碰 `item_contents`——对 `'pending'` 条目干净；若将来对**已转录**的条目重转录得到空结果，旧正文与旧 chunk 会留在 `'no_content'` 之下。v1 不可达（积压只取 `'pending'`，无手动重转录），留给加手动按钮的人。
-6. 复核发现、留给主会话：`prd.md`「待用户决定」仍写「见 docs/37 §1.1（D1–D7）」，而 `CONTEXT.md` 与本记录把 D1 / D6 记为「用户决定 2026-10-08」，两处口径要对齐。（`.trellis/spec/frontend/platform-onboarding.md` §3 / §4.4 的抖音混合内容模型已由主会话在复核同时改好，工作树里未提交。）
+6. 复核发现、留给主会话：`prd.md`「待用户决定」仍写「见 docs/37 §1.1（D1–D7）」，而 `CONTEXT.md` 与本记录把 D1 / D6 记为「用户决定 2026-10-08」，两处口径要对齐——主会话已把 `prd.md` 改为「D1 / D6 视为已确认：依据是用户 2026-10-08 的指令『完成 step1』」。（`.trellis/spec/frontend/platform-onboarding.md` §3 / §4.4 的抖音混合内容模型由主会话在复核同时改好，随 3f3babe 提交。）
 7. 验证（复核改动之后重跑）：`pnpm vitest run lib/douyin lib/bilibili lib/transcription lib/ingest lib/collections lib/tagging lib/chat` + 五个守卫：43 文件 / 512 例全过（复核前 511）；`pnpm compile` 通过；`pnpm test` 根 225 文件 / 1954 例、`packages/*` 15 文件 / 263 例全过，无偶发超时。
 
 ### Step 2 — Background handler（SW 图扩一支）
