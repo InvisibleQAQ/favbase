@@ -8,10 +8,13 @@ import {
   buildFolderItemsRequest,
   buildFoldersRequest,
   classifyResponse,
+  createDouyinDetailPacer,
   createDouyinPacer,
   DouyinAuthError,
   DouyinRateLimitError,
+  DouyinSignatureError,
   DouyinStatusError,
+  DouyinUnreachableError,
   fetchPublicFolders,
   findVerifyMarker,
   mapAweme,
@@ -269,12 +272,30 @@ describe('classifyResponse', () => {
     expect((err as Error).message).toMatch(/SDK/);
   });
 
+  // The transcription handler folds F2 and F3 into one error code and F11 into
+  // another (docs/37 §4.3 T2 / T2′ / T3), and must do so by class, never by
+  // matching the message text. Both classes are plain `Error` subclasses: the
+  // sync side still classifies by the two platform bases and sees no change.
+  it('F2 is a DouyinSignatureError whose reason says the SDK was not ready', () => {
+    const err = classifyError({ kind: 'sdk-not-ready' });
+    expect(err).toBeInstanceOf(DouyinSignatureError);
+    expect((err as DouyinSignatureError).reason).toBe('sdk-not-ready');
+    expect((err as Error).name).toBe('DouyinSignatureError');
+  });
+
   it('F3: 403 + ArgusSecurityPlugin is a plain Error with the body snippet (a signature problem)', () => {
     const err = classifyError(raw('Blocked by ArgusSecurityPlugin Signature Not Found', 403));
     expect(err).toBeInstanceOf(Error);
     expect(err).not.toBeInstanceOf(PlatformRateLimitError);
     expect((err as Error).message).toMatch(/HTTP 403/);
     expect((err as Error).message).toMatch(/ArgusSecurityPlugin Signature Not Found/);
+  });
+
+  it('F3 is a DouyinSignatureError whose reason says Argus refused the signature', () => {
+    const err = classifyError(raw('Blocked by ArgusSecurityPlugin Signature Not Found', 403));
+    expect(err).toBeInstanceOf(DouyinSignatureError);
+    expect((err as DouyinSignatureError).reason).toBe('argus');
+    expect(err).not.toBeInstanceOf(DouyinUnreachableError);
   });
 
   it.each([403, 429])('F4: %i without an Argus body is a rate limit locked for the cooldown', (status) => {
@@ -484,6 +505,83 @@ describe('createDouyinPacer', () => {
   });
 });
 
+// The transcription-only pacer (docs/37 D4 / §4.5): one interval between
+// consecutive aweme/detail requests, measured from the previous request's
+// send time, no long rest. A clock is injected so the "time already elapsed"
+// cases need no real waiting.
+describe('createDouyinDetailPacer', () => {
+  it('does not wait before the first request', async () => {
+    const sleep = vi.fn(async (_ms: number) => {});
+    const pacer = createDouyinDetailPacer({ sleep, random: () => 0.5, now: () => 0 });
+    await pacer.beforeRequest();
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it('waits only the remainder of MIN + rand·JITTER since the previous request was sent', async () => {
+    const sleep = vi.fn(async (_ms: number) => {});
+    let clock = 0;
+    const pacer = createDouyinDetailPacer({ sleep, random: () => 0.5, now: () => clock });
+    await pacer.beforeRequest();
+    clock = 1_000;
+    await pacer.beforeRequest();
+    expect(sleep).toHaveBeenCalledTimes(1);
+    expect(sleep).toHaveBeenLastCalledWith(5_000 + 0.5 * 3_000 - 1_000);
+  });
+
+  it('keeps the interval inside [MIN, MIN + JITTER) when no time has passed', async () => {
+    const delays: number[] = [];
+    const randoms = [0, 0.999999];
+    const pacer = createDouyinDetailPacer({
+      sleep: async (ms) => {
+        delays.push(ms);
+      },
+      random: () => randoms.shift() ?? 0,
+      now: () => 0,
+    });
+    await pacer.beforeRequest();
+    await pacer.beforeRequest();
+    await pacer.beforeRequest();
+    expect(delays).toHaveLength(2);
+    for (const ms of delays) {
+      expect(ms).toBeGreaterThanOrEqual(5_000);
+      expect(ms).toBeLessThan(8_000);
+    }
+  });
+
+  it('does not sleep at all when the previous request is already ≥ MIN + JITTER ago (the ASR path took longer)', async () => {
+    const sleep = vi.fn(async (_ms: number) => {});
+    let clock = 0;
+    const pacer = createDouyinDetailPacer({ sleep, random: () => 0.999999, now: () => clock });
+    await pacer.beforeRequest();
+    clock = 8_000;
+    await pacer.beforeRequest();
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  // The handler's pacer is ONE module-level instance for every TRANSCRIBE_AUDIO
+  // in the Service Worker, so two sessions (two app.html tabs) can call it at
+  // once. A caller that computed its wait from a `lastAt` the sleeping caller
+  // has not updated yet would wake with it and send alongside it: the pacer
+  // must queue callers, each measuring from the previous one's send time.
+  // Fake timers + the real `sleep`: an injected clock that advances inside
+  // `sleep` is sequential by construction and cannot show this race.
+  it('serialises concurrent callers: the second waits a full interval behind the first, not alongside it', async () => {
+    vi.useFakeTimers();
+    const pacer = createDouyinDetailPacer({ random: () => 0 });
+    await pacer.beforeRequest();
+    const sent: string[] = [];
+    const a = pacer.beforeRequest().then(() => sent.push('a'));
+    const b = pacer.beforeRequest().then(() => sent.push('b'));
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(sent).toEqual(['a']);
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(sent).toEqual(['a', 'b']);
+    await Promise.all([a, b]);
+  });
+});
+
 describe('requestEnvelope — retries, pacing and checkpoints (fake timers)', () => {
   it('paces and checkpoints every attempt, the retry included (2 checkpoints per attempt)', async () => {
     vi.useFakeTimers();
@@ -527,14 +625,18 @@ describe('requestEnvelope — retries, pacing and checkpoints (fake timers)', ()
     expect(transport).toHaveBeenCalledTimes(3);
   });
 
-  it('F11 spent on unreachable is a plain Error', async () => {
+  it('F11 spent on unreachable is a DouyinUnreachableError naming the cause', async () => {
     vi.useFakeTimers();
     const gone: DouyinTransportResult = { kind: 'unreachable', message: 'injection failed' };
     const { transport } = scripted(gone, gone, gone);
     const run = requestEnvelope(session(transport), buildFoldersRequest('0'), 'Douyin collects/list');
-    const assertion = expect(run).rejects.toThrow(/injection failed/);
+    const caught = run.catch((e: unknown) => e);
     await vi.runAllTimersAsync();
-    await assertion;
+    const err = await caught;
+    expect(err).toBeInstanceOf(DouyinUnreachableError);
+    expect(err).not.toBeInstanceOf(PlatformRateLimitError);
+    expect((err as Error).name).toBe('DouyinUnreachableError');
+    expect((err as Error).message).toMatch(/injection failed/);
     expect(transport).toHaveBeenCalledTimes(3);
   });
 

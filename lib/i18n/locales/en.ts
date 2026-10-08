@@ -294,6 +294,11 @@ const en: Record<LocaleKeys, string> = {
   'error.TRANSCRIBE_VIDEO_ID_MISMATCH':
     'The transcript came back for another video ({{received}}); nothing was saved',
   'error.UNSUPPORTED_PLATFORM': 'Transcription is not supported for this platform',
+  'error.DOUYIN_TAB_MISSING':
+    'A signed-in douyin.com tab is needed: open www.douyin.com and finish signing in or the verification',
+  'error.DOUYIN_MEDIA_UNAVAILABLE': 'This Douyin work is no longer available (private or removed)',
+  'error.DOUYIN_SIGNATURE_REJECTED': 'Douyin rejected the request signature; reload the douyin.com tab and retry',
+  'error.DOUYIN_RATE_LIMITED': 'Douyin rate-limited the request; try again later',
 
   'card.transcribe': 'Transcribe',
   'card.sourceCC': 'CC Official',

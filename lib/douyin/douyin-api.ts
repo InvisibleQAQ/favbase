@@ -54,6 +54,14 @@ const BACKOFF_BASE_MS = envNumber('VITE_DOUYIN_BACKOFF_BASE_MS', 2_000);
 const BACKOFF_JITTER_MS = envNumber('VITE_DOUYIN_BACKOFF_JITTER_MS', 500);
 /** How long a rate-limit / soft stop locks the Fetch button (`DouyinRateLimitError.resetAt`). */
 const COOLDOWN_MS = envNumber('VITE_DOUYIN_COOLDOWN_MS', 1_800_000);
+/**
+ * Transcription only (docs/37 D4 / §4.5): the interval between two
+ * aweme/detail requests, measured from the previous one's send time. The
+ * sync pacer above is not reused — its long rest every 25 requests would
+ * stretch a backlog of hundreds of videos from hours into a day.
+ */
+const DETAIL_DELAY_MIN_MS = envNumber('VITE_DOUYIN_DETAIL_DELAY_MIN_MS', 5_000);
+const DETAIL_DELAY_JITTER_MS = envNumber('VITE_DOUYIN_DETAIL_DELAY_JITTER_MS', 3_000);
 
 /** The three non-signature parameters every www.douyin.com web API call carries. */
 const COMMON_QUERY: Readonly<Record<string, string>> = {
@@ -135,6 +143,40 @@ export class DouyinStatusError extends Error {
   ) {
     super(message);
     this.name = 'DouyinStatusError';
+  }
+}
+
+/**
+ * The page SDK's signature was refused (`403 ArgusSecurityPlugin`, F3) or
+ * nothing would have been signed because the page's `window.fetch` is still
+ * native (F2). The user action for both is the same: reload the douyin.com
+ * tab. A named class so the transcription handler (docs/37 §4.3 T2′ / T3)
+ * can fold it into its own error code without matching the message text.
+ * Deliberately a plain `Error` subclass, not a platform base: the sync side
+ * classifies by `PlatformAuthError` / `PlatformRateLimitError` and keeps
+ * treating this as a generic failure.
+ */
+export class DouyinSignatureError extends Error {
+  constructor(
+    message: string,
+    readonly reason: 'argus' | 'sdk-not-ready',
+  ) {
+    super(message);
+    this.name = 'DouyinSignatureError';
+  }
+}
+
+/**
+ * The request never completed (tab closed, navigated away or discarded;
+ * injection timeout; network error) and the shared transient budget is
+ * spent (F11). Same rationale as `DouyinSignatureError`: the transcription
+ * handler needs this by class (docs/37 §4.3 T2), and it stays a plain
+ * `Error` for the sync side.
+ */
+export class DouyinUnreachableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'DouyinUnreachableError';
   }
 }
 
@@ -287,13 +329,17 @@ export function classifyResponse(
   now: () => number = Date.now,
 ): DouyinEnvelope | RetrySignal {
   if (result.kind === 'sdk-not-ready') {
-    throw new Error(
+    throw new DouyinSignatureError(
       `${what}: the douyin.com page SDK is not ready (window fetch is still native) — reload the douyin.com tab`,
+      'sdk-not-ready',
     );
   }
   if (result.kind === 'unreachable') {
     const cause = result.message;
-    return retryAfter(transientBackoffMs, () => new Error(`${what}: request did not complete: ${cause}`));
+    return retryAfter(
+      transientBackoffMs,
+      () => new DouyinUnreachableError(`${what}: request did not complete: ${cause}`),
+    );
   }
 
   const { status, text } = result;
@@ -301,7 +347,10 @@ export function classifyResponse(
 
   if (status === 403 && text.includes('ArgusSecurityPlugin')) {
     // Deterministic signature refusal: favbase or the page SDK changed. Retrying only burns the window.
-    throw new Error(`${what}: HTTP 403 signature refused by ArgusSecurityPlugin: ${snippet}`);
+    throw new DouyinSignatureError(
+      `${what}: HTTP 403 signature refused by ArgusSecurityPlugin: ${snippet}`,
+      'argus',
+    );
   }
   if (status === 403 || status === 429) {
     throw new DouyinRateLimitError(`${what}: HTTP ${status} (risk control): ${snippet}`, cooldownFrom(now));
@@ -390,6 +439,47 @@ export function createDouyinPacer(
         }
       }
       sent += 1;
+    },
+  };
+}
+
+/**
+ * Transcription-only pacer for aweme/detail (docs/37 D4 / §4.5). It measures
+ * from the LAST request's send time, not from the previous completion, and
+ * has no long rest: the ASR path already spends ≥ 10 s per video, so all
+ * this reins in is back-to-back detail calls (a run of cache hits that fall
+ * through, a batch of unavailable works). One module-level instance per
+ * Service Worker life — the handler owns it, every `TRANSCRIBE_AUDIO` for
+ * douyin shares it; a SW restart forgets one interval, which is accepted.
+ * `sleep` / `random` / `now` are injectable so tests never wait.
+ *
+ * Callers are queued: two sessions (two app.html tabs) can call this while
+ * the first is still asleep, and a caller that read `lastAt` before the
+ * sleeping one updated it would compute the same `due`, wake with it and send
+ * alongside it. Each caller computes its wait only once the previous caller
+ * has sent — "one interval between any two detail requests" is the whole
+ * point of this pacer.
+ */
+export function createDouyinDetailPacer(
+  deps: { sleep?: (ms: number) => Promise<void>; random?: () => number; now?: () => number } = {},
+): DouyinPacer {
+  const wait = deps.sleep ?? sleep;
+  const random = deps.random ?? Math.random;
+  const now = deps.now ?? Date.now;
+  let lastAt: number | null = null;
+  let tail: Promise<void> = Promise.resolve();
+  return {
+    beforeRequest() {
+      const turn = tail.then(async () => {
+        if (lastAt !== null) {
+          const due = lastAt + jitteredDelayMs(DETAIL_DELAY_MIN_MS, DETAIL_DELAY_JITTER_MS, random) - now();
+          if (due > 0) await wait(due);
+        }
+        lastAt = now();
+      });
+      // A rejected wait must not wedge every later caller behind it.
+      tail = turn.catch(() => {});
+      return turn;
     },
   };
 }

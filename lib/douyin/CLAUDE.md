@@ -34,6 +34,21 @@
 - 上一条的第二级只在 `format === 'mp4'` 里选、优先 `is_h265 === 0`、`bit_rate` 非有限数的档不参与：按 `bit_rate` 升序取第一档会选到 h265 + bytevc1 的 dash 档。
 - `aweme/detail` 的 `cla_info`（AI 字幕轨）v1 不读：Step 0 实测 136 个样本全空。形状记在 docs/37 §4.2。
 
+## Background 转录 handler（docs/37 Step 2）
+
+- `douyin-transcription-handler.ts` 在 Background SW 的静态图上，import 白名单：`./douyin-api`、`./douyin-tab`、`./douyin-media`、`@/lib/background/transcription-utils`、pipeline / types / cache 与 `@/lib/storage/settings` 这几个 leaf。禁止 `./douyin-sync-service`、`@/lib/database*`、`@/lib/ingest*`、`@/lib/collections` / `@/lib/storage` barrel、`@/lib/background/transcription-handlers`（成环）。守卫：`tests/agent-bridge-background-bundle-contract.test.ts`（源码级）+ `pnpm build` 的 bundle 检查（产物级）。
+- detail 请求懒到 ASR 路径的 URL extractor 里取，不是 pipeline 之前的 prepare：cache 命中（D7 积压重开后）与缺 ASR key 都不发签名请求、不等节奏器、不需要标签页。别把它搬回 handler 入口。
+- extractor 的顺序固定：T1 查 `findTab()` → 节奏器 → `requestEnvelope` → `decodeDetail` → `aweme_id` 回声闸门 → `pickAudioSourceUrls`。T1 在节奏器之前：标签页明显不在时零等待、零请求；模块级节奏器用真实 `sleep`，`douyin-transcription-handler.test.ts` 的默认导出用例正是靠这个顺序才不等 5–8 s。
+- detail 走 `requestEnvelope` 的共享瞬时预算（unreachable / 5xx / 空 200 共用 `MAX_RETRIES`，403 / 429 不重试），不传 `control`：转录的取消机制是 `signal`，节奏等待与注入请求都不认它，所以 extractor 在 detail 返回后补一次 `signal.aborted` 检查。
+- `createDouyinDetailPacer` 是 handler 的模块级单例（每个 SW 生命周期一个，所有抖音 `TRANSCRIBE_AUDIO` 共用）：按上次请求的发送时刻计 `MIN + rand·JITTER`，无长休息；SW 重启丢一次间隔，可接受。不复用同步的 `createDouyinPacer`（docs/37 D4 否决项）。
+- 上一条的并发调用（两个 app.html 标签页各跑一个 session）串行排队，后到者从前者的发送时刻起算：不排队的话后到者读到的是前者睡前的 `lastAt`，算出同一个 `due`、一起醒、背靠背发两条签名请求。同步的 `createDouyinPacer` 不排队是因为它每次运行一个实例、运行由 job store 串行。
+- 上一条的节奏器在 `withRetries` 的 attempt 里，重试也算请求、也等间隔（与同步节奏器同理：风控按请求计数）。代价：标签页中途关掉后，3 次 unreachable 叠上退避与间隔，约 10–16 s 才报 `DOUYIN_TAB_MISSING`，不是立刻。
+- detail 响应的 `aweme_id` 必须逐字节等于请求的 videoId，否则 `ASR_UNKNOWN`（`params.detail` 带两个 id）、不下载不转录（docs/29 的教训）。
+- 不缓存 detail、不缓存直链：直链 ≈ 3 h（视频）/ 24 h（纯音轨）过期，每次转录现取现下。
+- 错误折算只按类、不按 message 文本——`DouyinSignatureError`（Argus 403 / `sdk-not-ready`）与 `DouyinUnreachableError`（unreachable 耗尽）两个具名子类就是为此存在的；它们直接 `extends Error`，同步侧按两个平台基类分类的逻辑不受影响。
+- 折算表（docs/37 §4.3）：T1 无标签页 / T2 unreachable 耗尽 → `DOUYIN_TAB_MISSING` + `reason: 'closed'`；T4′ 验证页（`resetAt: null`）→ `'verify'`；T5 未登录 → `'login'`；T2′ / T3 → `DOUYIN_SIGNATURE_REJECTED` + `reason: 'sdk-not-ready' | 'argus'`；T4 与空 payload（`resetAt` 非空）→ `DOUYIN_RATE_LIMITED` + `retryAfter`（秒，只有这一个字段，不借 ASR quota 的 `resetAt` / `providerId`）；T6 → `DOUYIN_MEDIA_UNAVAILABLE` + `reason`；T7 → `ASR_NO_AUDIO_SOURCE`；T11 `DouyinStatusError` → `ASR_UNKNOWN`。
+- `fetchOfficialSubtitle` 恒 `null`（Step 0：`cla_info` 零样本），`postProcess` 恒等（D-b），cache 用 `'douyin'` 命名空间。
+
 ## 坑
 
 - 本目录非测试文件里不要写含「斜杠 + 星号」的字符串字面量（如 URL 匹配模式）：env 常量守卫与裸 fetch 守卫用朴素正则剥块注释，这种字面量会把其后到下一个块注释结尾之间的代码从扫描里藏起来。标签页 URL 因此从 descriptor 的 `hostPermissions` 读。
@@ -44,11 +59,11 @@
 
 | 形态 | 动作 / 错误 |
 |---|---|
-| `sdk-not-ready` | `Error`（刷新抖音标签页），不重试 |
-| 403 + body 含 `ArgusSecurityPlugin` | `Error`，不重试（签名问题：favbase 或 SDK 变了） |
+| `sdk-not-ready` | `DouyinSignatureError(reason: 'sdk-not-ready')`（刷新抖音标签页），不重试 |
+| 403 + body 含 `ArgusSecurityPlugin` | `DouyinSignatureError(reason: 'argus')`，不重试（签名问题：favbase 或 SDK 变了） |
 | 403 / 429 无 Argus | `DouyinRateLimitError(resetAt = now + COOLDOWN_MS)`，不重试 |
 | 200 空 body | 重试；耗尽 → `DouyinRateLimitError`（冷却） |
-| 5xx / `unreachable` | 重试；耗尽 → `Error`（与空 body **共用**一份 `MAX_RETRIES` 预算） |
+| 5xx / `unreachable` | 重试；耗尽 → 5xx 是 `Error`，`unreachable` 是 `DouyinUnreachableError`（与空 body **共用**一份 `MAX_RETRIES` 预算） |
 | 其他非 2xx | `Error`，不重试 |
 | 非 JSON（挑战页）/ 验证标记 | `DouyinRateLimitError(resetAt: null)`——用户去抖音标签页完成验证 |
 | JSON 不是对象 / 无 `status_code` | `Error`（未知形状） |

@@ -8,6 +8,7 @@ import type { OffscreenProgressMessage } from '@/lib/offscreen/types';
 import { createErrorInfo } from '@/lib/transcription/types';
 import { PROGRESS } from '@/lib/transcription/constants';
 import { handleBiliTranscribe } from '@/lib/bilibili/bilibili-transcription-handler';
+import { handleDouyinTranscribe } from '@/lib/douyin/douyin-transcription-handler';
 import { notifyTab, type MessageSender } from './transcription-utils';
 
 export type { MessageSender } from './transcription-utils';
@@ -22,6 +23,7 @@ export type PlatformHandler = (
 
 const platformHandlers: Record<string, PlatformHandler> = {
   bilibili: handleBiliTranscribe,
+  douyin: handleDouyinTranscribe,
 };
 
 export async function handleTranscribe(

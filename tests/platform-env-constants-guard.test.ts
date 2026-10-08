@@ -87,8 +87,7 @@ const EXPECTED_ENV_CONSTANTS: ReadonlyArray<{
   { file: 'lib/bookmarks/bookmark-page-fetch.ts', key: 'VITE_BOOKMARKS_MAX_HTML_BYTES', fallback: 5_242_880 },
   { file: 'lib/bookmarks/bookmark-page-fetch.ts', key: 'VITE_BOOKMARKS_META_PRESCAN_BYTES', fallback: 1024 },
   { file: 'lib/bookmarks/bookmark-content.ts', key: 'VITE_BOOKMARKS_MIN_CONTENT_CHARS', fallback: 200 },
-  // douyin (docs/33 §4.5; lib/douyin is scanned by the two platform-dir
-  // checks above only once 'douyin' joins COLLECTION_PLATFORMS in Step 2)
+  // douyin (docs/33 §4.5; the transcription pacer is docs/37 §4.5)
   { file: 'lib/douyin/douyin-api.ts', key: 'VITE_DOUYIN_PAGE_SIZE', fallback: 20 },
   { file: 'lib/douyin/douyin-api.ts', key: 'VITE_DOUYIN_PAGE_DELAY_MIN_MS', fallback: 5_000 },
   { file: 'lib/douyin/douyin-api.ts', key: 'VITE_DOUYIN_PAGE_DELAY_JITTER_MS', fallback: 3_000 },
@@ -101,6 +100,8 @@ const EXPECTED_ENV_CONSTANTS: ReadonlyArray<{
   { file: 'lib/douyin/douyin-api.ts', key: 'VITE_DOUYIN_BACKOFF_JITTER_MS', fallback: 500 },
   { file: 'lib/douyin/douyin-api.ts', key: 'VITE_DOUYIN_COOLDOWN_MS', fallback: 1_800_000 },
   { file: 'lib/douyin/douyin-sync-service.ts', key: 'VITE_DOUYIN_TITLE_MAX_CHARS', fallback: 140 },
+  { file: 'lib/douyin/douyin-api.ts', key: 'VITE_DOUYIN_DETAIL_DELAY_MIN_MS', fallback: 5_000 },
+  { file: 'lib/douyin/douyin-api.ts', key: 'VITE_DOUYIN_DETAIL_DELAY_JITTER_MS', fallback: 3_000 },
 ];
 
 /** Module-level `const NAME = <number-ish literal/arith>` (arrays/strings/objects never match). */

@@ -10,9 +10,9 @@ import {
   ensureGroqConnectivity,
   requestGroqTranscription,
 } from '@/lib/transcription/groq-client';
-import { fetchAudioBlob } from '@/lib/transcription/audio-extractor';
+import { fetchFirstAudioBlob, isAbortError } from '@/lib/transcription/audio-extractor';
 import { assertAudioNotReused } from '@/lib/transcription/audio-fingerprint';
-import { createErrorInfo } from '@/lib/transcription/types';
+import { createErrorInfo, isTranscribeError } from '@/lib/transcription/types';
 import { GROQ_MAX_AUDIO_BYTES, PROGRESS } from '@/lib/transcription/constants';
 import type { AsrConfig, OnProgress } from '@/lib/transcription/pipeline';
 
@@ -38,10 +38,21 @@ export function notifyTab(
   ctx.sendToTab(tabId, msg);
 }
 
+/**
+ * The ASR half of a platform's `PipelineDeps.transcribeAudio`. The platform
+ * supplies only `extractAudioUrls`: every URL its media may be downloaded
+ * from, in the order to try them (one for Bilibili's DASH track, three per
+ * tier for Douyin). The shared downloader walks that list; the candidate
+ * that actually downloaded is what the Offscreen chunker is told to fetch
+ * again. An extractor that throws a `TranscribeErrorInfo` or an abort is
+ * reporting a classified failure (a missing platform tab, a refused
+ * signature, a cancelled job) and is passed through as is; anything else it
+ * throws is `ASR_NO_AUDIO_SOURCE`.
+ */
 export function createTranscribeAudio(
   tabId: number,
   ctx: BackgroundContext,
-  extractAudioUrl: (videoId: string, cid: number) => Promise<string>,
+  extractAudioUrls: (videoId: string, cid: number) => Promise<string[]>,
 ) {
   return async (params: {
     videoId: string;
@@ -58,15 +69,16 @@ export function createTranscribeAudio(
     if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
 
     onProgress(PROGRESS.DOWNLOAD_BEGIN, 'extracting');
-    let audioUrl: string;
+    let urls: string[];
     try {
-      audioUrl = await extractAudioUrl(videoId, cid);
+      urls = await extractAudioUrls(videoId, cid);
     } catch (err) {
+      if (isTranscribeError(err) || isAbortError(err)) throw err;
       throw createErrorInfo('ASR_NO_AUDIO_SOURCE', err instanceof Error ? err.message : 'Audio extraction failed');
     }
 
     onProgress(PROGRESS.DOWNLOAD_BEGIN + 1, 'downloading');
-    const audioBlob = await fetchAudioBlob(audioUrl, signal, (p) =>
+    const { url: audioUrl, blob: audioBlob } = await fetchFirstAudioBlob(urls, signal, (p) =>
       onProgress(p, 'downloading'),
     );
     if (signal.aborted) throw new DOMException('Aborted', 'AbortError');

@@ -10,7 +10,7 @@
 - 错误是纯数据 `TranscribeErrorInfo`（无类继承，可过 IPC），用 `createErrorInfo()` / `isTranscribeError()`。`message` 是 debug 信息，永不直接展示；UI 按 `code` + `params` 翻译。
 - 429 只把明确的 `audio seconds per day (ASD)` 识别为 `ASR_QUOTA_EXCEEDED`，其余形状一律 `ASR_RATE_LIMIT`；供应商原文只作 debug。
 - ASR 配置（apiKey / model / baseUrl）只从 `resolveAsrConfig` 来。`groq-client.ts` 的 `baseUrl` 参数就是多 ASR provider 的接缝，不要为新 provider 另写 client。
-- 新增平台：建 `lib/<platform>/<platform>-transcription-handler.ts`（自己 prepare + 组装 deps + 调 pipeline），在 `lib/background/transcription-handlers.ts` 的 `platformHandlers` 注册一行。各平台 handler 完全独立，不抽共享 adapter 接口。
+- 新增平台：建 `lib/<platform>/<platform>-transcription-handler.ts`（自己取媒体 / 字幕来源、组装 deps、调 pipeline；取媒体可以懒到 deps 的 extractor 里，抖音就是——cache 命中与缺 ASR key 时零平台请求），在 `lib/background/transcription-handlers.ts` 的 `platformHandlers` 注册一行。各平台 handler 完全独立，不抽共享 adapter 接口。
 - 新增 `TranscribeErrorCode` 要同步 wire schema（`lib/runtime-message/schemas.ts`）与两个 locale，规则在 `lib/i18n/CLAUDE.md`。
 
 ## app 侧落库 seam（`transcribe-and-persist.ts`，docs/37 D-c）
@@ -23,6 +23,13 @@
 - `createStatusListener` 的大小写无关比对是已知缺陷（跟着 `lib/background/job-registry.ts` 的 lowercase），别照抄到闸门上。
 - `PersistContentResult` 的 owner 是这里；`lib/bilibili/bili-sync-service.ts` 与 `transcribe-utils.ts` 只 re-export。
 - 守卫：`transcribe-and-persist.test.ts`（假 persist、任意 platform）与 `lib/bilibili/transcribe-utils.test.ts`（经 B 站包装对真实 PGlite persist）。
+
+## 音频候选与下载（docs/37 Step 2）
+
+- `createTranscribeAudio` 的 extractor 返回**候选 URL 列表**（B 站一条，抖音三级各三条），不是单个 URL；`audio-extractor.ts` 的 `fetchFirstAudioBlob` 按序逐条下载，非 2xx 与网络错误换下一条，AbortError 立即穿透，全部失败抛最后一条的错误，空列表 `ASR_NO_AUDIO_SOURCE`。「一个列表按序试」是机制，不带平台知识。
+- extractor 抛出的 `TranscribeErrorInfo` 与 AbortError 原样透传，其余才折成 `ASR_NO_AUDIO_SOURCE`：抖音的四个 `DOUYIN_*` 码全在 extractor 里产生，「统一」成 `ASR_NO_AUDIO_SOURCE` 会把「缺标签页」变成「无音轨」。
+- 交给 Offscreen 分块的是**实际下载成功的那条** URL（Offscreen 自己再下载一次），不是候选第一条。
+- 四个 `DOUYIN_*` 码是平台前置条件类错误，`params.reason` 的取值与折算表只写在 `lib/douyin/CLAUDE.md`（别在这里再抄一份）；本目录只需知道 `DOUYIN_RATE_LIMITED` 的 `retryAfter` 单位是秒、不带 `resetAt` / `providerId`（那是 ASR quota 的形状）。
 
 ## 坑
 

@@ -285,6 +285,10 @@ const zhCN = {
   'error.TRANSCRIBE_DUPLICATE': '该视频正在转录中，请勿重复发起',
   'error.TRANSCRIBE_VIDEO_ID_MISMATCH': '返回的字幕属于另一个视频（{{received}}），已拒绝写入',
   'error.UNSUPPORTED_PLATFORM': '暂不支持该平台的转录',
+  'error.DOUYIN_TAB_MISSING': '需要一个已登录的抖音标签页：打开 www.douyin.com 并完成登录或验证',
+  'error.DOUYIN_MEDIA_UNAVAILABLE': '该抖音作品已不可用（仅作者可见或已删除）',
+  'error.DOUYIN_SIGNATURE_REJECTED': '抖音拒绝了请求签名，请刷新抖音标签页后重试',
+  'error.DOUYIN_RATE_LIMITED': '抖音触发了风控，请稍后再试',
 
   'card.transcribe': '转录',
   'card.sourceCC': 'CC 官方',

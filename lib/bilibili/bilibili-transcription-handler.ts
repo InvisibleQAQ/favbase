@@ -26,7 +26,8 @@ export async function handleBiliTranscribe(
   const deps = {
     getAsrConfig: getAsrSettings,
     fetchOfficialSubtitle: biliCtx.fetchOfficialSubtitle,
-    transcribeAudio: createTranscribeAudio(tabId, ctx, biliCtx.extractAudioUrl),
+    // The shared downloader takes a candidate list; Bilibili's DASH manifest yields one URL.
+    transcribeAudio: createTranscribeAudio(tabId, ctx, async (id, cid) => [await biliCtx.extractAudioUrl(id, cid)]),
     cacheGet: async (id: string) => {
       const entry = await getVideoCache('bilibili', id);
       if (!entry) return null;

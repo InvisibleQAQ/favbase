@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
+import * as ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
 const ROOT = path.resolve(__dirname, '..');
@@ -14,6 +15,20 @@ function code(relativePath: string): string {
   return source(relativePath)
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/^\s*\/\/.*$/gm, '');
+}
+
+/** Every import / re-export specifier of a module, by AST, with whether it is type-only (erased at build). */
+function moduleSpecifiers(relativePath: string): Array<{ specifier: string; typeOnly: boolean }> {
+  const ast = ts.createSourceFile(relativePath, source(relativePath), ts.ScriptTarget.Latest, true);
+  const found: Array<{ specifier: string; typeOnly: boolean }> = [];
+  for (const node of ast.statements) {
+    if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
+      found.push({ specifier: node.moduleSpecifier.text, typeOnly: node.importClause?.isTypeOnly === true });
+    } else if (ts.isExportDeclaration(node) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
+      found.push({ specifier: node.moduleSpecifier.text, typeOnly: node.isTypeOnly });
+    }
+  }
+  return found;
 }
 
 describe('Agent Bridge background bundle contract', () => {
@@ -114,4 +129,44 @@ describe('Agent Bridge background bundle contract', () => {
       expect(code(file)).not.toMatch(/\bimport\s*\(/);
     },
   );
+
+  // The Douyin transcription handler (docs/37 Step 2) put `lib/douyin/` on
+  // this graph — but only its request layer, the pure media module and the
+  // tab leaf. `douyin-sync-service.ts` value-imports `@/lib/database` and
+  // `@/lib/ingest` (PGlite); one import of it from any of these four files,
+  // or one `@/lib/database` / `@/lib/ingest` / barrel import inside them, is
+  // the 54 MB build failing again (docs/37 iron rule 2 — this is the
+  // source-level half, `scripts/check-background-bundle.mjs` the artifact).
+  describe('Douyin transcription handler stays off the PGlite graph (docs/37 Step 2)', () => {
+    it.each([
+      'lib/douyin/douyin-transcription-handler.ts',
+      'lib/douyin/douyin-media.ts',
+      'lib/douyin/douyin-api.ts',
+      'lib/douyin/douyin-tab.ts',
+    ])('%s imports neither the sync service, the database / ingest, the two barrels nor a dynamic import', (file) => {
+      const content = code(file);
+
+      expect(content).not.toContain("from './douyin-sync-service'");
+      expect(content).not.toMatch(/^import\s+(?!type\s)[^;]*from ['"]@\/lib\/(?:database|ingest)(?:\/[^'"]*)?['"];?$/m);
+      // Barrels only: the handler's `@/lib/storage/settings` leaf is the sanctioned SW path.
+      expect(content).not.toMatch(/^import\s+(?!type\s)[^;]*from ['"]@\/lib\/(?:collections|storage)['"];?$/m);
+      expect(content).not.toMatch(/\bimport\s*\(/);
+    });
+
+    it('douyin-tab.ts imports only the browser API, the descriptor leaf, backoff and the API types', () => {
+      const allowed = ['wxt/browser', '@/lib/collections/platform-descriptor', '@/lib/http/backoff', './douyin-api'];
+      const found = moduleSpecifiers('lib/douyin/douyin-tab.ts');
+
+      expect(found.length).toBeGreaterThan(0);
+      expect(found.map(({ specifier }) => specifier).filter((specifier) => !allowed.includes(specifier))).toEqual([]);
+      // The API layer is a value module (envNumber, the error classes); the leaf may only take its types.
+      expect(found.filter(({ specifier, typeOnly }) => specifier === './douyin-api' && !typeOnly)).toEqual([]);
+    });
+
+    it('transcription-handlers.ts registers the Douyin handler statically', () => {
+      expect(source('lib/background/transcription-handlers.ts')).toContain(
+        "from '@/lib/douyin/douyin-transcription-handler'",
+      );
+    });
+  });
 });

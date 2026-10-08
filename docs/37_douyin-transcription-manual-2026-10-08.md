@@ -1,6 +1,6 @@
 # 37 抖音字幕与转录接入手册（2026-10-08）
 
-> 状态：**草案；Step 0 已完成 2026-10-08（用户账号、BrowserOS neo 实测，只读）**——网页 aweme 对象有 `cla_info` 字段但 136 个样本全空，v1 「优先 AI 字幕」半边改为**直接 ASR**（`fetchOfficialSubtitle: async () => null`，不写 `douyin-subtitle.ts`）；另发现纯音轨 `video.bit_rate_audio[]`，D-g 据此修订。证据在 Step 0 落地记录与任务目录 `research/douyin-step0-subtitle-media-probe-2026-10-08.md`；**Step 1 已完成 2026-10-08（内容模型翻转 + 领域层；代码 + 单测，已复核，commit 3f3babe）**，按任务目录 `info.md` 执行，其 §0 四条裁决（D6 的 desc 也空 → `'no_content'`、`decodeDetail` 空 payload 抛冷却错误、`pickAudioSourceUrls` 三级全拼、入库门用 D-f 谓词）是对本文的有意偏离，见 Step 1 节末「Step 1 落地记录」。§1 的 D1–D7 是待用户确认的决策（每条带推荐项）；D-a 起是写手册时由代码核对推出的设计默认项。一次对话只做一个 Step；执行任一 Step 前先读 §1 决策、§2 否决清单、§3 铁律，再读该 Step 的八段。
+> 状态：**草案；Step 0 已完成 2026-10-08（用户账号、BrowserOS neo 实测，只读）**——网页 aweme 对象有 `cla_info` 字段但 136 个样本全空，v1 「优先 AI 字幕」半边改为**直接 ASR**（`fetchOfficialSubtitle: async () => null`，不写 `douyin-subtitle.ts`）；另发现纯音轨 `video.bit_rate_audio[]`，D-g 据此修订。证据在 Step 0 落地记录与任务目录 `research/douyin-step0-subtitle-media-probe-2026-10-08.md`；**Step 1 已完成 2026-10-08（内容模型翻转 + 领域层；代码 + 单测，已复核，commit 3f3babe）**，按任务目录 `info.md` 执行，其 §0 四条裁决（D6 的 desc 也空 → `'no_content'`、`decodeDetail` 空 payload 抛冷却错误、`pickAudioSourceUrls` 三级全拼、入库门用 D-f 谓词）是对本文的有意偏离，见 Step 1 节末「Step 1 落地记录」；**Step 2 已完成 2026-10-08（Background handler；代码 + 单测，已复核，未提交）**，按任务目录 `info.md` 的 Step 2 节执行，其 §0 九条裁决（detail 懒到 ASR 路径里取、共享下载器收候选列表、extractor 的结构化错误透传、`douyin-api` 两个具名错误类、`aweme_id` 回声闸门等）是对本文的有意偏离，见 Step 2 节末「Step 2 落地记录」。§1 的 D1–D7 是待用户确认的决策（每条带推荐项）；D-a 起是写手册时由代码核对推出的设计默认项。一次对话只做一个 Step；执行任一 Step 前先读 §1 决策、§2 否决清单、§3 铁律，再读该 Step 的八段。
 >
 > 任务目录：`.trellis/tasks/10-08-douyin-transcription-subtitle-first-asr-fallback-tagging-reuse-bilibili-flow/`。前置手册：`docs/33`（抖音收藏接入，Step 0–3 已落地）、`docs/04`（B站转录管线）、`docs/29`（B站字幕串台事故与归属校验）。
 >
@@ -51,7 +51,7 @@
 | D-g | **音频源三级取数（Step 0 修订）**：① `video.bit_rate_audio[0].audio_meta.url_list` 的 `main_url → backup_url → fallback_url`（纯音轨，注意这里的 `url_list` 是对象不是数组）；② 没有纯音轨时取 `video.bit_rate[]` 里 `format === 'mp4'` 且 `is_h265 === 0` 的最低码率档，再退任意 codec 的最低 mp4 档；③ 都没有才 `video.play_addr.url_list`。每级都按 url_list 顺序 fall-through，非 2xx 换下一条 | Step 0 实测：按 `bit_rate` 升序的第一档多半是 h265 + bytevc1 且 `format: 'dash'`（手册原写法会选到它）；纯音轨 `main_url` 的主机 `v26-web` 对无 Referer 的 SW 请求 403（`Forbid_code 020200`），`backup_url`（`v11-weba`）与 `fallback_url`（play API 302）都 200，所以顺序 fall-through 不是可选项。纯音轨把 ≤ 24 MB 直传变成常态（22 min 视频估 8 MB），超限的才进 Offscreen 抽音轨；直传 mp4 时视频轨跟着上传是接受的浪费（Groq 按音频秒计费，不按字节） |
 | D-h | **detail 响应的验证码扫描要把 `aweme_detail` 加进容器键** | `scanVerify`（`douyin-api.ts:211-231`）只对 `aweme_list` / `collects_list` 之外的字符串值匹配 `captcha` 等标记；detail 响应的条目在 `aweme_detail` 下，一条讲 captcha 的视频文案会被当成验证页、整条转录以「去验证」失败。`ITEM_LIST_KEYS`（`:200`）加 `aweme_detail` |
 | D-i | **detail 的 `status_code: 0` + `aweme_detail: null` + 带 `filter_detail`（如 `status_self_see` / `core_dep`）= 作品不可用的合法结果**，条目标 `'error'`、不算风控 | docs/33 `research/douyin-rate-limiting.md` 第 55 行：dtk 规则 12「payload.explained → business_error」只在 `aweme/detail/` 上观测到。没有 `filter_detail` 的空 payload 仍按 F8 当软风控 |
-| D-j | **新错误码四个**：`DOUYIN_TAB_MISSING`（D5；`params.reason: 'closed' \| 'login' \| 'verify'`）、`DOUYIN_MEDIA_UNAVAILABLE`（D-i，含 `filter_detail` 原因）、`DOUYIN_SIGNATURE_REJECTED`（Argus 403 与 `sdk-not-ready`，提示刷新抖音标签页）、`DOUYIN_RATE_LIMITED`（冷却，带 `retryAfter`）；其余折进既有码（5xx / 不可达 → `DOWNLOAD_FAILED`，无 play URL → `ASR_NO_AUDIO_SOURCE`） | 每个码要同步 `lib/runtime-message/schemas.ts:20-37` 的 wire enum、`lib/i18n/index.test.ts:97-100` 的双向 parity、两个 locale 的 `error.<CODE>`（`lib/transcription/CLAUDE.md:14`）。四个各有不同的用户动作（开 / 登录 / 验证标签页；放弃；刷新标签页；等冷却），折不进一个；不借 `ASR_RATE_LIMIT`，见 §4.3 T4 |
+| D-j | **新错误码四个**：`DOUYIN_TAB_MISSING`（D5；`params.reason: 'closed' \| 'login' \| 'verify'`）、`DOUYIN_MEDIA_UNAVAILABLE`（D-i，含 `filter_detail` 原因）、`DOUYIN_SIGNATURE_REJECTED`（Argus 403 与 `sdk-not-ready`，提示刷新抖音标签页）、`DOUYIN_RATE_LIMITED`（冷却，带 `retryAfter`）；其余折进既有码（无 play URL → `ASR_NO_AUDIO_SOURCE`；Step 2 勘误：原写「5xx / 不可达 → `DOWNLOAD_FAILED`」作废——那是音频下载失败的码，文案会说错；detail 的 5xx 耗尽是 plain `Error` → `ASR_UNKNOWN`，不可达耗尽 → `DOUYIN_TAB_MISSING` + `reason: 'closed'`，见 §4.3 T2 / T11） | 每个码要同步 `lib/runtime-message/schemas.ts:20-37` 的 wire enum、`lib/i18n/index.test.ts:97-100` 的双向 parity、两个 locale 的 `error.<CODE>`（`lib/transcription/CLAUDE.md:14`）。四个各有不同的用户动作（开 / 登录 / 验证标签页；放弃；刷新标签页；等冷却），折不进一个；不借 `ASR_RATE_LIMIT`，见 §4.3 T4 |
 
 ---
 
@@ -124,7 +124,7 @@
 | # | 形态 | 动作 | 错误码 |
 |---|---|---|---|
 | T1 | `findDouyinTab()` 为 null（handler 入口） | 不发请求 | `DOUYIN_TAB_MISSING`（D5：停放，不标 error） |
-| T2 | transport `unreachable`（注入超时、标签页中途关闭、网络错误） | 不重试。**停放与否看此刻 `findDouyinTab()`**：为 null 才算缺前置条件（D5），否则是普通单条失败——否则「标签页在、网络抖一下」会停放 → 立刻恢复 → 重入队 → 再失败，空转 | `DOUYIN_TAB_MISSING`（adapter 再查一次标签页决定是否停放） |
+| T2 | transport `unreachable`（注入超时、标签页中途关闭、网络错误） | 不重试（Step 2 勘误：指 handler 不在共享瞬时预算之外另加重试；detail 仍走 `requestEnvelope`，unreachable 与 5xx / 空 200 共用 `MAX_RETRIES`，耗尽后才是本行）。**停放与否看此刻 `findDouyinTab()`**：为 null 才算缺前置条件（D5），否则是普通单条失败——否则「标签页在、网络抖一下」会停放 → 立刻恢复 → 重入队 → 再失败，空转 | `DOUYIN_TAB_MISSING`（adapter 再查一次标签页决定是否停放） |
 | T2′ | transport `sdk-not-ready`（页面 fetch 仍是 native） | 不重试；用户动作是刷新标签页，与 T3 同一条文案 | `DOUYIN_SIGNATURE_REJECTED` + `params.reason: 'sdk-not-ready'` |
 | T3 | 403 + `ArgusSecurityPlugin` | 不重试 | `DOUYIN_SIGNATURE_REJECTED`（文案：刷新抖音标签页后重试） |
 | T4 | 403 / 429 无 Argus、200 空 body（重试耗尽） | 复用 `classifyResponse` 抛出的 `DouyinRateLimitError(resetAt 非空)` → 折成转录错误。**不借用 `ASR_RATE_LIMIT`**：它的文案写死「Groq 速率限制」（`lib/i18n/locales/zh-CN.ts` `transcribe.rateLimit` / `error.ASR_RATE_LIMIT`），屏幕上会说错供应商 | `DOUYIN_RATE_LIMITED` + `retryAfter`（= `resetAt − now`）；`lib/auto-transcribe` 对带 `retryAfter` 的错误的处理（`pipeline.ts:248-253`，临时限流最多重试一次）要改成按「有 `retryAfter`」判，不按 `code === 'ASR_RATE_LIMIT'` 判——这是共享模块里一个字面量换成一个形状，不是平台分支 |
@@ -344,6 +344,85 @@ Coverage 的 content 段（`collection-processing-policy.ts:102-105`）：视频
 **回滚**：revert；SW 图回到 Step 1 之前。
 
 **判据**：从 app.html DevTools 手发一条 `TRANSCRIBE_AUDIO { platform: 'douyin' }` 能得到 `success: true`（字幕或 ASR 任一路径）；manifest 零差异；bundle 守卫绿。
+
+#### Step 2 落地记录（2026-10-08，代码 + 单测；未提交）
+
+执行稿是任务目录 `info.md` 的 Step 2 节（主会话读完 B站 handler、共享下载器、pipeline、`douyin-api` / `douyin-tab` / `douyin-media` 与五个守卫后写的逐文件规格），与本文冲突处以它的 §0 为准。范围：`lib/`、`tests/`、`.env.example`、`.env.local`（只在抖音块末尾加两行）、三份目录 `CLAUDE.md`、本记录与 `prd.md`；`entrypoints/`、`lib/auto-transcribe/`、库都没碰。D3 / D4 视为已确认：依据是用户的指令「完成 step2」，而 Step 2 的文件表就是 D3（detail 在 Background handler 里经 tab transport 现取）与 D4（转录专用节奏器）的落地；回滚是 revert。`.env.local` 的两行（§4.5 要求征得同意）同样以这条指令为据，只加了注释与留空的 key，没动别的行。
+
+**做了什么**
+
+- `lib/douyin/douyin-transcription-handler.ts`（新）：`createDouyinTranscribeHandler(session)` + 默认导出 `handleDouyinTranscribe`（模块级 `createDouyinDetailPacer()` 单例）。detail 不是 pipeline 之前的 prepare，而是在 ASR 路径的 URL extractor 里：T1 `findTab()` → 节奏 → `requestEnvelope`（不传 `control`）→ `decodeDetail` → `aweme_id` 回声闸门 → `pickAudioSourceUrls`。`fetchOfficialSubtitle` 恒 `null`（Step 0）、`postProcess` 恒等（D-b）、cache 用 `'douyin'`、`cid: 0`。错误按类折算成 §4.3 的码（`toTranscribeErrorInfo`），`DOUYIN_RATE_LIMITED` 只带 `retryAfter`（秒）。
+- `lib/background/transcription-handlers.ts`：`douyin: handleDouyinTranscribe`。
+- `lib/transcription/audio-extractor.ts`：`fetchFirstAudioBlob(urls, signal, onProgress)`（按序逐条下载，非 2xx 与网络错误换下一条，AbortError 穿透，全败抛最后一条，空列表 `ASR_NO_AUDIO_SOURCE`）、`isAbortError`。`lib/background/transcription-utils.ts`：`createTranscribeAudio` 第三个参数改为 `extractAudioUrls → Promise<string[]>`，extractor 抛的 `TranscribeErrorInfo` / AbortError 透传，Offscreen 分块拿的是实际下载成功的那条 URL。`lib/bilibili/bilibili-transcription-handler.ts` 包一层成单元素列表，行为不变。
+- `lib/douyin/douyin-api.ts`：`DouyinSignatureError(reason: 'argus' | 'sdk-not-ready')`、`DouyinUnreachableError`（都直接 `extends Error`，message 一字未改，同步侧按两个平台基类分类不受影响）；`createDouyinDetailPacer({ sleep, random, now })`（按上次请求发送时刻、无长休息）；两个 env 常量 `VITE_DOUYIN_DETAIL_DELAY_MIN_MS` / `_JITTER_MS`（5000 / 3000）。
+- 错误码四处同步：`lib/transcription/types.ts`、`lib/runtime-message/schemas.ts`、`lib/i18n/locales/{zh-CN,en}.ts`（四条文案不含 reason / snippet）。
+- 守卫：`tests/agent-bridge-background-bundle-contract.test.ts` 加三组（四个 douyin 文件不得值导入 `douyin-sync-service` / `@/lib/database*` / `@/lib/ingest*` / 两个 barrel、无动态 `import(`；`douyin-tab.ts` 的 import 集合 ⊆ 四个白名单且 `./douyin-api` 只能 type-only；`transcription-handlers.ts` 含静态注册）；`tests/platform-env-constants-guard.test.ts` 登记两个新键；`.env.example` / `.env.local` 抖音块各加两行。
+- 测试：`douyin-transcription-handler.test.ts` 新 17 例（§4.3 T1–T7、T11 每行一例，另有 cache 命中零请求、缺 key 零请求、ASR 路径的候选列表顺序、`aweme_id` 不符、abort、默认导出接线）；`audio-extractor.test.ts` 新 8 例；`transcription-utils.test.ts` 新 6 例；`douyin-api.test.ts` +7 例（节奏器 5，含复核加的并发串行；错误类 2）、1 例改断言。
+- 文档：`lib/douyin/CLAUDE.md`（新节「Background 转录 handler」，失败形态表三行改类型名）、`lib/transcription/CLAUDE.md`（新节「音频候选与下载」）、`lib/background/CLAUDE.md`（Handler 节两条）、本文页头与 §4.3 T2 行、`prd.md`。
+
+**对本文的偏离（`info.md` Step 2 节 §0 的九条裁决）**
+
+1. **detail 懒到 ASR 路径里取**，不是「prepare → 组 deps → pipeline」：按本文顺序，cache 命中与缺 ASR key 都会白发一次签名请求、白等一次节奏器，cache 命中时无标签页还会以 T1 失败，与 D7「重开后不重复转录（cache 命中）」冲突。测试锁住：cache 命中与缺 key 两例都断言 `findTab` / transport 零调用。
+2. **共享下载器收候选列表**（本文留给 Step 2 的决定）：机制在 `lib/transcription`（零平台知识），B站传单元素列表。
+3. **`createTranscribeAudio` 透传 extractor 抛的结构化错误与 AbortError**：否则四个 `DOUYIN_*` 码全被改写成 `ASR_NO_AUDIO_SOURCE`（证伪 M1：撤掉即 15 例红）。
+4. **两个具名错误类**：handler 按类折算 T2 / T2′ / T3，不靠 message 字符串匹配。
+5. **`aweme_id` 回声闸门**（本文没写）：detail 答错视频 → `ASR_UNKNOWN`、不下载。docs/29 的教训。
+6. **T2 的「不重试」解读为「不在共享预算之外另加重试」**：detail 走 `requestEnvelope` 的 `MAX_RETRIES`，与同步一致；§4.3 T2 行已加勘误。代价：标签页中途关掉后约 10–16 s（3 次 unreachable 叠退避与间隔）才报 `DOUYIN_TAB_MISSING`。
+7. **`DOUYIN_RATE_LIMITED` 不借 `resetAt` / `providerId`**（那是 ASR quota 的形状）。
+8. **`getAsrSettings` 走 leaf `@/lib/storage/settings`**（`lib/storage/CLAUDE.md`），B站 handler 的 barrel 导入是既有代码、未动。
+9. **文案不含 `params.reason` 与 snippet**（`lib/i18n/CLAUDE.md`）；`DOUYIN_TAB_MISSING` 三个 reason 共用一条，Step 3 的横幅再细分。
+
+其他：T1 的 message 前缀 `WHAT_DETAIL`（只作 debug）；本文测试清单里「字幕命中 → `source: 'official'` 且不调 ASR」在 v1 不可达（`fetchOfficialSubtitle` 恒 `null`），记为 N/A，不是漏测；「节奏器两次调用间隔落在 `[MIN, MIN+JITTER)`」在 `douyin-api.test.ts` 锁住。
+
+**先红证据**（每个文件先写断言跑一次，再改实现）
+
+| 文件 | 改实现前 |
+|---|---|
+| `lib/transcription/types.ts` 只加码 | `pnpm compile`：`lib/i18n/index.test.ts(100,70): error TS2322: Type 'true' is not assignable to type 'never'`（wire / domain parity） |
+| wire enum 加码、locale 未加 | `lib/i18n/index.test.ts` 4 failed：`expected 'error.DOUYIN_TAB_MISSING' not to be 'error.DOUYIN_TAB_MISSING'`（四个码各一） |
+| `douyin-api.test.ts` | 7 failed / 92：`createDouyinDetailPacer is not a function` ×4、`instanceof assertion needs a constructor but undefined was given` ×3 |
+| env 守卫 | 先 `envNumber keys not registered … VITE_DOUYIN_DETAIL_DELAY_MIN_MS / _JITTER_MS`；登记后 `.env.example` / `.env.local` 各报 `missing documented lines` |
+| `audio-extractor.test.ts` + `transcription-utils.test.ts` | 13 failed / 14：`fetchFirstAudioBlob is not a function` ×7、`isAbortError is not a function`；行为红 `expected { code: 'ASR_NO_AUDIO_SOURCE' } to match { code: 'DOUYIN_TAB_MISSING' }`、`… to be AbortError`（裁决 3 的证据） |
+| `douyin-transcription-handler.test.ts` | `Failed to resolve import "./douyin-transcription-handler"`；实现写完 17 / 17 一次过 |
+
+**证伪**（每次改一处、跑对应文件、还原；还原后 sha256 与改前一致）
+
+| # | 改动 | 变红 |
+|---|---|---|
+| F1 | handler 加 `import { getDb } from '@/lib/database'` | bundle contract 1 例 |
+| F2 | `douyin-tab.ts` 的 `./douyin-api` 改成值导入 | 1 例 |
+| F3 | 删掉 `transcription-handlers.ts` 的 douyin import | 1 例 |
+| M1 | 撤掉 `createTranscribeAudio` 的透传（= Step 2 前的 catch） | utils 2 例 + handler 13 例 |
+| M2 | 撤掉 `aweme_id` 回声闸门 | handler 1 例 |
+| M3 | T1 查标签页挪到 detail 请求之后 | handler 4 例（ASR 顺序、T1、T2 的 `findTab` 计数、默认导出） |
+
+**验证**（2026-10-08）
+
+- `pnpm vitest run lib/douyin lib/background lib/transcription lib/bilibili lib/i18n tests/agent-bridge-background-bundle-contract.test.ts tests/platform-env-constants-guard.test.ts tests/platform-sleep-guard.test.ts tests/http-fetch-deadline-guard.test.ts tests/lib-import-smoke.test.ts tests/platform-completeness-contract.test.ts`：41 文件 / 481 例全过（复核前 480）。
+- `pnpm compile`：通过。`pnpm test`：根 228 文件 / 2002 例（复核前 2001）、`packages/*` 15 文件 / 263 例全过，无偶发超时。
+- `pnpm build`（复核的节奏器改动之后重跑）：`[bundle-contract] background graph 14 modules / 961873 bytes`（改前基线同一台机器同一天：14 modules / 947147 bytes，多出的 14,726 字节是 handler + `douyin-api` / `douyin-tab` / `douyin-media` 进 SW 图；复核前一次 build 是 961807），PGlite 标记 / dangling initializer / 动态 `import()` 零命中；`background.js` 里 `douyin-sync-service` / `pglite` 零命中。
+- manifest：基线 build 与两次改后 build 的 `.output/chrome-mv3/manifest.json` 逐字节相同（`cmp` 零差异）。
+
+**未做 / 留给后面**
+
+- **本 Step 判据的第一条（从 app.html 手发 `TRANSCRIBE_AUDIO` 得到 `success: true`）没跑**：它需要 (a) 在 BrowserOS neo 里 `chrome.runtime.reload()` 装上新 build——会关掉用户已开的扩展页面，要先征得同意；(b) 已配置的 ASR key——docs/33 Step 3 实测时没有，没 key 的话只能到 `ASR_INVALID_KEY`，到不了 `success: true`。两者齐了再跑，顺手把 Step 4 清单 2 的签名计数从 0 开始记。
+- `lib/auto-transcribe/pipeline.ts` 仍按 `code === 'ASR_RATE_LIMIT'` 判临时限流，`DOUYIN_RATE_LIMITED` 的 `retryAfter` 要等 Step 3 改成「带 `retryAfter`」才被消费；Step 3 之前它是普通单条错误。
+- 节奏等待与注入请求都不认 `signal`，取消最坏多等约 8 s + 一次请求（已写进 `lib/douyin/CLAUDE.md`）。
+- Step 3 要注意：`lib/background/job-registry.ts` 一个 tab 只记一个转录 job（`controllers` / `tabVideoIds` 按 tabId 键）。B站与抖音的自动转录都从同一个 app.html 标签页发，两条 session 若并发，后发的会顶掉前者在 registry 里的 controller 与 videoId（`abortTranscription(tabId)` 只能中止后者，Offscreen 进度会算到后者头上）。`'queue'` 碰撞只在各自的 `JOB_PLATFORM` 命名空间内串行，跨平台不串行；producer 设计时要么共用一条转录队列，要么接受这个缺口并写明。
+- 每次抖音 ASR 都会在 SW 控制台留一行 `[audio-extractor] … HTTP 403`：纯音轨 `main_url` 主机对 SW 恒 403（Step 0），fall-through 的预期噪音，Step 4 看日志别追。
+- `createTranscribeAudio` 的 extractor 签名仍带 `cid`，抖音忽略它；不对称但无害。
+
+**Step 2 复核（2026-10-08，trellis-check）**
+
+逐条核对 `info.md` Step 2 节 §0 九条裁决与 §1.1–§1.10、铁律 2 / 5 / 6、§4.3 每行的测试、取消点、`createTranscribeAudio` 的调用链、错误码与 env 的四处同步、三份 `CLAUDE.md`、测试质量。品味评分：好。致命问题一条，已修：
+
+1. **`createDouyinDetailPacer` 对并发调用不串行**（对 `info.md` §1.1 字面写法的有意偏离）。两个 `beforeRequest()` 同时进来时都在 `await` 之前读到同一个 `lastAt`、算出同一个 `due`，一起睡一起醒，背靠背发两条签名 detail 请求——模块级单例只保证「一个实例」，没保证「任意两条 detail 相隔 ≥ MIN」。触发条件：两个 app.html 标签页各跑一个 session（`ctx.startTranscription` 按 tab 登记，不互斥）。修法是 promise 链排队，后到者只在前者写完 `lastAt` 后才算自己的 `due`；拒绝的 wait 不卡住后续调用。先红证据：`expected [ 'a', 'b' ] to deeply equal [ 'a' ]`（两个调用在 5 s 同时 resolve）；新用例用真 `sleep` + 假时钟（注入「在 `sleep` 里推进时钟」的写法测不出这个 race）。
+2. `douyin-transcription-handler.test.ts` T2 补断言 `pacer.beforeRequest` 恰 3 次：「重试也等间隔」从 api 层锁到 handler 层。
+3. `lib/douyin/CLAUDE.md` +1 条（并发排队；同步的 `createDouyinPacer` 不排队是因为每次运行一个实例、运行由 job store 串行）；`lib/transcription/CLAUDE.md` 的 `params.reason` 取值收成指向 `lib/douyin/CLAUDE.md` 的指针——同一张折算表两份必漂。
+4. 铁律 6 的判断：`audio-extractor.ts` / `transcription-utils.ts` 注释里提 Douyin 与 docs/37 D-g 是出处引用，代码零平台分支；四个 `DOUYIN_*` 码是 D-j 明文要求进 `types.ts` 与 wire enum 的枚举。不算违规。
+5. 复核发现、主会话随手改：本文 §1.2 D-j「5xx / 不可达 → `DOWNLOAD_FAILED`」与实现不符（detail 不是音频下载），已在该格加勘误；`lib/transcription/CLAUDE.md`「新增平台」一条的「自己 prepare」改述为取媒体可以懒到 deps 里。
+6. 复核发现、未改：`pipeline.ts` 的 AbortError 判断与 `isAbortError` 是同一逻辑两处写，`isAbortError` 放 `types.ts` 旁更顺（pipeline → extractor 的 import 方向别扭）——小重构，留给后面。
+7. 验证（复核改动之后重跑）：§2 的 vitest 命令 41 文件 / 481 例全过（复核前 480）；`pnpm compile` 通过；`pnpm test` 根 228 文件 / 2002 例、`packages/*` 15 文件 / 263 例全过，零偶发超时。主会话随后重跑 `pnpm build`：见上面「验证」一节的 bundle 数字（复核改动后重测）。
 
 ### Step 3 — app 侧：流式转录、积压、pipeline 条、角标
 

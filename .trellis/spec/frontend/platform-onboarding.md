@@ -305,6 +305,20 @@ not apply (§4.3).
   `sections/bilibili/bilibili-processing-adapter.ts`; douyin —
   `persistDouyinTranscript` / `markDouyinError` / `getDouyinPendingVideos` in
   `lib/douyin/douyin-sync-service.ts` (the app side lands in docs/37 Step 3).
+- The Service Worker side is one handler per platform,
+  `lib/<platform>/<platform>-transcription-handler.ts`, registered in
+  `lib/background/transcription-handlers.ts` (docs/37 Step 2). It assembles
+  `PipelineDeps` and calls the shared pipeline; it never imports the
+  platform's sync service, `@/lib/database` or `@/lib/ingest` (the Service
+  Worker graph has no PGlite — `tests/agent-bridge-background-bundle-contract.test.ts`
+  plus the `pnpm build` bundle check). Media resolution may be lazy, inside
+  the `extractAudioUrls` dep rather than ahead of the pipeline, so a cache
+  hit or a missing ASR key costs the platform no request (douyin). The
+  extractor returns a candidate URL list the shared downloader walks in
+  order, and any `TranscribeErrorInfo` it throws passes through unchanged —
+  platform-prerequisite codes (`DOUYIN_TAB_MISSING` …) are added to
+  `TranscribeErrorCode`, the wire enum and both locales together
+  (`lib/transcription/CLAUDE.md`).
 
 **Mixed content model — one platform, inline and deferred items (douyin,
 docs/37 Step 1).** When only some items are deferred, three rules keep the

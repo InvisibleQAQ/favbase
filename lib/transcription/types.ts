@@ -66,7 +66,14 @@ export type TranscribeErrorCode =
   | 'ASR_UNKNOWN'
   | 'TRANSCRIBE_DUPLICATE'
   | 'TRANSCRIBE_VIDEO_ID_MISMATCH'
-  | 'UNSUPPORTED_PLATFORM';
+  | 'UNSUPPORTED_PLATFORM'
+  // Platform-prerequisite failures of the Douyin handler (docs/37 D-j): what
+  // `params.reason` may hold is listed in `lib/douyin/douyin-transcription-handler.ts`.
+  // `DOUYIN_RATE_LIMITED` carries `retryAfter` in seconds.
+  | 'DOUYIN_TAB_MISSING'
+  | 'DOUYIN_MEDIA_UNAVAILABLE'
+  | 'DOUYIN_SIGNATURE_REJECTED'
+  | 'DOUYIN_RATE_LIMITED';
 
 export interface TranscribeSuccess {
   success: true;
