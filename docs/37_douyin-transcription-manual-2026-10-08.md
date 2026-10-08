@@ -1,0 +1,440 @@
+# 37 抖音字幕与转录接入手册（2026-10-08）
+
+> 状态：**草案；Step 0 已完成 2026-10-08（用户账号、BrowserOS neo 实测，只读）**——网页 aweme 对象有 `cla_info` 字段但 136 个样本全空，v1 「优先 AI 字幕」半边改为**直接 ASR**（`fetchOfficialSubtitle: async () => null`，不写 `douyin-subtitle.ts`）；另发现纯音轨 `video.bit_rate_audio[]`，D-g 据此修订。证据在 Step 0 落地记录与任务目录 `research/douyin-step0-subtitle-media-probe-2026-10-08.md`；**Step 1 已完成 2026-10-08（内容模型翻转 + 领域层；代码 + 单测，已复核，未提交）**，按任务目录 `info.md` 执行，其 §0 四条裁决（D6 的 desc 也空 → `'no_content'`、`decodeDetail` 空 payload 抛冷却错误、`pickAudioSourceUrls` 三级全拼、入库门用 D-f 谓词）是对本文的有意偏离，见 Step 1 节末「Step 1 落地记录」。§1 的 D1–D7 是待用户确认的决策（每条带推荐项）；D-a 起是写手册时由代码核对推出的设计默认项。一次对话只做一个 Step；执行任一 Step 前先读 §1 决策、§2 否决清单、§3 铁律，再读该 Step 的八段。
+>
+> 任务目录：`.trellis/tasks/10-08-douyin-transcription-subtitle-first-asr-fallback-tagging-reuse-bilibili-flow/`。前置手册：`docs/33`（抖音收藏接入，Step 0–3 已落地）、`docs/04`（B站转录管线）、`docs/29`（B站字幕串台事故与归属校验）。
+>
+> 起因：用户 2026-10-08 要求「抖音收藏的视频已经拿到了，但没有字幕。视频优先 AI 字幕，没有 AI 字幕就转录，然后保存内容到数据库，然后打标签。这些 B站都写了，尽量复用」。
+
+---
+
+## 0. 结论
+
+| 问题 | 结论 | 证据 |
+|---|---|---|
+| B站链路能复用多少 | **转录策略管线、ASR 客户端、音频下载、Offscreen 分块、字幕缓存、串行转录状态机、处理 lane（Embed / Tag）、pipeline 条、配置阻塞横幅全部按原样复用，零平台分支**。要新写的只有抖音的三块平台碎片（§4.1 表）：取媒体地址与字幕轨（经抖音标签页）、WebVTT → `SubtitleRow[]` 解析、落库 seam | `lib/transcription/CLAUDE.md:13`「新增平台：建 `lib/<platform>/<platform>-transcription-handler.ts` … 在 `platformHandlers` 注册一行」；`lib/cache/CLAUDE.md`「新平台直接传自己的 platform 字符串」；`lib/auto-transcribe/CLAUDE.md`「平台 adapter 只提供单条转录、错误标记…」 |
+| 「打标签」要做什么 | **不写新代码**。转录落库后调 `enqueueCollectionProcessingItem` 进共享 Embed / Tag lane（抖音同步已在用它，`entrypoints/app/sections/douyin/douyin-sync-adapter.ts:55-62`）；打标签的输入在 descriptor 加 `descriptionField: 'desc'` 后自动带上文案 | `lib/tagging/tagging-service.ts:101-128`：标题 + 作者 + `platformMeta[descriptor.descriptionField]` + `item_contents.plainText` |
+| 真正的难点 | 不在转录，在**内容模型**：抖音今天把 `desc` 当正文、入库即 `'chunked'`、随即打标签（`lib/douyin/douyin-sync-service.ts:406-407`）。转录后替换正文**不会重新打标签**（`collection-processing-policy.ts:119`：Tag 候选 = 尚无标签）。所以视频必须像 B站一样以 `'pending'` 入库、转录后才进 Embed / Tag（D1） | §1 D1 |
+| 抖音有没有「AI 字幕」接口 | **字段有，样本零**（Step 0 实测）。网页播放器读 aweme 顶层 `cla_info: { list: [{ id, url, language }], original_language_info }`（不是开源解析器读的 `video.cla_info.caption_infos[]`，那是移动端形状）；但收藏列表、detail、related、搜索、精选公开课共 136 个 aweme 对象里 `cla_info` 全部缺失或 `null`。**v1 直接 ASR**，`cla_info` 只作将来的钩子记在 §4.2 | Step 0 落地记录；research/`douyin-step0-subtitle-media-probe-2026-10-08.md` §4 |
+| 音频从哪来 | **首选纯音轨 `video.bit_rate_audio[0]`**（Step 0 实测：DASH fMP4、AAC HE v2 48 kbps，99 s 视频 0.6 MB，约为最低 mp4 档的 1/10；20 条样本里 13 条视频有（1 条有 2 档）、6 条视频 `null`（15 / 23 / 35 / 43 / 53 s 与一条 2022 年的 170 s 老视频：除老视频外都 ≤ 53 s，正好是 mp4 退路也很小的短视频）、图文 `null`），退路是最低码率的 `format: 'mp4'` 档。写手册时「抖音网页没有纯音轨流」是错的。现有链路吃得下：`fetchAudioBlob` 把下载的字节当 `audio/mp4` 给 Groq（Groq 接受 mp4），超 24 MB 走 Offscreen FFmpeg，那里本来就 `-vn -map 0:a:0 -c:a copy` 抽音轨 | `lib/transcription/audio-extractor.ts:4-54`、`lib/offscreen/ffmpeg-subsystem.ts:187-196`、`lib/transcription/constants.ts:1` |
+| 媒体地址何时取 | 转录时经抖音标签页发一次 `aweme/v1/web/aweme/detail/`（受 Argus 签名保护，SW 直连不行），不在同步时存 URL（会过期，且 SW 读不到 `platform_meta`）。Background handler 自己 prepare，与 B站同形（D3） | §1 D3；docs/33 `research/douyin-request-signing.md` 第 72 行受保护路径表含 `detail/` |
+| 需要新表 / 迁移吗 | 不需要。`contentState` 是普通 text 列；`item_contents.subtitle_source` 已存在。**但库里现有的抖音行要清掉重拉**（D2） | §1 D2 |
+| manifest 变化 | **零**。CDN 下载靠 bookmarks 的 `<all_urls>`（`lib/collections/platform-descriptor.ts:159`），`scripting` 与 `https://www.douyin.com/*` 已在。Step 2 的判据之一是 manifest 逐字节不变 | `wxt.config.ts:49-73` |
+
+---
+
+## 1. 决策记录
+
+### 1.1 待用户确认（每条给推荐项）
+
+| # | 决策 | 推荐 | 备选与否决理由 |
+|---|---|---|---|
+| **D1** | **抖音视频的内容模型翻转为 B站式**：descriptor 改 `contentKind: 'transcript'`、`descriptionField: 'desc'`（镜像 bilibili 的 `intro`，`platform-descriptor.ts:119-122`）；可转录的（D-f：`mediaKind === 'video' && durationMs > 0`）视频入库 `contentState: 'pending'`、不写 `item_contents`、不派发处理 lane；转录落库后才经 `enqueueCollectionProcessingItem` 进 Embed / Tag（Step 1 勘误：原写「`mediaKind === 'video'` 的条目」，入库门改用 D-f 谓词，无时长的视频与图文同形——否则它们永远 `'pending'`、永远进不了 producer，见 Step 1 落地记录）。图文（`images` 非空）维持现状：`desc` 即正文、入库 `'chunked'`、同步时派发 | **做**。否则：① 转录替换正文后不会重新打标签（`collection-processing-policy.ts:119` Tag 候选 = `not(hasTag)`，`tagging-service.ts:71-72` 注释明说「re-transcription won't re-tag」），标签永远停在只看过文案的版本；② Coverage 的 content 段会在转录前就显示 100%（`'chunked'` 已算 done，`:102-105`），pipeline 条的「转录」段没有意义 | A′ 保留文案正文、转录后重打标签：要么删标签重跑（在共享 lane 上为一个平台加特殊路径），要么改 Tag 候选谓词（破坏「幂等、重转录不重打」的既有契约）。否决。<br>A″ 正文 = 文案 + 转录拼接：切块与 `subtitle_source` 语义都混掉。否决 |
+| **D1 的副作用，一并确认** | 图文的正文就是 `desc`，加了 `descriptionField: 'desc'` 后打标签 prompt 会把 `desc` 喂两遍（descriptor 注释 `platform-descriptor.ts:100-107` 明确提醒过这种重复） | **接受**：重复的是一段通常 < 200 字的文案，代价是 prompt 多几十 token；为它在共享 tagging 里加「description 与 content 相同则跳过」属于为一个平台加判断 | 给抖音分两个 `contentKind`：descriptor 是按平台一份，拆成按 mediaKind 两份要动 `lib/chat/tools.ts:57-59` 的 `CONTENT_KIND_LIST` 与 completeness contract。否决 |
+| **D2** | **库里现有的抖音行清掉重拉**（2026-10-07 Step 3 实测留下的 466 条，全部 `'chunked'` + 已派发打标签） | **清**（同 docs/33 Step 3 清库先例，用户批准后执行）。扩展未上线、无用户数据（memory：don't design migrations），insert-only 下入库后也改不回 `'pending'` | 写一次性修复把视频行退回 `'pending'` 并删标签：为测试数据写迁移。否决 |
+| **D3** | **媒体地址与字幕轨在 Background handler 里现取**：`lib/douyin/douyin-transcription-handler.ts` 用 `douyinTabTransport`（`lib/douyin/douyin-tab.ts:147-168`，SW 里 `browser.tabs.query` / `browser.scripting.executeScript` 都可用）发 `aweme/v1/web/aweme/detail/?aweme_id=`，从响应按 D-g 取音频候选（Step 0 后不再取字幕轨：`cla_info` 零样本） | **做**。与 `lib/transcription/CLAUDE.md:13`「各平台 handler 完全独立」同形；SW 只需要 `videoId`（= `aweme_id`），wire schema 不动（`platform` 本来就是自由字符串，`lib/background/message-protocol.ts:56`） | B 同步时把 `play_addr` / 字幕 URL 写进 `platform_meta`：URL 带签名会过期（TikTok 同形字段带 `url_expire`，抖音 `[UNKNOWN]`），而且 SW 没有 PGlite、读 meta 要走 read proxy 或改 wire。否决。<br>C 同步时在内存里把 aweme 对象连 URL 一起交给转录 producer、`TranscribeRequest` 带 URL：改 wire schema、handler 不再自给自足、断掉的 session 重启后仍要 detail。否决（若 Step 4 实测 detail 请求被签名门禁拒绝，再回到这里重议） |
+| **D4** | **节奏**：每条视频的 detail 请求经一个转录专用的节奏器，常量 `VITE_DOUYIN_DETAIL_DELAY_MIN_MS` / `_JITTER_MS`（铁律 7），只控 detail 请求间隔，不像同步那样每 25 次长休息 | **做，默认 5000 / 3000**（与同步页间隔同值）。ASR 路径每条本来 ≥ 10 s，节奏器实际只约束字幕命中路径的连发。首次积压（约 466 条）会在同一个标签页生命周期里发 466 次签名请求，远超 a_bogus 分桶里的「140 次」（docs/33 §6 `[UNKNOWN]`，同步最多到 28 次）——这是 Step 4 要盯的第一个数字 | 复用同步的 `createDouyinPacer`（含 25 次一次 1–3 分钟休息）：转录间隔已够长，再加长休息是把 8 小时的积压拉成一天。否决 |
+| **D5** | **抖音标签页缺失时转录 session 的行为**：session 派发前门（无标签页不派发、不算错误）；session 进行中标签页关掉 → handler 返回新错误码 `DOUYIN_TAB_MISSING`，`lib/auto-transcribe` 把它当「缺前置条件」停放当前条目并等待，**不**逐条标 `'error'` | **做，把「缺 ASR key」泛化为「缺前置条件」**：`AutoTranscribeAdapter.hasAsrKey / waitForAsrKey` 改名为 `isPrerequisiteMissing(error) / waitForPrerequisite()`，pipeline 的停放逻辑（`lib/auto-transcribe/pipeline.ts:232-241`）不变，只是判定由 adapter 决定；B站 adapter 的实现仍只认 `ASR_INVALID_KEY && !hasKey`。**判定必须是「此刻」的，照 ASR 守卫的形状** `code === 'ASR_INVALID_KEY' && !(await hasAsrKey())`：抖音 adapter 收到 `DOUYIN_TAB_MISSING` 后再查一次 `findDouyinTab()`，为 null（或 reason 是 `login` / `verify`）才停放；标签页在、只是瞬态失败，就是普通单条错误（§4.3 T2 的空转风险） | 不泛化、错误即标 `'error'`：标签页一关，一分钟内整份积压全部落 `'error'`、永不重试。否决。<br>在 adapter 的 `transcribe()` 里自旋等标签页：那个签名没有 checkpoint，暂停失效。否决 |
+| **D6** | **转录结果为空（无口播、纯 BGM）时**：`persistExistingItemContent` 对空文本返回 `null`（`lib/ingest/ingest.ts:300-301`），B站条目因此停在 `'pending'`、永不再入队——这是 B站今天的缺口。抖音无口播视频比例高得多，必须收口 | **空转录 → 正文退回 `desc`**（`subtitle_source: null`，`desc` 也空则 `'no_content'`）。条目在知识库里的样子等于今天（文案可检索、可打标签），只是多了一次 ASR 的代价 | 空转录 → `'error'`：把「没话说」当故障，Coverage 的 error 数失真。否决。<br>空转录 → `'no_content'`：丢掉今天已经有的文案正文。否决 |
+| **D7** | **积压补扫**：B站的 Transcript producer 只吃本次同步新插入的条目，关掉 app.html 丢 session 后留下的 `'pending'` 只能靠卡片上的手动转录按钮救（`lib/auto-transcribe/CLAUDE.md`「不查历史 pending」、`sections/bilibili/CLAUDE.md`「mount 也不扫历史 pending」）。抖音 v1 不做手动按钮，`'pending'` 会越积越多 | **每次同步运行末尾把本平台 `'pending'` 的视频条目追加进同一个 Transcript producer**（查 DB，不查远端；在 `runDouyinSync` 里、funnel 之内）。这不违反 `lib/auto-transcribe` 的约束（那条约束管的是 lib 模块自己不查 pending；app 侧 producer 喂什么由平台 adapter 决定） | 挂载时补扫：违反「同步只由按钮触发」（`sections/douyin/CLAUDE.md`）且每次开页面都要标签页。否决。<br>照抄 B站、先做手动按钮：用户要的是自动链路；手动按钮列为后续项（§5 Step 4「未做」） |
+
+### 1.2 设计默认项（写手册时由代码推出，后续 Step 不得无理由改回）
+
+| # | 默认项 | 理由 |
+|---|---|---|
+| D-a | **字幕来源标签仍是 `'official' \| 'asr'`**，抖音 AI 字幕记 `'official'` | `lib/subtitle/CLAUDE.md`：`SubtitleSource` 按转录方法区分，不加平台名；`item_contents.subtitle_source` 与卡片的 CC / ASR 角标都认这两个值 |
+| D-b | **`postProcess` 对抖音是恒等函数**，不复用 `processSubtitles` | 那是 B站特有的后处理（过滤点赞、投币话术），`lib/bilibili/CLAUDE.md`「别搬进 `lib/transcription`」。抖音字幕没有这类话术；要过滤什么等 Step 4 看样本 |
+| D-c | **`transcribeAndPersist` 的平台无关核心提到 `lib/transcription/`**，平台只注入 `platform` + 落库函数 + `markError` | 它今天硬编码 `PLATFORM = 'bilibili'` 与 `persistContentChunks`（`lib/bilibili/transcribe-utils.ts:10, 40-86`）。抖音是第二个真实调用方——全局规则「抽象等重复真实出现再做」此刻成立。逐字节 videoId 闸门、`item-content-updated` 事件、`startProcessing` seam 三件事对抖音完全一样；B站侧改成薄包装、行为不变、测试照过。**不与 `lib/transcription/CLAUDE.md:13`「各平台 handler 完全独立，不抽共享 adapter 接口」冲突**：那条管的是 SW 侧的平台 handler（prepare + 组 deps），这里提的是 app 侧的落库 seam；SW handler 抖音照样独立写一份。新文件进 `tests/lib-import-smoke.test.ts` 清单（它的加载图必须 storage-free，同 `transcribe-utils.ts`） |
+| D-d | **`lib/auto-transcribe` 与 `AutoTranscribeBar` / `use-auto-transcribe` 不复制，参数化 pipeline 实例** | `AutoTranscribeBar` 只吃 `AutoTranscribeState`（`sections/bilibili/auto-transcribe-bar.tsx:11`），`useAutoTranscribe` 只差一个 pipeline 单例（`use-auto-transcribe.ts:9`）。把 bar 挪到 `components/`、hook 接收 pipeline 参数，B站零行为变化 |
+| D-e | **抖音 v1 只做自动转录（同步后流式 + D7 积压），不做卡片上的手动转录 / 取消按钮** | `TranscriptionCoordinator` 深度绑定 B站类型（`BiliFavVideo`、`isProcessableVideo`、`getEmbeddedBvids`、cache `'bilibili'`，`lib/bilibili/transcription-coordinator.ts:1-12`），泛化它是另一个 Step 的活。卡片的 `footer` slot（`components/collection/collection-card.tsx:53-54`）留着，字幕来源角标（CC / ASR）v1 就加 |
+| D-f | **转录只认 `mediaKind === 'video' && durationMs > 0` 的条目**；图文、`duration: 0`、`status.is_delete` 的作品不进 producer | `mapAweme` 已有这两个字段（`lib/douyin/douyin-api.ts:458-460`）。谓词叫 `isTranscribableAweme`，只是内存判定，**不**进 `PLATFORM_DOWNSTREAM_ELIGIBILITY.douyin`：它不是下游排除（图文照样要 Embed / Tag），与 B站 `isProcessableVideo` 的语义不同 |
+| D-g | **音频源三级取数（Step 0 修订）**：① `video.bit_rate_audio[0].audio_meta.url_list` 的 `main_url → backup_url → fallback_url`（纯音轨，注意这里的 `url_list` 是对象不是数组）；② 没有纯音轨时取 `video.bit_rate[]` 里 `format === 'mp4'` 且 `is_h265 === 0` 的最低码率档，再退任意 codec 的最低 mp4 档；③ 都没有才 `video.play_addr.url_list`。每级都按 url_list 顺序 fall-through，非 2xx 换下一条 | Step 0 实测：按 `bit_rate` 升序的第一档多半是 h265 + bytevc1 且 `format: 'dash'`（手册原写法会选到它）；纯音轨 `main_url` 的主机 `v26-web` 对无 Referer 的 SW 请求 403（`Forbid_code 020200`），`backup_url`（`v11-weba`）与 `fallback_url`（play API 302）都 200，所以顺序 fall-through 不是可选项。纯音轨把 ≤ 24 MB 直传变成常态（22 min 视频估 8 MB），超限的才进 Offscreen 抽音轨；直传 mp4 时视频轨跟着上传是接受的浪费（Groq 按音频秒计费，不按字节） |
+| D-h | **detail 响应的验证码扫描要把 `aweme_detail` 加进容器键** | `scanVerify`（`douyin-api.ts:211-231`）只对 `aweme_list` / `collects_list` 之外的字符串值匹配 `captcha` 等标记；detail 响应的条目在 `aweme_detail` 下，一条讲 captcha 的视频文案会被当成验证页、整条转录以「去验证」失败。`ITEM_LIST_KEYS`（`:200`）加 `aweme_detail` |
+| D-i | **detail 的 `status_code: 0` + `aweme_detail: null` + 带 `filter_detail`（如 `status_self_see` / `core_dep`）= 作品不可用的合法结果**，条目标 `'error'`、不算风控 | docs/33 `research/douyin-rate-limiting.md` 第 55 行：dtk 规则 12「payload.explained → business_error」只在 `aweme/detail/` 上观测到。没有 `filter_detail` 的空 payload 仍按 F8 当软风控 |
+| D-j | **新错误码四个**：`DOUYIN_TAB_MISSING`（D5；`params.reason: 'closed' \| 'login' \| 'verify'`）、`DOUYIN_MEDIA_UNAVAILABLE`（D-i，含 `filter_detail` 原因）、`DOUYIN_SIGNATURE_REJECTED`（Argus 403 与 `sdk-not-ready`，提示刷新抖音标签页）、`DOUYIN_RATE_LIMITED`（冷却，带 `retryAfter`）；其余折进既有码（5xx / 不可达 → `DOWNLOAD_FAILED`，无 play URL → `ASR_NO_AUDIO_SOURCE`） | 每个码要同步 `lib/runtime-message/schemas.ts:20-37` 的 wire enum、`lib/i18n/index.test.ts:97-100` 的双向 parity、两个 locale 的 `error.<CODE>`（`lib/transcription/CLAUDE.md:14`）。四个各有不同的用户动作（开 / 登录 / 验证标签页；放弃；刷新标签页；等冷却），折不进一个；不借 `ASR_RATE_LIMIT`，见 §4.3 T4 |
+
+---
+
+## 2. 否决清单（后续 Step 不得重提）
+
+| 路线 | 否决理由 |
+|---|---|
+| 用 `music.play_url`（「原声」）当音轨 | 只在作品用原声时它才是视频音轨；用了授权 BGM 就转录出一首歌。没有可靠的判别字段 |
+| SW 直接 fetch `aweme/v1/web/aweme/detail/` | 2026-09-10 / 14 起在 Argus 受保护路径表里（docs/33 `research/douyin-request-signing.md` 第 72 行与 `public-favorites-semantics.md` 第 147 行），SW 直连 403 |
+| **自己构造** `https://www.douyin.com/aweme/v1/play/?video_id=<uri>` 稳定播放地址 | 社区 2026-08 起报告 iesdouyin share API 已不返回数据（Phantomlau3674/douyin-video-decoder），现状 `[UNKNOWN]`；而 detail 响应里的 `bit_rate[]` 直链已经够用，不另引入一条待验证路线。（Step 0 实测：服务端在每个 `url_list` 的第 3 条 / `fallback_url` 里**自己给出**带 `sign` / `biz_sign` 的 play API 地址，SW 无 cookie 请求它 302 到新签的 CDN 直链，视频与纯音轨都 200——按 url_list 顺序用它是 D-g 的 fall-through，不是这条否决的路线；否决的是自己拼） |
+| 转录时从页面 DOM / `<video>` 元素截流 | 要激活标签页、与 DOM 耦合，docs/33 §2.2 已否决同类路线 |
+| 在抖音标签页里（MAIN world）下载音频再传回 SW | 1.6 MB 一页的 JSON 已靠 `executeScript` 结构化克隆回传，几十 MB 的音频走这条路没测过；CDN 直链从 SW / Offscreen 下载本来就是 B站的现成路径，Step 0 先验证它能走 |
+| 把 B站的 `TranscriptionCoordinator` 泛化后给抖音做手动按钮 | v1 不做手动按钮（D-e）；泛化是独立任务 |
+| 共享 tagging 里加「description 与 content 相同则跳过」 | 为一个平台的图文加判断（D1 副作用，已接受重复） |
+
+---
+
+## 3. 跨 Step 铁律
+
+1. **docs/33 §3 的九条铁律全部继续生效**：detail 请求绝不预填签名参数、`collect*` 才是收藏、id 一律字符串、按形态判失败、403 / 429 不在请求层重试、不碰用户的抖音标签页、数值全走 `envNumber('VITE_DOUYIN_*')` 并登记 env 守卫、测试先红后绿、一次对话一个 Step。
+2. **SW 图不得触到 `lib/douyin/douyin-sync-service.ts`**（`:34` 值导入 `@/lib/database`，`:36-49` 导入 entities 与 `lib/ingest`）。handler 只许 import `douyin-api.ts`、`douyin-tab.ts`、新建的纯模块 `douyin-media.ts`，以及 `lib/background/transcription-utils.ts`（`lib/background/CLAUDE.md:27`：import `transcription-handlers.ts` 会成环）。守卫：`scripts/check-background-bundle.mjs`（`pnpm build`，2 MiB 上限、零 PGlite 标记、零动态 `import(`）+ `tests/agent-bridge-background-bundle-contract.test.ts` 新增两条 import 边。
+3. **`persistExistingItemContent` 是重转录写正文的唯一入口**（`lib/ingest/CLAUDE.md:26`），`subtitleSource` 如实透传（`'official' | 'asr'`，退回文案时 `null`）。
+4. **videoId 闸门逐字节比对**（`lib/bilibili/CLAUDE.md`「转录落库」；aweme_id 是纯数字串，但闸门本身不因平台放宽）。
+5. **`lib/douyin/` 零 `fetch(`**（字幕 VTT 与 mp4 都由共享的 `fetchAudioBlob` / Offscreen 下载，或 `fetchWithDeadline`）；`douyin-tab.ts` 的裸 `fetch` 白名单不扩大。
+6. **共享模块零平台知识**：`lib/transcription`、`lib/auto-transcribe`、`lib/cache`、`lib/tagging` 里不得出现 `'douyin'` 字面量或 `platform_meta` 的 key（守卫 `tests/platform-completeness-contract.test.ts`）。
+7. **图文的同步路径一行不改**：`'chunked'` 入库、同事务写正文、逐页派发、D-g 幽灵清扫全部照旧（`lib/douyin/CLAUDE.md`「同步编排」）。
+8. **每个 Step 的文档（目录 `CLAUDE.md`、本文落地记录、`CONTEXT.md` 若动术语）与代码同一个 commit**；commit 只在用户明确要求时做。
+
+---
+
+## 4. 形状速查
+
+### 4.1 B站链路地图与抖音的复用表
+
+| 环节 | B站实现 | 抖音 | 动作 |
+|---|---|---|---|
+| 策略管线 cache → 官方字幕 → ASR | `lib/transcription/pipeline.ts:81` `runTranscriptionPipeline`，差异经 `PipelineDeps`（`:16-39`）注入 | 同一个函数 | **复用** |
+| Background 平台 handler | `lib/bilibili/bilibili-transcription-handler.ts:16`：prepare → 组 deps → 调 pipeline → `notifyTab` | `lib/douyin/douyin-transcription-handler.ts`：prepare = 经 tab transport 取 detail | **新写**（约 80 行，形状照抄） |
+| handler 注册 | `lib/background/transcription-handlers.ts:23-25` `platformHandlers` | 加一行 `douyin: handleDouyinTranscribe` | **一行** |
+| 官方字幕 fetcher | `lib/bilibili/bilibili-transcription-adapter.ts:20`（wbi/v2 + `ownsSubtitleUrl` 归属校验，B站专属） | **v1 不写**（Step 0：`cla_info` 零样本）。handler 的 `fetchOfficialSubtitle: async () => null`；将来有样本再按 §4.2 的 `cla_info.list[]` 形状补 `douyin-subtitle.ts` | **一行** |
+| 音频 URL 提取 | `lib/bilibili/bilibili-api.ts:346` `extractBiliAudioUrl`（DASH 最高带宽音轨） | `lib/douyin/douyin-media.ts` `pickAudioSourceUrls(detail)`（返回有序候选：纯音轨三条 → 最低 mp4 档三条，D-g），下载侧逐条 fall-through | **新写**（纯函数） |
+| 音频下载 / 直传 / 分块 | `lib/background/transcription-utils.ts:42` `createTranscribeAudio` → `fetchAudioBlob` → Groq 或 Offscreen | 同一个函数，传入抖音的 `extractAudioUrl` | **复用** |
+| 字幕缓存 | `lib/cache/video-cache.ts`，key `local:vc:bilibili:<bvid>` | `getVideoCache('douyin', awemeId)` / `mergeVideoCache('douyin', …)` | **复用**（传平台串） |
+| 后处理 | `processSubtitles`（B站话术过滤） | 恒等（D-b） | — |
+| 落库 seam | `lib/bilibili/transcribe-utils.ts:40` `transcribeAndPersist` → `persistContentChunks`（`bili-sync-service.ts:168`）→ `persistExistingItemContent` | 核心提到 `lib/transcription/transcribe-and-persist.ts`（D-c）；抖音的 `persistDouyinTranscript` / `markDouyinError` 进 `douyin-sync-service.ts` | **抽核心 + 新写两个函数** |
+| 串行转录状态机 | `lib/auto-transcribe/pipeline.ts` `AutoTranscribePipeline`，adapter `lib/bilibili/auto-transcribe-adapter.ts:25` | `lib/douyin/auto-transcribe-adapter.ts`（同形，`transcribe` / `markError` / 前置条件 / quota） | **复用管线 + 新写 adapter** |
+| app 侧 producer（同步 → Transcript inbox） | `sections/bilibili/auto-transcribe-runtime.ts` `runBiliStreamingSync` + `createTranscriptProducer`，`startJob(JOB_PLATFORM, 'transcribe', …, 'queue')` | `sections/douyin/auto-transcribe-runtime.ts`：`onPagePersisted` 放宽为带条目（D7 的积压也从这里进） | **新写**（照抄形状） |
+| Embed / Tag 派发 | `sections/bilibili/bilibili-processing-adapter.ts` | 抖音 sync adapter 已有同一调用（`douyin-sync-adapter.ts:55-62`），抽成 `douyin-processing-adapter.ts` 供同步与转录共用 | **搬一下** |
+| pipeline 条的「转录」段 | `bilibili-view.tsx:55-57` `transcriptionStage` + `useJob(JOB_PLATFORM, 'transcribe')` | `douyin-view.tsx:62-68` 加 `content:` | **几行** |
+| 自动转录进度条 / 配额暂停 | `sections/bilibili/auto-transcribe-bar.tsx`、`use-auto-transcribe.ts` | 挪到 `components/auto-transcribe/`，hook 收 pipeline 参数（D-d） | **搬 + 参数化** |
+| 缺 ASR 横幅 | `CollectionConfigurationNotice asrBlocked`（`bilibili-view.tsx:281`） | `douyin-view.tsx:168-174` 传 `asrBlocked` | **一行** |
+| 卡片字幕来源角标 | `video-card.tsx` CC / ASR Chip | `douyin-card.tsx` 读 `item_contents.subtitle_source`（查询加一列） | **小改** |
+| 处理 lane、Library Gate、job 命名空间 | 全部共享（`'transcribe'` 已是 `BackgroundJobKind`，`background-jobs-store.ts:29`；闸门 `library-gate.ts:35-41`） | — | **零改动** |
+
+### 4.2 detail 接口（经 tab transport）
+
+| 项 | 值 |
+|---|---|
+| 请求 | `GET /aweme/v1/web/aweme/detail/`，query = `aweme_id` + 三个公共参数（`COMMON_QUERY`，`douyin-api.ts:59-63`，目前模块私有，Step 1 导出或加 `buildDetailRequest(awemeId)`）。零签名参数 |
+| 成功 | HTTP 200，`status_code: 0`，`aweme_detail: { … }`，与列表条目同形（docs/33 `research/douyin-collects-web-api.md` 第 220 行） |
+| 作品不可用 | `status_code: 0` + `aweme_detail: null` + `filter_detail`（原因码）→ D-i；无 `filter_detail` 的空 payload → F8 同类（软风控） |
+| 媒体字段（取数顺序，Step 0 定稿） | ① `video.bit_rate_audio[]`（纯音轨；每档 `{ audio_extra, audio_meta: { bitrate, codec_type, format: 'dash', media_type: 'audio', size, sub_info, url_list: { main_url, backup_url, fallback_url } }, audio_quality }`，可为 `null`）；② `video.bit_rate[]`（每档 `{ bit_rate, gear_name, format: 'mp4' 或 'dash', is_h265, is_bytevc1, play_addr: { data_size, uri, url_list[3], width, height, file_hash } }`，`format === 'mp4'` 中最低码率、优先 `is_h265 === 0`）；③ `video.play_addr.url_list`。`url_list` 固定 3 条：`v11-weba` CDN、`v26-web` CDN、`www.douyin.com/aweme/v1/play/?…sign&biz_sign`（服务端给的，不是自己拼的）。`play_addr.uri` 留作日志；`video.cdn_url_expired`（仅 detail）= 直链过期 unix 秒 |
+| 字幕字段（Step 0 定稿） | aweme **顶层** `cla_info: { list: [{ id, url, language }], original_language_info }`，可缺失或 `null`（网页播放器源码；`language` 含 `CN` 即中文，否则英文）。**实测 136 / 136 为空**（含 30 条英文公开课），所以 v1 不读它；将来补时选轨规则是「`language` 含 `CN` 的第一条，否则第一条有 `url` 的」。开源解析器的 `video.cla_info.caption_infos[]` / `subtitle_infos[]` 在网页响应里都不存在 |
+| 字幕格式 | `[UNKNOWN]`（零样本，播放器把 `cla_info.list[].url` 直接交给 xgplayer texttrack）。v1 不解析；将来补解析器时两种都认，输出 `SubtitleRow { from, to, text }`（`lib/subtitle/types.ts`） |
+| URL 过期（Step 0 定稿） | CDN 直链路径 `/<32 hex 签名>/<8 hex 过期 unix>/video/tos/…`：视频档 ≈ 签发 + 3 h，纯音轨 ≈ + 24 h；detail 的 `video.cdn_url_expired` 就是这个数。过期段改一位即 403。handler 在同一次调用里取 URL、立刻下载，不跨调用复用（设计不变） |
+| 验证码扫描 | `aweme_detail` 加进 `ITEM_LIST_KEYS`（D-h） |
+
+### 4.3 失败形态 → 动作（转录路径；同步路径的 F1–F12 不变）
+
+| # | 形态 | 动作 | 错误码 |
+|---|---|---|---|
+| T1 | `findDouyinTab()` 为 null（handler 入口） | 不发请求 | `DOUYIN_TAB_MISSING`（D5：停放，不标 error） |
+| T2 | transport `unreachable`（注入超时、标签页中途关闭、网络错误） | 不重试。**停放与否看此刻 `findDouyinTab()`**：为 null 才算缺前置条件（D5），否则是普通单条失败——否则「标签页在、网络抖一下」会停放 → 立刻恢复 → 重入队 → 再失败，空转 | `DOUYIN_TAB_MISSING`（adapter 再查一次标签页决定是否停放） |
+| T2′ | transport `sdk-not-ready`（页面 fetch 仍是 native） | 不重试；用户动作是刷新标签页，与 T3 同一条文案 | `DOUYIN_SIGNATURE_REJECTED` + `params.reason: 'sdk-not-ready'` |
+| T3 | 403 + `ArgusSecurityPlugin` | 不重试 | `DOUYIN_SIGNATURE_REJECTED`（文案：刷新抖音标签页后重试） |
+| T4 | 403 / 429 无 Argus、200 空 body（重试耗尽） | 复用 `classifyResponse` 抛出的 `DouyinRateLimitError(resetAt 非空)` → 折成转录错误。**不借用 `ASR_RATE_LIMIT`**：它的文案写死「Groq 速率限制」（`lib/i18n/locales/zh-CN.ts` `transcribe.rateLimit` / `error.ASR_RATE_LIMIT`），屏幕上会说错供应商 | `DOUYIN_RATE_LIMITED` + `retryAfter`（= `resetAt − now`）；`lib/auto-transcribe` 对带 `retryAfter` 的错误的处理（`pipeline.ts:248-253`，临时限流最多重试一次）要改成按「有 `retryAfter`」判，不按 `code === 'ASR_RATE_LIMIT'` 判——这是共享模块里一个字面量换成一个形状，不是平台分支 |
+| T4′ | F6 验证页（`DouyinRateLimitError(resetAt: null)`） | 用户必须去标签页完成验证 → **停放**（同 T1），不是重试一次后标 `'error'` | `DOUYIN_TAB_MISSING` + `params.reason: 'verify'`；`waitForPrerequisite` 对这个 reason 只能等用户动作：轮询间隔同 T1，恢复后重发 detail |
+| T5 | `status_code: 8` 未登录 / 2483 | 停放（同 T1：用户要去标签页登录） | `DOUYIN_TAB_MISSING` + `params.reason: 'login'` |
+| T6 | 作品不可用（D-i） | 标 `'error'`，继续下一条 | `DOUYIN_MEDIA_UNAVAILABLE` |
+| T7 | 有 `aweme_detail` 但取不到任何 play URL（图文误入、`status.is_delete`） | 标 `'error'` | `ASR_NO_AUDIO_SOURCE` |
+| T8 | 字幕轨存在但下载失败 / 解析出 0 行 | 记 warn，落 ASR（与 B站 `fetchOfficialSubtitle` 返回 `null` 同义）。**v1 不触发**（Step 0 后 `fetchOfficialSubtitle` 恒为 `null`） | — |
+| T9 | mp4 下载非 2xx / CORS 拒绝 | 既有路径 | `DOWNLOAD_FAILED` |
+| T10 | ASR 返回 0 行 | 正文退回 `desc`（D6） | 成功 |
+| T11 | 其他非零 `status_code` | 标 `'error'` | `ASR_UNKNOWN` + `params.detail` 含 `status_code / status_msg` |
+
+每个错误 `message` 带 HTTP 状态与 300 字符 body 片段（`textSnippet`）——与 docs/33 §4.4 同一条原则：这是把 `[UNKNOWN]` 变成已知的唯一途径。
+
+### 4.4 内容状态流转（D1 之后）
+
+| 条目 | 入库 | 转录成功 | 转录为空（D6） | 终态失败 |
+|---|---|---|---|---|
+| 视频（可转录的，D-f） | `'pending'`，无 `item_contents`，不派发 | `item_contents { plainText: 转录全文, subtitle_source: 'official' \| 'asr' }` + 带时间戳 chunk（`chunkSubtitleRows`）→ `'chunked'` → 派发 Embed / Tag | `item_contents { plainText: desc, subtitle_source: null }` + `charSplit` chunk → `'chunked'` → 派发；desc 也空 → `'no_content'`、不派发（Step 1 裁决） | `'error'`（`markDouyinError`） |
+| 图文、无时长的视频（Step 1） | `'chunked'`（正文 = desc，同事务），逐页派发 | 不进转录 | — | — |
+
+Coverage 的 content 段（`collection-processing-policy.ts:102-105`）：视频 `'pending'` 不算 done → pipeline 条「转录」段如实显示积压。
+
+### 4.5 节奏与常量（D4）
+
+| 常量 | 默认 | 说明 |
+|---|---|---|
+| `VITE_DOUYIN_DETAIL_DELAY_MIN_MS` | 5000 | 两次 detail 请求的最小间隔（SW 模块级「上次请求时刻」+ `sleep`；SW 重启丢一次间隔，可接受） |
+| `VITE_DOUYIN_DETAIL_DELAY_JITTER_MS` | 3000 | `jitteredDelayMs` |
+| `VITE_DOUYIN_TAB_POLL_MS` | 5000 | Step 3：session 停放后轮询 `findDouyinTab()` 的间隔（D5） |
+
+登记 `tests/platform-env-constants-guard.test.ts` 的 `EXPECTED_ENV_CONSTANTS`、`.env.example` 与 `.env.local` 的抖音块（后者征得用户同意）。不复用同步的 `createDouyinPacer`（§1 D4 否决项）。
+
+---
+
+## 5. 分步
+
+### Step 0 — 实机探测（只读，用户账号）
+
+**目标**：把 §6 前四条 `[UNKNOWN]` 变成已知，定稿 §4.2 的字段契约。不改代码。
+
+**依赖**：BrowserOS 在跑（CDP `127.0.0.1:9110`，docs/33 Step 3 的方法）、已登录抖音；**用户批准**在其账号上发约 4 次请求并开一个 douyin.com 标签页。
+
+**做法**（照 docs/33 Step 0 / 3 的 CDP 脚本形状，脚本放 `%TEMP%\fbcdp\dy\`，不入仓库）
+
+1. 开 `https://www.douyin.com/user/self?showTab=favorite_collection`，等页面 SDK 就位（`Function.prototype.toString.call(window.fetch)` 不含 `[native code]`）。
+2. 页内 fetch `listcollection count=1 cursor=0`：记录 `aweme_list[0].video` 的全部顶层键、`bit_rate[]` 每档的 `bit_rate / gear_name / play_addr.url_list[0]` 形状、是否存在 `cla_info / caption_infos / subtitle_infos / subtitleInfos / claInfo` 任一键。
+3. 挑一条在网页播放器里**能看到「字幕」开关**的收藏视频（没有就从首页找一条公开视频），页内 fetch `aweme/v1/web/aweme/detail/?aweme_id=…`：同样记录键；对比列表条目与 detail 的字幕字段是否一致（列表没有、detail 有 → 转录时必须 detail；两者都有 → 仍走 detail，但记下来）。
+4. **从扩展 SW 上下文**（`chrome://extensions` 的 favbase SW target，`Runtime.evaluate`）`fetch(字幕 URL, { credentials: 'omit', mode: 'cors' })`：HTTP 状态、`content-type`、前 200 字符（是否 `WEBVTT`）；再 `fetch(最低码率 mp4 URL)` 只读 `content-length` 与状态（`method: 'HEAD'` 不行就 `GET` 后 `cancel()` body）。记录 URL 里的过期参数名。
+5. 可选：同一 URL 10 分钟后再 HEAD 一次，看是否过期。
+
+**判据**：§4.2「字幕字段」「URL 过期」两格填上实测值；§6 前四行各标「已证实 / 已证伪 / 仍未知 + 原因」；若字幕字段在列表与 detail 里都不存在，D3 的「优先 AI 字幕」半边变成「直接 ASR」，§4.1 的 `douyin-subtitle.ts` 缩成 `fetchOfficialSubtitle: async () => null`，本文页头注明。
+
+**回滚**：关掉探测开的标签页。零代码。
+
+#### Step 0 落地记录（2026-10-08，只读实测，零代码）
+
+- 环境：BrowserOS neo MCP（server 0.0.67 / Chromium 151）直接驱动 douyin.com 标签页（docs/33 Step 3 时连不上，这次正常）；扩展 SW 侧用 CDP 9110 `Runtime.evaluate`，SW 休眠时从扩展自己的 offscreen 文档发一条 runtime 消息唤醒。账号同 docs/33（喜欢 235）。脚本 `%TEMP%\fbcdp\dy\t0\`（`t0-list.js`、`wake-sw.mjs`、`sw-fetch.mjs`、`probe-*.js`、`t0-notes.md`）。本探测自己发的签名 API 请求 2 次（`listcollection count=20` 一次、`aweme/detail` 一次），CDN / play API 请求 11 次（SW 9 次：mp4 直链 3 次含 6.5 min 复查与篡改过期段、纯音轨 `main_url` 主机 3 次、`backup_url`、`fallback_url`、`url_list[2]` play API；页面侧纯音轨 2 次）；另开过 3 个自己的标签页看播放器与页面自己的接口（5 个视频页、1 个搜索页、精选 2 个 tab，页面自己发出约 20 次签名请求），已全部关闭。全部原始形状（脱敏）在任务目录 `research/douyin-step0-subtitle-media-probe-2026-10-08.md`。
+- **字幕：字段有，样本零 → v1 直接 ASR。** 网页播放器 SubtitlesPlugin 读 aweme 顶层 `cla_info.list[].{ id, url, language }`（`client-entry` 把 `cla_info` 映射成 `claInfo = { list, originalLanguageInfo }`），AB 配置 `subtitles.enable = 1`、语言 `zh-Hans-CN` / `en-US`。但 136 个 aweme 对象（收藏 20，含我自己 detail 的 1 条与在播放器里开的 4 条；页面自己的 detail / related / series 去重后 16；搜索「英文演讲」30；精选公开课 / 知识 70）`cla_info` 全部缺失或 `null`，4 条收藏在播放器里 texttrack 列表为空。按本 Step 判据：§4.1 的 `douyin-subtitle.ts` 不写，handler `fetchOfficialSubtitle: async () => null`；`cla_info` 形状记在 §4.2 作钩子。`is_subtitled`（顶层，0 / 缺省）与它无关。
+- **媒体：发现纯音轨。** `video.bit_rate_audio[]`（DASH fMP4，AAC HE v2 48 kbps，99 s 视频 604 KB，`url_list` 是 `{ main_url, backup_url, fallback_url }` 对象）在 20 条样本里 13 条视频有（1 条有 2 档）、6 条视频 `null`（15 / 23 / 35 / 43 / 53 s 与一条 2022 年的 170 s 老视频：除老视频外都 ≤ 53 s，正好是 mp4 退路也很小的短视频）、图文 `null`。手册原「抖音没有纯音轨流」作废，D-g 改为三级取数 + url_list 顺序 fall-through。顺序不是可选项：纯音轨 `main_url`（`v26-web`）对无 Referer 的 SW 请求 403（`Forbid_code 020200`，同一 URL 在页面里 200 / 206），`backup_url`（`v11-weba`）与 `fallback_url`（play API 302）都 200。
+- **直链：** SW 里（`credentials: 'omit'`, `mode: 'cors'`，与 `fetchAudioBlob` 相同）最低 H.264 mp4 档 `v11-weba` 直链 200 `video/mp4` 7,590,969 B `ftypisom`，`access-control-allow-origin: *`；`url_list[2]` 的 play API（服务端给的 `sign` + `biz_sign`，无 cookie）302 到新签 CDN 后 200。过期：路径第 2 段 8 hex = unix 秒 = detail 的 `video.cdn_url_expired`，视频档 ≈ 签发 + 3 h、纯音轨 ≈ + 24 h；6.5 min 后同 URL 仍 200；过期段改一位 403（前面 32 hex 是签名）。「同一次调用里取用、不跨调用复用」不变。
+- **D-g 的坑：** `bit_rate[]` 按 `bit_rate` 升序的第一档多半是 h265 + bytevc1 且 `format: 'dash'`（`720_3_1` / `540_x_1`），手册原写法会选到它。退路改为 `format === 'mp4'` 中最低码率、优先 `is_h265 === 0`。
+- **detail：** 经页面 fetch 一次成功（`status_code 0`，`aweme_detail` 82.8 KB，256 ms，`a_bogus` + `x-secsdk-web-signature` + `verifyFp` 自动补上）；与列表条目同形（`play_addr.uri`、`bit_rate` 14 档、`bit_rate_audio` 1 档一致），detail 独有 `cdn_url_expired` / `download_addr` / `is_h265` 等约 40 键。单次成功不证明签名被接受（docs/33 调研：错签约 3/8 也能拿到数据），Step 2 判据负责。
+- **顺带：** 页面自己的 API 全走 XMLHttpRequest（SDK 同样补签），favbase 的 `window.fetch` 路线在 docs/33 已证实；`music.play_url` 20 条全有但按 §2 不碰；视频页在后台标签页会自动播放，探测时逐一暂停了。
+- **未做 / 留给后面：** 非空 `cla_info` 的 URL 主机、格式、SW CORS（无样本）；Groq 对 fMP4 纯音轨（`ftyp` + DASH 分段）与 h265 mp4 的接受度（Step 4 清单 3 扩成三类：纯音轨、H.264 mp4、h265 mp4）；`bit_rate_audio` 为 `null` 的视频占比（样本 6 / 19，Step 4 记数）。
+
+### Step 1 — 内容模型翻转 + 领域层（`lib/douyin/`、descriptor）
+
+**目标**：D1 / D6 / D-c / D-f / D-g / D-h 落地并测绿；SW 图未动；app 侧仍不转录（视频入库后停在 `'pending'`，图文照旧）。
+
+**依赖**：Step 0 定稿字段；D1 / D2 经用户确认。本 Step 不改 `.env.local`（节奏常量在 Step 2）、不清库（改法第 3 条）。
+
+**文件**
+
+| 文件 | 动作 |
+|---|---|
+| `lib/collections/platform-descriptor.ts:209-231` | `contentKind: 'transcript'`、`descriptionField: 'desc'`，注释改写（原注释「video transcription is out of scope」作废） |
+| `lib/douyin/douyin-api.ts` | 导出 `buildDetailRequest(awemeId)`；`ITEM_LIST_KEYS` 加 `aweme_detail`（D-h）；`DouyinRawAweme` 不变 |
+| `lib/douyin/douyin-media.ts`（新，纯函数） | `decodeDetail(envelope)` → `{ kind: 'aweme', detail } \| { kind: 'unavailable', reason }`（D-i）；`pickAudioSourceUrls(detail)`（D-g 三级有序候选：纯音轨 main / backup / fallback → 最低 H.264 mp4 档的 3 条 url_list → `play_addr.url_list`）；`isTranscribableAweme(meta)`（D-f） |
+| ~~`lib/douyin/douyin-subtitle.ts`~~ | **不写**（Step 0：`cla_info` 136 个样本全空；将来有样本再按 §4.2 的形状补） |
+| `lib/douyin/douyin-sync-service.ts` | `contentState`：视频 `'pending'`，图文沿用（`:406-407`）；`textOf` 对视频返回 `''`（它只在 `'chunked'` 时被调，`lib/ingest/ingest.ts:425-433`）；新增 `persistDouyinTranscript(awemeId, rows, source)`（`rows` 空 → 退回 meta 的 `desc`，D6）、`markDouyinError(awemeId)`、`getDouyinPendingVideos()`（D7 的查询：`contentState = 'pending'` 且 `platform_meta->>'mediaKind' = 'video'`，返回 producer 需要的 `{ awemeId, title, coverUrl, authorName, durationMs }`） |
+| `lib/transcription/transcribe-and-persist.ts`（新） | D-c：从 `lib/bilibili/transcribe-utils.ts:40-86` 提出核心，签名 `transcribeAndPersist({ platform, videoId, title, persist, hooks })`；`createStatusListener` 一并提出 |
+| `lib/bilibili/transcribe-utils.ts` | 改成薄包装（`platform: 'bilibili'`、`persist: persistContentChunks`），对外签名不变；测试照过 |
+| `lib/douyin/CLAUDE.md`、`lib/bilibili/CLAUDE.md`、`lib/transcription/CLAUDE.md` | 内容模型、seam 搬家、新纯模块的约束 |
+| `CONTEXT.md` | 抖音 Content 的含义变了：视频 = 字幕 / 转录（空则退回文案），图文 = 文案。与 docs/33 D1 写进去的那条并列（铁律 8） |
+| `tests/lib-import-smoke.test.ts` | 清单加 `lib/transcription/transcribe-and-persist.ts`、`lib/douyin/douyin-media.ts` |
+| `tests/platform-completeness-contract.test.ts` 等 | 按 `tsc` 与契约测试的红项逐条烧 |
+
+**改法要点**
+
+1. 先翻 descriptor，跑 `pnpm compile && pnpm vitest run tests/platform-completeness-contract.test.ts lib/chat`——`CONTENT_KIND_LIST`（`lib/chat/tools.ts:57-59`）与 Knowledge Tool 的描述文本会随之变化，看哪些测试红。
+2. `persistDouyinTranscript` 走 `persistExistingItemContent(db, 'douyin', awemeId, text, chunks, source)`：转录非空 → `chunkSubtitleRows(rows)` + `source`；为空 → `desc` + `charSplit(desc, { preferParagraph: false })` + `null`。它**不**启动 Embed / Tag（铁律 3；`lib/ingest/CLAUDE.md:38`）。
+3. **本 Step 不清库**。insert-only 下既有的 466 条 `'chunked'` 行不会被重新入库，对新代码无害；Step 1 的正确性由内存 PGlite 测试证明。若在这里清库，视频会以 `'pending'` 入库却要等到 Step 3 才有人转录——一次对话一个 Step，中间是好几天没有正文的库。清库重拉（D2）挪到 Step 3 的判据第一行。
+
+**测试**（先红后绿）
+
+- descriptor：`contentKind` / `descriptionField` 黄金值；tagging 输入对抖音带上 `desc`。
+- `douyin-media`：Step 0 的真实形状做夹具（脱敏 id / URL，research 文件 §2）——纯音轨优先且 `url_list` 对象按 main / backup / fallback 展开、`bit_rate_audio` 为 `null` 时退 mp4、最低 mp4 档不取 h265 + dash 档、无 `bit_rate` 退 `play_addr`、`filter_detail` → unavailable、图文 / `duration 0` 不可转录、`aweme_detail` 里含 `captcha` 的文案**不**触发验证标记（D-h，撤掉 `ITEM_LIST_KEYS` 的新增即红）。
+- ~~`douyin-subtitle`~~：Step 0 后不写。
+- `douyin-sync-service`（内存 PGlite）：视频 `'pending'` 无正文无派发、图文 `'chunked'` 照旧、`persistDouyinTranscript` 三条（非空 / 空退回 desc / desc 也空 → `'no_content'`、返回 `null`；Step 1 勘误：原写「`null` 且状态不变」，与 D6 冲突，按 D6）、`subtitle_source` 如实、`getDouyinPendingVideos` 只返回视频、重转录覆盖正文并重建 chunk。
+- `transcribe-and-persist`：B站现有测试原样过；新增一条用假 persist 证明闸门与事件对任意 platform 成立。
+
+**验证**：`pnpm vitest run lib/douyin lib/bilibili lib/transcription lib/ingest tests/platform-completeness-contract.test.ts tests/lib-import-smoke.test.ts tests/platform-env-constants-guard.test.ts`；`pnpm compile`；`pnpm test`。不跑 `pnpm build`（SW 图未动）。
+
+**回滚**：revert。库里的 `'pending'` 行对旧代码无害（它只是永远不被处理）。
+
+**判据**：上面全绿；`lib/douyin/CLAUDE.md` 写明「视频 `'pending'`、图文 `'chunked'`」与 D6 的退回规则；B站的落库行为由既有测试证明未变。
+
+#### Step 1 落地记录（2026-10-08，代码 + 单测；未提交）
+
+执行稿是任务目录 `info.md`（主会话读完代码后写的逐文件规格），与本文冲突处以它的 §0 为准。范围：只动 `lib/`、`tests/`、三份目录 `CLAUDE.md`、`CONTEXT.md`、本记录与 `prd.md`；`entrypoints/`、`.env.*`、库、`pnpm build` 都没碰。
+
+**做了什么**
+
+- `lib/collections/platform-descriptor.ts`：douyin `contentKind: 'transcript'`、`descriptionField: 'desc'`，注释按 D1 / D6 改写。翻完先按改法要点 1 跑 `pnpm compile` 与契约 / `lib/chat` / `lib/collections` / `lib/tagging`：**既有套件零红**（16 文件 / 165 例全过）——`CONTENT_KIND_LIST` 是从 descriptor 派生的集合，`transcript` 与 `post-text` 两个值本来就在集合里，Knowledge Tool 的描述文本一字未变。红的只有先写的两条新断言（descriptor 黄金值、tagging 输入带 `desc`），翻完即绿。
+- `lib/douyin/douyin-api.ts`：导出 `buildDetailRequest(awemeId)`（GET，`aweme_id` + 三个公共参数，零签名参数）、`WHAT_DETAIL`、`cooldownFrom`；`ITEM_LIST_KEYS` 加 `aweme_detail`（D-h）。
+- `lib/douyin/douyin-media.ts`（新，纯函数）：`decodeDetail`（D-i）、`pickAudioSourceUrls`（D-g）、`isTranscribableAweme`（D-f）。只 import `./douyin-api` 与 `@/lib/http/response-body`。
+- `lib/douyin/douyin-sync-service.ts`：入库门 `contentStateOf`（`isTranscribableAweme` → `'pending'`，否则 `desc` 即正文）；`ingestPage` 的 `textOf` 只对非可转录条目给 `desc`；新增 `persistDouyinTranscript` / `markDouyinError` / `getDouyinPendingVideos` 与 `DouyinPendingVideo`。
+- `lib/transcription/transcribe-and-persist.ts`（新，D-c）：从 `lib/bilibili/transcribe-utils.ts` 逐行提出的核心，签名 `transcribeAndPersist({ platform, videoId, title, persist, hooks })`，`createStatusListener` 一并搬入；`PersistContentResult` 的 owner 改为这里。`lib/bilibili/transcribe-utils.ts` 改成薄包装（`platform: 'bilibili'`、`persist: persistContentChunks`），对外签名不变；`bili-sync-service.ts` 的 `PersistContentResult` 改为 re-export。`transcribe-utils.test.ts` 一字未改、原样绿。
+- 测试：`platform-descriptor.test.ts` +1、`tagging-service.test.ts` +1、`douyin-api.test.ts` +2（另 `requests` 表加 `aweme/detail` 一行，表驱动的两条 it.each 各多一例）、`douyin-media.test.ts` 新 16 例（复核 +1，见下）、`douyin-sync-service.test.ts` +12 新例 / 5 处既有用例改夹具或断言（25 → 37）、`transcribe-and-persist.test.ts` 新 6 例；`tests/lib-import-smoke.test.ts` 清单加两个新模块。
+- 文档：`lib/douyin/CLAUDE.md`（新节「内容模型与转录落库」、失败形态表加 detail 四行、D-h）、`lib/bilibili/CLAUDE.md`「转录落库」（seam 搬家、留指针）、`lib/transcription/CLAUDE.md`（新节「app 侧落库 seam」）、`CONTEXT.md`（Douyin Content 两分，与 docs/33 D1 那条并列）、本文页头 / §1.1 D1 / §4.4 / Step 1 测试清单、`prd.md`。
+
+**对本文的偏离（`info.md` §0 的四条裁决）**
+
+1. **D6「desc 也空」→ `'no_content'`、返回 `null`**（本文 Step 1 测试清单原写「`null` 且状态不变」，与 §1.1 D6 自相矛盾）。留在 `'pending'` 会被 D7 的积压补扫每次同步重新入队、白跑一次管线，Coverage 永远到不了 100%。实现经 `settleItemContent(db, id, '', chunkDesc)` 结算，不写正文。
+2. **`decodeDetail` 对「无 `filter_detail` 的空 payload」抛 `DouyinRateLimitError(resetAt = now + COOLDOWN_MS)`**（与列表 F8 同形），不加第三个 kind；`cooldownFrom` 因此从 `douyin-api.ts` 导出。
+3. **`pickAudioSourceUrls` 对 D-g 措辞的有意偏离**：D-g 写「② 没有纯音轨时 … ③ 都没有才 play_addr」；实现把三级候选**全部**按序拼成一个去重后的列表。下载侧逐条 fall-through 时，纯音轨三条全 403 也还有 mp4 可退；只给一级等于把「主机 403」变成整条失败。
+4. **`'pending'` 的门在入库处、用 D-f 的 `isTranscribableAweme`，不是 D1 字面的「`mediaKind === 'video'`」**：两条合起来会留下一类永远转录不了的 `'pending'`（时长缺失 / 为 0 的视频）。无时长的视频与图文同形入库（`desc` 即正文、同步时派发），`getDouyinPendingVideos` 于是不需要再按 `mediaKind` 过滤。D1 的目的（转录后才打标签）不变。
+
+**其他偏离与补充**
+
+5. 既有用例的改动超出测试清单点名的三处：「first sync walks every page」的 `newItemIds` 由 5 个 id 改为 `[]`（默认夹具是带时长的视频，入库即 `'pending'`，没有正文落地）；`chunkCountOf` 挪到 helper 区，另加 `contentOf` / `chunksOf` 两个 helper。
+6. 多一条本文没列的用例「a transcription cut short before its chunks keeps its transcript when a page of the running sync sweeps it」：Transcript lane 与 Fetch lane 并发时，转录正文已写、chunk 未写，随后同步的一页含该视频——那一页的清扫先问 `textOf`。它锁的是 `textOf` 对可转录视频恒 `''` 的理由。运行开头那次清扫（`textOf: () => ''`）会先治愈上一次运行留下的幽灵，所以只有同一次运行里并发产生的幽灵才会走到页级 `textOf`；用例靠 transport 在答第一页之前制造中断。
+7. `persistDouyinTranscript` 先过滤全空白行，正文与切块都用过滤后的 rows（`info.md` 写的是原 rows 拼正文），两者才一致。`markDouyinError` 多写 `updatedAt`（bilibili 的 `markVideoError` 不写）。`decodeDetail` 判 `filter_detail` 时字符串先 trim（只有空白的字符串不算解释）。
+8. `WHAT_DETAIL` 由 `douyin-media.ts` 使用（错误消息前缀），`info.md` 的 import 白名单按模块算，不按符号。
+
+**先红证据**（每个文件先写断言跑一次，再改实现）
+
+| 文件 | 改实现前 |
+|---|---|
+| `platform-descriptor.test.ts`、`tagging-service.test.ts` | 2 例红：`expected 'post-text' to be 'transcript'`、`expected undefined to be '文案 #tag'` |
+| `douyin-api.test.ts` | 整个文件红：`buildDetailRequest is not a function` |
+| `douyin-media.test.ts` | 模块不存在 |
+| `douyin-sync-service.test.ts` | 12 failed / 36：三条行为红（`newItemIds` 得到 5 个 id 而非 `[]`；`'11'` 得 `'chunked'` 而非 `'pending'`；无 desc 的视频得 `'no_content'` 而非 `'pending'`），其余 `persistDouyinTranscript is not a function` |
+| `transcribe-and-persist.test.ts` | 模块不存在 |
+
+**证伪**（每次改一处、跑对应文件、还原；还原后 sha256 与改前一致）
+
+| # | 改动 | 变红 |
+|---|---|---|
+| D-h | 撤掉 `ITEM_LIST_KEYS` 的 `aweme_detail` | api 1 例（`expected 'captcha' to be null`） |
+| D-g a | 第二级不偏好 `is_h265 === 0` | media 4 例 |
+| D-g b | 第二级不过滤 `format === 'mp4'` | media 1 例 |
+| D-g c | 纯音轨 `backup_url` 排在 `main_url` 前 | media 2 例 |
+| D-g d | 只给第一级（有纯音轨就不列 mp4） | media 1 例 |
+| textOf | `descById` 对可转录视频也给 `desc` | sync 1 例：并发转录中断后的正文被 `'desc 1'` 覆盖、`subtitle_source` 丢失 |
+
+**验证**（2026-10-08）
+
+- `pnpm vitest run lib/douyin lib/bilibili lib/transcription lib/ingest lib/collections lib/tagging tests/platform-completeness-contract.test.ts tests/lib-import-smoke.test.ts tests/platform-env-constants-guard.test.ts tests/platform-sleep-guard.test.ts tests/http-fetch-deadline-guard.test.ts lib/chat`：43 文件 / 511 例全过。
+- `pnpm compile`：通过（根 `tsc --noEmit` + `pnpm -r compile`）。
+- `pnpm test`：根 225 文件 / 1953 例、`packages/*` 15 文件 / 263 例全过，无偶发超时。
+- 没跑 `pnpm build`（SW 图未动，本 Step 不要求）。
+
+**未做 / 留给后面**
+
+- 清库重拉（D2）按改法第 3 条挪到 Step 3 判据第一行；库里既有的 466 条 `'chunked'` 抖音行对新代码无害（insert-only，不会被重新入库）。
+- `createStatusListener` 的大小写无关比对原样搬入（已知缺陷，`lib/bilibili/CLAUDE.md`），不在本 Step 范围。
+- 根 `CLAUDE.md` 的目录索引里 `lib/transcription/` 一行原只写「管线」（复核时已补半句，见下）。`lib/ingest/CLAUDE.md` 未动：`persistExistingItemContent` 与 `settleItemContent` 的用法都在它许可的范围内。
+- `docs/37` §4.1 表的「落库 seam」与「字幕缓存」等行描述的是 Step 2 / 3 的接线，本 Step 不改。
+
+**Step 1 复核（2026-10-08，trellis-check；仍未提交）**
+
+逐条核对 `info.md` §1.1–§1.6 与 §0 四条裁决、§3 铁律 3–7、import 边界、五个守卫：代码与落地记录一致，零缺陷。改了四处文档、加了一例测试：
+
+1. `lib/collections/CLAUDE.md` `descriptionField` 一条：规则不变，补上 douyin 是已接受的例外（图文的 Content 就是 `desc`，descriptor 仍填 `'desc'`），指向 §1.1 D1 副作用行。
+2. 根 `CLAUDE.md` 目录索引 `lib/transcription/` 一行补「兼 app 侧落库 seam `transcribe-and-persist.ts`」。
+3. `lib/douyin/CLAUDE.md`：两条多事实的 bullet 各拆开（`getDouyinPendingVideos` / `markDouyinError`；`pickAudioSourceUrls` 的三级列表 / 纯音轨顺序不可改 / `url_list` 是对象）。
+4. `douyin-media.test.ts` +1：`classifyResponse` → `decodeDetail` 整条链对 detail body 成立（`has_more` / 列表键的形状检查在分页解码器里，不在 `classifyResponse`）——Step 1 的 16 例都是手工拼的 envelope，没有一例走过 Step 2 handler 真正会走的路径；读代码确认能过，加一例锁住。
+5. 复核发现、未改：`persistDouyinTranscript` 对「空转录 + 空 desc」调 `settleItemContent(db, id, '', …)`，空文本下 `chunkAndSettle` 不换 chunk、不碰 `item_contents`——对 `'pending'` 条目干净；若将来对**已转录**的条目重转录得到空结果，旧正文与旧 chunk 会留在 `'no_content'` 之下。v1 不可达（积压只取 `'pending'`，无手动重转录），留给加手动按钮的人。
+6. 复核发现、留给主会话：`prd.md`「待用户决定」仍写「见 docs/37 §1.1（D1–D7）」，而 `CONTEXT.md` 与本记录把 D1 / D6 记为「用户决定 2026-10-08」，两处口径要对齐。（`.trellis/spec/frontend/platform-onboarding.md` §3 / §4.4 的抖音混合内容模型已由主会话在复核同时改好，工作树里未提交。）
+7. 验证（复核改动之后重跑）：`pnpm vitest run lib/douyin lib/bilibili lib/transcription lib/ingest lib/collections lib/tagging lib/chat` + 五个守卫：43 文件 / 512 例全过（复核前 511）；`pnpm compile` 通过；`pnpm test` 根 225 文件 / 1954 例、`packages/*` 15 文件 / 263 例全过，无偶发超时。
+
+### Step 2 — Background handler（SW 图扩一支）
+
+**目标**：`TRANSCRIBE_AUDIO { platform: 'douyin', videoId: awemeId }` 从 app.html 发到 SW 后能跑完 cache → 字幕 → ASR，错误码齐全；`pnpm build` 过 bundle 守卫；manifest 逐字节不变。
+
+**依赖**：Step 1。
+
+**文件**
+
+| 文件 | 动作 |
+|---|---|
+| `lib/douyin/douyin-transcription-handler.ts`（新） | `handleDouyinTranscribe(msg, tabId, ctx, signal)`：入口 `findDouyinTab()`（T1）→ 节奏等待（D4）→ `requestEnvelope({ transport: douyinTabTransport, pacer: 转录节奏器 }, buildDetailRequest(videoId), 'detail')` → `decodeDetail` → 组 deps：`fetchOfficialSubtitle: async () => null`（Step 0）、`transcribeAudio`：按 `pickAudioSourceUrls(detail)` 的候选逐条下载、非 2xx 换下一条（Step 0：纯音轨 `main_url` 主机对 SW 403，`backup_url` 200；`createTranscribeAudio` 今天只收单个 URL 提取函数，Step 2 决定是在 handler 里循环还是让共享下载器收候选列表——共享侧改动必须零平台知识）、`cacheGet / cacheSave` 用 `'douyin'`、`postProcess: rows => rows`、`getAsrConfig: getAsrSettings` → `runTranscriptionPipeline` → 失败 `notifyTab(... 'failed')` |
+| `lib/background/transcription-handlers.ts:23-25` | `douyin: handleDouyinTranscribe` |
+| `lib/transcription/types.ts:53-69`、`lib/runtime-message/schemas.ts:20-37`、`lib/i18n/locales/{zh-CN,en}.ts` | D-j 四个错误码 + `error.<CODE>` 文案 |
+| `lib/douyin/douyin-api.ts` | 转录节奏器 `createDouyinDetailPacer()`（只控间隔）与两个 env 常量（§4.5） |
+| `tests/agent-bridge-background-bundle-contract.test.ts` | 新增边：handler 不得 import `douyin-sync-service` / `@/lib/database` / `@/lib/ingest`；`douyin-tab.ts` 仍只 import `wxt/browser` + descriptor + backoff |
+| `tests/platform-env-constants-guard.test.ts`、`.env.example`、`.env.local` | 两个新键 |
+| `lib/transcription/CLAUDE.md`、`lib/background/CLAUDE.md`、`lib/douyin/CLAUDE.md` | handler 的 import 边界、detail 的 cache 与节奏 |
+
+**改法要点**
+
+1. 错误折算（§4.3）：`DouyinRateLimitError(resetAt 非空)` → `DOUYIN_RATE_LIMITED` + `retryAfter: ceil((resetAt-now)/1000)`；`DouyinRateLimitError(resetAt: null)`（验证页）→ `DOUYIN_TAB_MISSING` + `reason: 'verify'`；`DouyinAuthError` → `DOUYIN_TAB_MISSING` + `reason: 'login'`；无标签页 / `unreachable` → `DOUYIN_TAB_MISSING` + `reason: 'closed'`；Argus 403 / `sdk-not-ready` → `DOUYIN_SIGNATURE_REJECTED`；`DouyinStatusError` → `ASR_UNKNOWN`。全部用 `createErrorInfo`，不抛类实例过 IPC（`lib/transcription/CLAUDE.md:10`）。
+2. pipeline 的 `cid` 参数对抖音无意义，传 `0`（`PipelineRequest.cid` 是 number，不改类型）。
+3. `assertAudioNotReused` 照常生效：同一 mp4 指纹配不同 `aweme_id` 即拒。
+4. 不在 handler 里缓存 detail 响应：每次调用现取（§4.2「URL 过期」）。
+
+**测试**
+
+- handler 单测（fake transport、fake `ctx`）：T1–T7（含 T2′ / T4′）、T11 每行一例；字幕命中 → `source: 'official'` 且不调 ASR；无字幕 → ASR；cache 命中短路；节奏器两次调用间隔落在 `[MIN, MIN+JITTER)`。
+- 错误码 parity（`lib/i18n/index.test.ts:97-100`）自动红再绿。
+- `pnpm build`：`[bundle-contract]` 的模块数与字节数记进落地记录；`background.js` 里 `douyin-sync-service` / `pglite` 零命中。
+
+**验证**：`pnpm vitest run lib/douyin lib/background lib/i18n tests/agent-bridge-background-bundle-contract.test.ts tests/platform-env-constants-guard.test.ts`；`pnpm compile`；`pnpm test`；`pnpm build && diff /tmp/manifest-before.json .output/chrome-mv3/manifest.json`（**零差异**）。
+
+**回滚**：revert；SW 图回到 Step 1 之前。
+
+**判据**：从 app.html DevTools 手发一条 `TRANSCRIBE_AUDIO { platform: 'douyin' }` 能得到 `success: true`（字幕或 ASR 任一路径）；manifest 零差异；bundle 守卫绿。
+
+### Step 3 — app 侧：流式转录、积压、pipeline 条、角标
+
+**目标**：点「立即获取」后新入库的视频自动排进 Transcript lane，转录后进 Embed / Tag；关过页面留下的 `'pending'` 在下一次同步末尾被补上（D7）；pipeline 条多一个「转录」段；卡片有 CC / ASR 角标；缺 ASR 与缺标签页各有横幅。
+
+**依赖**：Step 2。
+
+**文件**
+
+| 文件 | 动作 |
+|---|---|
+| `lib/auto-transcribe/types.ts`、`pipeline.ts:232-241, 248-253` | D5：`hasAsrKey / waitForAsrKey` → `isPrerequisiteMissing(error) / waitForPrerequisite()`；`asrBlocked` 改名 `prerequisiteBlocked` 并带 `reason: 'asr' \| 'platform-tab'`（UI 文案据此选）；临时限流的判定从 `code === 'ASR_RATE_LIMIT'` 改为「错误带 `retryAfter`」（§4.3 T4） |
+| `lib/bilibili/auto-transcribe-adapter.ts` | 按新接口实现（只认 `ASR_INVALID_KEY`），行为不变 |
+| `lib/douyin/auto-transcribe-adapter.ts`（新） | `transcribe` → `transcribeAndPersist({ platform: 'douyin', persist: persistDouyinTranscript })`；`markError: markDouyinError`；`isPrerequisiteMissing(error)`：`ASR_INVALID_KEY` 且此刻无 key，或 `DOUYIN_TAB_MISSING` 且此刻 `findDouyinTab() === null` / reason 是 `login` / `verify`（D5：瞬态失败不停放）；`waitForPrerequisite`：前者同 B站 watch settings，后者轮询 `findDouyinTab()`（间隔经 `envNumber('VITE_DOUYIN_TAB_POLL_MS')`，登记 env 守卫）；quota 两个函数照抄 |
+| `entrypoints/app/sections/douyin/auto-transcribe-runtime.ts`（新） | 照 `sections/bilibili/auto-transcribe-runtime.ts`：pipeline 单例、`createTranscriptProducer`、`startJob(JOB_PLATFORM, 'transcribe', …, 'queue')`；producer 的输入 = 同步每页新插入的视频（`onPagePersisted` 放宽为 `(ids, items)`）+ 同步末尾 `getDouyinPendingVideos()`（D7） |
+| `entrypoints/app/sections/douyin/douyin-sync-adapter.ts` | 同步前门不变；funnel 内动态 `import('./auto-transcribe-runtime')`（同 B站，转录 runtime 不进启动 chunk）；派发改经 `douyin-processing-adapter.ts` |
+| `entrypoints/app/sections/douyin/douyin-processing-adapter.ts`（新） | 从 sync adapter 抽出的 `enqueueDouyinCollectionProcessing` |
+| `entrypoints/app/components/auto-transcribe/`（新，搬迁） | `AutoTranscribeBar` 与 `useAutoTranscribe(pipeline)`；B站 section 改 import 路径 |
+| `entrypoints/app/sections/douyin/douyin-view.tsx` | `content: transcriptionStage(...)`（把 B站本地的 `transcriptionStage` 提到 `hooks/pipeline-segments.ts`）、`useJob(JOB_PLATFORM, 'transcribe')`、`<AutoTranscribeBar>`、`CollectionConfigurationNotice prerequisiteBlocked`、`extraRefreshKey` |
+| `entrypoints/app/sections/douyin/douyin-card.tsx` | CC / ASR Chip（`subtitle_source` 经 `getDouyinItems` 多查一列） |
+| `lib/collections/configuration-blockers.ts:52`、`components/configuration-blocker/`、`lib/chat/tools.ts:235` | `capability: 'asr'` 之外加一种（文案「打开并登录抖音标签页后自动继续」）。**注意**：这是共享模块，capability 名要像 `'asr'` 一样是能力词而不是平台词——用 `'platform-tab'` + `platform` 参数，守卫 `tests/platform-completeness-contract.test.ts` 才不会红。`asrBlocked` 改名 `prerequisiteBlocked` 会连带 `lib/chat/tools.ts:235`（那里写死 `asrBlocked: false`，Knowledge Tool 没有状态机上下文，改名后仍传「无阻塞」） |
+| i18n（zh-CN + en） | `configurationBlocker.platformTab`、`error.DOUYIN_*` 三条（Step 2 已加）、`douyin.subtitleSource.*` |
+| `sections/douyin/CLAUDE.md`、`entrypoints/app/hooks/CLAUDE.md`、`components/auto-transcribe/CLAUDE.md`（新）、`lib/auto-transcribe/CLAUDE.md` | 前置条件泛化、积压补扫是抖音的有意偏离、bar 的归属 |
+
+**改法要点**
+
+1. 同步 → 转录的顺序，**两条输入源不能混**：`onPagePersisted` 今天收的是 `result.contentPersisted`（`douyin-sync-service.ts:265`）——以 `'pending'` 入库的视频**永远不在这个列表里**（ingest 只对 `'chunked'` 条目写正文，`lib/ingest/ingest.ts:425-433`），照原样接线会得到一个空的 Transcript inbox。所以页回调改成两个参数：`contentPersisted`（图文 + 治愈的幽灵，派发 Embed / Tag，照旧）与 `insertedVideos`（`result.inserted` 里 `mediaKind === 'video'` 的条目，带 producer 需要的标题 / 封面 / 作者 / 时长，`IngestResult.inserted` 是 `IngestedItem[]`，`lib/ingest/ingest.ts:145`）；后者 `append` 进 producer。同步成功结算前再 `append(getDouyinPendingVideos())`（D7）——`session.append` 按 videoId 去重（`lib/auto-transcribe/CLAUDE.md`），本次刚入库的不会被重复加入。
+2. Fetch 不 await Transcript（`sections/bilibili/CLAUDE.md`「转录与处理 lane」）；producer 在 `finally` 里 `close()`。
+3. 无标签页时同步本来就在 funnel 前抛 `DouyinAuthError`，所以 producer 不会被创建；session 中途丢标签页走 D5 停放。
+4. `useAutoTranscribe(pipeline)`：B站传 `biliAutoTranscribePipeline`，抖音传 `douyinAutoTranscribePipeline`；hook 零副作用（`sections/bilibili/CLAUDE.md`「`use-auto-transcribe.ts` 是单例 pipeline 的纯订阅」）。
+
+**测试**
+
+- `lib/auto-transcribe/pipeline.test.ts`：`isPrerequisiteMissing` 返回真时停放、`waitForPrerequisite` 恢复后按原顺序重入、过一次 checkpoint；B站既有用例改接口后原样绿。
+- `lib/douyin/auto-transcribe-adapter.test.ts`：`DOUYIN_TAB_MISSING` 算前置条件缺失、`ASR_INVALID_KEY` 有 key 时不算；`waitForPrerequisite` 在标签页出现后 resolve。
+- `sections/douyin/auto-transcribe-runtime.test.ts`：每页视频进 inbox、图文不进、`'pending'` 积压在成功结算前追加且去重、Fetch 不等 Transcript、producer `close` 后 session 能完成。
+- `douyin-sync-adapter.test.ts`：派发经 processing adapter；无标签页仍在 funnel 前抛。
+- `douyin-view.test.tsx`：转录段出现、横幅两种 reason 文案、角标。
+- 守卫：completeness contract（新 capability 不带平台字面量）、i18n 无硬编码 CJK、ui-vendor-boundaries（bar 搬家后不引入新依赖）。
+
+**验证**：`pnpm vitest run lib/auto-transcribe lib/douyin lib/bilibili entrypoints/app/sections/douyin entrypoints/app/sections/bilibili entrypoints/app/components/auto-transcribe tests/platform-completeness-contract.test.ts tests/i18n-no-hardcoded.test.ts tests/ui-vendor-boundaries.test.ts`；`pnpm compile`；`pnpm test`；`pnpm build`（bar 搬家影响 app chunk，不影响 SW；manifest 零差异）。
+
+**回滚**：revert；库里已转录的正文对旧代码仍是合法 `'chunked'` 行。
+
+**判据**：先按 D2 清库（用户批准后删 `items where platform='douyin'`（级联）、`authors` 孤儿、`platform_sync_records`、`local:douyin-backfill`，docs/33 Step 3 的 `clear-douyin.js` 可照用）；重拉一次后，不碰页面，视频逐条出现 CC / ASR 角标、标签随后出现；关掉 app.html 再开、再同步一次，残留的 `'pending'` 被补上；关掉抖音标签页，进度条显示等待而不是错误；`pnpm build` 的 manifest 零差异。
+
+### Step 4 — 实机端到端验证（生产条件）
+
+**目标**：在用户账号上跑完一次「清库 → 全量 → 自动转录积压 → 打标签」，把 §6 剩余 `[UNKNOWN]` 收口，按实测调默认值。
+
+**依赖**：Step 1–3 已落地；ASR key 已配置（Step 3 实测时无 key）。
+
+**清单**
+
+1. **字幕命中率**：积压里 `subtitle_source = 'official'` 与 `'asr'` 的比例；字幕轨的语言分布；是否有 VTT 解析失败的样本（T8）。
+2. **签名计数**：同一标签页生命周期内 detail 请求累计次数；第一次出现 Argus 403 / `sdk-not-ready` 时的计数——这是 docs/33 §6「140 次分桶」的直接测量。出现即记录，对策是文案「刷新抖音标签页」，**不是**自动 reload。
+3. **mp4 直传**：Groq 对带视频轨的 mp4（文件名 `audio.m4a`）是否接受；≤ 24 MB 与 > 24 MB 各至少一条；Offscreen 抽音轨耗时。
+4. **D6 比例**：空转录退回 `desc` 的条目数——若过半，说明 ASR 在无口播视频上白跑，评估是否要在转录前用 `music.title`（「原声」字样）之类的弱信号跳过（**不在本 Step 做**，只记数）。
+5. **节奏**：字幕命中路径的实际间隔（应 ≥ 5 s）；整份积压总耗时。
+6. **D7**：中途关 app.html，重开后再同步，`'pending'` 被补上且不重复转录（cache 命中）。
+7. **D5**：session 进行中关抖音标签页 → 停放；重开 → 继续，无条目被标 `'error'`。
+8. **打标签**：转录后的标签明显比文案版更贴内容（抽 10 条人工看）。
+9. **Chat / Agent Bridge**：`favbase search "<字幕里的关键词>" --platform douyin` 命中转录正文。
+
+**不做**：不压测风控；不在本 Step 改节奏常量以外的代码。
+
+**回滚**：推翻默认值 → 只改对应 `VITE_DOUYIN_*`；推翻路线（detail 被拒、CDN 不可下载）→ 停下来回 §1 D3 重议，不就地换路线。
+
+**判据**：清单 1–9 全部有记录；§6 每条收口；落地记录写进本文。
+
+---
+
+## 6. 未知与风险
+
+| `[UNKNOWN]` | 影响 | 状态 |
+|---|---|---|
+| 抖音网页 aweme 对象是否带 AI 字幕轨字段（`video.cla_info.caption_infos` / `subtitle_infos` / 其他） | 「优先 AI 字幕」半边是否存在 | **已证伪（2026-10-08）**：字段是顶层 `cla_info.list[]`（播放器源码），但 136 个样本全空；v1 直接 ASR。非空样本的 URL 主机、格式、CORS 仍未知 |
+| 字幕轨在收藏列表条目里就有，还是只在 `aweme/detail` 里 | 不影响路线（D3 一律 detail），影响 Step 0 结论的表述 | **仍未知**（两边都没有非空样本；列表与 detail 都没有 `cla_info` 键，精选接口给 `null`） |
+| 字幕 VTT URL 与 `bit_rate[].play_addr` 直链能否从扩展 SW / Offscreen 以 `credentials: 'omit'` 下载（CORS、Referer、签名参数） | D3 路线成立与否 | **直链已证实（2026-10-08）**：SW 里 mp4 档 `v11-weba` 直链 200（`access-control-allow-origin: *`），play API 第 3 条 302 后 200；纯音轨 `v26-web` 主机 403 但 `backup_url` / `fallback_url` 200 → 必须顺序 fall-through。VTT 无样本，仍未知 |
+| 直链是否带过期参数、有效期多长 | 是否能跨调用复用（本文按「不复用」设计） | **已证实（2026-10-08）**：路径第 2 段 8 hex = 过期 unix（= `cdn_url_expired`），视频 ≈ 3 h、纯音轨 ≈ 24 h，6.5 min 后仍 200，改过期段即 403。设计不变 |
+| `aweme/detail` 经注入 transport 的签名是否被接受 | 同上 | 同步三接口已证实（docs/33 §6），detail 在同一受保护表里，推断成立；Step 2 判据 |
+| a_bogus 单页面生命周期签名计数分桶 | 首次积压约 466 次 detail | docs/33 §6 仍未知；Step 4 清单 2 |
+| Groq 对带视频轨的 mp4（文件名 `.m4a`）的接受度 | D-g | Step 4 清单 3 |
+| 无口播视频比例 | D6 的 ASR 浪费 | Step 4 清单 4 |
+| 页内 fetch 的风控阈值 | 节奏默认值 | docs/33 §6 仍未知；不压测 |
+
+---
+
+## 7. 参考
+
+- 本仓库：`docs/33`（抖音接入，§1 D3 / D4、§3 铁律、§4.4 形态、§6 未知）、`docs/04`（B站转录管线）、`docs/29`（字幕归属校验与串台事故）、`.trellis/spec/frontend/platform-onboarding.md` §4.4「延迟正文」
+- 目录规则：`lib/transcription/CLAUDE.md`、`lib/auto-transcribe/CLAUDE.md`、`lib/cache/CLAUDE.md`、`lib/subtitle/CLAUDE.md`、`lib/bilibili/CLAUDE.md`「转录落库」、`lib/douyin/CLAUDE.md`、`lib/ingest/CLAUDE.md`、`lib/background/CLAUDE.md`、`lib/offscreen/CLAUDE.md`、`entrypoints/app/hooks/CLAUDE.md`「处理 lane」、`entrypoints/app/sections/bilibili/CLAUDE.md`「转录与处理 lane」
+- 外部（写手册时字幕字段的唯一线索；**Step 0 已证实网页响应不是这个形状**，见 §4.2）：ucmao/media-parser `src/parsers/douyin_parser.py` `get_subtitles`（读 `video.cla_info.caption_infos[]` → `video.subtitle_infos[]`，选 `zh-Hans` 等，下载后按 WebVTT cue 解析）；fyfsxkh/TokBrain `app/services/f2_links.py` `_subtitle_candidates`（容器 `video.subtitleInfos` / `video.subtitle_infos` / `aweme.subtitle_infos` / `aweme.video_subtitle`）；社区项目 VidSumAI 则声称「抖音无标准 CC 字幕」
+- 抖音 detail 的 `filter_detail` 业务结果：docs/33 `research/douyin-rate-limiting.md` 第 55 行（dtk 规则 12 / 13）

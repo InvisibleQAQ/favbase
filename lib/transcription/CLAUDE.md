@@ -13,6 +13,17 @@
 - 新增平台：建 `lib/<platform>/<platform>-transcription-handler.ts`（自己 prepare + 组装 deps + 调 pipeline），在 `lib/background/transcription-handlers.ts` 的 `platformHandlers` 注册一行。各平台 handler 完全独立，不抽共享 adapter 接口。
 - 新增 `TranscribeErrorCode` 要同步 wire schema（`lib/runtime-message/schemas.ts`）与两个 locale，规则在 `lib/i18n/CLAUDE.md`。
 
+## app 侧落库 seam（`transcribe-and-persist.ts`，docs/37 D-c）
+
+- 它是 `TRANSCRIBE_AUDIO` 的另一端：app.html 侧发消息、逐字节比对 `data.videoId`、调平台注入的 `persist`、发 `item-content-updated`、交给 `startProcessing`，正文 durable 后立即返回（Embed / Tag ticket 不阻塞下一条转录，`onIndexed` 只是晚到的通知）。平台只注入 `platform` + `persist` + hooks。
+- 与上面「各平台 handler 完全独立」不冲突：那条管 SW 侧的 prepare + deps；这条是 app 侧的落库，所有平台共用一份。
+- 本目录不得 import `lib/<platform>/`（方向只能平台 → 共享），也不得出现平台 id 字面量；加载图 storage-free，在 `tests/lib-import-smoke.test.ts` 清单里。
+- videoId 闸门逐字节 `!==`，不按平台放宽（BV 号是大小写敏感的 base58；aweme_id 是纯数字串，闸门不因此放宽）。不匹配 → 不调 persist、不发事件、不启动后处理，`console.error` 恰好一行、带两个 id（它首先是定位工具）。
+- `persist` 返回 `null`（条目不存在、写库失败）→ `onIndexed(null)`、无事件、无后处理。
+- `createStatusListener` 的大小写无关比对是已知缺陷（跟着 `lib/background/job-registry.ts` 的 lowercase），别照抄到闸门上。
+- `PersistContentResult` 的 owner 是这里；`lib/bilibili/bili-sync-service.ts` 与 `transcribe-utils.ts` 只 re-export。
+- 守卫：`transcribe-and-persist.test.ts`（假 persist、任意 platform）与 `lib/bilibili/transcribe-utils.test.ts`（经 B 站包装对真实 PGlite persist）。
+
 ## 坑
 
 - `assertAudioNotReused`：同一音频 hash 配不同 videoId 即拒绝，防的是 SPA 跳转后拿到上一个视频的旧音频。别当成多余校验删掉。

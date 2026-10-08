@@ -212,9 +212,14 @@ export const PLATFORM_DESCRIPTORS = {
     jobPlatform: 'douyin',
     // Rides the user's own logged-in www.douyin.com tab; nothing to enter.
     readiness: 'login',
-    // The post text (`desc`); video transcription is out of scope.
-    contentKind: 'post-text',
-    descriptionField: null,
+    // A video's Content is its subtitle / ASR transcript (docs/37 D1), with
+    // the post text as the fallback when the transcript comes back empty
+    // (D6); an image post's Content is the post text (`desc`) itself.
+    contentKind: 'transcript',
+    // The post text, the mirror of bilibili's `intro`. For an image post the
+    // Content already IS `desc`, so the tagging prompt sees it twice —
+    // accepted rather than a per-media-kind descriptor (D1 side effect).
+    descriptionField: 'desc',
     // Requests run inside the user's open douyin.com tab (MAIN-world
     // injection, signed by the page SDK) — docs/33 D4. Also needs the
     // `scripting` API permission, declared in wxt.config.ts.

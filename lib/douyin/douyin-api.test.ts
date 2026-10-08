@@ -4,6 +4,7 @@ import { resolveHttpDeadlineMs } from '@/lib/http/fetch-with-deadline';
 import { RetrySignal } from '@/lib/http/retry';
 import {
   buildCollectionRequest,
+  buildDetailRequest,
   buildFolderItemsRequest,
   buildFoldersRequest,
   classifyResponse,
@@ -183,6 +184,7 @@ describe('douyin request construction', () => {
     ['listcollection', buildCollectionRequest('0')],
     ['collects/list', buildFoldersRequest('0')],
     ['collects/video/list', buildFolderItemsRequest('7300000000000000123', '0')],
+    ['aweme/detail', buildDetailRequest('7300000000000000123')],
   ];
 
   it.each(requests)('%s carries zero signature parameters', (_name, req) => {
@@ -226,6 +228,15 @@ describe('douyin request construction', () => {
     expect(req.query.collects_id).toBe('7300000000000000123');
     expect(typeof req.query.collects_id).toBe('string');
     expect(req.query).toMatchObject({ cursor: '20', count: '20' });
+    expect(req.form).toBeUndefined();
+  });
+
+  it('aweme/detail is a GET keyed by the string aweme_id and no form (docs/37 §4.2)', () => {
+    const req = buildDetailRequest('7300000000000000123');
+    expect(req.method).toBe('GET');
+    expect(req.path).toBe('/aweme/v1/web/aweme/detail/');
+    expect(req.query.aweme_id).toBe('7300000000000000123');
+    expect(typeof req.query.aweme_id).toBe('string');
     expect(req.form).toBeUndefined();
   });
 
@@ -409,6 +420,11 @@ describe('findVerifyMarker', () => {
     expect(findVerifyMarker({ collects_list: [{ collects_name: 'verify_ticket' }] })).toBeNull();
     expect(findVerifyMarker({ status_msg: 'please pass the captcha' })).toBe('captcha');
     expect(findVerifyMarker({ aweme_list: [{ verify_ticket: 't' }] })).toBe('verify_ticket');
+  });
+
+  it('treats aweme_detail as an item too: a caption about captchas is not a challenge (docs/37 D-h)', () => {
+    expect(findVerifyMarker({ aweme_detail: { desc: 'how I beat the captcha' } })).toBeNull();
+    expect(findVerifyMarker({ aweme_detail: { verify_ticket: 't' } })).toBe('verify_ticket');
   });
 });
 

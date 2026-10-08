@@ -1,6 +1,6 @@
 # lib/douyin
 
-抖音收藏收录领域（docs/33）。同步登录用户的**全部收藏**，`status === 1` 的公开收藏夹是 Source；正文 = 作品 `desc`，同步时即得。app 侧接线（标签页门、断点读写、逐页派发）见 `entrypoints/app/sections/douyin/CLAUDE.md`。
+抖音收藏收录领域（docs/33）与字幕 / 转录接入（docs/37）。同步登录用户的**全部收藏**，`status === 1` 的公开收藏夹是 Source。Content 按作品形态两分（docs/37 D1）：可转录的视频以 `'pending'` 入库、转录后才有正文；图文与无时长的视频，正文 = 作品 `desc`，同步时即得。app 侧接线（标签页门、断点读写、逐页派发）见 `entrypoints/app/sections/douyin/CLAUDE.md`。
 
 ## 约束
 
@@ -16,6 +16,23 @@
 - **绝不预填签名参数**（`a_bogus` / `X-Bogus` / `verifyFp` / `fp` / `uifid` / `timestamp` / `x-secsdk-web-signature` / `msToken`）：签名覆盖精确 query，SDK 签完再多一个参数就是 `403 Sign Invalid`。
 - id 一律字符串：收藏夹用 `collects_id_str`——`collects_id` 是 int64，`JSON.parse` 后已丢精度。
 - 抖音 API 里 `collect*` = 收藏（本平台），`favorite*` = 喜欢 / 点赞（与本平台无关，别调）。
+
+## 内容模型与转录落库（docs/37 Step 1）
+
+- 入库门是 `isTranscribableAweme`（`douyin-media.ts`：`mediaKind === 'video' && durationMs > 0`）：为真 → `'pending'`、不写 `item_contents`、不派发；其余（图文、无时长视频）`desc` 即正文，`'chunked'` / `'no_content'`，逐页派发。用 D-f 的谓词而不是 D1 字面的「`mediaKind === 'video'`」：否则无时长的视频永远 `'pending'`、永远进不了转录 producer（Step 1 的有意偏离）。
+- 视频不能以文案入库的原因：Tag 候选 = 尚无标签，转录替换正文后不会重新打标签；Coverage 的 content 段也会在转录前就算 done。
+- `ingestPage` 的 `textOf` 对可转录视频恒 `''`：幽灵清扫对 `'has_content'` 零 chunk 的条目调它，被中断（正文已写、chunk 未写）的转录正是这种幽灵——返回 `desc` 会用文案覆盖已存的转录正文；`''` 让清扫退到已存 `plainText`，用 `charSplit` 原样重切（时间戳丢失、正文保留）。守卫：`douyin-sync-service.test.ts`「a transcription cut short …」。
+- `persistDouyinTranscript(awemeId, rows, source)` 是本平台转录写正文的唯一 seam：非空 rows → `persistExistingItemContent` + `chunkSubtitleRows`，`source` 如实透传进 `subtitle_source`；全空白 rows 视为空转录；空转录 → 正文退回 `desc`（`subtitle_source: null`、`charSplit` 切块），`desc` 也空 → 结算 `'no_content'`、返回 `null`（D6）。它不发事件、不派发 lane，那是 `lib/transcription/transcribe-and-persist.ts` 的活。
+- 上一条里一个函数出现两个 ingest 入口是刻意的：`persistExistingItemContent` 是写正文的唯一入口（docs/37 铁律 3），`settleItemContent` 在这里只结算无正文条目的状态、不写正文；两者都是 `lib/ingest/CLAUDE.md` 许可的事务外入口，别把其中一个「统一」掉。
+- `getDouyinPendingVideos()` 是 D7 积压的查询：只看 `content_state = 'pending'`，不再按 `mediaKind` 过滤——入库门保证 `'pending'` 只有可转录视频。
+- `markDouyinError` 翻 `'error'`，fire-and-forget（镜像 bilibili）；`'error'` 的条目不再进积压，也没有重试入口（v1 无手动按钮）。
+- `douyin-media.ts` 是零 I/O 纯模块，Background SW 的转录 handler（docs/37 Step 2）会 import 它：只许 import `./douyin-api` 与 `@/lib/http/response-body`，不得 import `douyin-sync-service` / `@/lib/database` / `@/lib/ingest` / `@/lib/storage`；在 `tests/lib-import-smoke.test.ts` 清单里。
+- `isTranscribableAweme` 是内存判定，不进 `PLATFORM_DOWNSTREAM_ELIGIBILITY`：它不是下游排除（图文照样要 Embed / Tag），与 B 站 `isProcessableVideo` 语义不同。
+- `pickAudioSourceUrls` 把三级候选**全部**按序拼成一个列表（纯音轨 `main_url → backup_url → fallback_url` → 最低 H.264 mp4 档的 3 条 → `play_addr.url_list`），下载侧逐条 fall-through（对 D-g 措辞的有意偏离：只给一级会把「主机 403」变成整条失败）。
+- 上一条里纯音轨三条的顺序不可改：`main_url` 的主机对无 Referer 的 SW 请求 403，`backup_url` / `fallback_url` 200（Step 0 实测）。
+- 纯音轨 `bit_rate_audio[].audio_meta.url_list` 是**对象**（三个命名 URL），`bit_rate[].play_addr.url_list` 才是数组；别按同一形状解析。
+- 上一条的第二级只在 `format === 'mp4'` 里选、优先 `is_h265 === 0`、`bit_rate` 非有限数的档不参与：按 `bit_rate` 升序取第一档会选到 h265 + bytevc1 的 dash 档。
+- `aweme/detail` 的 `cla_info`（AI 字幕轨）v1 不读：Step 0 实测 136 个样本全空。形状记在 docs/37 §4.2。
 
 ## 坑
 
@@ -40,9 +57,13 @@
 | `status_code: 0` + 列表空 + `has_more` 真 | 有失效 id（`disabled_item_ids` / `invalid_item_id_list`）→ 整页失效，继续翻；否则 `DouyinRateLimitError`（冷却）软停 |
 | `has_more` 缺失或不是 bool / 0 / 1 | `Error`——没有它不能翻页，不猜 |
 | `has_more` 真但 cursor 不可用 / 不前进 / 回退 | `Error`；续传段第一次请求的「不前进 / 回退」另清断点（见「断点状态」） |
+| `aweme/detail`：`aweme_detail` 是对象 | `decodeDetail` → `{ kind: 'aweme' }` |
+| `aweme/detail`：`aweme_detail` 为 null + `filter_detail` 带值（非空对象 / 字符串） | `{ kind: 'unavailable', reason }`——作品不可用的合法结果（docs/37 D-i：仅自己可见、已删除），不算风控 |
+| `aweme/detail`：`aweme_detail` 为 null 且无 `filter_detail` | `DouyinRateLimitError`（冷却）——与列表的 F8 同形 |
+| `aweme/detail`：`aweme_detail` 既不是对象也不是 null | `Error`（未知形状） |
 
 - 合法零结果：`status_code: 0` + 列表 `[]` / `null` / 缺键 + `has_more` 假。无夹 = `collects_list: null` 有实测；`aweme_list: null` + `has_more: 0` 无直接样本 `[UNKNOWN]`，按同一规则放行。
-- 验证码检测不扫用户内容：四个标记作为**键名**带非空值时任意层级命中，作为**字符串值**只在信封层算、不进 `aweme_list` / `collects_list` 条目——否则一条讲 captcha 的视频会让整次同步以「去验证」停掉。
+- 验证码检测不扫用户内容：四个标记作为**键名**带非空值时任意层级命中，作为**字符串值**只在信封层算、不进 `aweme_list` / `collects_list` / `aweme_detail` 条目——否则一条讲 captcha 的视频会让整次同步以「去验证」停掉，或让那条视频的转录以「去验证」失败（docs/37 D-h）。
 - 收藏接口上真实的验证形态 `[UNKNOWN]`。
 - `2154` / `2156` / `10000` / `10001` 刻意不单独分类（证据弱，docs/33 §2.3），走 `DouyinStatusError`。
 

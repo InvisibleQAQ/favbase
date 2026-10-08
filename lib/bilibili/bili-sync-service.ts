@@ -158,7 +158,9 @@ export async function markVideoError(bvid: string): Promise<void> {
   } catch { /* fire-and-forget */ }
 }
 
-export type PersistContentResult = 'embedded' | 'chunked' | null;
+// The seam's result type is owned by the shared core (docs/37 D-c); kept
+// here as a re-export for the coordinator and the processing adapter.
+export type { PersistContentResult } from '@/lib/transcription/transcribe-and-persist';
 
 /**
  * Persist transcription content and timestamped chunks, stopping at the

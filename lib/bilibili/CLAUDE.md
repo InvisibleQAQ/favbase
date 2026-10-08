@@ -51,8 +51,8 @@ B站领域层：公开收藏夹同步、字幕获取（Main World 拦截优先�
 ## 转录落库
 
 - 入库只有 app.html 的两个转录入口，都经 `transcribeAndPersist` 这一个 seam；视频页 Content Script 面板只写字幕缓存、不入库。
-- `transcribeAndPersist` 落库前的 videoId 闸门是逐字节 `!==`，不匹配即拒写（不写 DB、不发事件、不启动后处理）。别放宽成大小写无关：BV 号是大小写敏感的 base58，宽松比对只会放过真实错配。
-- BV 号在 API 调用与消息传递里保留原始大小写（`extractBvid` 不折叠）。`lib/cache/video-cache.ts` 的 `normalizeVideoId` 与 `lib/background/job-registry.ts` 把 id 转小写是已知缺陷，别照抄。
+- `transcribe-utils.ts` 只是 `lib/transcription/transcribe-and-persist.ts`（docs/37 D-c）绑定 `platform: 'bilibili'` + `persist: persistContentChunks` 的薄包装，对外签名不变。videoId 闸门逐字节、`item-content-updated` 事件、`startProcessing` 交接、durable 后立即返回这些规则随核心搬到 `lib/transcription/CLAUDE.md`；`PersistContentResult` 的 owner 也是那里，本目录只 re-export。`transcribe-utils.test.ts` 经包装对真实 PGlite persist 测核心，不要改它来迁就核心。
+- B 站专属的仍在这里：BV 号在 API 调用与消息传递里保留原始大小写（`extractBvid` 不折叠）——闸门不能放宽成大小写无关正是因为 BV 号是大小写敏感的 base58。`lib/cache/video-cache.ts` 的 `normalizeVideoId` 与 `lib/background/job-registry.ts` 把 id 转小写是已知缺陷，别照抄。
 - `persistContentChunks(bvid, rows, source)` 的 `source`（`'official'|'asr'`）必须如实透传进 `item_contents.subtitle_source`，与正文同一条 upsert 写入（docs/29 Step 5）。它不是收藏夹那个 Source。
 - 重复转录覆盖 content、事务重建 chunks 并把状态退回 `'chunked'`。切块只用带时间戳的 `chunkSubtitleRows`。
 - 领域层不 import app queue / store，也零 value import `@/lib/embedding`、`@/lib/tagging`：Embed / Tag 经必填注入的 `startProcessing` 交给 app 层，没有 fallback。

@@ -27,9 +27,13 @@
  *     The descriptor is additionally loaded by `wxt.config.ts` in Node, so its
  *     value imports are pinned by `lib/collections/platform-descriptor.test.ts`
  *     (docs/26 iron rule 3); this contract covers the load-time half.
- *   - the Bilibili transcription seam (`transcribe-utils`) never value-imports
- *     `@/lib/embedding`/`@/lib/tagging`; post-processing is injected via
- *     `startProcessing` (docs/20 中-5).
+ *   - the transcription persistence seam (`lib/transcription/transcribe-and-persist`,
+ *     docs/37 D-c) and its Bilibili binding (`transcribe-utils`) never
+ *     value-import `@/lib/embedding`/`@/lib/tagging`; post-processing is
+ *     injected via `startProcessing` (docs/20 中-5).
+ *   - `lib/douyin/douyin-media` is the pure module the Background SW's Douyin
+ *     transcription handler imports (docs/37 Step 2): no database, ingest or
+ *     storage in its graph.
  *   - the shared platform error bases (`lib/collections/sync-errors.ts`) are a
  *     zero-import leaf: every platform's `*-api.ts` extends them, the
  *     Background SW included (docs/32 Step 4).
@@ -65,6 +69,8 @@ const PURE_ENTRIES: readonly string[] = [
   '@/lib/agent-bridge/protocol',
   '@/lib/agent-bridge/tool-registry',
   '@/lib/bilibili/transcribe-utils',
+  '@/lib/transcription/transcribe-and-persist',
+  '@/lib/douyin/douyin-media',
   '@/lib/embedding/chunker',
   '@/lib/embedding/char-split',
   '@/lib/collections/platforms',

@@ -12,6 +12,13 @@
  * Items seen only in the all-favorites list carry NO Source (D-a: a synthetic
  * "all favorites" Source would show up as a fake folder chip).
  *
+ * Content (docs/37 D1): a transcribable video (`isTranscribableAweme`) enters
+ * `'pending'` and gets its Content from the transcript later, through
+ * `persistDouyinTranscript` — the same shape as bilibili, so that Embed / Tag
+ * run on the transcript and not on the post text (a re-transcription never
+ * re-tags). Everything else — image posts, a video with no usable duration —
+ * has its `desc` as Content at sync time (`'chunked'` / `'no_content'`).
+ *
  * Unlike x / zhihu, every page is persisted as it arrives (`ingestCollection`
  * per page) and the caller hears each page's content-persisted ids
  * (`onPagePersisted`, D-b): a first full sync is paced at roughly 2 minutes
@@ -29,7 +36,7 @@
  * barrel. The transport and the breakpoint state come from the caller.
  */
 
-import { eq, sql, type SQL } from 'drizzle-orm';
+import { and, eq, sql, type SQL } from 'drizzle-orm';
 import type { CooperativeCheckpoint } from '@/lib/collections/cooperative-checkpoint';
 import { getDb } from '@/lib/database';
 import type { FavbaseDb } from '@/lib/database';
@@ -45,8 +52,15 @@ import { items } from '@/lib/database/entities/items';
 // Leaf import, never the '@/lib/embedding' barrel (its value re-export of
 // './config' reaches '@/lib/storage' at module load).
 import { charSplit } from '@/lib/embedding/char-split';
+import { chunkSubtitleRows } from '@/lib/embedding/chunker';
 import { envNumber } from '@/lib/env';
-import { ingestCollection, type IngestResult } from '@/lib/ingest/ingest';
+import {
+  ingestCollection,
+  persistExistingItemContent,
+  settleItemContent,
+  type IngestResult,
+} from '@/lib/ingest/ingest';
+import type { SubtitleRow, SubtitleSource } from '@/lib/subtitle/types';
 import {
   createDouyinPacer,
   decodeCursor,
@@ -60,6 +74,7 @@ import {
   type DouyinSession,
   type DouyinTransport,
 } from './douyin-api';
+import { isTranscribableAweme } from './douyin-media';
 
 // Re-export what service consumers actually need: structured errors + the
 // types appearing in public signatures below.
@@ -137,8 +152,10 @@ export interface SyncDouyinOptions {
   backfill: DouyinBackfillState;
   onBackfill?: (state: DouyinBackfillState) => void | Promise<void>;
   /**
-   * platformItemIds whose content landed in one ingest call — a page's, or the
-   * run-opening sweep's (D-g: ghosts an earlier run left) — dispatch them now (D-b).
+   * platformItemIds whose content landed in one ingest call — a page's image
+   * posts and non-transcribable videos, or the run-opening sweep's ghosts
+   * (D-g) — dispatch them now (D-b). A transcribable video is never here: it
+   * enters 'pending' and is dispatched by the transcription seam.
    */
   onPagePersisted?: (platformItemIds: string[]) => void;
   onProgress?: DouyinProgressCallback;
@@ -376,13 +393,34 @@ function chunkDesc(text: string) {
   return charSplit(text, { preferParagraph: false });
 }
 
+/**
+ * The declared content state of one aweme (docs/37 D1, D-f). A transcribable
+ * video must NOT enter with its desc as Content: the Tag lane only takes an
+ * untagged item, so a transcript that later replaced the desc would never be
+ * tagged, and Coverage would report the video done before it was transcribed.
+ * A video the transcription producer would never take (no duration) is
+ * shaped like an image post instead of being parked 'pending' forever.
+ */
+function contentStateOf(aweme: DouyinRawAweme): 'pending' | 'chunked' | 'no_content' {
+  if (isTranscribableAweme(aweme)) return 'pending';
+  return aweme.desc.trim() ? 'chunked' : 'no_content';
+}
+
 /** One page → one `ingestCollection` call. Sources are upserted once per run, so none here. */
 function ingestPage(
   db: FavbaseDb,
   awemes: DouyinRawAweme[],
   origin: PageOrigin,
 ): Promise<IngestResult> {
-  const descById = new Map(awemes.map((a) => [a.id, a.desc]));
+  // Only the items whose Content IS the desc. `textOf` is also what the
+  // ghost sweep asks for an item stuck at 'has_content' with no chunks — and
+  // a transcription interrupted between its content write and its chunk
+  // write is exactly such a ghost. Answering with the desc would overwrite
+  // the stored transcript with the post text; answering '' lets the sweep
+  // re-chunk the stored transcript as is (timestamps lost, text kept).
+  const descById = new Map(
+    awemes.filter((a) => !isTranscribableAweme(a)).map((a) => [a.id, a.desc]),
+  );
   const folder = origin.kind === 'folder' ? origin.folder : null;
   return ingestCollection(db, {
     platform: PLATFORM,
@@ -403,8 +441,7 @@ function ingestPage(
       authorName: a.author.nickname,
       originalUrl: originalUrlOf(a),
       publishedAt: a.createTime !== null ? new Date(a.createTime * 1000) : null,
-      // The desc is the Content, in hand at sync time: never 'pending'.
-      contentState: a.desc.trim() ? ('chunked' as const) : ('no_content' as const),
+      contentState: contentStateOf(a),
       platformMeta: {
         desc: a.desc,
         authorName: a.author.nickname,
@@ -421,6 +458,117 @@ function ingestPage(
     })),
     links: folder ? awemes.map((a) => ({ platformItemId: a.id, platformSourceId: folder.id })) : [],
     content: { textOf: (id) => descById.get(id) ?? '', chunk: chunkDesc },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Public API — transcription (docs/37 D6 / D7; the app-side seam is
+// lib/transcription/transcribe-and-persist.ts)
+// ---------------------------------------------------------------------------
+
+/** What the transcript producer needs to queue one pending video (docs/37 D7). */
+export interface DouyinPendingVideo {
+  awemeId: string;
+  title: string;
+  coverUrl: string | null;
+  authorName: string;
+  durationMs: number | null;
+}
+
+/**
+ * Persist one video's transcript: the only way this platform's transcript
+ * becomes its Content. Non-empty rows → the joined text with timestamped
+ * chunks and `source` recorded as `item_contents.subtitle_source`. Empty
+ * rows (no speech, music only) → the post text becomes the Content with no
+ * subtitle source (docs/37 D6), so the item ends up exactly as an image post
+ * does; no desc either → the item settles 'no_content' and null is returned.
+ *
+ * Two ingest entry points in one function, on purpose:
+ * `persistExistingItemContent` is the single writer of a transcript's text
+ * (docs/37 iron rule 3), and `settleItemContent` here only settles the state
+ * of an item that has NO text — it writes nothing. Both are the entry points
+ * `lib/ingest/CLAUDE.md` allows outside a transaction; do not "unify" them.
+ * Starts no Embed / Tag lane and emits no event: the seam does that.
+ */
+export async function persistDouyinTranscript(
+  awemeId: string,
+  rows: SubtitleRow[],
+  source: SubtitleSource,
+  db: FavbaseDb = getDb(),
+): Promise<'chunked' | null> {
+  try {
+    // Blank rows are not speech; a transcript of only blanks is an empty one.
+    const spoken = rows.filter((row) => row.text.trim());
+    if (spoken.length > 0) {
+      const result = await persistExistingItemContent(
+        db,
+        PLATFORM,
+        awemeId,
+        spoken.map((row) => row.text).join('\n'),
+        chunkSubtitleRows(spoken),
+        source,
+      );
+      if (result) {
+        console.info(`[douyin-sync] Persisted ${spoken.length} rows for aweme=${awemeId} (source=${source})`);
+      }
+      return result;
+    }
+
+    const [row] = await db
+      .select({ id: items.id, desc: sql<string | null>`${items.platformMeta}->>'desc'` })
+      .from(items)
+      .where(and(eq(items.platform, PLATFORM), eq(items.platformItemId, awemeId)))
+      .limit(1);
+    if (!row) return null;
+    const desc = (row.desc ?? '').trim();
+    if (desc) {
+      return await persistExistingItemContent(db, PLATFORM, awemeId, desc, chunkDesc(desc), null);
+    }
+    await settleItemContent(db, row.id, '', chunkDesc);
+    return null;
+  } catch (err) {
+    console.error(`[douyin-sync] Content persistence failed for aweme=${awemeId}:`, err);
+    return null;
+  }
+}
+
+/** Mark a video's transcription as failed for good; fire-and-forget (mirrors bilibili's `markVideoError`). */
+export async function markDouyinError(awemeId: string, db: FavbaseDb = getDb()): Promise<void> {
+  try {
+    await db
+      .update(items)
+      .set({ contentState: 'error', updatedAt: new Date() })
+      .where(and(eq(items.platform, PLATFORM), eq(items.platformItemId, awemeId)));
+  } catch {
+    /* fire-and-forget */
+  }
+}
+
+/**
+ * The transcription backlog (docs/37 D7): every stored item still 'pending',
+ * newest publish first. The ingest gate (`contentStateOf`) only ever writes
+ * 'pending' for a transcribable video, so there is nothing to filter here.
+ */
+export async function getDouyinPendingVideos(db: FavbaseDb = getDb()): Promise<DouyinPendingVideo[]> {
+  const rows = await db
+    .select({
+      platformItemId: items.platformItemId,
+      title: items.title,
+      authorName: items.authorName,
+      platformMeta: items.platformMeta,
+    })
+    .from(items)
+    .where(and(eq(items.platform, PLATFORM), eq(items.contentState, 'pending')))
+    .orderBy(sql`${items.publishedAt} DESC NULLS LAST`);
+  return rows.map((row) => {
+    const narrowed = narrowDouyinMeta(row.platformMeta, { title: row.title, authorName: row.authorName });
+    return {
+      awemeId: row.platformItemId,
+      title: row.title,
+      coverUrl: narrowed.coverUrl,
+      authorName: narrowed.authorName,
+      durationMs: narrowed.durationMs,
+    };
   });
 }
 

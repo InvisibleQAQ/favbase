@@ -254,6 +254,17 @@ describe('tagging-service (in-memory PGlite)', () => {
       expect(input.content).toBeUndefined();
     });
 
+    it("feeds a Douyin post's desc as input.description next to the transcript", async () => {
+      // Pins douyin's `descriptionField: 'desc'` (docs/37 D1): a video's
+      // Content is its transcript, so the post text is the description the
+      // Content does not already carry.
+      await seedItem('dy-1', 'douyin', { desc: '文案 #tag', mediaKind: 'video' });
+      const d = deps();
+      await tagPlatformItem('douyin', 'dy-1', d);
+
+      expect(d.generate.mock.calls[0][1].description).toBe('文案 #tag');
+    });
+
     it('ignores YouTube meta description: the full text is already the Content', async () => {
       // Pins youtube's `descriptionField: null`. Its meta `description` is a
       // card-sized slice of the text the Content already carries.

@@ -96,6 +96,7 @@
 | 同步 funnel、平台错误模型、重试、收藏页 hook、查询片段 | `docs/32_platform-flow-unification-audit-2026-09-29.md` §2（已否决清单，不得重提）和对应 Step 的落地记录 |
 | 平台分层、lib 的 import 边界 | `docs/20_multi-platform-architecture-deepening-audit-2026-08-21.md` |
 | 抖音 | `docs/33_douyin-collection-platform-manual-2026-10-03.md` §1–§3 |
+| 抖音的字幕 / 转录 / 打标签接入（内容模型翻转） | `docs/37_douyin-transcription-manual-2026-10-08.md` §1 决策、§2 否决清单、§3 铁律 |
 | app.html 的主题、shell、共享原语、Dashboard、Settings、Chat 外壳 | `docs/25_app-ui-minimal-alignment-manual-2026-09-01.md` 对应 Step 的偏离与勘误，附录 C、D |
 | app.html / welcome.html 对照 Minimal 的视觉保真度；截扩展页的方法 | `docs/31_minimal-ui-polish-2026-09-27.md`（§1 截图步骤，§3 未定项） |
 | welcome.html 的外壳与动画 | `docs/28_welcome-minimal-alignment-2026-09-08.md` §3 拒绝清单 |
@@ -129,7 +130,7 @@
 - 主题 token 与组件覆盖：`entrypoints/app/theme/`
 - Knowledge Tool、检索、会话持久化：`lib/chat/`；Agent Bridge 的协议与 WS client：`lib/agent-bridge/`；CLI 与 daemon：`packages/favbase/`；Skill 与 Agent Setup Guide：`skills/favbase/`
 - SW 的消息分发：`lib/background/`；跨 runtime 共享的 schema 片段：`lib/runtime-message/`
-- 转录：`lib/transcription/`（管线）、`lib/auto-transcribe/`（状态机）、`lib/cache/`（字幕缓存）、`lib/subtitle/`（共享类型）
+- 转录：`lib/transcription/`（管线，兼 app 侧落库 seam `transcribe-and-persist.ts`）、`lib/auto-transcribe/`（状态机）、`lib/cache/`（字幕缓存）、`lib/subtitle/`（共享类型）
 
 其余按名字找：
 

@@ -62,7 +62,7 @@ a rewrite, not an edit.
 | --- | --- | --- |
 | **Auth shape** — what must exist before the first sync can run? | the descriptor's `readiness` (`'credentials'` / `'login'` / `'local'`; `WELCOME_READINESS_BY_PLATFORM` derives from it), and whether you owe a Connections card (§8) | `credentials`: github, youtube · `login`: bilibili, x, zhihu, douyin (a usable logged-in site tab, checked before the funnel) · `local`: bookmarks |
 | **Source shape** — does the platform expose containers (folders / playlists / collections)? | the descriptor's `dimensions` (`ranked` / `author` / `source`, `null` when the platform has no Source), whether a Collection Item may hold N memberships | multi-Source: bilibili, bookmarks, zhihu, youtube, douyin (public folders; an item may belong to no Source at all) · single: github, x |
-| **Content shape** — what text feeds Embedding, and is it available at sync time? | the `content` block of `IngestInput`, the `contentState` you declare, the descriptor's `contentKind` (§6.1), whether the pipeline gains a content stage | inline at sync: github README, zhihu answer, youtube description, x tweet, douyin post text · deferred: bookmarks extraction, bilibili transcription |
+| **Content shape** — what text feeds Embedding, and is it available at sync time? | the `content` block of `IngestInput`, the `contentState` you declare, the descriptor's `contentKind` (§6.1), whether the pipeline gains a content stage | inline at sync: github README, zhihu answer, youtube description, x tweet · deferred: bookmarks extraction, bilibili transcription · **mixed, decided per item**: douyin — a transcribable video (`isTranscribableAweme`: `mediaKind === 'video' && durationMs > 0`) is deferred (`'pending'`, transcript), everything else is inline post text (docs/37 D1 / D-f; the mixed-model rules are in §4.4) |
 | **Sort key** — what is the platform's native "recency"? | the descriptor's `sortKey` (`PLATFORM_SORT_KEYS` derives from it) | `publishedAt` column, or a `platform_meta` field with `unixSeconds` / `iso8601` format |
 | **Downstream eligibility** — are some persisted items ineligible for Content → Embedding → Tags? | `PLATFORM_DOWNSTREAM_ELIGIBILITY` (`null` when none) | only bilibili has one (taken-down videos) |
 
@@ -278,7 +278,7 @@ not apply (§4.3).
   `sections/bookmarks/use-bookmark-extraction.ts`, the chained start in
   `sections/bookmarks/bookmarks-sync-adapter.ts`.
 
-**Streaming variant — bilibili (during the sync, timestamped).**
+**Streaming variant — bilibili, douyin (during the sync, timestamped).**
 
 - The Fetch producer feeds new items to a transcription pipeline while the
   sync is still paging. The pipeline is a module singleton holding its own
@@ -290,10 +290,52 @@ not apply (§4.3).
   platform identity, records the subtitle source, and commits `has_content`
   before `chunked`. A successful write is followed by the same
   `item-content-updated` event and per-item `enqueueCollectionProcessingItem`.
-- Code: `persistContentChunks` in `lib/bilibili/bili-sync-service.ts`, the
-  persist → event → enqueue sequence in `lib/bilibili/transcribe-utils.ts`,
+- The persist → event → enqueue sequence is shared (docs/37 D-c):
+  `transcribeAndPersist({ platform, videoId, title, persist, hooks })` in
+  `lib/transcription/transcribe-and-persist.ts` sends `TRANSCRIBE_AUDIO`,
+  refuses a response whose `data.videoId` is not byte-equal to the request
+  (no write, no event, no lanes), calls the platform's `persist(videoId,
+  rows, source): Promise<'chunked' | null>`, emits `item-content-updated`
+  only on `'chunked'`, then hands the item to `startProcessing` and returns
+  before Embed / Tag settle. A platform supplies the three bindings and
+  nothing else; `lib/transcription/` never imports `lib/<platform>/`.
+- Code: bilibili — `persistContentChunks` in `lib/bilibili/bili-sync-service.ts`,
+  the thin binding `lib/bilibili/transcribe-utils.ts`,
   `sections/bilibili/auto-transcribe-runtime.ts`,
-  `sections/bilibili/bilibili-processing-adapter.ts`.
+  `sections/bilibili/bilibili-processing-adapter.ts`; douyin —
+  `persistDouyinTranscript` / `markDouyinError` / `getDouyinPendingVideos` in
+  `lib/douyin/douyin-sync-service.ts` (the app side lands in docs/37 Step 3).
+
+**Mixed content model — one platform, inline and deferred items (douyin,
+docs/37 Step 1).** When only some items are deferred, three rules keep the
+two halves from corrupting each other:
+
+- The gate is one in-memory predicate, applied where `contentState` is
+  declared (`isTranscribableAweme` in `lib/douyin/douyin-media.ts`): true →
+  `'pending'`, no text; false → the inline rule of §4.3. Gate with the
+  predicate the worker actually uses, not with the media kind alone — an item
+  that is `'pending'` but can never be transcribed (a video with no duration)
+  stays `'pending'` forever and keeps re-entering the backlog.
+- `content.textOf` returns `''` for every deferred item, even when the sync
+  has a description in hand. The ghost sweep (§4.6) calls `textOf` for an
+  item at `'has_content'` with no chunks, and a transcription interrupted
+  between its content write and its chunk write is exactly that item:
+  answering with the description overwrites the stored transcript with the
+  post text and drops its `subtitle_source`. `''` makes the sweep re-chunk the
+  stored transcript as is (timestamps lost, text kept). Guard:
+  `lib/douyin/douyin-sync-service.test.ts` "a transcription cut short …".
+- An empty transcript (no speech) must settle, not stay `'pending'`:
+  `persistExistingItemContent` returns `null` for blank text and leaves the
+  state alone, so the platform's `persist` falls back — douyin writes the post
+  text through `persistExistingItemContent(…, charSplit(desc), null)`
+  (`subtitle_source` null), and with no post text either settles
+  `'no_content'` through `settleItemContent(db, itemId, '', chunker)`, which
+  writes no text. Bilibili still leaves such a video `'pending'` (known gap,
+  docs/37 D6). Two ingest entry points in one `persist` is deliberate; do not
+  "unify" them — `persistExistingItemContent` stays the only writer of a
+  transcript's text.
+- The backlog query (`getDouyinPendingVideos`) reads `content_state =
+  'pending'` and nothing else: the gate already guarantees what is in there.
 
 **Which writer.** Opaque text → `settleItemContent`. A transcript (timestamped
 chunks, a subtitle source to record) → `persistExistingItemContent`. Never pair

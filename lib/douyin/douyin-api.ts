@@ -65,10 +65,13 @@ const COMMON_QUERY: Readonly<Record<string, string>> = {
 const COLLECTION_PATH = '/aweme/v1/web/aweme/listcollection/';
 const FOLDERS_PATH = '/aweme/v1/web/collects/list/';
 const FOLDER_ITEMS_PATH = '/aweme/v1/web/collects/video/list/';
+/** One aweme in full — the transcription handler's source of media URLs (docs/37 §4.2). */
+const DETAIL_PATH = '/aweme/v1/web/aweme/detail/';
 
 const WHAT_COLLECTION = 'Douyin listcollection';
 const WHAT_FOLDERS = 'Douyin collects/list';
 const WHAT_FOLDER_ITEMS = 'Douyin collects/video/list';
+export const WHAT_DETAIL = 'Douyin aweme/detail';
 
 // ---------------------------------------------------------------------------
 // Transport contract (lib defines it, the app implements it — docs/33 §4.1)
@@ -170,6 +173,20 @@ export function buildFolderItemsRequest(folderId: string, offset: string): Douyi
   };
 }
 
+/**
+ * One aweme by id (docs/37 §4.2): `aweme_id` + the three common parameters,
+ * nothing else. The signature parameters are the page SDK's to add, exactly
+ * as for the three list endpoints (docs/37 §3 iron rule 1).
+ */
+export function buildDetailRequest(awemeId: string): DouyinRequest {
+  return {
+    method: 'GET',
+    path: DETAIL_PATH,
+    query: { ...COMMON_QUERY, aweme_id: awemeId },
+    timeoutMs: resolveHttpDeadlineMs(),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Response classification (docs/33 §4.4 — by shape, not by code)
 // ---------------------------------------------------------------------------
@@ -196,8 +213,11 @@ const VERIFY_KEYS: ReadonlySet<string> = new Set([
 /**
  * Item lists hold user content (desc, nickname, folder name) — a string value
  * in there that mentions "captcha" is a video about captchas, not a challenge.
+ * `aweme_detail` is the one item of a detail response (docs/37 D-h): without
+ * it here, one caption about captchas fails that video's transcription as
+ * "go verify".
  */
-const ITEM_LIST_KEYS: ReadonlySet<string> = new Set(['aweme_list', 'collects_list']);
+const ITEM_LIST_KEYS: ReadonlySet<string> = new Set(['aweme_list', 'collects_list', 'aweme_detail']);
 
 function hasValue(value: unknown): boolean {
   if (value === null || value === undefined || value === false || value === 0 || value === '') {
@@ -233,14 +253,16 @@ function scanVerify(node: unknown, inItems: boolean): string | null {
 /**
  * The verification marker a response carries, or null. A marker KEY with a
  * value counts at any depth; a string VALUE naming a marker counts only
- * outside `aweme_list` / `collects_list` (design C, docs/33 Step 1 record).
- * One pass over the parsed body.
+ * outside `aweme_list` / `collects_list` / `aweme_detail` (design C, docs/33
+ * Step 1 record; the detail container added by docs/37 D-h). One pass over
+ * the parsed body.
  */
 export function findVerifyMarker(json: unknown): string | null {
   return scanVerify(json, false);
 }
 
-function cooldownFrom(now: () => number): Date {
+/** `resetAt` for a refusal or a withheld payload: now + the cooldown. */
+export function cooldownFrom(now: () => number): Date {
   return new Date(now() + COOLDOWN_MS);
 }
 

@@ -84,6 +84,17 @@ describe('platform descriptor', () => {
     }
   });
 
+  it('douyin: the Content is the transcript and `desc` is the description', () => {
+    // docs/37 D1: a transcribable video enters 'pending' and is transcribed
+    // like a Bilibili video, so its Content is the transcript (the post text
+    // falls back in only when the transcript is empty, D6). `desc` is then
+    // the description the Content does not carry — the mirror of bilibili's
+    // `intro`. For an image post the Content IS `desc`, so the tagging prompt
+    // sees it twice; accepted (D1 side effect).
+    expect(PLATFORM_DESCRIPTORS.douyin.contentKind).toBe('transcript');
+    expect(PLATFORM_DESCRIPTORS.douyin.descriptionField).toBe('desc');
+  });
+
   it('keeps background-job namespaces unique', () => {
     // Jobs are keyed `{jobPlatform}:{kind}`, so two platforms sharing a
     // namespace share one lane: the second sync is dropped as a duplicate and

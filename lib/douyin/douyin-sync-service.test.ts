@@ -8,6 +8,7 @@ import { and, eq } from 'drizzle-orm';
 import * as schema from '@/lib/database/schema';
 import { runMigrations } from '@/lib/database/migrations';
 import type { FavbaseDb } from '@/lib/database';
+import type { SubtitleRow } from '@/lib/subtitle/types';
 import { CUT_SHORT_MARKER, withChunkWritesCutShort } from '@/tests/ingest-test-support';
 
 // No storage mock: the service's load graph is storage-free by contract
@@ -18,7 +19,10 @@ import {
   DouyinRateLimitError,
   DouyinStatusError,
   getDouyinItems,
+  getDouyinPendingVideos,
   getFolderCounts,
+  markDouyinError,
+  persistDouyinTranscript,
   syncDouyinCollectionsToDb,
   type DouyinBackfillState,
   type DouyinPacer,
@@ -56,6 +60,15 @@ function rawAweme(id: string, overrides: Record<string, unknown> = {}) {
     images: null,
     ...overrides,
   };
+}
+
+/** An image post (图文): non-empty `images`, `duration: 0`. Its Content is the desc (docs/37 D1). */
+function rawNote(id: string, overrides: Record<string, unknown> = {}) {
+  return rawAweme(id, {
+    images: [{ url_list: ['https://p3/img.webp'] }],
+    video: { duration: 0, cover: { url_list: [] } },
+    ...overrides,
+  });
 }
 
 interface Fav {
@@ -223,6 +236,33 @@ describe('douyin-sync-service (in-memory PGlite)', () => {
     return rows[0];
   }
 
+  async function chunkCountOf(platformItemId: string): Promise<number> {
+    const item = await getItem(platformItemId);
+    const rows = await db
+      .select({ id: schema.itemChunks.id })
+      .from(schema.itemChunks)
+      .where(eq(schema.itemChunks.itemId, item.id));
+    return rows.length;
+  }
+
+  async function contentOf(platformItemId: string) {
+    const item = await getItem(platformItemId);
+    const rows = await db
+      .select({ plainText: schema.itemContents.plainText, subtitleSource: schema.itemContents.subtitleSource })
+      .from(schema.itemContents)
+      .where(eq(schema.itemContents.itemId, item.id));
+    return rows[0] ?? null;
+  }
+
+  async function chunksOf(platformItemId: string) {
+    const item = await getItem(platformItemId);
+    return db
+      .select({ text: schema.itemChunks.chunkText, startSec: schema.itemChunks.startSec })
+      .from(schema.itemChunks)
+      .where(eq(schema.itemChunks.itemId, item.id))
+      .orderBy(schema.itemChunks.chunkIndex);
+  }
+
   // -------------------------------------------------------------------------
   // First full sync
   // -------------------------------------------------------------------------
@@ -242,7 +282,9 @@ describe('douyin-sync-service (in-memory PGlite)', () => {
     ]);
     expect(await storedIds()).toEqual(['1', '2', '3', '4', '5']);
     expect(result).toMatchObject({ fetched: 5, inserted: 5, folders: 0 });
-    expect(result?.newItemIds.sort()).toEqual(['1', '2', '3', '4', '5']);
+    // Every fixture is a transcribable video: inserted 'pending', no content
+    // landed, nothing to dispatch (docs/37 D1).
+    expect(result?.newItemIds).toEqual([]);
   });
 
   it('D-a: items from the all-favorites list carry no Source, and are still queryable', async () => {
@@ -259,7 +301,9 @@ describe('douyin-sync-service (in-memory PGlite)', () => {
 
   it('D-b: onPagePersisted fires per page with the ids whose content landed', async () => {
     const list = favs(['1', '2', '3']);
-    list[1].raw = rawAweme('2', { desc: '' });
+    list[0].raw = rawNote('1');
+    list[1].raw = rawNote('2', { desc: '' });
+    list[2].raw = rawNote('3');
     const { transport } = fakeDouyin({ favorites: list });
 
     const { persisted } = await run(transport, FRESH);
@@ -304,7 +348,8 @@ describe('douyin-sync-service (in-memory PGlite)', () => {
     expect(first.originalUrl).toBe('https://www.douyin.com/video/11');
     expect(first.authorName).toBe('Alice');
     expect(first.publishedAt?.getTime()).toBe((1_700_000_000 + 11) * 1000);
-    expect(first.contentState).toBe('chunked');
+    // A transcribable video waits for its transcript (docs/37 D1).
+    expect(first.contentState).toBe('pending');
     expect(first.platformMeta).toEqual({
       desc: '\n\n   first line  \nsecond line #tag',
       authorName: 'Alice',
@@ -323,10 +368,14 @@ describe('douyin-sync-service (in-memory PGlite)', () => {
     const note = await getItem('12');
     expect(note.originalUrl).toBe('https://www.douyin.com/note/12');
     expect(note.platformMeta).toMatchObject({ mediaKind: 'note', durationMs: null, coverUrl: 'https://p3/img.webp' });
+    // An image post's Content is its desc, in hand at sync time.
+    expect(note.contentState).toBe('chunked');
 
+    // A video with a duration but no desc is still a transcribable video:
+    // 'pending', not 'no_content' — the transcript decides.
     const empty = await getItem('13');
     expect(empty.title).toBe('Alice');
-    expect(empty.contentState).toBe('no_content');
+    expect(empty.contentState).toBe('pending');
     const emptyContent = await db
       .select()
       .from(schema.itemContents)
@@ -336,11 +385,8 @@ describe('douyin-sync-service (in-memory PGlite)', () => {
     const long = await getItem('14');
     expect(long.title).toBe('长'.repeat(140));
 
-    const chunks = await db
-      .select()
-      .from(schema.itemChunks)
-      .where(eq(schema.itemChunks.itemId, first.id));
-    expect(chunks.length).toBeGreaterThan(0);
+    expect(await chunkCountOf('11')).toBe(0);
+    expect(await chunkCountOf('12')).toBeGreaterThan(0);
 
     const [author] = await db
       .select()
@@ -690,9 +736,11 @@ describe('douyin-sync-service (in-memory PGlite)', () => {
     const world: World = { favorites: favs(['1', '2', '3', '4']) };
     await run(fakeDouyin(world).transport, FRESH);
 
+    // Image posts: their desc is chunked at ingest, so a chunk write can be
+    // cut short. A video's chunks only ever come from its transcript.
     world.favorites = [
-      { raw: rawAweme('11', { desc: `${CUT_SHORT_MARKER} desc 11` }), ts: TOP + 2000 },
-      { raw: rawAweme('12'), ts: TOP + 1000 },
+      { raw: rawNote('11', { desc: `${CUT_SHORT_MARKER} desc 11` }), ts: TOP + 2000 },
+      { raw: rawNote('12'), ts: TOP + 1000 },
       ...world.favorites,
     ];
     const cut = await withChunkWritesCutShort(pg, () => run(fakeDouyin(world).transport, DONE));
@@ -701,23 +749,14 @@ describe('douyin-sync-service (in-memory PGlite)', () => {
     return world;
   }
 
-  async function chunkCountOf(platformItemId: string): Promise<number> {
-    const item = await getItem(platformItemId);
-    const rows = await db
-      .select({ id: schema.itemChunks.id })
-      .from(schema.itemChunks)
-      .where(eq(schema.itemChunks.itemId, item.id));
-    return rows.length;
-  }
-
   it('a page cut short while writing content loses no text: a later run that never ingests that page again heals it and dispatches it', async () => {
     const world = await headPageCutShort();
 
     // Two newer favorites fill the head page; the cut-short page comes next,
     // is wholly known, and ends the head segment without being ingested.
     world.favorites = [
-      { raw: rawAweme('14'), ts: TOP + 4000 },
-      { raw: rawAweme('13'), ts: TOP + 3000 },
+      { raw: rawNote('14'), ts: TOP + 4000 },
+      { raw: rawNote('13'), ts: TOP + 3000 },
       ...world.favorites,
     ];
     const next = fakeDouyin(world);
@@ -747,6 +786,192 @@ describe('douyin-sync-service (in-memory PGlite)', () => {
     }
     expect(persisted.map((ids) => [...ids].sort())).toEqual([['11', '12']]);
     expect([...(result?.newItemIds ?? [])].sort()).toEqual(['11', '12']);
+  });
+
+  // -------------------------------------------------------------------------
+  // Content model (docs/37 D1 / D-f): a transcribable video waits for its
+  // transcript; everything else carries its desc as Content at sync time.
+  // -------------------------------------------------------------------------
+
+  it('D1: a transcribable video enters pending with no content row, no chunks and no dispatch', async () => {
+    const { transport } = fakeDouyin({ favorites: favs(['1', '2']) });
+    const { result, persisted } = await run(transport, FRESH);
+
+    expect(result).toMatchObject({ inserted: 2, newItemIds: [] });
+    expect(persisted).toEqual([]);
+    for (const id of ['1', '2']) {
+      expect((await getItem(id)).contentState).toBe('pending');
+      expect(await contentOf(id)).toBeNull();
+      expect(await chunkCountOf(id)).toBe(0);
+    }
+  });
+
+  it('a video without a duration is not transcribable: its desc is the Content, chunked and dispatched at sync', async () => {
+    const list: Fav[] = [
+      { raw: rawAweme('1', { video: { duration: 0, cover: { url_list: [] } } }), ts: TOP },
+      { raw: rawAweme('2', { video: { cover: { url_list: [] } } }), ts: TOP - 1000 },
+    ];
+    const { transport } = fakeDouyin({ favorites: list, pageSize: 10 });
+    const { persisted } = await run(transport, FRESH);
+
+    expect(persisted).toEqual([['1', '2']]);
+    for (const id of ['1', '2']) {
+      expect((await getItem(id)).contentState).toBe('chunked');
+      expect((await getItem(id)).platformMeta).toMatchObject({ mediaKind: 'video', durationMs: null });
+      expect(await contentOf(id)).toEqual({ plainText: `desc ${id}`, subtitleSource: null });
+      expect(await chunkCountOf(id)).toBeGreaterThan(0);
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // Transcript persistence seam (docs/37 D6, iron rule 3)
+  // -------------------------------------------------------------------------
+
+  const ROWS: SubtitleRow[] = [
+    { start: 0, end: 2.5, text: '第一句' },
+    { start: 2.5, end: 5, text: '第二句' },
+  ];
+
+  it.each(['official', 'asr'] as const)('persistDouyinTranscript stores the joined transcript with subtitle_source %s and timestamped chunks', async (source) => {
+    await run(fakeDouyin({ favorites: favs(['1']) }).transport, FRESH);
+
+    await expect(persistDouyinTranscript('1', ROWS, source, db)).resolves.toBe('chunked');
+
+    expect((await getItem('1')).contentState).toBe('chunked');
+    expect(await contentOf('1')).toEqual({ plainText: '第一句\n第二句', subtitleSource: source });
+    const chunks = await chunksOf('1');
+    expect(chunks.length).toBeGreaterThan(0);
+    expect(chunks[0].startSec).toBe(0);
+  });
+
+  it('D6: an empty transcript falls back to the desc as Content, with no subtitle source and untimed chunks', async () => {
+    await run(fakeDouyin({ favorites: favs(['1']) }).transport, FRESH);
+
+    await expect(persistDouyinTranscript('1', [], 'asr', db)).resolves.toBe('chunked');
+
+    expect((await getItem('1')).contentState).toBe('chunked');
+    expect(await contentOf('1')).toEqual({ plainText: 'desc 1', subtitleSource: null });
+    const chunks = await chunksOf('1');
+    expect(chunks.length).toBeGreaterThan(0);
+    expect(chunks[0].startSec).toBeNull();
+  });
+
+  it('D6: rows of nothing but whitespace count as an empty transcript', async () => {
+    await run(fakeDouyin({ favorites: favs(['1']) }).transport, FRESH);
+    await expect(
+      persistDouyinTranscript('1', [{ start: 0, end: 1, text: '   ' }], 'asr', db),
+    ).resolves.toBe('chunked');
+    expect(await contentOf('1')).toEqual({ plainText: 'desc 1', subtitleSource: null });
+  });
+
+  it('D6: an empty transcript for a video with no desc settles no_content and returns null', async () => {
+    const list: Fav[] = [{ raw: rawAweme('1', { desc: '' }), ts: TOP }];
+    await run(fakeDouyin({ favorites: list }).transport, FRESH);
+    expect((await getItem('1')).contentState).toBe('pending');
+
+    await expect(persistDouyinTranscript('1', [], 'asr', db)).resolves.toBeNull();
+
+    expect((await getItem('1')).contentState).toBe('no_content');
+    expect(await contentOf('1')).toBeNull();
+    expect(await chunkCountOf('1')).toBe(0);
+  });
+
+  it('re-transcription replaces the text and rebuilds the chunks', async () => {
+    await run(fakeDouyin({ favorites: favs(['1']) }).transport, FRESH);
+    await persistDouyinTranscript('1', [{ start: 0, end: 1, text: 'first take' }], 'asr', db);
+    expect(await chunkCountOf('1')).toBe(1);
+
+    // Enough rows, far enough apart, to make more than one chunk.
+    const long: SubtitleRow[] = Array.from({ length: 12 }, (_, i) => ({
+      start: i * 10,
+      end: i * 10 + 3,
+      text: `第${i}段 ${'字'.repeat(120)}`,
+    }));
+    await expect(persistDouyinTranscript('1', long, 'official', db)).resolves.toBe('chunked');
+
+    const content = await contentOf('1');
+    expect(content?.subtitleSource).toBe('official');
+    expect(content?.plainText.startsWith('第0段')).toBe(true);
+    expect(content?.plainText).not.toContain('first take');
+    const chunks = await chunksOf('1');
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks.some((c) => c.text.includes('first take'))).toBe(false);
+  });
+
+  it('a transcription cut short before its chunks keeps its transcript when a page of the running sync sweeps it: textOf is blank for a transcribable video', async () => {
+    // The Transcript lane runs while the Fetch lane is still paging. Here the
+    // transcript of '1' lands but its chunk write fails right before the head
+    // page [9, 1] is fetched: that page's ingest meets '1' as a ghost at
+    // 'has_content'. The sweep asks the page's textOf first — were it to hand
+    // over the desc, the post text would overwrite the stored transcript.
+    const world: World = { favorites: favs(['1', '2', '3', '4']) };
+    await run(fakeDouyin(world).transport, FRESH);
+    world.favorites = [{ raw: rawAweme('9'), ts: TOP + 1000 }, ...world.favorites];
+
+    const transcript = `${CUT_SHORT_MARKER} 转录正文`;
+    const inner = fakeDouyin(world).transport;
+    let interrupted = false;
+    const transport: DouyinTransport = async (req) => {
+      if (!interrupted && req.path === LIST) {
+        interrupted = true;
+        const cut = await withChunkWritesCutShort(pg, () =>
+          persistDouyinTranscript('1', [{ start: 0, end: 1, text: transcript }], 'asr', db),
+        );
+        expect(cut).toBeNull();
+        expect((await getItem('1')).contentState).toBe('has_content');
+      }
+      return inner(req);
+    };
+
+    const { error, persisted } = await run(transport, DONE);
+
+    expect(error).toBeNull();
+    expect(interrupted).toBe(true);
+    expect((await getItem('1')).contentState).toBe('chunked');
+    expect(await contentOf('1')).toEqual({ plainText: transcript, subtitleSource: 'asr' });
+    expect(await chunkCountOf('1')).toBe(1);
+    // Healed, so dispatched; '9' is a transcribable video and is not.
+    expect(persisted.flat()).toEqual(['1']);
+  });
+
+  it('persistDouyinTranscript returns null for an aweme that is not stored', async () => {
+    await expect(persistDouyinTranscript('404', ROWS, 'asr', db)).resolves.toBeNull();
+    await expect(persistDouyinTranscript('404', [], 'asr', db)).resolves.toBeNull();
+  });
+
+  it('markDouyinError flips the item to error', async () => {
+    await run(fakeDouyin({ favorites: favs(['1', '2']) }).transport, FRESH);
+    await markDouyinError('1', db);
+    expect((await getItem('1')).contentState).toBe('error');
+    expect((await getItem('2')).contentState).toBe('pending');
+  });
+
+  // -------------------------------------------------------------------------
+  // Backlog (docs/37 D7): what a later sync feeds the transcript producer
+  // -------------------------------------------------------------------------
+
+  it('getDouyinPendingVideos returns only pending items, newest publish first, with what the producer needs', async () => {
+    const list: Fav[] = [
+      { raw: rawAweme('1'), ts: TOP },
+      { raw: rawNote('2'), ts: TOP - 1000 },
+      { raw: rawAweme('3', { video: { duration: 0, cover: { url_list: [] } } }), ts: TOP - 2000 },
+      { raw: rawAweme('4'), ts: TOP - 3000 },
+      { raw: rawAweme('5'), ts: TOP - 4000 },
+      { raw: rawAweme('6'), ts: TOP - 5000 },
+    ];
+    await run(fakeDouyin({ favorites: list, pageSize: 10 }).transport, FRESH);
+    await persistDouyinTranscript('4', ROWS, 'asr', db);
+    await markDouyinError('5', db);
+
+    const pending = await getDouyinPendingVideos(db);
+    expect(pending.map((v) => v.awemeId)).toEqual(['6', '1']);
+    expect(pending[0]).toEqual({
+      awemeId: '6',
+      title: 'desc 6',
+      coverUrl: 'https://p3/cover.jpeg',
+      authorName: 'Alice',
+      durationMs: 12_000,
+    });
   });
 
   // -------------------------------------------------------------------------

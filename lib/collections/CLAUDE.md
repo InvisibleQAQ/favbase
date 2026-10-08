@@ -13,7 +13,7 @@
 - `hostPermissions` 的 flatMap 顺序是 manifest 契约：已装 MV3 扩展的 `host_permissions` 一变就要用户重新授权。黄金顺序锁在 `platform-descriptor.test.ts`。
 - `PLATFORM_DESCRIPTORS.x.hostPermissions` 同时是 `entrypoints/background.ts` 的 X webRequest filter：改这一格同时改 manifest 与捕获范围。
 - `jobPlatform` 必须唯一（同名会让两个平台共用一条 job lane）。bilibili / bookmarks / douyin 用平台 id，github / x / zhihu / youtube 是历史别名、未统一；不再给平台 id 发明第二个名字（用户决定）。
-- `descriptionField` 只填「**不在** Content 里的简介」的 meta key：youtube 的 meta 有 `description`，但那是 Content 的截断片段，所以填 `null`。
+- `descriptionField` 只填「**不在** Content 里的简介」的 meta key：youtube 的 meta 有 `description`，但那是 Content 的截断片段，所以填 `null`。已接受的例外是 douyin：视频的 Content 是转录、`desc` 是简介，但图文的 Content 就是 `desc`，descriptor 仍填 `'desc'`，打标签 prompt 对图文会看到两遍——为一个平台的图文拆 descriptor 或在共享 tagging 加判断都被否决（`docs/37 §1.1` D1 副作用行）。
 - `dimensions.author` / `source` / `meta.kind` 必须是 `dimensions.ranked` 的成员或 `null`，否则 Dashboard 细分卡静默留空（契约测试守）。`source: null` 显式表示该平台没有 Source。
 - 新平台必须在 `PLATFORM_DOWNSTREAM_ELIGIBILITY`（`platform-eligibility.ts`）显式声明，无排除写 `null`。排除规则的 SQL 定义在 `lib/<platform>/`，与内存判定同 owner，本表只登记。
 
