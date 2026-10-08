@@ -1,6 +1,6 @@
 # 37 抖音字幕与转录接入手册（2026-10-08）
 
-> 状态：**草案；Step 0 已完成 2026-10-08（用户账号、BrowserOS neo 实测，只读）**——网页 aweme 对象有 `cla_info` 字段但 136 个样本全空，v1 「优先 AI 字幕」半边改为**直接 ASR**（`fetchOfficialSubtitle: async () => null`，不写 `douyin-subtitle.ts`）；另发现纯音轨 `video.bit_rate_audio[]`，D-g 据此修订。证据在 Step 0 落地记录与任务目录 `research/douyin-step0-subtitle-media-probe-2026-10-08.md`；**Step 1 已完成 2026-10-08（内容模型翻转 + 领域层；代码 + 单测，已复核，commit 3f3babe）**，按任务目录 `info.md` 执行，其 §0 四条裁决（D6 的 desc 也空 → `'no_content'`、`decodeDetail` 空 payload 抛冷却错误、`pickAudioSourceUrls` 三级全拼、入库门用 D-f 谓词）是对本文的有意偏离，见 Step 1 节末「Step 1 落地记录」；**Step 2 已完成 2026-10-08（Background handler；代码 + 单测，已复核，未提交）**，按任务目录 `info.md` 的 Step 2 节执行，其 §0 九条裁决（detail 懒到 ASR 路径里取、共享下载器收候选列表、extractor 的结构化错误透传、`douyin-api` 两个具名错误类、`aweme_id` 回声闸门等）是对本文的有意偏离，见 Step 2 节末「Step 2 落地记录」。§1 的 D1–D7 是待用户确认的决策（每条带推荐项）；D-a 起是写手册时由代码核对推出的设计默认项。一次对话只做一个 Step；执行任一 Step 前先读 §1 决策、§2 否决清单、§3 铁律，再读该 Step 的八段。
+> 状态：**草案；Step 0 已完成 2026-10-08（用户账号、BrowserOS neo 实测，只读）**——网页 aweme 对象有 `cla_info` 字段但 136 个样本全空，v1 「优先 AI 字幕」半边改为**直接 ASR**（`fetchOfficialSubtitle: async () => null`，不写 `douyin-subtitle.ts`）；另发现纯音轨 `video.bit_rate_audio[]`，D-g 据此修订。证据在 Step 0 落地记录与任务目录 `research/douyin-step0-subtitle-media-probe-2026-10-08.md`；**Step 1 已完成 2026-10-08（内容模型翻转 + 领域层；代码 + 单测，已复核，commit 3f3babe）**，按任务目录 `info.md` 执行，其 §0 四条裁决（D6 的 desc 也空 → `'no_content'`、`decodeDetail` 空 payload 抛冷却错误、`pickAudioSourceUrls` 三级全拼、入库门用 D-f 谓词）是对本文的有意偏离，见 Step 1 节末「Step 1 落地记录」；**Step 2 已完成 2026-10-08（Background handler；代码 + 单测，已复核，commit 1b0b227）**，按任务目录 `info.md` 的 Step 2 节执行，其 §0 九条裁决（detail 懒到 ASR 路径里取、共享下载器收候选列表、extractor 的结构化错误透传、`douyin-api` 两个具名错误类、`aweme_id` 回声闸门等）是对本文的有意偏离，见 Step 2 节末「Step 2 落地记录」。§1 的 D1–D7 是待用户确认的决策（每条带推荐项）；D-a 起是写手册时由代码核对推出的设计默认项。一次对话只做一个 Step；执行任一 Step 前先读 §1 决策、§2 否决清单、§3 铁律，再读该 Step 的八段。
 >
 > 任务目录：`.trellis/tasks/10-08-douyin-transcription-subtitle-first-asr-fallback-tagging-reuse-bilibili-flow/`。前置手册：`docs/33`（抖音收藏接入，Step 0–3 已落地）、`docs/04`（B站转录管线）、`docs/29`（B站字幕串台事故与归属校验）。
 >
@@ -345,7 +345,7 @@ Coverage 的 content 段（`collection-processing-policy.ts:102-105`）：视频
 
 **判据**：从 app.html DevTools 手发一条 `TRANSCRIBE_AUDIO { platform: 'douyin' }` 能得到 `success: true`（字幕或 ASR 任一路径）；manifest 零差异；bundle 守卫绿。
 
-#### Step 2 落地记录（2026-10-08，代码 + 单测；未提交）
+#### Step 2 落地记录（2026-10-08，代码 + 单测；commit 1b0b227）
 
 执行稿是任务目录 `info.md` 的 Step 2 节（主会话读完 B站 handler、共享下载器、pipeline、`douyin-api` / `douyin-tab` / `douyin-media` 与五个守卫后写的逐文件规格），与本文冲突处以它的 §0 为准。范围：`lib/`、`tests/`、`.env.example`、`.env.local`（只在抖音块末尾加两行）、三份目录 `CLAUDE.md`、本记录与 `prd.md`；`entrypoints/`、`lib/auto-transcribe/`、库都没碰。D3 / D4 视为已确认：依据是用户的指令「完成 step2」，而 Step 2 的文件表就是 D3（detail 在 Background handler 里经 tab transport 现取）与 D4（转录专用节奏器）的落地；回滚是 revert。`.env.local` 的两行（§4.5 要求征得同意）同样以这条指令为据，只加了注释与留空的 key，没动别的行。
 
