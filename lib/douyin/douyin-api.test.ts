@@ -8,6 +8,7 @@ import {
   buildFolderItemsRequest,
   buildFoldersRequest,
   classifyResponse,
+  createDouyinAudioUrlMemo,
   createDouyinDetailPacer,
   createDouyinPacer,
   DouyinAuthError,
@@ -579,6 +580,65 @@ describe('createDouyinDetailPacer', () => {
     await vi.advanceTimersByTimeAsync(5_000);
     expect(sent).toEqual(['a', 'b']);
     await Promise.all([a, b]);
+  });
+});
+
+// The candidate-URL memo (docs/38): a retry after a temporary rate limit must
+// not spend another signed detail request. Keyed by aweme_id, fresh for
+// `VITE_DOUYIN_AUDIO_URL_TTL_MS` (30 min, far inside the ~3 h CDN expiry),
+// oldest entry evicted past `VITE_DOUYIN_AUDIO_URL_MEMO_SIZE`.
+describe('createDouyinAudioUrlMemo', () => {
+  const TTL = 1_800_000;
+  const URLS = ['https://v11-weba.douyinvod.com/a/', 'https://www.douyin.com/aweme/v1/play/?file_id=a'];
+
+  it('misses an id it has never stored', () => {
+    expect(createDouyinAudioUrlMemo().get('1', 0)).toBeNull();
+  });
+
+  it('answers a stored id with its candidates until the TTL (30 min by default) runs out', () => {
+    const memo = createDouyinAudioUrlMemo();
+    memo.set('1', URLS, 1_000);
+    expect(memo.get('1', 1_000 + TTL - 1)).toEqual(URLS);
+    expect(memo.get('1', 1_000 + TTL)).toBeNull();
+    // An expired entry is gone, not merely hidden.
+    expect(memo.get('1', 1_000)).toBeNull();
+  });
+
+  it('keeps its own copy: neither the stored nor the returned list aliases the caller', () => {
+    const memo = createDouyinAudioUrlMemo();
+    const stored = [...URLS];
+    memo.set('1', stored, 0);
+    stored.push('https://changed/');
+    memo.get('1', 0)!.push('https://also-changed/');
+    expect(memo.get('1', 0)).toEqual(URLS);
+  });
+
+  it('evicts the oldest stored id once more than the capacity are held', () => {
+    const memo = createDouyinAudioUrlMemo({ capacity: 2 });
+    memo.set('1', ['https://one/'], 0);
+    memo.set('2', ['https://two/'], 1);
+    memo.set('3', ['https://three/'], 2);
+    expect(memo.get('1', 3)).toBeNull();
+    expect(memo.get('2', 3)).toEqual(['https://two/']);
+    expect(memo.get('3', 3)).toEqual(['https://three/']);
+  });
+
+  it('a re-stored id is the newest again (fresh time, last to be evicted)', () => {
+    const memo = createDouyinAudioUrlMemo({ capacity: 2, ttlMs: 100 });
+    memo.set('1', ['https://one/'], 0);
+    memo.set('2', ['https://two/'], 10);
+    memo.set('1', ['https://one-again/'], 50);
+    memo.set('3', ['https://three/'], 60);
+    expect(memo.get('2', 61)).toBeNull();
+    expect(memo.get('1', 149)).toEqual(['https://one-again/']);
+  });
+
+  it('holds 32 ids by default', () => {
+    const memo = createDouyinAudioUrlMemo();
+    for (let i = 0; i <= 32; i += 1) memo.set(String(i), [`https://${i}/`], i);
+    expect(memo.get('0', 33)).toBeNull();
+    expect(memo.get('1', 33)).toEqual(['https://1/']);
+    expect(memo.get('32', 33)).toEqual(['https://32/']);
   });
 });
 

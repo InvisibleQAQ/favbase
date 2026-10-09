@@ -133,6 +133,32 @@ function platformRateLimited(retryAfter: number): TranscribeResponse {
   };
 }
 
+function asrSuccess(videoId = 'BV1'): TranscribeResponse {
+  return {
+    success: true,
+    data: { videoId, rows: [], source: 'asr', cached: false },
+  };
+}
+
+/** A daily quota whose reset lands a few seconds after the 60 s limit floor (tests start at t = 1 000). */
+function shortQuota(): TranscribeResponse {
+  const quota = dailyQuotaExceeded();
+  if (!quota.success) quota.error.resetAt = 70_000;
+  return quota;
+}
+
+/** `waitSeconds` at each entry into `'paused'` — the temporary-limit waits, in order. */
+function recordPausedWaits(pipeline: AutoTranscribePipeline): number[] {
+  const waits: number[] = [];
+  let previous = pipeline.getSnapshot().phase;
+  pipeline.subscribe(() => {
+    const { phase, waitSeconds } = pipeline.getSnapshot();
+    if (phase === 'paused' && previous !== 'paused') waits.push(waitSeconds);
+    previous = phase;
+  });
+  return waits;
+}
+
 describe('AutoTranscribePipeline streaming session', () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -421,34 +447,214 @@ describe('AutoTranscribePipeline streaming session', () => {
     }
   });
 
-  it('retries a platform rate limit once after its retryAfter, then marks the item on a second failure', async () => {
+  // docs/38: a temporary rate limit (a `retryAfter`, judged after prerequisite
+  // and quota) never fails the item. The item stays current and is retried
+  // after max(retryAfter, min(600, 60·2^(k-1))) seconds, k = consecutive
+  // temporary limits in this session; any other outcome resets k.
+  it('retries the same item through three consecutive temporary limits with a doubling floor, then counts it once', async () => {
     vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
     const transcribe = vi.fn()
-      .mockResolvedValueOnce(platformRateLimited(2))
-      .mockResolvedValueOnce(platformRateLimited(2));
+      .mockResolvedValueOnce(rateLimited(2))
+      .mockResolvedValueOnce(rateLimited(2))
+      .mockResolvedValueOnce(rateLimited(2))
+      .mockResolvedValueOnce(asrSuccess());
     const markError = vi.fn().mockResolvedValue(undefined);
     const pipeline = new AutoTranscribePipeline(makeAdapter({ transcribe, markError }));
+    const waits = recordPausedWaits(pipeline);
+
+    try {
+      const session = pipeline.createSession();
+      session.append([video('BV-1')]);
+      session.close();
+      const run = session.run();
+
+      await waitForState(pipeline, () => waits.length === 1);
+      expect(waits).toEqual([60]);
+      // The countdown and the sleep agree: nothing is resent a millisecond early.
+      await vi.advanceTimersByTimeAsync(59_999);
+      expect(transcribe).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+      await waitForState(pipeline, () => waits.length === 2);
+      expect(transcribe).toHaveBeenCalledTimes(2);
+
+      await vi.advanceTimersByTimeAsync(120_000);
+      await waitForState(pipeline, () => waits.length === 3);
+      expect(transcribe).toHaveBeenCalledTimes(3);
+
+      await vi.advanceTimersByTimeAsync(240_000);
+      await waitForState(pipeline, (state) => state.phase === 'waiting');
+      expect(transcribe).toHaveBeenCalledTimes(4);
+      await vi.advanceTimersByTimeAsync(20_000);
+      await run;
+
+      expect(waits).toEqual([60, 120, 240]);
+      expect(transcribe.mock.calls.map(([videoId]) => videoId)).toEqual(['BV-1', 'BV-1', 'BV-1', 'BV-1']);
+      expect(markError).not.toHaveBeenCalled();
+      expect(pipeline.getSnapshot()).toMatchObject({
+        phase: 'done',
+        currentIndex: 1,
+        stats: { asr: 1, skipped: 0, remaining: 0 },
+      });
+    } finally {
+      pipeline.dispose();
+    }
+  });
+
+  it('caps the backoff floor at 600 s from the fifth consecutive temporary limit on', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const transcribe = vi.fn();
+    for (let i = 0; i < 6; i += 1) transcribe.mockResolvedValueOnce(rateLimited(2));
+    transcribe.mockResolvedValueOnce(asrSuccess());
+    const markError = vi.fn().mockResolvedValue(undefined);
+    const pipeline = new AutoTranscribePipeline(makeAdapter({ transcribe, markError }));
+    const waits = recordPausedWaits(pipeline);
+
+    try {
+      const session = pipeline.createSession();
+      session.append([video('BV-1')]);
+      session.close();
+      const run = session.run();
+      await vi.runAllTimersAsync();
+      await run;
+
+      expect(waits).toEqual([60, 120, 240, 480, 600, 600]);
+      expect(transcribe).toHaveBeenCalledTimes(7);
+      expect(markError).not.toHaveBeenCalled();
+      expect(pipeline.getSnapshot()).toMatchObject({ phase: 'done', stats: { asr: 1, skipped: 0 } });
+    } finally {
+      pipeline.dispose();
+    }
+  });
+
+  it("waits the limit's own retryAfter when it is longer than the floor (a platform cooldown of 1800 s), judged by shape", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const transcribe = vi.fn()
+      .mockResolvedValueOnce(platformRateLimited(1_800))
+      .mockResolvedValueOnce(platformRateLimited(1_800))
+      .mockResolvedValueOnce(asrSuccess('DY-1'));
+    const markError = vi.fn().mockResolvedValue(undefined);
+    const pipeline = new AutoTranscribePipeline(makeAdapter({ transcribe, markError }));
+    const waits = recordPausedWaits(pipeline);
 
     try {
       const session = pipeline.createSession();
       session.append([video('DY-1')]);
       session.close();
       const run = session.run();
-      await waitForState(pipeline, (state) => state.phase === 'paused');
 
-      // Judged by the shape (a `retryAfter`), not by the ASR code.
-      expect(pipeline.getSnapshot().waitSeconds).toBe(2);
-      await vi.advanceTimersByTimeAsync(1_999);
-      expect(transcribe).toHaveBeenCalledOnce();
-      await vi.advanceTimersByTimeAsync(1);
-      await vi.waitFor(() => expect(transcribe).toHaveBeenCalledTimes(2));
+      await waitForState(pipeline, () => waits.length === 1);
+      await vi.advanceTimersByTimeAsync(1_799_999);
+      expect(transcribe).toHaveBeenCalledTimes(1);
+      await vi.runAllTimersAsync();
       await run;
 
-      expect(markError).toHaveBeenCalledWith('DY-1');
-      expect(pipeline.getSnapshot()).toMatchObject({
-        phase: 'done',
-        stats: { skipped: 1, remaining: 0 },
-      });
+      expect(waits).toEqual([1_800, 1_800]);
+      expect(transcribe).toHaveBeenCalledTimes(3);
+      expect(markError).not.toHaveBeenCalled();
+      expect(pipeline.getSnapshot()).toMatchObject({ phase: 'done', stats: { asr: 1, skipped: 0 } });
+    } finally {
+      pipeline.dispose();
+    }
+  });
+
+  // Each row: per-item scripts, and the floor the second item's limit must get.
+  // Without the reset, B's first limit would be the k-th consecutive one.
+  it.each([
+    {
+      outcome: 'a success',
+      scripts: { A: [rateLimited(2), rateLimited(2), asrSuccess('A')], B: [rateLimited(2), asrSuccess('B')] },
+      waits: [60, 120, 60],
+      markedErrors: [] as string[],
+    },
+    {
+      outcome: 'an ordinary failure',
+      scripts: { A: [rateLimited(2), unknownFailure()], B: [rateLimited(2), asrSuccess('B')] },
+      waits: [60, 60],
+      markedErrors: ['A'],
+    },
+    {
+      outcome: 'a rejected transcription',
+      scripts: { A: [rateLimited(2), new Error('message bridge failed')], B: [rateLimited(2), asrSuccess('B')] },
+      waits: [60, 60],
+      markedErrors: ['A'],
+    },
+    {
+      outcome: 'a daily quota pause',
+      scripts: { A: [rateLimited(2), shortQuota(), rateLimited(2), asrSuccess('A')], B: [asrSuccess('B')] },
+      waits: [60, 60],
+      markedErrors: [] as string[],
+    },
+    {
+      outcome: 'a parked prerequisite',
+      scripts: { A: [rateLimited(2), tabMissing(), asrSuccess('A')], B: [rateLimited(2), asrSuccess('B')] },
+      waits: [60, 60],
+      markedErrors: [] as string[],
+    },
+  ])('resets the backoff after $outcome: the next temporary limit waits max(retryAfter, 60) again', async ({ scripts, waits: expected, markedErrors }) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const remaining: Record<string, Array<TranscribeResponse | Error>> = {
+      A: [...scripts.A],
+      B: [...scripts.B],
+    };
+    const transcribe = vi.fn(async (videoId: string) => {
+      const next = remaining[videoId]?.shift();
+      if (!next) throw new Error(`script exhausted for ${videoId}`);
+      if (next instanceof Error) throw next;
+      return next;
+    });
+    const markError = vi.fn().mockResolvedValue(undefined);
+    const pipeline = new AutoTranscribePipeline(makeAdapter({
+      transcribe,
+      markError,
+      missingPrerequisite: async (error) => (error.code === 'DOUYIN_TAB_MISSING' ? 'platform-tab' : null),
+      // Far enough out that B runs first; runAllTimersAsync reaches it.
+      waitForPrerequisite: () => new Promise<void>((resolve) => { setTimeout(resolve, 1_000_000); }),
+    }));
+    const waits = recordPausedWaits(pipeline);
+
+    try {
+      const session = pipeline.createSession();
+      session.append([video('A'), video('B')]);
+      session.close();
+      const run = session.run();
+      await vi.runAllTimersAsync();
+      await run;
+
+      expect(waits).toEqual(expected);
+      expect(markError.mock.calls.map(([videoId]) => videoId)).toEqual(markedErrors);
+      expect(remaining).toEqual({ A: [], B: [] });
+      expect(pipeline.getSnapshot()).toMatchObject({ phase: 'done', stats: { remaining: 0 } });
+    } finally {
+      pipeline.dispose();
+    }
+  });
+
+  it('stop() during a temporary-limit wait cancels the session without marking the item', async () => {
+    vi.useFakeTimers();
+    const transcribe = vi.fn().mockResolvedValue(rateLimited(2));
+    const markError = vi.fn().mockResolvedValue(undefined);
+    const pipeline = new AutoTranscribePipeline(makeAdapter({ transcribe, markError }));
+
+    try {
+      const session = pipeline.createSession();
+      session.append([video('BV-1')]);
+      session.close();
+      const run = session.run();
+      await waitForState(pipeline, (state) => state.phase === 'paused');
+      await vi.advanceTimersByTimeAsync(30_000);
+
+      pipeline.stop();
+      await run;
+
+      expect(pipeline.getSnapshot().phase).toBe('cancelled');
+      expect(transcribe).toHaveBeenCalledTimes(1);
+      expect(markError).not.toHaveBeenCalled();
     } finally {
       pipeline.dispose();
     }
@@ -635,34 +841,6 @@ describe('AutoTranscribePipeline session controls', () => {
     }
   });
 
-  it('waits for the provider retry delay before retrying a temporary rate limit', async () => {
-    vi.useFakeTimers();
-    const transcribe = vi.fn()
-      .mockResolvedValueOnce(rateLimited(2))
-      .mockResolvedValueOnce(success());
-    const adapter = makeAdapter({
-      transcribe,
-    });
-    const pipeline = new AutoTranscribePipeline(adapter);
-
-    try {
-      const session = pipeline.createSession();
-      session.append([video('BV-1')]);
-      session.close();
-      void session.run();
-      await waitForState(pipeline, (state) => state.phase === 'paused');
-
-      expect(pipeline.getSnapshot().waitSeconds).toBe(2);
-      await vi.advanceTimersByTimeAsync(1_999);
-      expect(transcribe).toHaveBeenCalledOnce();
-
-      await vi.advanceTimersByTimeAsync(1);
-      await vi.waitFor(() => expect(transcribe).toHaveBeenCalledTimes(2));
-    } finally {
-      pipeline.dispose();
-    }
-  });
-
   it('pauses when the retry response reports daily quota exhaustion', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(1_000_000);
@@ -679,7 +857,8 @@ describe('AutoTranscribePipeline session controls', () => {
       session.close();
       void session.run();
       await waitForState(pipeline, (state) => state.phase === 'paused');
-      await vi.advanceTimersByTimeAsync(1_000);
+      // A temporary limit waits at least the 60 s backoff floor (docs/38).
+      await vi.advanceTimersByTimeAsync(60_000);
 
       expect(pipeline.getSnapshot()).toMatchObject({
         phase: 'quota_paused',
@@ -788,6 +967,92 @@ describe('AutoTranscribePipeline session controls', () => {
     }
   });
 
+  it('passes the cooperative checkpoint after a temporary-limit wait, before the item is resent', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const transcribe = vi.fn()
+      .mockResolvedValueOnce(rateLimited(2))
+      .mockResolvedValueOnce(asrSuccess());
+    const pipeline = new AutoTranscribePipeline(makeAdapter({ transcribe }));
+    let paused = false;
+    const parked = deferred<void>();
+    const release = deferred<void>();
+    const checkpoint = vi.fn(async () => {
+      if (!paused) return;
+      parked.resolve();
+      await release.promise;
+    });
+
+    try {
+      const session = pipeline.createSession();
+      session.append([video('BV-1')]);
+      session.close();
+      const run = session.run({ checkpoint });
+      await waitForState(pipeline, (state) => state.phase === 'paused');
+      const checkpointsBeforeWait = checkpoint.mock.calls.length;
+      paused = true; // the Library Gate pauses while the limit's wait runs
+
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(transcribe).toHaveBeenCalledTimes(1); // nothing resent while paused
+      await parked.promise;
+      expect(checkpoint).toHaveBeenCalledTimes(checkpointsBeforeWait + 1);
+
+      paused = false;
+      release.resolve();
+      await waitForState(pipeline, (state) => state.phase === 'waiting');
+      expect(transcribe).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(20_000);
+      await run;
+    } finally {
+      pipeline.dispose();
+    }
+  });
+
+  // A Library Gate pause can hold the post-wait checkpoint for as long as the
+  // user likes; a stop() pressed meanwhile must not let the item be resent
+  // (and then marked) once the gate opens.
+  it.each([
+    { wait: 'a temporary-limit wait', first: () => rateLimited(2), waitMs: 60_000 },
+    { wait: 'a daily quota wait', first: shortQuota, waitMs: 69_000 },
+  ])('stop() while the checkpoint after $wait holds cancels without resending or marking the item', async ({ first, waitMs }) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
+    const transcribe = vi.fn()
+      .mockResolvedValueOnce(first())
+      .mockResolvedValue(unknownFailure());
+    const markError = vi.fn().mockResolvedValue(undefined);
+    const pipeline = new AutoTranscribePipeline(makeAdapter({ transcribe, markError }));
+    let paused = false;
+    const parked = deferred<void>();
+    const release = deferred<void>();
+    const checkpoint = vi.fn(async () => {
+      if (!paused) return;
+      parked.resolve();
+      await release.promise;
+    });
+
+    try {
+      const session = pipeline.createSession();
+      session.append([video('BV-1')]);
+      session.close();
+      const run = session.run({ checkpoint });
+      await waitForState(pipeline, (state) => state.phase === 'paused' || state.phase === 'quota_paused');
+      paused = true;
+
+      await vi.advanceTimersByTimeAsync(waitMs);
+      await parked.promise;
+      pipeline.stop();
+      release.resolve();
+      await run;
+
+      expect(pipeline.getSnapshot().phase).toBe('cancelled');
+      expect(transcribe).toHaveBeenCalledTimes(1);
+      expect(markError).not.toHaveBeenCalled();
+    } finally {
+      pipeline.dispose();
+    }
+  });
+
   it('anchors the quota countdown to reset time after timer throttling', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(1_000);
@@ -808,6 +1073,34 @@ describe('AutoTranscribePipeline session controls', () => {
       await vi.advanceTimersByTimeAsync(1_000);
 
       expect(pipeline.getSnapshot().waitSeconds).toBe(0);
+    } finally {
+      pipeline.dispose();
+    }
+  });
+
+  // docs/38 made the 'paused' wait minutes long (up to 30 min for a platform
+  // cooldown): a throttled background tab fires the 1 s countdown tick far
+  // less often, so the displayed seconds must come from the deadline.
+  it('anchors the temporary-limit countdown to its deadline after timer throttling', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
+    const transcribe = vi.fn().mockResolvedValue(rateLimited(2));
+    const pipeline = new AutoTranscribePipeline(makeAdapter({ transcribe }));
+
+    try {
+      const session = pipeline.createSession();
+      session.append([video('BV-1')]);
+      session.close();
+      void session.run();
+      await waitForState(pipeline, (state) => state.phase === 'paused');
+      expect(pipeline.getSnapshot().waitSeconds).toBe(60);
+
+      // 50 s pass while no tick fires, then one tick.
+      vi.setSystemTime(51_000);
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      expect(pipeline.getSnapshot().waitSeconds).toBe(9);
+      expect(transcribe).toHaveBeenCalledTimes(1);
     } finally {
       pipeline.dispose();
     }

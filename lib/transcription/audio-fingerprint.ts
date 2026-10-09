@@ -9,11 +9,15 @@ interface FingerprintEntry {
 
 const lru: FingerprintEntry[] = [];
 
-async function sha256(blob: Blob): Promise<string> {
-  const buffer = await blob.arrayBuffer();
-  const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+/** Lower-case hex SHA-256 of raw bytes; the Offscreen chunk-resume table keys tracks by it too. */
+export async function sha256Hex(bytes: BufferSource): Promise<string> {
+  const hashBuffer = await crypto.subtle.digest('SHA-256', bytes);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function sha256(blob: Blob): Promise<string> {
+  return sha256Hex(await blob.arrayBuffer());
 }
 
 export async function assertAudioNotReused(

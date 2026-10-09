@@ -62,6 +62,16 @@ const COOLDOWN_MS = envNumber('VITE_DOUYIN_COOLDOWN_MS', 1_800_000);
  */
 const DETAIL_DELAY_MIN_MS = envNumber('VITE_DOUYIN_DETAIL_DELAY_MIN_MS', 5_000);
 const DETAIL_DELAY_JITTER_MS = envNumber('VITE_DOUYIN_DETAIL_DELAY_JITTER_MS', 3_000);
+/**
+ * Transcription only (docs/38): how long one aweme's candidate media URLs
+ * are reused, so a retry after a temporary rate limit spends no second
+ * signed detail request. Far inside the CDN links' own expiry (about 3 h for
+ * video, 24 h for audio-only): a link that expires in the memo makes the
+ * download fail, and that failure loses the item.
+ */
+const AUDIO_URL_TTL_MS = envNumber('VITE_DOUYIN_AUDIO_URL_TTL_MS', 1_800_000);
+/** How many aweme ids the memo holds before it drops the oldest. */
+const AUDIO_URL_MEMO_SIZE = envNumber('VITE_DOUYIN_AUDIO_URL_MEMO_SIZE', 32);
 
 /** The three non-signature parameters every www.douyin.com web API call carries. */
 const COMMON_QUERY: Readonly<Record<string, string>> = {
@@ -480,6 +490,48 @@ export function createDouyinDetailPacer(
       // A rejected wait must not wedge every later caller behind it.
       tail = turn.catch(() => {});
       return turn;
+    },
+  };
+}
+
+/** Candidate media URLs per aweme id, for the transcription handler's retries (docs/38). */
+export interface DouyinAudioUrlMemo {
+  /** The candidates stored for `awemeId` if still fresh at `at`, else `null`. */
+  get(awemeId: string, at: number): string[] | null;
+  set(awemeId: string, urls: readonly string[], at: number): void;
+}
+
+/**
+ * One module-level instance per Service Worker life, like the detail pacer;
+ * a SW restart forgets it, which costs one more signed request. Entries are
+ * fresh for `ttlMs` from when they were stored and the oldest stored one is
+ * dropped past `capacity`. Lists are copied in and out. The clock is the
+ * caller's (`at`), so tests never wait.
+ */
+export function createDouyinAudioUrlMemo(
+  opts: { ttlMs?: number; capacity?: number } = {},
+): DouyinAudioUrlMemo {
+  const ttlMs = opts.ttlMs ?? AUDIO_URL_TTL_MS;
+  const capacity = opts.capacity ?? AUDIO_URL_MEMO_SIZE;
+  // Insertion order = store order: the first key is always the oldest entry.
+  const entries = new Map<string, { urls: string[]; storedAt: number }>();
+  return {
+    get(awemeId, at) {
+      const entry = entries.get(awemeId);
+      if (!entry) return null;
+      if (at - entry.storedAt >= ttlMs) {
+        entries.delete(awemeId);
+        return null;
+      }
+      return [...entry.urls];
+    },
+    set(awemeId, urls, at) {
+      entries.delete(awemeId);
+      entries.set(awemeId, { urls: [...urls], storedAt: at });
+      while (entries.size > capacity) {
+        const oldest = entries.keys().next().value as string;
+        entries.delete(oldest);
+      }
     },
   };
 }

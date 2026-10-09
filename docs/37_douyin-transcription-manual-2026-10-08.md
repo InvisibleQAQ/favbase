@@ -540,7 +540,7 @@ Coverage 的 content 段（`collection-processing-policy.ts:102-105`）：视频
 **未做 / 留给后面**
 
 - **本 Step 判据的实机部分没跑**：清库（D2，删 `items where platform='douyin'` 级联、`authors` 孤儿、`platform_sync_records`、`local:douyin-backfill`）要用户当场批准；之后的「不碰页面，视频逐条出现 CC / ASR 角标、标签随后出现」「关掉 app.html 再开、再同步，残留的 `'pending'` 被补上」「关掉抖音标签页，进度条显示等待」需要已配置的 ASR key 与 BrowserOS neo 里 reload 扩展（会关掉用户已开的扩展页面）。三者齐了在 Step 4 一并跑，Step 4 清单 6 / 7 就是这两条。
-- **风控冷却期间条目会落 `'error'`**（复核发现，按本文 §4.3 T4「重试一次」保留）：`DOUYIN_RATE_LIMITED` 的 `retryAfter` 是 30 分钟冷却，每条在 `paused` 里等满、重试一次，再被拒即 `'error'`；持续风控时约每 30 分钟永久失去一条（v1 无重试入口），并向被风控的账号每 30 分钟多发 1–2 次签名请求。改法要在共享状态机里加「瞬态失败、保持 `'pending'` 不标 error」一类，或给平台冷却一个不借 ASR quota 文案的暂停态；Step 4 清单 2 先看实际出现频率再定。
+- **风控冷却期间条目会落 `'error'`**（复核发现，按本文 §4.3 T4「重试一次」保留）：`DOUYIN_RATE_LIMITED` 的 `retryAfter` 是 30 分钟冷却，每条在 `paused` 里等满、重试一次，再被拒即 `'error'`；持续风控时约每 30 分钟永久失去一条（v1 无重试入口），并向被风控的账号每 30 分钟多发 1–2 次签名请求。改法要在共享状态机里加「瞬态失败、保持 `'pending'` 不标 error」一类，或给平台冷却一个不借 ASR quota 文案的暂停态；Step 4 清单 2 先看实际出现频率再定。（2026-10-09 已修：临时限流不再标 error，见 docs/38。）
 - SW 的 `job-registry` 一个 tab 只记一个转录 job，B站与抖音 session 并发会串台（Step 2 已记）；v1 接受，写进 `entrypoints/app/hooks/CLAUDE.md` 与 `lib/background/CLAUDE.md`。
 - session 被取消时若正在等标签页加载，adapter 的短路状态会留到下一次 douyin.com 标签页加载完成；v1 抖音没有取消入口，基本不可达。同一轮停放里先后出现两类前置条件时，`prerequisiteBlocked` 显示后一类、等待的是前一类；SW 先查 ASR key 再查标签页，实际不会同时出现。
 - 卡片上的手动转录 / 取消按钮（D-e）与 `'error'` 条目的重试入口仍是后续项。
@@ -592,9 +592,9 @@ Coverage 的 content 段（`collection-processing-policy.ts:102-105`）：视频
 **新发现**（都没改代码，按本 Step「不做」）
 
 1. **Whisper 幻觉，跨平台**：静音 / 纯音乐片段的 ASR 返回非空的固定套话，D6 的「空转录」判定接不住，垃圾正文入库、切块、向量化、进检索（清单 9 的反例）。`lib/transcription` 与B站同一条 ASR 路径都没有过滤。后续项：在共享 ASR 结果上加幻觉过滤（已知套话黑名单，或 Groq `verbose_json` 的 `no_speech_prob` / `avg_logprob`），命中即按空转录处理（抖音退回 `desc`）——要先查 Groq 的响应字段，`[UNKNOWN]`。
-2. **ASR 限流在 Groq `on_demand` 档是常态，「重试一次」会永久丢条目**：首次限流在 06:35（开跑 19 min、42 条之后），是 ASPH（每小时音频秒数 7200）而非日额度，码是 `ASR_RATE_LIMIT`。到暂停共 36 次限流落在 31 条上，**5 条二次被拒落 `'error'`（16%）**——`retry-after` 对 ASPH 不可靠（等满 21 s / 7 s / 8 s 仍被拒；p50 83 s，max 405 s）。v1 没有 `'error'` 的重试入口，D7 积压只捡 `'pending'`。Step 3「未做」预判的是抖音风控冷却，实测触发它的是 ASR 供应方。另外每次重试都重走 extractor，**再发一次 detail 签名请求并重下音频**（123 次 detail 里 30 次是重试，24%）：这把 a_bogus 计数与风控暴露放大了约四分之一。后续项与 Step 3「未做」那条合并：共享状态机里「带 `retryAfter` 的临时限流」改为保持 `'pending'` 的可恢复等待（像 `quota_paused`，但不借 quota 文案），不标 error；抖音侧可选在 SW 生命周期内按 `aweme_id` 记住已解析的候选直链（直链 ≥ 3 h 有效），重试不再签名。
+2. **ASR 限流在 Groq `on_demand` 档是常态，「重试一次」会永久丢条目**：首次限流在 06:35（开跑 19 min、42 条之后），是 ASPH（每小时音频秒数 7200）而非日额度，码是 `ASR_RATE_LIMIT`。到暂停共 36 次限流落在 31 条上，**5 条二次被拒落 `'error'`（16%）**——`retry-after` 对 ASPH 不可靠（等满 21 s / 7 s / 8 s 仍被拒；p50 83 s，max 405 s）。v1 没有 `'error'` 的重试入口，D7 积压只捡 `'pending'`。Step 3「未做」预判的是抖音风控冷却，实测触发它的是 ASR 供应方。另外每次重试都重走 extractor，**再发一次 detail 签名请求并重下音频**（123 次 detail 里 30 次是重试，24%）：这把 a_bogus 计数与风控暴露放大了约四分之一。后续项与 Step 3「未做」那条合并：共享状态机里「带 `retryAfter` 的临时限流」改为保持 `'pending'` 的可恢复等待（像 `quota_paused`，但不借 quota 文案），不标 error；抖音侧可选在 SW 生命周期内按 `aweme_id` 记住已解析的候选直链（直链 ≥ 3 h 有效），重试不再签名。（2026-10-09 已修，连同新发现 4 需要的分块续传：docs/38。）
 3. **D-g 的「纯音轨让 ≤ 24 MB 直传成为常态」对长视频不成立**：纯音轨码率两档——约 48–56 kbps（时长 ≤ 478 s）与约 194 kbps（21 条，≥ 256 s）。194 kbps 下 24 MB ≈ 990 s，剩余积压里 30 条 > 990 s 会进 Offscreen 分块（已实测可用）。唯一一条有两档纯音轨的作品，`[0]` 是低码率那档，所以 `[0]` 不保证最低码率；要不要按码率挑最低档，等有更多双档样本再定。
-4. **2.5 h 的作品（积压里最长 9124 s）在 ASPH 7200 s/h 下注定失败**（推断，未实测）：分块转录过程中必撞限流，整条重来一次再被拒即 `'error'`。新发现 2 的修法能接住它。
+4. **2.5 h 的作品（积压里最长 9124 s）在 ASPH 7200 s/h 下注定失败**（推断，未实测）：分块转录过程中必撞限流，整条重来一次再被拒即 `'error'`。（2026-10-09 勘误：原写「新发现 2 的修法能接住它」不成立。只把限流改成不落 error，任一块 429 仍是整条重来，总音频超过每小时额度的作品会在队头无限循环、每轮烧光一小时额度、卡死其后全部条目；还要分块断点续传才接得住，见 docs/38 §1。）
 5. **Transcribe 段的口径两处不一**：session 在跑时显示 session 进度（「32/442」，只算视频），session 结束后显示 coverage（「62/469」，27 条图文以 `'chunked'` 计入已完成）。图文不转录却算进分子分母。小问题，记下不改。
 6. **`closed` 停放会把整个队列在一分钟内逐条过一遍 SW**（每条一次 `TRANSCRIBE_AUDIO`、零网络），这是 Step 3 偏离 3 的设计（cache 命中仍能成功），实测代价可忽略。
 
@@ -603,7 +603,7 @@ Coverage 的 content 段（`collection-processing-policy.ts:102-105`）：视频
 **未做 / 留给后面**
 
 - 剩余积压 347 条（40.0 h 音频）暂停在 `'pending'`；`'error'` 5 条（全是新发现 2）。重新跑之前先定新发现 2 的修法，否则按 16% 推算还会再丢约 50 条。
-- 新发现 1（幻觉过滤）、2（限流不标 error + 重试不重签）是下一个任务的候选，各自要一份手册。
+- 新发现 1（幻觉过滤）、2（限流不标 error + 重试不重签）是下一个任务的候选，各自要一份手册。（新发现 2 与 4 已由 docs/38 落地；5 条 `'error'` 的处置也在那里。）
 - B站自动转录仍是用户手动暂停的状态（library gate），由用户决定何时恢复：恢复后它与抖音共用 Groq ASPH。
 - `job-registry` 一个 tab 一个转录 job 的串台缺口（Step 2 / 3 已记）本次没触发：B站在暂停中。
 

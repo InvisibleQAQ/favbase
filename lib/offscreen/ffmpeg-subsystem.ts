@@ -14,12 +14,17 @@ import {
   MAX_CHUNK_SHRINK_ROUNDS,
   AUDIO_MIME_TYPE,
 } from '@/lib/transcription/constants';
+import { sha256Hex } from '@/lib/transcription/audio-fingerprint';
 import { requestGroqTranscription } from '@/lib/transcription/groq-client';
 import { sendOffscreenProgress } from './client';
 import {
+  chunkProgressKey,
+  createChunkProgressStore,
+  transcribeChunksResumable,
+} from './chunk-progress';
+import {
   estimateSafeChunkSeconds,
   buildOverlappedChunkPlan,
-  mergeTimestampedChunkRows,
 } from './chunking';
 
 const SESSION_TTL_MS = 10 * 60 * 1000;
@@ -42,10 +47,18 @@ function withFfmpegLock<T>(fn: () => Promise<T>): Promise<T> {
 
 interface ChunkSession {
   chunks: { bytes: Uint8Array; plan: ChunkPlan }[];
+  /** SHA-256 of the bytes this document downloaded: the track's identity in `chunkProgress`. */
+  audioHash: string;
   lastActive: number;
 }
 
 const sessions = new Map<string, ChunkSession>();
+
+/**
+ * Outlives the chunk sessions (the SW releases each one, success or not): a
+ * later session for the same track resumes at the chunk that failed (docs/38).
+ */
+const chunkProgress = createChunkProgressStore();
 
 function touchSession(sessionId: string): void {
   const session = sessions.get(sessionId);
@@ -215,6 +228,7 @@ async function splitAudioIntoChunks(
 async function doPrepare(msg: OffscreenPrepareRequest): Promise<void> {
   const sourceBytes = await fetchAudioBytes(msg.audioUrl);
   const totalBytes = sourceBytes.byteLength;
+  const audioHash = await sha256Hex(sourceBytes);
 
   let duration: number;
   try {
@@ -267,7 +281,7 @@ async function doPrepare(msg: OffscreenPrepareRequest): Promise<void> {
     );
   }
 
-  sessions.set(msg.sessionId, { chunks: chunks!, lastActive: Date.now() });
+  sessions.set(msg.sessionId, { chunks: chunks!, audioHash, lastActive: Date.now() });
 }
 
 async function transcribeChunk(
@@ -290,39 +304,21 @@ async function doTranscribe(msg: OffscreenTranscribeRequest): Promise<SubtitleRo
 
   touchSession(msg.sessionId);
 
-  let accumulated: SubtitleRow[] = [];
-  const total = session.chunks.length;
-
-  for (let i = 0; i < total; i++) {
-    touchSession(msg.sessionId);
-    const { bytes, plan } = session.chunks[i];
-
-    sendOffscreenProgress({
-      type: 'OFFSCREEN_CHUNK_PROGRESS',
-      sessionId: msg.sessionId,
-      chunkIndex: i,
-      totalChunks: total,
-    });
-
-    const rows = await transcribeChunk(bytes, msg.apiKey, msg.model, msg.baseUrl);
-
-    if (i === 0) {
-      accumulated = rows.map((r) => ({
-        start: r.start + plan.startSec,
-        end: r.end + plan.startSec,
-        text: r.text,
-      }));
-    } else {
-      accumulated = mergeTimestampedChunkRows(
-        accumulated,
-        rows,
-        plan.startSec,
-        CHUNK_OVERLAP_SECONDS,
-      );
-    }
-  }
-
-  return accumulated;
+  return transcribeChunksResumable({
+    chunks: session.chunks,
+    key: chunkProgressKey(session.audioHash, msg.model, msg.baseUrl),
+    store: chunkProgress,
+    transcribeChunk: (bytes) => transcribeChunk(bytes, msg.apiKey, msg.model, msg.baseUrl),
+    onChunkStart: (chunkIndex, totalChunks) => {
+      touchSession(msg.sessionId);
+      sendOffscreenProgress({
+        type: 'OFFSCREEN_CHUNK_PROGRESS',
+        sessionId: msg.sessionId,
+        chunkIndex,
+        totalChunks,
+      });
+    },
+  });
 }
 
 export function prepare(msg: OffscreenPrepareRequest): Promise<void> {

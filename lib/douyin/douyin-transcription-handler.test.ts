@@ -1,8 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { BackgroundContext } from '@/lib/background/types';
-import type { TranscribeErrorInfo, TranscribeRequest, TranscribeResponse } from '@/lib/transcription/types';
-import { buildDetailRequest, type DouyinRequest, type DouyinTransportResult } from './douyin-api';
+import {
+  createErrorInfo,
+  type TranscribeErrorInfo,
+  type TranscribeRequest,
+  type TranscribeResponse,
+} from '@/lib/transcription/types';
+import {
+  buildDetailRequest,
+  createDouyinAudioUrlMemo,
+  type DouyinRequest,
+  type DouyinTransportResult,
+} from './douyin-api';
 import { pickAudioSourceUrls } from './douyin-media';
 
 // Boundary of the Service Worker handler: the tab leaf (chrome.*), the ASR
@@ -138,13 +148,14 @@ function session(
     findTab: vi.fn(async () => TAB_ID),
     transport,
     pacer: { beforeRequest: vi.fn(async () => {}) },
+    audioUrls: createDouyinAudioUrlMemo(),
     now: () => NOW,
     ...extra,
   };
 }
 
-function request(): TranscribeRequest {
-  return { type: 'TRANSCRIBE_AUDIO', platform: 'douyin', videoId: ID, title: 'a video' };
+function request(videoId = ID): TranscribeRequest {
+  return { type: 'TRANSCRIBE_AUDIO', platform: 'douyin', videoId, title: 'a video' };
 }
 
 function context(): BackgroundContext {
@@ -398,6 +409,108 @@ describe('handleDouyinTranscribe — failure shapes', () => {
 
     expect(boundary.fetchFirstAudioBlob).not.toHaveBeenCalled();
     expect(boundary.mergeVideoCache).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The candidate memo (docs/38): a retry spends no second signed request
+// ---------------------------------------------------------------------------
+
+describe('handleDouyinTranscribe — candidate URLs are memoised per aweme_id', () => {
+  const TTL_MS = 1_800_000;
+  const OTHER = '7300000000000000777';
+
+  function groqRateLimit(): TranscribeErrorInfo {
+    return { ...createErrorInfo('ASR_RATE_LIMIT', 'HTTP 429 audio seconds per hour'), retryAfter: 21 };
+  }
+
+  function clocked(transport: DouyinTranscribeSession['transport']) {
+    const clock = { now: NOW };
+    return { clock, s: session(transport, { now: () => clock.now }) };
+  }
+
+  it('a retry inside the TTL (after an ASR rate limit) reuses the candidates: no tab lookup, no pacing, no detail', async () => {
+    const payload = detailPayload();
+    const { transport } = scripted(ok(detailBody({ aweme_detail: payload })));
+    const { clock, s } = clocked(transport);
+    boundary.requestGroqTranscription.mockRejectedValueOnce(groqRateLimit());
+
+    const first = await run(s);
+    expect(first.success).toBe(false);
+    if (first.success) throw new Error('unreachable');
+    expect(first.error.code).toBe('ASR_RATE_LIMIT');
+
+    clock.now = NOW + TTL_MS - 1;
+    const second = await run(s);
+
+    expect(second).toEqual({ success: true, data: { videoId: ID, rows: ROWS, source: 'asr', cached: false } });
+    expect(transport).toHaveBeenCalledTimes(1);
+    expect(s.findTab).toHaveBeenCalledTimes(1);
+    expect(s.pacer.beforeRequest).toHaveBeenCalledTimes(1);
+    expect(boundary.fetchFirstAudioBlob).toHaveBeenCalledTimes(2);
+    expect(boundary.fetchFirstAudioBlob.mock.calls[1]![0]).toEqual(pickAudioSourceUrls(payload));
+  });
+
+  it('past the TTL the next call takes fresh candidates through the tab and a paced detail request', async () => {
+    const { transport, requests } = scripted(
+      ok(detailBody({ aweme_detail: detailPayload() })),
+      ok(detailBody({ aweme_detail: detailPayload() })),
+    );
+    const { clock, s } = clocked(transport);
+
+    await run(s);
+    clock.now = NOW + TTL_MS;
+    await run(s);
+
+    expect(requests).toEqual([buildDetailRequest(ID), buildDetailRequest(ID)]);
+    expect(s.findTab).toHaveBeenCalledTimes(2);
+    expect(s.pacer.beforeRequest).toHaveBeenCalledTimes(2);
+  });
+
+  it("another aweme_id is never answered from the first one's candidates", async () => {
+    const { transport, requests } = scripted(
+      ok(detailBody({ aweme_detail: detailPayload() })),
+      ok(detailBody({ aweme_detail: detailPayload({ aweme_id: OTHER }) })),
+    );
+    const s = session(transport);
+    const handler = createDouyinTranscribeHandler(s);
+
+    await handler(request(ID), TAB_ID, context(), new AbortController().signal);
+    const other = await handler(request(OTHER), TAB_ID, context(), new AbortController().signal);
+
+    expect(other.success).toBe(true);
+    expect(requests).toEqual([buildDetailRequest(ID), buildDetailRequest(OTHER)]);
+    expect(s.findTab).toHaveBeenCalledTimes(2);
+  });
+
+  it("a detail answered for another aweme_id is not memoised under this one (docs/29's lesson holds on the retry too)", async () => {
+    const { transport, requests } = scripted(
+      ok(detailBody({ aweme_detail: detailPayload({ aweme_id: OTHER }) })),
+      ok(detailBody({ aweme_detail: detailPayload() })),
+    );
+    const s = session(transport);
+
+    const first = await run(s);
+    expect(first.success).toBe(false);
+    const second = await run(s);
+
+    expect(second.success).toBe(true);
+    expect(requests).toEqual([buildDetailRequest(ID), buildDetailRequest(ID)]);
+  });
+
+  it('a failed detail stores nothing: the next call asks again', async () => {
+    const { transport, requests } = scripted(
+      raw('', 403),
+      ok(detailBody({ aweme_detail: detailPayload() })),
+    );
+    const s = session(transport);
+
+    const first = await run(s);
+    expect(first.success).toBe(false);
+    const second = await run(s);
+
+    expect(second.success).toBe(true);
+    expect(requests).toEqual([buildDetailRequest(ID), buildDetailRequest(ID)]);
   });
 });
 

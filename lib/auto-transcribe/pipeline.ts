@@ -28,6 +28,15 @@ const INITIAL_STATE: AutoTranscribeState = {
   stats: { existing: 0, cc: 0, asr: 0, skipped: 0, remaining: 0 },
 };
 
+/**
+ * Floor and cap of the temporary-rate-limit wait, in seconds (docs/38). A
+ * provider's `retry-after` is not trusted on its own: Groq's ASPH limit kept
+ * refusing after waits of 7–21 s (docs/37 Step 4), so consecutive limits back
+ * off from this floor. Shared mechanism, not a platform policy number.
+ */
+const RATE_LIMIT_BACKOFF_BASE_SECONDS = 60;
+const RATE_LIMIT_BACKOFF_CAP_SECONDS = 600;
+
 export interface AutoTranscribeSession {
   append(videos: readonly AutoTranscribeVideo[]): void;
   close(): void;
@@ -37,6 +46,15 @@ export interface AutoTranscribeSession {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/** `consecutive` counts this limit too (the first is 1); a longer `retryAfter` always wins. */
+function rateLimitWaitSeconds(retryAfter: number, consecutive: number): number {
+  const floor = Math.min(
+    RATE_LIMIT_BACKOFF_CAP_SECONDS,
+    RATE_LIMIT_BACKOFF_BASE_SECONDS * 2 ** (consecutive - 1),
+  );
+  return Math.max(retryAfter, floor);
+}
 
 function randomDelay(minS: number, maxS: number): number {
   return (minS + Math.random() * (maxS - minS)) * 1000;
@@ -180,6 +198,13 @@ export class AutoTranscribePipeline {
         this.running = true;
         this.installStatusListener();
 
+        /**
+         * Temporary limits in a row. A limited item stays current and every
+         * other outcome resets the count, so it never spans two items: it is
+         * the current item's retry count.
+         */
+        let consecutiveRateLimits = 0;
+
         try {
           // A born-paused Library Gate must stop the runner before quota
           // storage or any inbox item is touched.
@@ -223,7 +248,6 @@ export class AutoTranscribePipeline {
             try {
               let response: Awaited<ReturnType<AutoTranscribeAdapter['transcribe']>>;
               let parkedItem = false;
-              let rateLimitRetried = false;
               while (true) {
                 response = await this.adapter.transcribe(
                   item.videoId,
@@ -234,9 +258,10 @@ export class AutoTranscribePipeline {
                   // Order is the contract (docs/37 Step 3): a missing
                   // prerequisite parks; a daily quota pauses the session; a
                   // temporary limit — judged by its `retryAfter` shape, not by
-                  // a provider code — is retried once; anything else fails
-                  // the item. Quota comes before the shape check because a
-                  // quota error carries a `retryAfter` too.
+                  // a provider code — keeps the item and retries it after a
+                  // growing wait, with no attempt limit (docs/38); anything
+                  // else fails the item. Quota comes before the shape check
+                  // because a quota error carries a `retryAfter` too.
                   const prerequisite = await this.adapter.missingPrerequisite(response.error);
                   if (prerequisite) {
                     parked.push(item);
@@ -249,21 +274,32 @@ export class AutoTranscribePipeline {
                     break;
                   }
                   if (response.error.code === 'ASR_QUOTA_EXCEEDED') {
+                    consecutiveRateLimits = 0;
                     const resumable = await this.waitForQuota(response.error, ac.signal);
                     if (!resumable) return;
                     await control?.checkpoint();
+                    // A stop() pressed while the checkpoint held must not resend the item.
+                    ac.signal.throwIfAborted();
                     this.patch({ phase: 'transcribing', videoProgress: 0, videoStage: 'start' });
                     continue;
                   }
-                  if (response.error.retryAfter !== undefined && !rateLimitRetried) {
-                    rateLimitRetried = true;
-                    await this.waitWithCountdown(response.error.retryAfter * 1000, 'paused', ac.signal);
+                  if (response.error.retryAfter !== undefined) {
+                    consecutiveRateLimits += 1;
+                    const waitSeconds = rateLimitWaitSeconds(response.error.retryAfter, consecutiveRateLimits);
+                    await this.waitWithCountdown(waitSeconds * 1000, 'paused', ac.signal);
+                    // The wait can run for minutes: a Library Gate pause
+                    // requested meanwhile must hold before the item is resent,
+                    // and a stop() pressed while it held must not resend it.
+                    await control?.checkpoint();
+                    ac.signal.throwIfAborted();
                     this.patch({ phase: 'transcribing', videoProgress: 0, videoStage: 'start' });
                     continue;
                   }
                 }
                 break;
               }
+              // Leaving the retry loop (a result, an ordinary failure, a park) ends a limit streak.
+              consecutiveRateLimits = 0;
               if (parkedItem) continue;
               if (response.success) {
                 const stats = { ...this.state.stats };
@@ -285,6 +321,7 @@ export class AutoTranscribePipeline {
               }
             } catch (error) {
               if ((error as Error)?.name === 'AbortError' || ac.signal.aborted) throw error;
+              consecutiveRateLimits = 0;
               console.error(`[auto-transcribe] Item ${item.videoId} failed:`, error);
               try {
                 await this.adapter.markError(item.videoId);
@@ -358,12 +395,16 @@ export class AutoTranscribePipeline {
 
   // --- Private: countdown ---
 
-  private startCountdown(): void {
+  /**
+   * Seconds are read off `deadline`, never decremented per tick: a throttled
+   * background tab fires the tick far less than once a second, and the waits
+   * run from seconds to hours (a temporary limit up to 30 min, a quota to
+   * its reset).
+   */
+  private startCountdown(deadline: number): void {
     this.clearCountdown();
     this.countdownTimer = setInterval(() => {
-      const next = this.state.phase === 'quota_paused' && this.state.quotaResetAt !== null
-        ? Math.ceil((this.state.quotaResetAt - Date.now()) / 1000)
-        : this.state.waitSeconds - 1;
+      const next = Math.ceil((deadline - Date.now()) / 1000);
       if (next <= 0) {
         this.clearCountdown();
         this.patch({ waitSeconds: 0 });
@@ -385,8 +426,9 @@ export class AutoTranscribePipeline {
     phase: AutoTranscribePhase,
     signal: AbortSignal,
   ): Promise<void> {
+    const deadline = Date.now() + ms;
     this.patch({ phase, waitSeconds: Math.ceil(ms / 1000) });
-    this.startCountdown();
+    this.startCountdown(deadline);
     try {
       await sleep(ms, signal);
     } finally {

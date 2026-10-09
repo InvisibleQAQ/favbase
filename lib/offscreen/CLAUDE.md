@@ -17,6 +17,16 @@ Offscreen Document 的协议、生命周期与两个子系统：FFmpeg WASM 音�
 - 模块加载不得有定时器副作用：session 清扫的 `setInterval` 收在 `ffmpeg-subsystem.start()` 里，由 `main.ts` 启动，测试用 `stop()` 关。
 - `chunking.ts` 保持零副作用的纯数学，单测 `chunking.test.ts`。
 
+## 分块续传（docs/38）
+
+- 某块 429 后，SW 的下一次重试（新的 chunk session）从失败的那块接着转，已转完的块不再请求 ASR：限流的条目不出队、不设重试上限，没有续传的话总音频超过 ASPH 额度的作品会在队头无限整条重来。
+- `chunk-progress.ts` 是零 I/O 纯模块（进度表 + 续传循环，单测 `chunk-progress.test.ts`）；表实例与接线在 `ffmpeg-subsystem.ts`（接线测试 `ffmpeg-subsystem.test.ts`）。
+- 进度表的 key = Offscreen 自己下载的字节的 sha256 + model + baseUrl。不按 URL：同一音轨换了候选主机照样续上。不含 apiKey：换 key 行不变。
+- 只存已合并的行与下一块下标，不存块字节：块字节照旧随 SW 的 release 释放，续传时重新下载、重新切。所以条目能活 24 h（LRU 8）。
+- 续传前分块计划必须逐项相等（时长探测或 `maxBytes` 变了，切法就不同），否则丢弃进度从头来。
+- 续传对 SW 透明：SW↔Offscreen 协议与 SW 的 `finally` release 都不改。别让 SW 带「从第几块开始」，也别跳过 release 来保住 session。
+- 撞 429 不在 Offscreen 里原地等再重试同一块：SW 会一直挂着等应答，而这里的转录不认取消信号。等待留在 app.html 的状态机里（docs/38 §2）。
+
 ## 坑
 
 - FFmpeg 实例不可并发：`prepare()` / `transcribe()` 导出即经 `withFfmpegLock` 串行。操作失败要 `resetFFmpeg()` 回到 `pending`，否则坏掉的实例会污染后续任务。

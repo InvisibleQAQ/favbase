@@ -87,7 +87,7 @@ const EXPECTED_ENV_CONSTANTS: ReadonlyArray<{
   { file: 'lib/bookmarks/bookmark-page-fetch.ts', key: 'VITE_BOOKMARKS_MAX_HTML_BYTES', fallback: 5_242_880 },
   { file: 'lib/bookmarks/bookmark-page-fetch.ts', key: 'VITE_BOOKMARKS_META_PRESCAN_BYTES', fallback: 1024 },
   { file: 'lib/bookmarks/bookmark-content.ts', key: 'VITE_BOOKMARKS_MIN_CONTENT_CHARS', fallback: 200 },
-  // douyin (docs/33 §4.5; the transcription pacer is docs/37 §4.5)
+  // douyin (docs/33 §4.5; the transcription pacer is docs/37 §4.5, the candidate memo docs/38)
   { file: 'lib/douyin/douyin-api.ts', key: 'VITE_DOUYIN_PAGE_SIZE', fallback: 20 },
   { file: 'lib/douyin/douyin-api.ts', key: 'VITE_DOUYIN_PAGE_DELAY_MIN_MS', fallback: 5_000 },
   { file: 'lib/douyin/douyin-api.ts', key: 'VITE_DOUYIN_PAGE_DELAY_JITTER_MS', fallback: 3_000 },
@@ -102,6 +102,8 @@ const EXPECTED_ENV_CONSTANTS: ReadonlyArray<{
   { file: 'lib/douyin/douyin-sync-service.ts', key: 'VITE_DOUYIN_TITLE_MAX_CHARS', fallback: 140 },
   { file: 'lib/douyin/douyin-api.ts', key: 'VITE_DOUYIN_DETAIL_DELAY_MIN_MS', fallback: 5_000 },
   { file: 'lib/douyin/douyin-api.ts', key: 'VITE_DOUYIN_DETAIL_DELAY_JITTER_MS', fallback: 3_000 },
+  { file: 'lib/douyin/douyin-api.ts', key: 'VITE_DOUYIN_AUDIO_URL_TTL_MS', fallback: 1_800_000 },
+  { file: 'lib/douyin/douyin-api.ts', key: 'VITE_DOUYIN_AUDIO_URL_MEMO_SIZE', fallback: 32 },
   { file: 'lib/douyin/auto-transcribe-adapter.ts', key: 'VITE_DOUYIN_TAB_POLL_MS', fallback: 5_000 },
 ];
 

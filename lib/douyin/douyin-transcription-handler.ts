@@ -18,10 +18,12 @@
  * inside the ASR path's URL extractor (info.md Step 2 ruling 1). The pipeline
  * consults the subtitle cache and checks the ASR key first, so a cache hit
  * (the D7 backlog after a restart) or a missing key spends no signed request
- * and no pacer interval, and needs no douyin.com tab at all. Nothing from a
- * detail response is kept: its CDN links expire (about 3 h for video, 24 h
- * for the audio-only track), so every transcription takes them fresh and
- * downloads at once.
+ * and no pacer interval, and needs no douyin.com tab at all. Of a detail
+ * response only the candidate URL list is kept, per aweme id and for far less
+ * than the CDN links' own expiry (about 3 h for video, 24 h for the
+ * audio-only track): a retry after a temporary rate limit then downloads
+ * again without a second signed request (docs/38). The audio bytes are never
+ * kept.
  */
 
 import { createTranscribeAudio, notifyTab } from '@/lib/background/transcription-utils';
@@ -39,6 +41,7 @@ import {
 } from '@/lib/transcription/types';
 import {
   buildDetailRequest,
+  createDouyinAudioUrlMemo,
   createDouyinDetailPacer,
   DouyinAuthError,
   DouyinRateLimitError,
@@ -47,6 +50,7 @@ import {
   DouyinUnreachableError,
   requestEnvelope,
   WHAT_DETAIL,
+  type DouyinAudioUrlMemo,
   type DouyinPacer,
   type DouyinTransport,
 } from './douyin-api';
@@ -61,7 +65,9 @@ export interface DouyinTranscribeSession {
   findTab: () => Promise<number | null>;
   transport: DouyinTransport;
   pacer: DouyinPacer;
-  /** Clock for the cooldown arithmetic; defaults to `Date.now`. */
+  /** Candidate URLs of recently resolved awemes, consulted before the T1 gate (docs/38). */
+  audioUrls: DouyinAudioUrlMemo;
+  /** Clock for the cooldown arithmetic and the memo's TTL; defaults to `Date.now`. */
   now?: () => number;
 }
 
@@ -126,13 +132,14 @@ function toTranscribeErrorInfo(err: unknown, now: () => number): TranscribeError
 }
 
 /**
- * The ASR path's URL extractor: the T1 gate, then one paced, page-signed
- * detail request through the shared transient budget (unreachable / 5xx /
- * empty 200 retry; 403 / 429 never do), then decode, then the D-g candidate
- * list. The pacer wait and the injected request do not observe `signal`, so
- * an abort is checked once they return. Every failure leaves as a
- * `TranscribeErrorInfo` (or the abort), which `createTranscribeAudio` passes
- * through untouched.
+ * The ASR path's URL extractor: the memo first (a fresh hit answers with no
+ * tab, no pacer and no request), then the T1 gate, then one paced,
+ * page-signed detail request through the shared transient budget
+ * (unreachable / 5xx / empty 200 retry; 403 / 429 never do), then decode,
+ * then the D-g candidate list, which is memoised. The pacer wait and the
+ * injected request do not observe `signal`, so an abort is checked once they
+ * return. Every failure leaves as a `TranscribeErrorInfo` (or the abort),
+ * which `createTranscribeAudio` passes through untouched, and stores nothing.
  */
 async function resolveAudioSources(
   session: DouyinTranscribeSession,
@@ -140,6 +147,9 @@ async function resolveAudioSources(
   signal: AbortSignal,
 ): Promise<string[]> {
   const now = session.now ?? Date.now;
+
+  const memoised = session.audioUrls.get(videoId, now());
+  if (memoised) return memoised;
 
   // T1 — ahead of the pacer: a plainly absent tab costs no wait and no request.
   if ((await session.findTab()) === null) {
@@ -184,6 +194,7 @@ async function resolveAudioSources(
     // T7: an image post that slipped in, a deleted work.
     throw createErrorInfo('ASR_NO_AUDIO_SOURCE', `${WHAT_DETAIL}: no playable audio source for ${videoId}`);
   }
+  session.audioUrls.set(videoId, urls, now());
   return urls;
 }
 
@@ -232,9 +243,12 @@ export function createDouyinTranscribeHandler(session: DouyinTranscribeSession):
 
 /** One pacer per Service Worker life: every `TRANSCRIBE_AUDIO` for douyin shares it (docs/37 §4.5). */
 const detailPacer = createDouyinDetailPacer();
+/** Likewise one candidate memo per Service Worker life (docs/38). */
+const audioUrlMemo = createDouyinAudioUrlMemo();
 
 export const handleDouyinTranscribe: DouyinTranscribeHandler = createDouyinTranscribeHandler({
   findTab: findDouyinTab,
   transport: douyinTabTransport,
   pacer: detailPacer,
+  audioUrls: audioUrlMemo,
 });
