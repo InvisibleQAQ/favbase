@@ -35,5 +35,6 @@
 
 - `assertAudioNotReused`：同一音频 hash 配不同 videoId 即拒绝，防的是 SPA 跳转后拿到上一个视频的旧音频。别当成多余校验删掉。
 - 音频超过 `GROQ_MAX_AUDIO_BYTES` 才走 Offscreen FFmpeg 分块，否则直传。
+- 已知缺口：没有 ASR 幻觉过滤。静音 / 纯音乐片段的 Whisper 结果是非空套话（「字幕志愿者 李宗盛」「请不吝点赞 订阅 转发 打赏支持明镜与点点栏目」），各平台的「空转录」分支都接不住，套话入库、进检索；docs/37 Step 4 实测抖音 9 / 90。B站走同一条 ASR 路径。
 - `TranscribeRequest.cid` 可选：B 站 content script 有就传，app.html 不传、由 adapter 解析。
 - B 站的 prepare 不读 auth：SW 的 fetch 自带 B 站 cookie jar（docs/29 Step 4），不要再手拼 Cookie。

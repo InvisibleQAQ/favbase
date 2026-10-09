@@ -11,5 +11,6 @@
 - adapter 可以在等待期间短路 `transcribe()`（抖音对需要用户动作的前置条件这样做），本模块不替平台决定。
 - `configuration_required` 只在没有其他可运行条目时才成为 phase；`prerequisiteBlocked` 是独立的 UI 阻塞信号（横幅按它选文案），两者不要合并。它与 `quota_paused` 都是保留当前 session 的可恢复等待态。
 - 单条失败的判定顺序是契约：前置条件 → `ASR_QUOTA_EXCEEDED` → 带 `retryAfter` 的临时限流（按形状判，不按 `ASR_RATE_LIMIT` 码判；quota 先判是因为它也带 `retryAfter`）→ 普通失败。临时限流每条最多重试一次。daily quota 写 durable guard，当前及后续条目留到 reset 后重试，不计入 skipped / error；新 session 遇到未过期的 guard 同样原地等待。
+- 已知缺口：「临时限流重试一次、再失败就 error」接不住 Groq `on_demand` 档的 ASPH（每小时音频秒数）——它的 `retry-after` 不可靠，docs/37 Step 4 实测 31 条被限流、5 条二次被拒永久落 `'error'`（v1 无重试入口，积压补扫只捡 `'pending'`）。改法候选在 docs/37 Step 4 落地记录「新发现 2」。
 - cooperative checkpoint 的位置是契约：runner 入口（早于读 durable quota guard）、领取每条视频前、配置恢复后。Library Gate 由 app 层的 job runner 注入。
 - 实例归 app 层模块级 runtime 所有。组件只能订阅，不得在 mount / unmount 时启动、dispose 或补扫队列。关闭 app.html 会丢 session，这是明确的 page-runtime 契约，不是 bug。

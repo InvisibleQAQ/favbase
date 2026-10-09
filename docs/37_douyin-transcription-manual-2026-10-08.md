@@ -1,6 +1,6 @@
 # 37 抖音字幕与转录接入手册（2026-10-08）
 
-> 状态：**草案；Step 0 已完成 2026-10-08（用户账号、BrowserOS neo 实测，只读）**——网页 aweme 对象有 `cla_info` 字段但 136 个样本全空，v1 「优先 AI 字幕」半边改为**直接 ASR**（`fetchOfficialSubtitle: async () => null`，不写 `douyin-subtitle.ts`）；另发现纯音轨 `video.bit_rate_audio[]`，D-g 据此修订。证据在 Step 0 落地记录与任务目录 `research/douyin-step0-subtitle-media-probe-2026-10-08.md`；**Step 1 已完成 2026-10-08（内容模型翻转 + 领域层；代码 + 单测，已复核，commit 3f3babe）**，按任务目录 `info.md` 执行，其 §0 四条裁决（D6 的 desc 也空 → `'no_content'`、`decodeDetail` 空 payload 抛冷却错误、`pickAudioSourceUrls` 三级全拼、入库门用 D-f 谓词）是对本文的有意偏离，见 Step 1 节末「Step 1 落地记录」；**Step 2 已完成 2026-10-08（Background handler；代码 + 单测，已复核，commit 1b0b227）**，按任务目录 `info.md` 的 Step 2 节执行，其 §0 九条裁决（detail 懒到 ASR 路径里取、共享下载器收候选列表、extractor 的结构化错误透传、`douyin-api` 两个具名错误类、`aweme_id` 回声闸门等）是对本文的有意偏离，见 Step 2 节末「Step 2 落地记录」；**Step 3 已完成 2026-10-08（app 侧：前置条件泛化、Transcript lane、积压补扫、pipeline 条、角标；代码 + 单测，已复核，commit 0afb943）**，按任务目录 `info.md` 的 Step 3 节执行，其 §0 十一条裁决加复核后一条（前置条件返回「缺哪种」、签名被拒也停放、等用户动作期间短路转录、login / verify 等标签页重新加载、producer 与 ASR 半边各提一份共享实现、角标列走共享分页查询、已有 session 在跑时跳过积压等）是对本文的有意偏离，见 Step 3 节末「Step 3 落地记录」；判据里的清库与实机部分留到 Step 4。§1 的 D1–D7 是待用户确认的决策（每条带推荐项）；D-a 起是写手册时由代码核对推出的设计默认项。一次对话只做一个 Step；执行任一 Step 前先读 §1 决策、§2 否决清单、§3 铁律，再读该 Step 的八段。
+> 状态：**草案；Step 0 已完成 2026-10-08（用户账号、BrowserOS neo 实测，只读）**——网页 aweme 对象有 `cla_info` 字段但 136 个样本全空，v1 「优先 AI 字幕」半边改为**直接 ASR**（`fetchOfficialSubtitle: async () => null`，不写 `douyin-subtitle.ts`）；另发现纯音轨 `video.bit_rate_audio[]`，D-g 据此修订。证据在 Step 0 落地记录与任务目录 `research/douyin-step0-subtitle-media-probe-2026-10-08.md`；**Step 1 已完成 2026-10-08（内容模型翻转 + 领域层；代码 + 单测，已复核，commit 3f3babe）**，按任务目录 `info.md` 执行，其 §0 四条裁决（D6 的 desc 也空 → `'no_content'`、`decodeDetail` 空 payload 抛冷却错误、`pickAudioSourceUrls` 三级全拼、入库门用 D-f 谓词）是对本文的有意偏离，见 Step 1 节末「Step 1 落地记录」；**Step 2 已完成 2026-10-08（Background handler；代码 + 单测，已复核，commit 1b0b227）**，按任务目录 `info.md` 的 Step 2 节执行，其 §0 九条裁决（detail 懒到 ASR 路径里取、共享下载器收候选列表、extractor 的结构化错误透传、`douyin-api` 两个具名错误类、`aweme_id` 回声闸门等）是对本文的有意偏离，见 Step 2 节末「Step 2 落地记录」；**Step 3 已完成 2026-10-08（app 侧：前置条件泛化、Transcript lane、积压补扫、pipeline 条、角标；代码 + 单测，已复核，commit 0afb943）**，按任务目录 `info.md` 的 Step 3 节执行，其 §0 十一条裁决加复核后一条（前置条件返回「缺哪种」、签名被拒也停放、等用户动作期间短路转录、login / verify 等标签页重新加载、producer 与 ASR 半边各提一份共享实现、角标列走共享分页查询、已有 session 在跑时跳过积压等）是对本文的有意偏离，见 Step 3 节末「Step 3 落地记录」；判据里的清库与实机部分留到 Step 4。**Step 4 已完成 2026-10-09（实机端到端，零代码）**：清单 1–9 全部有记录，本页签名到 156 次零拒绝、Groq 接受 mp4 直传、D5 / D7 实测通过；新发现两项缺陷——Whisper 在静音短视频上输出非空幻觉套话（D6 接不住，10%）、Groq `on_demand` 档 ASPH 限流下「重试一次」永久丢条目（16%）且每次重试重发 detail 签名请求——见 Step 4 节末「Step 4 落地记录」，剩余积压暂停在 `'pending'`。§1 的 D1–D7 是待用户确认的决策（每条带推荐项）；D-a 起是写手册时由代码核对推出的设计默认项。一次对话只做一个 Step；执行任一 Step 前先读 §1 决策、§2 否决清单、§3 铁律，再读该 Step 的八段。
 >
 > 任务目录：`.trellis/tasks/10-08-douyin-transcription-subtitle-first-asr-fallback-tagging-reuse-bilibili-flow/`。前置手册：`docs/33`（抖音收藏接入，Step 0–3 已落地）、`docs/04`（B站转录管线）、`docs/29`（B站字幕串台事故与归属校验）。
 >
@@ -569,21 +569,59 @@ Coverage 的 content 段（`collection-processing-policy.ts:102-105`）：视频
 
 **判据**：清单 1–9 全部有记录；§6 每条收口；落地记录写进本文。
 
+#### Step 4 落地记录（2026-10-09，实机，零代码）
+
+**条件**：用户 05:45 重装扩展（库与 storage 全新，抖音零行，D2 清库因此不必执行、什么都没删）并配好 Groq ASR（`whisper-large-v3-turbo`，service tier `on_demand`）；B站全量自动转录与抖音共用这把 key，用户在开跑前手动暂停了B站；LLM（tagging）与 embedding 由用户在 06:37 配上，lane 经 `resumeCollectionProcessing` 自动恢复。抖音标签页是我在 BrowserOS neo 里开的 `user/self?showTab=favorite_collection`（登录态有效），从没碰用户的标签页。06:15:48 点「立即获取」，07:48:30 在抖音页点「Pause library build」暂停（用户选的停止点：同一标签页生命周期的签名请求越过 140），暂停后零请求。剩余积压留在 `'pending'`，点 Resume 并开一个 douyin.com 标签页即续跑。
+
+**测法**（scratch，不入仓库，`%TEMP%\fbcdp\dy\s4\`）：在我的抖音标签页里，于 SDK 已接管 `window.fetch` 之后包一层只读计数器（不在 SDK 就绪前装，transport 的 `sdk-not-ready` 判定保持真实），记每次 `aweme/v1/web/*` 的状态码、`status_code`、detail 的音轨形状；PerformanceObserver 记本页生命周期内全部 `aweme/v1/web/*` 请求（含页面自己的 XHR，a_bogus 按页计数）；app.html 里挂只读 `onMessage` 收 `TRANSCRIBE_STATUS`（错误码不落库，只在推送里）；60 s 一次的一次性 CDP 采样读库。没有常驻调试器挂在标签页上。
+
+**结果**
+
+| # | 清单 | 实测 |
+|---|---|---|
+| 1 | 字幕命中率 | `official` 0 / `asr` 90；123 次 detail 响应的 `cla_info` 全部 null（Step 0 的 136 个样本之后又 93 个不同作品）。语言分布、VTT 解析无从测 |
+| 2 | 签名计数 | 生命周期一（06:13–06:27）：我们的请求 59 次（list 28 + detail 31），本页 `aweme/v1/web/*` 共 81 次；生命周期二（06:30 重开–07:50）：我们的 96 次（detail 92），本页共 **156 次**。155 次我们的请求**全部** 200 / `status_code 0`，零 Argus 403、零 `sdk-not-ready`、零验证页、零空 payload；`aweme_id` 回声 123 / 123 一致，`filter_detail` 零。「本页签名 < 140」分桶至少到 156 没被打分 |
+| 3 | mp4 直传 | 没有纯音轨的 37 个作品全部 ≤ 170 s，选中的最低 H.264 mp4 档最大 20.7 MB；其中 35 条以 `audio.m4a` 直传 Groq 转录成功，另 2 条是限流落 error / 暂停时仍 pending，与 mp4 无关——**Groq 接受带视频轨的 mp4**。> 24 MB：mp4 档一次都没出现；纯音轨出现一次（1329 s 视频 32.14 MB），走 Offscreen 分块 3 块，chunking → done 30 s，成功 |
+| 4 | D6 比例 | 空转录退回 `desc`：**0 / 90**。但 9 / 90（10%）的正文整段是 Whisper 幻觉（6 条「字幕志愿者 李宗盛 / 杨栋梁」、3 条「请不吝点赞 订阅 转发 打赏支持明镜与点点栏目」），另 1 条结尾带「优优独播剧场——YoYo Television Series Exclusive」；全部是 ≤ 31 s 的静音 / 纯音乐短视频。没有过半，`music.title` 跳过不必做；真问题是幻觉，见下「新发现 1」 |
+| 5 | 节奏 | 字幕命中路径不存在（无 official）。相邻 detail 间隔 min 5.3 s / p50 20 s / p90 120 s，< 5 s 零次。同步全量 469 条约 8.5 min（06:15:48 → 06:24）。转录 06:16 → 07:47 共 90 条、5.03 h 音频；撞 ASPH 之后稳态 ≈ 每小时 2 h 音频。首次积压 442 条共约 45 h 音频 → 整份积压按 ASPH 至少约 23 h（ASD 日上限 `[UNKNOWN]`，本次没撞到） |
+| 6 | D7 | 两次关 app.html：① 06:31:12（两条之间）→ 重开、再同步（fetched 20 / inserted 0）→ 积压追加、06:32:07 续转；② 06:33:36 在 `uploading` 时关 → SW 照常完成并写 `vc:douyin:7679033686959901961`（42 行）→ 重开再同步后该条 06:34:26 落库 `asr`，**没有第二次 detail、没有阶段推送**（cache 命中）。全程 detail 无重复转录（重复的 30 次全部来自限流重试，见新发现 2） |
+| 7 | D5 | 06:26:50 关抖音标签页 → 410 条在 74 s 内逐条以 `DOUYIN_TAB_MISSING` + `closed` 停放（T1 门零网络，0.26 s / 条；一轮停放只起一个等待），横幅「waiting for a logged-in site tab…」，**零 `'error'`**；06:30:15 重开 → 06:30:27 自动恢复，按原顺序重入 |
+| 8 | 打标签 | 随机抽 10 条：7 条至少有一个只能从转录得出的标签（「原住民」「简历优化」「3D地球 / 公开数据」「AIAgent / AI编程」等），转录明显比文案版贴内容；2 条正文是幻觉，标签仍由标题 / 文案撑住。视频平均 4.76 个标签，抖音共 309 个不同标签 |
+| 9 | 检索 | 用户配对 Agent Bridge 后，`favbase search "巴罗" --platform douyin`、`"比拉瓦尔"`（两词只在转录里，标题 / 文案没有）首条命中的 `chunk_text` 正是转录正文。反例：`"李宗盛"` 前 3 条命中全是幻觉正文（codex 教程、AI 视频提示词、山东旅游） |
+
+**新发现**（都没改代码，按本 Step「不做」）
+
+1. **Whisper 幻觉，跨平台**：静音 / 纯音乐片段的 ASR 返回非空的固定套话，D6 的「空转录」判定接不住，垃圾正文入库、切块、向量化、进检索（清单 9 的反例）。`lib/transcription` 与B站同一条 ASR 路径都没有过滤。后续项：在共享 ASR 结果上加幻觉过滤（已知套话黑名单，或 Groq `verbose_json` 的 `no_speech_prob` / `avg_logprob`），命中即按空转录处理（抖音退回 `desc`）——要先查 Groq 的响应字段，`[UNKNOWN]`。
+2. **ASR 限流在 Groq `on_demand` 档是常态，「重试一次」会永久丢条目**：首次限流在 06:35（开跑 19 min、42 条之后），是 ASPH（每小时音频秒数 7200）而非日额度，码是 `ASR_RATE_LIMIT`。到暂停共 36 次限流落在 31 条上，**5 条二次被拒落 `'error'`（16%）**——`retry-after` 对 ASPH 不可靠（等满 21 s / 7 s / 8 s 仍被拒；p50 83 s，max 405 s）。v1 没有 `'error'` 的重试入口，D7 积压只捡 `'pending'`。Step 3「未做」预判的是抖音风控冷却，实测触发它的是 ASR 供应方。另外每次重试都重走 extractor，**再发一次 detail 签名请求并重下音频**（123 次 detail 里 30 次是重试，24%）：这把 a_bogus 计数与风控暴露放大了约四分之一。后续项与 Step 3「未做」那条合并：共享状态机里「带 `retryAfter` 的临时限流」改为保持 `'pending'` 的可恢复等待（像 `quota_paused`，但不借 quota 文案），不标 error；抖音侧可选在 SW 生命周期内按 `aweme_id` 记住已解析的候选直链（直链 ≥ 3 h 有效），重试不再签名。
+3. **D-g 的「纯音轨让 ≤ 24 MB 直传成为常态」对长视频不成立**：纯音轨码率两档——约 48–56 kbps（时长 ≤ 478 s）与约 194 kbps（21 条，≥ 256 s）。194 kbps 下 24 MB ≈ 990 s，剩余积压里 30 条 > 990 s 会进 Offscreen 分块（已实测可用）。唯一一条有两档纯音轨的作品，`[0]` 是低码率那档，所以 `[0]` 不保证最低码率；要不要按码率挑最低档，等有更多双档样本再定。
+4. **2.5 h 的作品（积压里最长 9124 s）在 ASPH 7200 s/h 下注定失败**（推断，未实测）：分块转录过程中必撞限流，整条重来一次再被拒即 `'error'`。新发现 2 的修法能接住它。
+5. **Transcribe 段的口径两处不一**：session 在跑时显示 session 进度（「32/442」，只算视频），session 结束后显示 coverage（「62/469」，27 条图文以 `'chunked'` 计入已完成）。图文不转录却算进分子分母。小问题，记下不改。
+6. **`closed` 停放会把整个队列在一分钟内逐条过一遍 SW**（每条一次 `TRANSCRIBE_AUDIO`、零网络），这是 Step 3 偏离 3 的设计（cache 命中仍能成功），实测代价可忽略。
+
+**§6 收口**：见 §6 表各行状态列（2026-10-09 更新）。
+
+**未做 / 留给后面**
+
+- 剩余积压 347 条（40.0 h 音频）暂停在 `'pending'`；`'error'` 5 条（全是新发现 2）。重新跑之前先定新发现 2 的修法，否则按 16% 推算还会再丢约 50 条。
+- 新发现 1（幻觉过滤）、2（限流不标 error + 重试不重签）是下一个任务的候选，各自要一份手册。
+- B站自动转录仍是用户手动暂停的状态（library gate），由用户决定何时恢复：恢复后它与抖音共用 Groq ASPH。
+- `job-registry` 一个 tab 一个转录 job 的串台缺口（Step 2 / 3 已记）本次没触发：B站在暂停中。
+
 ---
 
 ## 6. 未知与风险
 
 | `[UNKNOWN]` | 影响 | 状态 |
 |---|---|---|
-| 抖音网页 aweme 对象是否带 AI 字幕轨字段（`video.cla_info.caption_infos` / `subtitle_infos` / 其他） | 「优先 AI 字幕」半边是否存在 | **已证伪（2026-10-08）**：字段是顶层 `cla_info.list[]`（播放器源码），但 136 个样本全空；v1 直接 ASR。非空样本的 URL 主机、格式、CORS 仍未知 |
+| 抖音网页 aweme 对象是否带 AI 字幕轨字段（`video.cla_info.caption_infos` / `subtitle_infos` / 其他） | 「优先 AI 字幕」半边是否存在 | **已证伪（2026-10-08）**：字段是顶层 `cla_info.list[]`（播放器源码），但 136 个样本全空；v1 直接 ASR。Step 4（2026-10-09）又 93 个不同作品的 detail 全部 null。非空样本的 URL 主机、格式、CORS 仍未知 |
 | 字幕轨在收藏列表条目里就有，还是只在 `aweme/detail` 里 | 不影响路线（D3 一律 detail），影响 Step 0 结论的表述 | **仍未知**（两边都没有非空样本；列表与 detail 都没有 `cla_info` 键，精选接口给 `null`） |
-| 字幕 VTT URL 与 `bit_rate[].play_addr` 直链能否从扩展 SW / Offscreen 以 `credentials: 'omit'` 下载（CORS、Referer、签名参数） | D3 路线成立与否 | **直链已证实（2026-10-08）**：SW 里 mp4 档 `v11-weba` 直链 200（`access-control-allow-origin: *`），play API 第 3 条 302 后 200；纯音轨 `v26-web` 主机 403 但 `backup_url` / `fallback_url` 200 → 必须顺序 fall-through。VTT 无样本，仍未知 |
+| 字幕 VTT URL 与 `bit_rate[].play_addr` 直链能否从扩展 SW / Offscreen 以 `credentials: 'omit'` 下载（CORS、Referer、签名参数） | D3 路线成立与否 | **直链已证实（2026-10-08）**：SW 里 mp4 档 `v11-weba` 直链 200（`access-control-allow-origin: *`），play API 第 3 条 302 后 200；纯音轨 `v26-web` 主机 403 但 `backup_url` / `fallback_url` 200 → 必须顺序 fall-through。Step 4（2026-10-09）：生产链路 90 条全部下载成功（含 Offscreen 二次下载）。VTT 无样本，仍未知 |
 | 直链是否带过期参数、有效期多长 | 是否能跨调用复用（本文按「不复用」设计） | **已证实（2026-10-08）**：路径第 2 段 8 hex = 过期 unix（= `cdn_url_expired`），视频 ≈ 3 h、纯音轨 ≈ 24 h，6.5 min 后仍 200，改过期段即 403。设计不变 |
-| `aweme/detail` 经注入 transport 的签名是否被接受 | 同上 | 同步三接口已证实（docs/33 §6），detail 在同一受保护表里，推断成立；Step 2 判据 |
-| a_bogus 单页面生命周期签名计数分桶 | 首次积压约 466 次 detail | docs/33 §6 仍未知；Step 4 清单 2 |
-| Groq 对带视频轨的 mp4（文件名 `.m4a`）的接受度 | D-g | Step 4 清单 3 |
-| 无口播视频比例 | D6 的 ASR 浪费 | Step 4 清单 4 |
-| 页内 fetch 的风控阈值 | 节奏默认值 | docs/33 §6 仍未知；不压测 |
+| `aweme/detail` 经注入 transport 的签名是否被接受 | 同上 | **已证实（2026-10-09，Step 4）**：123 / 123 次 200 / `status_code 0`，回声一致 |
+| a_bogus 单页面生命周期签名计数分桶 | 首次积压约 466 次 detail | **部分收口（2026-10-09，Step 4）**：同一页面生命周期内本页 `aweme/v1/web/*` 请求到 156 次（我们的 96 次）零拒绝，「< 140」分桶至少到 156 没被打分；更高的计数（整份积压约 560 次，含重试）仍未知 |
+| Groq 对带视频轨的 mp4（文件名 `.m4a`）的接受度 | D-g | **已证实（2026-10-09，Step 4）**：35 条 mp4 直传全部转录成功（≤ 20.7 MB）；> 24 MB 的 mp4 没出现（无纯音轨的作品都 ≤ 170 s），该路径的 FFmpeg 抽音轨仍未在生产上跑过 |
+| 无口播视频比例 | D6 的 ASR 浪费 | **已测（2026-10-09，Step 4）**：空转录 0 / 90，但 9 / 90 的正文是 Whisper 幻觉套话（≤ 31 s 静音 / 纯音乐片段）——D6 的前提「无口播 = 空转录」不成立，见 Step 4 新发现 1 |
+| 页内 fetch 的风控阈值 | 节奏默认值 | docs/33 §6 仍未知；不压测。Step 4：两个生命周期合计 155 次（含 28 页同步）零风控信号，节奏默认值不改 |
 
 ---
 

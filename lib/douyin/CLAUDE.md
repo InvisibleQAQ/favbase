@@ -45,6 +45,8 @@
 - 上一条的节奏器在 `withRetries` 的 attempt 里，重试也算请求、也等间隔（与同步节奏器同理：风控按请求计数）。代价：标签页中途关掉后，3 次 unreachable 叠上退避与间隔，约 10–16 s 才报 `DOUYIN_TAB_MISSING`，不是立刻。
 - detail 响应的 `aweme_id` 必须逐字节等于请求的 videoId，否则 `ASR_UNKNOWN`（`params.detail` 带两个 id）、不下载不转录（docs/29 的教训）。
 - 不缓存 detail、不缓存直链：直链 ≈ 3 h（视频）/ 24 h（纯音轨）过期，每次转录现取现下。
+- 上一条的代价（docs/37 Step 4）：ASR 限流后的那次重试会重走 extractor，再发一次 detail 签名请求、重下音频——实测 123 次 detail 里 30 次是重试。
+- 纯音轨不保证小：码率两档，约 48–56 kbps 与约 194 kbps（多见于 ≥ 256 s 的作品）；194 kbps 下 > 约 16.5 min 的纯音轨超过 24 MB，照样走 Offscreen 分块（Step 4 实测可用）。别因为「有纯音轨」就省掉分块路径。
 - 错误折算只按类、不按 message 文本——`DouyinSignatureError`（Argus 403 / `sdk-not-ready`）与 `DouyinUnreachableError`（unreachable 耗尽）两个具名子类就是为此存在的；它们直接 `extends Error`，同步侧按两个平台基类分类的逻辑不受影响。
 - 折算表（docs/37 §4.3）：T1 无标签页 / T2 unreachable 耗尽 → `DOUYIN_TAB_MISSING` + `reason: 'closed'`；T4′ 验证页（`resetAt: null`）→ `'verify'`；T5 未登录 → `'login'`；T2′ / T3 → `DOUYIN_SIGNATURE_REJECTED` + `reason: 'sdk-not-ready' | 'argus'`；T4 与空 payload（`resetAt` 非空）→ `DOUYIN_RATE_LIMITED` + `retryAfter`（秒，只有这一个字段，不借 ASR quota 的 `resetAt` / `providerId`）；T6 → `DOUYIN_MEDIA_UNAVAILABLE` + `reason`；T7 → `ASR_NO_AUDIO_SOURCE`；T11 `DouyinStatusError` → `ASR_UNKNOWN`。
 - `fetchOfficialSubtitle` 恒 `null`（Step 0：`cla_info` 零样本），`postProcess` 恒等（D-b），cache 用 `'douyin'` 命名空间。
