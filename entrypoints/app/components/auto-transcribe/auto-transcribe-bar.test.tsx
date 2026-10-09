@@ -20,7 +20,7 @@ vi.mock('@/lib/i18n/use-translation', () => ({
   useTranslation: () => ({}),
 }));
 
-vi.mock('../../components/iconify', () => ({
+vi.mock('../iconify', () => ({
   Iconify: () => <span aria-hidden="true" />,
 }));
 
@@ -29,7 +29,7 @@ import { AutoTranscribeBar } from './auto-transcribe-bar';
 function idleState(overrides: Partial<AutoTranscribeState> = {}): AutoTranscribeState {
   return {
     phase: 'idle',
-    asrBlocked: false,
+    prerequisiteBlocked: null,
     currentVideoTitle: '',
     currentVideoId: '',
     currentVideo: null,

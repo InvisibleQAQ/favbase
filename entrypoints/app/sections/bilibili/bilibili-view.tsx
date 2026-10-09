@@ -14,10 +14,14 @@ import {
   PipelineProgressStrip,
   StateBox,
 } from '../../components/collection';
-import { backgroundJobRuntime, fetchedCountProgress } from '../../hooks/pipeline-segments';
+import {
+  backgroundJobRuntime,
+  fetchedCountProgress,
+  transcriptionStage,
+} from '../../hooks/pipeline-segments';
 import { useCollectionPipeline } from '../../hooks/use-collection-pipeline';
 import { useCollectionBreadcrumbs } from '../../hooks/use-collection-breadcrumbs';
-import { useJob, type BackgroundJob } from '../../hooks/background-jobs-store';
+import { useJob } from '../../hooks/background-jobs-store';
 import { jobPlatformForCollection } from '../../hooks/collection-job-platform';
 import { SEARCH_DEBOUNCE_MS } from '../../hooks/use-collection-library';
 import type { CollectionSyncError } from '../../hooks/collection-sync-error';
@@ -27,10 +31,10 @@ import {
 } from '../../hooks/collection-sync-error-message';
 import { Iconify } from '../../components/iconify';
 import { CollectionConfigurationNotice } from '../../components/configuration-blocker';
-import { AutoTranscribeBar } from './auto-transcribe-bar';
+import { AutoTranscribeBar, useAutoTranscribe } from '../../components/auto-transcribe';
+import { biliAutoTranscribePipeline } from './auto-transcribe-runtime';
 import { FolderChips } from './folder-chips';
 import { TaggedVideoCard } from './tagged-video-card';
-import { useAutoTranscribe } from './use-auto-transcribe';
 import { useBiliFavFolders } from './use-bili-fav-folders';
 import { useBiliFavVideos } from './use-bili-fav-videos';
 import { useVideoTranscribe } from './use-video-transcribe';
@@ -50,11 +54,6 @@ const SYNC_ERROR_COPY: SyncErrorCopy = {
   auth: 'collections.notLoggedInTitle',
   rateLimited: 'collections.rateLimited',
 };
-
-/** Transcription is bilibili's content stage on both the folder page and the fallback page. */
-function transcriptionStage(label: string, transcribeJob: BackgroundJob | null) {
-  return { id: 'transcription', label, runtime: backgroundJobRuntime(transcribeJob) };
-}
 
 function NotLoggedIn({ onRetry }: { onRetry: () => void }) {
   const { t } = useTranslation();
@@ -278,7 +277,7 @@ function BilibiliCollectionPage({
             platform={PLATFORM}
             coverage={coverage}
             coverageStatus={coverageStatus}
-            asrBlocked={autoTranscribe.state.asrBlocked}
+            prerequisiteBlocked={autoTranscribe.state.prerequisiteBlocked}
           />
         ) : undefined
       }
@@ -425,7 +424,7 @@ export function BilibiliView() {
 
   const selectedId = mediaId ? Number(mediaId) : folders[0]?.id;
   const selectedFolder = folders.find((folder) => folder.id === selectedId);
-  const autoTranscribe = useAutoTranscribe();
+  const autoTranscribe = useAutoTranscribe(biliAutoTranscribePipeline);
   const [searchInput, setSearchInput] = useState('');
   const [keyword, setKeyword] = useState('');
   const keywordRef = useRef('');

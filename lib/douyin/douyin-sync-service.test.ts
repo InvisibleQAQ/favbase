@@ -950,6 +950,58 @@ describe('douyin-sync-service (in-memory PGlite)', () => {
   // Backlog (docs/37 D7): what a later sync feeds the transcript producer
   // -------------------------------------------------------------------------
 
+  it('onVideosPending hands each persisted page its newly inserted transcribable videos, in page order (docs/37 Step 3)', async () => {
+    const list: Fav[] = [
+      { raw: rawAweme('1'), ts: TOP },
+      { raw: rawNote('2'), ts: TOP - 1000 },
+      { raw: rawAweme('3', { video: { duration: 0, cover: { url_list: [] } } }), ts: TOP - 2000 },
+      { raw: rawAweme('4', { desc: '' }), ts: TOP - 3000 },
+    ];
+    const onVideosPending = vi.fn();
+    const { persisted } = await run(fakeDouyin({ favorites: list }).transport, FRESH, { onVideosPending });
+
+    // Page 1 = [1, 2]: the note is Content at sync (dispatched), the video is
+    // pending (queued). Page 2 = [3, 4]: no duration → not transcribable.
+    expect(persisted).toEqual([['2'], ['3']]);
+    expect(onVideosPending.mock.calls).toEqual([
+      [[{ awemeId: '1', title: 'desc 1', coverUrl: 'https://p3/cover.jpeg', authorName: 'Alice', durationMs: 12_000 }]],
+      [[{ awemeId: '4', title: 'Alice', coverUrl: 'https://p3/cover.jpeg', authorName: 'Alice', durationMs: 12_000 }]],
+    ]);
+  });
+
+  it('onVideosPending follows `inserted`, not the page: a folder page re-listing a stored video does not queue it twice', async () => {
+    const world: World = {
+      favorites: favs(['1', '2']),
+      folders: [{ id: '6910000000000000202', name: 'Public', status: 1, items: [rawAweme('1'), rawAweme('99')] }],
+      pageSize: 10,
+    };
+    const onVideosPending = vi.fn();
+    await run(fakeDouyin(world).transport, FRESH, { onVideosPending });
+
+    expect(onVideosPending.mock.calls.map(([videos]) => videos.map((v: { awemeId: string }) => v.awemeId))).toEqual([
+      ['1', '2'],
+      ['99'],
+    ]);
+  });
+
+  it('getDouyinItems carries the subtitle source: the transcript method after a transcription, null while pending and for a desc fallback', async () => {
+    const list: Fav[] = [
+      { raw: rawAweme('1'), ts: TOP },
+      { raw: rawAweme('2'), ts: TOP - 1000 },
+      { raw: rawAweme('3'), ts: TOP - 2000 },
+    ];
+    await run(fakeDouyin({ favorites: list, pageSize: 10 }).transport, FRESH);
+    await persistDouyinTranscript('1', ROWS, 'asr', db);
+    await persistDouyinTranscript('2', [], 'asr', db);
+
+    const { rows } = await getDouyinItems({ page: 1, pageSize: 10 }, db);
+    expect(rows.map((r) => [r.awemeId, r.subtitleSource])).toEqual([
+      ['3', null],
+      ['2', null],
+      ['1', 'asr'],
+    ]);
+  });
+
   it('getDouyinPendingVideos returns only pending items, newest publish first, with what the producer needs', async () => {
     const list: Fav[] = [
       { raw: rawAweme('1'), ts: TOP },

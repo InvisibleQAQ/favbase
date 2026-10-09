@@ -51,7 +51,7 @@ Chat（Agentic RAG 知识库助手）的平台无关 lib：hybrid 检索、Knowl
 
 ## 已知缺口
 
-- `getProcessingCoverage` 的 `blockers` 不穷举：`asrBlocked` 恒为 `false`（ASR 阻塞的判据是 bilibili 状态机的 wait signal，这里拿不到），正文卡在未配置的转录 provider 上时它是空的。description 已写明，改动时不得删。
+- `getProcessingCoverage` 的 `blockers` 不穷举：`prerequisiteBlocked` 恒为 `null`（ASR key / 平台标签页这类转录前置条件的判据是各平台转录状态机的 wait signal，这里拿不到），正文卡在未配置的转录 provider 或缺失的平台标签页上时它是空的。description 已写明，改动时不得删。
 - `acquisition.total` 恒为 `null`（远端总数不可知），description 写明不得声称同步完整。
 - 语义臂因维度漂移降级时（provider 已配置，查询向量与列维度不符）只在 SW console 打一条 warn，模型与外部 agent 都看不到：`blockers` 只抓得到「embedding provider 没配」那一种。`docs/27` Step 3 只剩这一项与 chunk 级计数未做。
 

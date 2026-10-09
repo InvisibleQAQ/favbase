@@ -380,15 +380,15 @@ describe('chatTools', () => {
       expect(github?.blockers).toEqual([]);
     });
 
-    it('never reports the ASR blocker, whose signal is not visible here', async () => {
+    it('never reports a transcription prerequisite (ASR key, platform tab), whose signal is not visible here', async () => {
       providerState.embedding = false;
       providerState.llm = false;
 
       const platforms = await readCoverage();
 
-      expect(
-        platforms.flatMap((entry) => entry.blockers.map((blocker) => blocker.capability)),
-      ).not.toContain('asr');
+      const capabilities = platforms.flatMap((entry) => entry.blockers.map((blocker) => blocker.capability));
+      expect(capabilities).not.toContain('asr');
+      expect(capabilities).not.toContain('platform-tab');
     });
 
     it('returns only the requested platform', async () => {
@@ -482,8 +482,9 @@ describe('chatTools', () => {
 
       // Derived, not hand-written: the capabilities the tool can actually emit
       // are whatever the shared rule yields with no state-machine signal —
-      // the same `asrBlocked: false` the tool passes. Wire ASR up later and
-      // this fails until the text names it too.
+      // the same `prerequisiteBlocked: null` the tool passes. Wire a
+      // transcription prerequisite up later and this fails until the text
+      // names it too.
       const reportable = deriveConfigurationBlockers({
         coverage: {
           acquisition: { done: 1, total: null },
@@ -491,7 +492,7 @@ describe('chatTools', () => {
           embedding: { done: 0, total: 1 },
           tagging: { done: 0, total: 1 },
         },
-        asrBlocked: false,
+        prerequisiteBlocked: null,
         asrConfigured: false,
         embeddingConfigured: false,
         llmConfigured: false,

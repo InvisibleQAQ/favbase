@@ -8,15 +8,23 @@ import {
   type SiteAction,
 } from '../../components/collection-states';
 import { PipelineProgressStrip, CollectionPageScaffold } from '../../components/collection';
-import { backgroundJobRuntime, fetchedCountProgress } from '../../hooks/pipeline-segments';
+import { AutoTranscribeBar, useAutoTranscribe } from '../../components/auto-transcribe';
+import {
+  backgroundJobRuntime,
+  fetchedCountProgress,
+  transcriptionStage,
+} from '../../hooks/pipeline-segments';
 import { useCollectionPipeline } from '../../hooks/use-collection-pipeline';
 import { useCollectionBreadcrumbs } from '../../hooks/use-collection-breadcrumbs';
+import { useJob } from '../../hooks/background-jobs-store';
+import { jobPlatformForCollection } from '../../hooks/collection-job-platform';
 import { rateLimitRemainingMs } from '../../hooks/collection-sync-error';
 import {
   syncErrorMessage,
   type SyncErrorCopy,
 } from '../../hooks/collection-sync-error-message';
 import { formatCountdown, useCountdown } from '../../hooks/use-countdown';
+import { douyinAutoTranscribePipeline } from './auto-transcribe-runtime';
 import { useDouyinFavorites } from './use-douyin-favorites';
 import { DouyinCard } from './douyin-card';
 import { TaggedDouyinCard } from './tagged-douyin-card';
@@ -24,6 +32,7 @@ import { DouyinGridSkeleton } from './douyin-grid-skeleton';
 
 /** Platform key for all tag operations in this (douyin-only) section. */
 const PLATFORM = 'douyin';
+const JOB_PLATFORM = jobPlatformForCollection(PLATFORM);
 // Every request runs in the user's own logged-in www.douyin.com tab (docs/33
 // D3), so opening that tab is how the library fills: it leads both the empty
 // and the not-logged-in state, and Fetch steps back beside it. favbase never
@@ -59,12 +68,19 @@ export function DouyinView() {
   const { t } = useTranslation();
   const douyin = useDouyinFavorites();
   const breadcrumbs = useCollectionBreadcrumbs(PLATFORM);
+  // Videos are transcribed after the sync (docs/37 Step 3): the automatic
+  // session's state drives the bar, the prerequisite banner and the coverage
+  // refresh; the shared `transcribe` job is the content stage's runtime.
+  const autoTranscribe = useAutoTranscribe(douyinAutoTranscribePipeline);
+  const transcribeJob = useJob(JOB_PLATFORM, 'transcribe');
   const { coverage, coverageStatus, segments } = useCollectionPipeline({
     platform: PLATFORM,
     syncing: douyin.syncing,
     fetch: backgroundJobRuntime(douyin.syncJob, fetchedCountProgress),
+    content: transcriptionStage(t('pipeline.transcription'), transcribeJob),
     embedJob: douyin.embedJob,
     tagJob: douyin.tagJob,
+    extraRefreshKey: `${autoTranscribe.running}:${transcribeJob?.generation ?? 0}`,
   });
   // A cooldown (a rate limit with a reset) locks the Fetch button until then.
   const lockMs = useCountdown((now) => rateLimitRemainingMs(douyin.syncError, now));
@@ -127,6 +143,12 @@ export function DouyinView() {
         <TaggedDouyinCard item={item} onEditTags={openEditor} />
       )}
       skeleton={<DouyinGridSkeleton />}
+      // The automatic transcription's progress; idle draws nothing, and the
+      // parked-for-a-prerequisite state is the configuration notice's.
+      operation={
+        <AutoTranscribeBar state={autoTranscribe.state} running={autoTranscribe.running} />
+      }
+      operationScope="primary-category"
       // Public folders (status === 1) are the only Sources; a favorite outside
       // every public folder shows under "All" only (docs/33 D1 / D-a).
       primaryCategory={douyin.libraryCount > 0 ? (
@@ -170,6 +192,7 @@ export function DouyinView() {
           platform={PLATFORM}
           coverage={coverage}
           coverageStatus={coverageStatus}
+          prerequisiteBlocked={autoTranscribe.state.prerequisiteBlocked}
         />
       }
       pipeline={authFailed ? undefined : pipeline}

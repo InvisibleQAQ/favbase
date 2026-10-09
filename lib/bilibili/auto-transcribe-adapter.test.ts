@@ -8,15 +8,13 @@ const transcribeMocks = vi.hoisted(() => ({
   createStatusListener: vi.fn(),
 }));
 
+// Functional mocks: the ASR prerequisite helpers are the storage reads this
+// adapter delegates to (lib/storage/asr-prerequisite.ts has their own tests).
 const storageMocks = vi.hoisted(() => ({
-  getAsrSettings: vi.fn(async () => ({ apiKey: '' })),
-  resolveAsrConfig: vi.fn((settings: any) => ({
-    apiKey: settings.asrConfigs?.[settings.asrProvider]?.apiKey ?? '',
-    model: '',
-    baseUrl: '',
-  })),
-  settingsStorage: { getValue: vi.fn(), watch: vi.fn() },
-  asrQuotaPauseStorage: { getValue: vi.fn(), setValue: vi.fn() },
+  hasAsrApiKey: vi.fn(async () => false),
+  waitForAsrApiKey: vi.fn(async () => undefined),
+  getActiveAsrQuotaPause: vi.fn(async () => null),
+  setAsrQuotaPause: vi.fn(async () => undefined),
 }));
 
 vi.mock('./transcribe-utils', () => transcribeMocks);
@@ -31,8 +29,8 @@ import { createBiliAutoTranscribeAdapter } from './auto-transcribe-adapter';
 
 describe('Bilibili auto-transcribe adapter processing seam', () => {
   beforeEach(() => {
-    storageMocks.settingsStorage.getValue.mockReset();
-    storageMocks.settingsStorage.watch.mockReset();
+    storageMocks.hasAsrApiKey.mockReset().mockResolvedValue(false);
+    storageMocks.waitForAsrApiKey.mockReset().mockResolvedValue(undefined);
   });
 
   it('forwards the injected processing starter', async () => {
@@ -48,45 +46,26 @@ describe('Bilibili auto-transcribe adapter processing seam', () => {
     );
   });
 
-  it('loads a quota pause only for the active ASR provider', async () => {
-    storageMocks.asrQuotaPauseStorage.getValue.mockResolvedValue({
-      providerId: 'groq',
-      resetAt: 5_000,
-    });
-    storageMocks.settingsStorage.getValue.mockResolvedValue({ asrProvider: 'groq' });
+  it("judges only a missing ASR key as a prerequisite, and only while the key is still missing", async () => {
     const adapter = createBiliAutoTranscribeAdapter({ startProcessing: vi.fn() });
+    const invalidKey = { code: 'ASR_INVALID_KEY' as const, message: 'no key' };
 
-    await expect(adapter.getQuotaPause()).resolves.toEqual({
-      providerId: 'groq',
-      resetAt: 5_000,
-    });
+    await expect(adapter.missingPrerequisite(invalidKey)).resolves.toBe('asr');
 
-    storageMocks.settingsStorage.getValue.mockResolvedValue({ asrProvider: 'siliconflow' });
-    await expect(adapter.getQuotaPause()).resolves.toBeNull();
+    storageMocks.hasAsrApiKey.mockResolvedValue(true);
+    await expect(adapter.missingPrerequisite(invalidKey)).resolves.toBeNull();
+    await expect(
+      adapter.missingPrerequisite({ code: 'ASR_UNKNOWN', message: 'boom' }),
+    ).resolves.toBeNull();
   });
 
-  it('waits for a valid ASR setting without losing an update racing the initial read', async () => {
-    let resolveInitial!: (settings: any) => void;
-    const initial = new Promise<any>((resolve) => {
-      resolveInitial = resolve;
-    });
-    let onChange!: (settings: any) => void;
-    const unwatch = vi.fn();
-    storageMocks.settingsStorage.getValue.mockReturnValue(initial);
-    storageMocks.settingsStorage.watch.mockImplementation((callback) => {
-      onChange = callback;
-      return unwatch;
-    });
+  it('waits on the shared ASR key watcher and delegates the quota pause to the shared helpers', async () => {
     const adapter = createBiliAutoTranscribeAdapter({ startProcessing: vi.fn() });
 
-    const waiting = adapter.waitForAsrKey();
-    onChange({
-      asrProvider: 'groq',
-      asrConfigs: { groq: { apiKey: 'configured', model: 'whisper' } },
-    });
-    await waiting;
-    resolveInitial({ asrProvider: 'groq', asrConfigs: {} });
+    await adapter.waitForPrerequisite({ code: 'ASR_INVALID_KEY', message: 'no key' });
+    expect(storageMocks.waitForAsrApiKey).toHaveBeenCalledOnce();
 
-    expect(unwatch).toHaveBeenCalledOnce();
+    expect(adapter.getQuotaPause).toBe(storageMocks.getActiveAsrQuotaPause);
+    expect(adapter.setQuotaPause).toBe(storageMocks.setAsrQuotaPause);
   });
 });

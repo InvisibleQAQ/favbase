@@ -43,6 +43,9 @@ import type { DouyinRequest, DouyinTransport, DouyinTransportResult } from './do
  * a literal would hide the lines after it from both.)
  */
 const [DOUYIN_TAB_URL] = PLATFORM_DESCRIPTORS.douyin.hostPermissions;
+// The match pattern ends in `*`; without it, it is the URL prefix of a tab on
+// the site (derived, so no slash-star literal appears here either).
+const DOUYIN_TAB_URL_PREFIX = DOUYIN_TAB_URL.slice(0, -1);
 
 /**
  * The id of the first usable www.douyin.com tab, or null. Usable = not
@@ -57,6 +60,32 @@ export async function findDouyinTab(): Promise<number | null> {
     if (tab.id !== undefined && !tab.discarded && tab.status === 'complete') return tab.id;
   }
   return null;
+}
+
+/**
+ * Resolves on the next completed load of a www.douyin.com tab
+ * (`tabs.onUpdated` with `status: 'complete'`): the cheapest evidence that the
+ * user acted on the tab — signed in, passed a check, reloaded it. The
+ * auto-transcribe adapter waits on it for a `login` / `verify` / signature
+ * prerequisite (docs/37 Step 3 ruling 5); polling `findDouyinTab()` would
+ * resolve at once while the logged-out tab is still open, re-queue the item,
+ * and send one more signed request into the same wall. A check passed
+ * in-page without a reload is NOT seen: the banner tells the user to reload.
+ * Never touches the tab.
+ */
+export function waitForDouyinTabLoad(): Promise<void> {
+  return new Promise((resolve) => {
+    const onUpdated = (
+      _tabId: number,
+      changeInfo: { status?: string },
+      tab: { url?: string },
+    ): void => {
+      if (changeInfo.status !== 'complete' || !tab.url?.startsWith(DOUYIN_TAB_URL_PREFIX)) return;
+      browser.tabs.onUpdated.removeListener(onUpdated);
+      resolve();
+    };
+    browser.tabs.onUpdated.addListener(onUpdated);
+  });
 }
 
 /**

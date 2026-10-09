@@ -325,6 +325,7 @@ const zhCN = {
   'autoTranscribe.quotaPausedNoReset': '自动转录已暂停，额度重置后将自动继续。',
   'configurationBlocker.title': '需要完成配置',
   'configurationBlocker.asr': '有视频没有可用的官方字幕，正在等待 ASR 转录。',
+  'configurationBlocker.platformTab': '{{platform}}中有视频在等待已登录的网站标签页：打开并登录后会自动继续；完成登录或验证后请刷新该标签页。',
   'configurationBlocker.embedding': '有 {{count}} 个条目正在等待生成向量。',
   'configurationBlocker.embedding.one': '有 {{count}} 个条目正在等待生成向量。',
   'configurationBlocker.llm': '有 {{count}} 个条目正在等待生成 AI 标签。',

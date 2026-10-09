@@ -6,7 +6,7 @@ import Chip from '@mui/material/Chip';
 
 import { formatDateTime, t } from '@/lib/i18n';
 import { useTranslation } from '@/lib/i18n/use-translation';
-import { Iconify } from '../../components/iconify';
+import { Iconify } from '../iconify';
 import { formatDuration } from '../../utils/format-duration';
 import type { AutoTranscribeState } from '@/lib/auto-transcribe/types';
 

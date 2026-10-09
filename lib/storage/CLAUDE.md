@@ -37,4 +37,5 @@ WXT storage 的统一管理目录，对外 import 面是 `@/lib/storage`。每�
 - Onboarding（`local:onboarding`）：只由 welcome 页写一次，app 首次 render 前读一次、不 watch。`null` 是安装时弹引导页的唯一闸门；`platforms` 只影响落地路由与侧栏优先级，绝不 gating。详见 `entrypoints/welcome/CLAUDE.md`。
 - Agent Bridge config / status：UI 与 scheduler 只能经 `agent-bridge.ts` 的 typed get / watch（它在边界补齐旧存量缺失的字段）。`lastAuthFailureAt` 是事故痕迹，成功握手也不清除。
 - ASR quota guard（`local:asr-quota-pause`）：只存 provider 与 reset 时间，不保存也不恢复转录队列。读取方必须核对当前 `settings.asrProvider`，否则切换 provider 后会被旧 guard 阻塞。
+- `asr-prerequisite.ts` 是转录前置条件的 ASR 半边（有没有 key、等 key、读写 quota guard）的唯一实现，各平台的 auto-transcribe adapter 共用；别在 adapter 里再抄一份 `settingsStorage.watch`。它先 watch 再读初值，反过来有 initial-read / watch 竞态。
 - X 认证 header、WebDAV 三个 key 的 owner：`lib/x/CLAUDE.md`、`lib/sync/CLAUDE.md`。

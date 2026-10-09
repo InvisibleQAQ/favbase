@@ -1,6 +1,6 @@
 # 37 抖音字幕与转录接入手册（2026-10-08）
 
-> 状态：**草案；Step 0 已完成 2026-10-08（用户账号、BrowserOS neo 实测，只读）**——网页 aweme 对象有 `cla_info` 字段但 136 个样本全空，v1 「优先 AI 字幕」半边改为**直接 ASR**（`fetchOfficialSubtitle: async () => null`，不写 `douyin-subtitle.ts`）；另发现纯音轨 `video.bit_rate_audio[]`，D-g 据此修订。证据在 Step 0 落地记录与任务目录 `research/douyin-step0-subtitle-media-probe-2026-10-08.md`；**Step 1 已完成 2026-10-08（内容模型翻转 + 领域层；代码 + 单测，已复核，commit 3f3babe）**，按任务目录 `info.md` 执行，其 §0 四条裁决（D6 的 desc 也空 → `'no_content'`、`decodeDetail` 空 payload 抛冷却错误、`pickAudioSourceUrls` 三级全拼、入库门用 D-f 谓词）是对本文的有意偏离，见 Step 1 节末「Step 1 落地记录」；**Step 2 已完成 2026-10-08（Background handler；代码 + 单测，已复核，commit 1b0b227）**，按任务目录 `info.md` 的 Step 2 节执行，其 §0 九条裁决（detail 懒到 ASR 路径里取、共享下载器收候选列表、extractor 的结构化错误透传、`douyin-api` 两个具名错误类、`aweme_id` 回声闸门等）是对本文的有意偏离，见 Step 2 节末「Step 2 落地记录」。§1 的 D1–D7 是待用户确认的决策（每条带推荐项）；D-a 起是写手册时由代码核对推出的设计默认项。一次对话只做一个 Step；执行任一 Step 前先读 §1 决策、§2 否决清单、§3 铁律，再读该 Step 的八段。
+> 状态：**草案；Step 0 已完成 2026-10-08（用户账号、BrowserOS neo 实测，只读）**——网页 aweme 对象有 `cla_info` 字段但 136 个样本全空，v1 「优先 AI 字幕」半边改为**直接 ASR**（`fetchOfficialSubtitle: async () => null`，不写 `douyin-subtitle.ts`）；另发现纯音轨 `video.bit_rate_audio[]`，D-g 据此修订。证据在 Step 0 落地记录与任务目录 `research/douyin-step0-subtitle-media-probe-2026-10-08.md`；**Step 1 已完成 2026-10-08（内容模型翻转 + 领域层；代码 + 单测，已复核，commit 3f3babe）**，按任务目录 `info.md` 执行，其 §0 四条裁决（D6 的 desc 也空 → `'no_content'`、`decodeDetail` 空 payload 抛冷却错误、`pickAudioSourceUrls` 三级全拼、入库门用 D-f 谓词）是对本文的有意偏离，见 Step 1 节末「Step 1 落地记录」；**Step 2 已完成 2026-10-08（Background handler；代码 + 单测，已复核，commit 1b0b227）**，按任务目录 `info.md` 的 Step 2 节执行，其 §0 九条裁决（detail 懒到 ASR 路径里取、共享下载器收候选列表、extractor 的结构化错误透传、`douyin-api` 两个具名错误类、`aweme_id` 回声闸门等）是对本文的有意偏离，见 Step 2 节末「Step 2 落地记录」；**Step 3 已完成 2026-10-08（app 侧：前置条件泛化、Transcript lane、积压补扫、pipeline 条、角标；代码 + 单测，已复核，未提交）**，按任务目录 `info.md` 的 Step 3 节执行，其 §0 十一条裁决加复核后一条（前置条件返回「缺哪种」、签名被拒也停放、等用户动作期间短路转录、login / verify 等标签页重新加载、producer 与 ASR 半边各提一份共享实现、角标列走共享分页查询、已有 session 在跑时跳过积压等）是对本文的有意偏离，见 Step 3 节末「Step 3 落地记录」；判据里的清库与实机部分留到 Step 4。§1 的 D1–D7 是待用户确认的决策（每条带推荐项）；D-a 起是写手册时由代码核对推出的设计默认项。一次对话只做一个 Step；执行任一 Step 前先读 §1 决策、§2 否决清单、§3 铁律，再读该 Step 的八段。
 >
 > 任务目录：`.trellis/tasks/10-08-douyin-transcription-subtitle-first-asr-fallback-tagging-reuse-bilibili-flow/`。前置手册：`docs/33`（抖音收藏接入，Step 0–3 已落地）、`docs/04`（B站转录管线）、`docs/29`（B站字幕串台事故与归属校验）。
 >
@@ -125,8 +125,8 @@
 |---|---|---|---|
 | T1 | `findDouyinTab()` 为 null（handler 入口） | 不发请求 | `DOUYIN_TAB_MISSING`（D5：停放，不标 error） |
 | T2 | transport `unreachable`（注入超时、标签页中途关闭、网络错误） | 不重试（Step 2 勘误：指 handler 不在共享瞬时预算之外另加重试；detail 仍走 `requestEnvelope`，unreachable 与 5xx / 空 200 共用 `MAX_RETRIES`，耗尽后才是本行）。**停放与否看此刻 `findDouyinTab()`**：为 null 才算缺前置条件（D5），否则是普通单条失败——否则「标签页在、网络抖一下」会停放 → 立刻恢复 → 重入队 → 再失败，空转 | `DOUYIN_TAB_MISSING`（adapter 再查一次标签页决定是否停放） |
-| T2′ | transport `sdk-not-ready`（页面 fetch 仍是 native） | 不重试；用户动作是刷新标签页，与 T3 同一条文案 | `DOUYIN_SIGNATURE_REJECTED` + `params.reason: 'sdk-not-ready'` |
-| T3 | 403 + `ArgusSecurityPlugin` | 不重试 | `DOUYIN_SIGNATURE_REJECTED`（文案：刷新抖音标签页后重试） |
+| T2′ | transport `sdk-not-ready`（页面 fetch 仍是 native） | 不重试；用户动作是刷新标签页，与 T3 同一条文案（Step 3 勘误：与 T3 一样**停放**等标签页重新加载，不标 `'error'`，见 Step 3 落地记录偏离 2） | `DOUYIN_SIGNATURE_REJECTED` + `params.reason: 'sdk-not-ready'` |
+| T3 | 403 + `ArgusSecurityPlugin` | 不重试（Step 3 勘误：停放，同 T2′） | `DOUYIN_SIGNATURE_REJECTED`（文案：刷新抖音标签页后重试） |
 | T4 | 403 / 429 无 Argus、200 空 body（重试耗尽） | 复用 `classifyResponse` 抛出的 `DouyinRateLimitError(resetAt 非空)` → 折成转录错误。**不借用 `ASR_RATE_LIMIT`**：它的文案写死「Groq 速率限制」（`lib/i18n/locales/zh-CN.ts` `transcribe.rateLimit` / `error.ASR_RATE_LIMIT`），屏幕上会说错供应商 | `DOUYIN_RATE_LIMITED` + `retryAfter`（= `resetAt − now`）；`lib/auto-transcribe` 对带 `retryAfter` 的错误的处理（`pipeline.ts:248-253`，临时限流最多重试一次）要改成按「有 `retryAfter`」判，不按 `code === 'ASR_RATE_LIMIT'` 判——这是共享模块里一个字面量换成一个形状，不是平台分支 |
 | T4′ | F6 验证页（`DouyinRateLimitError(resetAt: null)`） | 用户必须去标签页完成验证 → **停放**（同 T1），不是重试一次后标 `'error'` | `DOUYIN_TAB_MISSING` + `params.reason: 'verify'`；`waitForPrerequisite` 对这个 reason 只能等用户动作：轮询间隔同 T1，恢复后重发 detail |
 | T5 | `status_code: 8` 未登录 / 2483 | 停放（同 T1：用户要去标签页登录） | `DOUYIN_TAB_MISSING` + `params.reason: 'login'` |
@@ -468,6 +468,82 @@ Coverage 的 content 段（`collection-processing-policy.ts:102-105`）：视频
 **回滚**：revert；库里已转录的正文对旧代码仍是合法 `'chunked'` 行。
 
 **判据**：先按 D2 清库（用户批准后删 `items where platform='douyin'`（级联）、`authors` 孤儿、`platform_sync_records`、`local:douyin-backfill`，docs/33 Step 3 的 `clear-douyin.js` 可照用）；重拉一次后，不碰页面，视频逐条出现 CC / ASR 角标、标签随后出现；关掉 app.html 再开、再同步一次，残留的 `'pending'` 被补上；关掉抖音标签页，进度条显示等待而不是错误；`pnpm build` 的 manifest 零差异。
+
+#### Step 3 落地记录（2026-10-08，代码 + 单测；未提交）
+
+执行稿是任务目录 `info.md` 的 Step 3 节（主会话读完 `lib/auto-transcribe`、两个 adapter、B站与抖音 section、横幅、`collection-queries`、`job-registry` 与六个守卫后写的逐文件规格），与本文冲突处以它的 §0 为准。范围：`lib/`（`lib/background/` 与 SW handler 的代码未动）、`entrypoints/app/`、`tests/`、`.env.example` / `.env.local`（抖音块各两行）、十三份目录 `CLAUDE.md`、`.trellis/spec/frontend/platform-onboarding.md` §4.4、本记录与 `prd.md`；库没碰。D5 / D7 视为已确认：依据是用户的指令「完成 step3」，而 Step 3 的文件表就是两者的落地；回滚是 revert。`.env.local` 的两行同样以这条指令为据，只加注释与留空的 key。
+
+实现子代理在收尾时因额度限制中断，没有交回先红证据与偏离清单；主会话确认 `pnpm compile` 与聚焦集全绿后，由复核子代理逐文件对稿，并用 19 个单点变异重建「测试锁住了行为」的证据（下表），替代丢失的先红记录。
+
+**做了什么**
+
+- 前置条件泛化（D5）：`lib/auto-transcribe` 的 adapter 接口 `hasAsrKey / waitForAsrKey` 换成 `missingPrerequisite(error) → 'asr' | 'platform-tab' | null` 与 `waitForPrerequisite(error)`；状态 `asrBlocked: boolean` 换成 `prerequisiteBlocked`。`TranscribePrerequisite` 住 `lib/collections/configuration-blockers.ts`（能力词，不是平台词），`deriveConfigurationBlockers` 对 `'platform-tab'` 出一条无 `pending`、无设置链接的阻塞项；Knowledge Tool 传 `null`。
+- 临时限流按形状判（§4.3 T4）：判定顺序改为「前置条件 → `ASR_QUOTA_EXCEEDED` → 带 `retryAfter` 的重试一次 → 普通失败」。quota 必须先判：groq-client 对每个 429 都带 `retryAfter`（无头默认 30 s）。`DEFAULT_RATE_LIMIT_PAUSE_SECONDS` 成了死代码，已删。
+- ASR 半边不复制：B站 adapter 里的四段 storage 逻辑提到 leaf `lib/storage/asr-prerequisite.ts`，两个 adapter 共用；B站 adapter 测试里的两例原样搬进它的测试。
+- `lib/douyin/auto-transcribe-adapter.ts`（新）：`transcribe` 经共享 seam 落库，`markError: markDouyinError`；前置条件判定与三种等待见下面偏离 2–4。`lib/douyin/douyin-tab.ts` 只加一个导出 `waitForDouyinTabLoad()`（`tabs.onUpdated` 的下一次 douyin.com 标签页 `complete`），import 集合不变。
+- 两条输入源（改法要点 1）：`syncDouyinCollections` 新增 `onVideosPending`，每页从 `result.inserted` 回连 aweme、过 `isTranscribableAweme` 后发出，与 D7 积压共用 `DouyinPendingVideo` 一个形状。
+- Transcript lane 泛化：B站 runtime 的 tail / 派发 / producer 提到泛型层 `entrypoints/app/hooks/transcript-lane.ts`，tail 按 lane（= 按 pipeline 实例），不跨平台串行；B站 runtime 只留资格判定与映射。
+- 抖音 app 侧：`sections/douyin/auto-transcribe-runtime.ts`（pipeline 单例、`runDouyinStreamingSync`：每页视频进 inbox，sync 成功后追加 D7 积压）、`douyin-processing-adapter.ts`（从 sync adapter 抽出）；sync adapter 在 funnel 内动态 import runtime，标签页门不变。
+- UI：`AutoTranscribeBar` 与 `useAutoTranscribe(pipeline)` 搬到 `components/auto-transcribe/`（D-d），B站改传自己的 pipeline；`transcriptionStage` 提到 `hooks/pipeline-segments.ts`；抖音 view 有转录段、进度条、`prerequisiteBlocked` 横幅；抖音卡片在 footer 画 CC / ASR 角标（复用 `card.sourceCC` / `card.sourceASR`，`info` 色）。角标的列来自共享 `pagedItemsQuery` 的 LEFT JOIN `item_contents`（`PagedItemRow.subtitleSource` 三值：`undefined` 未加载 / `null` 非转录 / 来源）。
+- i18n 只加一个 key `configurationBlocker.platformTab`（`{{platform}}` = 导航名），不加 `douyin.subtitleSource.*`。env：`VITE_DOUYIN_TAB_POLL_MS`（5000）登记守卫与两个 env 文件。
+- 文档：`lib/{auto-transcribe,collections,chat,douyin,storage,database,background}/CLAUDE.md`、`entrypoints/app/{hooks,components/auto-transcribe（新）,components/configuration-blocker,sections/bilibili,sections/douyin}/CLAUDE.md`、根 `CLAUDE.md` 目录清单、`platform-onboarding.md` §4.4、本文页头与 §4.3 T2′ / T3 两行。
+
+**对本文的偏离（`info.md` Step 3 节 §0 的十一条裁决，加复核后一条）**
+
+1. **前置条件接口返回「缺哪种」**：手册写 `isPrerequisiteMissing(error)`（布尔）加改名后的 `prerequisiteBlocked` 带 `reason`；布尔载不动横幅要的 reason，合成一个返回值、一个状态字段。`waitForPrerequisite` 收停放时的那条错误，adapter 据此选等待方式。
+2. **`DOUYIN_SIGNATURE_REJECTED` 算前置条件缺失、不标 `'error'`**（§4.3 T2′ / T3 已加勘误）：修复动作是用户刷新标签页，与 login / verify 同类；SDK 一失效就逐条落 `'error'`，而 v1 没有重试入口——正是 D5 否决「错误即标 error」的理由。
+3. **等「用户对标签页做了动作」期间 adapter 短路 `transcribe()`**：login / verify / signature 停放后，后续条目不再发 `TRANSCRIBE_AUDIO`，直接返回停放时的错误、一并停放；否则每条都白发一次节奏化的签名请求打到同一堵墙上（466 条约一小时的 403）。`closed` 不短路：SW 的 T1 门零请求，cache 命中仍能成功。
+4. **三种等待**：ASR key → 共享 settings watcher；`closed` → 轮询 `findDouyinTab()`（`VITE_DOUYIN_TAB_POLL_MS`）；login / verify / signature → 下一次 douyin.com 标签页加载完成。手册写的「轮询 `findDouyinTab()`」在登录墙上会立刻 resolve → 重入队 → 再发一次签名请求 → 再停放，空转。代价：页内完成验证而不刷新不会自动恢复，横幅文案写明「完成后刷新该标签页」。
+5. **页回调改法**：手册写「`onPagePersisted` 放宽为 `(ids, items)`」；实现是新增独立回调 `onVideosPending`，按 `inserted` 算（夹内页会重新列出 head 已入库的视频，insert-only 下不得重复入队）。
+6. **producer 泛化到 `hooks/transcript-lane.ts`**（手册写「照抄形状」）：抖音是第二个真实调用方，抽象此刻成立；tail 按 lane，B站的自动转录不会排在抖音几百条积压后面。
+7. **ASR 半边提到 `lib/storage/asr-prerequisite.ts`**（手册写「quota 两个函数照抄」）：照抄就是 copy-paste。
+8. **角标的列走共享分页查询**（手册写「`getDouyinItems` 多查一列」）：零平台知识的 LEFT JOIN，所有平台的分页查询都带上这一列；标签筛选网格没有这列、不画角标。
+9. **`'platform-tab'` 不进 `ConfigurationCapability`**：那个类型兼作设置页叶子，`settingsPath('ai/platform-tab')` 没有页面。阻塞项类型扩为 `ConfigurationCapability | 'platform-tab'`，横幅对它不渲染设置链接。
+10. **文案复用 `card.sourceCC` / `card.sourceASR`**，不加手册 i18n 行里的 `douyin.subtitleSource.*`。
+11. **D7 积压在 sync 开始时已有抖音转录 session 在跑就跳过**（复核发现、主会话裁决，不在执行稿里）：lane 让后一个 producer 排在活动 session 后面，此刻读出的积压等轮到时已过期，已转录的条目会被重放（cache 命中、不发签名请求，但重写正文、替换 chunk 清掉 embedding、重新 embed、每条再等 10–15 s）；首次积压要跑几个小时，期间再点一次「立即获取」或每日自动同步就会触发。`isActive()` 在入口判。代价：前一次 sync 失败、没追加积压时，遗留的 `'pending'` 要等下一次开始时没有 session 在跑的同步。备选「lane 提供惰性追加、在 session 创建时才读积压」否决：要把异步加载塞进泛型层，还得处理 loader 在 `close()` 之后 resolve（对已关闭的 session `append` 会抛）。
+
+**复核（trellis-check）的修正**
+
+- `collection-configuration-notice.test.tsx` 两个新用例在断言之后才重置共享的 `configState`，一条断言失败会把状态漏给下一例；改为 `beforeEach` 统一重置（变异 M13 实测出现过级联）。
+- `douyin-sync-adapter.ts` 对非 promise 的 ticket 写了 `void`，去掉。
+- `entrypoints/app/hooks/CLAUDE.md` 的「Transcript lane」一节插在了「收藏页 hooks」中间，把其后几条规则吞到新标题下；挪到该节之后。B站与 `components/auto-transcribe/` 两份 `CLAUDE.md` 里的改动日志式写法改成现状描述。`platform-onboarding.md` §4.4 原写「app 侧在 docs/37 Step 3 落地」，改为现状。
+
+**证伪**（每次改一处、跑对应测试文件、还原；还原后 `sha256sum -c` 与改前一致。机器另有进程占约 55% CPU，统一加 `--hookTimeout=90000 --testTimeout=60000`，免得超时冒充「被杀」）
+
+| # | 改动 | 变红 |
+|---|---|---|
+| M1 | pipeline 先判 `retryAfter` 再判 quota | 2 例（`expected 'paused' to be 'quota_paused'`） |
+| M2 | 改回按 `ASR_RATE_LIMIT` 码判临时限流 | 1 例（平台限流不再重试一次） |
+| M3 | 去掉 adapter 的 `transcribe()` 短路 | 1 例 |
+| M4 | `closed` 不查 `findTab()` 就停放 | 1 例（`expected 'platform-tab' to be null`） |
+| M5 | signature 返回 `null` | 1 例 |
+| M6 | login 改为轮询 `findTab()` | 1 例（`waitForTabLoad` 零调用） |
+| M7 | `onVideosPending` 按页算而不是按 `inserted` | 1 例（夹内页重复列出的 `'1'` 被再次入队） |
+| M8 | sync 失败也追加积压 | 1 例 |
+| M9 | 积压读取失败向外抛 | 1 例（`promise rejected "Error: db gone"`） |
+| M10 | 多条 lane 共用一个模块级 tail | 2 例（跨平台被串行） |
+| M11 | 去掉 LEFT JOIN 与该列 | 2 例 |
+| M12a / b | `null` / `undefined` 也画角标；CC 与 ASR 对调 | 1 例；2 例 |
+| M13 | `'platform-tab'` 也渲染设置链接 | 1 例（修完测试隔离后） |
+| M14a / b | `waitForDouyinTabLoad` 对 `loading` / 非抖音 host 也 resolve | 1 例；2 例 |
+| M15a / b | sync adapter 绕过 funnel；runtime 先于标签页门 | 2 例；2 例 |
+| G1 / G2 | 去掉偏离 11 的入口判断；改为 sync 之后才读 `isActive()` | 各 1 例（`getDouyinPendingVideos` 被调 1 次）；新用例先红同一句 |
+
+**验证**（2026-10-08）
+
+- 聚焦集（`info.md` Step 3 节 §2 的命令，加大超时）：94 文件 / 853 例全过。默认超时下同一集合有 17 个文件超时、零断言失败（PGlite `beforeAll`，机器负载）。
+- `pnpm compile`：通过。
+- `pnpm test`：根 236 文件 / 2050 例首跑 30 个文件失败，全部是 PGlite `beforeAll` 超时及其级联（`afterAll` 的 `close` 读 undefined、`chat-view.test.tsx` 的 DOM 残留），零真实断言失败；当时机器 CPU 被其他进程占到 77%，import 阶段累计 1602 s。这 30 个文件加 `--hookTimeout=120000 --testTimeout=60000` 重跑：30 文件 / 360 例全过。根部失败让 `&&` 跳过了 `packages/*`，单独跑 `pnpm -r test`：15 文件 / 263 例全过。
+- `pnpm build`：`[bundle-contract] background graph 14 modules / 962605 bytes`（Step 2 基线同一台机器同一天：961873；多出的 732 字节是 SW 图上的 `configuration-blockers.ts` 与 `douyin-tab.ts` 的增量），PGlite 标记 / dangling initializer / 动态 `import()` 零命中；`background.js` 里 `douyin-sync-service` / `pglite` 零命中。
+- manifest：改前基线 build 与改后 build 的 `.output/chrome-mv3/manifest.json` 逐字节相同（`cmp` 零差异）。
+
+**未做 / 留给后面**
+
+- **本 Step 判据的实机部分没跑**：清库（D2，删 `items where platform='douyin'` 级联、`authors` 孤儿、`platform_sync_records`、`local:douyin-backfill`）要用户当场批准；之后的「不碰页面，视频逐条出现 CC / ASR 角标、标签随后出现」「关掉 app.html 再开、再同步，残留的 `'pending'` 被补上」「关掉抖音标签页，进度条显示等待」需要已配置的 ASR key 与 BrowserOS neo 里 reload 扩展（会关掉用户已开的扩展页面）。三者齐了在 Step 4 一并跑，Step 4 清单 6 / 7 就是这两条。
+- **风控冷却期间条目会落 `'error'`**（复核发现，按本文 §4.3 T4「重试一次」保留）：`DOUYIN_RATE_LIMITED` 的 `retryAfter` 是 30 分钟冷却，每条在 `paused` 里等满、重试一次，再被拒即 `'error'`；持续风控时约每 30 分钟永久失去一条（v1 无重试入口），并向被风控的账号每 30 分钟多发 1–2 次签名请求。改法要在共享状态机里加「瞬态失败、保持 `'pending'` 不标 error」一类，或给平台冷却一个不借 ASR quota 文案的暂停态；Step 4 清单 2 先看实际出现频率再定。
+- SW 的 `job-registry` 一个 tab 只记一个转录 job，B站与抖音 session 并发会串台（Step 2 已记）；v1 接受，写进 `entrypoints/app/hooks/CLAUDE.md` 与 `lib/background/CLAUDE.md`。
+- session 被取消时若正在等标签页加载，adapter 的短路状态会留到下一次 douyin.com 标签页加载完成；v1 抖音没有取消入口，基本不可达。同一轮停放里先后出现两类前置条件时，`prerequisiteBlocked` 显示后一类、等待的是前一类；SW 先查 ASR key 再查标签页，实际不会同时出现。
+- 卡片上的手动转录 / 取消按钮（D-e）与 `'error'` 条目的重试入口仍是后续项。
 
 ### Step 4 — 实机端到端验证（生产条件）
 

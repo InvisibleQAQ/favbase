@@ -282,8 +282,17 @@ not apply (§4.3).
 
 - The Fetch producer feeds new items to a transcription pipeline while the
   sync is still paging. The pipeline is a module singleton holding its own
-  state, and its `'transcribe'` job uses the `'queue'` collision so an
-  automatic session waits behind a manual single-video transcription.
+  state; the producer / dispatch mechanics are the shared
+  `entrypoints/app/hooks/transcript-lane.ts` (one lane per pipeline, never
+  serialized across platforms), whose `'transcribe'` job uses the `'queue'`
+  collision so an automatic session waits behind a manual single-video
+  transcription. The platform runtime keeps only eligibility and the mapping
+  to `AutoTranscribeVideo`.
+- The platform's `AutoTranscribeAdapter` answers `missingPrerequisite(error)`
+  judged NOW (`'asr'` / `'platform-tab'` / `null`) and
+  `waitForPrerequisite(error)`; the parked state reaches the Collection
+  banner as `prerequisiteBlocked`. The ASR half is shared
+  (`lib/storage/asr-prerequisite.ts`); rules in `lib/auto-transcribe/CLAUDE.md`.
 - The text is timestamped subtitle rows, so the write is
   `persistExistingItemContent(db, platform, platformItemId, text,
   chunkSubtitleRows(rows), subtitleSource)`. It addresses the item by
@@ -304,7 +313,11 @@ not apply (§4.3).
   `sections/bilibili/auto-transcribe-runtime.ts`,
   `sections/bilibili/bilibili-processing-adapter.ts`; douyin —
   `persistDouyinTranscript` / `markDouyinError` / `getDouyinPendingVideos` in
-  `lib/douyin/douyin-sync-service.ts` (the app side lands in docs/37 Step 3).
+  `lib/douyin/douyin-sync-service.ts`, `lib/douyin/auto-transcribe-adapter.ts`,
+  `sections/douyin/auto-transcribe-runtime.ts` (also appends the stored
+  `'pending'` backlog after a successful sync that started with no session
+  running, docs/37 D7),
+  `sections/douyin/douyin-processing-adapter.ts`.
 - The Service Worker side is one handler per platform,
   `lib/<platform>/<platform>-transcription-handler.ts`, registered in
   `lib/background/transcription-handlers.ts` (docs/37 Step 2). It assembles

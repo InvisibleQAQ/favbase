@@ -23,10 +23,12 @@ import { and, desc, eq, ilike, or, sql, type Column, type SQL } from 'drizzle-or
 import type { CollectionPlatform } from '@/lib/collections/platforms';
 import type { FavbaseDb } from '@/lib/database';
 import { items } from '@/lib/database/entities/items';
+import { itemContents } from '@/lib/database/entities/item-contents';
 import { itemSources } from '@/lib/database/entities/item-sources';
 import { sources } from '@/lib/database/entities/sources';
 import { getPlatformSyncRecord } from '@/lib/database/platform-sync-record';
 import { escapeLike } from '@/lib/database/sql-utils';
+import type { SubtitleSource } from '@/lib/subtitle/types';
 
 /** The fixed column set every platform's paged query selects from `items`. */
 export interface PagedItemRow {
@@ -37,6 +39,14 @@ export interface PagedItemRow {
   originalUrl: string;
   publishedAt: Date | null;
   platformMeta: unknown;
+  /**
+   * `item_contents.subtitle_source`, filled by `pagedItemsQuery`'s LEFT JOIN
+   * (one content row per item at most, so no row multiplies). Three values:
+   * `undefined` = not loaded (a row rebuilt from a tagging result carries no
+   * content column), `null` = content that is not a transcript, or no
+   * content yet; otherwise how the transcript was obtained.
+   */
+  subtitleSource?: SubtitleSource | null;
 }
 
 export interface PagedItemsOptions<TItem> {
@@ -72,8 +82,10 @@ export async function pagedItemsQuery<TItem>(
         originalUrl: items.originalUrl,
         publishedAt: items.publishedAt,
         platformMeta: items.platformMeta,
+        subtitleSource: itemContents.subtitleSource,
       })
       .from(items)
+      .leftJoin(itemContents, eq(itemContents.itemId, items.id))
       .where(where)
       .orderBy(orderBy)
       .limit(pageSize)

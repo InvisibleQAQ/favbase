@@ -20,18 +20,49 @@ interface ScaffoldProps {
   syncDisabledLabel?: string;
   pipeline?: ReactNode;
   configurationNotice?: ReactNode;
+  operation?: ReactNode;
+  operationScope?: string;
   authFailedState?: ReactNode;
   emptyState: ReactNode;
   primaryCategory: ReactNode;
   copy: { title: string; caption?: string; syncErrorText: string };
 }
 
+interface PipelineInput {
+  content?: { id: string; label: string } | null;
+  extraRefreshKey?: unknown;
+}
+
 const mocks = vi.hoisted(() => ({
   douyin: vi.fn(),
   scaffold: { last: null as ScaffoldProps | null },
+  pipeline: { last: null as PipelineInput | null },
+  // The auto-transcribe pipeline singleton the view subscribes to, as a
+  // mutable snapshot (the real one lives in auto-transcribe-runtime.ts).
+  transcribeState: {
+    phase: 'idle',
+    prerequisiteBlocked: null as string | null,
+    currentVideoTitle: '',
+    currentVideoId: '',
+    currentVideo: null as { cover: string; title: string; author: string; duration: number } | null,
+    totalVideos: 0,
+    currentIndex: 0,
+    videoProgress: 0,
+    videoStage: '',
+    waitSeconds: 0,
+    quotaResetAt: null,
+    stats: { existing: 0, cc: 0, asr: 0, skipped: 0, remaining: 0 },
+  },
 }));
 
 vi.mock('./use-douyin-favorites', () => ({ useDouyinFavorites: () => mocks.douyin() }));
+
+vi.mock('./auto-transcribe-runtime', () => ({
+  douyinAutoTranscribePipeline: {
+    subscribe: () => () => undefined,
+    getSnapshot: () => mocks.transcribeState,
+  },
+}));
 
 vi.mock('../../components/collection', () => ({
   CollectionPageScaffold: (props: ScaffoldProps) => {
@@ -42,12 +73,15 @@ vi.mock('../../components/collection', () => ({
         <div data-slot="empty">
           {props.libraryCount === 0 && !props.authFailed ? props.emptyState : null}
         </div>
+        <div data-slot="operation">{props.operation}</div>
+        <div data-slot="notice">{props.configurationNotice}</div>
         <div data-slot="primary">{props.primaryCategory}</div>
       </div>
     );
   },
   PipelineProgressStrip: () => <div data-slot="pipeline" />,
   CollectionCard: () => null,
+  CollectionCardRow: () => null,
   CoverBadge: () => null,
   CardGridSkeleton: () => null,
   CollectionCardSkeleton: () => null,
@@ -59,11 +93,16 @@ vi.mock('../../components/tags', () => ({
 }));
 
 vi.mock('../../components/configuration-blocker', () => ({
-  CollectionConfigurationNotice: () => <div data-slot="configuration-notice" />,
+  CollectionConfigurationNotice: (props: { prerequisiteBlocked?: string | null }) => (
+    <div data-slot="configuration-notice" data-prerequisite={props.prerequisiteBlocked ?? ''} />
+  ),
 }));
 
 vi.mock('../../hooks/use-collection-pipeline', () => ({
-  useCollectionPipeline: () => ({ coverage: null, coverageStatus: 'loading', segments: [] }),
+  useCollectionPipeline: (input: PipelineInput) => {
+    mocks.pipeline.last = input;
+    return { coverage: null, coverageStatus: 'loading', segments: [] };
+  },
 }));
 
 vi.mock('../../components/iconify', () => ({
@@ -129,6 +168,13 @@ describe('DouyinView', () => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
     mocks.scaffold.last = null;
+    mocks.pipeline.last = null;
+    mocks.transcribeState = {
+      ...mocks.transcribeState,
+      phase: 'idle',
+      prerequisiteBlocked: null,
+      currentVideo: null,
+    };
     mocks.douyin.mockReturnValue(hookState());
     container = document.createElement('div');
     document.body.append(container);
@@ -246,5 +292,42 @@ describe('DouyinView', () => {
     render();
 
     expect(container.querySelector('[data-slot="primary"]')?.children).toHaveLength(0);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Transcription (docs/37 Step 3): the content stage, the prerequisite banner
+  // and the progress bar all come from the platform's auto-transcribe pipeline.
+  // ---------------------------------------------------------------------------
+
+  it('declares the transcription content stage over the transcribe job and refreshes coverage on its signals', () => {
+    render();
+
+    expect(mocks.pipeline.last?.content).toMatchObject({ id: 'transcription', label: 'pipeline.transcription' });
+    expect(mocks.pipeline.last?.extraRefreshKey).toBe('false:0');
+  });
+
+  it('hands the prerequisite the session is parked on to the configuration notice', () => {
+    mocks.transcribeState = { ...mocks.transcribeState, phase: 'configuration_required', prerequisiteBlocked: 'platform-tab' };
+
+    render();
+
+    expect(container.querySelector('[data-slot="configuration-notice"]')?.getAttribute('data-prerequisite'))
+      .toBe('platform-tab');
+  });
+
+  it('shows the running auto-transcribe bar with the current video in the operation slot', () => {
+    mocks.transcribeState = {
+      ...mocks.transcribeState,
+      phase: 'transcribing',
+      totalVideos: 3,
+      currentIndex: 1,
+      currentVideo: { cover: '', title: 'Clip A', author: 'Alice', duration: 61 },
+    };
+
+    const props = render();
+
+    expect(props.operationScope).toBe('primary-category');
+    expect(container.querySelector('[data-slot="operation"]')?.textContent).toContain('Clip A');
+    expect(mocks.pipeline.last?.extraRefreshKey).toBe('true:0');
   });
 });

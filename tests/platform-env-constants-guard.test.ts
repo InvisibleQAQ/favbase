@@ -102,6 +102,7 @@ const EXPECTED_ENV_CONSTANTS: ReadonlyArray<{
   { file: 'lib/douyin/douyin-sync-service.ts', key: 'VITE_DOUYIN_TITLE_MAX_CHARS', fallback: 140 },
   { file: 'lib/douyin/douyin-api.ts', key: 'VITE_DOUYIN_DETAIL_DELAY_MIN_MS', fallback: 5_000 },
   { file: 'lib/douyin/douyin-api.ts', key: 'VITE_DOUYIN_DETAIL_DELAY_JITTER_MS', fallback: 3_000 },
+  { file: 'lib/douyin/auto-transcribe-adapter.ts', key: 'VITE_DOUYIN_TAB_POLL_MS', fallback: 5_000 },
 ];
 
 /** Module-level `const NAME = <number-ish literal/arith>` (arrays/strings/objects never match). */

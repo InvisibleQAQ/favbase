@@ -137,7 +137,7 @@
 - 每个平台两份：`lib/<platform>/` 与 `entrypoints/app/sections/<platform>/`（github 的 section 目录叫 `github-stars`；bilibili 另有 `lib/bilibili/inject/`）
 - `lib/{ai,embedding,tagging,summary,sync,export,permissions,events,hooks,i18n,offscreen}/`
 - `entrypoints/`、`entrypoints/app/`、`entrypoints/app/{pages,utils,sections}/`、`entrypoints/app/sections/{overview,settings,settings/embedding,chat,collections}/`
-- `entrypoints/app/components/{label,empty-content,custom-breadcrumbs,custom-popover,scrollbar,snackbar,loading-screen,chart,iconify,settings,library-gate,configuration-blocker}/`
+- `entrypoints/app/components/{label,empty-content,custom-breadcrumbs,custom-popover,scrollbar,snackbar,loading-screen,chart,iconify,settings,library-gate,configuration-blocker,auto-transcribe}/`
 - `entrypoints/welcome/`、`entrypoints/bilibili-video.content/` 及其 `components/`、`hooks/`
 - `scripts/`
 

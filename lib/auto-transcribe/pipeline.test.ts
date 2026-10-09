@@ -64,8 +64,8 @@ function makeAdapter(
   return {
     transcribe: vi.fn(),
     markError: vi.fn().mockResolvedValue(undefined),
-    hasAsrKey: vi.fn().mockResolvedValue(true),
-    waitForAsrKey: vi.fn().mockResolvedValue(undefined),
+    missingPrerequisite: vi.fn().mockResolvedValue(null),
+    waitForPrerequisite: vi.fn().mockResolvedValue(undefined),
     getQuotaPause: vi.fn().mockResolvedValue(null),
     setQuotaPause: vi.fn().mockResolvedValue(undefined),
     createStatusListener: vi.fn(() => () => undefined),
@@ -103,6 +103,32 @@ function unknownFailure(): TranscribeResponse {
     error: {
       code: 'ASR_UNKNOWN',
       message: 'transcription failed',
+    },
+  };
+}
+
+/** The adapter judgement a platform makes for a missing ASR key (lib/bilibili). */
+const asrKeyMissing: AutoTranscribeAdapter['missingPrerequisite'] = async (error) =>
+  error.code === 'ASR_INVALID_KEY' ? 'asr' : null;
+
+function tabMissing(): TranscribeResponse {
+  return {
+    success: false,
+    error: {
+      code: 'DOUYIN_TAB_MISSING',
+      message: 'no usable tab',
+      params: { reason: 'closed' },
+    },
+  };
+}
+
+function platformRateLimited(retryAfter: number): TranscribeResponse {
+  return {
+    success: false,
+    error: {
+      code: 'DOUYIN_RATE_LIMITED',
+      message: 'HTTP 403',
+      retryAfter,
     },
   };
 }
@@ -177,12 +203,12 @@ describe('AutoTranscribePipeline streaming session', () => {
     const transcribe = vi.fn()
       .mockResolvedValueOnce(missingAsrConfiguration())
       .mockResolvedValueOnce(success());
-    const waitForAsrKey = vi.fn(() => configured.promise);
+    const waitForPrerequisite = vi.fn(() => configured.promise);
     const checkpoint = vi.fn(async () => undefined);
     const pipeline = new AutoTranscribePipeline(makeAdapter({
       transcribe,
-      hasAsrKey: vi.fn().mockResolvedValue(false),
-      waitForAsrKey,
+      missingPrerequisite: asrKeyMissing,
+      waitForPrerequisite,
     }));
 
     try {
@@ -193,8 +219,13 @@ describe('AutoTranscribePipeline streaming session', () => {
 
       await waitForState(pipeline, (state) => state.phase === 'configuration_required');
       expect(transcribe).toHaveBeenCalledOnce();
-      expect(waitForAsrKey).toHaveBeenCalledOnce();
+      // The wait is handed the error the item was parked on.
+      expect(waitForPrerequisite).toHaveBeenCalledOnce();
+      expect(waitForPrerequisite).toHaveBeenCalledWith(
+        expect.objectContaining({ code: 'ASR_INVALID_KEY' }),
+      );
       expect(pipeline.getSnapshot()).toMatchObject({
+        prerequisiteBlocked: 'asr',
         currentVideoId: 'BV-NEEDS-ASR',
         currentIndex: 0,
         stats: { skipped: 0, remaining: 1 },
@@ -209,6 +240,7 @@ describe('AutoTranscribePipeline streaming session', () => {
 
       expect(pipeline.getSnapshot()).toMatchObject({
         phase: 'done',
+        prerequisiteBlocked: null,
         currentIndex: 1,
         stats: { skipped: 0, remaining: 0 },
       });
@@ -228,8 +260,8 @@ describe('AutoTranscribePipeline streaming session', () => {
     const waitForAsrKey = vi.fn(() => configured.promise);
     const pipeline = new AutoTranscribePipeline(makeAdapter({
       transcribe,
-      hasAsrKey: vi.fn().mockResolvedValue(false),
-      waitForAsrKey,
+      missingPrerequisite: asrKeyMissing,
+      waitForPrerequisite: waitForAsrKey,
     }));
 
     try {
@@ -245,7 +277,7 @@ describe('AutoTranscribePipeline streaming session', () => {
       ]);
       expect(waitForAsrKey).toHaveBeenCalledOnce();
       expect(pipeline.getSnapshot()).toMatchObject({
-        asrBlocked: true,
+        prerequisiteBlocked: 'asr',
         currentIndex: 1,
         stats: { remaining: 1 },
       });
@@ -253,7 +285,7 @@ describe('AutoTranscribePipeline streaming session', () => {
       await vi.advanceTimersByTimeAsync(20_000);
       expect(pipeline.getSnapshot()).toMatchObject({
         phase: 'configuration_required',
-        asrBlocked: true,
+        prerequisiteBlocked: 'asr',
       });
 
       configured.resolve();
@@ -265,7 +297,7 @@ describe('AutoTranscribePipeline streaming session', () => {
 
       expect(pipeline.getSnapshot()).toMatchObject({
         phase: 'done',
-        asrBlocked: false,
+        prerequisiteBlocked: null,
         currentIndex: 2,
         stats: { remaining: 0 },
       });
@@ -286,8 +318,8 @@ describe('AutoTranscribePipeline streaming session', () => {
     const waitForAsrKey = vi.fn(() => configured.promise);
     const pipeline = new AutoTranscribePipeline(makeAdapter({
       transcribe,
-      hasAsrKey: vi.fn().mockResolvedValue(false),
-      waitForAsrKey,
+      missingPrerequisite: asrKeyMissing,
+      waitForPrerequisite: waitForAsrKey,
     }));
 
     try {
@@ -303,7 +335,7 @@ describe('AutoTranscribePipeline streaming session', () => {
       ]);
       expect(waitForAsrKey).toHaveBeenCalledOnce();
       expect(pipeline.getSnapshot()).toMatchObject({
-        asrBlocked: true,
+        prerequisiteBlocked: 'asr',
         currentIndex: 0,
         stats: { remaining: 2 },
       });
@@ -323,10 +355,131 @@ describe('AutoTranscribePipeline streaming session', () => {
 
       expect(pipeline.getSnapshot()).toMatchObject({
         phase: 'done',
-        asrBlocked: false,
+        prerequisiteBlocked: null,
         currentIndex: 2,
         stats: { remaining: 0 },
       });
+    } finally {
+      pipeline.dispose();
+    }
+  });
+
+  it("parks an item on a 'platform-tab' prerequisite and re-queues it in order once the adapter says the tab is back", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const tabBack = deferred<void>();
+    const transcribe = vi.fn()
+      .mockResolvedValueOnce(tabMissing())
+      .mockResolvedValueOnce(success())
+      .mockResolvedValueOnce(success());
+    const waitForPrerequisite = vi.fn(() => tabBack.promise);
+    const checkpoint = vi.fn(async () => undefined);
+    const pipeline = new AutoTranscribePipeline(makeAdapter({
+      transcribe,
+      // What the Douyin adapter answers when the tab really is gone (docs/37 D5).
+      missingPrerequisite: async (error) =>
+        error.code === 'DOUYIN_TAB_MISSING' ? 'platform-tab' : null,
+      waitForPrerequisite,
+    }));
+
+    try {
+      const session = pipeline.createSession();
+      session.append([video('DY-1'), video('DY-2')]);
+      session.close();
+      const run = session.run({ checkpoint });
+
+      await vi.waitFor(() => expect(transcribe).toHaveBeenCalledTimes(2));
+      expect(waitForPrerequisite).toHaveBeenCalledOnce();
+      expect(waitForPrerequisite).toHaveBeenCalledWith(
+        expect.objectContaining({ code: 'DOUYIN_TAB_MISSING' }),
+      );
+      expect(pipeline.getSnapshot()).toMatchObject({
+        prerequisiteBlocked: 'platform-tab',
+        stats: { skipped: 0, remaining: 1 },
+      });
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(pipeline.getSnapshot()).toMatchObject({ phase: 'configuration_required' });
+      const checkpointsBeforeResume = checkpoint.mock.calls.length;
+
+      tabBack.resolve();
+      await vi.waitFor(() => expect(transcribe).toHaveBeenCalledTimes(3));
+      // The parked item comes back in its original place, through a checkpoint.
+      expect(transcribe.mock.calls.map(([videoId]) => videoId)).toEqual(['DY-1', 'DY-2', 'DY-1']);
+      expect(checkpoint.mock.calls.length).toBe(checkpointsBeforeResume + 1);
+      expect(pipeline.getSnapshot().prerequisiteBlocked).toBeNull();
+      await vi.advanceTimersByTimeAsync(20_000);
+      await run;
+
+      expect(pipeline.getSnapshot()).toMatchObject({
+        phase: 'done',
+        prerequisiteBlocked: null,
+        currentIndex: 2,
+        stats: { skipped: 0, remaining: 0 },
+      });
+    } finally {
+      pipeline.dispose();
+    }
+  });
+
+  it('retries a platform rate limit once after its retryAfter, then marks the item on a second failure', async () => {
+    vi.useFakeTimers();
+    const transcribe = vi.fn()
+      .mockResolvedValueOnce(platformRateLimited(2))
+      .mockResolvedValueOnce(platformRateLimited(2));
+    const markError = vi.fn().mockResolvedValue(undefined);
+    const pipeline = new AutoTranscribePipeline(makeAdapter({ transcribe, markError }));
+
+    try {
+      const session = pipeline.createSession();
+      session.append([video('DY-1')]);
+      session.close();
+      const run = session.run();
+      await waitForState(pipeline, (state) => state.phase === 'paused');
+
+      // Judged by the shape (a `retryAfter`), not by the ASR code.
+      expect(pipeline.getSnapshot().waitSeconds).toBe(2);
+      await vi.advanceTimersByTimeAsync(1_999);
+      expect(transcribe).toHaveBeenCalledOnce();
+      await vi.advanceTimersByTimeAsync(1);
+      await vi.waitFor(() => expect(transcribe).toHaveBeenCalledTimes(2));
+      await run;
+
+      expect(markError).toHaveBeenCalledWith('DY-1');
+      expect(pipeline.getSnapshot()).toMatchObject({
+        phase: 'done',
+        stats: { skipped: 1, remaining: 0 },
+      });
+    } finally {
+      pipeline.dispose();
+    }
+  });
+
+  it('judges a daily quota before the retryAfter shape: a quota response pauses, it is not retried as a rate limit', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const quota = dailyQuotaExceeded();
+    if (!quota.success) quota.error.resetAt = 5_000;
+    const transcribe = vi.fn()
+      .mockResolvedValueOnce(quota)
+      .mockResolvedValue(success());
+    const pipeline = new AutoTranscribePipeline(makeAdapter({ transcribe }));
+
+    try {
+      const session = pipeline.createSession();
+      session.append([video('BV-1')]);
+      session.close();
+      const run = session.run();
+
+      await waitForState(pipeline, (state) => state.phase === 'quota_paused');
+      expect(pipeline.getSnapshot()).toMatchObject({ phase: 'quota_paused', quotaResetAt: 5_000 });
+      expect(transcribe).toHaveBeenCalledOnce();
+
+      await vi.advanceTimersByTimeAsync(4_000);
+      await vi.waitFor(() => expect(transcribe).toHaveBeenCalledTimes(2));
+      await vi.advanceTimersByTimeAsync(20_000);
+      await run;
+      expect(pipeline.getSnapshot()).toMatchObject({ phase: 'done', stats: { skipped: 0 } });
     } finally {
       pipeline.dispose();
     }

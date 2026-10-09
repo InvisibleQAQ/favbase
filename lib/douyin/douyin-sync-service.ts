@@ -158,6 +158,15 @@ export interface SyncDouyinOptions {
    * enters 'pending' and is dispatched by the transcription seam.
    */
   onPagePersisted?: (platformItemIds: string[]) => void;
+  /**
+   * Transcribable videos (`isTranscribableAweme`) newly inserted by one
+   * persisted page, in page order — the Transcript producer's streaming input
+   * (docs/37 Step 3). Derived from `result.inserted`, so an item already
+   * stored (a folder page re-listing what the head walk inserted) is never
+   * here (insert-only); the run's own D7 backlog pass catches what an
+   * earlier, lost session left 'pending'.
+   */
+  onVideosPending?: (videos: DouyinPendingVideo[]) => void;
   onProgress?: DouyinProgressCallback;
   control?: CooperativeCheckpoint;
   /** Test seam; production uses `createDouyinPacer()`. */
@@ -196,6 +205,13 @@ export interface DouyinItem {
   originalUrl: string;
   /** Publish time — Douyin has no per-item favorite time. */
   publishedAt: Date | null;
+  /**
+   * How the Content was obtained when it is a transcript (the card's CC /
+   * ASR badge). `null` = post text or no content yet; `undefined` = this row
+   * did not come through the paged query (the tagged card rebuilds a row
+   * without the content column), NOT "no transcript".
+   */
+  subtitleSource?: SubtitleSource | null;
 }
 
 export interface DouyinQuery {
@@ -289,6 +305,14 @@ export async function syncDouyinCollectionsToDb(
     report(result);
     const dropped = new Set(result.droppedItemIds);
     for (const aweme of awemes) if (!dropped.has(aweme.id)) known.add(aweme.id);
+    // The other input of the Transcript producer: what this page inserted
+    // AND is transcribable. By `inserted`, not by the page — a folder page
+    // re-lists videos the head walk already stored.
+    const insertedIds = new Set(result.inserted.map((item) => item.platformItemId));
+    const pending = awemes
+      .filter((aweme) => insertedIds.has(aweme.id) && isTranscribableAweme(aweme))
+      .map(toPendingVideo);
+    if (pending.length > 0) opts.onVideosPending?.(pending);
   };
 
   // 1. Public folders → Sources. An empty public folder is still a Source.
@@ -386,6 +410,17 @@ function titleOf(aweme: DouyinRawAweme): string {
 function originalUrlOf(aweme: DouyinRawAweme): string {
   const kind = aweme.mediaKind === 'note' ? 'note' : 'video';
   return `https://www.douyin.com/${kind}/${aweme.id}`;
+}
+
+/** The producer's view of one just-inserted video — the same shape `getDouyinPendingVideos` returns. */
+function toPendingVideo(aweme: DouyinRawAweme): DouyinPendingVideo {
+  return {
+    awemeId: aweme.id,
+    title: titleOf(aweme),
+    coverUrl: aweme.coverUrl,
+    authorName: aweme.author.nickname,
+    durationMs: aweme.durationMs,
+  };
 }
 
 /** The desc is sentence-only text like a tweet: no paragraph preference. */
@@ -658,6 +693,7 @@ export function toDouyinItem(row: PagedItemRow): DouyinItem {
     title: row.title,
     originalUrl: row.originalUrl,
     publishedAt: row.publishedAt,
+    subtitleSource: row.subtitleSource,
     ...narrowDouyinMeta(row.platformMeta, { title: row.title, authorName: row.authorName }),
   };
 }

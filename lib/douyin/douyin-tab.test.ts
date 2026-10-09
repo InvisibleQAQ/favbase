@@ -11,11 +11,16 @@ import type { DouyinRequest, DouyinTransportResult } from './douyin-api';
 const browserMock = vi.hoisted(() => ({
   query: vi.fn(),
   executeScript: vi.fn(),
+  addListener: vi.fn(),
+  removeListener: vi.fn(),
 }));
 
 vi.mock('wxt/browser', () => ({
   browser: {
-    tabs: { query: browserMock.query },
+    tabs: {
+      query: browserMock.query,
+      onUpdated: { addListener: browserMock.addListener, removeListener: browserMock.removeListener },
+    },
     scripting: { executeScript: browserMock.executeScript },
   },
 }));
@@ -25,6 +30,7 @@ import {
   douyinPageFetch,
   douyinTabTransport,
   findDouyinTab,
+  waitForDouyinTabLoad,
 } from './douyin-tab';
 
 const POST: DouyinRequest = {
@@ -102,6 +108,68 @@ describe('findDouyinTab (the one resolver: tab gate, probeReady and transport)',
 
     browserMock.query.mockResolvedValue([]);
     await expect(findDouyinTab()).resolves.toBeNull();
+  });
+});
+
+describe('waitForDouyinTabLoad (the next completed load of a douyin.com tab, docs/37 Step 3 ruling 5)', () => {
+  type OnUpdated = (tabId: number, changeInfo: { status?: string }, tab: { id?: number; url?: string }) => void;
+
+  beforeEach(() => {
+    browserMock.addListener.mockReset();
+    browserMock.removeListener.mockReset();
+  });
+
+  function listener(): OnUpdated {
+    expect(browserMock.addListener).toHaveBeenCalledOnce();
+    return browserMock.addListener.mock.calls[0][0] as OnUpdated;
+  }
+
+  async function flush(): Promise<void> {
+    for (let i = 0; i < 3; i += 1) await Promise.resolve();
+  }
+
+  it('resolves when a douyin.com tab finishes loading, and removes its listener', async () => {
+    let settled = false;
+    const waiting = waitForDouyinTabLoad().then(() => {
+      settled = true;
+    });
+    const onUpdated = listener();
+
+    onUpdated(7, { status: 'complete' }, { id: 7, url: 'https://www.douyin.com/user/self?showTab=favorite_collection' });
+    await waiting;
+
+    expect(settled).toBe(true);
+    expect(browserMock.removeListener).toHaveBeenCalledWith(onUpdated);
+  });
+
+  it('ignores a douyin.com tab that is still loading and a completed tab on another host', async () => {
+    let settled = false;
+    void waitForDouyinTabLoad().then(() => {
+      settled = true;
+    });
+    const onUpdated = listener();
+
+    onUpdated(7, { status: 'loading' }, { id: 7, url: 'https://www.douyin.com/' });
+    onUpdated(8, { status: 'complete' }, { id: 8, url: 'https://www.bilibili.com/' });
+    onUpdated(9, { status: 'complete' }, { id: 9, url: 'https://evil.example/https://www.douyin.com/' });
+    await flush();
+
+    expect(settled).toBe(false);
+    expect(browserMock.removeListener).not.toHaveBeenCalled();
+  });
+
+  it('ignores an update whose tab reports no url', async () => {
+    let settled = false;
+    void waitForDouyinTabLoad().then(() => {
+      settled = true;
+    });
+    const onUpdated = listener();
+
+    onUpdated(7, { status: 'complete' }, { id: 7 });
+    await flush();
+
+    expect(settled).toBe(false);
+    expect(browserMock.removeListener).not.toHaveBeenCalled();
   });
 });
 

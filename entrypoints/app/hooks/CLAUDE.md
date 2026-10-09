@@ -67,10 +67,18 @@ app.html 专用的共享 hooks 与页面运行时 job 调度（只跑在 Extensi
 - `resolveCollectionPhase`（`collection-phase.ts`）的分支顺序即契约：view 只做 `switch(phase)`，不各自排优先级。
 - pipeline 段的形状只在 `collectionPipelineStages` 声明（Fetch → 可选 content 段 → Embedding → Tagging），view 经 `useCollectionPipeline` 消费，不手写 stages 数组。
 - pipeline 段是纯展示快照，没有段级 pause / resume：运行控制只归 per-platform 闸门（`library-gate.ts` + `components/library-gate/`）。
+- `transcriptionStage`（`pipeline-segments.ts`）是转录平台共享的 content 段：runtime 读该平台的 `transcribe` job（手动与自动转录共用同一个 key），view 不自己拼段对象。
 - 进度契约：Fetch 段完成后保留本次总数并显示 100%（`completedProgress: 'last-run'`）；同步进度带 `fetchedCount`、远端总数未知的平台用 `fetchedCountProgress`，其余用默认 `readJobProgress`。
 - `useCollectionBreadcrumbs` 是收藏路由祖先的唯一 owner，每个平台收藏页 view 必须调用它（守卫：同一契约测试）。末项永远无 href；文案取导航名（`nav.*`），可能与页面 h1 不逐字相同（聚合页 h1「全部收藏」/ 末项「收藏夹」）。
 - 面包屑只给必经层级加级：bilibili 详情页传 `leaf`（收藏夹名）；bookmarks 的 `:folderId` 不传——它是带「全部」chip 的可选筛选，不是层级。
 - `SEARCH_DEBOUNCE_MS` 只在 `use-collection-library.ts` 定义，其它收藏页 import 它。
+
+## Transcript lane（`transcript-lane.ts`）
+
+- 泛型层：一个平台一条 lane（`createTranscriptLane(pipeline, jobPlatform)`），Fetch producer 的 `append` 只收已映射的 `AutoTranscribeVideo[]`；资格判定与平台形状到 `AutoTranscribeVideo` 的映射留在各平台 section 的 `auto-transcribe-runtime.ts`，lane 不认识任何平台。
+- session 以 `startJob(jobPlatform, 'transcribe', …, 'queue')` 派发：手动单视频转录占着 key 时由 store 排队接续，不写重派发循环。
+- tail **按 lane**（= 按 pipeline 实例）串行，不跨平台：否则 B站的自动转录会排在抖音几百条积压后面。
+- 已知缺口（v1 接受）：B站与抖音两条 session 可以同时从同一个 app.html 标签页发 `TRANSCRIBE_AUDIO`，而 SW 的 `lib/background/job-registry.ts` 一个 tab 只记一个转录 job——后发者顶掉前者的 controller 与 videoId：B站手动取消会中止最近登记的那条，被顶掉的视频失去去重，Offscreen 进度会算到后者头上。要么以后共用一条转录队列，要么 registry 按 `(tabId, platform)` 键。
 
 ## 坑
 

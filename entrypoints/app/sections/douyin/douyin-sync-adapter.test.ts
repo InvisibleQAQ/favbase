@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   findDouyinTab: vi.fn(),
   transport: vi.fn(),
   syncDouyinCollections: vi.fn(),
+  runStreaming: vi.fn(),
   runPlatformSync: vi.fn(),
   enqueue: vi.fn(),
   getBackfill: vi.fn(),
@@ -28,14 +29,18 @@ vi.mock('@/lib/douyin/douyin-tab', () => ({
   douyinTabTransport: mocks.transport,
 }));
 vi.mock('@/lib/douyin/douyin-sync-service', () => ({
-  syncDouyinCollections: mocks.syncDouyinCollections,
   DouyinAuthError: mocks.DouyinAuthError,
+}));
+// The transcription runtime (dynamically imported inside the funnel) wraps the
+// domain sync; here it is the domain sync, so the options reach the same spy.
+vi.mock('./auto-transcribe-runtime', () => ({
+  runDouyinStreamingSync: mocks.runStreaming,
+}));
+vi.mock('./douyin-processing-adapter', () => ({
+  enqueueDouyinCollectionProcessing: mocks.enqueue,
 }));
 vi.mock('@/lib/storage', () => ({
   douyinBackfillStorage: { getValue: mocks.getBackfill, setValue: mocks.setBackfill },
-}));
-vi.mock('../../hooks/collection-processing-jobs', () => ({
-  enqueueCollectionProcessingItem: mocks.enqueue,
 }));
 // The funnel (record + dispatch) has its own tests; here it is a passthrough
 // that runs the adapter's sync closure and keeps what it reported.
@@ -65,6 +70,9 @@ describe('douyin Sync Adapter (shared by manual page + daily auto-sync)', () => 
     mocks.syncDouyinCollections
       .mockReset()
       .mockResolvedValue({ fetched: 0, inserted: 0, folders: 0, newItemIds: [] });
+    mocks.runStreaming
+      .mockReset()
+      .mockImplementation((transport: unknown, opts: SyncDouyinOptions) => mocks.syncDouyinCollections(transport, opts));
     mocks.runPlatformSync
       .mockReset()
       .mockImplementation(async (_platform, _control, sync: () => Promise<PlatformSyncOutcome>) => {
@@ -80,18 +88,19 @@ describe('douyin Sync Adapter (shared by manual page + daily auto-sync)', () => 
     await expect(run).rejects.toBeInstanceOf(mocks.DouyinAuthError);
     await expect(run).rejects.toMatchObject({ reason: 'missing' });
     // Not an attempt: no Platform Sync Record, the platform never contacted,
-    // the breakpoint never read.
+    // the breakpoint never read, the transcription runtime never loaded.
     expect(mocks.runPlatformSync).not.toHaveBeenCalled();
+    expect(mocks.runStreaming).not.toHaveBeenCalled();
     expect(mocks.syncDouyinCollections).not.toHaveBeenCalled();
     expect(mocks.getBackfill).not.toHaveBeenCalled();
   });
 
-  it('runs the domain sync inside the funnel through the tab transport, with the stored breakpoint and the checkpoint', async () => {
+  it('runs the domain sync inside the funnel, through the streaming transcription runtime and the tab transport, with the stored breakpoint and the checkpoint', async () => {
     await runDouyinSync(() => undefined, control);
 
     expect(mocks.runPlatformSync).toHaveBeenCalledWith('douyin', control, expect.any(Function));
-    expect(mocks.syncDouyinCollections).toHaveBeenCalledTimes(1);
-    expect(mocks.syncDouyinCollections.mock.calls[0][0]).toBe(mocks.transport);
+    expect(mocks.runStreaming).toHaveBeenCalledTimes(1);
+    expect(mocks.runStreaming.mock.calls[0][0]).toBe(mocks.transport);
     expect(syncOptions()).toMatchObject({ backfill: STORED, control });
   });
 
@@ -126,12 +135,13 @@ describe('douyin Sync Adapter (shared by manual page + daily auto-sync)', () => 
 
     await runDouyinSync(() => undefined, control);
 
-    // Dispatched as each page lands, not at the end of the run.
+    // Dispatched as each page lands, not at the end of the run, through the
+    // processing adapter the transcription seam shares.
     expect(enqueuedAfterFirstPage).toBe(2);
     expect(mocks.enqueue.mock.calls.map((call) => call[0])).toEqual([
-      { jobPlatform: 'douyin', itemPlatform: 'douyin', itemId: '7300000000000000001' },
-      { jobPlatform: 'douyin', itemPlatform: 'douyin', itemId: '7300000000000000002' },
-      { jobPlatform: 'douyin', itemPlatform: 'douyin', itemId: '7300000000000000003' },
+      '7300000000000000001',
+      '7300000000000000002',
+      '7300000000000000003',
     ]);
     // ...so the funnel gets no batch to dispatch a second time.
     expect(outcome).toEqual({ fetched: 3, inserted: 3, newItemIds: [] });

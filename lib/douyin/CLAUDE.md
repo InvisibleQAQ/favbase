@@ -49,6 +49,16 @@
 - 折算表（docs/37 §4.3）：T1 无标签页 / T2 unreachable 耗尽 → `DOUYIN_TAB_MISSING` + `reason: 'closed'`；T4′ 验证页（`resetAt: null`）→ `'verify'`；T5 未登录 → `'login'`；T2′ / T3 → `DOUYIN_SIGNATURE_REJECTED` + `reason: 'sdk-not-ready' | 'argus'`；T4 与空 payload（`resetAt` 非空）→ `DOUYIN_RATE_LIMITED` + `retryAfter`（秒，只有这一个字段，不借 ASR quota 的 `resetAt` / `providerId`）；T6 → `DOUYIN_MEDIA_UNAVAILABLE` + `reason`；T7 → `ASR_NO_AUDIO_SOURCE`；T11 `DouyinStatusError` → `ASR_UNKNOWN`。
 - `fetchOfficialSubtitle` 恒 `null`（Step 0：`cla_info` 零样本），`postProcess` 恒等（D-b），cache 用 `'douyin'` 命名空间。
 
+## 自动转录 adapter（docs/37 Step 3）
+
+- `auto-transcribe-adapter.ts` 是本平台的 `AutoTranscribeAdapter`，与 B站同形；ASR 半边（有没有 key、等 key、quota guard）是共享的 `lib/storage/asr-prerequisite.ts`，不在这里抄。它合法 import `@/lib/storage` 与 `./douyin-tab`，所以不在 import-smoke 清单里；sync-service 与 SW handler 都不得 import 它。
+- `missingPrerequisite` 按此刻判：`DOUYIN_TAB_MISSING` + `closed` 只在 `findDouyinTab()` 为 null 时算前置条件缺失（标签页在、请求抖了一下 = 普通单条失败，否则停放 → 立刻恢复 → 重入队 → 再失败，空转）；`login` / `verify` 与 `DOUYIN_SIGNATURE_REJECTED` 不查标签页就算缺失。
+- `DOUYIN_SIGNATURE_REJECTED` 算前置条件缺失、不标 `'error'`（对 docs/37 §4.3 T2′ / T3 的有意偏离）：修复动作是用户刷新标签页，与 login / verify 同类；SDK 一失效就逐条落 `'error'`，v1 没有重试入口。
+- 等「用户对标签页做了动作」（login / verify / signature）期间 `transcribe()` 短路返回停放时的那条错误：pipeline 把后续条目一并停放，不再逐条发节奏化的签名请求打到登录 / 验证墙上。`closed` 不短路：SW 的 T1 门零请求，cache 命中仍能成功（D7 重开后不重复转录）。
+- 三种等待：ASR key → 共享 settings watcher；`closed` → 轮询 `findDouyinTab()`，间隔 `VITE_DOUYIN_TAB_POLL_MS`（只管这一种）；login / verify / signature → `waitForDouyinTabLoad()`（`tabs.onUpdated` 的下一次 douyin.com 标签页 `complete`）。轮询 `findDouyinTab()` 在登录墙上会立刻 resolve 而空转，所以后者等的是「用户动过标签页」最便宜的证据。
+- 上一条的代价：页内完成登录 / 验证而不刷新不会自动恢复，横幅文案明说「完成后刷新该标签页」。`waitForDouyinTabLoad` 从不碰标签页。
+- `onVideosPending` 与 `onPagePersisted` 是两条输入源：前者按 `result.inserted` 算（夹内页会重新列出 head 已入库的视频，insert-only 下它们不在 `inserted` 里，不得重复入队），只含 `isTranscribableAweme` 的；后者是图文 / 无时长视频 / 治愈的幽灵。两者共用 `DouyinPendingVideo` 一个形状。
+
 ## 坑
 
 - 本目录非测试文件里不要写含「斜杠 + 星号」的字符串字面量（如 URL 匹配模式）：env 常量守卫与裸 fetch 守卫用朴素正则剥块注释，这种字面量会把其后到下一个块注释结尾之间的代码从扫描里藏起来。标签页 URL 因此从 descriptor 的 `hostPermissions` 读。

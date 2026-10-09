@@ -17,6 +17,7 @@ Offscreen Document 持有唯一的 PGlite；app.html 经 3-hop Port 中继（app
 - `escapeLike` 是 ILIKE 注入的唯一防线，只保留这一份。收藏页搜索一律经 `collection-queries.ts` 的 `searchCondition`，不要各自拼 `ilike`。
 - `collection-queries.ts` 的查询片段 builder 平台参数刻意是 `string` 而不是 `CollectionPlatform`：新平台的 lib 层要能先于判别符翻转建成并测绿。
 - 可选筛选片段在无筛选时返回 `undefined`，调用方无条件 push，由 `and()` 丢掉。
+- `pagedItemsQuery` LEFT JOIN `item_contents` 只为带出 `subtitleSource`（`item_id` 是主键，不乘行；count 查询不 join）。`PagedItemRow.subtitleSource` 三值：`undefined` = 这一行不是经分页查询来的（tagged card 从 tagging 行重建，没有这列），`null` = 正文不是转录或还没有正文，否则是转录方法。卡片画 CC / ASR 角标只认后者，别把 `undefined` 当「没有字幕」。
 - 「上次同步」读 Platform Sync Record 的 `last_success_at`，不是 `max(sources.lastFetchedAt)`：失败与空库同步从不写 source 行，旧读法会把它们读成「从未同步」。
 - Platform Sync Record 的读写只在 `platform-sync-record.ts`，唯一写入方是 app 侧 funnel `entrypoints/app/hooks/platform-sync.ts`。它是设备本地状态，见 `entities/CLAUDE.md`。
 

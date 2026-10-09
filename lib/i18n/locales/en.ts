@@ -335,6 +335,7 @@ const en: Record<LocaleKeys, string> = {
   'autoTranscribe.quotaPausedNoReset': 'Auto transcription is paused and will resume automatically after the quota resets.',
   'configurationBlocker.title': 'Configuration required',
   'configurationBlocker.asr': 'A video without official subtitles is waiting for ASR transcription.',
+  'configurationBlocker.platformTab': 'Videos in {{platform}} are waiting for a logged-in site tab: open the site and sign in and they continue automatically; after signing in or passing a check, reload that tab.',
   'configurationBlocker.embedding': '{{count}} items are waiting for embeddings.',
   'configurationBlocker.embedding.one': '{{count}} item is waiting for embeddings.',
   'configurationBlocker.llm': '{{count}} items are waiting for AI tags.',

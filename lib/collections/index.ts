@@ -33,5 +33,6 @@ export {
   type ConfigurationBlocker,
   type ConfigurationCapability,
   type DeriveConfigurationBlockersInput,
+  type TranscribePrerequisite,
 } from './configuration-blockers';
 export type { CooperativeCheckpoint } from './cooperative-checkpoint';

@@ -15,7 +15,7 @@ import type { TranscribeErrorInfo } from '@/lib/transcription/types';
 
 const INITIAL_STATE: AutoTranscribeState = {
   phase: 'idle',
-  asrBlocked: false,
+  prerequisiteBlocked: null,
   currentVideoTitle: '',
   currentVideoId: '',
   currentVideo: null,
@@ -27,8 +27,6 @@ const INITIAL_STATE: AutoTranscribeState = {
   quotaResetAt: null,
   stats: { existing: 0, cc: 0, asr: 0, skipped: 0, remaining: 0 },
 };
-
-const DEFAULT_RATE_LIMIT_PAUSE_SECONDS = 60;
 
 export interface AutoTranscribeSession {
   append(videos: readonly AutoTranscribeVideo[]): void;
@@ -92,13 +90,14 @@ export class AutoTranscribePipeline {
     if (this.isActive()) throw new Error('Auto-transcribe session already active');
 
     const queue: AutoTranscribeVideo[] = [];
-    const blockedAsr: AutoTranscribeVideo[] = [];
+    /** Items parked on a missing prerequisite; re-queued in order once it is back. */
+    const parked: AutoTranscribeVideo[] = [];
     const seen = new Set<string>();
     let closed = false;
     let started = false;
     let wake: (() => void) | null = null;
-    let asrWait: Promise<void> | null = null;
-    let asrWaitError: unknown = null;
+    let prerequisiteWait: Promise<void> | null = null;
+    let prerequisiteWaitError: unknown = null;
     this.sessionActive = true;
     this.state = { ...INITIAL_STATE };
     this.emit();
@@ -111,21 +110,23 @@ export class AutoTranscribePipeline {
     };
     this.closeActiveSession = close;
 
-    const watchForAsrConfiguration = (): void => {
-      if (asrWait) return;
+    // One wait per park episode: the first parked error picks how the adapter
+    // waits; items parked later join the same wait.
+    const watchForPrerequisite = (error: TranscribeErrorInfo): void => {
+      if (prerequisiteWait) return;
 
-      asrWait = this.adapter.waitForAsrKey().then(
+      prerequisiteWait = this.adapter.waitForPrerequisite(error).then(
         () => {
-          asrWait = null;
-          asrWaitError = null;
-          queue.unshift(...blockedAsr.splice(0));
-          this.patch({ asrBlocked: false, phase: 'transcribing' });
+          prerequisiteWait = null;
+          prerequisiteWaitError = null;
+          queue.unshift(...parked.splice(0));
+          this.patch({ prerequisiteBlocked: null, phase: 'transcribing' });
           wake?.();
           wake = null;
         },
-        (error: unknown) => {
-          asrWait = null;
-          asrWaitError = error;
+        (waitError: unknown) => {
+          prerequisiteWait = null;
+          prerequisiteWaitError = waitError;
           wake?.();
           wake = null;
         },
@@ -135,19 +136,19 @@ export class AutoTranscribePipeline {
     const waitForItem = async (): Promise<boolean> => {
       if (
         queue.length === 0
-        && blockedAsr.length > 0
+        && parked.length > 0
         && this.state.phase !== 'configuration_required'
       ) {
         this.patch({ phase: 'configuration_required' });
       }
-      while (queue.length === 0 && (!closed || blockedAsr.length > 0)) {
-        if (asrWaitError) throw asrWaitError;
+      while (queue.length === 0 && (!closed || parked.length > 0)) {
+        if (prerequisiteWaitError) throw prerequisiteWaitError;
         await new Promise<void>((resolve) => {
           wake = resolve;
         });
         wake = null;
       }
-      if (asrWaitError) throw asrWaitError;
+      if (prerequisiteWaitError) throw prerequisiteWaitError;
       return queue.length > 0;
     };
 
@@ -221,7 +222,7 @@ export class AutoTranscribePipeline {
 
             try {
               let response: Awaited<ReturnType<AutoTranscribeAdapter['transcribe']>>;
-              let parkedForAsr = false;
+              let parkedItem = false;
               let rateLimitRetried = false;
               while (true) {
                 response = await this.adapter.transcribe(
@@ -229,43 +230,41 @@ export class AutoTranscribePipeline {
                   item.title,
                   () => this.patch({ videoStage: 'indexing', videoProgress: 100 }),
                 );
-                if (
-                  !response.success
-                  && response.error.code === 'ASR_INVALID_KEY'
-                  && !(await this.adapter.hasAsrKey())
-                ) {
-                  blockedAsr.push(item);
-                  this.patch({
-                    phase: queue.length > 0 ? 'transcribing' : 'configuration_required',
-                    asrBlocked: true,
-                  });
-                  watchForAsrConfiguration();
-                  parkedForAsr = true;
-                  break;
-                }
-                if (
-                  !response.success
-                  && response.error.code === 'ASR_RATE_LIMIT'
-                  && !rateLimitRetried
-                ) {
-                  rateLimitRetried = true;
-                  const retryDelayMs = (
-                    response.error.retryAfter ?? DEFAULT_RATE_LIMIT_PAUSE_SECONDS
-                  ) * 1000;
-                  await this.waitWithCountdown(retryDelayMs, 'paused', ac.signal);
-                  this.patch({ phase: 'transcribing', videoProgress: 0, videoStage: 'start' });
-                  continue;
-                }
-                if (!response.success && response.error.code === 'ASR_QUOTA_EXCEEDED') {
-                  const resumable = await this.waitForQuota(response.error, ac.signal);
-                  if (!resumable) return;
-                  await control?.checkpoint();
-                  this.patch({ phase: 'transcribing', videoProgress: 0, videoStage: 'start' });
-                  continue;
+                if (!response.success) {
+                  // Order is the contract (docs/37 Step 3): a missing
+                  // prerequisite parks; a daily quota pauses the session; a
+                  // temporary limit — judged by its `retryAfter` shape, not by
+                  // a provider code — is retried once; anything else fails
+                  // the item. Quota comes before the shape check because a
+                  // quota error carries a `retryAfter` too.
+                  const prerequisite = await this.adapter.missingPrerequisite(response.error);
+                  if (prerequisite) {
+                    parked.push(item);
+                    this.patch({
+                      phase: queue.length > 0 ? 'transcribing' : 'configuration_required',
+                      prerequisiteBlocked: prerequisite,
+                    });
+                    watchForPrerequisite(response.error);
+                    parkedItem = true;
+                    break;
+                  }
+                  if (response.error.code === 'ASR_QUOTA_EXCEEDED') {
+                    const resumable = await this.waitForQuota(response.error, ac.signal);
+                    if (!resumable) return;
+                    await control?.checkpoint();
+                    this.patch({ phase: 'transcribing', videoProgress: 0, videoStage: 'start' });
+                    continue;
+                  }
+                  if (response.error.retryAfter !== undefined && !rateLimitRetried) {
+                    rateLimitRetried = true;
+                    await this.waitWithCountdown(response.error.retryAfter * 1000, 'paused', ac.signal);
+                    this.patch({ phase: 'transcribing', videoProgress: 0, videoStage: 'start' });
+                    continue;
+                  }
                 }
                 break;
               }
-              if (parkedForAsr) continue;
+              if (parkedItem) continue;
               if (response.success) {
                 const stats = { ...this.state.stats };
                 if (response.data.source === 'official') stats.cc += 1;
@@ -301,7 +300,7 @@ export class AutoTranscribePipeline {
 
           this.patch({
             phase: 'done',
-            asrBlocked: false,
+            prerequisiteBlocked: null,
             currentVideoTitle: '',
             currentVideoId: '',
             currentVideo: null,
@@ -312,7 +311,7 @@ export class AutoTranscribePipeline {
           if ((error as Error)?.name !== 'AbortError' && !ac.signal.aborted) {
             console.error('[auto-transcribe] Pipeline error:', error);
           }
-          this.patch({ phase: 'cancelled', asrBlocked: false });
+          this.patch({ phase: 'cancelled', prerequisiteBlocked: null });
         } finally {
           this.running = false;
           this.sessionActive = false;

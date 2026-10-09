@@ -27,6 +27,7 @@ Background Service Worker 的消息层：typed 消息协议与路由、各领域
 - 平台转录 handler 经 `transcription-handlers.ts` 的 `platformHandlers` 按 `msg.platform` 分发。平台 handler 只能 import `transcription-utils.ts`，import `transcription-handlers.ts` 会成环。
 - 抖音 handler（`lib/douyin/douyin-transcription-handler.ts`）的 `aweme/detail` 请求经 `browser.scripting.executeScript` 注入用户已打开的 douyin.com 标签页（`lib/douyin/douyin-tab.ts`），SW 不直连——该路径在 Argus 受保护表里，直连是 403。它把 `lib/douyin/` 的请求层带进了 SW 图，`douyin-sync-service`（PGlite）必须留在图外，守卫见 `tests/agent-bridge-background-bundle-contract.test.ts`。
 - `createTranscribeAudio` 的 extractor 返回候选 URL 列表，共享下载器 `fetchFirstAudioBlob` 逐条 fall-through；extractor 抛的 `TranscribeErrorInfo` / AbortError 原样透传（规则归 `lib/transcription/CLAUDE.md`）。
+- 已知缺口：转录 `job-registry` 按 tabId 键、一个 tab 只记一个转录 job，而 app.html 的 B站与抖音自动转录 session 可以并发从同一个 tab 发 `TRANSCRIBE_AUDIO`，后发者顶掉前者的 controller / videoId（取消与 Offscreen 进度会串台）。v1 接受，详见 `entrypoints/app/hooks/CLAUDE.md`「Transcript lane」。
 - Offscreen 进度消息的 sessionId 解析不到目标 tab 时，warn 后丢弃。
 - `FETCH_BOOKMARK_PAGE` 把任意站点的 fetch 隔离在没有 Document 的 SW 里：第三方响应的 HTTP Link preload / modulepreload 会污染 app.html 的 CSP。
 - `handleFetchBookmarkPage` 先校验 URL（拒 localhost、内网、非 HTTP(S)）。响应是结构化结果，不跨消息传 `Response` / `Headers`。

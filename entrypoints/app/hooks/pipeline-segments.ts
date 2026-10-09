@@ -89,6 +89,18 @@ export function backgroundJobRuntime<TProgress = unknown>(
   };
 }
 
+/**
+ * The transcription content stage shared by the transcribing platforms: the
+ * platform's one `transcribe` job (manual and automatic runs alike) as the
+ * stage runtime, so a paused library gate shows on the segment.
+ */
+export function transcriptionStage(
+  label: string,
+  transcribeJob: BackgroundJob | null,
+): CollectionPipelineContentStage {
+  return { id: 'transcription', label, runtime: backgroundJobRuntime(transcribeJob) };
+}
+
 /** Fetch progress adapter for sync jobs that report a running `fetchedCount` (remote total unknown). */
 export function fetchedCountProgress(
   progress: { fetchedCount: number } | null,

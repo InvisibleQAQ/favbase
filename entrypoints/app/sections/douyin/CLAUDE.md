@@ -18,12 +18,25 @@
 - 抖音不给逐条收藏时间，排序用作品发布时间，caption 必须如实写出（`douyin.sortedByPublishTime`）。
 - 导航键是 `nav.douyinFavorites`，不是 docs/33 写的 `nav.douyinCollections`：`Collection` 是 favbase 自己的领域词（根 `CONTEXT.md`）。抖音 API 里 `collect*` 才是收藏，`favorite*` 是喜欢 / 点赞，与本平台无关。
 
+## 转录与处理 lane（docs/37 Step 3）
+
+- 可转录视频以 `'pending'` 入库（门在 `lib/douyin`），正文由 Transcript lane 流式转录后才有：sync adapter 在 funnel 内动态 import `auto-transcribe-runtime.ts`（转录 runtime 不进启动 chunk），`runDouyinStreamingSync` 把每页 `onVideosPending` 的视频喂进共享的 `hooks/transcript-lane.ts`。
+- 两条输入源不能混：`onPagePersisted`（图文、无时长视频、治愈的幽灵）经 `douyin-processing-adapter.ts` 逐条派发 Embed / Tag；`onVideosPending`（本页新插入的可转录视频）进 Transcript inbox。视频转录落库后由 `transcribe-and-persist` 经同一个 processing adapter 派发。
+- D7 积压（`getDouyinPendingVideos()`）只在 sync **成功**结算前追加，失败 / 验证页不追加（挡住 sync 的也会挡住转录）；session 按 id 去重，本次刚入库的不会排两次。积压读取失败只记 error，不把成功的 Platform Sync 变成失败。
+- sync 开始时若已有抖音转录 session 在跑，本次跳过 D7 积压（`isActive()` 在入口判，不在 sync 之后）：此刻读出的列表要排在那个 session 后面，等轮到时已过期，已转录的条目会被重放（cache 命中，但重写正文、替换 chunk 清掉 embedding、重新 embed、每条再等 10–15 s）。代价：前一次失败的 sync 没追加的残留，要等下一次开始时没有 session 在跑的 sync。
+- Fetch 不 await Transcript；producer 在 `finally` 里 close，失败的 sync 仍排空已发布的条目。
+- v1 没有卡片上的手动转录 / 取消按钮（docs/37 D-e）；`'error'` 的条目没有重试入口。
+- 标签筛选网格不画 CC / ASR 角标：tagged card 从 tagging 行重建 `PagedItemRow`，没有 `subtitleSource`（`undefined` ≠ 没有字幕）。
+- 缺前置条件的横幅：`prerequisiteBlocked` 来自 `douyinAutoTranscribePipeline` 的状态；`'platform-tab'` 的文案要用户打开 / 登录 / 验证后**刷新**标签页，页内完成验证不刷新不会恢复（`lib/douyin/CLAUDE.md`）。
+- SW 侧 job registry 一个 tab 只记一个转录 job，B站与抖音 session 并发时会串台：已知缺口，见 `entrypoints/app/hooks/CLAUDE.md`「Transcript lane」。
+
 ## 已知缺口
 
 - 冷却锁只在内存里（刷新即解），只锁标题栏按钮；错误态的 Retry 与每日自动同步都不看它。
+- 风控冷却期间条目会落 `'error'`：`DOUYIN_RATE_LIMITED` 带 30 分钟的 `retryAfter`，状态机等满后只重试一次，再被拒就标 `'error'`，v1 没有重试入口（docs/37 Step 3 落地记录「未做」）。
 - 封面 URL 原样使用，可能带会过期的签名参数 `[UNKNOWN]`；目前只靠卡片外壳的破图回退，没有刷新机制。
 
 ## 指针
 
 - transport、节奏器、断点续传：`lib/douyin/CLAUDE.md`；逐页入库 + 逐条派发的契约：`.trellis/spec/frontend/platform-onboarding.md` §4.6。
-- 测试：`douyin-view.test.tsx`、`douyin-sync-adapter.test.ts`。
+- 测试：`douyin-view.test.tsx`、`douyin-card.test.tsx`、`douyin-sync-adapter.test.ts`、`auto-transcribe-runtime.test.ts`、`douyin-processing-adapter.test.ts`。

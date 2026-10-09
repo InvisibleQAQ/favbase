@@ -9,11 +9,10 @@ import {
   type StartTranscribeProcessing,
 } from './transcribe-utils';
 import {
-  asrQuotaPauseStorage,
-  getAsrSettings,
-  resolveAsrConfig,
-  settingsStorage,
-  type UserSettings,
+  getActiveAsrQuotaPause,
+  hasAsrApiKey,
+  setAsrQuotaPause,
+  waitForAsrApiKey,
 } from '@/lib/storage';
 
 export interface BiliAutoTranscribeAdapterOptions {
@@ -34,41 +33,16 @@ export function createBiliAutoTranscribeAdapter(
 
     markError: markVideoError,
 
-    async hasAsrKey(): Promise<boolean> {
-      const config = await getAsrSettings();
-      return Boolean(config.apiKey);
-    },
+    // Bilibili's only prerequisite is the ASR key, judged NOW: an invalid-key
+    // answer with a key already saved is an ordinary per-item failure.
+    missingPrerequisite: async (error) =>
+      error.code === 'ASR_INVALID_KEY' && !(await hasAsrApiKey()) ? 'asr' : null,
 
-    waitForAsrKey(): Promise<void> {
-      return new Promise((resolve) => {
-        let unwatch: (() => void) | null = null;
-        let resolved = false;
-        const accept = (settings: UserSettings): void => {
-          if (resolved || !resolveAsrConfig(settings).apiKey) return;
-          resolved = true;
-          unwatch?.();
-          resolve();
-        };
+    waitForPrerequisite: () => waitForAsrApiKey(),
 
-        unwatch = settingsStorage.watch(accept);
-        if (resolved) unwatch();
-        void settingsStorage.getValue().then(accept).catch((error) => {
-          console.error('[auto-transcribe] Failed to read ASR settings:', error);
-        });
-      });
-    },
+    getQuotaPause: getActiveAsrQuotaPause,
 
-    async getQuotaPause() {
-      const [pause, settings] = await Promise.all([
-        asrQuotaPauseStorage.getValue(),
-        settingsStorage.getValue(),
-      ]);
-      return pause?.providerId === settings.asrProvider ? pause : null;
-    },
-
-    async setQuotaPause(pause) {
-      await asrQuotaPauseStorage.setValue(pause);
-    },
+    setQuotaPause: setAsrQuotaPause,
 
     createStatusListener,
   };

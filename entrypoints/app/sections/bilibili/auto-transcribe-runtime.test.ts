@@ -132,6 +132,27 @@ describe('runBiliStreamingSync', () => {
     expect(mocks.close).toHaveBeenCalledOnce();
   });
 
+  it('keeps the eligibility rule and the video mapping on this side of the lane: a taken-down video and one without a bvid never enter the inbox', async () => {
+    mocks.syncAllFavoriteVideos.mockImplementation(
+      async (_folders, _onProgress, _control, onItemsPersisted) => {
+        onItemsPersisted([
+          { ...video('BV-TAKEN-DOWN'), attr: 9 },
+          video(''),
+          { ...video('BV-OK'), cover: '//i0.hdslb.com/cover.jpg', duration: 61 },
+        ]);
+        return { fetchedCount: 3, syncedCount: 3 };
+      },
+    );
+
+    await runBiliStreamingSync([folder(1)]);
+    await vi.waitFor(() => expect(mocks.run).toHaveBeenCalledOnce());
+
+    expect(mocks.append).toHaveBeenCalledOnce();
+    expect(mocks.append).toHaveBeenCalledWith([
+      { videoId: 'BV-OK', title: 'BV-OK', cover: 'https://i0.hdslb.com/cover.jpg', author: 'UP', duration: 61 },
+    ]);
+  });
+
   it('closes the producer on Fetch failure so already-published items drain', async () => {
     const fetchError = new Error('page 2 failed');
     mocks.syncAllFavoriteVideos.mockImplementation(

@@ -7,6 +7,7 @@ import {
   collectionPipelineStages,
   fetchedCountProgress,
   readJobProgress,
+  transcriptionStage,
 } from './pipeline-segments';
 import { getJob, startJob } from './background-jobs-store';
 
@@ -276,5 +277,35 @@ describe('collectionPipelineStages', () => {
   it('adapts a running fetchedCount into an open-ended acquisition count', () => {
     expect(fetchedCountProgress({ fetchedCount: 25 })).toEqual({ done: 25, total: null });
     expect(fetchedCountProgress(null)).toBeNull();
+  });
+
+  it("declares the shared transcription content stage over the platform's transcribe job", () => {
+    const transcribeJob = {
+      platform: 'p',
+      kind: 'transcribe' as const,
+      phase: 'running' as const,
+      running: true,
+      progress: { done: 3, total: 9 },
+      lastProgress: null,
+      error: null,
+      generation: 2,
+    };
+
+    expect(transcriptionStage('Transcribe', transcribeJob)).toEqual({
+      id: 'transcription',
+      label: 'Transcribe',
+      runtime: {
+        phase: 'running',
+        running: true,
+        progress: { done: 3, total: 9 },
+        lastProgress: null,
+        error: null,
+      },
+    });
+    expect(transcriptionStage('Transcribe', null)).toEqual({
+      id: 'transcription',
+      label: 'Transcribe',
+      runtime: null,
+    });
   });
 });

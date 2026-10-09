@@ -229,10 +229,11 @@ const getProcessingCoverageTool = tool({
         tagging: coverage.tagging,
         blockers: deriveConfigurationBlockers({
           coverage,
-          // The ASR blocker is raised by the Bilibili state machine's wait
-          // signal, which no Knowledge Tool can see; only the two
-          // count-derived capabilities are reportable here.
-          asrBlocked: false,
+          // A transcription prerequisite (an ASR key, the platform's own
+          // tab) is raised by a platform state machine's wait signal, which
+          // no Knowledge Tool can see; only the two count-derived
+          // capabilities are reportable here.
+          prerequisiteBlocked: null,
           asrConfigured: false,
           embeddingConfigured,
           llmConfigured,

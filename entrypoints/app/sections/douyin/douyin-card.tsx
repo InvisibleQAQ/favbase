@@ -1,10 +1,11 @@
 import Avatar from '@mui/material/Avatar';
+import Chip from '@mui/material/Chip';
 import Typography from '@mui/material/Typography';
 
 import { formatDateTime } from '@/lib/i18n';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify } from '../../components/iconify';
-import { CollectionCard, CoverBadge } from '../../components/collection';
+import { CollectionCard, CollectionCardRow, CoverBadge } from '../../components/collection';
 import { Label } from '../../components/label';
 import { TagRow } from '../../components/tags';
 import { formatDuration } from '../../utils/format-duration';
@@ -21,14 +22,18 @@ export interface DouyinCardProps {
 /**
  * One Douyin favorite on the shared `CollectionCard` shell: cover with a
  * duration badge (videos), author header, the post text as a three-line
- * title, publish time, and a "photos" stamp for image posts (图文 / 实况).
- * The cover is a CDN URL as Douyin returned it; a failed load falls back to
- * the platform glyph (the shell's own fallback).
+ * title, publish time, a "photos" stamp for image posts (图文 / 实况), and —
+ * once a video's Content is its transcript — the CC / ASR source badge in
+ * the footer, outside the link (the bilibili card's `info` chip, same
+ * semantics: "has a transcript"). The cover is a CDN URL as Douyin returned
+ * it; a failed load falls back to the platform glyph (the shell's own
+ * fallback).
  */
 export function DouyinCard({ favorite, tags, onEditTags }: DouyinCardProps) {
   // Subscribe to locale changes so formatDateTime / the stamp re-render.
   const { t } = useTranslation();
   const durationSeconds = favorite.durationMs ? Math.round(favorite.durationMs / 1000) : 0;
+  const transcribed = favorite.subtitleSource === 'official' || favorite.subtitleSource === 'asr';
 
   return (
     <CollectionCard
@@ -67,6 +72,18 @@ export function DouyinCard({ favorite, tags, onEditTags }: DouyinCardProps) {
         ) : undefined
       }
       tags={tags ? <TagRow tags={tags} onEditTags={onEditTags} /> : undefined}
+      footer={
+        transcribed ? (
+          <CollectionCardRow sx={{ gap: 0.5 }}>
+            <Chip
+              label={t(favorite.subtitleSource === 'official' ? 'card.sourceCC' : 'card.sourceASR')}
+              icon={<Iconify icon="solar:subtitles-bold-duotone" width={14} />}
+              size="small"
+              color="info"
+            />
+          </CollectionCardRow>
+        ) : undefined
+      }
     />
   );
 }

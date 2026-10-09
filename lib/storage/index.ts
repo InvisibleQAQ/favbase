@@ -30,6 +30,13 @@ export {
 } from './ui-state';
 
 export {
+  getActiveAsrQuotaPause,
+  hasAsrApiKey,
+  setAsrQuotaPause,
+  waitForAsrApiKey,
+} from './asr-prerequisite';
+
+export {
   type ThemeColorPreset,
   type ThemeContrast,
   type ThemeSettings,

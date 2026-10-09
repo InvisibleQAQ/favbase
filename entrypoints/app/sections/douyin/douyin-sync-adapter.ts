@@ -1,15 +1,13 @@
 import type { CooperativeCheckpoint } from '@/lib/collections';
-import { DouyinAuthError, syncDouyinCollections } from '@/lib/douyin/douyin-sync-service';
+import { DouyinAuthError } from '@/lib/douyin/douyin-sync-service';
 import { douyinTabTransport, findDouyinTab } from '@/lib/douyin/douyin-tab';
 import { douyinBackfillStorage } from '@/lib/storage';
 
-import { jobPlatformForCollection } from '../../hooks/collection-job-platform';
-import { enqueueCollectionProcessingItem } from '../../hooks/collection-processing-jobs';
 import { runPlatformSync } from '../../hooks/platform-sync';
 import type { AutoSyncPolicy } from '../../hooks/use-daily-auto-sync';
+import { enqueueDouyinCollectionProcessing } from './douyin-processing-adapter';
 
 const ITEM_PLATFORM = 'douyin';
-const JOB_PLATFORM = jobPlatformForCollection(ITEM_PLATFORM);
 
 /** Progress for the Douyin sync — no total is knowable; the running count and page. */
 export interface DouyinSyncProgress {
@@ -35,6 +33,13 @@ export interface DouyinSyncProgress {
  * only dispatches on success. The funnel therefore gets `newItemIds: []`;
  * its success-time embed backlog pass still runs.
  *
+ * Videos take the other lane (docs/37 Step 3): the sync runs through
+ * `runDouyinStreamingSync` (`auto-transcribe-runtime.ts`), which feeds each
+ * page's newly inserted transcribable videos to the Transcript lane and, once
+ * the sync succeeded, the stored 'pending' backlog (D7). The runtime is
+ * imported dynamically so the transcription code stays out of the app boot
+ * chunk (bilibili precedent).
+ *
  * The manual page and the daily auto-sync coordinator run this same function.
  */
 export async function runDouyinSync(
@@ -47,19 +52,16 @@ export async function runDouyinSync(
   }
   await runPlatformSync(ITEM_PLATFORM, control, async () => {
     const backfill = await douyinBackfillStorage.getValue();
-    const result = await syncDouyinCollections(douyinTabTransport, {
+    // ESM modules are singletons: this is the same pipeline instance the
+    // douyin section's view subscribes to.
+    const { runDouyinStreamingSync } = await import('./auto-transcribe-runtime');
+    const result = await runDouyinStreamingSync(douyinTabTransport, {
       backfill,
       onBackfill: (state) => douyinBackfillStorage.setValue(state),
       // `itemId` is the platformItemId (aweme_id): the embed / tag lanes
       // resolve it against `items.platform_item_id`.
       onPagePersisted: (platformItemIds) => {
-        for (const itemId of platformItemIds) {
-          enqueueCollectionProcessingItem({
-            jobPlatform: JOB_PLATFORM,
-            itemPlatform: ITEM_PLATFORM,
-            itemId,
-          });
-        }
+        for (const itemId of platformItemIds) enqueueDouyinCollectionProcessing(itemId);
       },
       onProgress: (fetchedCount, page) => onProgress({ fetchedCount, page }),
       control,

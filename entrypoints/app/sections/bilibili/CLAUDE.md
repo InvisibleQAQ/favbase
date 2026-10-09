@@ -26,10 +26,10 @@ app.html B站收藏夹页（`/collections/bilibili[/:mediaId]`）的平台 adapt
 
 ### 转录与处理 lane
 
-- Fetch 不 await Transcript；多个 Fetch producer 只在 Transcript lane 串行，Fetch 不被锁。
+- Fetch 不 await Transcript；多个 Fetch producer 只在 Transcript lane 串行，Fetch 不被锁。producer / 派发机制是共享的 `hooks/transcript-lane.ts`（docs/37 Step 3）；本目录的 `auto-transcribe-runtime.ts` 只留 pipeline 单例、`isProcessableVideo` + 有 bvid 的资格判定和到 `AutoTranscribeVideo` 的映射。
 - 转录 session 用 `startJob(..., 'queue')` 派发：手动转录占着 `transcribe` job key 时由 job store 排队并自动接续，不要写重派发循环。
-- 自动批转录与手动单视频共用同一个 `transcribe` job key；pipeline strip 的 Transcription 段读这个 job，闸门暂停时才会正确显示 paused。禁止用 `indexing` 冒充 Tagging 段。
-- `use-auto-transcribe.ts` 是单例 pipeline 的纯 `useSyncExternalStore` 订阅：不得加 mount 查询或 start / stop / dispose 副作用。
+- 自动批转录与手动单视频共用同一个 `transcribe` job key；pipeline strip 的 Transcription 段（共享的 `transcriptionStage`）读这个 job，闸门暂停时才会正确显示 paused。禁止用 `indexing` 冒充 Tagging 段。
+- 进度条 `AutoTranscribeBar` 与订阅 hook `useAutoTranscribe(pipeline)` 住 `components/auto-transcribe/`（与抖音共用，docs/37 D-d），view 传 `biliAutoTranscribePipeline`；hook「纯订阅、零副作用」的规则在那里的 `CLAUDE.md`。
 - 转录成功且 chunks durable 后 enqueue Embed / Tag 双 lane 并立即返回，两者都不阻塞下一条 Transcript；卡片的「已索引」标记由晚到的回调独立刷新。
 - Embed / Tag 经 `bilibili-processing-adapter.ts` 进共享处理 inbox：它是 app/lib 边界，领域层因此不依赖 app 的 job store。
 - job 命名空间一律是 `jobPlatformForCollection(PLATFORM)` 派生的 `JOB_PLATFORM`，不手写 `'bilibili'`；守卫 `tests/platform-completeness-contract.test.ts`。
@@ -47,9 +47,7 @@ app.html B站收藏夹页（`/collections/bilibili[/:mediaId]`）的平台 adapt
 - 页面 h1 固定 `collections.sidebarTitle`，主分类标题 `collections.foldersTitle`；当前夹名只出现在面包屑末项，不进 caption、不冒充页面标题。
 - 页面各区块保持纵向堆叠；压成三行的方案已被用户否决（docs/19 P0-1），别重提。
 - 收藏夹 chip 只显示名称，不显示每个夹的视频数。
-- `auto-transcribe-bar.tsx` 在 idle 时返回 null：pipeline strip 的 Transcribe 段已承载覆盖率。配额暂停是 `role="status"`，不是 alert。
-- 缺 ASR 的提醒由页面的 `CollectionConfigurationNotice` 统一出，进度条不重复画 warning；缺 ASR 的条目被停放，后续有官方字幕的视频仍继续处理。
-- 进度条自持下边距：scaffold 的 operation slot 不加间距。
+- 缺 ASR 的提醒由页面的 `CollectionConfigurationNotice` 统一出（`prerequisiteBlocked` 来自 pipeline 状态），进度条不重复画 warning；缺 ASR 的条目被停放，后续有官方字幕的视频仍继续处理。进度条自身的规则在 `components/auto-transcribe/CLAUDE.md`。
 - 排序控件的选中态是 8% 品牌洗底 + `text.primary`，不用主色做文字。
 - 视频卡 Chip 按语义着色（`.trellis/spec/frontend/ui-design-system.md` §9）：可点动作 `primary`、CC/ASR 来源 `info`、已索引 `secondary`；`success` 对比度不过 4.5，已否决。`video-card.test.tsx` 锁。
 - 视频卡的操作栏与标签行必须在链接之外（由 `CollectionCard` 外壳保证）；失效视频灰显、无链接、无操作栏。

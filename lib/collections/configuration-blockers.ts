@@ -1,14 +1,26 @@
 import type { ProcessingCoverage } from './processing-coverage';
 
 /**
+ * What a transcription state machine may park its items on (docs/37 D5): a
+ * capability word, never a platform id — the Collection page banner and the
+ * `getProcessingCoverage` Knowledge Tool read the same value.
+ * - `'asr'`: the active ASR provider has no key.
+ * - `'platform-tab'`: the platform's own site tab is missing, logged out, on a
+ *   verification page, or its signing SDK refused the request. No settings page
+ *   fixes it; the user acts on the tab.
+ */
+export type TranscribePrerequisite = 'asr' | 'platform-tab';
+
+/**
  * A provider capability whose absence stops persisted work from progressing.
  * Doubles as the Settings deep-link section id.
  */
 export type ConfigurationCapability = 'asr' | 'embedding' | 'llm';
 
 export interface ConfigurationBlocker {
-  capability: ConfigurationCapability;
-  /** Items waiting on this capability. Absent for ASR, whose signal is not a count. */
+  /** `'platform-tab'` has no settings page: the fix is a user action on the platform's own tab. */
+  capability: ConfigurationCapability | 'platform-tab';
+  /** Items waiting on this capability. Absent for 'asr' and 'platform-tab', whose signal is not a count. */
   pending?: number;
 }
 
@@ -20,11 +32,12 @@ export interface DeriveConfigurationBlockersInput {
    */
   coverage: ProcessingCoverage | null;
   /**
-   * Authoritative wait signal from the platform's own state machine. An empty
-   * key is not by itself a blocker: nothing is queued on ASR until the machine
-   * says so.
+   * Authoritative wait signal from the platform's own transcription state
+   * machine: the prerequisite its parked items wait for, or `null`. An empty
+   * ASR key is not by itself a blocker: nothing is queued on ASR until the
+   * machine says so.
    */
-  asrBlocked: boolean;
+  prerequisiteBlocked: TranscribePrerequisite | null;
   asrConfigured: boolean;
   embeddingConfigured: boolean;
   llmConfigured: boolean;
@@ -43,13 +56,14 @@ export interface DeriveConfigurationBlockersInput {
  */
 export function deriveConfigurationBlockers({
   coverage,
-  asrBlocked,
+  prerequisiteBlocked,
   asrConfigured,
   embeddingConfigured,
   llmConfigured,
 }: DeriveConfigurationBlockersInput): ConfigurationBlocker[] {
   const blockers: ConfigurationBlocker[] = [];
-  if (asrBlocked && !asrConfigured) blockers.push({ capability: 'asr' });
+  if (prerequisiteBlocked === 'asr' && !asrConfigured) blockers.push({ capability: 'asr' });
+  if (prerequisiteBlocked === 'platform-tab') blockers.push({ capability: 'platform-tab' });
   if (!coverage) return blockers;
 
   const embeddingPending = (coverage.embedding.total ?? 0) - coverage.embedding.done;

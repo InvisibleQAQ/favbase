@@ -42,7 +42,8 @@
 - **Background SW 图上的 import 约束**：`processing-coverage.ts` 的 `getDb` 取 `@/lib/database/db-state`、`FavbaseDb` 取 `@/lib/database/db-types`，不得走 `@/lib/database` barrel（它值导入 PGlite）。
 - 同一约束沿传递闭包展开：`configuration-blockers.ts`、`collection-processing-policy.ts`、`platform-eligibility.ts` 与 `lib/bilibili/video-eligibility.ts` 里的 `@/lib/database` 必须保持 `import type`。
 - 违反上两条时唯一的运行信号是构建期 `scripts/check-background-bundle.mjs` 报一条不点名文件的错。源码层守卫是 `tests/agent-bridge-background-bundle-contract.test.ts`；往这张图上加新 import 时把新边也加进去。
-- `deriveConfigurationBlockers` 是「已持久化的活儿在等一个没人配的 provider」的唯一实现，Collection 页横幅与 `getProcessingCoverage` Knowledge Tool 共用——否则模型会把「永远不会动」说成「还在处理中」。Knowledge Tool 没有平台状态机上下文，`asrBlocked` 传 `false`。
+- `deriveConfigurationBlockers` 是「已持久化的活儿在等一个没人配的 provider」的唯一实现，Collection 页横幅与 `getProcessingCoverage` Knowledge Tool 共用——否则模型会把「永远不会动」说成「还在处理中」。Knowledge Tool 没有平台状态机上下文，`prerequisiteBlocked` 传 `null`。
+- `TranscribePrerequisite`（`'asr' | 'platform-tab'`）住 `configuration-blockers.ts`：它是能力词、不是平台 id（共享模块零平台知识），`lib/auto-transcribe` 与横幅都从这里读同一个词。`'platform-tab'` 不是 `ConfigurationCapability`（没有对应的设置页叶子），阻塞项里不带 `pending`、不带设置链接。
 
 ## 平台错误基类与暂停协议
 
