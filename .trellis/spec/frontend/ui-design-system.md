@@ -171,11 +171,12 @@ Every app UI change is checked in both schemes.
 
 - Allowed: platform glyph and platform-owned data graphic.
 - Forbidden: body text, panel background, selected navigation, focus ring.
-- GitHub and X declare `palette: 'ink'` in `PLATFORM_META` and resolve to the
-  current scheme's text ink in the palette owner.
+- Black-logo brands declare `palette: 'ink'` in `PLATFORM_META` and resolve to
+  the current scheme's text ink in the palette owner; which ones they are is
+  read from the descriptor, not listed here.
 - Brand values live in `PLATFORM_META.palette` (docs/26 Step 2), one entry per
   platform; `core/palette.ts` derives both schemes from it and never lists
-  platforms itself. `core/palette.test.ts` locks the eight hexes as literals.
+  platforms itself. `core/palette.test.ts` locks every brand hex as a literal.
 
 Brand-colored platforms must retain at least 3:1 contrast on
 `background.default` and `background.neutral`.
@@ -717,7 +718,7 @@ Implemented state (docs/25 Step 6, 2026-09-03):
   makes the line secondary.
 - Composition card: `CardHeader` title, a 200px `DonutChart`
   (`components/chart/`) with `totalItems` in the hole, a dashed `Divider`, then
-  six legend rows — stacked, not side by side, because the card is 4/12 at `lg`
+  one legend row per platform — stacked, not side by side, because the card is 4/12 at `lg`
   (~220px inside its padding). The legend **is** the detail selector: vertical
   `Tabs` (indicator hidden) whose `Tab` labels are `ChartLegendItem`
   (phrasing content only — `Tab` renders a `<button>`), each with a 12px
@@ -736,7 +737,7 @@ Implemented state (docs/25 Step 6, 2026-09-03):
   (the card is only 6/12 at `md`), bars in secondary ink
   (`grey.500Channel` 0.64), never platform color.
 - Library empty (`totalItems === 0`) → `StateBox` with an outlined link to
-  `/collections`, under the KPI row; the six legend rows stay visible with real
+  `/collections`, under the KPI row; every platform's legend row stays visible with real
   zeros. Top tags render only when non-empty, and that condition lives in the
   orchestrator so no empty card is laid out.
 - Card titles are `component="h2" variant="h4"` (16px, the same call as
@@ -1137,7 +1138,7 @@ text used to be scored at full ink and a faded caption could not fail. It still
 reads only `background-color`, so text over a `background-image` gradient is
 scored against the layer underneath; a card that paints its tint as a gradient
 must have its ink checked by hand. The live-data probe asserts its own shape
-(four `[data-slot="kpi-value"]` figures, six legend tabs) rather than recording
+(four `[data-slot="kpi-value"]` figures, legend tabs present) rather than recording
 whatever the selector happened to find. Any audit that can only pass is not an
 audit.
 

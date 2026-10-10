@@ -27,8 +27,16 @@
 - 演示内容是示意：不放看起来像统计的数字（首装时库是空的，任何数字都是假的）。唯一例外是 `product-tour.tsx` 的真实截图。
 - 全页唯一可执行的出口是 `agent-skills.tsx` 那条可复制指令（内插 `lib/repo.ts` 的 `AGENT_SETUP_GUIDE_URL`）。不出示任何 `npm` / `favbase setup` 命令：配对要 Bridge Token，首装时还不存在（`docs/adr/0005`）。
 - 版本号与许可（`v{version} · GPL-3.0`）全产品只在 `footer.tsx` 露出，守卫 `layout.test.tsx`。footer 刻意零新外链。
-- `capability-marquee.tsx` 的平台 pill 是手写的，刻意不从 registry 派生（docs/26 D5）；漏平台由 `tests/platform-completeness-contract.test.ts` 报红。
+- `capability-marquee.tsx` 的平台 pill 是手写的（`icon` 也是字面量），刻意不从 registry 派生（docs/26 D5）；pill 的 `platform` 字段只给字形取身份色，别借它改成从 `PLATFORM_META` 取图标。漏平台、`platform` 与 `labelKey` 对不上（抄行没改色），都由 `tests/platform-completeness-contract.test.ts` 报红。
 - Platform Request 是动作外链，不是平台，不进 registry（根 `CONTEXT.md`）。
+
+## 色彩
+
+- 平台身份色（`theme.vars.palette.platform[id]`）只上字形：OrbitCore 芯片、marquee pill、picker 图标格。label、底、边框保持中性；ink 品牌由主题解析成墨色，本页不写平台分支。chat 演示的来源字形刻意不着色，跟 app 真实的 `sections/chat/source-card.tsx` 走（docs/39 D1-a）。
+- picker 未选中图标格的底必须是 `background.neutral`：平台色的 3:1 只对 `background.default` / `neutral` 验证过（`app/theme/core/palette.test.ts`），原来的 `grey.500` 10% 洗底上 YouTube 暗色只有 2.99:1。选中态照 app nav 激活态：`text.accent` 字形 + `primary` 8% 洗底。
+- 平台字形不拿来表达别的意思：书签的 `solar:bookmark-bold-duotone` 在本页是琥珀色，how-it-works 步骤 01 因此换成非平台字形（docs/39 D1-b）。
+- 可读文字不用 `text.disabled`（亮色 2.7:1），用 `text.secondary`。
+- 不写局部焦点环：`ButtonBase` 渲染 `<button>`，主题 CssBaseline 的 `button:focus-visible` 环（亮 `primary.darker`、暗 `primary.main`）已经覆盖；`.Mui-focusVisible` 与 `:focus-visible` 同时成立（MUI 的 `isFocusVisible` 就是 `matches(':focus-visible')`）。局部写 `primary.main` 在亮色只有 2.5:1。
 
 ## 向 Minimal 借鉴（先读 docs/28 §3 拒绝清单）
 
@@ -50,7 +58,7 @@
 
 ## 动画
 
-- `MotionConfig reducedMotion="user"`（`main.tsx`）只管声明式 `animate`；`style` 绑定的 MotionValue（滚动视差 / 缩放）不受它约束，必须在组件里用 `useReducedMotion()` 手动 gate。
+- `MotionConfig reducedMotion="user"`（`main.tsx`）只把 transform 与 `width` / `height` / `top` / `left` / `right` / `bottom` 的声明式动画（motion-dom `positionalKeys`）和 layout 动画改成瞬时；opacity、颜色、`backgroundPosition`、`strokeDashoffset` 照跑，`style` 绑定的 MotionValue（滚动视差 / 缩放）完全不受它约束。要这些在 reduce 下停，必须在组件里用 `useReducedMotion()` 手动 gate。
 - 动画元素从 `components/motion-box.tsx` 取 `MotionBox` / `MotionButtonBase`，别各自 `motion.create(...)`。
 - 有意节奏的段落用 `FadeIn`（手排 delay，`x`/`y` 自由取值，`varFade` 装不进它，docs/28 §4 E1）；同质列表用 `MotionContainer` + `varContainer`。
 - `MotionViewport` 不得恢复 Minimal 的 `smDown` 分支：它在 600px 处切换渲染元素类型，React 会卸载重建整段，picker 丢选择、chat demo 重播。

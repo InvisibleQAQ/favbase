@@ -30,7 +30,7 @@ export function WelcomeFooter() {
           <BrandMark />
         </Box>
 
-        <Typography variant="caption" sx={{ mt: 1, display: 'block', color: 'text.disabled' }}>
+        <Typography variant="caption" sx={{ mt: 1, display: 'block', color: 'text.secondary' }}>
           {`v${EXTENSION_VERSION} · GPL-3.0`}
         </Typography>
       </Container>

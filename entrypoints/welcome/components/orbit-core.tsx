@@ -142,7 +142,8 @@ export function OrbitCore() {
                   borderRadius: '30%',
                   display: 'grid',
                   placeItems: 'center',
-                  color: 'text.primary',
+                  // Identity color on the glyph only; the tile stays neutral.
+                  color: t2.vars.palette.platform[platform.id],
                   bgcolor: 'background.paper',
                   border: `1px solid ${t2.vars.palette.divider}`,
                   boxShadow: t2.vars.customShadows.z8,

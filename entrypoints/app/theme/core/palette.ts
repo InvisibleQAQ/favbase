@@ -20,7 +20,7 @@ import type { SchemesRecord, ThemeColorScheme } from '../types';
  * Minimal `core/palette.ts` skeleton with the Favbase brand tokens: coral
  * `primary` (one ramp for both schemes; presets swap it in
  * `../with-settings/update-core.ts`), the derived `text.accent`, the
- * six-platform `platform` palette, and scheme text/background values owned by
+ * per-platform `platform` palette, and scheme text/background values owned by
  * `theme-config.ts`. Type extensions land in `../extend-theme-types.d.ts`.
  */
 

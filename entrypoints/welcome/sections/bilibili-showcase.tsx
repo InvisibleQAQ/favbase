@@ -55,7 +55,9 @@ function TabButton({
       role="tab"
       aria-selected={active}
       onClick={onClick}
-      sx={(theme) => ({
+      // No local focus ring: ButtonBase renders a `<button>`, so the theme
+      // baseline's `button:focus-visible` ring (CssBaseline) reaches it.
+      sx={{
         position: 'relative',
         flex: 1,
         gap: 0.75,
@@ -64,11 +66,7 @@ function TabButton({
         fontSize: 13,
         fontWeight: 600,
         color: active ? 'primary.main' : 'text.secondary',
-        '&.Mui-focusVisible': {
-          outline: `2px solid ${theme.vars.palette.primary.main}`,
-          outlineOffset: 2,
-        },
-      })}
+      }}
     >
       {/* Shared layoutId makes the pill slide between tabs instead of blinking. */}
       {active && (
@@ -290,7 +288,8 @@ function PlayerMock() {
             borderRadius: '50%',
             display: 'grid',
             placeItems: 'center',
-            color: 'common.white',
+            // The theme's WCAG pick for ink on `primary.main`; white is 2.5:1 on coral.
+            color: 'primary.contrastText',
             bgcolor: varAlpha(theme.vars.palette.primary.mainChannel, 0.92),
           })}
         >

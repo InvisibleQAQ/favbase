@@ -193,7 +193,7 @@ function ChatDemo() {
                 <Typography
                   variant="caption"
                   sx={{
-                    color: 'text.disabled',
+                    color: 'text.secondary',
                     fontWeight: 600,
                     letterSpacing: '0.08em',
                     textTransform: 'uppercase',

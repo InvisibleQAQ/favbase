@@ -16,14 +16,15 @@ export interface CollectionPlatformConfig {
 }
 
 /**
- * Brand identity color per scheme, or `'ink'` for a black-logo brand (github,
- * x) that resolves to the scheme's own text ink in `theme/core/palette.ts`.
+ * Brand identity color per scheme, or `'ink'` for a black-logo brand that
+ * resolves to the scheme's own text ink in `theme/core/palette.ts` (which
+ * brands are ink: the `palette` fields of `PLATFORM_META` below).
  *
- * Values come from the dataviz palette validator (adjacent-pairs mode; all six
- * checks pass on both the ground and the neutral tile of each scheme — raw
+ * Values come from the dataviz palette validator (adjacent-pairs mode; every
+ * check passes on both the ground and the neutral tile of each scheme — raw
  * brand hexes such as bilibili `#FB7299` fail contrast at 2.4:1). Changing one
  * REQUIRES re-running the validator and updating
- * `.trellis/tasks/08-20-analytics-platform-brand-colors/research/palette-validation.md`;
+ * `.trellis/tasks/archive/2026-08/08-20-analytics-platform-brand-colors/research/palette-validation.md`;
  * `theme/core/palette.test.ts` locks every value and its >= 3:1 contrast.
  */
 export type PlatformBrandPalette = { readonly light: string; readonly dark: string } | 'ink';

@@ -77,12 +77,13 @@ function PlatformCard({
         border: `2px solid ${selected ? theme.vars.palette.primary.main : 'transparent'}`,
         boxShadow: selected ? theme.vars.customShadows.card : theme.vars.customShadows.z1,
         transition: theme.transitions.create(['border-color', 'box-shadow']),
-        '&.Mui-focusVisible': {
-          outline: `2px solid ${theme.vars.palette.primary.main}`,
-          outlineOffset: 2,
-        },
+        // No local focus ring: the card is a `<button>`, so the theme
+        // baseline's `button:focus-visible` ring (CssBaseline) reaches it.
       })}
     >
+      {/* Unselected: the platform's identity glyph on `background.neutral`,
+          the ground its 3:1 floor is validated against (a translucent grey
+          wash over paper is not). Selected: the app nav's active treatment. */}
       <Box
         sx={(theme) => ({
           width: 44,
@@ -91,10 +92,12 @@ function PlatformCard({
           borderRadius: '30%',
           display: 'grid',
           placeItems: 'center',
-          color: selected ? 'primary.main' : 'text.primary',
+          color: selected
+            ? theme.vars.palette.text.accent
+            : theme.vars.palette.platform[platform.id],
           bgcolor: selected
-            ? varAlpha(theme.vars.palette.primary.mainChannel, 0.12)
-            : varAlpha(theme.vars.palette.grey['500Channel'], 0.1),
+            ? varAlpha(theme.vars.palette.primary.mainChannel, 0.08)
+            : theme.vars.palette.background.neutral,
         })}
       >
         <Iconify icon={platform.icon} width={24} />
@@ -228,7 +231,7 @@ export function PlatformPicker() {
 
         <Typography
           variant="caption"
-          sx={{ mt: 2, maxWidth: 460, textAlign: 'center', color: 'text.disabled' }}
+          sx={{ mt: 2, maxWidth: 460, textAlign: 'center', color: 'text.secondary' }}
         >
           {t('welcome.picker.footnote')}
         </Typography>

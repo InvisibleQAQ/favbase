@@ -77,7 +77,7 @@ function ScrollHint({ label }: { label: string }) {
         flexDirection: 'column',
         alignItems: 'center',
         gap: 0.5,
-        color: 'text.disabled',
+        color: 'text.secondary',
       }}
     >
       <Typography variant="caption" sx={{ letterSpacing: '0.14em', textTransform: 'uppercase' }}>

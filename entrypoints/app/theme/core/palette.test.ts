@@ -9,8 +9,9 @@ import { background, platform, text } from './palette';
 
 const SCHEMES = ['light', 'dark'] as const;
 
-/** The hued brands; github and x declare `'ink'` in the app Platform Descriptor. */
+/** The hued brands; the black-logo rest declare `'ink'` in the app Platform Descriptor. */
 const BRAND_COLORED = COLLECTION_PLATFORMS.filter((id) => PLATFORM_META[id].palette !== 'ink');
+const INK_BRANDS = COLLECTION_PLATFORMS.filter((id) => PLATFORM_META[id].palette === 'ink');
 
 /**
  * docs/26 Step 2 moved these values out of `themeConfig.platform` and into
@@ -90,9 +91,11 @@ describe('palette.platform', () => {
     }
   });
 
-  it.each(SCHEMES)('%s scheme keeps black-logo brands (github, x) as ink', (scheme) => {
-    expect(platform[scheme].github).toBe(text[scheme].primary);
-    expect(platform[scheme].x).toBe(text[scheme].primary);
+  it.each(SCHEMES)('%s scheme resolves every black-logo brand to the text ink', (scheme) => {
+    expect(INK_BRANDS.length).toBeGreaterThan(0);
+    for (const id of INK_BRANDS) {
+      expect(platform[scheme][id], id).toBe(text[scheme].primary);
+    }
   });
 
   it('keeps exactly bilibili, bookmarks, zhihu and youtube hued', () => {

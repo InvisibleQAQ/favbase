@@ -122,32 +122,33 @@ function isExplicitUndefined(expression: ts.Expression | undefined): boolean {
 }
 
 /**
- * String values of one field across an array literal of object literals — e.g.
- * every `labelKey` in `const ROW_TOP: Pill[] = [{ labelKey: '…' }, …]`.
+ * The string-literal fields of each object literal in an array literal — e.g.
+ * `{ labelKey, platform }` per pill of `const ROW_TOP: Pill[] = [{ … }, …]`.
  * `undefined` when the binding is missing or is not an array literal.
  */
-function arrayFieldValues(
+function arrayStringFields(
   module: SourceModule,
   name: string,
-  field: string,
-): string[] | undefined {
+): Partial<Record<string, string>>[] | undefined {
   const initializer = variableInitializer(module, name);
   if (!initializer) return undefined;
   const array = unwrap(initializer);
   if (!ts.isArrayLiteralExpression(array)) return undefined;
 
-  const values: string[] = [];
+  const elements: Partial<Record<string, string>>[] = [];
   for (const element of array.elements) {
     const object = unwrap(element);
     if (!ts.isObjectLiteralExpression(object)) continue;
+    const fields: Partial<Record<string, string>> = {};
     for (const property of object.properties) {
       if (!ts.isPropertyAssignment(property) || !property.name) continue;
-      if (propertyName(property.name) !== field) continue;
+      const key = propertyName(property.name);
       const value = stringValue(unwrap(property.initializer));
-      if (value) values.push(value);
+      if (key && value) fields[key] = value;
     }
+    elements.push(fields);
   }
-  return values;
+  return elements;
 }
 
 /**
@@ -387,17 +388,26 @@ describe('platform completeness contract', () => {
     // module pulls MUI + Iconify + motion, which this contract never loads.
     const marquee = sourceModule('entrypoints/welcome/sections/capability-marquee.tsx');
     const marqueeRows = ['ROW_TOP', 'ROW_BOTTOM'].map(
-      (row) => [row, arrayFieldValues(marquee, row, 'labelKey')] as const,
+      (row) => [row, arrayStringFields(marquee, row)] as const,
     );
     const pillLabelKeys = new Set<string>();
-    for (const [row, labelKeys] of marqueeRows) {
-      if (!labelKeys) {
+    for (const [row, pills] of marqueeRows) {
+      if (!pills) {
         missing.push(`all: welcome marquee ${row} is not an explicit array literal`);
         continue;
       }
-      for (const labelKey of labelKeys) pillLabelKeys.add(labelKey);
+      for (const { labelKey, platform } of pills) {
+        if (labelKey) pillLabelKeys.add(labelKey);
+        // A pill's `platform` only picks its glyph's identity color, so a copied
+        // row that keeps the old platform paints another brand and nothing else
+        // notices. It must name the platform whose title the pill shows.
+        if (!platform || !navMeta) continue;
+        if (stringValue(propertyValue(navMeta, platform, 'title')) !== labelKey) {
+          missing.push(`${platform}: welcome marquee pill '${labelKey}' wears this platform's color`);
+        }
+      }
     }
-    if (navMeta && marqueeRows.every(([, labelKeys]) => labelKeys)) {
+    if (navMeta && marqueeRows.every(([, pills]) => pills)) {
       for (const platform of COLLECTION_PLATFORMS) {
         const title = stringValue(propertyValue(navMeta, platform, 'title'));
         // A missing title is a compile error on the exhaustive `PLATFORM_META`,

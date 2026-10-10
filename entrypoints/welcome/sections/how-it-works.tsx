@@ -37,7 +37,9 @@ const STEPS: Step[] = [
     titleKey: 'welcome.flow.step1.title',
     descKey: 'welcome.flow.step1.desc',
     hintKey: 'welcome.flow.step1.hint',
-    icon: 'solar:bookmark-bold-duotone',
+    // Not the bookmark glyph: that one is the bookmarks platform's, which wears
+    // its identity color elsewhere on this page.
+    icon: 'solar:folder-with-files-bold-duotone',
     glyph: 'rows',
   },
   {

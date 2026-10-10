@@ -229,7 +229,7 @@ export function AgentSkills() {
         </Box>
 
         <FadeIn delay={0.6}>
-          <Typography variant="caption" sx={{ display: 'block', mt: 3.5, color: 'text.disabled' }}>
+          <Typography variant="caption" sx={{ display: 'block', mt: 3.5, color: 'text.secondary' }}>
             {t('welcome.agentSkills.requirement')}
           </Typography>
         </FadeIn>

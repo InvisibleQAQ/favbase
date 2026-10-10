@@ -101,6 +101,7 @@
 | app.html / welcome.html 对照 Minimal 的视觉保真度；截扩展页的方法 | `docs/31_minimal-ui-polish-2026-09-27.md`（§1 截图步骤，§3 未定项） |
 | welcome.html 的外壳与动画 | `docs/28_welcome-minimal-alignment-2026-09-08.md` §3 拒绝清单 |
 | welcome 截图画廊（`product-tour.tsx`、`public/assets/images/welcome/`） | `docs/35_welcome-real-screenshots-2026-10-03.md` |
+| welcome.html 的配色（平台字形、画廊舞台、hero 品牌词、彩球、ForDesigner 带） | `docs/39_welcome-color-pass-2026-10-10.md` §1 决策、§2 各 Step |
 | Agent Bridge 的扩展侧、CLI、Skill | `docs/30_agent-bridge-architecture-review-2026-09-27.md` 的「待决策汇总」与「执行顺序」；`docs/adr/0002`、`0003`、`0005` |
 | Agent Bridge 的本地测试、doctor、安装指引 | `docs/27_agent-bridge-local-testing-and-improvements-2026-09-07.md` |
 | Agent Bridge 的重连与认证失败 | `docs/24_agent-bridge-reconnect-latency-remediation-2026-09-01.md`（其中的 bad-token 退避已被 docs/30 #1 删除） |

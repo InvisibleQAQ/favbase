@@ -1,5 +1,6 @@
 import type { LocaleKeys } from '@/lib/i18n';
 import type { IconifyName } from '@/entrypoints/app/components/iconify';
+import type { CollectionPlatform } from '@/lib/collections/platforms';
 
 import { useRef } from 'react';
 import { useReducedMotion, useScroll, useTransform } from 'motion/react';
@@ -11,27 +12,34 @@ import { Iconify } from '@/entrypoints/app/components/iconify';
 
 import { MotionBox } from '../components/motion-box';
 
-type Pill = { labelKey: LocaleKeys; icon?: IconifyName };
+/**
+ * A platform pill carries its glyph and the platform whose identity color the
+ * glyph wears; a capability pill has neither and gets the coral dot. The icon
+ * literals stay hand-written (docs/26 D5): `platform` only picks the color.
+ */
+type Pill =
+  | { labelKey: LocaleKeys; icon: IconifyName; platform: CollectionPlatform }
+  | { labelKey: LocaleKeys; icon?: never; platform?: never };
 
 /** Platforms lead the top row; the capabilities they unlock trail the bottom. */
 const ROW_TOP: Pill[] = [
-  { labelKey: 'nav.bilibiliFavorites', icon: 'simple-icons:bilibili' },
+  { labelKey: 'nav.bilibiliFavorites', icon: 'simple-icons:bilibili', platform: 'bilibili' },
   { labelKey: 'welcome.tags.semanticSearch' },
-  { labelKey: 'nav.githubStars', icon: 'mdi:github' },
+  { labelKey: 'nav.githubStars', icon: 'mdi:github', platform: 'github' },
   { labelKey: 'welcome.tags.localFirst' },
-  { labelKey: 'nav.bookmarks', icon: 'solar:bookmark-bold-duotone' },
+  { labelKey: 'nav.bookmarks', icon: 'solar:bookmark-bold-duotone', platform: 'bookmarks' },
   { labelKey: 'welcome.tags.aiTags' },
-  { labelKey: 'nav.xBookmarks', icon: 'mdi:twitter' },
+  { labelKey: 'nav.xBookmarks', icon: 'mdi:twitter', platform: 'x' },
   { labelKey: 'welcome.tags.agentSkills' },
 ];
 
 const ROW_BOTTOM: Pill[] = [
   { labelKey: 'welcome.tags.hybridRetrieval' },
-  { labelKey: 'nav.zhihuFavorites', icon: 'simple-icons:zhihu' },
+  { labelKey: 'nav.zhihuFavorites', icon: 'simple-icons:zhihu', platform: 'zhihu' },
   { labelKey: 'welcome.tags.transcription' },
-  { labelKey: 'nav.youtubePlaylists', icon: 'mdi:youtube' },
+  { labelKey: 'nav.youtubePlaylists', icon: 'mdi:youtube', platform: 'youtube' },
   { labelKey: 'welcome.tags.summary' },
-  { labelKey: 'nav.douyinFavorites', icon: 'simple-icons:tiktok' },
+  { labelKey: 'nav.douyinFavorites', icon: 'simple-icons:tiktok', platform: 'douyin' },
   { labelKey: 'welcome.tags.pglite' },
   { labelKey: 'welcome.tags.obsidian' },
   { labelKey: 'welcome.tags.incremental' },
@@ -65,8 +73,12 @@ function PillRow({ pills }: { pills: Pill[] }) {
               boxShadow: theme.vars.customShadows.z1,
             })}
           >
-            {pill.icon ? (
-              <Iconify icon={pill.icon} width={18} />
+            {pill.platform ? (
+              <Iconify
+                icon={pill.icon}
+                width={18}
+                sx={(theme) => ({ color: theme.vars.palette.platform[pill.platform] })}
+              />
             ) : (
               <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: 'primary.main' }} />
             )}
@@ -85,8 +97,9 @@ function PillRow({ pills }: { pills: Pill[] }) {
  */
 export function CapabilityMarquee() {
   const ref = useRef<HTMLDivElement>(null);
-  // MotionConfig's reducedMotion only governs declarative `animate` props —
-  // style-bound MotionValues bypass it, so the parallax is gated by hand.
+  // MotionConfig's reducedMotion only stills declarative transform / layout
+  // animations — style-bound MotionValues bypass it, so the parallax is gated
+  // by hand.
   const reduceMotion = useReducedMotion();
   const { scrollYProgress } = useScroll({ target: ref, offset: ['start end', 'end start'] });
 
