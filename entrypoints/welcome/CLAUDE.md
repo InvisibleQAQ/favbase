@@ -40,7 +40,9 @@
 
 ## 向 Minimal 借鉴（先读 docs/28 §3 拒绝清单）
 
-- 已拒绝、别再提：`HeroBackground`（同心圆虚线与 `OrbitCore` 的轨道圆打架）、`animate-text`（逐字 `inline-block`，无空格的中文整句会成为一个不可折行的词）、`renderIcons`（本页已有 OrbitCore / marquee / picker 三处在列平台）、`animate-count-up`、Pricing / Testimonials / FAQs 等销售页段落。
+- 已拒绝、别再提：`HeroBackground` 除 `Dots` 外（同心圆虚线与 `OrbitCore` 的轨道圆打架；`Dots` 已由 docs/39 Step 4 移植，docs/28 §3.1 的三条拒绝理由都不针对它）、`animate-text`（逐字 `inline-block`，无空格的中文整句会成为一个不可折行的词）、`renderIcons`（本页已有 OrbitCore / marquee / picker 三处在列平台）、`animate-count-up`、Pricing / Testimonials / FAQs 等销售页段落。
+- 同样已拒绝：OrbitCore 内圈彩点（照 `illustration-integration.webp` 重绘的那道，docs/39 Step 4，用户 2026-10-11 撤回）。静态彩点与每 46s 转一圈的品牌色芯片撞色相；en 核心标签在 md 已伸到 r≈47（200 单位的 SVG），更小的内圈都压字；它是轨道上的第四套同心系统。
+- hero 浮动彩球（`hero.tsx` 的 `Dots`）的坐标是实测的，不是 Minimal 的，只对现在的 hero 几何成立：Container `lg`、7/5 分栏、`--fb-orbit-r`、标题 clamp，动其中任何一项都要重跑 docs/39 Step 4 的量法。只从 lg 起渲染；挂在钉住层里，偏移以它的中心为原点，随钉住层被 `spent` gate 一起停绘（漂移照在 motion 的帧循环里跑，docs/28 §5）。
 - `components/animated-text.tsx` 只切到词层，正是为了中文能按字折行，别换成 Minimal 的实现。
 - 对 Minimal 的刻意偏离，别「对齐回去」：Hero 保留 Grid 左文右 `OrbitCore` 分栏而非居中单列栈（docs/28 D4）、背景保留 Aurora（D5）、顶栏跟 app.html 一样用 `disableElevation`（D3）。
 - `platform-request.tsx` 是 Minimal `home-advertisement` 深色 CTA 卡的原样移植，视觉分量不再让位于 picker 的主 CTA（docs/31 Step 2 推翻了 docs/28 §3.4 对它的拒绝）。它不走 `WelcomeSection`、零纵向 padding，描述色固定 `grey.500`（深色卡不随配色变）。

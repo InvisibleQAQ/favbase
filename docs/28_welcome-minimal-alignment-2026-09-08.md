@@ -18,7 +18,7 @@
 | D2 | 骨架落 `entrypoints/welcome/layout.tsx`（welcome 私有），按叶 import `app/layouts/core/*`。不建 `app/layouts/main/`——app.html 只有 dashboard 布局，永不消费 MainLayout | 用户决定 |
 | D3 | 顶栏行为**跟 app.html 一致**：`disableElevation`，静止透明 / 滚动后淡入 blur + divider / 无椭圆阴影。不跟 Minimal home（它两个 prop 都不传，多一层 `z8` 椭圆阴影） | 用户决定 |
 | D4 | Hero **保留 Grid 左文右 OrbitCore 分栏**，不改居中单列栈。Minimal 用居中栈是因为它没有产品主视觉可放（只能堆星级、头像、平台小图标） | 用户决定 |
-| D5 | Hero 背景**保留 Aurora**，不移植 `HeroBackground` | 用户决定 |
+| D5 | Hero 背景**保留 Aurora**，不移植 `HeroBackground`。**2026-10-11**：docs/39 Step 4 从中取了 `Dots`（五颗浮动彩球，坐标重新实测），其余仍不移植（§3.1 补注） | 用户决定 |
 | D6 | animate 层**按内容分**：`FadeIn` 保签名（57 处调用点不动）内部换实现；同质列表用 `MotionContainer` + `varContainer` 固定 stagger；有意节奏处保手排 delay | 用户决定 |
 | D7 | animate 原语落 `entrypoints/welcome/components/animate/` + `VENDOR_RULES` 加 `motion` 守卫 | 用户决定 |
 | D8 | section 语言**结构取、颜色留**：渐变实现从 CSS class 换成 `theme.mixins.textGradient`，但~~**保 coral 品牌色**；`Eyebrow` 药丸保留~~；`py` md 16→20。**颜色与药丸两半已于 2026-09-27 由 docs/31 Step 3 推翻**（用户决定）：五个 section 标题改 Minimal 的中性写法（主体 `text.primary` 实色 + 尾词淡出），caption 改裸 overline（`SectionCaption`），coral 渐变只留给 hero——Minimal 自己也是 hero 彩色、section 中性。`textGradient` 实现与 `py` 20 不变，明细见 docs/31 §4 Step 3 | 用户决定 |
@@ -56,7 +56,7 @@
 | 3 | 五层 spring 视差 y1..y5 | **取四层**（favbase 左列三块 + 右列 orbit）：y1 = eyebrow+h1，y2 = 副文案，y3 = CTA 行，y4 = OrbitCore |
 | 4 | 居中单列栈 | **不取**（D4） |
 | 5 | `h1` 吃 `typography:'h2'` + lg 断点 72/90px；首行 `opacity:0.24`；品牌词 `textGradient` + 20s `backgroundPosition` 往复 | **部分取**：渐变实现取，字号不取（见 §4 勘误 E2）。**2026-10-11**：首行淡化（取 `text.secondary` 实色，不用 0.24）与品牌词流动渐变由 docs/39 Step 3 补取；字号仍不取（E2） |
-| 6 | `HeroBackground` | **不取**（D5，理由见 §3） |
+| 6 | `HeroBackground` | **不取**（D5，理由见 §3）。**2026-10-11**：`Dots` 例外，由 docs/39 Step 4 补取 |
 
 ### 2.3 animate 原语（`$MIN/components/animate/`）
 
@@ -98,6 +98,8 @@
 `$MIN/sections/home/components/hero-background.tsx` + `hero-svg.tsx`（330）+ `svg-elements.tsx`（289），资源 `background-3.webp` 15 KB + dark 专用 `hero-blur.webp` 345 KB。
 
 > **补注（2026-09-28）**：其中 `svg-elements.tsx` 的 `FloatLine` 一族（`FloatLine` / `FloatPlusIcon` / `FloatTriangleLeftIcon` / `FloatTriangleDownIcon` / `FloatDotIcon`）已由 docs/31 Step 4 移植给 hero 以下的段落用（`entrypoints/welcome/components/svg-elements.tsx`，用户决定逐段对照 Minimal 源文件）；`FloatXIcon` 与 `CircleSvg` 未移植，理由见 docs/31 §4 Step 4 D-a。**`HeroBackground` 本身的拒绝不变**，hero 仍然不画线（Minimal 的 `home-hero` 也不画）。下面三条理由针对的是 hero 的铺满式背景，不是段落 gutter 里的线。
+
+> **补注（2026-10-11）**：`hero-svg.tsx` 的 `Dots`（五颗浮动彩球，约 90 行）已由 docs/39 Step 4 移植进 hero（`entrypoints/welcome/sections/hero.tsx`，用户 2026-10-10 为补色相要的，docs/39 §1 Q4），坐标按 favbase 的分栏重新实测，不照抄。下面三条理由都不针对它：它不是同心圆或网格线，没有文字，也不是 619 行的体量。其余部分（`Circles` / `Lines` / `PlusIcon` / `Texts` / 两张背景图）的拒绝不变。
 
 拒绝理由，按强度排序：
 
@@ -202,6 +204,8 @@ welcome 当初自造 clamp 正是因为 favbase 的 theme 没有 Minimal 那档�
 grill 中我说过「fixed 之后 Aurora/Orbit 持续动画的开销现状就有，只是从跳过绘制变成参与合成」。**这句是错的**：现状 Hero 不 fixed，滚出视口后浏览器跳过 offscreen 元素的绘制**与合成**；改 fixed 后元素永远 onscreen，Aurora 的两个 `filter: blur(48px)` 大圆（`clamp(320px, 46vw, 720px)`）与 OrbitCore 约 20 个动画节点会持续参与合成。这是真新增，不是从零到一之外的免费项。
 
 Minimal 无感是因为它的 `HeroBackground` 是静态 SVG + 图片（`initial`/`animate` 只跑一次）。
+
+> **勘误（2026-10-11，docs/39 Step 4）**：上一句不全对。`HeroBackground` 里有两样东西一直在动：`Dots` 的漂移（6s 往复）与 `Texts` 描边字的横向滚动（64s，md 起），都是 `repeat: Infinity`，而且挂在同一个 `position: fixed` 的钉住层里、没有 gate，所以 Minimal 也一直在付这份合成，只是量小：五颗 12–14px 的点加一行描边字，没有 blur。favbase 移植来的 `Dots` 挂在钉住层内，随下面的 `spent` gate 一起停绘。
 
 **处理**：`hero.tsx` 的钉住层在 `percent >= 100` 时加 `visibility: 'hidden'`。`visibility: hidden` 让浏览器跳过整棵子树的绘制与合成；`opacity: 0` 不会。motion 的 JS 循环仍在跑（除条件渲染无法停，而条件渲染会让往回滚时重播入场），但 GPU 侧的 blur 合成停了。3 行代码。
 

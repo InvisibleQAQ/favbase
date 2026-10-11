@@ -1,4 +1,5 @@
 import type { MotionValue, SpringOptions } from 'motion/react';
+import type { PaletteColorKey } from '@/entrypoints/app/theme/core/palette';
 
 import { useRef, useState } from 'react';
 import {
@@ -22,6 +23,7 @@ import { Iconify } from '@/entrypoints/app/components/iconify';
 import { FadeIn } from '../components/fade-in';
 import { MotionBox } from '../components/motion-box';
 import { OrbitCore } from '../components/orbit-core';
+import { varFade, MotionContainer } from '../components/animate';
 import { ctaGlowShadow, Headline, SectionCaption } from '../components/section-shell';
 
 /** Two slow-drifting colour blobs behind the fold. Decorative only. */
@@ -62,6 +64,90 @@ function Aurora() {
   );
 }
 
+type DotSpec = {
+  color: PaletteColorKey;
+  size?: number;
+  axis: 'x' | 'y';
+  /** Centre at the start of the drift, in px from the pinned layer's centre. */
+  dx: number;
+  dy: number;
+};
+
+// In Minimal's order, which is the stagger order. Measured, not Minimal's
+// numbers: see `Dots`.
+const DOTS: DotSpec[] = [
+  { color: 'error', size: 14, axis: 'x', dx: -444, dy: -236 },
+  { color: 'warning', axis: 'y', dx: 96, dy: 150 },
+  { color: 'info', axis: 'x', dx: 490, dy: 232 },
+  { color: 'secondary', axis: 'x', dx: 530, dy: -180 },
+  { color: 'success', axis: 'y', dx: -372, dy: 258 },
+];
+
+function Dot({ color, size = 12, axis, dx, dy }: DotSpec) {
+  return (
+    <MotionBox
+      variants={varFade('in')}
+      sx={{
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        width: size,
+        height: size,
+        transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`,
+      }}
+    >
+      {/* No `useReducedMotion()` gate: `x`/`y` are positional keys, so
+          `MotionConfig reducedMotion="user"` already makes the drift jump to
+          its last keyframe and stop. */}
+      <MotionBox
+        animate={{ [axis]: [0, 24] }}
+        transition={{ duration: 6, ease: 'linear', repeat: Infinity, repeatType: 'reverse' }}
+        sx={(theme) => ({
+          width: 1,
+          height: 1,
+          borderRadius: '50%',
+          boxShadow: `0px -2px 4px 0px ${theme.vars.palette[color].main} inset`,
+          background: `linear-gradient(135deg, ${theme.vars.palette[color].lighter}, ${theme.vars.palette[color].light})`,
+          ...theme.applyStyles('dark', {
+            boxShadow: `0px -2px 4px 0px ${theme.vars.palette[color].dark} inset`,
+          }),
+        })}
+      />
+    </MotionBox>
+  );
+}
+
+/**
+ * Minimal's five drifting hero dots (`hero-svg.tsx` `Dot` / `Dots`), the only
+ * part of its `HeroBackground` taken (docs/39 Step 4; the rest stays rejected,
+ * docs/28 §3.1). The root is a `MotionContainer`, as `HeroBackground`'s is, so
+ * the dots fade in on the same stagger. Decorative only.
+ *
+ * The coordinates are not Minimal's. Its numbers place dots around a centred
+ * single-column stack; this hero keeps the copy / orbit split (docs/28 D4),
+ * and copied as-is they land on the subtitle and on the orbit (the E4 lesson:
+ * Minimal's hero geometry ports by meaning, not by line). Each dot's (dx, dy)
+ * is its centre at the start of the drift, measured from the pinned layer's
+ * centre. Measured on the real layout across lg+ viewports in en and zh, the
+ * whole 24px sweep clears the copy, the CTAs and the resting orbit's chip
+ * ring, and the header from ~650px of viewport height (docs/39 Step 4).
+ *
+ * Rendered from lg only. There the pinned layer is the viewport and the
+ * Container is fixed-width, so offsets from the layer centre stay put; below
+ * it the columns close in and the right gutter goes. Not rendered rather than
+ * `display: none`, so nothing drifts on motion's frame loop where they don't
+ * show.
+ */
+function Dots() {
+  return (
+    <MotionContainer aria-hidden sx={{ position: 'absolute', inset: 0, zIndex: 0 }}>
+      {DOTS.map((dot) => (
+        <Dot key={dot.color} {...dot} />
+      ))}
+    </MotionContainer>
+  );
+}
+
 function ScrollHint({ label }: { label: string }) {
   return (
     <MotionBox
@@ -98,6 +184,7 @@ export function Hero() {
   const { t } = useTranslation();
 
   const mdUp = useMediaQuery((theme) => theme.breakpoints.up('md'));
+  const lgUp = useMediaQuery((theme) => theme.breakpoints.up('lg'));
   const reduceMotion = useReducedMotion();
 
   const scrollProgress = useScrollPercent();
@@ -120,9 +207,10 @@ export function Hero() {
   );
 
   // Once the fold has scrolled past, take the whole pinned layer out of paint.
-  // `opacity: 0` alone would keep Aurora's two blur(48px) discs and the orbit's
-  // ~20 animated nodes compositing forever, which Minimal never pays for
-  // because its hero background is static.
+  // `opacity: 0` alone would keep Aurora's two blur(48px) discs, the drifting
+  // dots and the orbit's ~20 animated nodes compositing forever. Minimal pins
+  // its hero the same way with no such gate, but all that keeps moving in its
+  // background is five small dots and one line of scrolling text (docs/28 §5).
   const spent = animated && scrollProgress.percent >= 100;
 
   return (
@@ -167,6 +255,7 @@ export function Hero() {
         })}
       >
         <Aurora />
+        {lgUp && <Dots />}
 
         <Container
           maxWidth="lg"

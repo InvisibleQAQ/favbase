@@ -26,7 +26,7 @@
 | Q1 | 画廊舞台**完整轮换**（照 `home-highlight-features.tsx:144-157` 的 8 个 stop）+ 两处可读性偏离：副标题改 `text.primary`；暗色加一层 `grey.900` 60% 压暗层 |
 | Q2 | 平台字形上品牌色，OrbitCore / marquee / picker **三处都上**；picker 选中态照 app nav 先例 |
 | Q3 | Hero 标题做 Minimal 的三级层次，首行取可读下限：首行 `text.secondary` 实色（不用 Minimal 的 `opacity: 0.24`，1.63:1），次行墨色，品牌词流动渐变 |
-| Q4 | 可选项三项都做：Hero 浮动彩球、OrbitCore 内圈彩点、agent-skills 改 ForDesigner 深色带 |
+| Q4 | 可选项三项都做：Hero 浮动彩球、OrbitCore 内圈彩点、agent-skills 改 ForDesigner 深色带。**2026-10-11**：OrbitCore 内圈彩点由用户撤回（看过 mock 后选「不做」，理由见 Step 4），另两项不变 |
 
 可读性偏离的先例是 docs/31 Step 3 Q2「形照搬，色取可读下限」。
 
@@ -426,7 +426,7 @@
   中性尾词与白色尾词从 docs/31 Step 3 起就是这样，品牌词只是沿用了同一种盒子。真要修，应在 `Headline` 里给拉丁尾词统一补回
   末尾字距（例如 `paddingInlineEnd` 取字距的绝对值），一次覆盖所有尾词，不要只给品牌词单独打补丁。本步没有做。
 
-### Step 4 — Hero 浮动彩球 + OrbitCore 内圈彩点（未开始）
+### Step 4 — Hero 浮动彩球 + OrbitCore 内圈彩点（彩球已落地并完成浏览器验收 2026-10-11；内圈彩点已撤回，用户 2026-10-11；见本步「落地记录」）
 
 - **彩球**：移植 `$MIN/sections/home/components/hero-svg.tsx:242-330` 的 `Dot` / `Dots` 为 welcome 私有组件，挂在钉住层
   `<Aurora />` 旁、Container 之下。token 照搬（`palette[c].lighter → light` 135deg、inset 阴影亮 `main` / 暗 `dark`，
@@ -436,10 +436,136 @@
   orbit 46s 一圈，环内任何固定点都会撞芯片，所以必须放在 orbit 半径以外、避开文案列。
 - docs/28 D5 拆开：`HeroBackground` 的同心圆 / 网格线 / 描边字仍拒绝，三条拒绝理由都不针对 `Dots`；
   `welcome/CLAUDE.md`「已拒绝、别再提」那行同步改写。
-- **内圈彩点**：照 `illustration-integration.webp` 的语汇重绘（位图，无源码，色值从图里取样，token 是 [UNKNOWN]）：
+- **内圈彩点（已撤回，用户 2026-10-11，理由见下一条；这段是原计划，保留不改）**：照 `illustration-integration.webp`
+  的语汇重绘（位图，无源码，色值从图里取样，token 是 [UNKNOWN]）：
   在辐条内段 r≈40–55 加一道无芯片的内圈放 6 个低透明度彩点，不是放在芯片所在的 r=76 环上。
   **开工前先拿 Step 1 的截图再确认一次**：平台组核验 agent 反对这一项——芯片换成品牌色后，再加一套语义色彩点会和
   「色相 = 平台」抢位置，success / error 色的点可能被读成状态。用户 2026-10-10 选了做，这条风险是事后才补告知的。
+- **撤回经过**：开工前主会话按上一条做了再确认，给用户看了四种 mock（现状轨道、多色内圈、单色 coral 内圈、390px 下的内圈；
+  草稿在系统临时目录，不进仓库），用户选「不做内圈」。当时摆出的三条证据：
+  1. 撞色相：从 `illustration-integration.webp` 取样的内圈色是紫 / 琥珀 / 绿 / coral / 青 / 绿。琥珀与书签芯片同族，青挨着知乎的蓝，
+     coral 挨着 YouTube 与 B站。内圈是静止的，芯片每 46s 转一圈，每个芯片都会扫过每一颗点。
+  2. 几何：en 核心标签「LOCAL KNOWLEDGE BASE」在 md 下已伸到 200 单位 SVG 的 r≈47，r≈48 以内的任何内圈都压字；xs / sm 下标签
+     远宽于核心，计划的 r 40–55 整段都压（390px mock）。
+  3. 轨道上已经叠了三套同心系统（外圈虚线环、每个芯片一条的流动辐条、两道声呐光晕），内圈虚线环是第四套，正是 docs/28 §3.1 拒绝
+     `HeroBackground` 时说的「叠两层同心圆分不出主次」。
+
+#### 落地记录（2026-10-11）
+
+只做了彩球；内圈彩点已撤回，没有任何代码。
+
+**改动**（路径相对 `entrypoints/welcome/`，行号为改后）：
+
+- `sections/hero.tsx`：
+  - `:67-84` 数据表：`DotSpec`（颜色、尺寸、漂移轴、dx、dy）与 `DOTS`。五行按 Minimal 的顺序排（error / warning / info /
+    secondary / success），也就是 stagger 的顺序。渲染靠映射这张表，没有逐颗手写的 JSX。
+  - `:86-118` `Dot`：外层 `MotionBox` 挂 `varFade('in')`，`absolute`、`top` / `left` 50%、尺寸缺省 12，定位写成中心偏移
+    `translate(calc(-50% + dx px), calc(-50% + dy px))`（`:96`）。内层 `MotionBox` 的漂移是 `animate={{ [axis]: [0, 24] }}` 加
+    Minimal 的缺省 transition（6s、linear、无限、reverse，`:103-104`）；`sx` 照搬（`:105-114`）：`lighter → light` 135deg 渐变，
+    inset 阴影亮色 `main`、暗色 `dark`（`applyStyles('dark')`），颜色键的类型是 `PaletteColorKey`（`:2` 类型 import，先例
+    `components/animate/scroll-progress.tsx:2`）。`:99-101` 一句注释说明为什么不手动 gate reduce motion。
+  - `:120-149` `Dots`：根是 `MotionContainer`（`:26` 从 `../components/animate` 取），`aria-hidden`，
+    `absolute; inset: 0; zIndex: 0`，与 Aurora 那层同值。文档注释写了出处、坐标为什么不是 Minimal 的、偏移的含义、
+    lg 门槛与理由、怎么核验的。
+  - `:187` `lgUp`；`:258` `{lgUp && <Dots />}`，紧跟 `<Aurora />`、在 Container 之前：DOM 顺序让彩球压在 Aurora 上，
+    Container 的 `zIndex: 1` 压在两者上；彩球也就落在 `spent` gate 的 `visibility: hidden` 之内。
+  - `:209-213` `spent` 注释改写：彩球列进被 gate 停绘的东西。原句「Minimal 从不付这笔开销，因为它的 hero 背景是静态的」
+    不对，改成 Minimal 同样钉住、没有 gate，只是一直在动的东西量小（docs/28 §5 勘误）。
+- 文档：`welcome/CLAUDE.md:43`（「已拒绝」那行改成 `HeroBackground` 除 `Dots` 外）、`:44`（新增：内圈彩点已拒绝，附理由）、
+  `:45`（新增：彩球坐标只对现在的 hero 几何成立，动几何就重跑本步量法；只从 lg 起渲染；挂在钉住层里）；docs/28 D5 行
+  （`:21`）、§2.2 #6（`:59`）、§3.1 补注（`:102`）、§5 勘误（`:208`）；本文 §1 Q4（`:29`）、本步状态行、内圈彩点两段。
+
+**坐标与量法**（`.trellis/` 不进仓库，量法只记在这里；量的脚本是系统临时目录里的草稿，也不进仓库）：
+
+主会话在 BrowserOS 里装的扩展上用 CDP 量。md 起钉住层就是视口，内容在层里居中；lg（1200）起 Container 定宽，所以相对层中心
+的偏移在各宽度下不变：文案列 x ∈ [−580, 约 +25]（en 标题行尾），y ∈ [−205, +205]；orbit 中心在 (+341, 0)，lg 以上各宽度相同；
+orbit 禁区半径 209 = 芯片环 168 + 芯片半对角线 34 + 余量 7，按静止的 orbit 算（7 不是 `Magnet` 的位移，`strength={7}` 是
+除数，见下方已知局限）。lg 以下两列向中间收（900 宽时文案列碰到 orbit 禁区），
+右侧 gutter 消失。
+
+| 颜色 | 尺寸 | 漂移 | 中心 (dx, dy)，相对钉住层中心，px | lg+ 且视口高 ≥ 650 时的最小间距 |
+|---|---|---|---|---|
+| error | 14 | x [0, 24] | (−444, −236) | 14px，到顶栏（1366×657 zh） |
+| warning | 12 | y [0, 24] | (+96, +150) | 72px，到 orbit 禁区（1200×800 zh） |
+| info | 12 | x [0, 24] | (+490, +232) | 56px，到 orbit 禁区（1366×657 zh） |
+| secondary | 12 | x [0, 24] | (+530, −180) | 36px，到右沿（1200×800 en） |
+| success | 12 | y [0, 24] | (−372, +258) | 41px，到下沿（1366×657 zh） |
+
+间距按整段漂移扫过的范围算，对象是顶栏下沿、eyebrow / 标题各行 / 副文案的文字范围、两个 CTA、ScrollHint、orbit 禁区圆和
+层的四沿，量了 21 个视口 × en / zh。对照：照抄 Minimal 的数，1440×790 下 warning 落进副文案（−42px），info 与 secondary
+落在 orbit 上（−68 / −40px）。已知局限：视口高低于约 650 时左上那颗挤到顶栏（1280×600 下进入 72px 的顶栏带 15px，仍在
+logo 副标题文字之下），不压字；表里到 orbit 禁区的间距只对静止的 orbit 成立：指针进入 orbit 外 120px 内时 `Magnet`
+（`orbit-core.tsx`，偏移 = 指针到中心的距离 / 7，判定「近」用的是已偏移的盒子）让整个 orbit 朝指针偏，实测每轴最多 43px，
+间距随之收窄（实测值见下方「浏览器验收」，最坏 −20px），芯片在 Container 的 `zIndex: 1` 上，压在彩球之上。主会话判定接受：
+滚动时 y4 视差本来就让整个 orbit 与文案滑过静止的彩球（Minimal 的背景同样静止、内容视差滑过），这只是同一类短暂遮挡，
+不碰文字；md（900–1199）下 secondary 与 info 掉出右沿、error 贴左沿，这是只从 lg 起渲染的原因；
+md 以下是上下堆叠的布局。改 Container 宽度、7/5 分栏、`--fb-orbit-r` 或标题 clamp 中的任何一项，这张表就要重量。
+
+**与上文计划的偏离 / 默认决定**：
+
+1. 定位写成中心偏移 `translate(calc(-50% + dx), calc(-50% + dy))`，不用 Minimal 的 `translate(calc(50% + X), …)`。后者把点的
+   中心放在 `X + 尺寸` 处，数字本身没法直接拿来复核；数值反正是新量的，没有理由保留那种写法。
+2. 入场不是计划写的对象形 `initial` / `animate` + `transitionEnter()`，而是给彩球一个 `MotionContainer` 根、每颗点挂
+   `varFade('in')`。计划的前提只是「hero 没有 `MotionContainer` 父级」；给彩球一个，就复现了 Minimal 的 stagger
+   （`HeroBackground` 的根本来就是 `MotionContainer`，`hero-background.tsx:92`），也合 docs/28 D6「同质列表用
+   `MotionContainer` + `varContainer`」。`varFade('in')` 与 Minimal `Dot` 内联的 variants 逐值相同（0.64s、同一条曲线），
+   只多一个用不到的 `exit`。`MotionContainer` 此前零消费者，这是第一个。
+3. 只从 lg 起渲染（`useMediaQuery` 条件渲染，先例 `hero-background.tsx:129` 的 `{mdUp && <Texts />}`）。计划没写断点；理由见上方
+   「坐标与量法」。用条件渲染而不是 `display: none`，看不见的地方 motion 的帧循环里就没有它们。
+4. 不加测试：约束是布局几何，happy-dom 算不出来；核验靠浏览器实测（上方量法与下方「浏览器验收」）。
+5. 不手动 gate reduce motion（Step 3 的品牌词要 gate，这里不要）：`x` / `y` 在 motion-dom 12.42.2 的 `positionalKeys` 里，
+   `visual-element-target.mjs:84-87` 在 reduce 下把这类键的整个 transition 换成 `{ type: false }`，漂移直接跳到末帧停住；
+   opacity 入场照跑（与 ScrollHint 相同；Aurora 没有 opacity 入场）；漂移被停住，与 Aurora 的 x / y / scale 相同。
+6. 外层的 `sx` 不像 Minimal 那样再展开到内层。Minimal 的 `Dot` 把调用方的 `sx`（尺寸 + transform）同时给了内外两层，
+   内层的 transform 随即被 motion 写的内联漂移覆盖，尺寸本来就是 100%，所以对画面没有影响；这里按数据渲染，没有 `sx` 透传。
+7. favbase 的 error 阶梯（`#FFE0DE → #FF7A75`，main `#E53935`）比 Minimal 的（`#FFE9D5 → #FFAC82`，main `#FF5630`）偏红，
+   照计划接受。
+8. 计划只点名 docs/28 D5，实际多补了 §2.2 #6：那一格同样写着「不取」，不补就是一处过期的说法。
+
+**验证**：
+
+- 生成的 CSS 与运行时（happy-dom 下在 `ThemeProvider` 里渲染 `Hero`，mock `useMediaQuery` 让 lg 成立，读 emotion 输出与内联
+  style；探针放在仓库内临时文件，跑完即删）：
+  - 五颗外层各一条规则：`position: absolute; top: 50%; left: 50%`，尺寸 14 / 12px，`transform: translate(calc(-50% + -444px),
+    calc(-50% + -236px))`，其余四颗的值与上表一致。外层没有 motion 写的内联 transform，`sx` 的定位不会被覆盖。
+  - 内层：`border-radius: 50%; box-shadow: 0px -2px 4px 0px var(--palette-<c>-main) inset; background: linear-gradient(135deg,
+    var(--palette-<c>-lighter), var(--palette-<c>-light))`；暗色只有一条 `*:where([data-color-scheme="dark"]) … { box-shadow: …
+    var(--palette-<c>-dark) inset }`。
+  - 根：`position: absolute; inset: 0; z-index: 0`，`aria-hidden="true"`；钉住层的子元素顺序是 Aurora → 彩球根 → Container →
+    ScrollHint。lg 不成立时钉住层只有 Aurora、Container、ScrollHint 三个子元素。
+  - 300ms 时五颗外层的内联 opacity 依次是 0.57 / 0.38 / 0.21 / 0.10 / 0.03（stagger 生效，顺序即数据表顺序）；内层内联
+    `translateX / translateY(1.192px)`，漂移在走。
+  - 包一层 `MotionConfig reducedMotion="always"`：300ms 时内层已是 `translateX / translateY(24px)`，1.5s 后不变；opacity 照常
+    淡入到 1。
+- `pnpm compile` 通过；focused `pnpm vitest run entrypoints/welcome entrypoints/app/theme tests/ui-vendor-boundaries.test.ts
+  tests/i18n-no-hardcoded.test.ts tests/platform-completeness-contract.test.ts` 14 个文件 / 157 例通过（与 Step 3 相同，本步没有
+  新测试）；`pnpm test` 首次整跑全绿，主仓库 239 个文件 / 2108 例、`packages/*` 15 个文件 / 263 例；`git diff --check` 干净。
+  没有跑 `pnpm build`。
+- **构建**：主会话 `pnpm build`（bundle 契约 14 个模块 / 963,108 字节）。`manifest.json`、`background.js`、`content-scripts/*`、
+  `app.html`、`offscreen.html` 的 sha1 构建前后不变；77 个 chunk 里只有 welcome 入口换了名（`welcome-DwptTnnh.js` →
+  `welcome-CdLRHK8u.js`），app.html 引用的 chunk 全部同名。没有重载扩展，用户开着的扩展页不受影响。
+- **浏览器验收**（§5，BrowserOS 里装的扩展 `ifnlocdg…`，自己新开的标签，页面实际加载的是 `welcome-CdLRHK8u.js`；亮暗与中英用
+  header 自己的按钮切，`setItem` / `chrome.storage.local.set` 在本标签吞掉那两次写入，截完读回共享存储仍是 `light` / 未设置；
+  加载、两次跨过 1200 宽、滚过首屏再滚回，控制台零报错零警告）：
+  - 几何（真实彩球：外层盒是漂移起点，加上 24px 漂移的整段扫过范围，对上方同一组障碍物算间距；15 个 lg+ 视口 × en / zh）：
+    五颗的中心实测等于数据表的 (dx, dy)。视口高 ≥ 650 时各颗最小间距：error 到顶栏 14（1366×657）、到 eyebrow 25 / 28（en / zh）；
+    warning 到 orbit 禁区 72（1200×800 zh）/ 74；info 到 orbit 禁区 56；secondary 到右沿 36（1200×800）、到 orbit 禁区 40；
+    success 到 CTA 47 / 50（en / zh）、到下沿 41（1366×657）。1280×600 下 error 进入顶栏带 15、success 离下沿 12，即上方已知局限。
+    ScrollHint 在任何视口都不是最近的障碍。1199×800、1024×768、900×900、390×844 中英都是零颗。
+  - token（1440×900 亮 en / 暗 en / 暗 zh / 亮 zh）：五颗内层 computed 渐变两种配色相同，等于 `lighter → light`，如 error
+    `linear-gradient(135deg, rgb(255,224,222), rgb(255,122,117))`、info `rgb(202,253,245) → rgb(97,243,243)`；inset 阴影亮色是
+    `main`（error `rgb(229,57,53)`、warning `rgb(255,171,0)`、info `rgb(0,184,217)`、secondary `rgb(142,51,255)`、success
+    `rgb(34,197,94)`），暗色是 `dark`（`rgb(183,28,28)` / `rgb(183,110,0)` / `rgb(0,108,156)` / `rgb(81,25,183)` / `rgb(17,141,87)`）。
+    钉住层子元素顺序 Aurora → 彩球根（`absolute`、`z-index: 0`、`aria-hidden="true"`）→ Container；opacity 入场后为 1。
+  - 漂移：1s 内内层 `translateX / translateY` 从 10.52 走到 14.58px（约 4px/s，即 6s 走 24px）。模拟 `prefers-reduced-motion: reduce`
+    后重载（1440×900、1920×1080）：五颗都停在 `translateX / translateY(24px)`，2s 前后不变，opacity 为 1。
+  - spent：滚过首屏后钉住层 `visibility: hidden`，五颗 computed 同为 `hidden`。
+  - Magnet（CDP 合成指针：先移到远处复位，再从 orbit 中心分 24 步走到目标点，停 1.5s 后量；按「任意角度的芯片都可能转到这里」
+    的禁区圆保守计算，括号里是当时芯片实际位置到扫过范围的最近距离）：1440×900 指针停在近区四角时 orbit 偏 ±43px，
+    右上角 secondary −20（34）、右下角 info −2（23）、左下角 warning 15（25）；指针停在彩球上时 secondary 8、info 21、warning 37。
+    1200×800 同法：右上角 secondary −11（44）、右下角 info 4（39）、左下角 warning 13（24）。负值即芯片转到该角度时会盖住彩球的一角，
+    处置见上方已知局限。
+  - 截图（1440×900 四组、1920×1080、1366×657、1200×800 亮 en，加 Magnet 右下角 2 倍特写）与上面的量值一致。
 
 ### Step 5 — agent-skills 改 ForDesigner 深色带（未开始）
 
