@@ -662,7 +662,8 @@ const zhCN = {
 
   'welcome.hero.eyebrow': '浏览器扩展 · 数据不出本机',
   'welcome.hero.titleLine1': '把收藏',
-  'welcome.hero.titleLine2': '变成知识库',
+  'welcome.hero.titleLine2': '变成',
+  'welcome.hero.titleBrand': '知识库',
   'welcome.hero.subtitle':
     '各平台的收藏自动收录、切块入库、向量索引。然后你只要提问——答案带着来源，原文一点即达。',
   'welcome.hero.ctaPrimary': '开始使用',

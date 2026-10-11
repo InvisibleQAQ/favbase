@@ -77,7 +77,7 @@ BrowserOS neo 的 MCP 工具驱动不了扩展页：`tabs new` 打开 `chrome-ex
 - **favbase 原状**：`Eyebrow` 药丸 + `headlineGradient(theme)` 的珊瑚渐变，hero 与五个 section 标题共用一道（`entrypoints/welcome/components/section-shell.tsx`）。
 - **冲突**（已推翻）：docs/28 **D8 是用户决定**：「结构取、颜色留，保 coral 品牌色，`Eyebrow` 药丸保留」。docs/28 的 D8 行、§2.4 矩阵 eyebrow / 标题渐变两行已改注（划掉被推翻的半句并注明日期，不删行），§4 E3 补一段更新。
 - **用户决定（2026-09-27）**：
-  - **Q1** hero 标题保 coral 渐变，只改五个 section 标题（flow / chat / agentSkills / bilibili / picker）——正是 Minimal 自己「hero 彩色、section 中性」的分法。hero 的 caption 同样换 overline，全页 caption 一致。Minimal hero 余下的首行 24% 淡化 + 流动渐变不在本步。
+  - **Q1** hero 标题保 coral 渐变，只改五个 section 标题（flow / chat / agentSkills / bilibili / picker）——正是 Minimal 自己「hero 彩色、section 中性」的分法。hero 的 caption 同样换 overline，全页 caption 一致。Minimal hero 余下的首行 24% 淡化 + 流动渐变不在本步。**2026-10-11 补注**：这两项由 docs/39 Step 3 完成，首行取 `text.secondary` 实色而不是 0.24 不透明度；hero 两行的 112deg coral 渐变与 `headlineGradient` 随之删除，彩色只留在品牌词上。
   - **Q2** 形照搬，色取可读下限：caption 用 `text.secondary`（Minimal 是 `text.disabled`）；尾词去掉 Minimal 额外的 `opacity: 0.4`，只留 `text.primary` → 20% 的 `to right` 淡出。favbase 的尾词是含义词（「knowledge base」「while you watch」），不是装饰。
   - **Q3** 五个标题拆 `heading` + `headingTail`，文案一字不改：zh 两半直接相接、en 加一个空格，都等于原句。
 - **默认决定**（最终确认时告知用户）：

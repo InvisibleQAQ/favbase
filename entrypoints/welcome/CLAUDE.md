@@ -48,12 +48,13 @@
 
 ## 标题（owner：`components/section-shell.tsx`）
 
-- 标题着色只在这里定义：`Headline ink="brand"` 的 coral 渐变只给 hero；section 标题是中性实色 + 尾词淡出；`white` 只给 `platform-request.tsx` 的深色卡（docs/31 Step 3）。
+- 标题着色只在这里定义，调用点不用 `sx` 覆盖颜色。四种墨色：section 标题 `neutral`（中性实色 + 尾词淡出）；hero 两行专用 `muted` 与 `brand`，是 Minimal 的三级标题（docs/39 Step 3）：首行 `muted` 是 `text.secondary` 实色，取可读下限（Minimal 的 `opacity: 0.24` 只有 1.63:1），次行 `brand` 是 `text.primary` 实色头 + 品牌词尾巴的 coral / amber 流动渐变；`white` 只给 `platform-request.tsx` 的深色卡（docs/31 Step 3）。
 - `how-it-works.tsx` 的步骤大号数字与中性尾词必须共用 `fadeTextGradient`；它与 `ctaGlowShadow` 都是定义一次的共享外观 helper，别再手写。
 - 字号用 `clamp`，不许换成 `variant="h1"/"h2"`：本仓库的主题阶梯被刻意压小（h1 平 28px、h2 平 24px），换过去 section 标题会缩 25–57%（docs/28 §4 E2）。
 - 中性尾词保持 `inline-block`，别改回 inline：inline 渐变按行切片，折到下一行的词只分到渐变末段，成了淡色孤字（docs/31 Step 3 D-d，用户看过截图后决定）。
 - `fadeTextGradient` 去掉了 Minimal 叠的 `opacity: 0.4`，`SectionCaption` 用 `text.secondary` 而非 `text.disabled`：都是为对比度的刻意偏离。
-- `Headline` 默认渲染 `h2`；全页唯一的 `h1` 在 `hero.tsx`，渐变留在每行的 `span` 上（挂到 h1 会横跨两行，且 `background-clip: text` 在 transformed 子元素上有渲染 glitch）。
+- `Headline` 默认渲染 `h2`；全页唯一的 `h1` 在 `hero.tsx`，h1 与两行本身都不上渐变，渐变只在品牌词自己的 `inline-block` span 上，宽度就是这个词（挂到 h1 会横跨两行，且 `background-clip: text` 在 transformed 子元素上有渲染 glitch；铺在整行上曾被拉到 7 列列框宽，zh 首行整行落在灰段）。
+- 品牌词的流动是 `backgroundPosition` 动画，`MotionConfig reducedMotion="user"` 停不了它（见「动画」），停它的是 `Headline` 里手动的 `useReducedMotion()` gate：reduce 下不给 `animate`，停在首帧。这行看着多余，别删（守卫 `components/section-shell.test.tsx`「Headline brand tail flow」）。
 - 调用点覆盖 `WelcomeSection` 的 `py`/`pt`/`pb` 必须带 `md` 键：标量只进 base 规则，md 起输给组件自己的媒体查询。
 
 ## 动画

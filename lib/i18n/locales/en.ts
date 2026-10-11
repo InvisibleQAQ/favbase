@@ -677,7 +677,8 @@ const en: Record<LocaleKeys, string> = {
 
   'welcome.hero.eyebrow': 'Browser extension · nothing leaves this machine',
   'welcome.hero.titleLine1': 'Your favorites,',
-  'welcome.hero.titleLine2': 'now answerable',
+  'welcome.hero.titleLine2': 'now',
+  'welcome.hero.titleBrand': 'answerable',
   'welcome.hero.subtitle':
     'Favorites from all your platforms, collected automatically, chunked into a local database and vector-indexed. Then you just ask — every answer carries its sources, one click from the original.',
   'welcome.hero.ctaPrimary': 'Get started',

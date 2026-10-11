@@ -1,6 +1,9 @@
 import type { ElementType, ReactNode } from 'react';
+import type { MotionProps } from 'motion/react';
 import type { BoxProps } from '@mui/material/Box';
 import type { CSSObject, Theme } from '@mui/material/styles';
+
+import { useReducedMotion } from 'motion/react';
 
 import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
@@ -11,6 +14,7 @@ import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify, type IconifyName } from '@/entrypoints/app/components/iconify';
 
 import { MotionViewport } from './animate';
+import { MotionBox } from './motion-box';
 
 /**
  * Primary-CTA glow. The hero and picker "main action" buttons share the exact
@@ -18,29 +22,6 @@ import { MotionViewport } from './animate';
  */
 export function ctaGlowShadow(theme: Theme) {
   return `0 10px 28px 0 ${varAlpha(theme.vars.palette.primary.mainChannel, 0.34)}`;
-}
-
-/**
- * The hero's display gradient, painted as text: grey into coral in light mode,
- * inverted (white into coral light) in dark so the glyphs stay the brightest
- * thing on screen. `Headline ink="brand"` is its only consumer, so it is not
- * exported.
- *
- * Colour on the hero, neutral grey on every section below it is Minimal's own
- * split (docs/31 Step 3): its hero carries the coloured words, its section
- * titles fade grey (`fadeTextGradient` below).
- */
-function headlineGradient(theme: Theme): CSSObject {
-  return {
-    ...theme.mixins.textGradient(
-      `112deg, ${theme.vars.palette.grey['800']} 0%, ${theme.vars.palette.grey['700']} 42%, ${theme.vars.palette.primary.main} 100%`
-    ),
-    ...theme.applyStyles('dark', {
-      ...theme.mixins.textGradient(
-        `112deg, ${theme.vars.palette.common.white} 0%, ${theme.vars.palette.grey['400']} 38%, ${theme.vars.palette.primary.light} 100%`
-      ),
-    }),
-  };
 }
 
 /**
@@ -152,30 +133,66 @@ export function Eyebrow({ children, icon }: { children: ReactNode; icon: Iconify
 
 /**
  * Which ink a `Headline` is painted in: `neutral` (the default) for every
- * section title, `brand` for the hero, `white` for the grey.900 card at the end
- * of the page. The union is what keeps `tail` off `brand`: the brand gradient
- * already runs across the whole line, and a fade laid over it has no defined
- * colour.
+ * section title, `muted` and `brand` for the hero's first and second lines,
+ * `white` for the grey.900 card at the end of the page. The union pins the
+ * tail per ink: `brand` must have one, because its tail is the brand word and
+ * without it brand would paint exactly what neutral paints under another name;
+ * `muted` refuses one, because the hero's first line has no second half and
+ * no tail paint has been designed to follow a `text.secondary` head.
  */
 type HeadlineInk =
   | { ink?: 'neutral'; tail?: ReactNode }
   | { ink: 'white'; tail?: ReactNode }
-  | { ink: 'brand'; tail?: never };
+  | { ink: 'brand'; tail: ReactNode }
+  | { ink: 'muted'; tail?: never };
 
 type InkStyle = (theme: Theme) => CSSObject;
 
+/** Solid `text.primary`: the head of a neutral title and of the hero's brand line. */
+const primaryHead: InkStyle = (theme) => ({ color: theme.vars.palette.text.primary });
+
 /**
- * What each ink paints: the headline, and the tail for the inks that take one.
- * Each tail keeps its source's box: `inline-block` for the neutral one
- * (Minimal's section title), plain inline for the white one (Minimal's
- * advertisement title).
+ * What each ink paints: the headline, the tail for the inks that take one, and
+ * for the one tail that moves, the motion props that move it (`flow`). The
+ * table is the whole difference between inks: `Headline` has no ink branch.
+ *
+ * Each tail keeps its source's box. `inline-block` for the neutral one
+ * (Minimal's section title) and for the brand word: Minimal's brand span is a
+ * flex item of a `flex-wrap` h1, which blockifies it. Here it must be a box of
+ * its own for the same reason as the neutral tail (docs/31 Step 3, D-d): an
+ * inline background is sliced across line fragments, and 「知识库」 may break
+ * between any two characters, leaving each piece a different stretch of the
+ * gradient. Plain inline for the white one (Minimal's advertisement title).
  */
-const INKS: Record<NonNullable<HeadlineInk['ink']>, { head: InkStyle; tail?: InkStyle }> = {
+const INKS: Record<
+  NonNullable<HeadlineInk['ink']>,
+  { head: InkStyle; tail?: InkStyle; flow?: Pick<MotionProps, 'animate' | 'transition'> }
+> = {
   neutral: {
-    head: (theme) => ({ color: theme.vars.palette.text.primary }),
+    head: primaryHead,
     tail: (theme) => ({ display: 'inline-block', ...fadeTextGradient(theme) }),
   },
-  brand: { head: headlineGradient },
+  // Minimal's brand word value for value (`home-hero.tsx:82-103`): a 300deg
+  // coral / amber run, scaled to 400% and walked by `background-position`.
+  // Palette variables are safe here, unlike in the product tour's stage: the
+  // flow moves the position and never interpolates a colour. Both schemes take
+  // the same paint, as in Minimal. `backgroundSize` must come after the mixin,
+  // whose `background` shorthand would reset it.
+  brand: {
+    head: primaryHead,
+    tail: (theme) => ({
+      display: 'inline-block',
+      ...theme.mixins.textGradient(
+        `300deg, ${theme.vars.palette.primary.main} 0%, ${theme.vars.palette.warning.main} 25%, ${theme.vars.palette.primary.main} 50%, ${theme.vars.palette.warning.main} 75%, ${theme.vars.palette.primary.main} 100%`
+      ),
+      backgroundSize: '400%',
+    }),
+    flow: {
+      animate: { backgroundPosition: '200% center' },
+      transition: { duration: 20, ease: 'linear', repeat: Infinity, repeatType: 'reverse' },
+    },
+  },
+  muted: { head: (theme) => ({ color: theme.vars.palette.text.secondary }) },
   white: {
     head: (theme) => ({ color: theme.vars.palette.common.white }),
     tail: (theme) =>
@@ -191,18 +208,31 @@ const INKS: Record<NonNullable<HeadlineInk['ink']>, { head: InkStyle; tail?: Ink
  *
  * `ink` picks the paint (`INKS` above). `neutral`, the default, is Minimal's
  * section title: solid `text.primary`, with the closing word(s) passed as
- * `tail` and faded through `fadeTextGradient`. `brand` paints
- * `headlineGradient` and belongs to the hero alone. `white` is solid
- * `common.white` for the grey.900 CTA card at the end of the page
- * (`platform-request.tsx`, Minimal's `home-advertisement`), its tail faded
- * white -> 40% white exactly as Minimal's advertisement title does; in light
- * mode the other two inks start from dark greys that disappear into that card.
+ * `tail` and faded through `fadeTextGradient`. The hero takes Minimal's
+ * three-level title (`home-hero.tsx:58-106`, docs/39 Step 3) and these two
+ * inks belong to it alone: `muted` is its first line, solid `text.secondary`
+ * where Minimal fades that line to 0.24 opacity (~1.63:1 on white; this is
+ * the readable floor, ~4.9:1); `brand` is its second, a solid `text.primary`
+ * head with the brand word as `tail`, flowing through coral and amber. Colour
+ * on the hero, neutral on every band below it is Minimal's own split
+ * (docs/31 Step 3). `white` is solid `common.white` for the grey.900 CTA card
+ * at the end of the page (`platform-request.tsx`, Minimal's
+ * `home-advertisement`), its tail faded white -> 40% white exactly as
+ * Minimal's advertisement title does; the other inks' heads are greys tuned
+ * for the page ground and sink into that card in light mode.
+ *
+ * The flow runs on `background-position`, which `MotionConfig
+ * reducedMotion="user"` does not stop (welcome/CLAUDE.md "动画"), so it is
+ * gated here by hand: under "reduce motion" the tail gets no `animate` and
+ * stays on its first frame, a still coral / amber gradient. Every ink's tail
+ * is the same `MotionBox`; one with no `flow` is inert.
  *
  * Head and tail are joined here, by locale: a space in latin scripts, nothing
  * in CJK, so neither translated half carries the separator. Minimal's
- * advertisement title offsets its tail with `ml: 1` and its section title
- * bakes a space into the head string; with a text node chosen by locale, a
- * line break between the halves leaves no indent and CJK gets no gap.
+ * advertisement title and hero brand word offset their tails with `ml`, and
+ * its section title bakes a space into the head string; with a text node
+ * chosen by locale, a line break between the halves leaves no indent and CJK
+ * gets no gap.
  *
  * The neutral tail is an `inline-block`, as in Minimal's section title: when
  * it does not fit after the head it drops to the next line whole, and its
@@ -241,7 +271,9 @@ export function Headline({
   sx?: BoxProps['sx'];
 } & HeadlineInk) {
   const { locale } = useTranslation();
+  const reduceMotion = useReducedMotion();
   const isCjk = locale === 'zh-CN';
+  const { head, tail: tailInk, flow } = INKS[ink];
 
   return (
     <Box
@@ -249,9 +281,7 @@ export function Headline({
       sx={[
         (theme) => ({
           m: 0,
-          // A gradient ink's `background-clip: text` has to sit on the element
-          // that paints the glyphs, which is this one.
-          ...INKS[ink].head(theme),
+          ...head(theme),
           fontFamily: theme.typography.fontSecondaryFamily,
           fontWeight: 800,
           lineHeight: isCjk ? 1.12 : 0.98,
@@ -269,9 +299,14 @@ export function Headline({
       {tail != null && (
         <>
           {!isCjk && ' '}
-          <Box component="span" sx={INKS[ink].tail}>
+          <MotionBox
+            component="span"
+            sx={tailInk}
+            animate={reduceMotion ? undefined : flow?.animate}
+            transition={flow?.transition}
+          >
             {tail}
-          </Box>
+          </MotionBox>
         </>
       )}
     </Box>

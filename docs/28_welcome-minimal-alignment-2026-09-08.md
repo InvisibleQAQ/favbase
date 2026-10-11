@@ -55,7 +55,7 @@
 | 2 | `opacity` 随滚动百分比 1→0（仅 mdUp） | **取**，另加 `useReducedMotion` gate |
 | 3 | 五层 spring 视差 y1..y5 | **取四层**（favbase 左列三块 + 右列 orbit）：y1 = eyebrow+h1，y2 = 副文案，y3 = CTA 行，y4 = OrbitCore |
 | 4 | 居中单列栈 | **不取**（D4） |
-| 5 | `h1` 吃 `typography:'h2'` + lg 断点 72/90px；首行 `opacity:0.24`；品牌词 `textGradient` + 20s `backgroundPosition` 往复 | **部分取**：渐变实现取，字号不取（见 §4 勘误 E2） |
+| 5 | `h1` 吃 `typography:'h2'` + lg 断点 72/90px；首行 `opacity:0.24`；品牌词 `textGradient` + 20s `backgroundPosition` 往复 | **部分取**：渐变实现取，字号不取（见 §4 勘误 E2）。**2026-10-11**：首行淡化（取 `text.secondary` 实色，不用 0.24）与品牌词流动渐变由 docs/39 Step 3 补取；字号仍不取（E2） |
 | 6 | `HeroBackground` | **不取**（D5，理由见 §3） |
 
 ### 2.3 animate 原语（`$MIN/components/animate/`）
@@ -188,6 +188,8 @@ welcome 当初自造 clamp 正是因为 favbase 的 theme 没有 Minimal 那档�
 **改法**：渐变抽成 `section-shell.tsx` 的 `headlineGradient(theme)`，`Headline` 与步骤数字共用——与该文件既有的 `ctaGlowShadow(theme)` 同一模式（`entrypoints/welcome/CLAUDE.md` 明写「别再手写」）。这比原方案更好：那两处本来就该同源，分开正是它们在 `welcome.css` 时代能漂的原因。
 
 **2026-09-27 更新**（docs/31 Step 3）：步骤数字改吃 `fadeTextGradient(theme)`，与 section 标题的尾词共用；`headlineGradient` 只剩 hero 一个消费者、不再导出。「两处同源」的做法不变，换的是它们共用的 helper。
+
+**2026-10-11 更新**（docs/39 Step 3）：hero 改成 Minimal 的三级标题，`headlineGradient` 失去最后一个消费者，已删除。
 
 顺带：`scroll-progress` 裁成单文件后 animate 层实际 314 行，低于 §1 预估的 404。
 

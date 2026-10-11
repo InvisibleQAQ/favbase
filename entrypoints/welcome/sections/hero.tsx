@@ -195,10 +195,16 @@ export function Hero() {
               <SectionCaption>{t('welcome.hero.eyebrow')}</SectionCaption>
             </FadeIn>
 
-            {/* One h1 for the whole title. Each line keeps its own reveal
-                mask and its own gradient clip — moving the gradient up to the
-                h1 would stretch it across both lines (and background-clip:text
-                glitches over transformed children). */}
+            {/* One h1 for the whole title, in Minimal's three levels: a muted
+                first line, a solid second line, and the brand word flowing at
+                its end (docs/39 Step 3). Each line keeps its own reveal mask.
+                The gradient lives on the brand word's own span inside
+                `Headline` and is exactly as wide as the word, so no
+                `width: fit-content` patch is needed: laid over a whole line it
+                spanned the 7-column cell, and zh line 1 sat entirely in its
+                grey stretch. Nothing paints on the h1 itself: a gradient there
+                would stretch across both lines, and background-clip:text
+                glitches over transformed children. */}
             <Box component="h1" sx={{ m: 0, mt: 3 }}>
               <FadeIn
                 component="span"
@@ -206,7 +212,7 @@ export function Hero() {
                 y={38}
                 sx={{ display: 'block', overflow: 'hidden' }}
               >
-                <Headline component="span" size="hero" ink="brand" sx={{ display: 'block' }}>
+                <Headline component="span" size="hero" ink="muted" sx={{ display: 'block' }}>
                   {t('welcome.hero.titleLine1')}
                 </Headline>
               </FadeIn>
@@ -216,7 +222,13 @@ export function Hero() {
                 y={38}
                 sx={{ display: 'block', overflow: 'hidden' }}
               >
-                <Headline component="span" size="hero" ink="brand" sx={{ display: 'block' }}>
+                <Headline
+                  component="span"
+                  size="hero"
+                  ink="brand"
+                  tail={t('welcome.hero.titleBrand')}
+                  sx={{ display: 'block' }}
+                >
                   {t('welcome.hero.titleLine2')}
                 </Headline>
               </FadeIn>

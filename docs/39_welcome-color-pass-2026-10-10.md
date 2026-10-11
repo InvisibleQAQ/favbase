@@ -288,7 +288,7 @@
   motion 只能混字面色值；primary 与 preset 色阶两种配色共用（`app/theme/CLAUDE.md:23`）；随配色变的 neutral 取自
   `theme.colorSchemes`。值取自 owner、没有字面量、也不进 `sx`，这条规则的意图没有破。不要为此去改 app 范围的 spec。
 
-### Step 3 — Hero 标题（未开始）
+### Step 3 — Hero 标题（已落地并完成浏览器验收 2026-10-11；见本步「落地记录」）
 
 - i18n：`welcome.hero.titleLine2` 改为前半（en「now」/ zh「变成」），新增 `welcome.hero.titleBrand`（「answerable」/「知识库」），
   两个 locale 同改；首尾拼接复用 `Headline` 现有的分隔逻辑（en 一个空格、zh 不加），不用 Minimal 的 `ml` 偏移（docs/31 Step 2 的理由）。
@@ -302,6 +302,129 @@
 - 对比度（如实记录，不再重问）：品牌词 coral 在白底 2.54:1、琥珀 1.9:1；Minimal 是绿 3.1 / 琥珀 1.9；现状行尾也是 2.54。
   favbase 的 primary 是 coral，coral ↔ amber 都是暖色、相距约 30°，流动感弱于 minimals.cc 的 green ↔ amber。
 - 记录同步：docs/31 Step 3 Q1 推迟的「首行淡化 + 流动渐变」标为本步完成；docs/28 §2.2 #5 补注；`welcome/CLAUDE.md`「标题」节。
+
+#### 落地记录（2026-10-11）
+
+**改动**（路径相对 `entrypoints/welcome/`，行号为改后）：
+
+- i18n：`lib/i18n/locales/en.ts:680-681`（`titleLine2` → `now`，新增 `titleBrand` → `answerable`）、`zh-CN.ts:665-666`
+  （`变成` / `知识库`）。两半都不带分隔符，拼接仍归 `Headline`。
+- `components/section-shell.tsx`：
+  - `:143-147` `HeadlineInk` 四态：`brand` 的 `tail` 改必填；新增 `muted`，`tail?: never`。`:134-142` 注释改写成联合现在锁的两件事
+    （brand 不带尾巴就是换了名字的 neutral；muted 是 hero 首行，没有后半句）。
+  - `:152` `primaryHead`：neutral 与 brand 共用的 `text.primary` 实色头。
+  - `:167-203` `INKS`：行类型加可选的 `flow`（`Pick<MotionProps, 'animate' | 'transition'>`）。`brand` = `primaryHead` + 品牌词尾巴
+    （`:183-189`：`inline-block`，`textGradient('300deg, primary.main 0%, warning.main 25%, …')`，其后 `backgroundSize: '400%'`）
+    + `flow`（`:190-193`：`backgroundPosition '200% center'`、20s linear、无限 reverse）；`muted` = `text.secondary` 实色（`:195`）。
+    表注释（`:154-166`）写明尾巴为什么是 `inline-block`；brand 行注释（`:175-180`）写明照搬出处、CSS 变量为什么在这里可以用、
+    `backgroundSize` 为什么必须在 mixin 之后。
+  - `Headline`：`:274` `useReducedMotion()`，`:276` 解构 `INKS[ink]`；尾巴换成 `MotionBox`（`:302-309`），
+    `animate={reduceMotion ? undefined : flow?.animate}`。文档注释的墨色段（`:209-222`）改写，新增 gate 段（`:224-228`），
+    拼接段补上 Minimal hero 品牌词同样用 `ml`（`:230-235`）。
+  - 删除 `headlineGradient` 及其注释块；import 加 `MotionProps` 类型、`useReducedMotion`、`MotionBox`（`:2`、`:6`、`:17`）。
+- `sections/hero.tsx:215` 首行 `ink="muted"`；`:225-233` 次行 `ink="brand" tail={t('welcome.hero.titleBrand')}`。两行各自的
+  `FadeIn` 遮罩与 delay 不变。`:198-207` h1 注释改写：渐变只在品牌词自己的 span 上，「铺在列框上」的 bug 不会复发，也不需要
+  `width: fit-content`；h1 上不放渐变的两条理由保留。
+- 守卫 `components/section-shell.test.tsx`（6 例 → 12 例）：
+  - `:18-21` partial mock `motion/react`，`motion` 保持真实，只钉 `useReducedMotion`；`:34` 每例后复位。
+  - `:101-117` brand 首尾拼接两例（en 一个空格 / zh 无），与 white、neutral 并列。
+  - `:119-145` 默认墨色两例。头（`:128-133`）：与 `ink="neutral"` 相等不变，不等对照从 `brand` 换成 `muted`（brand 的头现在与
+    neutral 同 class）。尾（`:137-144`，新增）：带 tail 时尾巴 span 的 class 与 `ink="neutral"` 相等、与 `ink="brand"` 不等。
+    头的对照换掉之后，默认值改回 `brand`（docs/31 Step 3 之前的默认）只有尾巴还能看出来，原来的 `.not.toBe(brand)` 锁的正是这件事。
+  - `:147-165` 两条编译期 `@ts-expect-error`：`muted` 收 tail、`brand` 不带 tail。
+  - `:167-200` reduce-motion gate 两例：放开时等 100ms，尾巴的内联 `background-position` 匹配 `N% center`；reduce 时为空。
+    happy-dom 下 motion 真的在跑（100ms 后约 `1% center`，即 20s 内 0 → 200% 的线性进度），所以用的是行为形式，没有退到 stub
+    `./motion-box`。
+- 文档：`welcome/CLAUDE.md:51`（「标题」首条，四种墨色）、`:56`（h1 那条）、`:57`（新增：手动 gate，指向守卫）；
+  docs/31 Step 3 Q1 补注（`:80`）；docs/28 §2.2 #5（`:58`）与 §4 E3（`:192`）补注。
+
+**与上文计划的偏离 / 默认决定**（计划没定、实现时定的）：
+
+1. 新墨色叫 `muted`，按画法命名，与 neutral / brand / white 同一套命名法。是墨色而不是调用点的 `sx` 颜色：标题颜色只在
+   `section-shell.tsx` 定义（`welcome/CLAUDE.md`「标题」）。
+2. 品牌词尾巴是 `inline-block`。依据：中性尾巴的 docs/31 D-d（inline 背景按行片段切开）；Minimal 的品牌词是 `flex-wrap` h1 的
+   flex item，被 blockify。favbase 另有一条：「知识库」字间可断，inline 时折开的每一段各分到渐变的一截。
+3. 流动参数是 `INKS` 行上的数据（`flow`），render 里没有 `if (ink === 'brand')`。所有墨色的尾巴是同一个 `MotionBox`；
+   neutral / white 尾巴没有 `flow`，是惰性的 motion 元素。它们不带 `variants`，`MotionViewport` 的 variant 传播驱动不到
+   （docs/31 Step 4 D-b 读过的 motion 机制）。
+4. neutral 与 brand 共用的实色头抽成模块私有的 `primaryHead`。
+5. `Headline` 里原来那条行内注释（「渐变墨色的 `background-clip: text` 必须挂在画字形的这个元素上」）删掉：四种墨色的头都是
+   实色，渐变只在尾巴上。
+6. 拼接段补了一句 Minimal hero 品牌词同样用 `ml`（`xs 0.75 / md 1 / xl 1.5`），不照搬的理由与 docs/31 Step 2 相同，
+   没有另写。
+7. gate 的正例断言收紧到 `N% center` 的形状，而不只是「非空」：它同时证明写进去的是这段流动的模板。
+8. 顺带核实（未改）：motion 12.42.2 的 `useReducedMotion()` 用 `useState(prefersReducedMotion.current)` 只在挂载时读一次
+   （`framer-motion/dist/es/utils/reduced-motion/use-reduced-motion.mjs`），页面打开期间切系统设置不会停下已在跑的流动，
+   要重载。本页其余手动 gate（hero 视差、marquee）同理。浏览器验收须先模拟 `prefers-reduced-motion: reduce` 再重载，同 Step 2。
+
+**验证**：
+
+- 变异（每次只改一处、从同一份备份还原，最后 `cmp` 与备份逐字节一致，还原后全绿）：
+  - (a) 删掉 gate（`animate={flow?.animate}`）→「Headline brand tail flow > never moves it under reduced motion」红
+    （`expected '1% center' to be ''`）。
+  - (b) gate 反过来 → 同组两例都红（正例 `expected '' to match /^\d+(\.\d+)?% center$/`，反例 `expected '1.01% center' to be ''`）。
+  - (c) brand 的 `flow.animate` 改成 `{}` →「walks the gradient when motion is allowed」红（`expected '' to match …`），
+    即正例这道对照在起作用。
+  - (d) brand 的 `tail` 放宽成 `tail?: ReactNode` → `tsc` 报 `section-shell.test.tsx(160,5): error TS2578: Unused
+    '@ts-expect-error' directive`（「requires a tail on the brand ink」）。
+  - (e) muted 的 `tail?: never` 放宽成 `ReactNode` → `tsc` 报 `section-shell.test.tsx(152,5): error TS2578`（「refuses a tail
+    on the muted ink」）。
+  - (f) 拼接条件反过来（`{isCjk && ' '}`）→ 六例拼接全红，含新增的「Headline brand ink with a tail」两例
+    （`expected 'headtail' to be 'head tail'` 与反向）。
+  - (g) muted 的头改成 `primaryHead` →「Headline default ink > paints what neutral paints, not the muted grey」红
+    （`expected 'MuiBox-root css-1xvzco1' not to be 'MuiBox-root css-1xvzco1'`）。
+  - (h) `Headline` 的默认值改成 `ink = 'brand'`（`section-shell.tsx:265`，类型照样通过）→ 只有「Headline default ink > fades
+    its tail as neutral does, not with the brand flow」红（`expected 'MuiBox-root css-1uooa9k' to be 'MuiBox-root
+    css-k78nkt'`），其余 11 例全绿：头那例与六例拼接都看不出这次回退。
+- 生成的 CSS（happy-dom 下在 `ThemeProvider` 里渲染 hero 的两行，读 emotion 输出；探针放在仓库内临时目录，跑完即删）：首行
+  `color: var(--palette-text-secondary)`；次行头 `color: var(--palette-text-primary)`；品牌词 span `display: inline-block;
+  background: linear-gradient(300deg, var(--palette-primary-main) 0%, var(--palette-warning-main) 25%, … 100%)`、
+  `background-clip: text`、`color: transparent`，`background-size: 400%` 排在 `background` 简写之后；没有暗色分支规则；
+  内联 `background-position` 随时间推进（50ms 时 `0.54% center`）。三者的 `font-size` 仍是 `clamp(2.5rem, 7.5vw, 5.5rem)`、
+  `line-height: 0.98`。
+- 对比度（WCAG，按 hex 计算，白底 / `#141A21`）：首行 `text.secondary` 4.88 / 6.41（Minimal 的 0.24 不透明度 1.63）；
+  次行头 `text.primary` 15.52 / 17.51；品牌词 coral 2.54 / 6.90、amber 1.90 / 9.24。亮色品牌词低于大字号 3:1，是 Q3 已如实记录的代价。
+  首行压在 Aurora 着色底上的实测值见下方「浏览器验收」。
+- `pnpm compile` 通过；focused `pnpm vitest run entrypoints/welcome entrypoints/app/theme tests/ui-vendor-boundaries.test.ts
+  tests/i18n-no-hardcoded.test.ts tests/platform-completeness-contract.test.ts` 14 个文件 / 157 例通过；`pnpm test` 首次整跑
+  全绿，主仓库 239 个文件 / 2108 例、`packages/*` 15 个文件 / 263 例；`git diff --check` 干净。
+- **构建**：主会话 `pnpm build`（bundle 契约 14 个模块 / 963,108 字节）。`manifest.json`、`background.js` 的 sha1 构建前后
+  不变；`content-scripts/bilibili-video.js` 变了（`7dcad03…` → `5b29965…`）：Content Script 经 `lib/i18n` 打包整张 locale 表，
+  新 key `welcome.hero.titleBrand` 在构建产物里查得到，行为不变。77 个 chunk 里 43 个换了名，含 welcome 入口
+  （`welcome-CMewlLq6.js` → `welcome-DwptTnnh.js`）、app 入口（`app-Dhf_j7vH.js` → `app-Cejcs4Iq.js`）与 `theme-provider-*`：
+  locale 表在两个入口共用的 chunk 里，hash 沿 import 链传开（同 Step 2）。没有重载扩展：已装的 SW 与 B站 content script
+  仍是旧构建，只少一条用不到的字符串；构建前已打开的 app.html 标签要刷新一次，才能加载没打开过的路由（docs/35 §6）。
+- **浏览器验收**（§5，BrowserOS 里装的扩展 `ifnlocdg…`，自己新开的标签，页面实际加载的是 `welcome-DwptTnnh.js`；亮暗与中英用
+  header 自己的按钮切，`setItem` / `chrome.storage.local.set` 在本标签吞掉那两次写入，截完读回共享存储仍是 `light` / 未设置；
+  加载并切暗色、切中文，控制台零报错零警告）。1440×900、1920×1080、900×900、390×844 四个视口，各跑亮 en、暗 en、暗 zh-CN、
+  亮 zh-CN 四组：
+  - 首行 computed `color` 与 `-webkit-text-fill-color` = `text.secondary`（亮 `rgb(99,115,129)`、暗 `rgb(145,158,171)`），
+    `background-image: none`；次行头 = `text.primary`（亮 `rgb(28,37,46)`、暗白），同样无背景；两行在四个视口都各占一行。
+  - 品牌词 span：`display: inline-block`；`background-image: linear-gradient(300deg, rgb(252,126,91) 0%, rgb(255,171,0) 25%, …
+    rgb(252,126,91) 100%)`；`background-size: 400% auto`；`background-clip: text`、填充透明。宽度就是这个词：en 428 / zh 264px
+    （1440、1920）、329 / 203（900）、195 / 120（390）；1440 下次行的行框是整列 659px。
+  - 流动：内联 `background-position` 每秒约推进 10%（0 → 200% 用 20s），如 1440 亮 en 2s 内 `63.4% center` →
+    `83.56% center`。切换语言时还是同一个元素，进度不断（1440：`23.9%` → `122.5%`）。模拟 `prefers-reduced-motion: reduce` 后重载
+    （1440，四组）：computed `0% 0%`，没有内联值，2s 前后不变。有几次读数是「没动」（390 首轮整轮、900 与 390 复跑的 zh 段）：
+    同一时刻标签变成 `visibilityState: hidden`，页内 rAF 计数也停了，是 BrowserOS 窗口被遮挡，不是产品问题；可见状态下复跑都在走。
+  - 字形纵向：墨迹上下沿都在品牌词的绘制盒以内（1440 en 墨迹 390.7–452.7 / 盒 373.7–459.9，zh 396.1–481.1 / 388.1–486.7，
+    其余视口同理）。横向见下方「顺带发现」。
+  - 首行对 Aurora 着色底的对比度：把 h1 设成 `visibility: hidden`（布局不变），按首行行框截图，16s 内取 5 帧（Aurora 在漂），
+    取最差像素。亮色 4.04（1440）/ 4.39（1920）/ 4.78（900）/ 4.12（390），最差点是 coral 光斑 `rgb(254,228,221)`；暗色
+    4.36 / 5.29 / 6.24 / 4.55，最亮点 `rgb(73,49,46)`。hero 标题 40–88px / 800 是大字号，阈值 3:1，全部通过；低于正文的 4.5
+    只出现在 coral 光斑压到首行的地方（纯底上是 4.88 / 6.41）。
+  - 截图（四个视口 × 四组整屏，加标题 2 倍特写）与量值一致。
+
+**顺带发现、未修**：
+
+- **渐变尾词的最后一个字形被切掉亚像素。** 拉丁标题的字距是 `-0.03em`，Chrome 在末字之后也算这一份字距，所以尾词的盒子比末字
+  墨迹窄；`background-clip: text` 加透明填充时，盒外的墨迹没有背景可显示（成因与下面的量值吻合，未查 Chromium 源码）。
+  1440 en 下按 canvas 墨迹对盒右沿量：品牌词「answerable」超出 1.24px；中性尾词「steps」1.06、「knowledge base」0.88、
+  「collect first?」1.27；白色尾词「platform?」1.27；另三条在盒内。品牌词做了像素对照：保持布局不变、把背景区左右各加宽 24px，
+  DPR 2 下与原样比较，390 / 900 / 1440 / 1920 都只差末字最右一列设备像素（10–16 个点）。对照组在加宽版上削掉右侧 2px，
+  检出 87–124 个点，说明比较方法有效。实际损失是 0.5 CSS px 的抗锯齿边，肉眼看不出。zh 字距为 0，墨迹离盒右沿还有 2px。
+  中性尾词与白色尾词从 docs/31 Step 3 起就是这样，品牌词只是沿用了同一种盒子。真要修，应在 `Headline` 里给拉丁尾词统一补回
+  末尾字距（例如 `paddingInlineEnd` 取字距的绝对值），一次覆盖所有尾词，不要只给品牌词单独打补丁。本步没有做。
 
 ### Step 4 — Hero 浮动彩球 + OrbitCore 内圈彩点（未开始）
 
