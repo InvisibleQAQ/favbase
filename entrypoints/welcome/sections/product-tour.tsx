@@ -1,5 +1,5 @@
 import type { LocaleKeys } from '@/lib/i18n';
-import type { Theme } from '@mui/material/styles';
+import type { Theme, SupportedColorScheme } from '@mui/material/styles';
 import type { UseClientRectReturn } from 'minimal-shared/hooks';
 import type { IconifyName } from '@/entrypoints/app/components/iconify';
 
@@ -22,11 +22,12 @@ import Stack from '@mui/material/Stack';
 import SvgIcon from '@mui/material/SvgIcon';
 import Container from '@mui/material/Container';
 import Typography from '@mui/material/Typography';
-import { styled, useTheme } from '@mui/material/styles';
+import { styled, useTheme, useColorScheme } from '@mui/material/styles';
 
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { Iconify } from '@/entrypoints/app/components/iconify';
 import { PLATFORM_META } from '@/entrypoints/app/collection-platform-registry';
+import { primaryColorPresets } from '@/entrypoints/app/theme/with-settings/color-presets';
 
 import { FadeIn } from '../components/fade-in';
 import { varFade, MotionViewport } from '../components/animate';
@@ -67,6 +68,16 @@ const renderLines = () => (
  * - the icon is centred on the title's line, whatever that line's height is;
  * - the width sits on the item, so its text wraps inside it.
  *
+ * The colour leaves it in three places, each marked at its spot. Two keep
+ * the text readable on the coloured stage (docs/39 Q1, after docs/31 Step 3
+ * Q2: the shape as-is, the colour at the readable floor):
+ * - an item's subtitle is `text.primary`, not `text.secondary`;
+ * - the dark scheme lays a `grey.900` 60% scrim over the stage once it has
+ *   a colour (`ScrollContainer`, `ScrollableContent`).
+ * The third is the stage's neutral stop, which follows the scheme: Minimal
+ * reads `theme.palette`, and under CSS variables that is always the light
+ * scheme (`stageStops`).
+ *
  * Replaced only where favbase has no counterpart; each is marked at its spot:
  * 1. `framer-motion` / `m` -> `motion/react` / `motion`.
  * 2. The title is `SectionCaption` + `Headline tail` + a description, each in
@@ -75,14 +86,12 @@ const renderLines = () => (
  * 4. The lines are the source's three marks, from `components/svg-elements`.
  * 5. `ITEMS` are the four pages of `tour-images.ts`.
  * 6. One background-image element per item, switched by scheme and locale.
- * 7. The sticky ground follows `home-hugepack-elements`' neutral ramp, not
- *    this file's five colour-preset gradients.
- * 8. No RTL branch.
- * 9. Reduced motion renders a plain column instead of the gallery.
+ * 7. No RTL branch.
+ * 8. Reduced motion renders a plain column instead of the gallery.
  */
 export function ProductTour() {
   const { t } = useTranslation();
-  // Replacement 9: style-bound MotionValues bypass MotionConfig's
+  // Replacement 8: style-bound MotionValues bypass MotionConfig's
   // reducedMotion, so the gallery is gated by hand. The two branches are
   // separate components because `useScroll` throws on a target ref that never
   // mounts.
@@ -256,12 +265,61 @@ function stuckItemMaxWidth(theme: Theme) {
   return `calc((100vh - ${taken}) * ${SHOT_RATIO})`;
 }
 
+/** The source's `scrollYProgress` offsets, one per stop of `stageStops`. */
+const STAGE_OFFSETS = [0, 0.12, 0.28, 0.48, 0.58, 0.62, 0.72, 0.92];
+
+/** The source's stop: top to bottom, `from` into `to`. */
+const gradient = (from: string, to: string) => `linear-gradient(180deg, ${from}, ${to})`;
+
+/**
+ * The sticky stage's ground, the source's eight stops: nothing, the primary
+ * ramp, the five colour presets, then neutral.
+ *
+ * Every stop is a literal colour. motion blends two gradients of one shape,
+ * `linear-gradient(180deg, #hex, #hex)`, but a `var()` in either makes it
+ * step from one to the other, and the `background-color` transition on
+ * `ScrollContainer` (the source's) cannot ease a `background-image`. The
+ * primary and preset ramps serve both schemes (`app/theme/CLAUDE.md`), so
+ * their hex freezes nothing. `transparent` into the first gradient steps all
+ * the same: the stage cuts to full coral as soon as the progress leaves 0, as
+ * in the source.
+ *
+ * Not the source's: the neutral is the active scheme's. Minimal reads
+ * `theme.palette`, which under CSS variables is always the light scheme, so
+ * the dark page ends on a light-grey band. Each scheme's own value is in
+ * `theme.colorSchemes`. `colorScheme` is undefined until the provider mounts;
+ * the light value that stands in shows only from progress 0.72 on. The
+ * `theme.palette` fallback is for the type alone: this theme defines both
+ * schemes.
+ *
+ * Exported for `product-tour.test.ts`.
+ */
+export function stageStops(theme: Theme, colorScheme: SupportedColorScheme | undefined) {
+  const { primary } = theme.palette;
+  const { preset1, preset2, preset3, preset4, preset5 } = primaryColorPresets;
+  const neutral =
+    theme.colorSchemes[colorScheme ?? 'light']?.palette.background.neutral ??
+    theme.palette.background.neutral;
+
+  return [
+    'transparent',
+    gradient(primary.light, primary.dark),
+    gradient(preset1.light, preset1.dark),
+    gradient(preset2.light, preset2.dark),
+    gradient(preset3.light, preset3.dark),
+    gradient(preset4.light, preset4.dark),
+    gradient(preset5.light, preset5.dark),
+    gradient(neutral, neutral),
+  ];
+}
+
 type ScrollContentProps = {
   containerRoot: UseClientRectReturn;
 };
 
 function ScrollableContent({ containerRoot }: ScrollContentProps) {
   const theme = useTheme();
+  const { colorScheme } = useColorScheme();
 
   const containerRef = useRef<HTMLDivElement>(null);
   const containerRect = useClientRect(containerRef);
@@ -275,26 +333,21 @@ function ScrollableContent({ containerRoot }: ScrollContentProps) {
 
   const physics = { damping: 16, mass: 0.12, stiffness: 80 };
 
-  // Replacement 8: no `isRtl` sign flip; the repo has no direction support.
+  // Replacement 7: no `isRtl` sign flip; the repo has no direction support.
   const scrollRange = -scrollRect.scrollWidth + containerRect.width / 2;
 
   const x = useSpring(useTransform(scrollYProgress, [0, 1], [0, scrollRange]), physics);
 
-  // Replacement 7: `home-hugepack-elements`' ramp. The source cycles the five
-  // `primaryColorPresets` gradients, which is that band's own subject. These
-  // stops are CSS variables, which motion steps between rather than blends;
-  // the `background-color` transition on `ScrollContainer` is what eases it.
-  const background = useTransform(
-    scrollYProgress,
-    [0, 0.25, 0.5, 0.75, 1],
-    [
-      theme.vars.palette.background.default,
-      theme.vars.palette.background.neutral,
-      theme.vars.palette.background.neutral,
-      theme.vars.palette.background.neutral,
-      theme.vars.palette.background.default,
-    ]
-  );
+  const background = useTransform(scrollYProgress, STAGE_OFFSETS, stageStops(theme, colorScheme));
+
+  // Not the source's: the dark scrim's opacity (`ScrollContainer`). The scrim
+  // dims the stage's colour, so it waits for one: off while the stage is
+  // still `transparent`, where it would only dim the decorative line running
+  // behind it, then on from the frame the coral cuts in through the neutral
+  // end. motion sets a custom property like any style key, but its `style`
+  // type does not list them, hence the separate object.
+  const scrim = useTransform(scrollYProgress, (progress) => (progress > 0 ? 1 : 0));
+  const stageStyle = { background, '--tour-scrim': scrim };
 
   useMotionValueEvent(scrollYProgress, 'change', (latest) => {
     setStartScroll(latest !== 0 && latest !== 1);
@@ -302,7 +355,7 @@ function ScrollableContent({ containerRoot }: ScrollContentProps) {
 
   return (
     <ScrollRoot ref={containerRef} sx={{ height: scrollRect.scrollWidth, minHeight: '100vh' }}>
-      <ScrollContainer style={{ background }} data-scrolling={startScroll}>
+      <ScrollContainer style={stageStyle} data-scrolling={startScroll}>
         <ScrollContent
           ref={scrollRef}
           style={{ x }}
@@ -320,7 +373,7 @@ function ScrollableContent({ containerRoot }: ScrollContentProps) {
 }
 
 /**
- * Replacement 9, the reduced-motion band: no runway, no sticky container and
+ * Replacement 8, the reduced-motion band: no runway, no sticky container and
  * no bound MotionValue. The same items in a column, on the gallery's own
  * spacing (`ScrollRoot`'s top padding, `ScrollContent`'s gap), each image as
  * wide as the Container.
@@ -366,9 +419,27 @@ const ScrollContainer = styled(motion.div)(({ theme }) => ({
   [theme.breakpoints.up('md')]: {
     '--tour-header-height': 'var(--layout-header-desktop-height)',
   },
+  // Not the source's: a dark-scheme scrim, so the white title and subtitle
+  // read on the coloured stops (docs/39 Q1); the neutral stop darkens too.
+  // Being sticky, the container is the scrim's containing block;
+  // `ScrollContent` is lifted above it. `--tour-scrim` is bound to the
+  // scroll progress in `ScrollableContent`.
+  ...theme.applyStyles('dark', {
+    '&::before': {
+      content: '""',
+      position: 'absolute',
+      inset: 0,
+      pointerEvents: 'none',
+      opacity: 'var(--tour-scrim, 0)',
+      backgroundColor: varAlpha(theme.vars.palette.grey['900Channel'], 0.6),
+    },
+  }),
 }));
 
 const ScrollContent = styled(motion.div)(({ theme }) => ({
+  // Not the source's: above `ScrollContainer`'s dark scrim.
+  position: 'relative',
+  zIndex: 1,
   display: 'flex',
   gap: theme.spacing(5),
   paddingLeft: theme.spacing(3),
@@ -414,7 +485,11 @@ function Item({ item, stacked = false }: { item: TourItem; stacked?: boolean }) 
         />
         <Stack spacing={TEXT_GAP} sx={{ flex: 1, minWidth: 0 }}>
           <Typography variant="h3">{title}</Typography>
-          <Typography sx={{ color: 'text.secondary' }}>{t(item.descKey)}</Typography>
+          {/* Not the source's `text.secondary`: on the coloured stops it
+              falls under 4.5:1 in both schemes, the dark scrim included
+              (docs/39 Q1). The reduced-motion column has no stage and takes
+              the same ink. */}
+          <Typography sx={{ color: 'text.primary' }}>{t(item.descKey)}</Typography>
         </Stack>
       </Box>
 

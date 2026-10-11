@@ -72,12 +72,14 @@
 
 ## product-tour.tsx（真实截图画廊）
 
-- 全页唯一出示产品本身而非 mock 的段落，Minimal `home-highlight-features` 的逐值移植。九处替换与三处几何偏离逐条写在文件头与落点注释里，封顶宽度的算术在 `stuckItemMaxWidth` 的注释。
+- 全页唯一出示产品本身而非 mock 的段落，Minimal `home-highlight-features` 的逐值移植。八处替换、三处几何偏离与三处色彩偏离逐条写在文件头与落点注释里，封顶宽度的算术在 `stuckItemMaxWidth` 的注释。
 - 三处几何偏离（钉住区在顶栏下方并按剩余高度封顶条目宽度 / 图标对齐标题行 / 宽度写在条目根上）修的是实测缺陷，别还原成源文件（docs/35 §7）。
+- 彩色舞台上的两处可读性偏离是承重的，别「对齐回」源文件：副标题 `text.primary`（暗色下 `text.secondary` 压在舞台上，叠了压暗层也只有 2.1–3.4:1）；暗色 `ScrollContainer::before` 的 `grey.900` 60% 压暗层，`ScrollContent` 靠 `position: relative; zIndex: 1` 压在它上面（docs/39 Q1）。
+- 已知缺口（用户 2026-10-11 接受，不修）：上面的可读下限只在条目宽度被钉住区高度封顶的视口成立（如 1440×900，文字贴近舞台上沿）。视口偏高时条目按 `ITEM_WIDTH` 定宽、在钉住区里居中下沉，文字落到渐变更深处，亮色 preset2（紫）上的副标题实测 4.24:1（960×947）。别为它另加亮色罩层或改舞台色，那要用户另立决策（docs/39 Step 2「顺带发现」）。
 - 只放仪表盘 / 全部收藏 / GitHub Stars / X 书签四页；哪些页面不能公开、怎么重截见 docs/35。图在 `public/assets/images/welcome/`，增删改名必须同步 `tour-images.ts`（守卫 `tour-images.test.ts`）。
 - 代码不得依赖截图里有什么：图会按同名文件原位重截。
 - section 根与 sticky 容器的任何祖先都不能加 `overflow: hidden / auto / scroll`，否则 sticky 失效（`layout.tsx` 根上的 `overflowX: 'clip'` 不建滚动容器，不在此列）。
-- sticky 底色的 stop 是 CSS 变量，motion 在变量之间跳变、不插值，过渡靠 `ScrollContainer` 的 `transition`。别为了插值改成 `theme.palette.*` 的 hex，那会把配色冻在渲染那一刻。
+- sticky 舞台的 stop 必须是字面色值：渐变里有 `var()`，motion 就在两档之间跳变、不插值，`ScrollContainer` 的 `background-color` 过渡也缓不了 `background-image`。primary 与 preset 色阶两种配色共用，取 hex 不冻结任何东西；随配色变的 stop 从 `theme.colorSchemes[colorScheme]` 取，不能照源文件读 `theme.palette.*`：开了 CSS 变量又没传 `forceThemeRerender`，`theme.palette` 永远是 light 方案，暗色页会刷出浅灰带。守卫 `sections/product-tour.test.ts`。
 - reduce-motion 分支是独立组件 `StackedContent`，不是同一组件里的条件：`useScroll` 的 target ref 一直不挂载会触发它的 invariant。
 
 ## 新增段落

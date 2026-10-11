@@ -20,6 +20,8 @@
 D1 没有撞 docs/28 §3 的拒绝清单：那里拒绝的是 `HeroBackground`、`LazyMotion`、`AnimateText` 和
 销售页段落，`home-highlight-features` 不在其中。它是 Minimal 自己放真实截图的段落。
 
+D1 的舞台底色起初换成了 `home-hugepack-elements` 的中性坡道（替换 7），docs/39 Step 2 已换回源文件的 preset 轮换，替换 7 随之删除。
+
 D6 是对本页旧约定「演示内容是示意，不是真数据，不放统计数字」的一处例外：真实截图里必然有
 数字。例外只限这一段，其余段落仍是 mock、仍然不放数字。
 

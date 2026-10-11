@@ -157,7 +157,7 @@
   （13px / 11px 文字）。
 - `chat-showcase.tsx` ToolCallRow 的结果文字是 `success.main`，压在 `grey.500` 10% 洗底上亮色 2.09:1。
 
-### Step 2 — 产品画廊彩色舞台（未开始）
+### Step 2 — 产品画廊彩色舞台（已落地并完成浏览器验收 2026-10-10；见本步「落地记录」）
 
 - `sections/product-tour.tsx:283-297` 换回源文件的 8 个 stop：`'transparent'`；
   `linear-gradient(180deg, primary.light, primary.dark)`；preset1..5 的 light → dark，取叶文件
@@ -178,6 +178,115 @@
   不是「冻在渲染那一刻」，而是永远是 light 方案）；docs/35 §1 补注。
 - 不加页面：用户指的 `docs/ui-baseline/2026-10-03/app-1440x900@2x/` 按 docs/35 §2 除现有四张外只有 settings-export /
   settings-general 可公开，信息量低。画廊仍是四张。
+
+#### 落地记录（2026-10-10）
+
+**改动**（路径相对 `entrypoints/welcome/`，行号为改后）：
+
+- 舞台 stop：`sections/product-tour.tsx:269` `STAGE_OFFSETS`（源文件的 8 个 offset）、`:272` `gradient`、
+  `:297-314` 导出的 `stageStops(theme, colorScheme)`：`'transparent'`；`theme.palette.primary` light → dark；
+  `primaryColorPresets` preset1..5 light → dark（`:30` 从叶文件 import）；末档 neutral 取
+  `theme.colorSchemes[colorScheme ?? 'light']`。`:322` 读 `useColorScheme().colorScheme`，`:341` 交给 `useTransform`。
+  `ScrollContainer` 的 `transition: background-color` 照源文件保留（`:417`）。
+- 压暗层：`ScrollContainer` `:422-436` `applyStyles('dark', { '&::before': … })`，带 `pointerEvents: 'none'`，
+  `opacity` 读 `var(--tour-scrim, 0)`；`ScrollableContent` `:343-350` 把 `--tour-scrim` 绑到滚动进度（进度 0 为 0、
+  大于 0 为 1，见偏离 4），`:358` 经 `style` 交给容器；`ScrollContent` `:440-442` `position: relative; zIndex: 1`。
+  没有给 sticky 容器的任何祖先加 `overflow`。
+- 副标题：`Item` `:488-492` `text.secondary` → `text.primary`，画廊与 reduce-motion 的列共用，不分支。
+- 注释：文件头删替换 7，8 → 7、9 → 8（`:81-90`；落点 `:94`、`:336`、`:376`）；几何偏离之后补三处色彩偏离
+  （`:71-79`：两处可读性偏离 + 随配色走的 neutral）；旧的坡道注释换成 `stageStops` 的注释（`:274-296`）：stop 必须是
+  字面色值、neutral 为什么取 `colorSchemes`、`transparent` → 首个渐变照源文件硬切。
+- 守卫：新增 `sections/product-tour.test.ts`，6 例：light / dark / undefined 三种 scheme 下每个 stop 都不含 `var(`；
+  dark 收在 dark 的 `background.neutral`（同时断言亮暗两值不同，防空转）；light 与 undefined 收在 light 的。
+- 文档：`welcome/CLAUDE.md` product-tour 节（九处 → 八处替换并列出色彩偏离；新增「可读性偏离承重」一条；stop 那条按
+  实际机制改写并指向守卫；check 阶段补「已知缺口」一条，即下方「顺带发现」的高视口对比度）；docs/35 §1 D1 下补注。
+
+**与上文计划的偏离**：
+
+1. stop 列表抽成 `product-tour.tsx` 内导出的纯函数 `stageStops(theme, colorScheme)`，供守卫测试直接调用，没有新建模块。
+2. `theme.colorSchemes` 在 MUI 的类型里是 `Partial`，取不到时回退 `theme.palette.background.neutral`，只为过类型：
+   主题两种配色都定义，运行时走不到这一支（变异 a 证明 dark 不会落到它上面）。
+3. 守卫测试 mock 了 `@/lib/i18n/use-translation`：section 模块经 `lib/i18n` 在 import 时读扩展 storage，
+   与 `layout.test.tsx`、`section-shell.test.tsx` 同法。
+4. （check 阶段）压暗层不再常亮，不透明度跟着滚动进度走。`useScroll` 的默认 offset 是 `start start` → `end end`，
+   接近画廊的那段进度一直是 0，舞台是 `transparent`，常亮的压暗层没有颜色可压，只压了贯穿 section 的装饰竖线
+   （≥1440px，`renderLines` 的竖线是整段 section 高，`ScrollRoot` 的 `zIndex: 9` 叠在它上面）：竖线从约 1.51:1 压到
+   约 1.16:1，暗色下在舞台上沿处断开，亮色照常穿过。改成 `useTransform(scrollYProgress, p => p > 0 ? 1 : 0)` 写进
+   自定义属性 `--tour-scrim`，由 `::before` 的 `opacity` 读，与 coral 切入落在同一帧（motion 在同一次渲染里写
+   `background` 与自定义属性）。没用 `'&[data-scrolling="true"]::before'`：`data-scrolling` 在进度 1 翻回 false，
+   暗色 neutral 末段会在离场时从压暗后的色值跳回 `#222B34`。
+
+**验证**：
+
+- 生成的 CSS（happy-dom 下在 `ThemeProvider` 里渲染 `ProductTour`，读 emotion 输出；探针放在系统临时目录，跑完即删；
+  偏离 4 之后 check 阶段重跑）：sticky 容器（`[data-scrolling]`）进度 0 时内联 `--tour-scrim: 0; background: transparent`；
+  压暗层只有一条规则 `*:where([data-color-scheme="dark"]) .css-…::before { content: ""; position: absolute; inset: 0;
+  pointer-events: none; opacity: var(--tour-scrim, 0); background-color: rgba(var(--palette-grey-900Channel) / 60%) }`，
+  亮色没有对应规则；`ScrollContent` 带 `position: relative; z-index: 1`；四个副标题共用一个类，
+  `color: var(--palette-text-primary)`。另用一个 `motion.div` 验证同样的绑定：驱动值 0 → 0.3 → 0，内联依次是
+  `--tour-scrim: 0` / `1` / `0`。
+- `stageStops` 的实际输出（亮暗只差末档）：`transparent`；`#FDA48A → #C4502E`；`#68CDF9 → #0351AB`；
+  `#B985F4 → #431A9E`；`#6BB1F8 → #063BA7`；`#FED680 → #B66816`；`#FFC1AC → #B71833`；neutral 亮 `#F4F6F8`、暗 `#222B34`。
+- 对比度（按 hex 推算，不是实测）：1440×900 下封顶后的条目在钉住区里居中，标题行约在舞台高度 4.5% 处、副标题约 9.4%，
+  按这两个位置在各渐变上取色，暗色先叠 60% `grey.900`。亮色：标题 `text.primary` 5.39–10.72、副标题 5.05–10.22
+  （换成 `text.secondary` 是 1.59–3.22）；暗色：标题白 5.88–8.65、副标题 6.06–8.94（`text.secondary` 2.22–3.27）；
+  neutral 段亮 14.32、暗 16.28。最低值都在 preset2（紫）或 preset4（琥珀）。这组数只在条目宽度被钉住区高度封顶的视口
+  成立，视口偏高时文字下沉，亮色会跌破 4.5:1，见下方「顺带发现」。
+- 变异（每次只改一处，跑 `product-tour.test.ts`，还原后 6 例全绿）：(a) neutral 改读 `theme.palette.background.neutral`
+  → 「ends on the dark neutral in the dark scheme」红（收到 `#F4F6F8`）；(b) 第二档改成
+  `theme.vars.palette.primary.light` → 三例「are literal colours, never a CSS variable」全红；(c) 未挂载时的回退改成
+  `'dark'` → 「ends on the light neutral (scheme undefined)」红。
+- `pnpm compile` 通过；focused `pnpm vitest run entrypoints/welcome entrypoints/app/theme tests/ui-vendor-boundaries.test.ts
+  tests/i18n-no-hardcoded.test.ts` 13 个文件 / 144 例通过；`pnpm test` 首次整跑全绿，主仓库 239 个文件 / 2102 例、
+  `packages/*` 15 个文件 / 263 例；`git diff --check` 干净。没有跑 `pnpm build`。偏离 4 之后 check 阶段重跑：
+  `pnpm compile` 通过，同一组 focused 13 个文件 / 144 例通过，`pnpm test` 首次整跑全绿（主仓库 239 / 2102、
+  `packages/*` 15 / 263），`git diff --check` 干净。
+- **构建**：主会话 `pnpm build`（bundle 契约 14 个模块 / 963,108 字节）。`manifest.json`、`background.js`、
+  `content-scripts/*` 的 sha1 构建前后不变，没有重载扩展。77 个 chunk 里除 welcome 入口（`welcome-WFh-NrFH.js` →
+  `welcome-CMewlLq6.js`）外，app 侧也有一批 chunk 换了名（入口 `app-Dl4Fc-XC.js` → `app-Dhf_j7vH.js`、
+  `theme-provider-*` 与各 section / 卡片 chunk），与 Step 1 只换 welcome 不同。推断原因：welcome 改从共享的
+  `theme-provider` chunk 多取 `primaryColorPresets`，这个 chunk 的导出表变了，hash 沿 import 链传给所有引用它的 chunk
+  （[UNKNOWN] 未拿旧构建逐字节对比）。后果：构建前已打开的 app.html 标签仍持有旧入口，没打开过的路由会报
+  「Failed to fetch dynamically imported module」，刷新一次即可（docs/35 §6）。
+- **浏览器验收**（§5，BrowserOS 里装的扩展 `ifnlocdg…`，自己新开的标签，页面实际加载的是 `welcome-CMewlLq6.js`；
+  亮暗与中英用 header 自己的按钮切，`setItem` / `chrome.storage.local.set` 在本标签吞掉那两次写入，截完读回共享存储仍是
+  `light` / 未设置；控制台零报错）。1440×900 亮 en、暗 en、暗 zh-CN、亮 zh-CN 四组，按 `ScrollOffset.All`
+  （`start start` → `end end`）把进度换成滚动位置，在 8 个 stop 与每段中点各量一次：
+  - 舞台 computed `background-image` 逐档等于 `stageStops` 的 hex 渐变（进度 0 为 `none`，即 `transparent`）；段中点是
+    插值色（如 p=0.2 为 `rgb(193,186,201) → rgb(139,81,125)`），没有硬切。暗色末档 `rgb(34,43,52)`，亮色
+    `rgb(244,246,248)`；停在 neutral 段点 header 切到亮色，不滚动，舞台立即换成亮色 neutral。
+  - 压暗层：亮色 `::before` 不存在；暗色是 `rgba(20,26,33,0.6)`，`opacity` 跟 `--tour-scrim` 走：接近画廊的那段与
+    p=0 为 0，p=0.002 起为 1，p=1 与离场后仍为 1（装饰竖线全程 `display: block`）。
+  - 副标题 computed color = `text.primary`（亮 `rgb(28,37,46)`、暗白），四页都是；reduce-motion（模拟
+    `prefers-reduced-motion: reduce` 后重载）渲染成没有 sticky 的竖列，4 个条目的副标题同为 `text.primary`。
+  - 对比度（实测：文字行框内从上到下取 11 个点，按 computed 渐变在该高度取色，暗色叠压暗层，取最差点；覆盖 stop 与段中点，
+    中英几何相同）：亮色标题 5.28–11.81、副标题 4.96–11.58、图标 5.27–11.80（换成 `text.secondary` 是 1.56–3.65）；
+    暗色标题 5.82–8.93、副标题 6.00–9.18（`text.secondary` 2.20–3.36）；neutral 段亮 14.32、暗 16.28。亮色最差在
+    preset2（p=0.48），暗色在 preset4（p=0.62）。与上面按 hex 推算的数量级一致、最差档相同；实测区间更宽，因为含段中点、
+    取的是行框最差点而不是行中心。
+  - 高视口样本（960×947 亮色，zh-CN 与 en 结果相同）：副标题行在舞台 0.197–0.225 处，与 check 阶段推算一致；p=0.48
+    副标题 4.24、标题 4.51、图标 4.50，p=0.53 副标题 4.68，p=0.38 为 5.35。下方「顺带发现」的缺口实测成立。
+  - 截图：四组配置的 8 个 stop 加高视口 5 张，与量值一致；4 张产品截图本身是 coral 界面，叠在蓝 / 紫舞台上（§2 计划已
+    列为照搬的代价）。
+
+**顺带发现、未修**：
+
+- **高视口下亮色副标题低于 4.5:1，用户 2026-10-11 接受，不修。** 条目宽度被 `ITEM_WIDTH` 而不是 `stuckItemMaxWidth` 卡住时
+  （视口够高），条目在钉住区里因 `justifyContent: center` 下沉，文字压到渐变更深处。按副标题行中心算，亮色 preset2
+  （`#B985F4 → #431A9E`，p≈0.48）上 `text.primary` 低于 4.5:1 的起点：md（900–1199，条目 800）视口高 ≥864、
+  lg（1200–1535）≥1197、xl（≥1536）≥1334。实例：960×947（1920×1080 屏半屏贴靠、最大化高度）副标题行在舞台
+  0.197–0.225 处，中心 4.32:1、标题 4.60；960×1000 副标题 4.22、标题中心 4.48（`h3` 20px / 600 不算大字号，阈值 4.5）；
+  1280×1307 副标题 4.33；2560×1600 副标题 4.12、标题 4.28。暗色有压暗层，同样几何下 ≥6.19。过渡段不会更差：motion
+  在平方空间混色，中间色偏亮，最差点就在 preset2 这一档。Q1 给的两处偏离已经用完（副标题已是 `text.primary`，
+  压暗层只在暗色），亮色在 Q1 范围内没有颜色杠杆，所以本步不改；用户看过实测数后选择接受，要修须另立决策（最直接的杠杆是亮色对称加一层白色薄罩，代价是舞台整体变浅）。check 阶段复核了 960×947
+  的几何（条目 800 宽、614 高，在 875 高的舞台里居中，副标题行 172.5–196.5px，即 0.197–0.225）与 t≈0.2 处的对比度
+  （4.38）；浏览器实测见上方「浏览器验收」的高视口样本（行框最差点 4.24、标题 4.51）。
+- spec `ui-design-system.md` §15 的「`theme.palette.*` in variable theme code」管不到本页：§1 Scope 写明 spec 只适用于
+  `entrypoints/app/**`，spec 里几处提到 welcome 的警告也都自注「outside this spec's scope」。本页适用的是
+  `app/theme/CLAUDE.md:5-7`「Pages consume `theme.vars.*` … must not copy palette … values into local `sx`」。
+  `stageStops` 读 `theme.palette.primary` 与 `primaryColorPresets` 的 hex，是对这一条字面的有意偏离，理由见它的注释：
+  motion 只能混字面色值；primary 与 preset 色阶两种配色共用（`app/theme/CLAUDE.md:23`）；随配色变的 neutral 取自
+  `theme.colorSchemes`。值取自 owner、没有字面量、也不进 `sx`，这条规则的意图没有破。不要为此去改 app 范围的 spec。
 
 ### Step 3 — Hero 标题（未开始）
 
