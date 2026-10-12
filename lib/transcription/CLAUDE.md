@@ -9,6 +9,10 @@
 - 消费方用 `data.videoId` 拒收不属于自己的字幕时必须逐字节比对：BV 号是大小写敏感的 base58。
 - 错误是纯数据 `TranscribeErrorInfo`（无类继承，可过 IPC），用 `createErrorInfo()` / `isTranscribeError()`。`message` 是 debug 信息，永不直接展示；UI 按 `code` + `params` 翻译。
 - 429 只把明确的 `audio seconds per day (ASD)` 识别为 `ASR_QUOTA_EXCEEDED`，其余形状一律 `ASR_RATE_LIMIT`；供应商原文只作 debug。
+- ASR 幻觉过滤只在 `mapTranscriptionToRows`：segment 命中 `asr-hallucination.ts` 的签名即整段丢；全丢 = 空转录，走各平台现有的空转录分支（docs/40）。
+- 幻觉名单只收真人几乎不说、注明来源的署名 / 频道 / 站点串；「谢谢观看」「点赞 订阅」这类真人也说的短语不收。
+- 名单规范化只折叠全半角、空白与大小写，不做繁简转换：繁体写法要单独成条。
+- `no_speech_prob` / `avg_logprob` 门槛已否决，别加回来：turbo 的 `no_speech_prob` 在本地实现上恒近 0（Groq 上未测），记忆型套话的 `avg_logprob` 又偏高（docs/40 §2）。
 - ASR 配置（apiKey / model / baseUrl）只从 `resolveAsrConfig` 来。`groq-client.ts` 的 `baseUrl` 参数就是多 ASR provider 的接缝，不要为新 provider 另写 client。
 - 新增平台：建 `lib/<platform>/<platform>-transcription-handler.ts`（自己取媒体 / 字幕来源、组装 deps、调 pipeline；取媒体可以懒到 deps 的 extractor 里，抖音就是——cache 命中与缺 ASR key 时零平台请求），在 `lib/background/transcription-handlers.ts` 的 `platformHandlers` 注册一行。各平台 handler 完全独立，不抽共享 adapter 接口。
 - 新增 `TranscribeErrorCode` 要同步 wire schema（`lib/runtime-message/schemas.ts`）与两个 locale，规则在 `lib/i18n/CLAUDE.md`。
@@ -35,6 +39,6 @@
 
 - `assertAudioNotReused`：同一音频 hash 配不同 videoId 即拒绝，防的是 SPA 跳转后拿到上一个视频的旧音频。别当成多余校验删掉。
 - 音频超过 `GROQ_MAX_AUDIO_BYTES` 才走 Offscreen FFmpeg 分块，否则直传。
-- 已知缺口：没有 ASR 幻觉过滤。静音 / 纯音乐片段的 Whisper 结果是非空套话（「字幕志愿者 李宗盛」「请不吝点赞 订阅 转发 打赏支持明镜与点点栏目」），各平台的「空转录」分支都接不住，套话入库、进检索；docs/37 Step 4 实测抖音 9 / 90。B站走同一条 ASR 路径。
+- 幻觉过滤只作用于新的 ASR 响应：已入库的套话正文和 video cache 里的旧行不会因此变干净。
 - `TranscribeRequest.cid` 可选：B 站 content script 有就传，app.html 不传、由 adapter 解析。
 - B 站的 prepare 不读 auth：SW 的 fetch 自带 B 站 cookie jar（docs/29 Step 4），不要再手拼 Cookie。

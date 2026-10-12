@@ -11,6 +11,7 @@ import {
   AUDIO_FILE_NAME,
   AUDIO_MIME_TYPE,
 } from './constants';
+import { isKnownAsrHallucination } from './asr-hallucination';
 
 const DEFAULT_ASR_BASE_URL = 'https://api.groq.com/openai/v1';
 
@@ -154,7 +155,7 @@ export function mapTranscriptionToRows(
   return data.segments
     .map((seg) => {
       const text = seg.text?.trim();
-      if (!text) return null;
+      if (!text || isKnownAsrHallucination(text)) return null;
       return {
         start: Number(seg.start),
         end: Number(seg.end) || Number(seg.start) + 3,

@@ -1,6 +1,29 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { requestGroqTranscription } from './groq-client';
+import { mapTranscriptionToRows, requestGroqTranscription } from './groq-client';
+
+describe('mapTranscriptionToRows hallucination filter', () => {
+  it('drops a known hallucination segment and keeps the speech around it', () => {
+    expect(mapTranscriptionToRows({
+      text: '',
+      segments: [
+        { start: 0, end: 4, text: ' 今天讲讲向量检索' },
+        { start: 4, end: 9, text: ' 优优独播剧场——YoYo Television Series Exclusive' },
+        { start: 9, end: 12, text: ' 下期再见' },
+      ],
+    })).toEqual([
+      { start: 0, end: 4, text: '今天讲讲向量检索' },
+      { start: 9, end: 12, text: '下期再见' },
+    ]);
+  });
+
+  it('returns no rows when every segment is a hallucination', () => {
+    expect(mapTranscriptionToRows({
+      text: '字幕志愿者 李宗盛',
+      segments: [{ start: 0, end: 29.98, text: ' 字幕志愿者 李宗盛' }],
+    })).toEqual([]);
+  });
+});
 
 describe('requestGroqTranscription rate limits', () => {
   afterEach(() => {
