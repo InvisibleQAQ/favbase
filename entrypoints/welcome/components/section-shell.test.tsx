@@ -162,6 +162,15 @@ describe('Headline ink and tail pairing', () => {
 
     expect(props.ink).toBe('brand');
   });
+
+  it('requires a tail on the warm ink at compile time', () => {
+    // Warm differs from neutral only in its tail; without one it paints what
+    // neutral does.
+    // @ts-expect-error -- `tail` is required on the warm ink
+    const props: HeadlineProps = { ink: 'warm', children: 'head' };
+
+    expect(props.ink).toBe('warm');
+  });
 });
 
 // `MotionConfig reducedMotion="user"` (main.tsx) looks as if it stilled every

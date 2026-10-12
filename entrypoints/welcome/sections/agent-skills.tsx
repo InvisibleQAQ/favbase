@@ -30,7 +30,9 @@ type CopyStatus = 'idle' | 'copied' | 'failed';
 
 /**
  * Minimal `home-testimonials`' lines, value for value: two down-pointing
- * triangles stacked on the spine at the head of a centred band.
+ * triangles stacked on the spine at the head of a centred band. They outlived
+ * the switch to for-designer's dark ground, which draws none (docs/39 Step 5
+ * Q6): painted over the section's background, the spine runs on unbroken.
  */
 const renderLines = () => (
   <>
@@ -78,6 +80,31 @@ const renderLines = () => (
  * Copy feedback is local on purpose: welcome mounts no `<Snackbar/>`, and
  * `sonner` is fenced to `app/components/snackbar/**` by
  * `tests/ui-vendor-boundaries.test.ts`.
+ *
+ * The band is Minimal `home-for-designer`'s xs form at every width (docs/39
+ * Step 5 Q1): a full-bleed grey.700 ground under a 135deg grey.900 run, the
+ * content still this one centred column. Its md+ quarter panels and webp are
+ * not ported; this content does not fit a quarter panel.
+ *
+ * The section forces the dark scheme on itself. The theme's dark variables are
+ * a bare `[data-color-scheme="dark"]` block, so everything inside reads dark
+ * tokens on either page: the `Headline` head turns white, the prompt card
+ * dark, `text.secondary` grey.500, the copy button's focus ring the dark one.
+ * None of them needs a dark-specific colour API for the flip; the white caption
+ * and the warm title are the band's design inks, not scheme adaptation. The
+ * `color` line beside the attribute is load-bearing: body's `text.primary` is
+ * resolved on body, in the page's scheme, and descendants inherit the resolved
+ * value, so text that sets no colour (FeatureList's) would keep the light ink,
+ * ~1.08:1 on the band. Declared here, it resolves against this element's dark
+ * variables (guard: `agent-skills.test.tsx`).
+ *
+ * Do not give this section a `theme.applyStyles('dark', …)` branch: it emits a
+ * descendant selector, `*:where([data-color-scheme="dark"]) .x`, which the
+ * element carrying the attribute never matches on a light page. Inside the
+ * band, an `applyStyles('light')` branch would match too (the light `<html>`
+ * is an ancestor) and a portal would escape to the light page; there are none.
+ * On the dark page the attribute is a no-op and the band merges with the
+ * ground (1.00-1.13:1), as Minimal's xs form does; accepted (Q2).
  */
 export function AgentSkills() {
   const { t } = useTranslation();
@@ -109,7 +136,19 @@ export function AgentSkills() {
         : t('welcome.agentSkills.copy');
 
   return (
-    <WelcomeSection lines={renderLines()}>
+    <WelcomeSection
+      data-color-scheme="dark"
+      lines={renderLines()}
+      sx={(theme) => ({
+        color: 'text.primary',
+        bgcolor: 'grey.700',
+        ...theme.mixins.bgGradient({
+          images: [
+            `linear-gradient(135deg, ${varAlpha(theme.vars.palette.grey['900Channel'], 0.8)} 0%, ${theme.vars.palette.grey[900]} 75%)`,
+          ],
+        }),
+      })}
+    >
       <Box
         sx={{
           maxWidth: 760,
@@ -121,11 +160,11 @@ export function AgentSkills() {
         }}
       >
         <FadeIn>
-          <SectionCaption>{t('welcome.agentSkills.eyebrow')}</SectionCaption>
+          <SectionCaption ink="white">{t('welcome.agentSkills.eyebrow')}</SectionCaption>
         </FadeIn>
 
         <FadeIn delay={0.06} y={16} sx={{ mt: 3 }}>
-          <Headline tail={t('welcome.agentSkills.headingTail')}>
+          <Headline ink="warm" tail={t('welcome.agentSkills.headingTail')}>
             {t('welcome.agentSkills.heading')}
           </Headline>
         </FadeIn>

@@ -17,7 +17,7 @@
 | `home-integrations` 插图里的全彩品牌 logo | OrbitCore、marquee、picker 三处平台字形写死 `text.primary` | 主题早有 `palette.platform[id]`，app 侧栏在用（`nav-item.tsx:237`），welcome 没接 |
 | `home-hero` 品牌词的 primary↔warning 流动渐变 | 两行整行铺静态 `grey.800 → coral`，而且铺在 7 列的列框上：zh 首行「把收藏」只占列宽约 40%，整行停在灰段，**没有一点 coral** | 没移植 + 实现 bug |
 | `hero-svg.tsx` 的 5 颗彩球 | 无 | 随 `HeroBackground` 整体被 docs/28 D5 拒绝 |
-| `home-for-designer` 深色带 + 渐变标题 | 无 | docs/31 Step 4 把它的位置映射给了 marquee，未移植 |
+| `home-for-designer` 深色带 + 渐变标题 | 无 | docs/31 Step 4 把它的位置映射给了 marquee，未移植。**2026-10-12**：Step 5 把它的 xs 形态移植给 agent-skills（满宽深色带、白头 + 琥珀 → coral 尾词、白色淡出 caption） |
 
 ## §1 决策（用户 2026-10-10）
 
@@ -26,7 +26,7 @@
 | Q1 | 画廊舞台**完整轮换**（照 `home-highlight-features.tsx:144-157` 的 8 个 stop）+ 两处可读性偏离：副标题改 `text.primary`；暗色加一层 `grey.900` 60% 压暗层 |
 | Q2 | 平台字形上品牌色，OrbitCore / marquee / picker **三处都上**；picker 选中态照 app nav 先例 |
 | Q3 | Hero 标题做 Minimal 的三级层次，首行取可读下限：首行 `text.secondary` 实色（不用 Minimal 的 `opacity: 0.24`，1.63:1），次行墨色，品牌词流动渐变 |
-| Q4 | 可选项三项都做：Hero 浮动彩球、OrbitCore 内圈彩点、agent-skills 改 ForDesigner 深色带。**2026-10-11**：OrbitCore 内圈彩点由用户撤回（看过 mock 后选「不做」，理由见 Step 4），另两项不变 |
+| Q4 | 可选项三项都做：Hero 浮动彩球、OrbitCore 内圈彩点、agent-skills 改 ForDesigner 深色带。**2026-10-11**：OrbitCore 内圈彩点由用户撤回（看过 mock 后选「不做」，理由见 Step 4），另两项不变。**2026-10-12**：agent-skills 深色带由 Step 5 落地，形态与墨色按用户逐条定的 Step 5 Q1–Q6 |
 
 可读性偏离的先例是 docs/31 Step 3 Q2「形照搬，色取可读下限」。
 
@@ -567,11 +567,11 @@ md 以下是上下堆叠的布局。改 Container 宽度、7/5 分栏、`--fb-or
     处置见上方已知局限。
   - 截图（1440×900 四组、1920×1080、1366×657、1200×800 亮 en，加 Magnet 右下角 2 倍特写）与上面的量值一致。
 
-### Step 5 — agent-skills 改 ForDesigner 深色带（未开始）
+### Step 5 — agent-skills 改 ForDesigner 深色带（用户 2026-10-12 逐条定完，见本步「用户决定」；已落地并完成浏览器验收 2026-10-12；见本步「落地记录」）
 
 `$MIN/sections/home/home-for-designer.tsx`：满宽 `grey.700` 底叠 `135deg grey.900@0.8 → grey.900` 渐变，caption 白色淡出，
 标题 `135deg warning.main → primary.main`，动作包在 `AnimateBorder` 里。用户 2026-10-10 选了做；开工时逐条问下面这些，
-它们不是本文能替用户定的：
+它们不是本文能替用户定的（原计划，保留不改；哪几条已过期见下方「前提核实」）：
 
 - 几何装不下：Minimal 是四分之一面板 + `minHeight 720` + 一张 favbase 没有对应物的 webp，agent-skills 有 prompt 卡、
   三条特性和需求说明，只能按语义移植配色。
@@ -585,6 +585,176 @@ md 以下是上下堆叠的布局。改 Container 宽度、7/5 分栏、`--fb-or
 - 页尾会有两块深色区（本段与 platform-request），中间夹 bilibili 的深色播放器；这一段的脊线（docs/31 Step 4 照
   `home-testimonials`）要么去掉、要么照 for-designer 不画线，脊线会断。
 - 推翻 docs/31 Step 3 Q1「hero 彩色、section 中性」与 Step 4 的段落映射。
+
+#### 前提核实（2026-10-12）
+
+开工前主会话派了一个工作流核实上面七条（Steps 1–4 落地之后，有几条已经不成立），并在已装的扩展里注入 mock 实测。
+草稿与截图在系统临时目录（`fbcdp/s5/`），不进仓库。
+
+- **机制（改变方案的那一条）**：主题的 `colorSchemeSelector` 是 `data-color-scheme`，MUI 9.4.0 把暗色变量块输出成裸属性选择器
+  `[data-color-scheme="dark"]`（`@mui/material/styles/createGetSelector.js:62-63`），不锚定 `html`。所以给段落根挂
+  `data-color-scheme="dark"`，整段就吃暗色 token（MUI 文档「Forcing a specific color scheme」有这个用法）：`Headline` 的
+  `text.primary` 头变白、prompt 卡变暗卡、焦点环换暗色那条，FeatureList 与 `Headline` 都不用为配色翻转加颜色 API。happy-dom 与 Chromium 155
+  实测，三处要知道：
+  1. 继承的 `color` 会漏：CssBaseline 给 body 写 `color: var(--palette-text-primary)`，在 body 上就算成了亮色值，子孙继承的是算好的
+     rgb。不写 `color` 的元素（FeatureList 的文字，`feature-list.tsx:40`）在亮色页里是 `#1C252E`，对带子 1.08:1。修法：挂属性的
+     那个元素上同时写 `color: text.primary`。
+  2. 挂属性的元素自身吃不到 `applyStyles('dark')`：它生成 `*:where([data-color-scheme="dark"]) .x`，是后代组合子。变量不受影响
+     （元素自己的 `var()` 按它自己声明的暗色变量解析）。反过来，这个元素上的 dark 分支恰好只在暗色页生效。
+  3. 子树里 `applyStyles('light')` 也会命中（`html` 是 light 祖先），portal（Tooltip / Popover）会逃出子树按亮色渲染。两者现在都是
+     0 处（仓库与 MUI 9.4.0 源码里 `applyStyles('light')` 都是 0），agent-skills 没有 portal。暗色页下这个属性是 no-op（290 个变量逐个比对，差异 0）。
+- 不用这个机制（只换背景）的实测：标题头 1.05:1、特性 1.08、描述 3.37，prompt 卡在深色带上成了一块白板（15–16:1）。
+- **P1 几何**：md+ 装不下属实（内容 760×560，Minimal 的四分之一面板 732×456），但「只能按语义移植配色」说过头：Minimal 在 md 以下
+  根本没有面板（两块都是 `display: { xs: 'none', md: 'block' }`），就是满宽渐变带 + 居中 Stack，这个形态在任何宽度都能原样移植。
+- **P2 标题墨色**：对比度成立（grey.900 上琥珀 9.24、coral 6.90；带子最亮点 8.20 / 6.12）。墨色计数过时：Step 3 之后已有
+  neutral / brand / muted / white 四种，琥珀→coral 是第五种。
+- **P3 caption**：成立，收笔 white@0.2 在带上 1.89–1.92。收笔 alpha ≥ 0.47 才到 4.5:1。
+- **P4 FeatureList**：消费者是三个（agent-skills、bilibili、chat），不是两个；继承的 `color` 就是它的颜色 API，带子根上一行即可，不碰另两处。
+- **P5 AnimateBorder**：三条字面都对，但 `borderGradient` 只是约 20 行零依赖的 CSS 函数，docs/25 没给跳过它的理由。真正的代价是
+  `useAnimationFrame` 每帧都跑、`MotionConfig` 停不了、要手动 gate，以及 Minimal 的 `text` 按钮违反角色规则「主动作 = contained +
+  primary」（`app/theme/CLAUDE.md:43-44`）。可读性不是理由：带子强制暗色，`variant="text" color="primary"` 的墨色 `text.accent`
+  解析成暗色的 `primary.light` `#FDA48A`（`app/theme/core/components/button.tsx:129-131`、`app/theme/core/palette.ts:114`），
+  对 grey.900 9.05:1、带子最亮点约 8.0:1；1.77:1（亮色的 `primary.darker` 对 grey.900）只在强制配色之外才成立。
+- **P6 页尾深色区**：漏了 picker。顺序是 agent-skills → bilibili（浅带，里面一块 314×177 的深色播放器 tile，是物件不是区域）→
+  picker（全白，主出口）→ request（Container 内的 grey.900 卡）。两块深色面相距 1930px（1440 宽）。脊线不是二选一：线画在段落
+  背景之上，grey.500@0.24 在带上 1.52:1，比白底的 1.23 还清楚，保留就不断。Minimal 自己的脊线在 for-designer 处断开（它一条线
+  不画，highlight-features 从自己顶部重新起线）。
+- **P7 推翻的决定**：成立，但 docs/31 Step 3 Q1 的理由本身不完整：Minimal 的 for-designer 就是一个标题彩色的 section。docs/39
+  Step 1 / Step 2 已经让平台字形与 product-tour 舞台上了色，Q1 实际只剩「section 标题中性」。
+- **漏掉的一条**：暗色页的 `background.default` 就是 grey.900，带子与页底 1.00–1.13:1（渐变 75% 起是实色 grey.900，右下角
+  就是页底；左上角最亮 1.13），几乎不存在。Minimal 靠 webp 与裸 grey.700 撑轮廓，这两样都不移植。
+
+#### 用户决定（2026-10-12）
+
+| # | 决定 | 依据 |
+|---|---|---|
+| Q1 形态 | Minimal 的 xs 形态铺满所有宽度：满宽 `grey.700` 底叠 `135deg grey.900@0.8 0% → grey.900 75%`，内容照旧居中单列，只换配色。不移植 md+ 的两块面板与 webp | Minimal 在 md 以下就是这个形态，是原样移植不是降级；内容装不进面板 |
+| Q2 暗色 | 暗色页下带子与页底融合，照原样接受，不加分隔线、不换底 | 与 Minimal xs 暗色一致；request 卡暗色下对页底也是 1.00:1 |
+| Q3 标题 | 白头 + 静态 `135deg warning.main → primary.main` 尾词，画在尾词上，不铺整行；`Headline` 加第五种墨色 | 尾词是 `inline-block`，盒宽就是墨迹，渐变两端都画得出来；整行铺在 760 宽列框上会重现 Step 3 修掉的「铺在列框上」（mock 实测墨迹只盖住渐变的 12%–89%）。不复用 `brand`：页面会出现第二个流动品牌词 |
+| Q4 caption | 白 → 48% 白淡出，形照搬、收笔取可读下限（最差 4.67:1） | docs/31 Step 3 Q2 与本文 Q3 的同一口径；Minimal 的 20% 收笔 1.91:1 |
+| Q5 流光框 | 不移植 `AnimateBorder`，动作保持 prompt 卡 + contained primary 复制按钮；docs/28 §3.4 的拒绝维持 | 见 P5 |
+| Q6 脊线 | 保留 agent-skills 现有的 `home-testimonials` 那套线，脊线贯通全页 | 见 P6；断开会留下约 880px 的断口 |
+
+默认接受、未单独问（用户可在浏览器验收时否决）：亮色下这条渐变在 1432×880 的面上只有约 10 级 8 位色阶，看得到很淡的斜向条纹；
+Minimal 用同一条渐变，xs 下有图片纹理盖住。亮色页里 chat 段底部的横虚线与 `+` 离带子顶边约 81px，成了两道相近的水平线。
+
+#### 落地记录（2026-10-12）
+
+**改动**（路径相对 `entrypoints/welcome/`，行号为改后）：
+
+- `sections/agent-skills.tsx`：
+  - `:139-151` `WelcomeSection` 根：`data-color-scheme="dark"`（经 `...other` 落到 `<section>`）；`sx` 函数里 `color: 'text.primary'`、
+    `bgcolor: 'grey.700'`，加一层 `theme.mixins.bgGradient`：`linear-gradient(135deg, varAlpha(grey['900Channel'], 0.8) 0%,
+    grey[900] 75%)`，取 `theme.vars.palette`（Minimal xs 那层去掉 webp）。padding 照旧走 `WelcomeSection`，没有 `overflow: hidden`
+    （偏离 5）。
+  - `:163` caption `ink="white"`；`:167` 标题 `ink="warm"`。段内其余（prompt 卡、复制按钮、FeatureList、需求说明、线）一行没动。
+  - 注释：组件文档 `:84-107` 新增三段：xs 形态铺满所有宽度（Q1）；强制暗色、`color` 那行为什么承重（fact 1，指向守卫）；
+    根上不写 `applyStyles('dark')`（fact 2）、`applyStyles('light')` 与 portal（fact 3）、暗色页融合已接受（Q2）。原有四段（含首句摘要）不动。
+    `renderLines` 注释 `:31-36` 补一句线为什么留在深色带上（Q6，偏离 6）。
+- `components/section-shell.tsx`：
+  - `:87-97` `InkStyle` 上移到文件前部（caption 与标题两张表共用），新增 `CAPTION_INKS`：`neutral` = `text.secondary`（原值），
+    `white` = `textGradient('to right, common.white, varAlpha(common.whiteChannel, 0.48)')`。
+  - `:119-131` `SectionCaption` 加 `ink?: keyof typeof CAPTION_INKS`，默认 `neutral`；文档 `:111-117` 补一段：Minimal for-designer 的
+    淡出，收笔从 0.2 抬到 0.48 的理由与对比度，渐变跨的是 caption 的盒子、agent-skills 的居中 flex 列把它收到字宽。
+  - `:175-180` `HeadlineInk` 加 `{ ink: 'warm'; tail: ReactNode }`，tail 必填；联合的注释 `:164-174` 改成五种墨色，写明 brand 与
+    warm 为什么都必须带尾巴。
+  - `:241-249` `INKS.warm`：头 `primaryHead`，尾 `display: 'inline-block'` + `textGradient('135deg, warning.main, primary.main')`
+    （`theme.vars`）。行注释 `:232-240`：Minimal for-designer 的 token 与角度、只画在尾词上（inline-block 的盒子就是墨迹，两端都画得出来；
+    铺整行会在 760 宽列框上重现 Step 3 的 bug）、静态不流动、只在深底上可读（带子里头是白、尾词 6.5–8.7:1，白底 1.9–2.5:1）。
+  - 其余注释：`primaryHead` `:182-186`、`INKS` 表注释 `:201-202`（warm 的尾词没有源盒子，按品牌词的理由取 `inline-block`）、
+    `Headline` 文档 `:273-276`（warm 是「hero 彩色、section 中性」的唯一例外，也是 Minimal 自己的）。
+- 守卫：
+  - `components/section-shell.test.tsx:166-173` 新增一例编译期 `@ts-expect-error`「requires a tail on the warm ink」，与 brand 那例并列
+    （12 → 13 例）。
+  - 新增 `sections/agent-skills.test.tsx`（1 例，行为形式）：在真实 `ThemeProvider` 里渲染 `AgentSkills`，断言标题头 `h2` 与
+    FeatureList 第一条的 computed `color` 都是暗色 `text.primary`（`:87-88`，标题头那条见偏离 7）。对照（`:83-85`）：`<html>` 的
+    `data-color-scheme` 是 `light`、亮暗两个 `text.primary` 不同、body 的 computed `color` 是亮色那个，防止整页都是暗色时空转。
+- 文档：`welcome/CLAUDE.md:40-44`（「色彩」新增五条，一条一个事实：根上的属性强制暗色；同一根上承重的 `color` 与守卫；根上不写
+  `applyStyles('dark')`；带子里无 `applyStyles('light')` 与 portal；暗色页融合已接受）、`:49`（「向 Minimal 借鉴」新增 `AnimateBorder`
+  维持拒绝及其真实代价）、`:59`（「标题」首条：五种墨色，`warm` 只给深色带）、`:63`（caption 白色收笔 48%）；docs/31 Step 3 Q1
+  （`:80`）、Step 4 映射表 marquee 行（`:122`）与 agent-skills 行（`:125`）补注；docs/28 §3.4 `animate-border` 行（`:137`）补注；
+  本文 §0 表 for-designer 行、§1 Q4、本步状态行。
+
+**与上文计划的偏离 / 默认决定**：
+
+1. `SectionCaption` 的两种墨色也写成一张表（`CAPTION_INKS`），与 `Headline` 的 `INKS` 同法，组件里没有墨色分支；`InkStyle`
+   随之上移到两张表之前。prop 类型取 `keyof typeof CAPTION_INKS`，值域就是计划写的 `'neutral' | 'white'`。neutral 从对象形
+   `color: 'text.secondary'` 改成函数形 `theme.vars.palette.text.secondary`，生成的规则不变（见下方「生成的 CSS」）。
+2. 新墨色用计划的默认名 `warm`：按画法命名（琥珀与 coral 都是暖色），与 neutral / brand / muted / white 同一套命名法；
+   实现里没有出现更贴切的名字。
+3. 测试没有照计划在渲染前给 `<html>` 设 `data-color-scheme="light"`：provider 在 effect 里按自己的 mode 重写 `<html>` 的这个属性
+   （`@mui/system` 9.4.0 `cssVars/createCssVarsProvider.js:172-201`；mode 没有存储时是 `defaultMode` light），预设的值会被覆盖，
+   是空操作（实测预设 `dark` 照样渲染成亮色页）。改成断言页面配色：`<html>` 属性为 `light`、body 的 computed `color` 是亮色
+   `text.primary`。变异 (d) 证明这道对照在起作用。
+4. 守卫用的是行为形式，没有退到「断言属性 + 断言生成的规则」：happy-dom 20.10.4 按继承链解析 `var()`，body 算出 `#1C252E`、
+   带子里的 FeatureList 算出 `#FFFFFF`，与 Chromium 的行为一致（「前提核实」fact 1）。同一例顺带守住 fact 2：把 `color` 挪进根上的
+   `applyStyles('dark')`，happy-dom 同样匹配不到（变异 c）。
+5. 没有照抄 Minimal 的 `overflow: hidden`：那一条是给 webp 和 md+ 面板的，带子里没有越界的东西（线在 `left: 80`，三角
+   `translateX(-50%)` 也落在段内；FeatureList 的 `x: -16` 入场在列内）。
+6. `renderLines` 的注释补了一句线为什么留在深色带上（Q6）。计划没列；不写的话，「照 for-designer 不画线」看起来像是一次对齐。
+7. （check 阶段）守卫加量标题头 `h2`。只量 FeatureList 钉不住属性挂在哪：把属性与 `color` 一起从根挪到 FeatureList 外层的 Box，
+   特性文字照样是白的，`Headline` 的头自己写 `text.primary`，按亮色页解析成墨色，压在带子上看不见；只量 FeatureList 的旧守卫对这个
+   变异是绿的（变异 f）。用的是行为断言，没有改成断言属性挂在根上。
+
+**验证**：
+
+- 生成的 CSS（happy-dom 下在 `ThemeProvider` 里渲染 `AgentSkills` 与一个不带 `ink` 的 `SectionCaption`，读 emotion 输出与 computed
+  style；探针放在仓库内临时文件，跑完即删）：
+  - section：属性 `data-color-scheme="dark"`；规则 `position: relative; color: var(--palette-text-primary); background-color:
+    var(--palette-grey-700); background-image: linear-gradient(135deg, rgba(var(--palette-grey-900Channel) / 80%) 0%,
+    var(--palette-grey-900) 75%); background-size: cover; background-repeat: no-repeat; background-position: center`；padding 仍是
+    `WelcomeSection` 的 xs 10 / md 20 两条媒体规则；没有 `overflow`。computed：底 `#454F5B`（grey.700）、色 `#FFFFFF`。
+  - caption（`ink="white"`）：overline 那组字形属性 + `background: linear-gradient(to right, var(--palette-common-white),
+    rgba(var(--palette-common-whiteChannel) / 48%))`、`background-clip: text`、`color: transparent`。不带 `ink` 的 caption 仍是
+    `color: var(--palette-text-secondary)`，与改前同值。
+  - 标题：h2 头 `color: var(--palette-text-primary)`；尾词 span `display: inline-block; background: linear-gradient(135deg,
+    var(--palette-warning-main), var(--palette-primary-main))`、`background-clip: text`、`color: transparent`，没有暗色分支规则。
+  - 描述与需求说明 computed `#919EAB`（暗色 `text.secondary` = grey.500）；复制按钮底 `#FC7E5B`、字 `#1F1B17`（`primary.contrastText`）。
+- 对比度沿用「前提核实」里 mock 的实测值（本步没有在真实构建上重量），由主会话的浏览器验收复核。
+- 变异（每次只做一种改动、从系统临时目录里的同一份备份还原，`cmp` 与备份逐字节一致，还原后全绿；(a)–(d) 在 check 阶段按加了
+  标题头断言的守卫重跑过，下面是重跑的结果）：
+  - (a) 删掉 `data-color-scheme="dark"` →「AgentSkills dark band on a light page > inks the title and FeatureList text with the dark
+    text.primary, not the light one」红在标题头那条（`:87`，`expected '#1C252E' to be '#FFFFFF'`）。
+  - (b) 删掉 `color: 'text.primary'` → 同一例红在 FeatureList 那条（`:88`），报错同上。
+  - (c) 把 `color` 那行换成根上的 `...theme.applyStyles('dark', { color: theme.vars.palette.text.primary })` → 同一例红在 `:88`，
+    报错同上（fact 2）。
+  - (d) 测试里渲染前写 `localStorage['favbase-color-mode'] = 'dark'`（整页暗色）→ 对照红（`expected 'dark' to be 'light'`）。
+  - (e) warm 的 `tail: ReactNode` 放宽成 `tail?: ReactNode` → `tsc` 报 `section-shell.test.tsx(169,5): error TS2578: Unused
+    '@ts-expect-error' directive`（「requires a tail on the warm ink」）。
+  - (f)（check 阶段，偏离 7）把属性与 `color: 'text.primary'` 一起从根挪到 FeatureList 外层的 Box → 同一例红在标题头那条（`:87`，
+    `expected '#1C252E' to be '#FFFFFF'`）。临时去掉 `:87` 那条（即只量 FeatureList 的旧守卫）再跑同一变异：绿。
+- `pnpm compile` 通过；focused `pnpm vitest run entrypoints/welcome entrypoints/app/theme tests/ui-vendor-boundaries.test.ts
+  tests/i18n-no-hardcoded.test.ts tests/platform-completeness-contract.test.ts` 15 个文件 / 159 例通过（Step 4 是 14 / 157：多了
+  `agent-skills.test.tsx` 1 例与 warm 的编译期 1 例）；`pnpm test` 首次整跑全绿，主仓库 240 个文件 / 2110 例、`packages/*`
+  15 个文件 / 263 例；`git diff --check`（含新文件）干净。没有跑 `pnpm build`。偏离 7 之后 check 阶段重跑：`pnpm compile` 通过，
+  同一组 focused 15 个文件 / 159 例通过（守卫仍是 1 例，多一条断言不加例数），`pnpm test` 首次整跑全绿（主仓库 240 / 2110、
+  `packages/*` 15 / 263），`git diff --check`（含新文件）干净。
+- **构建**：用户跑的 `pnpm build`（自动模式的权限分类器拦了主会话的构建：它会覆盖已加载的 `.output/chrome-mv3`）；主会话随后单跑
+  只读的 `scripts/check-background-bundle.mjs`：bundle 契约 14 个模块 / 963,108 字节，与 Step 1–4 相同。`manifest.json`、
+  `background.js`、`content-scripts/*`、`app.html`、`offscreen.html` 的 sha1 构建前后不变；77 个 chunk 里只有 welcome 入口换了名
+  （`welcome-CdLRHK8u.js` → `welcome-CHv_DU7M.js`），app.html 引用的 chunk 全部同名。没有重载扩展，用户开着的扩展页不受影响。
+- **浏览器验收**（§5，BrowserOS 里装的扩展 `ifnlocdg…`，自己开的标签，页面实际加载的是 `welcome-CHv_DU7M.js`；亮暗与中英用
+  header 自己的按钮切，`setItem` / `chrome.storage.local.set` 在本标签吞掉那两次写入，截完读回共享存储仍是 `light` / 未设置；
+  控制台零报错零警告）。1440×900 亮 en、暗 en、暗 zh-CN、亮 zh-CN 四组，加 390×844 亮 en：
+  - section：`data-color-scheme="dark"`，computed `color` 白、`color-scheme: dark`，底 `rgb(69,79,91)`（grey.700）叠
+    `linear-gradient(135deg, rgba(20,26,33,0.8) 0%, rgb(20,26,33) 75%)`；1440 下四角合成色左上 `rgb(30,37,45)`、右上 `(22,28,35)`、
+    左下 `(25,31,39)`、右下 `(20,26,33)`。五组相同（亮暗页、中英都不变）。
+  - 带内 computed：标题头白；尾词 `inline-block`、`linear-gradient(135deg, rgb(255,171,0), rgb(252,126,91))`（en 363px 宽、390 下 207px）；
+    caption 白 → 48% 白淡出、盒宽 151px 即字宽；FeatureList 三条白；描述、prompt label、需求说明 `rgb(145,158,171)`；code 白；
+    prompt 卡底 `rgb(34,43,52)`；复制按钮底 `rgb(252,126,91)`、字 `rgb(31,27,23)`。按钮 `focus({ focusVisible: true })` 后
+    `:focus-visible` 为真，轮廓 `rgb(252,126,91) solid 2px`、offset 2px，即暗色那条（亮色页也是）。
+  - 对比度（mock 的同一套量法：文字墨迹框内取网格点，按 computed 渐变在该点取色，取最差点）：1440 亮 en / 暗 en / 暗 zh / 亮 zh：
+    caption 4.82（起笔 16.5）、标题头 16.26–16.32、尾词 6.73（en）/ 6.84（zh），琥珀端 8.68、coral 端 6.48、描述 6.00–6.03、
+    prompt label 5.25、code 14.35、按钮字 6.74、特性 16.73–16.83、需求说明 6.20–6.21、对勾（非文本）6.58–6.62；卡对带子 1.15–1.22；
+    按钮对带子 6.79–6.85。390 亮 en：caption 4.78、头 15.90、尾词 6.59、描述 5.88、特性 16.83–17.06、需求说明 6.28。与「前提核实」
+    mock 的量值一致（caption 4.82 高于 mock 按最亮点估的 4.67：caption 不在左上角）。
+  - 边缘：亮色页带子顶边对上方白底 15.54–17.18、底边对 bilibili 的上分隔线 13.52–14.30；暗色页顶边对页底 1.02–1.13、底边对
+    bilibili 底色 1.00–1.06、对它的上分隔线 1.41–1.49，即 Q2 接受的融合。
+  - 脊线（≥1440）：竖线 grey.500@0.24 在带上 1.52:1，两个三角 1.22 / 1.52（0.12 / 0.24），线从 chat 接到 bilibili 不断；390 下
+    `display: none`。
+  - 亮色页顶栏滚到带子上方时，顶栏 `::before` 仍是白 80% 加 8px blur，压在深色带上是浅灰底、wordmark 墨色字，可读。
+  - 截图（四组 1440 加 390 两屏）与量值一致。首轮的亮 en 截图是空带：本标签在被遮挡的窗口里报 `visibilityState: hidden`、rAF
+    停着，入场动画没跑完；computed 值不受影响，补拍时等到 opacity 为 1 再截，正常。
 
 ## §3 不做
 

@@ -84,20 +84,50 @@ export function WelcomeSection({
   );
 }
 
+/** A paint for `SectionCaption` or `Headline`, keyed by ink in each one's table. */
+type InkStyle = (theme: Theme) => CSSObject;
+
+/** What each `SectionCaption` ink paints; the comment below has the why. */
+const CAPTION_INKS = {
+  neutral: (theme) => ({ color: theme.vars.palette.text.secondary }),
+  white: (theme) =>
+    theme.mixins.textGradient(
+      `to right, ${theme.vars.palette.common.white}, ${varAlpha(theme.vars.palette.common.whiteChannel, 0.48)}`
+    ),
+} satisfies Record<string, InkStyle>;
+
 /**
  * The small line above a section's `Headline`: Minimal's `SectionCaption`, a
  * bare overline (600 / 12px / uppercase, from the theme) with no pill and no
  * icon. Entrance motion stays with the call site's `FadeIn` (docs/28 D6).
  *
- * Colour is `text.secondary`, not Minimal's `text.disabled`: that one reads
- * ~2.7:1 on white and ~3.6:1 on the dark page, this one ~4.9:1 and ~6.4:1.
+ * The default ink is `text.secondary`, not Minimal's `text.disabled`: that
+ * one reads ~2.7:1 on white and ~3.6:1 on the dark page, this ~4.9:1 / ~6.4:1.
  *
  * A block, where Minimal's is a `span`: there it is a flex item, which
  * blockifies it; here it sits in `FadeIn`'s block div, where an inline span
  * would take the div's line strut and stand taller than its own 18px line.
+ *
+ * `ink="white"` is for agent-skills' dark band: Minimal for-designer's caption,
+ * white fading to the right, with the end raised from Minimal's 20% white
+ * (~1.91:1 on the band) to 48%, the readable floor (~4.67:1 at the worst point;
+ * docs/39 Step 5 Q4). The fade spans the caption's box, so it reads only where
+ * the box is the text: agent-skills' centred flex column shrink-wraps its
+ * `FadeIn`, and this block with it, to the caption; in a full-width column the
+ * fade would end out past the last letter.
  */
-export function SectionCaption({ children }: { children: ReactNode }) {
-  return <Box sx={{ typography: 'overline', color: 'text.secondary' }}>{children}</Box>;
+export function SectionCaption({
+  children,
+  ink = 'neutral',
+}: {
+  children: ReactNode;
+  ink?: keyof typeof CAPTION_INKS;
+}) {
+  return (
+    <Box sx={(theme) => ({ typography: 'overline', ...CAPTION_INKS[ink](theme) })}>
+      {children}
+    </Box>
+  );
 }
 
 /**
@@ -134,21 +164,26 @@ export function Eyebrow({ children, icon }: { children: ReactNode; icon: Iconify
 /**
  * Which ink a `Headline` is painted in: `neutral` (the default) for every
  * section title, `muted` and `brand` for the hero's first and second lines,
- * `white` for the grey.900 card at the end of the page. The union pins the
- * tail per ink: `brand` must have one, because its tail is the brand word and
- * without it brand would paint exactly what neutral paints under another name;
- * `muted` refuses one, because the hero's first line has no second half and
- * no tail paint has been designed to follow a `text.secondary` head.
+ * `warm` for agent-skills' dark band, `white` for the grey.900 card at the end
+ * of the page. The union pins the tail per ink: `brand` and `warm` must have
+ * one, because the tail is all they paint differently (the brand word; the
+ * amber -> coral run) and without it each would paint exactly what neutral
+ * paints under another name; `muted` refuses one, because the hero's first
+ * line has no second half and no tail paint has been designed to follow a
+ * `text.secondary` head.
  */
 type HeadlineInk =
   | { ink?: 'neutral'; tail?: ReactNode }
   | { ink: 'white'; tail?: ReactNode }
   | { ink: 'brand'; tail: ReactNode }
+  | { ink: 'warm'; tail: ReactNode }
   | { ink: 'muted'; tail?: never };
 
-type InkStyle = (theme: Theme) => CSSObject;
-
-/** Solid `text.primary`: the head of a neutral title and of the hero's brand line. */
+/**
+ * Solid `text.primary`: the head of a neutral title, of the hero's brand line
+ * and of the warm title, which is white only because its band forces the dark
+ * scheme.
+ */
 const primaryHead: InkStyle = (theme) => ({ color: theme.vars.palette.text.primary });
 
 /**
@@ -163,6 +198,8 @@ const primaryHead: InkStyle = (theme) => ({ color: theme.vars.palette.text.prima
  * inline background is sliced across line fragments, and 「知识库」 may break
  * between any two characters, leaving each piece a different stretch of the
  * gradient. Plain inline for the white one (Minimal's advertisement title).
+ * The warm tail has no source box (Minimal paints that whole title) and takes
+ * `inline-block` for the brand word's reasons; its row says why tail only.
  */
 const INKS: Record<
   NonNullable<HeadlineInk['ink']>,
@@ -192,6 +229,24 @@ const INKS: Record<
       transition: { duration: 20, ease: 'linear', repeat: Infinity, repeatType: 'reverse' },
     },
   },
+  // Minimal for-designer's title tokens and angle (`home-for-designer.tsx:95-97`,
+  // docs/39 Step 5 Q3), painted on the tail only. The inline-block box is the
+  // ink, so both ends of the run show; across the whole title the gradient
+  // would spread on the 760px column box once the title wraps, leaving the ink
+  // a middle stretch of it (docs/39 Step 3's "spread on the column box" bug).
+  // Static, unlike brand: a second flowing word would compete with the hero's.
+  // Reads only on a dark ground: agent-skills forces the dark scheme on its
+  // band, where `primaryHead` is white and the tail 6.5-8.7:1; on white the
+  // tail is 1.9-2.5:1.
+  warm: {
+    head: primaryHead,
+    tail: (theme) => ({
+      display: 'inline-block',
+      ...theme.mixins.textGradient(
+        `135deg, ${theme.vars.palette.warning.main}, ${theme.vars.palette.primary.main}`
+      ),
+    }),
+  },
   muted: { head: (theme) => ({ color: theme.vars.palette.text.secondary }) },
   white: {
     head: (theme) => ({ color: theme.vars.palette.common.white }),
@@ -215,7 +270,10 @@ const INKS: Record<
  * the readable floor, ~4.9:1); `brand` is its second, a solid `text.primary`
  * head with the brand word as `tail`, flowing through coral and amber. Colour
  * on the hero, neutral on every band below it is Minimal's own split
- * (docs/31 Step 3). `white` is solid `common.white` for the grey.900 CTA card
+ * (docs/31 Step 3), and so is its one exception: `warm` is Minimal
+ * for-designer's title on agent-skills' dark band (docs/39 Step 5), a solid
+ * head and a still amber -> coral tail that read only on that band's forced
+ * dark scheme. `white` is solid `common.white` for the grey.900 CTA card
  * at the end of the page (`platform-request.tsx`, Minimal's
  * `home-advertisement`), its tail faded white -> 40% white exactly as
  * Minimal's advertisement title does; the other inks' heads are greys tuned

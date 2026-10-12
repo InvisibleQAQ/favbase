@@ -37,10 +37,16 @@
 - 平台字形不拿来表达别的意思：书签的 `solar:bookmark-bold-duotone` 在本页是琥珀色，how-it-works 步骤 01 因此换成非平台字形（docs/39 D1-b）。
 - 可读文字不用 `text.disabled`（亮色 2.7:1），用 `text.secondary`。
 - 不写局部焦点环：`ButtonBase` 渲染 `<button>`，主题 CssBaseline 的 `button:focus-visible` 环（亮 `primary.darker`、暗 `primary.main`）已经覆盖；`.Mui-focusVisible` 与 `:focus-visible` 同时成立（MUI 的 `isFocusVisible` 就是 `matches(':focus-visible')`）。局部写 `primary.main` 在亮色只有 2.5:1。
+- agent-skills 深色带（Minimal for-designer 的 xs 形态，docs/39 Step 5）在段落根上挂 `data-color-scheme="dark"` 强制暗色：主题的暗色变量块是裸属性选择器，整段吃暗色 token，段内组件不用为配色翻转加颜色 API（白色 caption 与 `warm` 标题是设计墨色，不是配色适配）。
+- 同一个根上的 `color: 'text.primary'` 承重：body 的颜色按页面配色算好再往下继承，删掉它，FeatureList 这类不写颜色的字在亮色页继承亮色 `text.primary`（对带子 1.08:1）。守卫 `sections/agent-skills.test.tsx`，它同时量标题头，属性与 `color` 一起挪到更窄的元素上也报红。
+- 那个根上不写 `applyStyles('dark')`：它生成后代选择器，挂属性的元素自己在亮色页匹配不到（把 `color` 挪进去，守卫同样报红）。
+- 带子里不许出现 `applyStyles('light')`（`html` 是亮色祖先，会命中）和 portal（逃出子树按亮色渲染）。
+- 暗色页下 agent-skills 深色带与页底 1.00–1.13:1（渐变 75% 起是实色 grey.900，即暗色页底）、几乎融合，用户接受，不加分隔线、不换底（docs/39 Step 5 Q2）。
 
 ## 向 Minimal 借鉴（先读 docs/28 §3 拒绝清单）
 
 - 已拒绝、别再提：`HeroBackground` 除 `Dots` 外（同心圆虚线与 `OrbitCore` 的轨道圆打架；`Dots` 已由 docs/39 Step 4 移植，docs/28 §3.1 的三条拒绝理由都不针对它）、`animate-text`（逐字 `inline-block`，无空格的中文整句会成为一个不可折行的词）、`renderIcons`（本页已有 OrbitCore / marquee / picker 三处在列平台）、`animate-count-up`、Pricing / Testimonials / FAQs 等销售页段落。
+- 同样已拒绝：`AnimateBorder`（docs/28 §3.4，docs/39 Step 5 Q5 维持），agent-skills 深色带的动作仍是 prompt 卡 + contained primary 复制按钮。真正的代价是 `useAnimationFrame` 每帧都跑、`MotionConfig` 停不了得手动 gate，Minimal 那颗 `text` 按钮也违反「主动作 = contained + primary」（`app/theme/CLAUDE.md`）；缺 `borderGradient` 不算理由。
 - 同样已拒绝：OrbitCore 内圈彩点（照 `illustration-integration.webp` 重绘的那道，docs/39 Step 4，用户 2026-10-11 撤回）。静态彩点与每 46s 转一圈的品牌色芯片撞色相；en 核心标签在 md 已伸到 r≈47（200 单位的 SVG），更小的内圈都压字；它是轨道上的第四套同心系统。
 - hero 浮动彩球（`hero.tsx` 的 `Dots`）的坐标是实测的，不是 Minimal 的，只对现在的 hero 几何成立：Container `lg`、7/5 分栏、`--fb-orbit-r`、标题 clamp，动其中任何一项都要重跑 docs/39 Step 4 的量法。只从 lg 起渲染；挂在钉住层里，偏移以它的中心为原点，随钉住层被 `spent` gate 一起停绘（漂移照在 motion 的帧循环里跑，docs/28 §5）。
 - `components/animated-text.tsx` 只切到词层，正是为了中文能按字折行，别换成 Minimal 的实现。
@@ -50,11 +56,11 @@
 
 ## 标题（owner：`components/section-shell.tsx`）
 
-- 标题着色只在这里定义，调用点不用 `sx` 覆盖颜色。四种墨色：section 标题 `neutral`（中性实色 + 尾词淡出）；hero 两行专用 `muted` 与 `brand`，是 Minimal 的三级标题（docs/39 Step 3）：首行 `muted` 是 `text.secondary` 实色，取可读下限（Minimal 的 `opacity: 0.24` 只有 1.63:1），次行 `brand` 是 `text.primary` 实色头 + 品牌词尾巴的 coral / amber 流动渐变；`white` 只给 `platform-request.tsx` 的深色卡（docs/31 Step 3）。
+- 标题着色只在这里定义，调用点不用 `sx` 覆盖颜色。五种墨色：section 标题 `neutral`（中性实色 + 尾词淡出）；hero 两行专用 `muted` 与 `brand`，是 Minimal 的三级标题（docs/39 Step 3）：首行 `muted` 是 `text.secondary` 实色，取可读下限（Minimal 的 `opacity: 0.24` 只有 1.63:1），次行 `brand` 是 `text.primary` 实色头 + 品牌词尾巴的 coral / amber 流动渐变；`warm` 只给 agent-skills 深色带（docs/39 Step 5）：`text.primary` 头（带子强制暗色，所以是白）+ 尾词静态 135deg 琥珀 → coral，白底上尾词只有 1.9–2.5:1，别用到浅底上；`white` 只给 `platform-request.tsx` 的深色卡（docs/31 Step 3）。
 - `how-it-works.tsx` 的步骤大号数字与中性尾词必须共用 `fadeTextGradient`；它与 `ctaGlowShadow` 都是定义一次的共享外观 helper，别再手写。
 - 字号用 `clamp`，不许换成 `variant="h1"/"h2"`：本仓库的主题阶梯被刻意压小（h1 平 28px、h2 平 24px），换过去 section 标题会缩 25–57%（docs/28 §4 E2）。
 - 中性尾词保持 `inline-block`，别改回 inline：inline 渐变按行切片，折到下一行的词只分到渐变末段，成了淡色孤字（docs/31 Step 3 D-d，用户看过截图后决定）。
-- `fadeTextGradient` 去掉了 Minimal 叠的 `opacity: 0.4`，`SectionCaption` 用 `text.secondary` 而非 `text.disabled`：都是为对比度的刻意偏离。
+- `fadeTextGradient` 去掉了 Minimal 叠的 `opacity: 0.4`，`SectionCaption` 用 `text.secondary` 而非 `text.disabled`，深色带上的 `SectionCaption ink="white"` 收笔 48% 而非 Minimal 的 20%（1.91:1）：都是为对比度的刻意偏离。
 - `Headline` 默认渲染 `h2`；全页唯一的 `h1` 在 `hero.tsx`，h1 与两行本身都不上渐变，渐变只在品牌词自己的 `inline-block` span 上，宽度就是这个词（挂到 h1 会横跨两行，且 `background-clip: text` 在 transformed 子元素上有渲染 glitch；铺在整行上曾被拉到 7 列列框宽，zh 首行整行落在灰段）。
 - 品牌词的流动是 `backgroundPosition` 动画，`MotionConfig reducedMotion="user"` 停不了它（见「动画」），停它的是 `Headline` 里手动的 `useReducedMotion()` gate：reduce 下不给 `animate`，停在首帧。这行看着多余，别删（守卫 `components/section-shell.test.tsx`「Headline brand tail flow」）。
 - 调用点覆盖 `WelcomeSection` 的 `py`/`pt`/`pb` 必须带 `md` 键：标量只进 base 规则，md 起输给组件自己的媒体查询。

@@ -134,7 +134,7 @@ favbase `components/animated-text.tsx`（77 行）只切到词层正是为此（
 | 拒绝 | 规模 | 理由 |
 |---|---|---|
 | `animate-count-up.tsx` | 90 行 | 本页约定禁数字——首装时数据库是空的，任何统计数字都是假的 |
-| `animate-border.tsx` / `animate-logo.tsx` | 271 + 134 行 | 零用例 |
+| `animate-border.tsx` / `animate-logo.tsx` | 271 + 134 行 | 零用例。**2026-10-12 补注**：docs/39 Step 5 把 Minimal `home-for-designer` 的深色带移植给 agent-skills 时重新评估过 `AnimateBorder`（for-designer 用它包动作按钮），用户维持拒绝（docs/39 Step 5 Q5），动作仍是 prompt 卡 + contained primary 复制按钮。重评的理由：`useAnimationFrame` 每帧都跑、`MotionConfig` 停不了得手动 gate，Minimal 的 `text` 按钮也违反 `theme/CLAUDE.md`「主动作 = contained + primary」；它依赖的 `mixins.borderGradient` 只是约 20 行零依赖的 CSS 函数，缺它不算理由 |
 | 其余 9 个 variants（zoom/flip/scale/rotate/bounce/path/background/actions/slide） | ~658 行 | 零消费者，且每个都是独立概念。`varFade` 的 10 个方向保留全表——那是**一个正交 API**，裁剪会让「为什么只有 inUp 和 inLeft」变成需要解释的特殊情况 |
 | Minimal home 的 Pricing / Testimonials / FAQs / ZoneUI / ~~Advertisement~~ | ~1200 行 | 销售页段落。Testimonials 会逼出编造的用户评价，`renderRatings` 的星级 + AvatarGroup + "160+ Happy customers" 同理。**Advertisement（179 行）已于 2026-09-27 移植**（docs/31 Step 2，用户决定）：`platform-request.tsx` 改成它的深色 CTA 卡，只替换 favbase 没有对应物的部分（保留描述段、单个按钮、i18n 拆标题），明细见 docs/31 §4 Step 2。与其余四个的区别：它的内容槽装得下 favbase 已有的真动作（Platform Request 的 issue 外链），不逼出编造的内容。其余四个的拒绝不变 |
 | `renderIcons`（"Available For" + 平台图标行） | — | favbase 已有**三处**在列六平台清单：`OrbitCore`（Hero 右侧公转）、`CapabilityMarquee`（`ROW_TOP`/`ROW_BOTTOM` 含全部六个平台名 + 图标）、`PlatformPicker`。再加一处是第四次，且与紧接其后的 marquee 直接重复 |

@@ -77,7 +77,7 @@ BrowserOS neo 的 MCP 工具驱动不了扩展页：`tabs new` 打开 `chrome-ex
 - **favbase 原状**：`Eyebrow` 药丸 + `headlineGradient(theme)` 的珊瑚渐变，hero 与五个 section 标题共用一道（`entrypoints/welcome/components/section-shell.tsx`）。
 - **冲突**（已推翻）：docs/28 **D8 是用户决定**：「结构取、颜色留，保 coral 品牌色，`Eyebrow` 药丸保留」。docs/28 的 D8 行、§2.4 矩阵 eyebrow / 标题渐变两行已改注（划掉被推翻的半句并注明日期，不删行），§4 E3 补一段更新。
 - **用户决定（2026-09-27）**：
-  - **Q1** hero 标题保 coral 渐变，只改五个 section 标题（flow / chat / agentSkills / bilibili / picker）——正是 Minimal 自己「hero 彩色、section 中性」的分法。hero 的 caption 同样换 overline，全页 caption 一致。Minimal hero 余下的首行 24% 淡化 + 流动渐变不在本步。**2026-10-11 补注**：这两项由 docs/39 Step 3 完成，首行取 `text.secondary` 实色而不是 0.24 不透明度；hero 两行的 112deg coral 渐变与 `headlineGradient` 随之删除，彩色只留在品牌词上。
+  - **Q1** hero 标题保 coral 渐变，只改五个 section 标题（flow / chat / agentSkills / bilibili / picker）——正是 Minimal 自己「hero 彩色、section 中性」的分法。hero 的 caption 同样换 overline，全页 caption 一致。Minimal hero 余下的首行 24% 淡化 + 流动渐变不在本步。**2026-10-11 补注**：这两项由 docs/39 Step 3 完成，首行取 `text.secondary` 实色而不是 0.24 不透明度；hero 两行的 112deg coral 渐变与 `headlineGradient` 随之删除，彩色只留在品牌词上。**2026-10-12 补注**（docs/39 Step 5）：section 标题里现在有一个是彩色的：agent-skills 改成 Minimal `home-for-designer` 的深色带，标题白头 + 静态 135deg 琥珀 → coral 尾词（`Headline ink="warm"`）。本条「hero 彩色、section 中性是 Minimal 自己的分法」的理由不完整：Minimal 的 for-designer 就是一个标题彩色的 section，这是它的反例，本页照它开了这一处。其余 section 标题仍是中性。
   - **Q2** 形照搬，色取可读下限：caption 用 `text.secondary`（Minimal 是 `text.disabled`）；尾词去掉 Minimal 额外的 `opacity: 0.4`，只留 `text.primary` → 20% 的 `to right` 淡出。favbase 的尾词是含义词（「knowledge base」「while you watch」），不是装饰。
   - **Q3** 五个标题拆 `heading` + `headingTail`，文案一字不改：zh 两半直接相接、en 加一个空格，都等于原句。
 - **默认决定**（最终确认时告知用户）：
@@ -119,10 +119,10 @@ BrowserOS neo 的 MCP 工具驱动不了扩展页：`tabs new` 打开 `chrome-ex
   | favbase 段 | Minimal 源文件 | `renderLines`（逐值照搬） |
   |---|---|---|
   | `hero.tsx` | `home-hero` | 无（Minimal 也无） |
-  | `capability-marquee.tsx` | HugePack 的滚动画廊 / ForDesigner 满宽带 | 无：Minimal 不在满宽滚动内容上画线（HugePack / HighlightFeatures 的 `ScrollRoot` 是 `zIndex: 9` + sticky 不透明底，把脊线盖住） |
+  | `capability-marquee.tsx` | HugePack 的滚动画廊 / ForDesigner 满宽带（**2026-10-12 补注**：ForDesigner 不再映射到这里，docs/39 Step 5 把它的底色与墨色给了 agent-skills；marquee 本身与它的「无线」不变） | 无：Minimal 不在满宽滚动内容上画线（HugePack / HighlightFeatures 的 `ScrollRoot` 是 `zIndex: 9` + sticky 不透明底，把脊线盖住） |
   | `how-it-works.tsx` | `home-hugepack-elements` | 左三角 `top 80, left 80, opacity 0.4` + 竖线 `top 0, left 80` |
   | `chat-showcase.tsx` | `home-minimal` | `+` `top 72 / bottom 72, left 72` + 横线 `top 80 / bottom 80, left 0` + 竖线 |
-  | `agent-skills.tsx` | `home-testimonials` | `Stack spacing 8`（`top 64, left 80, translateX(-50%)`）里两个下三角：`opacity 0.12`、`30×15 opacity 0.24`；+ 竖线 |
+  | `agent-skills.tsx` | `home-testimonials`（**2026-10-12 补注**：线仍照 testimonials；段落底色与 caption / 标题墨色改取 `home-for-designer`，后者自己不画线，脊线在本段照旧贯通，docs/39 Step 5 Q1、Q6） | `Stack spacing 8`（`top 64, left 80, translateX(-50%)`）里两个下三角：`opacity 0.12`、`30×15 opacity 0.24`；+ 竖线 |
   | `bilibili-showcase.tsx` | `home-integrations` | `Stack spacing 8`（`top 64 … bottom 64, left 80, zIndex 2, translateX(-50%)`，`'& span': { position: static, opacity: 0.12 }`）里圆点 12 / 14 / 弹性空白 / 14 / 12；+ 竖线 |
   | `platform-picker.tsx` | `home-highlight-features` | `+` `top 72, left 72` + 横线 `top 80, left 0` + 竖线 |
   | `platform-request.tsx` | `home-advertisement`（唯一真有源文件的一段） | `+` `left 72, top 50%, mt -1` + 竖线 `top 0, left 80, height calc(50% + 64px)` + 横线 `top 50%, left 0`；Container 补 `position: relative` + `zIndex: 9` |
