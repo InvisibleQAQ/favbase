@@ -745,11 +745,11 @@ const en: Record<LocaleKeys, string> = {
   'welcome.chat.demoSource2': 'pgvector in practice: tuning HNSW',
   'welcome.chat.demoSource3': 'Why your vector recall is stuck',
 
-  'welcome.agentSkills.eyebrow': 'For your coding agent',
+  'welcome.agentSkills.eyebrow': 'For your AI agent',
   'welcome.agentSkills.heading': 'Let your AI agent search',
   'welcome.agentSkills.headingTail': 'what you saved',
   'welcome.agentSkills.desc':
-    'The same local knowledge base, asked from your coding agent instead of from here. Hand it the line below and it installs the CLI, installs the skill, and walks you through pairing.',
+    'The same local knowledge base, asked from your AI agent instead of from here. Hand it the line below and it installs the CLI, installs the skill, and walks you through pairing.',
   'welcome.agentSkills.promptLabel': 'Send this to your agent',
   'welcome.agentSkills.prompt': 'Set up favbase for me by following {{url}}',
   'welcome.agentSkills.copy': 'Copy',

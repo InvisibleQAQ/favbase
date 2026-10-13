@@ -47,6 +47,9 @@ and installed for Claude Code / Codex. `INSTALL.md` is the **Agent Setup Guide**
 - After installing the CLI it must **stop** and ask the user to paste the pairing command from
   Settings > Connections > Agent Skills. It must never contain a runnable `favbase setup` command
   of its own: the token exists only inside the running extension.
+- Step 4 tells agents other than Claude Code / Codex to run `npx skills add InvisibleQAQ/favbase -g`.
+  The welcome page and settings card say "AI agent" without naming any (`lib/i18n/CLAUDE.md`), and
+  this line is what makes that true on the install path; do not drop it.
 - Guard: `tests/agent-bridge-cli-aliases.test.ts`.
 
 ## Both files

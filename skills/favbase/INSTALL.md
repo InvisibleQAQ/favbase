@@ -7,7 +7,7 @@ playlists) into a searchable knowledge base that never leaves their machine.
 The installed skill lists the platforms the user's version supports.
 
 This document is a one-time setup guide, not the skill itself. Follow it once,
-end to end, then discard it: step 3 installs the actual favbase skill, and that
+end to end, then discard it: step 4 installs the actual favbase skill, and that
 skill is what you use from then on.
 
 **Read all five steps before you start.** Step 3 requires the user to fetch a
@@ -20,7 +20,8 @@ value you cannot obtain yourself, so plan to pause there.
   extension answers queries; the CLI only asks. Every command is read-only —
   there is no way to write to their library through it.
 - The favbase skill, written into `~/.claude/skills/favbase/` (Claude Code) and
-  `~/.agents/skills/favbase/` (Codex). Step 3's command does this for you.
+  `~/.agents/skills/favbase/` (Codex). Step 3's command does this for you; any
+  other agent adds one more command in step 4.
 
 ## Step 1 — check Node.js
 
@@ -83,6 +84,13 @@ It writes `~/.favbase/config.json` and installs the favbase skill for Claude
 Code and Codex. Add `--no-skill` only if the user explicitly asks you not to
 install the skill; `favbase install-skill` can do it later on its own.
 
+If you are an agent other than Claude Code or Codex, run this once after setup
+succeeds, so the skill also lands in the directory you load skills from:
+
+```bash
+npx skills add InvisibleQAQ/favbase -g
+```
+
 ## Step 5 — verify
 
 ```bash
@@ -111,9 +119,9 @@ not interpret exit codes on purpose: you are reading the project's latest
 source, while step 2 installed the latest release, and the two can differ. Use
 what ships with the CLI you installed instead:
 
-- The skill step 4 installed (`~/.claude/skills/favbase/SKILL.md` or
-  `~/.agents/skills/favbase/SKILL.md`) carries an exit-code table written for
-  that exact release. Read it when a command fails.
+- The skill step 4 installed (`~/.claude/skills/favbase/SKILL.md`,
+  `~/.agents/skills/favbase/SKILL.md`, or your own skills directory) carries an
+  exit-code table written for that exact release. Read it when a command fails.
 - `favbase doctor` checks each part of the link and lists what to fix.
 - `favbase --help` is authoritative for commands and flags.
 

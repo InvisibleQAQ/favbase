@@ -729,11 +729,11 @@ const zhCN = {
   'welcome.chat.demoSource2': 'pgvector 实战：HNSW 索引调参',
   'welcome.chat.demoSource3': '为什么你的向量检索召回率上不去',
 
-  'welcome.agentSkills.eyebrow': '给你的 coding agent',
+  'welcome.agentSkills.eyebrow': '给你的 AI agent',
   'welcome.agentSkills.heading': '让 AI agent 查',
   'welcome.agentSkills.headingTail': '你的收藏',
   'welcome.agentSkills.desc':
-    '同一个本地知识库，除了在这里问，也可以让你的 coding agent 直接查。把下面这句话交给它，它会自己装好命令行、装好 skill，并带你完成配对。',
+    '同一个本地知识库，除了在这里问，也可以让你的 AI agent 直接查。把下面这句话交给它，它会自己装好命令行、装好 skill，并带你完成配对。',
   'welcome.agentSkills.promptLabel': '把这句话发给你的 agent',
   'welcome.agentSkills.prompt': '帮我按照 {{url}} 安装并配置 favbase',
   'welcome.agentSkills.copy': '复制',
