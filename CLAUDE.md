@@ -20,6 +20,7 @@
 - `minimum_chrome_version` 是 117：MUI v9 的下限，同时满足 Agent Bridge 需要的 116（WebSocket 流量延长 SW 生命周期）。
 - manifest 的 `host_permissions` 由 `lib/collections/platform-descriptor.ts` 派生，顺序是契约。重构之后产物必须逐字节不变：已装扩展的权限一变，用户就要重新授权。
 - npm 包 `favbase`（CLI）：流程在 `packages/favbase/CLAUDE.md` 的 Release 一节。`main` 上的 `skills/favbase/SKILL.md` 必须始终等于 npm 最新版捆绑的那份，所以改它就等于一次发版。
+- GitHub Release：一个 release 带两个附件，tag 是 `v<扩展版本>`。一个版本号只对应一份构建，商店和 GitHub 共用这一份，所以版本号先递增再打包。文件名必须让人一眼分清：`favbase-<ver>-chrome-extension.zip`（`pnpm zip` 产物改名，在不含 `.env.local` 的干净 worktree 里构建，因为代码引用的 `VITE_*_API_KEY` 会被内联进包），以及 `favbase-cli-<ver>.tgz`（`npm pack favbase@<npm 最新版>` 拉下的原包改名，不重新构建）。
 
 ## 架构速览
 
