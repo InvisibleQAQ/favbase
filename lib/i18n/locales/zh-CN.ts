@@ -63,7 +63,7 @@ const zhCN = {
 
   'settings.agentBridge.title': 'Agent Skills',
   'settings.agentBridge.description':
-    '把 favbase 知识库接给 Claude Code、Codex 等本机 agent：安装 favbase skill 后，它们就能只读检索你收藏过的内容。检索时 Chrome 与本扩展需保持运行。',
+    '把 favbase 知识库接给本机的 AI agent：安装 favbase skill 后，它们就能只读检索你收藏过的内容。检索时 Chrome 与本扩展需保持运行。',
   'settings.agentBridge.enableLabel': '启用 Agent Skills',
   'settings.agentBridge.enableHint': '启用后在后台等待本机 favbase 命令接入：Chrome 120+ 约每 30 秒重试一次，更早的受支持版本约每 60 秒',
   'settings.agentBridge.portLabel': '端口',
@@ -86,9 +86,9 @@ const zhCN = {
   'settings.agentBridge.lastConnected': '最近连接',
   'settings.agentBridge.neverConnected': '从未连接',
   'settings.agentBridge.lastAuthFailure': '最近一次认证失败',
-  'settings.agentBridge.commandsTitle': '连接 Claude Code / Codex',
+  'settings.agentBridge.commandsTitle': '连接 AI agent',
   'settings.agentBridge.commandsStep1': '安装 CLI（需要 Node.js 20+）：npm install -g favbase',
-  'settings.agentBridge.commandsStep2': '复制下面的命令，在终端运行一次：写入本机配置，并为 Claude Code 与 Codex 安装 favbase skill',
+  'settings.agentBridge.commandsStep2': '复制下面的命令，在终端运行一次：写入本机配置，并为 AI agent 安装 favbase skill',
   'settings.agentBridge.commandsStep3': '检索时保持 Chrome 与本扩展运行',
   'settings.agentBridge.commandsTokenWarning': '命令中包含配对 Token，请勿公开分享。',
   'settings.agentBridge.copySetup': '复制 setup 命令',
@@ -730,7 +730,7 @@ const zhCN = {
   'welcome.chat.demoSource3': '为什么你的向量检索召回率上不去',
 
   'welcome.agentSkills.eyebrow': '给你的 coding agent',
-  'welcome.agentSkills.heading': '让 Claude Code 查',
+  'welcome.agentSkills.heading': '让 AI agent 查',
   'welcome.agentSkills.headingTail': '你的收藏',
   'welcome.agentSkills.desc':
     '同一个本地知识库，除了在这里问，也可以让你的 coding agent 直接查。把下面这句话交给它，它会自己装好命令行、装好 skill，并带你完成配对。',
@@ -739,7 +739,7 @@ const zhCN = {
   'welcome.agentSkills.copy': '复制',
   'welcome.agentSkills.copied': '已复制',
   'welcome.agentSkills.copyFailed': '复制失败',
-  'welcome.agentSkills.feature1': 'Claude Code 与 Codex 开箱可用',
+  'welcome.agentSkills.feature1': '你的 AI agent 开箱可用',
   'welcome.agentSkills.feature2': '只读：agent 永远不会改写你的库',
   'welcome.agentSkills.feature3': '数据不出本机，问的是正在运行的扩展本身',
   'welcome.agentSkills.requirement': '需要 Node.js 20+；配对那一步在设置 → 账号连接 → Agent Skills 完成',

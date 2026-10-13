@@ -24,6 +24,7 @@
 - provider 配置阻塞提示统一用 `configurationBlocker.*`；何时显示归 `entrypoints/app/components/configuration-blocker/CLAUDE.md`。
 - WebDAV 拒绝远端 Settings 的文案（`settings.sync.err.*`）必须说明本地设置未被覆盖，或需要升级。
 - Agent Bridge（`settings.agentBridge.*`）：可见文案里配对密钥固定叫「配对 Token」/ pairing token（代码与域术语仍是 Bridge Token），不写成 API key；不出现 Bridge / daemon 这类实现词，用户要照敲的字面命令（如 `favbase doctor`）除外。
+- Agent Skills 的可见文案（`settings.agentBridge.*`、`welcome.agentSkills.*`）笼统写 AI agent，不点名 Claude Code / Codex（用户决定 2026-10-13）：`favbase setup` 只给这两家装 skill，其余 agent 走 `npx skills add InvisibleQAQ/favbase -g`（根 `README.md`），笼统说法因此成立。
 - Agent Bridge 轮询文案必须同时写 Chrome 120+ 约 30 秒与 116–119 约 60 秒，不得笼统承诺 30 秒。bad-token 文案只给 setup 这一步修复动作：`favbase setup` 自己会替换持旧 token 的 daemon，不要再加 `daemon restart`。
 
 ## 坑

@@ -65,7 +65,7 @@ const en: Record<LocaleKeys, string> = {
 
   'settings.agentBridge.title': 'Agent Skills',
   'settings.agentBridge.description':
-    'Give Claude Code, Codex and other local agents your favbase knowledge base: once the favbase skill is installed they can search what you saved, read-only. Chrome and this extension must stay running while they search.',
+    'Give your local AI agents your favbase knowledge base: once the favbase skill is installed they can search what you saved, read-only. Chrome and this extension must stay running while they search.',
   'settings.agentBridge.enableLabel': 'Enable Agent Skills',
   'settings.agentBridge.enableHint': 'When enabled, waits in the background for a local favbase command: retried about every 30 seconds on Chrome 120+, or every 60 seconds on earlier supported versions',
   'settings.agentBridge.portLabel': 'Port',
@@ -88,9 +88,9 @@ const en: Record<LocaleKeys, string> = {
   'settings.agentBridge.lastConnected': 'Last connected',
   'settings.agentBridge.neverConnected': 'Never connected',
   'settings.agentBridge.lastAuthFailure': 'Last authentication failure',
-  'settings.agentBridge.commandsTitle': 'Connect Claude Code / Codex',
+  'settings.agentBridge.commandsTitle': 'Connect your AI agent',
   'settings.agentBridge.commandsStep1': 'Install the CLI (needs Node.js 20+): npm install -g favbase',
-  'settings.agentBridge.commandsStep2': 'Copy the command below and run it once in a terminal: it writes the local config and installs the favbase skill for Claude Code and Codex',
+  'settings.agentBridge.commandsStep2': 'Copy the command below and run it once in a terminal: it writes the local config and installs the favbase skill for your AI agents',
   'settings.agentBridge.commandsStep3': 'Keep Chrome and this extension running while agents search',
   'settings.agentBridge.commandsTokenWarning': 'The command contains your pairing token — do not share it publicly.',
   'settings.agentBridge.copySetup': 'Copy setup command',
@@ -746,7 +746,7 @@ const en: Record<LocaleKeys, string> = {
   'welcome.chat.demoSource3': 'Why your vector recall is stuck',
 
   'welcome.agentSkills.eyebrow': 'For your coding agent',
-  'welcome.agentSkills.heading': 'Let Claude Code search',
+  'welcome.agentSkills.heading': 'Let your AI agent search',
   'welcome.agentSkills.headingTail': 'what you saved',
   'welcome.agentSkills.desc':
     'The same local knowledge base, asked from your coding agent instead of from here. Hand it the line below and it installs the CLI, installs the skill, and walks you through pairing.',
@@ -755,7 +755,7 @@ const en: Record<LocaleKeys, string> = {
   'welcome.agentSkills.copy': 'Copy',
   'welcome.agentSkills.copied': 'Copied',
   'welcome.agentSkills.copyFailed': 'Copy failed',
-  'welcome.agentSkills.feature1': 'Works with Claude Code and Codex out of the box',
+  'welcome.agentSkills.feature1': 'Works with your AI agent out of the box',
   'welcome.agentSkills.feature2': 'Read-only — an agent can never write to your library',
   'welcome.agentSkills.feature3': 'Nothing leaves the machine; it asks the running extension itself',
   'welcome.agentSkills.requirement':
