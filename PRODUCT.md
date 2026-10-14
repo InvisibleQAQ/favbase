@@ -39,7 +39,7 @@ The claim a neighbor cannot truthfully copy: **every platform's favorites unifie
 ## Brand Commitments
 
 Binding for any visual work (confirmed 2026-08-20):
-- The fox logo at `public/icon/128.png` (and the icon set it ships with) stays, with its own colors.
+- The fox logo at `public/icon/128.png` (blue fox holding a star on a transparent background; the icon set ships it at every size) stays, with its own colors. It replaced the earlier blue-on-white fox by user decision 2026-10-14.
 - Coral primary `#FC7E5B` stays as the brand hue. Its usage may change (it must not be used as small text on white; 2.5:1), its hue may not.
 - Typeface pairing DM Sans Variable (UI) + Barlow (display) stays.
 - Name written lowercase: `favbase`.
