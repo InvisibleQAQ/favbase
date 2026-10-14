@@ -105,29 +105,45 @@ describe('chatTools', () => {
   });
 
   describe('searchKnowledgeBase', () => {
-    it('flattens hybridRetrieve hits to top-level result fields and passes filters through', async () => {
-      const hits: RetrievalHit[] = [
-        {
-          chunkId: 'c1',
-          chunkText: 'chunk one',
-          score: 0.9,
-          item: {
-            id: 'i1',
-            title: 'Title One',
-            url: 'http://x/1',
-            platform: 'bilibili',
-          },
-        },
-      ];
-      hybridRetrieveMock.mockResolvedValueOnce(hits);
+    const HIT: RetrievalHit = {
+      chunkId: 'c1',
+      chunkText: 'chunk one',
+      score: 0.9,
+      similarity: 0.42,
+      matchedTerms: ['ml'],
+      item: {
+        id: 'i1',
+        title: 'Title One',
+        url: 'http://x/1',
+        platform: 'bilibili',
+      },
+    };
 
-      const out = await runTool<{ count: number; results: Record<string, unknown>[] }>(
-        chatTools.searchKnowledgeBase,
-        { query: 'ml', platform: 'bilibili', tag_id: 'tag-1', top_k: 5 },
-        db,
-      );
+    interface SearchOutput {
+      count: number;
+      query_terms: string[];
+      semantic_search: boolean;
+      results: Record<string, unknown>[];
+    }
+
+    function search(input: unknown): Promise<SearchOutput> {
+      return runTool<SearchOutput>(chatTools.searchKnowledgeBase, input, db);
+    }
+
+    it('flattens hybridRetrieve hits to top-level result fields and passes filters through', async () => {
+      hybridRetrieveMock.mockResolvedValueOnce({
+        hits: [HIT],
+        queryTerms: ['ml', 'rust'],
+        semanticSearch: true,
+      });
+
+      const out = await search({ query: 'ml', platform: 'bilibili', tag_id: 'tag-1', top_k: 5 });
 
       expect(out.count).toBe(1);
+      expect(out.query_terms).toEqual(['ml', 'rust']);
+      expect(out.semantic_search).toBe(true);
+      // The pre-evidence fields keep their names and values (the published
+      // CLI prints this object verbatim); the evidence fields are additive.
       expect(out.results[0]).toEqual({
         item_id: 'i1',
         title: 'Title One',
@@ -135,6 +151,8 @@ describe('chatTools', () => {
         platform: 'bilibili',
         chunk_text: 'chunk one',
         score: 0.9,
+        similarity: 0.42,
+        matched_terms: ['ml'],
       });
       const [passedDb, passedQuery, passedOpts] = hybridRetrieveMock.mock.calls.at(-1)!;
       expect(passedDb).toBe(db);
@@ -142,16 +160,95 @@ describe('chatTools', () => {
       expect(passedOpts).toEqual({ platform: 'bilibili', tagId: 'tag-1', topK: 5 });
     });
 
+    it('passes a null similarity through when the semantic arm did not run', async () => {
+      hybridRetrieveMock.mockResolvedValueOnce({
+        hits: [{ ...HIT, similarity: null }],
+        queryTerms: ['ml'],
+        semanticSearch: false,
+      });
+
+      const out = await search({ query: 'ml' });
+
+      expect(out.semantic_search).toBe(false);
+      expect(out.results[0].similarity).toBeNull();
+    });
+
     it('defaults top_k to 8 and forwards platform/tagId', async () => {
-      hybridRetrieveMock.mockResolvedValueOnce([]);
-      const out = await runTool<{ count: number }>(
-        chatTools.searchKnowledgeBase,
-        { query: 'q' },
-        db,
-      );
+      hybridRetrieveMock.mockResolvedValueOnce({ hits: [], queryTerms: [], semanticSearch: true });
+      const out = await search({ query: 'q' });
       expect(out.count).toBe(0);
+      expect(out.results).toEqual([]);
       const [, , opts] = hybridRetrieveMock.mock.calls.at(-1)!;
       expect(opts).toEqual({ platform: undefined, tagId: undefined, topK: 8 });
+    });
+
+    /**
+     * Gotcha 2 (silent-failure guide): RRF always ranks something, so the
+     * tool returns a full list for a question the library knows nothing
+     * about. The only defence is what the model is told about `score` and
+     * about the evidence fields; nothing else stops it reading `count > 0`
+     * as "the user saved this".
+     */
+    describe('model-facing honesty', () => {
+      const text = () => modelFacingText(chatTools.searchKnowledgeBase);
+      const sentenceWith = (source: string, token: string) =>
+        source.split('。').find((s) => s.includes(token));
+
+      it('no longer claims count is 0 when nothing is relevant', () => {
+        expect(text()).not.toMatch(/无相关[^。]*count\s*为\s*0/);
+        // Where count is mentioned, relevance is sent to the evidence fields.
+        const countSentence = sentenceWith(text(), 'count');
+        expect(countSentence, 'count is still explained').toBeDefined();
+        expect(countSentence).toContain('matched_terms');
+        expect(countSentence).toContain('similarity');
+        // The system prompt's "nothing found" rule reads the same evidence.
+        expect(sentenceWith(CHAT_SYSTEM_PROMPT, 'count')).toContain('matched_terms');
+      });
+
+      it('describes every field it returns', async () => {
+        hybridRetrieveMock.mockResolvedValueOnce({
+          hits: [HIT],
+          queryTerms: ['ml'],
+          semanticSearch: true,
+        });
+        const out = await search({ query: 'ml' });
+        // Payload a model reads without being told; everything else needs a
+        // sentence, so a field added later reds here until it gets one.
+        const SELF_EVIDENT = ['results', 'title', 'url', 'platform', 'chunk_text'];
+        const fields = [...Object.keys(out), ...Object.keys(out.results[0])].filter(
+          (field) => !SELF_EVIDENT.includes(field),
+        );
+
+        // Non-vacuity: reading the fields off the output must keep working.
+        expect(fields).toEqual(
+          expect.arrayContaining(['query_terms', 'semantic_search', 'similarity', 'matched_terms']),
+        );
+        for (const field of fields) expect(text(), field).toContain(field);
+      });
+
+      it('says score only orders this list', () => {
+        const scoreSentence = sentenceWith(text(), 'score');
+        expect(scoreSentence).toContain('排序');
+        expect(scoreSentence).toContain('跨查询');
+        expect(scoreSentence).toContain('置信度');
+      });
+
+      it('says both reasons a query word is missing from query_terms', () => {
+        // The keyword arm drops a word with df = 0 and a word above the df cap
+        // (`keywordArm` in retrieval.ts). A model told only about the second
+        // reads a missing rare word as "too common" instead of "not saved".
+        const clause = text()
+          .split(/[。；]/)
+          .find((s) => s.includes('不会出现在其中'));
+        expect(clause, 'the omission clause').toBeDefined();
+        expect(clause).toContain('一次都没出现过');
+        expect(clause).toContain('常见词');
+      });
+
+      it('says what semantic_search=false means and what a thin result calls for', () => {
+        expect(sentenceWith(text(), 'semantic_search=false')).toContain('只跑了关键词检索');
+        expect(sentenceWith(text(), '三种成因')).toContain('getProcessingCoverage');
+      });
     });
 
     it('constrains platform to the collection-platform enum', () => {

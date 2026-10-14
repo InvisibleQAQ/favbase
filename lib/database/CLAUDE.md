@@ -14,6 +14,7 @@ Offscreen Document 持有唯一的 PGlite；app.html 经 3-hop Port 中继（app
 - 共享 helper（`collection-queries.ts`、`platform-sync-record.ts`、`sql-utils.ts`）显式吃 `db`，只 import entity leaf 与 drizzle，不调 `getDb()`、不 value-import barrel。
 - 跨 app context 的事务隔离只在 Offscreen handler 成立，调用端的 mutex 不算。规则见 `bridges/CLAUDE.md`。
 - 批量 INSERT 用 `sql-utils.ts` 的 `chunk()` 分批：Postgres 一条语句的 bind-param 上限是 65535。
+- `text-search.ts` 是关键词索引分词的唯一事实源（`segmentWords` 与 `TEXT_SEARCH_CONFIG`）。索引侧（`replaceItemChunks`、v008 回填）和查询侧（Chat 关键词臂）都必须走它，两边切出的词才对得上。它零 import，因为 SW、Offscreen、Node 测试都会加载它。守卫：`tests/agent-bridge-background-bundle-contract.test.ts`。
 - `escapeLike` 是 ILIKE 注入的唯一防线，只保留这一份。收藏页搜索一律经 `collection-queries.ts` 的 `searchCondition`，不要各自拼 `ilike`。
 - `collection-queries.ts` 的查询片段 builder 平台参数刻意是 `string` 而不是 `CollectionPlatform`：新平台的 lib 层要能先于判别符翻转建成并测绿。
 - 可选筛选片段在无筛选时返回 `undefined`，调用方无条件 push，由 `and()` 丢掉。

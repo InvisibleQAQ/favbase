@@ -8,6 +8,8 @@ WebDAV 双向同步领域。第一期只同步配置（`UserSettings` + locale�
 - 第二期：结构表 + `item_contents` 双向合并。知识库表 insert-only，所以做主键并集而不是 LWW；要先建 PGlite 导入层与 Offscreen RPC。挂钩点是 `sync-engine.ts` 的 `doSync` 里 `syncConfig` 之后那行注释。
 - 第二期必须排除 `platform_sync_records`：它是设备本地的 upsert 状态行，并到另一台设备会让对方以为今天已同步过、压掉自己的每日自动同步（docs/32 §5.1）。
 - 第三期：`item_chunks.embedding` 向量传输 + manifest 差量 + 维度兼容守卫。
+- 导入 chunk 时（无论哪一期）别直接 insert `item_chunks`：关键词索引 `item_chunk_terms` 由 `chunk_text` 经 JS 分词（`segmentWords`）派生，没有触发器替你补。要么走 `replaceItemChunks`，要么同时重建 terms 行，否则导入的 chunk 关键词检索搜不到（规则 owner：`lib/embedding/CLAUDE.md`）。
+- `item_chunk_terms` 不用上传：它是派生数据，对端由导入的 `chunk_text` 重建即可。
 
 ## 远端目录约定（`/FavbaseSync`）
 

@@ -25,3 +25,7 @@
 
 - `obsidian/sanitize.ts` 的禁用字符集与 tag 规则是 Obsidian 实测结论，不是防御性猜测；放宽会产出被静默忽略的文件或断掉的内部链接。
 - 导出卡组件在 `entrypoints/app/sections/overview/export-card.tsx`，渲染位置却是设置页的存储 tab。
+
+## 已知缺口
+
+- 备份也带上了 `item_chunk_terms`：它从 `chunk_text` 派生，可以重建，却把导出撑大（一个 chunk 一个 tsvector，带位置信息的 tsvector 比原文还大）。要排除它，得给 schema 加一个「派生表」的标记，再从标记派生 `EXPORT_TABLES`；不要在本目录手写表名去过滤（同「约束」里的表清单规则）。

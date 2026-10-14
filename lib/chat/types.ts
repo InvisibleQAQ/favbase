@@ -38,7 +38,28 @@ export interface RetrievalHit {
   chunkText: string;
   /** Fused RRF score (rank-based; not a cosine/similarity value). */
   score: number;
+  /**
+   * Raw cosine (`1 - distance`) of this chunk to the query, whichever arm
+   * found it. `null` when the semantic arm did not run or the chunk has no
+   * embedding. Model-specific: only comparable within one retrieval.
+   */
+  similarity: number | null;
+  /** The `HybridRetrieval.queryTerms` this chunk contains; `[]` for semantic-only hits. */
+  matchedTerms: string[];
   item: RetrievalItem;
+}
+
+/** What `hybridRetrieve` returns: the hits plus how the query was searched. */
+export interface HybridRetrieval {
+  hits: RetrievalHit[];
+  /**
+   * The lexemes the keyword arm searched with, after pruning (sorted). Shows
+   * how the query was segmented; `[]` when every query word is absent from the
+   * scope or too common to search by.
+   */
+  queryTerms: string[];
+  /** Whether the semantic arm ran (false: embedding unconfigured or dimension drift). */
+  semanticSearch: boolean;
 }
 
 /** Public options for `hybridRetrieve`. */

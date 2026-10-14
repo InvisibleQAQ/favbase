@@ -9,7 +9,11 @@ Embedding 领域层：chunker、durable chunk 持久化、向量存储与语义�
 - `ChunkInput` 是 chunker 与持久化之间的唯一契约。时间戳只存列，不混入 `text`（会污染向量）。chunker 的选择是平台 / 内容类型知识，留在调用方。
 - 本目录零平台知识，资格规则只来自 `lib/collections/collection-processing-policy.ts`，不在这里重写（规则 owner 与守卫见 `lib/collections/CLAUDE.md`）。
 - vector store 是 `(db, …)` 纯函数，走现有 Drizzle RPC proxy，offscreen 与 proxy 两端通用；不引入第二套 RPC。查询向量以 `'[…]'::vector` 字符串参数过桥。
+- `semanticSearchChunks` 的 `itemScope` 走精确扫描：HNSW 先扫索引再套 WHERE，结果数又被 `hnsw.ef_search`（默认 40）封顶，带过滤的 ANN 会被饿死。`MATERIALIZED` 是围栏，去掉它规划器会把 CTE 内联回索引扫描。`itemScope` 是调用方给的不透明谓词，本目录不认识平台与标签。
+- 上一条的守卫是 `vector-store.test.ts` 的 itemScope 用例，它的会话设了 `SET enable_sort = off`：几十行的表上排序比 HNSW 便宜，规划器不走索引，退回朴素 `WHERE` 也照样绿。
 - `replaceItemChunks` 的 returning 行数必须等于输入数，否则事务回滚：不许出现「写了零行却成功」。它自开事务，调用方不要再包事务（单连接 proxy 上嵌套死锁）。
+- `replaceItemChunks` 在同一事务里给每个 chunk 写一行 `item_chunk_terms`（`segmentWords` 分词后 `to_tsvector`），旧行靠 CASCADE 删除，行数同样断言。分词在 JS 里，没有触发器能代劳，所以新的 chunk 写入路径必须经过它，否则写进去的 chunk 关键词臂搜不到。
+- `chunkSimilarities` 不校验维度：只给 `semanticSearchChunks` 在同一次请求里已经接受过的查询向量用。
 - `diagnostics.ts` 的 trace 只许带 allowlist 里的元数据（标识、阶段、计数、provider / model / 维度、耗时）；禁止正文、chunk 文本、向量、API key、请求头与请求体。诊断 sink 吞掉自身异常，不得改变控制流。
 
 ## Embed lane（Processing Queue 的 lib 半边）

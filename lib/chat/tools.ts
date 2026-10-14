@@ -80,10 +80,22 @@ function contextDb(experimental_context: unknown): FavbaseDb {
  * Hybrid semantic + keyword retrieval over the user's local collection. This is
  * the primary grounding tool — the assistant MUST call it before answering any
  * question about the user's saved content. Read-only (SELECT only).
+ *
+ * Its blind spot is relevance: RRF ranks, it cannot say "nothing here is about
+ * the question", so the tool almost always returns a full list. The output
+ * therefore carries raw evidence (`matched_terms`, `similarity`) and the
+ * description tells the model to judge from it. Output fields are additive
+ * only: the published CLI prints this object verbatim.
  */
 const searchKnowledgeBase = tool({
   description:
-    `在用户的本地收藏知识库里做混合检索（pgvector 语义 + trigram 关键词），覆盖 ${PLATFORM_LIST} 的收藏内容。回答任何关于"用户收藏了什么/某个话题/某篇文章/某个视频"的问题前，必须先调用它，不要凭记忆作答。返回命中的收藏片段及其来源标题、链接与相关度分数。知识库为空或无相关内容时 count 为 0。`,
+    `在用户的本地收藏知识库里做混合检索（向量语义 + 分词关键词），覆盖 ${PLATFORM_LIST} 的收藏内容。回答任何关于"用户收藏了什么/某个话题/某篇文章/某个视频"的问题前，必须先调用它，不要凭记忆作答。返回命中的收藏片段及其来源标题、链接。` +
+    '同一收藏项在结果中最多出现一次，只带它最相关的一个片段；要读该收藏的完整正文，用它的 item_id 调用 getItemContent。' +
+    'score 是排名融合分，只用于给本次结果排序，不是相关度：不要跨查询比较它，也不要把它当置信度。' +
+    '本工具几乎总会返回结果，count 大于 0 不代表用户收藏过这个主题：要看每条结果的 matched_terms（该片段命中的检索词）、similarity（片段与查询的向量相似度，越高越接近，只在同一次调用的结果之间比较才有意义）和片段本身来判断是否相关；没有一条结果真正讲这个问题时，如实说知识库里没找到相关内容，不要拿沾边的结果凑答案。' +
+    '查询宜用简短的关键词；没找到时换 2-3 种说法再查（同义词、换成另一种语言），彼此独立的改写可以并行调用。query_terms 是关键词检索实际使用的词，可据此看出查询被怎样切分；在已入库的片段里（有筛选时是筛选范围内）一次都没出现过的词，和出现在大量片段里的常见词，都不参与关键词检索，所以不会出现在其中。' +
+    'semantic_search=false 表示本次只跑了关键词检索（没配置 embedding 或配置漂移），此时 similarity 全为 null，换了说法的内容更难命中。' +
+    '结果为空或明显偏少有三种成因（确实没收藏、还在处理、provider 没配置所以永远不会处理），此时调用 getProcessingCoverage 区分。',
   inputSchema: z.object({
     query: z.string(),
     platform: z.enum(COLLECTION_PLATFORMS).optional(),
@@ -97,13 +109,15 @@ const searchKnowledgeBase = tool({
   ),
   execute: async ({ query, platform, tag_id, top_k }, { experimental_context }) => {
     const db = contextDb(experimental_context);
-    const hits = await hybridRetrieve(db, query, {
+    const { hits, queryTerms, semanticSearch } = await hybridRetrieve(db, query, {
       platform,
       tagId: tag_id,
       topK: top_k ?? DEFAULT_TOP_K,
     });
     return {
       count: hits.length,
+      query_terms: queryTerms,
+      semantic_search: semanticSearch,
       results: hits.map((h) => ({
         item_id: h.item.id,
         title: h.item.title,
@@ -111,6 +125,8 @@ const searchKnowledgeBase = tool({
         platform: h.item.platform,
         chunk_text: h.chunkText,
         score: h.score,
+        similarity: h.similarity,
+        matched_terms: h.matchedTerms,
       })),
     };
   },
@@ -199,7 +215,7 @@ const listTags = tool({
  */
 const getProcessingCoverageTool = tool({
   description:
-    `列出用户收藏库各平台的处理进度（${PLATFORM_LIST}）：已拉取条数、正文获取、Embedding 向量化、AI 标签四个阶段各自的 done/total，以及 blockers（缺失的 provider 配置）。当 searchKnowledgeBase 返回 count 为 0、或命中结果明显偏少时调用它，据此区分「用户确实没收藏这个主题」与「收藏了但 AI 还没处理完」，并把真实进度告诉用户。` +
+    `列出用户收藏库各平台的处理进度（${PLATFORM_LIST}）：已拉取条数、正文获取、Embedding 向量化、AI 标签四个阶段各自的 done/total，以及 blockers（缺失的 provider 配置）。当 searchKnowledgeBase 返回 count 为 0、结果都与问题无关、或命中结果明显偏少时调用它，据此区分「用户确实没收藏这个主题」与「收藏了但 AI 还没处理完」，并把真实进度告诉用户。` +
     `content.kind 说明该平台的「正文」具体是什么（取值之一 ${CONTENT_KIND_LIST}），据此选用贴切的说法，例如 transcript 就说「已转录」而不是「已完成正文获取」。` +
     'acquisition.total 恒为 null：平台不提供可靠的远端总数，所以只能说「已拉取 N 条」，不得声称收藏已同步完整。' +
     'blockers 非空表示该阶段缺 provider 配置、不会自行推进，此时应提示用户去设置页配置，而不是让用户稍后再试。' +

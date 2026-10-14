@@ -1,6 +1,7 @@
-import { sql, eq, isNotNull } from 'drizzle-orm';
+import { sql, eq, inArray, isNotNull, type SQL } from 'drizzle-orm';
 import type { FavbaseDb } from '@/lib/database';
 import * as schema from '@/lib/database/schema';
+import { segmentWords, TEXT_SEARCH_CONFIG } from '@/lib/database/text-search';
 import {
   EmbeddingDimensionError,
   EmbeddingDimensionLimitError,
@@ -8,7 +9,7 @@ import {
 } from './errors';
 import type { ChunkInput } from './types';
 
-const { itemChunks, items } = schema;
+const { itemChunks, itemChunkTerms, items } = schema;
 
 // ---------------------------------------------------------------------------
 // replaceItemChunks
@@ -26,6 +27,11 @@ export interface ReplacedChunk {
  * repeat transcriptions). Time span goes into `start_sec`/`end_sec` (NULL for
  * non-timed content). Returns the inserted rows so the caller can attach
  * embeddings by id. Empty `chunks` just clears existing rows.
+ *
+ * Also writes each chunk's keyword-index row (`item_chunk_terms`) in the same
+ * transaction; the delete reaches the old ones through CASCADE. This is the
+ * only place chunks are written, so it is the only place the index has to be
+ * kept: segmentation runs in JS, so no trigger can do it.
  */
 export async function replaceItemChunks(
   db: FavbaseDb,
@@ -56,6 +62,22 @@ export async function replaceItemChunks(
       throw new Error(
         `Chunk persistence invariant failed for item ${itemId}: ` +
           `expected ${chunks.length} rows, inserted ${inserted.length}.`,
+      );
+    }
+
+    const indexed = await tx
+      .insert(itemChunkTerms)
+      .values(
+        inserted.map((chunk) => ({
+          chunkId: chunk.id,
+          tsv: sql`to_tsvector(${TEXT_SEARCH_CONFIG}::regconfig, ${segmentWords(chunk.chunkText)})`,
+        })),
+      )
+      .returning({ chunkId: itemChunkTerms.chunkId });
+    if (indexed.length !== inserted.length) {
+      throw new Error(
+        `Chunk keyword-index invariant failed for item ${itemId}: ` +
+          `expected ${inserted.length} rows, indexed ${indexed.length}.`,
       );
     }
     return inserted;
@@ -211,6 +233,13 @@ export interface SemanticSearchOptions {
   topK: number;
   /** Drop results with cosine score below this (score = 1 - distance). */
   minScore?: number;
+  /**
+   * Restrict the search to chunks matching this predicate, written against an
+   * unaliased `item_chunks` row. Opaque on purpose: the caller owns what the
+   * scope means, this module stays free of platform and tag knowledge. Present
+   * means an exact scan; see `semanticSearchChunks`.
+   */
+  itemScope?: SQL;
 }
 
 export interface SemanticSearchHit {
@@ -227,11 +256,60 @@ interface SearchRow extends Record<string, unknown> {
   score: number;
 }
 
+/** Unscoped: HNSW approximate nearest neighbours over the whole column. */
+function annQuery(vec: string, topK: number): SQL {
+  return sql`
+    SELECT
+      id AS chunk_id,
+      item_id,
+      chunk_text,
+      1 - (embedding <=> ${vec}::vector) AS score
+    FROM item_chunks
+    WHERE embedding IS NOT NULL
+    ORDER BY embedding <=> ${vec}::vector
+    LIMIT ${topK}
+  `;
+}
+
 /**
- * Cosine ANN search over `item_chunks.embedding`. Orders by pgvector `<=>`
+ * Scoped: exact nearest neighbours over the chunks `itemScope` admits.
+ * MATERIALIZED is the fence. Without it the planner inlines the CTE, the
+ * ORDER BY becomes `embedding <=> vec` again, and the HNSW index takes the
+ * query back. The CTE holds only (id, distance), so a large scope does not
+ * copy chunk text or vectors into the tuplestore; text is joined for topK rows.
+ */
+function exactScopedQuery(vec: string, topK: number, itemScope: SQL): SQL {
+  return sql`
+    WITH scoped AS MATERIALIZED (
+      SELECT id, embedding <=> ${vec}::vector AS distance
+      FROM item_chunks
+      WHERE embedding IS NOT NULL AND ${itemScope}
+    ),
+    nearest AS (
+      SELECT id, distance FROM scoped ORDER BY distance, id LIMIT ${topK}
+    )
+    SELECT
+      c.id AS chunk_id,
+      c.item_id,
+      c.chunk_text,
+      1 - nearest.distance AS score
+    FROM nearest
+    JOIN item_chunks c ON c.id = nearest.id
+    ORDER BY nearest.distance, nearest.id
+  `;
+}
+
+/**
+ * Cosine search over `item_chunks.embedding`. Orders by pgvector `<=>`
  * (cosine distance) and returns the top-K nearest chunks. `score = 1 - distance`
  * (higher = closer). The query vector is bound as a `'[...]'::vector` string
  * param, which survives the RPC/PortBridge boundary as plain text.
+ *
+ * Without `itemScope` this is an HNSW ANN scan. With it, the scan is exact:
+ * pgvector applies a WHERE only after the HNSW index scan, and that scan yields
+ * at most `hnsw.ef_search` rows (default 40), so a filtered ANN query comes
+ * back short or empty whenever closer chunks lie outside the scope. The cost of
+ * the exact scan is linear in the scope's embedded chunk count.
  *
  * The query vector is validated against the CURRENT column dimension (read
  * from the pg catalog). It comes from the active model, so it naturally
@@ -248,20 +326,12 @@ export async function semanticSearchChunks(
     throw new EmbeddingDimensionError(queryVector.length, columnDimensions);
   }
 
-  const { topK, minScore } = options;
+  const { topK, minScore, itemScope } = options;
   const vec = toSqlVector(queryVector);
 
-  const result = await db.execute<SearchRow>(sql`
-    SELECT
-      id AS chunk_id,
-      item_id,
-      chunk_text,
-      1 - (embedding <=> ${vec}::vector) AS score
-    FROM item_chunks
-    WHERE embedding IS NOT NULL
-    ORDER BY embedding <=> ${vec}::vector
-    LIMIT ${topK}
-  `);
+  const result = await db.execute<SearchRow>(
+    itemScope === undefined ? annQuery(vec, topK) : exactScopedQuery(vec, topK, itemScope),
+  );
 
   const rows = (result.rows ?? []) as SearchRow[];
   const hits = rows.map((r) => ({
@@ -272,6 +342,31 @@ export async function semanticSearchChunks(
   }));
 
   return minScore === undefined ? hits : hits.filter((h) => h.score >= minScore);
+}
+
+/**
+ * Cosine similarity (`1 - distance`, same as `semanticSearchChunks`' score) of
+ * the given chunks to `queryVector`, keyed by chunk id. Chunks without an
+ * embedding are absent from the map. An exact lookup by id, no index scan.
+ *
+ * No dimension check: callers pass a vector `semanticSearchChunks` has already
+ * accepted in the same request. A mismatch would make pgvector raise.
+ */
+export async function chunkSimilarities(
+  db: FavbaseDb,
+  queryVector: number[],
+  chunkIds: string[],
+): Promise<Map<string, number>> {
+  if (chunkIds.length === 0) return new Map();
+
+  const vec = toSqlVector(queryVector);
+  const result = await db.execute<{ chunk_id: string; similarity: number }>(sql`
+    SELECT id AS chunk_id, 1 - (embedding <=> ${vec}::vector) AS similarity
+    FROM item_chunks
+    WHERE embedding IS NOT NULL AND ${inArray(itemChunks.id, chunkIds)}
+  `);
+  const rows = (result.rows ?? []) as { chunk_id: string; similarity: number }[];
+  return new Map(rows.map((r) => [r.chunk_id, Number(r.similarity)]));
 }
 
 // ---------------------------------------------------------------------------

@@ -184,6 +184,73 @@ describe('replaceItemChunks', () => {
     expect(inserted).toEqual([]);
     expect(await getChunks(itemId)).toHaveLength(0);
   });
+
+  describe('keyword index (item_chunk_terms)', () => {
+    /** The item's terms rows, as `chunk_id -> tsvector text`. */
+    async function getTerms(itemId: string): Promise<Map<string, string>> {
+      const rows = await db
+        .select({ chunkId: schema.itemChunkTerms.chunkId, tsv: schema.itemChunkTerms.tsv })
+        .from(schema.itemChunkTerms)
+        .innerJoin(schema.itemChunks, eq(schema.itemChunks.id, schema.itemChunkTerms.chunkId))
+        .where(eq(schema.itemChunks.itemId, itemId));
+      return new Map(rows.map((r) => [r.chunkId, r.tsv]));
+    }
+
+    async function countAllTerms(): Promise<number> {
+      const result = await db.execute<{ n: number }>(
+        sql`SELECT count(*)::int AS n FROM item_chunk_terms`,
+      );
+      return Number((result.rows as { n: number }[])[0].n);
+    }
+
+    it('writes one row of segmented lexemes per chunk', async () => {
+      const itemId = await seedItem('t-write');
+
+      const inserted = await replaceItemChunks(db, itemId, [
+        { text: '大模型微调教程' },
+        { text: 'Rust async, explained!' },
+      ]);
+
+      const terms = await getTerms(itemId);
+      expect([...terms.keys()].sort()).toEqual(inserted.map((c) => c.id).sort());
+      // Segmented in JS before `to_tsvector`: without it the CJK run would be
+      // one lexeme, `'大模型微调教程'`.
+      expect(terms.get(inserted[0].id)).toBe("'大':1 '微调':3 '教程':4 '模型':2");
+      expect(terms.get(inserted[1].id)).toBe("'async':2 'explained':3 'rust':1");
+    });
+
+    it('writes an empty row for a chunk with no words, so the row count still matches', async () => {
+      const itemId = await seedItem('t-no-words');
+
+      const inserted = await replaceItemChunks(db, itemId, [{ text: '!!! 😀👍 ……' }]);
+
+      expect(await getTerms(itemId)).toEqual(new Map([[inserted[0].id, '']]));
+    });
+
+    it('re-chunking replaces the terms rows without orphans', async () => {
+      const itemId = await seedItem('t-rechunk');
+      await replaceItemChunks(db, itemId, [{ text: 'old zero' }, { text: 'old one' }, { text: 'old two' }]);
+      const before = await countAllTerms();
+
+      const inserted = await replaceItemChunks(db, itemId, [{ text: 'new zero' }, { text: 'new one' }]);
+
+      const terms = await getTerms(itemId);
+      expect([...terms.keys()].sort()).toEqual(inserted.map((c) => c.id).sort());
+      expect([...terms.values()].join(' ')).not.toContain('old');
+      expect(await countAllTerms()).toBe(before - 1);
+    });
+
+    it('empty input clears the terms rows too', async () => {
+      const itemId = await seedItem('t-empty');
+      await replaceItemChunks(db, itemId, TIMED);
+      const before = await countAllTerms();
+
+      await replaceItemChunks(db, itemId, []);
+
+      expect(await getTerms(itemId)).toEqual(new Map());
+      expect(await countAllTerms()).toBe(before - TIMED.length);
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -294,6 +361,129 @@ describe('vector store PGlite roundtrip', () => {
 
     await clearAllEmbeddings(db);
     expect((await getEmbeddingStats(db)).embeddedChunks).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// itemScope — exact scan over a caller-scoped chunk set
+// ---------------------------------------------------------------------------
+
+/**
+ * HNSW applies a WHERE only after its index scan, and that scan yields at most
+ * `hnsw.ef_search` (pgvector default 40) rows. With more than 40 closer chunks
+ * outside the scope, a filtered ANN query comes back short or empty; `itemScope`
+ * must not.
+ */
+describe('semanticSearchChunks itemScope (PGlite)', () => {
+  /** More than the default `hnsw.ef_search` of 40. */
+  const CLOSER_OUT_OF_SCOPE = 50;
+
+  let pg: PGlite;
+  let db: FavbaseDb;
+  let inScopeItem: string;
+  let inScopeChunks: string[]; // nearest first
+  let outOfScopeItem: string;
+
+  /** Unit query along dim 0; `lean` adds an off-axis component (more = farther). */
+  function leaning(offAxis: number, lean: number): number[] {
+    const v = oneHot(INITIAL_DIM, 0);
+    v[offAxis] = lean;
+    return v;
+  }
+
+  beforeAll(async () => {
+    pg = await PGlite.create({ extensions: { vector, uuid_ossp, pg_trgm } });
+    await runMigrations(pg);
+    db = drizzle({ client: pg, schema }) as unknown as FavbaseDb;
+    // On a few dozen rows a sort is cheaper than the HNSW index, so the planner
+    // never post-filters an index scan, and a regression to a plain
+    // `WHERE <scope> ORDER BY <=>` would pass. Disabling sorts gives this
+    // session the plan a large library gets (verified: that regression goes red).
+    await pg.exec('SET enable_sort = off');
+
+    const [author] = await db
+      .insert(schema.authors)
+      .values({ platform: 'test', platformAuthorId: 'a1', name: 'A' })
+      .returning();
+    const [inItem, outItem] = await db
+      .insert(schema.items)
+      .values(
+        ['in-scope', 'out-of-scope'].map((platformItemId) => ({
+          platform: 'test',
+          platformItemId,
+          authorId: author.id,
+          title: platformItemId,
+          authorName: 'A',
+          originalUrl: `http://x/${platformItemId}`,
+        })),
+      )
+      .returning();
+    inScopeItem = inItem.id;
+    outOfScopeItem = outItem.id;
+
+    // Out of scope: cosine ~0.999 to the query, closer than anything in scope.
+    await db.insert(schema.itemChunks).values(
+      Array.from({ length: CLOSER_OUT_OF_SCOPE }, (_, i) => ({
+        itemId: outOfScopeItem,
+        chunkIndex: i,
+        chunkText: `out ${i}`,
+        embedding: leaning(10 + i, 0.05),
+      })),
+    );
+    // In scope: cosine 0.894, 0.857, 0.819, 0.781, 0.743, 0.707.
+    const inserted = await db
+      .insert(schema.itemChunks)
+      .values(
+        Array.from({ length: 6 }, (_, j) => ({
+          itemId: inScopeItem,
+          chunkIndex: j,
+          chunkText: `in ${j}`,
+          embedding: leaning(1, 0.5 + 0.1 * j),
+        })),
+      )
+      .returning({ id: schema.itemChunks.id });
+    inScopeChunks = inserted.map((r) => r.id);
+  });
+
+  afterAll(async () => {
+    await pg.close();
+  });
+
+  const query = () => oneHot(INITIAL_DIM, 0);
+  const inScope = () => sql`${schema.itemChunks.itemId} = ${inScopeItem}`;
+
+  it('fills topK from the scope, nearest first, behind more than ef_search closer chunks', async () => {
+    const hits = await semanticSearchChunks(db, query(), { topK: 5, itemScope: inScope() });
+
+    expect(hits.map((h) => h.chunkId)).toEqual(inScopeChunks.slice(0, 5));
+    expect(hits.every((h) => h.itemId === inScopeItem)).toBe(true);
+    expect(hits[0].score).toBeCloseTo(1 / Math.sqrt(1.25), 5);
+  });
+
+  it('applies minScore after the scoped scan', async () => {
+    const hits = await semanticSearchChunks(db, query(), {
+      topK: 6,
+      minScore: 0.8,
+      itemScope: inScope(),
+    });
+
+    expect(hits.map((h) => h.chunkId)).toEqual(inScopeChunks.slice(0, 3));
+  });
+
+  it('returns [] when the scope holds no embedded chunk', async () => {
+    const hits = await semanticSearchChunks(db, query(), {
+      topK: 5,
+      itemScope: sql`${schema.itemChunks.itemId} = ${'00000000-0000-0000-0000-000000000000'}`,
+    });
+
+    expect(hits).toEqual([]);
+  });
+
+  it('without itemScope still returns the global nearest chunks', async () => {
+    const hits = await semanticSearchChunks(db, query(), { topK: 5 });
+
+    expect(hits).toHaveLength(5);
+    expect(hits.every((h) => h.itemId === outOfScopeItem)).toBe(true);
   });
 });
 

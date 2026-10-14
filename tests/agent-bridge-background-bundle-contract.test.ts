@@ -76,6 +76,17 @@ describe('Agent Bridge background bundle contract', () => {
     expect(tagQueries).not.toMatch(/^import\s+.*from ['"]@\/lib\/database['"];?$/m);
   });
 
+  // The keyword arm's word segmentation is on this graph twice: the query side
+  // through `retrieval.ts`, the chunk writer through `vector-store.ts` (which
+  // `retrieval.ts` imports for the semantic arm). It lives in a leaf with zero
+  // imports; one value import there is one hop toward the database barrel.
+  it('reaches the segmentation leaf, which imports nothing', () => {
+    expect(moduleSpecifiers('lib/database/text-search.ts')).toEqual([]);
+    for (const file of ['lib/chat/retrieval.ts', 'lib/embedding/vector-store.ts']) {
+      expect(source(file), file).toContain("from '@/lib/database/text-search'");
+    }
+  });
+
   // The `getProcessingCoverage` Knowledge Tool (2026-09-08) put the Collection
   // coverage readers on this graph, and it landed importing the
   // `@/lib/collections` barrel — which goes through `collections-query` and so

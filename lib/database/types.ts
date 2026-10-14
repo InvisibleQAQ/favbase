@@ -4,6 +4,7 @@ export type { Item, NewItem } from './entities/items';
 export type { ItemSource, NewItemSource } from './entities/item-sources';
 export type { ItemContent, NewItemContent } from './entities/item-contents';
 export type { ItemChunk, NewItemChunk } from './entities/item-chunks';
+export type { ItemChunkTerm, NewItemChunkTerm } from './entities/item-chunk-terms';
 export type { Tag, NewTag } from './entities/tags';
 export type { ItemTag, NewItemTag } from './entities/item-tags';
 export type { ChatConversationRow, NewChatConversationRow } from './entities/chat-conversations';

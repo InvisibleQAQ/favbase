@@ -11,7 +11,7 @@ import { createDbProxyClient } from './proxy-client';
  * The regular PGlite Drizzle driver imports the complete PGlite runtime even
  * when handed an existing client. The Postgres proxy driver keeps query
  * building lightweight; this adapter restores PGlite's raw execute result
- * shape for the two SELECT-only Knowledge Tool queries that use db.execute().
+ * shape for the SELECT-only Knowledge Tool queries that use db.execute().
  */
 export function initReadDbProxy(
   ensureOffscreen?: () => Promise<void>,

@@ -13,6 +13,7 @@
 
 - `item_chunks.embedding` 声明的 `{ dimensions: 1536 }` 只是名义值（drizzle 必填，只喂本项目不用的 drizzle-kit）。真实维度由 `lib/embedding/vector-store.ts` 运行时 ALTER，事实源是 pg catalog 的 `atttypmod`。
 - `item_chunks.start_sec` / `end_sec` 是字幕 chunk 的时间跨度，图文内容为 NULL。时间戳只存列，不混进 `chunk_text`（会污染向量）。
+- `item_chunk_terms` 是 `item_chunks` 的派生关键词索引，一个 chunk 一行。分词在 JS，触发器和生成列都维护不了它，唯一写入方是 `replaceItemChunks`。测试里直接 insert `item_chunks` 的行没有 terms 行，关键词臂搜不到；要被搜到就走 `replaceItemChunks`。
 - `item_contents.subtitle_source` 只有转录正文有值。NULL 表示不是转录，或加列之前写入、不回填的 B 站行。
 - `subtitle_source` 是字幕来源，不是 `sources` 表那个 **Source**（`CONTEXT.md`）。写正文必同时写它，不变量归 `lib/ingest/CLAUDE.md`。
 - `tags` 的 name 全局唯一、无 userId（单用户扁平命名空间）、无 `updated_at`（行不可变，不支持重命名）。

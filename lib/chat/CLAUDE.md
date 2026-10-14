@@ -14,7 +14,7 @@ Chat（Agentic RAG 知识库助手）的平台无关 lib：hybrid 检索、Knowl
 ## Service Worker 可达（`tools.ts` / `retrieval.ts` 被 Agent Bridge tool registry 静态加载）
 
 - 禁止动态 `import()`：HTML 规范不许 `ServiceWorkerGlobalScope` 用它，Chrome 直接 reject，Vite 的 preload 包装又把它报成误导性的 `window is not defined` / `document is not defined`。所有依赖一律静态 import。
-- 只走 leaf、不走 barrel：`@/lib/database/schema`、`@/lib/collections/processing-coverage` 与 `configuration-blockers`、`@/lib/storage/settings` 与 `resolve`、`@/lib/tagging/tag-queries`。database / collections barrel 会把 PGlite 打进 `background.js`。
+- 只走 leaf、不走 barrel：`@/lib/database/schema` 与 `text-search`、`@/lib/collections/processing-coverage` 与 `configuration-blockers`、`@/lib/storage/settings` 与 `resolve`、`@/lib/tagging/tag-queries`。database / collections barrel 会把 PGlite 打进 `background.js`。
 - 这类错误 `pnpm test` 全绿、`pnpm build` 才炸。守卫：`tests/agent-bridge-background-bundle-contract.test.ts`（源码层）、`scripts/check-background-bundle.mjs`（产物层）。
 - `conversation-runtime.ts` 对 `./agent` 的动态 import 是刻意的（纯所有权测试不该加载 WXT storage 模块图）；它只跑在 app.html，不得进入 SW 可达图。
 
@@ -28,16 +28,26 @@ Chat（Agentic RAG 知识库助手）的平台无关 lib：hybrid 检索、Knowl
 - `retrieval.ts` 自己的 `DEFAULT_TOP_K` 是库默认值，模型看不到（工具总是显式传 `topK`）。
 - `getItemContent` 的 `found`（有已提取正文）不得改义：已发布 CLI 捆绑的 SKILL.md 描述的就是它，扩展与 CLI 各自发版。新状态只能纯追加字段（如 `item_exists`）。
 - `getItemContent` 收到非 uuid 的 id 时让 Postgres 抛错、工具报错，刻意不兜底。
-- `getProcessingCoverage` 存在的理由：`searchKnowledgeBase` 的 `count: 0` 有三种成因（真没收藏 / 还在处理 / provider 没配所以永远不会处理），要给三种回答。
+- `searchKnowledgeBase` 的输出只许追加字段，不改名、不删：已发布 CLI 原样打印这个 JSON。
+- `score` 是 RRF，只能排序、不是相关度，RRF 也做不出「全不相关」的判断，所以工具几乎总有结果。相关度只能靠证据字段（`matched_terms`、`similarity`、`query_terms`、`semantic_search`）加 description 教模型去读。守卫在 `tools.test.ts`：输出里的新字段不写进 description 就红。
+- `similarity` 对每条返回的 chunk 都查 cosine（融合后一次 SELECT），不只取语义臂找到的那些：关键词单臂命中没有它，模型就没法拿它和别的结果比。
+- `getProcessingCoverage` 存在的理由：`searchKnowledgeBase` 的空结果或偏少结果有三种成因（真没收藏 / 还在处理 / provider 没配所以永远不会处理），要给三种回答。
 - `getProcessingCoverage` 的 `blockers` 走共享的 `deriveConfigurationBlockers`，与 Collection 页横幅同一条规则，别另写一份。
 
 ## 检索
 
-- 关键词臂只能用 trigram + `ILIKE`：PGlite 没有 `tsvector` 与中文分词，做不了 BM25，别「升级」成全文检索。
-- 关键词排名用 `word_similarity` 不用 `similarity()`：短 query 对长 CJK chunk，后者分数低到无法排序（实测 0.105 对 0.4）。
-- RRF 只用排名不用原始分：cosine 与 `word_similarity` 量纲不同，别改成加权分数。
-- `platform` / `tagId` 过滤写在 SQL 里、且在 RRF 截断之前，否则严格过滤会被全局 topK 饿死。
-- 语义臂在未配置 embedding 或维度漂移（`EmbeddingDimensionError`）时静默降级为仅关键词臂，绝不抛。
+- PGlite（PostgreSQL 18）有 `tsvector`、GIN、`phraseto_tsquery`，缺的只是中文分词。所以分词在 JS 做（`lib/database/text-search.ts` 的 `segmentWords`），索引侧与查询侧必须走同一个函数，否则两边切出的词对不上。
+- 关键词臂查 `item_chunk_terms`（分词后的 tsvector），按词匹配、不按子串：子串语义下 `rust` 命中 `trust`、`rag` 命中 `storage`。
+- 打分是命中词的 BM25 idf 之和，`N` 与 `df` 只数 scope 内的 chunk：稀有词压过常见词。没有 tf 与长度归一。
+- `df` 同时超过 `MAX_DF_RATIO · N` 与本臂 LIMIT 的词，既不召回也不计分。比例挡停用词；LIMIT 下限是为了不让小 scope（十几个 chunk 的标签）剪掉用户要搜的那个词。删掉下限，`retrieval.test.ts` 的 platform / tag 用例会红。
+- 短语加分：query 里按空白和标点分出的多词 run，在 chunk 里相邻出现（`phraseto_tsquery`）时，这些词的 idf 再加一遍。ICU 把词典外的词切成单字（`编程` → `编 程`），只有相邻性能区分 `大模型微调` 与 `微调…大模型`。
+- 关键词臂的 `cutoff` 只省 `ts_rank_cd` 的成本、不改结果，删掉它不会有测试变红。
+- 关键词臂必须是纯 `SELECT`，query 派生的字符串一律绑参。词数（`MAX_QUERY_WORDS`）和 run 数（`MAX_PHRASE_RUNS`）都封顶，因为每个词、每个 run 都要一次索引扫描。
+- RRF 只用排名不用原始分：cosine 与 idf 分量纲不同，别改成加权分数。
+- `platform` / `tagId` 只在 `buildItemScope` 写一次：一条 `item_chunks.item_id` 谓词同时下推进两条臂（关键词臂的 `N`、`df` 与召回，语义臂的精确扫描），`loadItems` 只按 id 取元数据、不再过滤。在臂外后过滤会被各臂的全局 LIMIT 和 HNSW 的 `ef_search` 饿死。
+- 关键词臂先把 scope 物化成 chunk id 集（`in_scope AS MATERIALIZED`），再 hash join 进每次 terms 扫描。直接 join 谓词，每个查询词的每个 posting 都要两次索引探查（20k chunk、2% scope 实测 100 ms 对 19 ms），而且没有测试会因此变红。
+- RRF 按 chunk 融合、不截断，再按 item 去重（留分最高的 chunk）后截 topK：否则一个长收藏的多个 chunk 会占满结果位。去重写在 `searchKnowledgeBase` 的 description 里（模型可见），改行为要同步改它。
+- 语义臂在未配置 embedding 或维度漂移（`EmbeddingDimensionError`）时降级为仅关键词臂，绝不抛。降级时 `semanticSearch` 为 false，`similarity` 全为 null。
 
 ## 会话
 
@@ -53,7 +63,12 @@ Chat（Agentic RAG 知识库助手）的平台无关 lib：hybrid 检索、Knowl
 
 - `getProcessingCoverage` 的 `blockers` 不穷举：`prerequisiteBlocked` 恒为 `null`（ASR key / 平台标签页这类转录前置条件的判据是各平台转录状态机的 wait signal，这里拿不到），正文卡在未配置的转录 provider 或缺失的平台标签页上时它是空的。description 已写明，改动时不得删。
 - `acquisition.total` 恒为 `null`（远端总数不可知），description 写明不得声称同步完整。
-- 语义臂因维度漂移降级时（provider 已配置，查询向量与列维度不符）只在 SW console 打一条 warn，模型与外部 agent 都看不到：`blockers` 只抓得到「embedding provider 没配」那一种。`docs/27` Step 3 只剩这一项与 chunk 级计数未做。
+- 语义臂因维度漂移降级时（provider 已配置，查询向量与列维度不符），模型只能从 `semantic_search=false` 看到这次没跑语义检索，看不到原因：`blockers` 只抓得到「embedding provider 没配」那一种。`docs/27` Step 3 只剩这一项与 chunk 级计数未做。
+- 无过滤时语义臂走 HNSW，最多返回 `hnsw.ef_search`（pgvector 默认 40）个 chunk，`perArm` 再大也一样；有过滤时是精确扫描，不受此限。
+- ICU 词典随 Chrome 版本变化时，旧索引的切分会和新 query 的切分对不上。目前没有分词指纹，也没有重切机制。
+- `idx_item_chunks_text_trgm`（v001）已经没有读者。迁移只做加法，所以先留着，是以后可以删的候选。
+- 没有标题臂：没有正文的收藏项，按标题也搜不到。
+- 没有校准过的相关度下限，也没有 reranker：`count` 几乎从不为 0，相关与否只能靠模型去读证据字段。
 
 ## 指针
 
