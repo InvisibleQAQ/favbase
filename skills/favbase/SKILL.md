@@ -3,7 +3,7 @@ name: favbase
 description: Search the user's own saved collections (Bilibili favorites, GitHub stars, browser bookmarks, X bookmarks, Zhihu favorites, YouTube playlists, Douyin favorites) through the local favbase browser extension. Use whenever the user asks what they saved, bookmarked, starred or favorited, or wants an answer grounded in their own collection. Read-only; runs the `favbase` CLI.
 allowed-tools: Bash(favbase:*)
 metadata:
-  version: "0.2.2"
+  version: "0.2.3"
 ---
 
 # favbase
@@ -39,7 +39,7 @@ nothing is ever written to the library.
 All data commands print JSON to stdout; diagnostics go to stderr.
 
 ```
-favbase tags [--platform <platform>]
+favbase tags [--platform <platform>] [--query <text>] [--limit <1-200>]
 favbase search "<query>" [--platform <platform>] [--tag <tag-id>] [--limit <1-20>]
 favbase get <item-id>
 favbase coverage [--platform <platform>]
@@ -60,12 +60,34 @@ every shell.
 ## Workflow
 
 1. Not sure how the user organizes things? `favbase tags` lists tags with item
-   counts; pass a tag id to `search --tag` to narrow.
+   counts, most-used first, and by default returns only the top 50. Output:
+   `{ "count", "total", "truncated", "hint", "tags": [{ "id", "name", "count" }] }`.
+   `truncated: true` means `total` tags matched but only `count` came back, so
+   the list is not all of them. Looking for one topic? Find its tag by name
+   first with `favbase tags --query <text>` (case-insensitive substring; on
+   `total: 0` try a synonym or the other language), then pass the tag `id` to
+   `search --tag` to narrow. If the output has no `truncated` field at all, the
+   installed extension predates `--query` / `--limit` and ignored them: do not
+   read through the whole list; tell the user to update the favbase extension.
 2. `favbase search "<query>"` runs hybrid retrieval (vector + keyword; Chinese
-   and English both work). Output:
-   `{ "count": n, "results": [{ "item_id", "title", "url", "platform", "chunk_text", "score" }] }`.
-   A `count: 0`, or a result set that looks suspiciously thin, is **not** by
-   itself evidence that the user saved nothing — go to step 3 before saying so.
+   and English both work). Output: `{ "count", "query_terms", "semantic_search",
+   "results": [{ "item_id", "title", "url", "platform", "chunk_text", "score",
+   "similarity", "matched_terms" }] }`.
+   It almost always returns results, so a non-empty list does **not** mean the
+   user saved the topic. Judge each result by `matched_terms` (the query terms
+   its snippet contains), `similarity` (vector closeness, higher is closer;
+   compare it only between results of one call) and the snippet itself.
+   `score` only orders this list: never compare it across queries or read it
+   as confidence. `query_terms` shows how the query was split for keyword
+   matching (words in no saved snippet, or in very many, are left out);
+   `semantic_search: false` means only keyword matching ran, so every
+   `similarity` is `null`. An older extension omits `query_terms`,
+   `semantic_search`, `similarity` and `matched_terms`: judge from `title` and
+   `chunk_text` alone, and do not count a missing field against a result.
+   If nothing returned is really about the question, do not stretch weak hits
+   into an answer. That, a `count: 0`, or a result set that looks suspiciously
+   thin is **not** by itself evidence that the user saved nothing — go to
+   step 3 before saying so.
 3. `favbase coverage` reports each platform's processing progress:
    `{ "platforms": [{ "platform", "acquisition", "content", "embedding",
    "tagging", "blockers" }] }`, each stage as `done`/`total`. It separates the

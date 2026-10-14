@@ -11,7 +11,7 @@ Offscreen Document 持有唯一的 PGlite；app.html 经 3-hop Port 中继（app
 - `read-proxy-db.ts`（`drizzle-orm/pg-proxy`）只读、不支持事务，禁止给 app 写路径用。它刻意保留 PGlite 的 `db.execute().rows` 形状（pg-proxy 默认会解包），因为共享的 Chat 检索读 `.rows`。
 - 初始化状态只在 `db-state.ts` 持有，main / proxy 两端不得各存一份。
 - `schema.ts` / `types.ts` 保持零 PGlite 运行时依赖，任何 context 都能安全 import。
-- 共享 helper（`collection-queries.ts`、`platform-sync-record.ts`、`sql-utils.ts`）显式吃 `db`，只 import entity leaf 与 drizzle，不调 `getDb()`、不 value-import barrel。
+- 共享 helper（`collection-queries.ts`、`platform-sync-record.ts`、`sql-utils.ts`）显式吃 `db`，只 import entity leaf 与 drizzle，不调 `getDb()`、不 value-import barrel。三个都经 `lib/tagging/tag-queries.ts` → `collection-queries.ts` 在 Background SW 图上，违反这条就是 `pnpm build` 失败。
 - 跨 app context 的事务隔离只在 Offscreen handler 成立，调用端的 mutex 不算。规则见 `bridges/CLAUDE.md`。
 - 批量 INSERT 用 `sql-utils.ts` 的 `chunk()` 分批：Postgres 一条语句的 bind-param 上限是 65535。
 - `text-search.ts` 是关键词索引分词的唯一事实源（`segmentWords` 与 `TEXT_SEARCH_CONFIG`）。索引侧（`replaceItemChunks`、v008 回填）和查询侧（Chat 关键词臂）都必须走它，两边切出的词才对得上。它零 import，因为 SW、Offscreen、Node 测试都会加载它。守卫：`tests/agent-bridge-background-bundle-contract.test.ts`。

@@ -27,6 +27,7 @@ describe('TOOL_ALIASES', () => {
     expect(buildAliasArgs(alias('search'), ['rust async'], { platform: 'github', tag: 't1', limit: '5' }))
       .toEqual({ query: 'rust async', platform: 'github', tag_id: 't1', top_k: 5 });
     expect(buildAliasArgs(alias('tags'), [], {})).toEqual({});
+    expect(buildAliasArgs(alias('tags'), [], { query: 'x', limit: '5' })).toEqual({ query: 'x', limit: 5 });
     expect(buildAliasArgs(alias('get'), ['item-1'], {})).toEqual({ item_id: 'item-1' });
     expect(buildAliasArgs(alias('coverage'), [], {})).toEqual({});
     expect(buildAliasArgs(alias('coverage'), [], { platform: 'bilibili' })).toEqual({
@@ -55,6 +56,9 @@ describe('TOOL_ALIASES', () => {
     expect(() => buildAliasArgs(alias('search'), ['q'], { limit })).toThrow(
       new UsageError('Option --limit must be a positive integer'),
     );
+    expect(() => buildAliasArgs(alias('tags'), [], { limit })).toThrow(
+      new UsageError('Option --limit must be a positive integer'),
+    );
   });
 
   // The upper bound belongs to the Knowledge Tool's schema, not to the CLI: a
@@ -68,6 +72,9 @@ describe('TOOL_ALIASES', () => {
   it('renders one usage line per alias with every flag', () => {
     expect(aliasUsageLine(alias('search'))).toContain(
       'search <query> [--platform <platform>] [--tag <tag_id>] [--limit <top_k>]',
+    );
+    expect(aliasUsageLine(alias('tags'))).toContain(
+      'tags [--platform <platform>] [--query <query>] [--limit <limit>]',
     );
     expect(aliasUsageLine(alias('coverage'))).toContain('coverage [--platform <platform>]');
   });

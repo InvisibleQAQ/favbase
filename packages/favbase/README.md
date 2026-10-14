@@ -36,7 +36,7 @@ Data commands print JSON to stdout; every diagnostic goes to stderr.
 
 ```
 favbase search "<query>" [--platform <platform>] [--tag <tag_id>] [--limit <top_k>]
-favbase tags [--platform <platform>]
+favbase tags [--platform <platform>] [--query <query>] [--limit <limit>]
 favbase get <item-id>
 favbase coverage [--platform <platform>]
 
@@ -50,9 +50,9 @@ favbase doctor
 favbase daemon [run|start|stop|restart]
 ```
 
-`search` runs hybrid retrieval (vector + keyword) inside the extension and answers with `{ count, results: [{ item_id, title, url, platform, chunk_text, score }] }`. A `count` of `0` means nothing you saved matches — not that the search failed. When a `chunk_text` snippet is too short to answer from, `favbase get <item_id>` returns `{ found, item_exists, item_id, content }`, with the full extracted text in `content` when `found` is true. `item_exists: false` means no saved item has that id — the id is wrong, not the library empty. `item_exists: true` with `found: false` means the item is saved but its text has not been extracted (yet); `coverage` shows how far processing has got.
+`search` runs hybrid retrieval (vector + keyword) inside the extension and answers with `{ count, query_terms, semantic_search, results: [{ item_id, title, url, platform, chunk_text, score, similarity, matched_terms }] }`. It ranks whatever is closest, so a non-empty answer does not mean you saved anything about the query: judge relevance from `matched_terms` (the query terms a snippet contains), `similarity` (vector closeness, comparable only within one search) and the snippet itself. `score` only orders one result list. `query_terms` shows how the query was split for keyword matching, and `semantic_search: false` means only keyword matching ran (no embedding provider is configured, or it no longer matches the stored vectors). An empty or thin answer is not proof that you saved nothing either; `coverage` below tells its three causes apart. When a `chunk_text` snippet is too short to answer from, `favbase get <item_id>` returns `{ found, item_exists, item_id, content }`, with the full extracted text in `content` when `found` is true. `item_exists: false` means no saved item has that id — the id is wrong, not the library empty. `item_exists: true` with `found: false` means the item is saved but its text has not been extracted (yet); `coverage` shows how far processing has got.
 
-`coverage` answers the question a `count` of `0` raises next: per platform it reports how many items have been fetched and how far each processing stage (content, embedding, tags) has got, plus `blockers` — a stage whose AI provider is not configured and so will never advance on its own. That is the difference between "you saved nothing about this", "it is still being processed" and "it will never be processed until you configure a provider". The fetched count has no denominator on purpose: the remote total is not knowable, so nothing here claims your library is fully synced.
+`coverage` answers the question an empty or thin `search` answer raises next: per platform it reports how many items have been fetched and how far each processing stage (content, embedding, tags) has got, plus `blockers` — a stage whose AI provider is not configured and so will never advance on its own. That is the difference between "you saved nothing about this", "it is still being processed" and "it will never be processed until you configure a provider". The fetched count has no denominator on purpose: the remote total is not knowable, so nothing here claims your library is fully synced.
 
 For the accepted `--platform` values run `favbase tools` — the tool schemas are generated from whatever the installed extension actually supports, so they are always current. `favbase --help` is authoritative if this file and the CLI ever disagree.
 

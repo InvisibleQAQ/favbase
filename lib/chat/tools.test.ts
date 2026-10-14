@@ -1,10 +1,12 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
 import { PGlite } from '@electric-sql/pglite';
 import { vector } from '@electric-sql/pglite-pgvector';
 import { uuid_ossp } from '@electric-sql/pglite/contrib/uuid_ossp';
 import { pg_trgm } from '@electric-sql/pglite/contrib/pg_trgm';
 import { drizzle } from 'drizzle-orm/pglite';
-import type { z } from 'zod';
+import { z } from 'zod';
 import * as schema from '@/lib/database/schema';
 import { runMigrations } from '@/lib/database/migrations';
 import type { FavbaseDb } from '@/lib/database';
@@ -13,7 +15,7 @@ import type { RetrievalHit } from './types';
 // Mock the retrieval + tagging arms so tool tests are network-free and
 // deterministic; getItemContent runs against real in-memory PGlite.
 vi.mock('./retrieval', () => ({ hybridRetrieve: vi.fn() }));
-vi.mock('@/lib/tagging/tag-queries', () => ({ getAllUsedTags: vi.fn() }));
+vi.mock('@/lib/tagging/tag-queries', () => ({ searchUsedTags: vi.fn() }));
 
 // Provider readiness is a settings read, not a query: stub the resolvers so the
 // coverage tool's blocker arm is driven from the test rather than a real store.
@@ -29,7 +31,7 @@ vi.mock('@/lib/storage/resolve', () => ({
 }));
 
 import { hybridRetrieve } from './retrieval';
-import { getAllUsedTags } from '@/lib/tagging/tag-queries';
+import { searchUsedTags } from '@/lib/tagging/tag-queries';
 import { COLLECTION_PLATFORMS, type CollectionPlatform } from '@/lib/collections/platforms';
 import { PLATFORM_DESCRIPTORS } from '@/lib/collections/platform-descriptor';
 import { deriveConfigurationBlockers } from '@/lib/collections/configuration-blockers';
@@ -37,7 +39,7 @@ import { CHAT_SYSTEM_PROMPT } from './prompts';
 import { chatTools } from './tools';
 
 const hybridRetrieveMock = vi.mocked(hybridRetrieve);
-const getAllUsedTagsMock = vi.mocked(getAllUsedTags);
+const searchUsedTagsMock = vi.mocked(searchUsedTags);
 
 /**
  * Whole-token match, so the single-letter platform id `x` is not found inside
@@ -205,25 +207,50 @@ describe('chatTools', () => {
         expect(sentenceWith(CHAT_SYSTEM_PROMPT, 'count')).toContain('matched_terms');
       });
 
-      it('describes every field it returns', async () => {
+      /** Every field a real output carries, top level and per result. */
+      async function returnedFields(): Promise<string[]> {
         hybridRetrieveMock.mockResolvedValueOnce({
           hits: [HIT],
           queryTerms: ['ml'],
           semanticSearch: true,
         });
         const out = await search({ query: 'ml' });
-        // Payload a model reads without being told; everything else needs a
-        // sentence, so a field added later reds here until it gets one.
-        const SELF_EVIDENT = ['results', 'title', 'url', 'platform', 'chunk_text'];
-        const fields = [...Object.keys(out), ...Object.keys(out.results[0])].filter(
-          (field) => !SELF_EVIDENT.includes(field),
-        );
-
+        const fields = [...Object.keys(out), ...Object.keys(out.results[0])];
         // Non-vacuity: reading the fields off the output must keep working.
         expect(fields).toEqual(
           expect.arrayContaining(['query_terms', 'semantic_search', 'similarity', 'matched_terms']),
         );
+        return fields;
+      }
+
+      it('describes every field it returns', async () => {
+        // Payload a model reads without being told; everything else needs a
+        // sentence, so a field added later reds here until it gets one.
+        const SELF_EVIDENT = ['results', 'title', 'url', 'platform', 'chunk_text'];
+        const fields = (await returnedFields()).filter((field) => !SELF_EVIDENT.includes(field));
         for (const field of fields) expect(text(), field).toContain(field);
+      });
+
+      // The other readers of this output: an agent through the CLI reads
+      // SKILL.md, a person reads the npm README, and the CLI prints the object
+      // verbatim. 1f5c6a2 added four fields and neither hand-written shape
+      // followed. Scoped to the first `{ … }` code span after the sentence that
+      // introduces search's output: step 2's prose names the evidence fields
+      // too, and the README paragraph also holds `get`'s shape.
+      it.each([
+        ['skills/favbase/SKILL.md', '`favbase search "<query>"` runs'],
+        ['packages/favbase/README.md', '`search` runs'],
+      ])('%s spells every returned field in its output shape', async (doc, lead) => {
+        const source = readFileSync(path.resolve(__dirname, '..', '..', doc), 'utf8');
+        const at = source.indexOf(lead);
+        expect(at, `${doc} no longer introduces search's output with ${lead}`).toBeGreaterThanOrEqual(0);
+        const shape = /`(\{[^`]*\})`/.exec(source.slice(at + lead.length))?.[1];
+        expect(shape, `${doc}: no \`{ … }\` output shape after ${lead}`).toBeDefined();
+
+        const missing = (await returnedFields()).filter(
+          (field) => !new RegExp(`\\b${field}\\b`).test(shape!),
+        );
+        expect(missing, `${doc}: fields searchKnowledgeBase returns but the shape omits`).toEqual([]);
       });
 
       it('says score only orders this list', () => {
@@ -360,20 +387,136 @@ describe('chatTools', () => {
     });
   });
 
+  /**
+   * Bounded since 2026-10-14: a real library had 1924 tags (~210 KB). The cut
+   * is the tool's blind spot, so `total` / `truncated` / `hint` exist only to
+   * say a list was cut, and the description says what to do about it.
+   */
   describe('listTags', () => {
-    it('flattens getAllUsedTags to {count, tags:[{id,name,count}]}', async () => {
-      getAllUsedTagsMock.mockResolvedValueOnce([
-        { id: 'tg1', name: 'ml', count: 3 },
-        { id: 'tg2', name: 'web', count: 1 },
-      ]);
-      const out = await runTool<{ count: number; tags: Record<string, unknown>[] }>(
-        chatTools.listTags,
-        { platform: 'bilibili' },
+    interface TagsOutput {
+      count: number;
+      total: number;
+      truncated: boolean;
+      hint: string | null;
+      tags: Record<string, unknown>[];
+    }
+
+    const TAGS = [
+      { id: 'tg1', name: 'ml', count: 3 },
+      { id: 'tg2', name: 'web', count: 1 },
+    ];
+
+    function listTags(input: unknown): Promise<TagsOutput> {
+      return runTool<TagsOutput>(chatTools.listTags, input, db);
+    }
+
+    const inputSchema = () => chatTools.listTags.inputSchema as unknown as z.ZodType;
+
+    /** The limit bounds as advertised to agents (the Agent Bridge emits this JSON Schema). */
+    function limitBounds(): { minimum: number; maximum: number } {
+      const json = z.toJSONSchema(inputSchema(), { io: 'input' }) as {
+        properties?: Record<string, { minimum?: number; maximum?: number }>;
+      };
+      const { minimum, maximum } = json.properties?.limit ?? {};
+      expect(minimum, 'listTags.limit no longer emits a JSON Schema `minimum`').toBeTypeOf('number');
+      expect(maximum, 'listTags.limit no longer emits a JSON Schema `maximum`').toBeTypeOf('number');
+      return { minimum: minimum!, maximum: maximum! };
+    }
+
+    /** The limit execute passes when the caller sends none. */
+    async function observedDefaultLimit(): Promise<number> {
+      searchUsedTagsMock.mockResolvedValueOnce({ tags: [], total: 0 });
+      await listTags({});
+      return searchUsedTagsMock.mock.calls.at(-1)![0].limit;
+    }
+
+    it('returns {count,total,truncated,hint,tags} and passes the filters through', async () => {
+      searchUsedTagsMock.mockResolvedValueOnce({ tags: TAGS, total: 2 });
+
+      const out = await listTags({ platform: 'bilibili', query: 'ml', limit: 5 });
+
+      // `count` and `tags[{id,name,count}]` keep their pre-limit meaning (the
+      // published CLI prints this object verbatim); the rest is additive.
+      expect(out).toEqual({ count: 2, total: 2, truncated: false, hint: null, tags: TAGS });
+      expect(searchUsedTagsMock).toHaveBeenLastCalledWith(
+        { platform: 'bilibili', query: 'ml', limit: 5 },
         db,
       );
-      expect(out.count).toBe(2);
-      expect(out.tags[0]).toEqual({ id: 'tg1', name: 'ml', count: 3 });
-      expect(getAllUsedTagsMock).toHaveBeenCalledWith('bilibili', db);
+    });
+
+    // Q2: the default applies to every caller that sends no limit, the
+    // published CLI included -- the extension cannot tell them apart.
+    it('asks for 50 tags when the caller sends no limit', async () => {
+      expect(await observedDefaultLimit()).toBe(50);
+      expect(searchUsedTagsMock.mock.calls.at(-1)![0]).toEqual({
+        platform: undefined,
+        query: undefined,
+        limit: 50,
+      });
+    });
+
+    it('flags a cut page and says in hint how to find the rest', async () => {
+      searchUsedTagsMock.mockResolvedValueOnce({ tags: TAGS, total: 1924 });
+
+      const out = await listTags({});
+
+      expect(out).toMatchObject({ count: 2, total: 1924, truncated: true });
+      expect(out.hint).toContain('1924');
+      expect(out.hint).toContain('前 2 个');
+      expect(out.hint).toContain('query');
+      expect(out.hint).toContain(`最大 ${limitBounds().maximum}`);
+    });
+
+    it('accepts limit 1 and 200 and refuses 0, 201 and non-integers', () => {
+      const schema = inputSchema();
+      for (const limit of [1, 200]) {
+        expect(schema.safeParse({ limit }).success, `limit ${limit}`).toBe(true);
+      }
+      for (const limit of [0, 201, 2.5]) {
+        expect(schema.safeParse({ limit }).success, `limit ${limit}`).toBe(false);
+      }
+      expect(schema.safeParse({}).success).toBe(true);
+      expect(schema.safeParse({ query: '学习', platform: 'github' }).success).toBe(true);
+    });
+
+    describe('model-facing honesty', () => {
+      const description = () => chatTools.listTags.description ?? '';
+
+      it('describes every field it returns', async () => {
+        searchUsedTagsMock.mockResolvedValueOnce({ tags: TAGS, total: 1924 });
+        const out = await listTags({});
+        // `count` and `id` predate the cut and their tokens occur in the text
+        // for other reasons (`tag_id`), so checking them here would be vacuous.
+        const SELF_EVIDENT = ['tags', 'id', 'name', 'count'];
+        const fields = [...Object.keys(out), ...Object.keys(out.tags[0])].filter(
+          (field) => !SELF_EVIDENT.includes(field),
+        );
+
+        // Non-vacuity: reading the fields off the output must keep working.
+        expect(fields).toEqual(expect.arrayContaining(['total', 'truncated', 'hint']));
+        for (const field of fields) expect(description(), field).toContain(field);
+      });
+
+      it('sends a cut list to query, and a missed query to other words', () => {
+        const sentence = description()
+          .split('。')
+          .find((s) => s.includes('truncated'));
+        expect(sentence, 'the truncated sentence').toBeDefined();
+        expect(sentence, 'the instruction itself, not just the word').toContain('用 query');
+        expect(sentence).toContain('同义词');
+      });
+
+      it('states the limit range and default that the schema and execute enforce', async () => {
+        const { minimum, maximum } = limitBounds();
+        const fallback = await observedDefaultLimit();
+
+        const clause = (inputSchema().description ?? '').split('limit=')[1];
+        expect(clause, 'the describe string no longer documents limit').toBeDefined();
+        expect(clause).toContain(`${minimum}-${maximum}`);
+        expect(clause).toContain(`默认 ${fallback}`);
+        // The description's opening promise is the same number.
+        expect(description()).toContain(`前 ${fallback} 个`);
+      });
     });
   });
 

@@ -24,11 +24,15 @@ Chat（Agentic RAG 知识库助手）的平台无关 lib：hybrid 检索、Knowl
 - 清单用平台 id 不用显示名：显示名是 `entrypoints/app/` 侧的 `LocaleKeys`，`lib/` 引不到。
 - 工具的盲区（读不到的状态、刻意不做的能力、不可知的分母）必须写进 description / system prompt，并写明模型下一步该做什么；只写在代码注释里等于没写（`.trellis/spec/guides/silent-failure-thinking-guide.md` Gotcha 2）。
 - 盲区守卫要从工具实际调用的函数派生再对账文本，不手写限制清单。模型面守卫全部放在 `tools.test.ts` 一个文件里，别拆到 `prompts.test.ts`。
-- `top_k` 的范围与默认值只有 `tools.ts` 三个不导出常量一处事实源，zod 链与 describe 串都由它们拼。唯一手写副本是 SKILL.md 的 `--limit <1-20>`，由 `tests/agent-bridge-cli-aliases.test.ts` 对账。
+- `top_k` 与 `listTags` 的 `limit`，范围与默认值各只有 `tools.ts` 的不导出常量一处事实源，zod 链、describe 串与 `listTags` 的 `hint` 都由它们拼。手写副本是 SKILL.md 各别名 synopsis 的 `--limit <min-max>` 和 Workflow 第 1 步的 tags 默认值，由 `tests/agent-bridge-cli-aliases.test.ts` 按 `positive-integer` 别名 flag 逐个对账。
 - `retrieval.ts` 自己的 `DEFAULT_TOP_K` 是库默认值，模型看不到（工具总是显式传 `topK`）。
 - `getItemContent` 的 `found`（有已提取正文）不得改义：已发布 CLI 捆绑的 SKILL.md 描述的就是它，扩展与 CLI 各自发版。新状态只能纯追加字段（如 `item_exists`）。
 - `getItemContent` 收到非 uuid 的 id 时让 Postgres 抛错、工具报错，刻意不兜底。
 - `searchKnowledgeBase` 的输出只许追加字段，不改名、不删：已发布 CLI 原样打印这个 JSON。
+- 新输出字段还要写进 SKILL.md Workflow 第 2 步与 npm README 的输出形状，否则 `tools.test.ts` 红。改 SKILL.md 就是一次 CLI 发版（`packages/favbase/CLAUDE.md` Release），所以加字段与发版同批。
+- `listTags` 同样只许追加字段，`count` 保持「本次返回条数」。
+- `listTags` 不传 `limit` 也截到默认值：扩展分不清已发布 CLI 和新调用方（Agent Bridge 无版本协商），截断只靠 `total` / `truncated` / `hint` 可见。
+- `hint` 是截断触达旧 SKILL.md 读者的唯一渠道，别删；`truncated` 是新 SKILL.md 识别旧扩展的锚（输出里没有它 = 扩展太旧），别改名。
 - `score` 是 RRF，只能排序、不是相关度，RRF 也做不出「全不相关」的判断，所以工具几乎总有结果。相关度只能靠证据字段（`matched_terms`、`similarity`、`query_terms`、`semantic_search`）加 description 教模型去读。守卫在 `tools.test.ts`：输出里的新字段不写进 description 就红。
 - `similarity` 对每条返回的 chunk 都查 cosine（融合后一次 SELECT），不只取语义臂找到的那些：关键词单臂命中没有它，模型就没法拿它和别的结果比。
 - `getProcessingCoverage` 存在的理由：`searchKnowledgeBase` 的空结果或偏少结果有三种成因（真没收藏 / 还在处理 / provider 没配所以永远不会处理），要给三种回答。

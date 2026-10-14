@@ -20,7 +20,7 @@ import { resolveLlmConfig } from '@/lib/storage/resolve';
 // Static on purpose: these tools also run inside the Background Service
 // Worker (Agent Bridge), and a Service Worker cannot use dynamic `import()`
 // (disallowed on ServiceWorkerGlobalScope by the HTML specification).
-import { getAllUsedTags } from '@/lib/tagging/tag-queries';
+import { searchUsedTags } from '@/lib/tagging/tag-queries';
 import { hybridRetrieve } from './retrieval';
 
 const { items, itemContents } = schema;
@@ -36,6 +36,17 @@ const TOP_K_MIN = 1;
 const TOP_K_MAX = 20;
 /** Default top-K for the knowledge-base search when the model omits it. */
 const DEFAULT_TOP_K = 8;
+
+/**
+ * `listTags` `limit` range and default, the same pattern as `top_k`: the zod
+ * chain, the describe string and the truncation `hint` are all built from
+ * these. A real library has ~2000 tags (~110 bytes each), so an unbounded list
+ * was ~210 KB. The default also applies to callers that send no `limit` at
+ * all, the published CLI included: the extension cannot tell them apart.
+ */
+const TAG_LIMIT_MIN = 1;
+const TAG_LIMIT_MAX = 200;
+const DEFAULT_TAG_LIMIT = 50;
 
 /**
  * The platform discriminators spelled out for the model, derived so a newly
@@ -178,23 +189,46 @@ const getItemContent = tool({
 });
 
 /**
- * List the tags in use across the knowledge base with per-tag item counts. Call
- * to discover topics or to narrow a later searchKnowledgeBase via `tag_id`.
+ * List the tags in use with per-tag item counts, most-used first. Call to
+ * discover topics or to narrow a later searchKnowledgeBase via `tag_id`.
  * Read-only (SELECT only).
+ *
+ * Bounded: only the first `limit` tags come back, and `query` finds a tag by
+ * name instead of reading the whole list. Its blind spot is the cut itself, so
+ * `total` / `truncated` / `hint` say a list was cut and the description says
+ * what to do next. `hint` is the only channel that reaches an agent holding a
+ * SKILL.md written before the cut existed. Output fields are additive only:
+ * the published CLI prints this object verbatim.
  */
 const listTags = tool({
   description:
-    '列出知识库中已使用的标签及各自的收藏项数量（count 降序）。当需要了解知识库有哪些主题、或想用某标签缩小 searchKnowledgeBase 的检索范围时调用。返回的 tag id 可作为 searchKnowledgeBase 的 tag_id 参数。',
+    `列出知识库中已使用的标签及各自的收藏项数量，按收藏项数量降序、同数按名字排列。默认只返回收藏项数量最多的前 ${DEFAULT_TAG_LIMIT} 个，标签总数可能远多于此，不要把返回的列表当成全部标签。` +
+    '当需要了解知识库有哪些主题、或想用某标签缩小 searchKnowledgeBase 的检索范围时调用；返回的 id 可作为 searchKnowledgeBase 的 tag_id 参数。' +
+    '顶层 count 是本次返回的标签个数，total 是符合筛选条件的标签总数，tags 里每项的 count 是该标签下的收藏项数。' +
+    `truncated=true 表示 total 大于 count、还有标签没返回，此时 hint 是一句说明（不截断时 hint 为 null）：要找某个主题的标签，用 query 按标签名查找；query 没命中（total 为 0）时换同义词或换成另一种语言再查；也可以调大 limit（最大 ${TAG_LIMIT_MAX}）。`,
   inputSchema: z.object({
     platform: z.enum(COLLECTION_PLATFORMS).optional(),
+    query: z.string().optional(),
+    limit: z.number().int().min(TAG_LIMIT_MIN).max(TAG_LIMIT_MAX).optional(),
   }).describe(
-    `统计参数。platform=可选，只统计某个平台的标签，取值之一 ${PLATFORM_LIST}；省略则统计全部平台。`,
+    `统计参数。platform=可选，只统计某个平台的标签，取值之一 ${PLATFORM_LIST}；省略则统计全部平台。` +
+      'query=可选，按标签名查找，不区分大小写的子串匹配（如 "rust" 也命中 "Rust 异步"）；省略则不按名字过滤。' +
+      `limit=可选，最多返回的标签数（整数，${TAG_LIMIT_MIN}-${TAG_LIMIT_MAX}，默认 ${DEFAULT_TAG_LIMIT}）。`,
   ),
-  execute: async ({ platform }, { experimental_context }) => {
+  execute: async ({ platform, query, limit }, { experimental_context }) => {
     const db = contextDb(experimental_context);
-    const tags = await getAllUsedTags(platform, db);
+    const { tags, total } = await searchUsedTags(
+      { platform, query, limit: limit ?? DEFAULT_TAG_LIMIT },
+      db,
+    );
+    const truncated = total > tags.length;
     return {
       count: tags.length,
+      total,
+      truncated,
+      hint: truncated
+        ? `符合条件的标签共 ${total} 个，只返回了收藏项数量最多的前 ${tags.length} 个：要找某个主题的标签，用 query 按标签名查找，或调大 limit（最大 ${TAG_LIMIT_MAX}）。`
+        : null,
       tags: tags.map((tg) => ({ id: tg.id, name: tg.name, count: tg.count })),
     };
   },

@@ -357,3 +357,34 @@ column. The value was present at the write site the whole time.
       entity's name, and assert that name in the rejection test. Owner:
       `lib/database/migrations/CLAUDE.md` (v001's `content_state` is the known
       residual)
+
+---
+
+## Gotcha 8: The new argument an older extension drops without a word
+
+**Symptom**: A new CLI flag (`favbase tags --query rust`) returns a valid
+result that ignored the flag: the whole unfiltered tag list. No error, no exit
+code, nothing on stderr.
+
+**Cause**: The extension and the CLI ship separately (Chrome Web Store, npm).
+`lib/agent-bridge/tool-registry.ts` validates arguments with the tool's own
+`z.object`, and zod strips unknown keys by default (zod 4.4.3, measured), so an
+extension older than the argument accepts the call and runs it without the
+argument. The WebSocket envelope is strict (`lib/agent-bridge/CLAUDE.md`), the
+tool's `args` are not. Making the schema strict now does not help: installed
+extensions keep the schema they shipped with.
+
+**Trigger — ask this whenever** a Knowledge Tool gains an input argument and a
+CLI alias flag or SKILL.md starts teaching it.
+
+**Prevention checklist**:
+
+- [ ] Ship an additive output field with the argument, so a caller can tell
+      "honoured" from "the extension predates it" by the field's absence.
+      Pattern: `listTags`' `truncated`
+- [ ] Tell the agent in SKILL.md what an older extension's output looks like
+      and what to do instead
+- [ ] Decide whether the npm release that teaches the argument waits for the
+      extension release that implements it; the window between them is the
+      residual
+- [ ] Owners: `lib/chat/CLAUDE.md` (模型可见面), `skills/favbase/CLAUDE.md`

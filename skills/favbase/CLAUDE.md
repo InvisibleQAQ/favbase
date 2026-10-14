@@ -15,15 +15,23 @@ and installed for Claude Code / Codex. `INSTALL.md` is the **Agent Setup Guide**
 - `metadata.version` must equal `packages/favbase/package.json`'s `version`; bump both in the
   release commit. It sits under `metadata` and is quoted because the Agent Skills spec has no
   top-level `version` and `metadata` values are strings. doctor does not read it.
-- Much of its prose is a hand-written copy of extension or CLI facts (platform lists, the
-  `--limit` range, one synopsis line per alias, the exit-code table, quoted CLI lines). Shipped
-  markdown cannot derive, so tests reconcile it: reword freely, but keep the shape a test anchors
-  on or change the test with it. Guards: `tests/agent-bridge-cli-aliases.test.ts`, and
-  `exit-codes.test.ts`, `cli-main.test.ts`, `cli-main-doctor.test.ts` in `packages/favbase`.
+- Much of its prose is a hand-written copy of extension or CLI facts (platform lists, each
+  `--limit` range on its own alias's synopsis line and nowhere else, the `tags` default, one
+  synopsis line per alias, the `search` output shape, the exit-code table, quoted CLI lines).
+  Shipped markdown cannot derive, so tests reconcile it: reword freely, but keep the shape a test
+  anchors on or change the test with it. Guards: `tests/agent-bridge-cli-aliases.test.ts`,
+  `lib/chat/tools.test.ts` (the `search` output shape), and `exit-codes.test.ts`,
+  `cli-main.test.ts`, `cli-main-doctor.test.ts` in `packages/favbase`.
 - The frontmatter `description`'s platform list is what an agent selects the skill by. A platform
   missing there means the agent never reaches for favbase when the user asks about it.
+- No guard: Workflow step 2's reading of `score`, `matched_terms`, `similarity` and
+  `semantic_search` mirrors `searchKnowledgeBase`'s description in `lib/chat/tools.ts`; only the
+  field names in its output shape are reconciled. Change both or neither.
 - No guard: Workflow step 4's `item_exists` / `found` meanings mirror `getItemContent`'s
   description in `lib/chat/tools.ts`. Change both or neither.
+- No guard: Workflow step 1 reads a `tags` output without `truncated` as an extension too old
+  for `--query` / `--limit` (they are silently stripped by its schema). Renaming that field in
+  `listTags` would make every new extension look old.
 - The exit-code table is the agent's error handling, and `packages/favbase/exit-codes.ts` decides
   which failure lands in which row. The test checks anchors only: when a failure changes code,
   reread the row as an agent would (silent-failure guide, Gotcha 5).

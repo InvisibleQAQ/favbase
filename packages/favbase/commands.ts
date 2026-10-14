@@ -46,9 +46,13 @@ const ALIASES: ToolAlias[] = [
   {
     command: 'tags',
     tool: 'listTags',
-    summary: 'list tags in use with item counts',
+    summary: 'list tags in use with item counts, most-used first',
     positional: null,
-    flags: { platform: PLATFORM_FLAG },
+    flags: {
+      platform: PLATFORM_FLAG,
+      query: { arg: 'query', kind: 'string' },
+      limit: { arg: 'limit', kind: 'positive-integer' },
+    },
   },
   {
     command: 'get',

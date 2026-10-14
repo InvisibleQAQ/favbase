@@ -37,8 +37,9 @@ provides no MCP server.
   Deliberate exceptions: the README's opening line and `bridge-server.ts`'s rejected-hello line
   in `daemon.log`. Nothing enforces the split.
 - SKILL.md and the npm README quote CLI behaviour by hand (exit-code tables, usage line, update
-  notice, `--limit` range, alias synopses, `--args-file`). Tests compare each quote with the
-  code: reword code and quotes together. SKILL.md side: `skills/favbase/CLAUDE.md`.
+  notice, `--limit` range, alias synopses, `--args-file`, `search`'s output shape). Tests compare
+  each quote with the code: reword code and quotes together. The `search` shape's guard sits in
+  `lib/chat/tools.test.ts`, beside the tool. SKILL.md side: `skills/favbase/CLAUDE.md`.
 - `README.md` deliberately lists no platforms; it points at `favbase tools`. SKILL.md's two lists
   are guarded, a third copy on the npm page would not be.
 - SKILL.md line endings are handled in exactly two places, because `inspectSkills` compares

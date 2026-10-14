@@ -71,10 +71,31 @@ describe('Agent Bridge background bundle contract', () => {
     const tools = source('lib/chat/tools.ts');
     const tagQueries = source('lib/tagging/tag-queries.ts');
 
-    expect(tools).toContain("import { getAllUsedTags } from '@/lib/tagging/tag-queries'");
+    expect(tools).toContain("import { searchUsedTags } from '@/lib/tagging/tag-queries'");
     expect(tagQueries).not.toMatch(/^import\s+.*from ['"]@\/lib\/tagging['"];?$/m);
     expect(tagQueries).not.toMatch(/^import\s+.*from ['"]@\/lib\/database['"];?$/m);
+    expect(tagQueries).toContain("import { searchCondition } from '@/lib/database/collection-queries'");
   });
+
+  // `listTags`' name filter (2026-10-14) reuses `searchCondition`, which put
+  // `collection-queries.ts` on this graph through `tag-queries.ts`, and with it
+  // `platform-sync-record.ts` and `sql-utils.ts`. The first two name the
+  // database barrel in an `import type`: deleting that one keyword re-admits
+  // PGlite, and only a full `pnpm build` would say so, naming none of these
+  // files. `sql-utils.ts` imports nothing today; the same rule holds it there.
+  it.each([
+    'lib/database/collection-queries.ts',
+    'lib/database/platform-sync-record.ts',
+    'lib/database/sql-utils.ts',
+  ])(
+    '%s, reached through tag-queries, keeps the database barrel type-only',
+    (file) => {
+      const content = code(file);
+
+      expect(content).not.toMatch(/^import\s+(?!type\s)[^;]*from ['"]@\/lib\/database['"];?$/m);
+      expect(content).not.toContain('@electric-sql/pglite');
+    },
+  );
 
   // The keyword arm's word segmentation is on this graph twice: the query side
   // through `retrieval.ts`, the chunk writer through `vector-store.ts` (which

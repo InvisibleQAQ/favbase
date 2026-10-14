@@ -4,7 +4,8 @@ AI 标签：内容落库后自动打标 + 标签 CRUD。`tags` / `item_tags` 的
 
 ## 约束
 
-- `tag-queries.ts` 是只读 leaf（零 storage / LLM / 写路径依赖）：Background SW 里的 `listTags` Knowledge Tool 静态 import 它，禁止让它经 `index.ts` / `tagging-service.ts` 拉入写路径。守卫 `tests/agent-bridge-background-bundle-contract.test.ts`。
+- `tag-queries.ts` 是只读 leaf（零 storage / LLM / 写路径依赖）：Background SW 里的 `listTags` Knowledge Tool 静态 import 它，禁止让它经 `index.ts` / `tagging-service.ts` 拉入写路径。它为名字过滤 value-import `@/lib/database/collection-queries` 的 `searchCondition`，所以那个文件也在 SW 图上。守卫 `tests/agent-bridge-background-bundle-contract.test.ts`。
+- `getAllUsedTags` 不设上限（app 的标签筛选与打标 prompt 要全量）；有界读是 `searchUsedTags`。两者共用 `selectUsedTags` 一个查询骨架，别复制 SQL。
 - prompt 里的「JSON」字样是硬约束，不可删：openai-compatible provider 走 `response_format: json_object`，OpenAI 规范要求 prompt 含 "json"，否则 400。守卫 `tagging.test.ts`。
 - 同一模式下 schema 不发给模型，输出结构 `{"tags": [...]}` 只能靠 prompt 传达，改 schema 要同时改 prompt。
 - `generateTags` 按 `supportsSchemaDelivery`（`lib/ai`）分叉：schema 发得出去的 provider 用 `generateObject({ schema })`，其余用 `output: 'no-schema'` + 客户端 Zod 校验。别统一成一条路径。

@@ -258,68 +258,112 @@ describe('favbase INSTALL.md stays reconciled with what it installs', () => {
 });
 
 /**
- * `top_k`'s range is the one argument contract spelled out by hand outside the
- * zod chain. docs/27 Step 6 found it in three places with no guard on any; the
- * third, the CLI's `AliasFlag.help`, was never rendered by `favbase --help` and
- * has been deleted (docs/27 D9), so the CLI holds no copy at all. The describe
- * string is now built from the same constants as the zod chain; SKILL.md cannot
- * be (shipped markdown). Both are reconciled here against the JSON Schema the
- * extension actually advertises -- the describe string too, because it stays
- * honest only while the zod chain keeps using the constants. Every failure
- * names the copy that went stale.
+ * An integer argument's range is the argument contract spelled out by hand
+ * outside the zod chain. docs/27 Step 6 found `top_k`'s in three places with no
+ * guard on any; the third, the CLI's `AliasFlag.help`, was never rendered by
+ * `favbase --help` and has been deleted (docs/27 D9), so the CLI holds no copy
+ * at all. Each describe string is built from the same constants as its zod
+ * chain; SKILL.md cannot be (shipped markdown). Both are reconciled here
+ * against the JSON Schema the extension actually advertises -- the describe
+ * string too, because it stays honest only while the zod chain keeps using the
+ * constants. Every failure names the copy that went stale.
+ *
+ * One case per `positive-integer` alias flag, read off the alias table: a flag
+ * added later is held to the same rule without anyone naming it here. Each
+ * range is read from its own alias's synopsis line, so `tags --limit <1-200>`
+ * and `search --limit <1-20>` are told apart.
  */
-describe('hand-written top_k bounds match the live search schema', () => {
+describe('hand-written integer bounds match the live tool schemas', () => {
   const SKILL_MD = path.resolve(__dirname, '..', 'skills', 'favbase', 'SKILL.md');
+  const skillLines = () => readFileSync(SKILL_MD, 'utf8').split(/\r?\n/);
+  const isSynopsisOf = (command: string, line: string) => new RegExp(`^favbase ${command}(?: |$)`).test(line);
 
-  // Derived, not named: whichever alias flag fronts `top_k` is the `--<flag>`
-  // synopsis SKILL.md has to carry.
-  const search = TOOL_ALIASES.find((alias) => alias.tool === 'searchKnowledgeBase');
-  const limit = Object.entries(search?.flags ?? {}).find(([, flag]) => flag.arg === 'top_k');
+  const bounded = TOOL_ALIASES.flatMap((alias) =>
+    Object.entries(alias.flags)
+      .filter(([, flag]) => flag.kind === 'positive-integer')
+      .map(([flag, { arg }]) => ({ command: alias.command, tool: alias.tool, flag, arg })),
+  );
+  type Bound = (typeof bounded)[number];
 
-  function liveTopK(): { range: string; description: string } {
-    const schema = describeTools().find((tool) => tool.name === 'searchKnowledgeBase')?.inputSchema as
+  function liveBounds({ tool, arg }: Bound): { range: string; description: string } {
+    const schema = describeTools().find((descriptor) => descriptor.name === tool)?.inputSchema as
       | {
           properties?: Record<string, { minimum?: number; maximum?: number }>;
           description?: string;
         }
       | undefined;
-    const { minimum, maximum } = schema?.properties?.top_k ?? {};
-    expect(minimum, 'searchKnowledgeBase.top_k no longer emits a JSON Schema `minimum`').toBeTypeOf('number');
-    expect(maximum, 'searchKnowledgeBase.top_k no longer emits a JSON Schema `maximum`').toBeTypeOf('number');
+    const { minimum, maximum } = schema?.properties?.[arg] ?? {};
+    expect(minimum, `${tool}.${arg} no longer emits a JSON Schema \`minimum\``).toBeTypeOf('number');
+    expect(maximum, `${tool}.${arg} no longer emits a JSON Schema \`maximum\``).toBeTypeOf('number');
     return { range: `${minimum}-${maximum}`, description: schema?.description ?? '' };
   }
 
-  it('finds the CLI flag that fronts top_k', () => {
-    // Reverse assertion: without it, a renamed alias or argument would turn
-    // every check below into a crash on `limit!` instead of a named failure.
-    expect(limit, 'no `favbase` alias flag maps onto searchKnowledgeBase.top_k').toBeDefined();
+  it('finds every bounded CLI flag', () => {
+    // Reverse assertion: if reading the alias table ever breaks, every case
+    // below vanishes and this block passes on nothing.
+    expect(bounded.map(({ command, flag, arg }) => `${command} --${flag} -> ${arg}`)).toEqual(
+      expect.arrayContaining(['search --limit -> top_k', 'tags --limit -> limit']),
+    );
   });
 
-  it('SKILL.md states the schema range in its --limit synopsis', () => {
-    const { range } = liveTopK();
-    const [name] = limit!;
-    const stated = [
-      ...readFileSync(SKILL_MD, 'utf8').matchAll(new RegExp(`--${name} <(\\d+-\\d+)>`, 'g')),
-    ].map((match) => match[1]);
+  it.each(bounded.map((bound) => [`${bound.command} --${bound.flag}`, bound] as const))(
+    'SKILL.md states the schema range in its favbase %s synopsis',
+    (_flag, bound) => {
+      const { range } = liveBounds(bound);
+      const synopsis = skillLines().find((line) => isSynopsisOf(bound.command, line));
+      expect(synopsis, `skills/favbase/SKILL.md has no \`favbase ${bound.command}\` synopsis line`).toBeDefined();
 
-    expect(
-      stated,
-      `skills/favbase/SKILL.md no longer carries the \`--${name} <min-max>\` synopsis this contract reads`,
-    ).not.toEqual([]);
-    for (const value of stated) {
-      expect(value, `skills/favbase/SKILL.md \`--${name} <${value}>\`: range differs from the top_k schema`).toBe(
-        range,
+      const stated = synopsis!.match(new RegExp(`--${bound.flag} <(\\d+-\\d+)>`))?.[1];
+      expect(
+        stated,
+        `skills/favbase/SKILL.md \`${synopsis}\` no longer carries the \`--${bound.flag} <min-max>\` this contract reads`,
+      ).toBeDefined();
+      expect(
+        stated,
+        `skills/favbase/SKILL.md \`--${bound.flag} <${stated}>\`: range differs from the ${bound.tool}.${bound.arg} schema`,
+      ).toBe(range);
+    },
+  );
+
+  // The cases above read one line each. A range written anywhere else (prose,
+  // an example, another alias's line) is a copy nothing would reconcile.
+  it('SKILL.md states a range only where a case above reads it', () => {
+    const offenders = skillLines()
+      .map((line, index) => [index + 1, line] as const)
+      .flatMap(([lineNo, line]) =>
+        [...line.matchAll(/--([a-z][a-z-]*) <\d+-\d+>/g)]
+          .filter(([, flag]) => !bounded.some((bound) => bound.flag === flag && isSynopsisOf(bound.command, line)))
+          .map(([copy]) => `SKILL.md:${lineNo} ${copy}`),
       );
-    }
+
+    expect(offenders, 'a hand-written range outside the reconciled synopsis lines').toEqual([]);
   });
 
-  it('the model-facing describe string states the schema range', () => {
-    const { range, description } = liveTopK();
-    const clause = description.split('top_k=')[1];
-    const copy = 'lib/chat/tools.ts searchKnowledgeBase describe string';
+  it.each(bounded.map((bound) => [`${bound.tool}.${bound.arg}`, bound] as const))(
+    'the describe string states the %s schema range',
+    (_arg, bound) => {
+      const { range, description } = liveBounds(bound);
+      const clause = description.split(`${bound.arg}=`)[1];
+      const copy = `lib/chat/tools.ts ${bound.tool} describe string`;
 
-    expect(clause, `${copy} no longer documents top_k`).toBeDefined();
-    expect(clause, `${copy}: range differs from what the zod chain enforces`).toContain(range);
+      expect(clause, `${copy} no longer documents ${bound.arg}`).toBeDefined();
+      expect(clause, `${copy}: range differs from what the zod chain enforces`).toContain(range);
+    },
+  );
+
+  // Workflow step 1 also spells the `tags` default ("the top 50"). The JSON
+  // Schema carries no default (`.optional()`, filled in `execute`), so the
+  // describe string is the source here; `lib/chat/tools.test.ts` holds that
+  // string to the limit `execute` really passes.
+  it('SKILL.md states the same tags default as the listTags describe string', () => {
+    const tags = bounded.find((bound) => bound.tool === 'listTags');
+    expect(tags, 'no `favbase` alias flag maps onto listTags.limit').toBeDefined();
+    const fallback = liveBounds(tags!).description.split(`${tags!.arg}=`)[1]?.match(/默认 (\d+)/)?.[1];
+    expect(fallback, 'the listTags describe string no longer states a default limit').toBeDefined();
+
+    expect(readFileSync(SKILL_MD, 'utf8'), `SKILL.md should say \`favbase tags\` returns the top ${fallback}`).toMatch(
+      new RegExp(`\\btop ${fallback}\\b`),
+    );
   });
 });
 
