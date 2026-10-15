@@ -8,7 +8,11 @@ import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
 
 import { DashboardContent } from '../../layouts/dashboard';
-import { isCollectionPlatform, type CollectionPlatform } from '@/lib/collections/platforms';
+import {
+  COLLECTION_PLATFORMS,
+  isCollectionPlatform,
+  type CollectionPlatform,
+} from '@/lib/collections/platforms';
 import { resumeCollectionProcessing } from '../../hooks/collection-processing-resume';
 import {
   useSettings,
@@ -61,12 +65,15 @@ export function SettingsView() {
   const route = resolveSettingsRoute(tabParam, sectionParam);
   const resumePlatform = parseResumePlatform(searchParams.get('resume'));
 
+  // Every platform, not just `?resume`: the Tagging Budget is shared, and a
+  // save (raising the limit included) means "carry on now" (docs/41 D8). A
+  // platform with nothing waiting settles at 0/0 straight away.
   const saveLlm = useCallback(
     async (draft: LlmDraft) => {
       await s.saveLlm(draft);
-      if (resumePlatform) resumeCollectionProcessing(resumePlatform, 'llm');
+      for (const platform of COLLECTION_PLATFORMS) resumeCollectionProcessing(platform, 'llm');
     },
-    [resumePlatform, s.saveLlm],
+    [s.saveLlm],
   );
   const saveEmbedding = useCallback(
     async (draft: EmbeddingDraft) => {

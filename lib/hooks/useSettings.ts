@@ -29,6 +29,8 @@ export interface LlmDraft {
   customProtocol: 'openai' | 'claude';
   temperature: number;
   maxTokens: number;
+  /** Not a connection field: a budget-only edit saves without a new test. */
+  taggingDailyTokenBudget: number;
   prefMode: 'quality' | 'efficiency';
 }
 
@@ -67,6 +69,7 @@ export function deriveLlmDraft(settings: UserSettings, provider?: LLMProviderId)
     customProtocol: settings.customProtocol,
     temperature: settings.temperature,
     maxTokens: settings.maxTokens,
+    taggingDailyTokenBudget: settings.taggingDailyTokenBudget,
     prefMode: settings.prefMode,
   };
 }
@@ -186,6 +189,7 @@ export function useSettings(): UseSettingsReturn {
         customProtocol: draft.customProtocol,
         temperature: draft.temperature,
         maxTokens: draft.maxTokens,
+        taggingDailyTokenBudget: draft.taggingDailyTokenBudget,
         prefMode: draft.prefMode,
         configSavedAt: { ...cur.configSavedAt, llm: Date.now() },
       })),

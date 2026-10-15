@@ -124,8 +124,11 @@ const en: Record<LocaleKeys, string> = {
   'settings.temperature': 'Temperature',
   'settings.temperatureLabel': 'Temperature',
   'settings.temperatureDesc': 'Controls randomness of generation (0-2, recommended 0.3)',
-  'settings.maxTokens': 'Max Tokens',
-  'settings.maxTokensDesc': 'Maximum tokens per request',
+  'settings.maxTokens': 'Max output tokens per request',
+  'settings.maxTokensDesc': "Caps a single request's output only, not the daily total",
+  'settings.taggingDailyTokenBudget': 'Daily auto-tagging token limit',
+  'settings.taggingDailyTokenBudgetDesc': 'Input plus output, shared by all platforms, resets at local midnight',
+  'settings.taggingBudgetSpentToday': 'Used today: {{spent}} / {{limit}}',
 
   'settings.baseUrl': 'Base URL',
   'settings.fetchModelsFailedDetail': 'Failed to fetch models: {{error}}',

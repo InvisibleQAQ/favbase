@@ -120,6 +120,7 @@ vi.mock('./webdav-sync-card', () => ({
   WebdavSyncCard: () => <div data-testid="webdav-card" />,
 }));
 
+import { COLLECTION_PLATFORMS } from '@/lib/collections/platforms';
 import { SettingsView } from './settings-view';
 
 function LocationProbe() {
@@ -308,40 +309,61 @@ describe('SettingsView routing', () => {
     ]);
   });
 
+  // docs/41 D8: raising the Tagging Budget means "carry on now", and the
+  // budget is shared, so every platform's Tags backlog is dispatched whether
+  // or not the user arrived through a `?resume=` link.
   it.each([
-    ['llm', 'llm'],
-    ['embedding', 'embedding'],
-  ] as const)('resumes the source platform after a successful %s save', async (section, capability) => {
+    '/settings/ai/llm?resume=github',
+    '/settings/ai/llm',
+  ])('resumes Tags on every platform after a successful LLM save at %s', async (entry) => {
+    await act(async () => {
+      renderAt(entry);
+    });
+
+    await act(async () => {
+      await cardProps.llm?.saveLlm({});
+    });
+
+    expect(resumeCollectionProcessing).toHaveBeenCalledTimes(COLLECTION_PLATFORMS.length);
+    for (const platform of COLLECTION_PLATFORMS) {
+      expect(resumeCollectionProcessing).toHaveBeenCalledWith(platform, 'llm');
+    }
+  });
+
+  it('resumes only the source platform after a successful embedding save', async () => {
+    await act(async () => {
+      renderAt('/settings/ai/embedding?resume=github');
+    });
+
+    await act(async () => {
+      await cardProps.embedding?.saveEmbedding({});
+    });
+
+    expect(resumeCollectionProcessing).toHaveBeenCalledOnce();
+    expect(resumeCollectionProcessing).toHaveBeenCalledWith('github', 'embedding');
+  });
+
+  it.each(['llm', 'embedding'] as const)('does not resume after a failed %s save', async (section) => {
+    if (section === 'llm') settingsState.saveLlm.mockRejectedValueOnce(new Error('save failed'));
+    else settingsState.saveEmbedding.mockRejectedValueOnce(new Error('save failed'));
     await act(async () => {
       renderAt(`/settings/ai/${section}?resume=github`);
     });
 
-    await act(async () => {
-      if (section === 'llm') await cardProps.llm?.saveLlm({});
-      else await cardProps.embedding?.saveEmbedding({});
-    });
-
-    expect(resumeCollectionProcessing).toHaveBeenCalledWith('github', capability);
-  });
-
-  it('does not resume after a failed save', async () => {
-    settingsState.saveLlm.mockRejectedValueOnce(new Error('save failed'));
-    await act(async () => {
-      renderAt('/settings/ai/llm?resume=github');
-    });
-
-    await expect(cardProps.llm?.saveLlm({})).rejects.toThrow('save failed');
+    const save =
+      section === 'llm' ? cardProps.llm?.saveLlm({}) : cardProps.embedding?.saveEmbedding({});
+    await expect(save).rejects.toThrow('save failed');
     expect(resumeCollectionProcessing).not.toHaveBeenCalled();
   });
 
-  it('ignores an invalid resume platform after a successful save', async () => {
+  it('ignores an invalid resume platform after a successful embedding save', async () => {
     await act(async () => {
-      renderAt('/settings/ai/llm?resume=unknown');
+      renderAt('/settings/ai/embedding?resume=unknown');
     });
 
-    await cardProps.llm?.saveLlm({});
+    await cardProps.embedding?.saveEmbedding({});
 
-    expect(settingsState.saveLlm).toHaveBeenCalledOnce();
+    expect(settingsState.saveEmbedding).toHaveBeenCalledOnce();
     expect(resumeCollectionProcessing).not.toHaveBeenCalled();
   });
 });

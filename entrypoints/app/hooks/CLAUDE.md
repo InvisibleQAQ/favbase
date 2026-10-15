@@ -6,6 +6,7 @@ app.html 专用的共享 hooks 与页面运行时 job 调度（只跑在 Extensi
 
 - 平台感知层只有四个模块：`library-gate`、`use-daily-auto-sync`、`platform-sync`、`use-credential-gated-library`，可以读 storage / DB、认识平台词汇。其余全部是泛型层：零 storage、不 import 任何具体平台的模块（`collection-job-platform` 是纯判别符映射，两档都可 import）。
 - 依赖单向：平台感知层向泛型层注入（`setJobGate`、`deps` 参数）；泛型层反向 import 即违规，`background-jobs-store` 尤其不得 import `library-gate`。
+- 唯一的 storage 例外：`use-tagging-tokens-spent-today` 只经 `@/lib/storage` 的 typed get / watch 读 Tagging Budget 账本（docs/41），不认识平台、不碰 job store。它不是给泛型层加 storage 读的先例。
 - 两档都不得 import `sections/`：各平台 Sync Adapter 的聚合点在 app 根 `collection-platform-auto-sync.ts`，由 `App.tsx` 注入 `useDailyAutoSync(platforms)`（hook 没有默认 registry）。守卫：`tests/platform-completeness-contract.test.ts`。
 - `useCollectionLibrary` 的 DB 依赖只有 `initDbProxy` 与 `@/lib/database/collection-queries` 的 `getPlatformLastSyncedAt`（按判别符读，不认识具体平台）；凭据与配置解析留在 `sections/<platform>/<platform>-sync-adapter.ts`，hook 的 `syncFn` 只引用 adapter。
 
@@ -85,6 +86,8 @@ app.html 专用的共享 hooks 与页面运行时 job 调度（只跑在 Extensi
 
 - `useCollectionBreadcrumbs` 不要 memo：`t` 是稳定的模块函数，`useMemo` 会把字符串冻在旧 locale。
 - `useCountdown` 在渲染期读 `Date.now()`，不要把 `now` 存进 state：没有倒计时时 state 不 tick，页面挂了很久才出现的 deadline 首帧会按挂载时刻多算。
+- `useTaggingTokensSpentToday` 同理：state 里存账本，读数每次渲染按 `new Date()` 算，昨天的账本才会读成 0。没有午夜定时器（刻意），页面跨过零点后要等下一次渲染才归零。
+- import `use-tagging-tokens-spent-today`（含间接）就会加载 `@/lib/storage` barrel（它和 `@/lib/tagging/budget` 都走 barrel），没有 `chrome` 的测试里会出 unhandled rejection：凡是 import 链上有它的模块，测试都要 mock 这个 hook。
 - `facetQuery` 函数体里的 `as TQuery` 不能删：去掉后 `tsc` 报 TS2345（`TQuery` 可能被实例化成约束的另一个子类型）。
 - `useJobsBadge` 只写不清理：unload 不可靠，关掉 app.html 后由 SW 的 `lib/background/jobs-badge.ts` 擦除；action API 失败只 warn，不能拖垮页面。
 - `useCollectionPipeline` 的 coverage refresh key 里 `syncing` 独立于 Fetch 段的 running：github 在 readme 相位提前 settle Fetch 段，而 sync job 仍在跑。

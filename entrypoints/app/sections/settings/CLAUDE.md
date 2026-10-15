@@ -15,7 +15,9 @@ app.html 设置页：顶部 Tab + 每个 tab 内「二级导航 rail + 右侧单
 - 视图零导航 state，tab / section 只来自 `useParams()`。切 tab 永远落该 tab 第一项，不记忆上次看的 section（用户决定：URL 是唯一事实源）。
 - 非法或缺省路径（`/settings`、裸 tab、未知段）的重定向一律 `<Navigate replace>`：push 会让后退键被弹回来再重定向，困在设置页。手点 tab / rail 才是 push。
 - `?resume=<CollectionPlatform>` 是一次性副作用参数，不是位置：经白名单解析，并随每次内部跳转保留在 query 里。
-- LLM / Embedding 保存成功后据 `resume` 恢复该平台的 Tags / Embed backlog，保存 reject 不派发；ASR 不走这里，由自动转录 watcher 恢复。
+- LLM 保存成功后对 `COLLECTION_PLATFORMS` 每个平台派发 Tags backlog，不看 `?resume`：Tagging Budget 全平台共用，保存（含调高上限）就是「现在继续」，没有积压的平台以 0/0 立即结束（docs/41 D8）。
+- Embedding 保存成功后只据 `?resume` 恢复该平台的 Embed backlog，它是 `?resume` 唯一的消费者。
+- 两者保存 reject 都不派发；ASR 不走这里，由自动转录 watcher 恢复。
 - 旧 `/settings?section=llm|asr|embedding` 深链由 `legacySectionPath` 升级，只认这三个值。
 - 面包屑首项的 `href` 是路由相对的 `'/'`，不是 `'#/'`：`RouterLink` 自己补 `#`，写 `'#/'` 点了回不到首页。
 
@@ -35,7 +37,9 @@ app.html 设置页：顶部 Tab + 每个 tab 内「二级导航 rail + 右侧单
 
 - 无自动保存：编辑只改卡内 draft，点「保存」才写 `settingsStorage`。未保存草稿刷新或切卡即丢，有意为之，不加未保存提示。
 - 保存被测试连接 gating：`canSave = verified || (dirty && 连接字段未变)`。连接字段一改，既有测试结果失效；非连接字段改动无需重测即可保存。
-- 连接字段是各卡的 `*_CONNECTION_KEYS`。ASR 的 model 不算：`/models` 探针验不了模型名。
+- 连接字段是各卡的 `*_CONNECTION_KEYS`。ASR 的 model 不算：`/models` 探针验不了模型名。LLM 的 `taggingDailyTokenBudget` 也不算，只改预算无需重测。
+- LLM 卡两个 token 输入框的文案必须一眼可分：`maxTokens` 是单次请求的输出上限，预算是自动打标签一天的输入加输出总量（`CONTEXT.md` Flagged ambiguities，docs/41 D6）。
+- 预算下方「今日已用 X / 上限」的上限取已保存的 settings，不取 draft：打标签按已保存的值执行，未保存的草稿不算数。
 - 「测试→验证→保存」状态机整个在 `use-config-draft.ts`，卡片只提供 `runTest` / `save` / 可选 `acceptResult`；不要在卡片里重建测试或保存状态。
 - 验证签名在测试发起时（await 之前）捕获：测试期间用户再编辑，旧签名对不上新 draft，不会误判 verified。
 - 外部 settings 变更只在用户未编辑时重同步 draft，不覆盖正在编辑的草稿。

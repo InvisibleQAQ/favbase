@@ -1,6 +1,6 @@
 # 41 Tagging Budget：自动打标签的每日 token 上限（2026-10-15）
 
-> 状态：**设计已定（用户 2026-10-15 逐条确认）；Step 1、Step 2 已落地（2026-10-15，见 §6），Step 3–4 未开工**。执行稿是任务目录 `.trellis/tasks/10-15-tagging-daily-token-budget/prd.md`（`.trellis/` 不进版本库，决策以本文为准）。
+> 状态：**设计已定（用户 2026-10-15 逐条确认）；Step 1–3 已落地（2026-10-15，见 §6），Step 4 未开工**。执行稿是任务目录 `.trellis/tasks/10-15-tagging-daily-token-budget/prd.md`（`.trellis/` 不进版本库，决策以本文为准）。
 >
 > 起因：自动打标签对每条 Collection Item 发一次 `generateObject`（`lib/tagging/tagger.ts`），输入是标题、简介、正文前 2000 字和 50 个已有标签（`lib/tagging/prompt.ts`）。花费与收藏数成正比，而且无人值守：首次同步几千条收藏，就可能一次烧掉用户 LLM key 的大部分余额。仓库里没有任何节流；设置页 LLM 卡上的 `maxTokens` 没有消费者（`lib/summary/CLAUDE.md`），而且它是单次请求的输出上限，本来就管不到这件事。
 >
@@ -65,7 +65,7 @@
 - 文档：`entrypoints/app/hooks/CLAUDE.md`「处理 lane」里 tag batch = `'queue'` 与「Tags 只吃本轮新 ids」两条；`lib/tagging/CLAUDE.md` 对应条目；`platform-sync.ts` 里 `PlatformSyncOutcome.newItemIds` 的注释若提到 tag 一并改；docs/33「Step 2.5 落地记录」的「中断那一次调用里已经切完块的条目没人派发」一条加指针到本文。
 - 验收：零新 id 的同步也派发 tag backlog；连续两次派发 coalesce 成一次；逐条派发的平台照常工作。
 
-### Step 3 — 设置页
+### Step 3 — 设置页（已落地 2026-10-15，见 §6）
 
 - `lib/hooks/useSettings.ts` 的 LLM draft 加字段；`entrypoints/app/sections/settings/llm-config-card.tsx` 高级区加输入框（与 `maxTokens` 并排，正整数），下方显示「今日已用 X / 上限」（watch 账本，跨日显示 0）；文案要让两个 token 输入框一眼区分（单次请求最大输出 vs 自动打标签每日上限，含输入输出）；`lib/i18n/locales/zh-CN.ts` 与 `en.ts` 同改。
 - `entrypoints/app/sections/settings/settings-view.tsx` 的 `saveLlm` 成功后对 `COLLECTION_PLATFORMS` 逐个 `resumeCollectionProcessing(platform, 'llm')`；Embedding 的 `?resume` 不变。
@@ -177,3 +177,40 @@
 - `pnpm compile`：通过。
 - `pnpm test`：根目录 245 个文件 / 2271 个用例，packages 15 个文件 / 263 个用例，全绿。
 - 不涉及 UI，没跑 `pnpm build`。
+
+### Step 3（2026-10-15）
+
+**落地**：按 D6、D8 落地，Step 4 的文件未动。
+
+- `LlmDraft` 加 `taggingDailyTokenBudget`。它不是连接字段，只改预算不用重测即可保存。
+- LLM 卡高级区：`maxTokens` 与预算并排放在第一行，temperature 挪到第二行。`maxTokens` 的 label 改为「单次请求最大输出 Token」，与预算一眼可分。
+- 预算下方显示「今日已用 X / 上限」，数据来自 `entrypoints/app/hooks/use-tagging-tokens-spent-today.ts`（初读加 watch）。上限取已保存的值，不取 draft。
+- `saveLlm` 成功后对 `COLLECTION_PLATFORMS` 逐个派发 Tags backlog，不看 `?resume`。Embedding 不变。
+
+**对 §4 与 §6 Step 1 的补充**（实现时发现）：
+
+1. `taggingTokensSpentToday` 没有进 `@/lib/tagging` 的 barrel（§6 Step 1 原计划用到时再导出）。hook 直接从叶子模块 `@/lib/tagging/budget` import，因为 barrel 会拖进 tagging-service 与数据库。
+2. hook 放在 `entrypoints/app/hooks/`，这是该目录「泛型层零 storage」规则的唯一例外，已登记在该目录的 `CLAUDE.md`。别的位置都不行：`lib/hooks/` 只放与 Content Script 共用的 hook；放进 `sections/settings/` 的话，Step 4 的收藏页就要 import `sections/`，这是禁止的。
+3. 预算输入用 `Number` 加 `Number.isSafeInteger` 解析，不用 `parseInt`：`parseInt` 会把 `1.5` 截成 1 收下。这个口径与 schema 的 `z.number().int().positive()` 相同（zod 4 的 `.int()` 就是安全整数）。
+4. 配置提醒给 LLM 链接附的 `?resume=` 现在是冗余参数，无害，没有改。
+
+**已知瑕疵（未修）**：
+
+- `maxTokens` 的新旧文案都说它限制单次请求的输出，但它没有消费者（`lib/summary/CLAUDE.md`）。改 label 只是为了与预算区分（D6），没有新增承诺。接线不在本任务范围内（§5）。
+- en 下 `formatCompactNumber` 只保留 1 位小数，已用 4.95M 起就显示「5M / 5M」，实际还剩不到 1%。zh 的同类窗口只有 500 token。量级可以忽略，没有改。
+- 读数没有跨午夜定时器：页面挂过零点后，要等下一次渲染才归零。
+
+**留给 Step 4**：`use-tagging-tokens-spent-today` 与 `lib/tagging/budget.ts` 都走 `@/lib/storage` barrel，在没有 `chrome` 的测试里 import 会出 unhandled rejection（已记进 `entrypoints/app/hooks/CLAUDE.md` 的坑）。如果 Step 4 在 `useCollectionPipeline` 这类所有平台 view 共用的 hook 里调用它，所有平台 view 的测试都要补 mock。两条路，开工时定：
+
+- 由 view 调用 hook，把读数往下传；
+- 或者把 `budget.ts` 改成 import storage 的两个叶子模块。
+
+**验证**：
+
+- 新增与改动的用例都先对旧代码跑红：settings-view 的两个 LLM 派发用例（带与不带 `?resume`）失败；llm-config-card 的 8 个用例里 7 个因找不到预算输入框失败，剩下的「读不到账本时不渲染读数行」是反向守卫，旧代码上本来就绿；hook 的测试因模块不存在失败。
+- 变异检查：去掉 hook 里的 `watched` 判断，「watch 先到时初读不覆盖」用例失败。
+- 复核补了三个用例：Embedding 保存 reject 不派发；初读失败后 watch 能恢复读数；StrictMode 双挂载。
+- `pnpm compile`：通过。
+- `pnpm test`：根目录 247 个文件 / 2290 个用例，packages 15 个文件 / 263 个用例，全绿。
+- `pnpm build`：通过，background graph 仍是 14 个模块，新 hook 没有进 SW 的模块图。
+- 没有在浏览器里看过设置页的新布局与读数行。

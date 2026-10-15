@@ -16,7 +16,9 @@ import ToggleButton from '@mui/material/ToggleButton';
 import Divider from '@mui/material/Divider';
 
 import { useTranslation } from '@/lib/i18n/use-translation';
+import { formatCompactNumber } from '@/lib/i18n';
 import { Iconify } from '../../components/iconify';
+import { useTaggingTokensSpentToday } from '../../hooks/use-tagging-tokens-spent-today';
 import { LLM_PROVIDERS, getProviderDef, type LLMProviderId } from '@/lib/providers';
 import type { UserSettings } from '@/lib/storage';
 import { deriveLlmDraft, type LlmDraft } from '@/lib/hooks/useSettings';
@@ -43,6 +45,7 @@ interface LlmConfigCardProps {
 export function LlmConfigCard({ settings, saveLlm }: LlmConfigCardProps) {
   const { t } = useTranslation();
   const { ensure, dialog } = useHostPermission();
+  const spentToday = useTaggingTokensSpentToday();
   const [showKey, setShowKey] = useState(false);
 
   const [isFetchingModels, setIsFetchingModels] = useState(false);
@@ -301,23 +304,7 @@ export function LlmConfigCard({ settings, saveLlm }: LlmConfigCardProps) {
             </Typography>
           </Grid>
 
-          <Grid size={{ xs: 12, md: 6 }}>
-            <TextField
-              fullWidth
-              label={t('settings.temperatureLabel')}
-              type="number"
-              value={draft.temperature}
-              onChange={(e) => {
-                const v = parseFloat(e.target.value);
-                if (!isNaN(v) && v >= 0 && v <= 2) setField('temperature', v);
-              }}
-              helperText={t('settings.temperatureDesc')}
-              slotProps={{
-                htmlInput: { step: 0.1, min: 0, max: 2 },
-              }}
-            />
-          </Grid>
-
+          {/* The two token caps side by side: one request's output vs. a day of automatic tagging. */}
           <Grid size={{ xs: 12, md: 6 }}>
             <TextField
               fullWidth
@@ -331,6 +318,55 @@ export function LlmConfigCard({ settings, saveLlm }: LlmConfigCardProps) {
               helperText={t('settings.maxTokensDesc')}
               slotProps={{
                 htmlInput: { min: 1, step: 100 },
+              }}
+            />
+          </Grid>
+
+          <Grid size={{ xs: 12, md: 6 }}>
+            <TextField
+              fullWidth
+              label={t('settings.taggingDailyTokenBudget')}
+              type="number"
+              value={draft.taggingDailyTokenBudget}
+              onChange={(e) => {
+                // The schema's rule: a positive safe integer. `Number`, not
+                // `parseInt`, so "1.5" is refused instead of truncated to 1.
+                const v = Number(e.target.value);
+                if (Number.isSafeInteger(v) && v > 0) setField('taggingDailyTokenBudget', v);
+              }}
+              helperText={
+                <>
+                  {t('settings.taggingDailyTokenBudgetDesc')}
+                  {spentToday !== null && (
+                    <Box component="span" sx={{ display: 'block' }}>
+                      {/* The saved limit, not the draft: it is the one tagging runs against. */}
+                      {t('settings.taggingBudgetSpentToday', {
+                        spent: formatCompactNumber(spentToday),
+                        limit: formatCompactNumber(settings.taggingDailyTokenBudget),
+                      })}
+                    </Box>
+                  )}
+                </>
+              }
+              slotProps={{
+                htmlInput: { min: 1, step: 100_000 },
+              }}
+            />
+          </Grid>
+
+          <Grid size={{ xs: 12, md: 6 }}>
+            <TextField
+              fullWidth
+              label={t('settings.temperatureLabel')}
+              type="number"
+              value={draft.temperature}
+              onChange={(e) => {
+                const v = parseFloat(e.target.value);
+                if (!isNaN(v) && v >= 0 && v <= 2) setField('temperature', v);
+              }}
+              helperText={t('settings.temperatureDesc')}
+              slotProps={{
+                htmlInput: { step: 0.1, min: 0, max: 2 },
               }}
             />
           </Grid>

@@ -122,8 +122,11 @@ const zhCN = {
   'settings.temperature': '温度 (Temperature)',
   'settings.temperatureLabel': 'Temperature',
   'settings.temperatureDesc': '控制生成内容的随机性（0-2，推荐 0.3）',
-  'settings.maxTokens': '最大 Token 数',
-  'settings.maxTokensDesc': '单次请求最大生成 token 数量',
+  'settings.maxTokens': '单次请求最大输出 Token',
+  'settings.maxTokensDesc': '只限制一次请求的输出长度，不是每日总量',
+  'settings.taggingDailyTokenBudget': '自动打标签每日 Token 上限',
+  'settings.taggingDailyTokenBudgetDesc': '含输入和输出，所有平台共用，每天零点重置',
+  'settings.taggingBudgetSpentToday': '今日已用 {{spent}} / {{limit}}',
 
   'settings.baseUrl': 'Base URL',
   'settings.fetchModelsFailedDetail': '获取模型列表失败：{{error}}',
