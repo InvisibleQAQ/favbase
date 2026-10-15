@@ -21,9 +21,9 @@
  * first-write-wins). Removing a video from a playlist never deletes rows.
  *
  * Auto-tag + auto-embed are NOT fired here (ST3): the app-side Sync Adapter
- * (youtube-sync-adapter.ts) hands `newItemIds` to the Platform Sync funnel,
- * which registers embed/tag as `startJob` background jobs for every platform
- * from one seam, with done/total progress. Descriptions are persisted +
+ * (youtube-sync-adapter.ts) runs this inside the Platform Sync funnel, which
+ * registers the embed/tag backlog drains as `startJob` background jobs for
+ * every platform from one seam, with done/total progress. Descriptions are persisted +
  * chunked → `content_state='chunked'`. ILIKE search works right after sync
  * either way.
  */
@@ -122,8 +122,6 @@ export interface SyncPlaylistsResult {
   entries: number;
   /** Items newly inserted this run (content persisted for these only). */
   inserted: number;
-  /** platformItemIds whose content was persisted this run — auto-tagging input. */
-  newItemIds: string[];
 }
 
 /** Row shape returned to the UI — zero drizzle knowledge required downstream. */
@@ -231,7 +229,7 @@ export async function syncPlaylistsToDb(
   batches: PlaylistBatch[],
 ): Promise<SyncPlaylistsResult> {
   const entryCount = batches.reduce((n, b) => n + b.entries.length, 0);
-  if (batches.length === 0) return { playlists: 0, entries: 0, inserted: 0, newItemIds: [] };
+  if (batches.length === 0) return { playlists: 0, entries: 0, inserted: 0 };
 
   // Dedupe across playlists in batch order: the first-seen playlist supplies
   // addedAt + the display membership (playlistId/playlistTitle in platformMeta).
@@ -301,7 +299,6 @@ export async function syncPlaylistsToDb(
     playlists: batches.length,
     entries: entryCount,
     inserted: result.inserted.length,
-    newItemIds: result.contentPersisted,
   };
 }
 

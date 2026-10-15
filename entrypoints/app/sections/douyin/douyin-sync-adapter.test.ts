@@ -69,7 +69,7 @@ describe('douyin Sync Adapter (shared by manual page + daily auto-sync)', () => 
     mocks.enqueue.mockReset();
     mocks.syncDouyinCollections
       .mockReset()
-      .mockResolvedValue({ fetched: 0, inserted: 0, folders: 0, newItemIds: [] });
+      .mockResolvedValue({ fetched: 0, inserted: 0, folders: 0 });
     mocks.runStreaming
       .mockReset()
       .mockImplementation((transport: unknown, opts: SyncDouyinOptions) => mocks.syncDouyinCollections(transport, opts));
@@ -108,7 +108,7 @@ describe('douyin Sync Adapter (shared by manual page + daily auto-sync)', () => 
     mocks.syncDouyinCollections.mockImplementation(async (_t: unknown, opts: SyncDouyinOptions) => {
       await opts.onBackfill?.({ resumeCursor: '1789000000000000', backfillDone: false });
       await opts.onBackfill?.({ resumeCursor: null, backfillDone: true });
-      return { fetched: 40, inserted: 40, folders: 0, newItemIds: [] };
+      return { fetched: 40, inserted: 40, folders: 0 };
     });
 
     await runDouyinSync(() => undefined, control);
@@ -125,12 +125,7 @@ describe('douyin Sync Adapter (shared by manual page + daily auto-sync)', () => 
       opts.onPagePersisted?.(['7300000000000000001', '7300000000000000002']);
       enqueuedAfterFirstPage = mocks.enqueue.mock.calls.length;
       opts.onPagePersisted?.(['7300000000000000003']);
-      return {
-        fetched: 3,
-        inserted: 3,
-        folders: 0,
-        newItemIds: ['7300000000000000001', '7300000000000000002', '7300000000000000003'],
-      };
+      return { fetched: 3, inserted: 3, folders: 0 };
     });
 
     await runDouyinSync(() => undefined, control);
@@ -143,8 +138,7 @@ describe('douyin Sync Adapter (shared by manual page + daily auto-sync)', () => 
       '7300000000000000002',
       '7300000000000000003',
     ]);
-    // ...so the funnel gets no batch to dispatch a second time.
-    expect(outcome).toEqual({ fetched: 3, inserted: 3, newItemIds: [] });
+    expect(outcome).toEqual({ fetched: 3, inserted: 3 });
   });
 
   it('maps page progress (initial zero seed + per-page updates)', async () => {
@@ -152,7 +146,7 @@ describe('douyin Sync Adapter (shared by manual page + daily auto-sync)', () => 
     mocks.syncDouyinCollections.mockImplementation(async (_t: unknown, opts: SyncDouyinOptions) => {
       opts.onProgress?.(20, 1);
       opts.onProgress?.(39, 2);
-      return { fetched: 39, inserted: 0, folders: 0, newItemIds: [] };
+      return { fetched: 39, inserted: 0, folders: 0 };
     });
 
     await runDouyinSync((p) => progress.push(p), control);

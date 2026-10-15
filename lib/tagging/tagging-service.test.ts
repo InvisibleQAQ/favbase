@@ -22,6 +22,7 @@ import {
   getItemsByTags,
   addTagToPlatformItem,
   removeTagFromPlatformItem,
+  type TaggingDeps,
 } from './tagging-service';
 
 // config.ts (pulled in by tagging-service.ts) value-imports `settingsStorage`,
@@ -78,6 +79,12 @@ function fakeBudget(cap = Number.POSITIVE_INFINITY) {
   return Object.assign(state, { budget });
 }
 
+/** The item claim as an uncontended tab sees it: always granted. */
+const grantedClaim: TaggingDeps['claim'] = (_key, run) => run();
+
+/** A claim another app.html tab is holding. */
+const heldElsewhere: TaggingDeps['claim'] = async () => null;
+
 describe('tagging-service (in-memory PGlite)', () => {
   let pg: PGlite;
   let db: FavbaseDb;
@@ -132,12 +139,15 @@ describe('tagging-service (in-memory PGlite)', () => {
     getConfig?: () => Promise<ResolvedTaggingConfig>;
     generate?: Mock<GenerateFn>;
     budget?: TaggingBudget;
+    claim?: TaggingDeps['claim'];
+    db?: () => FavbaseDb;
   }) {
     return {
       db: () => db,
       getConfig: async () => enabledConfig,
       generate: makeGenerate(),
       budget: fakeBudget().budget,
+      claim: grantedClaim,
       ...overrides,
     };
   }
@@ -496,6 +506,114 @@ describe('tagging-service (in-memory PGlite)', () => {
   });
 
   // -------------------------------------------------------------------------
+  // Cross-tab item claim: each app.html tab runs its own Tags backlog drain
+  // over the same shared DB, so one item must cost one LLM call, not one per tab
+  // -------------------------------------------------------------------------
+
+  describe('item claim', () => {
+    it('skips an item whose claim another tab holds: no LLM call, no budget read, no rows', async () => {
+      await seedItem('BV-HELD');
+      const ledger = fakeBudget();
+      const d = deps({ claim: heldElsewhere, budget: ledger.budget });
+
+      expect(await tagPlatformItem('bilibili', 'BV-HELD', d)).toBe('skipped');
+      expect(d.generate).not.toHaveBeenCalled();
+      expect(ledger.budget.remaining).not.toHaveBeenCalled();
+      expect(ledger.budget.charge).not.toHaveBeenCalled();
+      expect(await db.select().from(schema.itemTags)).toHaveLength(0);
+    });
+
+    it('checks the candidate inside the claim: an item tagged before the claim was granted is skipped', async () => {
+      await seedItem('BV-RACE');
+      const claim: TaggingDeps['claim'] = async (_key, run) => {
+        // The other tab tagged this item and released the claim just before ours was granted.
+        await addTagToPlatformItem('bilibili', 'BV-RACE', 'other-tab', db);
+        return run();
+      };
+      const d = deps({ claim });
+
+      expect(await tagPlatformItem('bilibili', 'BV-RACE', d)).toBe('skipped');
+      expect(d.generate).not.toHaveBeenCalled();
+    });
+
+    it('claims nothing when tagging is not configured', async () => {
+      await seedItem('BV-NOCLAIM');
+      const claimed: string[] = [];
+      const claim: TaggingDeps['claim'] = (key, run) => {
+        claimed.push(key);
+        return run();
+      };
+
+      await tagPlatformItem('bilibili', 'BV-NOCLAIM', deps({ getConfig: async () => disabledConfig, claim }));
+
+      expect(claimed).toEqual([]);
+    });
+
+    describe('default claim (Web Locks)', () => {
+      afterEach(() => {
+        vi.unstubAllGlobals();
+      });
+
+      /** Every seam injected except the claim, so the Web Locks default runs. */
+      function depsWithDefaultClaim() {
+        return {
+          db: () => db,
+          getConfig: async () => enabledConfig,
+          generate: makeGenerate(),
+          budget: fakeBudget().budget,
+        };
+      }
+
+      function stubLocks(grant: boolean) {
+        const request = vi.fn(
+          async (
+            name: string,
+            _options: { ifAvailable?: boolean },
+            callback: (lock: { name: string } | null) => Promise<unknown>,
+          ) => callback(grant ? { name } : null),
+        );
+        vi.stubGlobal('navigator', { locks: { request } });
+        return request;
+      }
+
+      it('asks for a non-blocking Web Lock named after the item and tags under it', async () => {
+        await seedItem('BV-LOCK');
+        const request = stubLocks(true);
+
+        expect(await tagPlatformItem('bilibili', 'BV-LOCK', depsWithDefaultClaim())).toBe('tagged');
+        expect(request).toHaveBeenCalledTimes(1);
+        const [name, options] = request.mock.calls[0];
+        expect(name).toContain('bilibili');
+        expect(name).toContain('BV-LOCK');
+        expect(options).toEqual({ ifAvailable: true });
+      });
+
+      it('skips without an LLM call when the lock is held elsewhere', async () => {
+        await seedItem('BV-LOCKED');
+        stubLocks(false);
+        const d = depsWithDefaultClaim();
+
+        expect(await tagPlatformItem('bilibili', 'BV-LOCKED', d)).toBe('skipped');
+        expect(d.generate).not.toHaveBeenCalled();
+      });
+
+      it('fails rather than tagging unclaimed when navigator.locks is missing', async () => {
+        const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        try {
+          await seedItem('BV-NOLOCKS');
+          vi.stubGlobal('navigator', {});
+          const d = depsWithDefaultClaim();
+
+          expect(await tagPlatformItem('bilibili', 'BV-NOLOCKS', d)).toBe('failed');
+          expect(d.generate).not.toHaveBeenCalled();
+        } finally {
+          errSpy.mockRestore();
+        }
+      });
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // tagNewItems (batch entry for collection syncs — audit docs/16 MEDIUM-2)
   // -------------------------------------------------------------------------
 
@@ -701,6 +819,58 @@ describe('tagging-service (in-memory PGlite)', () => {
 
       expect(generate).toHaveBeenCalledTimes(1);
       expect(secondProgress).toHaveBeenCalledWith({ done: 0, total: 0 });
+    });
+
+    it('resolves with an empty run when the LLM config cannot be read', async () => {
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        await seedItem('x-noconfig', 'x');
+        const generate = makeGenerate();
+        const onProgress = vi.fn();
+        const getConfig = async (): Promise<ResolvedTaggingConfig> => {
+          throw new Error('storage down');
+        };
+
+        await expect(
+          tagPlatformBacklog('x', deps({ getConfig, generate }), onProgress),
+        ).resolves.toBeUndefined();
+
+        expect(generate).not.toHaveBeenCalled();
+        expect(onProgress.mock.calls.map((call) => call[0])).toEqual([{ done: 0, total: 0 }]);
+        expect(errSpy).toHaveBeenCalled();
+      } finally {
+        errSpy.mockRestore();
+      }
+    });
+
+    it('resolves with an empty run when the candidate query rejects', async () => {
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        // The candidate query's builder chain, rejecting when awaited like a failed DB RPC.
+        const query: Record<string, unknown> = {
+          select: () => query,
+          from: () => query,
+          where: () => query,
+          orderBy: () => query,
+          then: (_resolve: unknown, reject: (err: Error) => void) => reject(new Error('db down')),
+        };
+        const generate = makeGenerate();
+        const onProgress = vi.fn();
+
+        await expect(
+          tagPlatformBacklog(
+            'x',
+            deps({ db: () => query as unknown as FavbaseDb, generate }),
+            onProgress,
+          ),
+        ).resolves.toBeUndefined();
+
+        expect(generate).not.toHaveBeenCalled();
+        expect(onProgress.mock.calls.map((call) => call[0])).toEqual([{ done: 0, total: 0 }]);
+        expect(errSpy).toHaveBeenCalled();
+      } finally {
+        errSpy.mockRestore();
+      }
     });
   });
 

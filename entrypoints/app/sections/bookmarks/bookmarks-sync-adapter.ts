@@ -25,14 +25,13 @@ export async function runBookmarksSync(
   control: CooperativeCheckpoint,
 ): Promise<void> {
   onProgress({ done: 0, total: null });
-  // Empty ids: extraction dispatches each item itself. The funnel still drains
-  // the embed and tag backlogs, because bookmarks left 'chunked' by an
-  // interrupted earlier run are not re-picked by extraction (it only sees
-  // 'pending').
+  // Extraction dispatches each item itself. The funnel still drains the embed
+  // and tag backlogs, because bookmarks left 'chunked' by an interrupted
+  // earlier run are not re-picked by extraction (it only sees 'pending').
   await runPlatformSync(ITEM_PLATFORM, control, async () => {
     const result = await syncBookmarks(control);
     onProgress({ done: result.totalBookmarks, total: null });
-    return { fetched: result.totalBookmarks, inserted: result.inserted, newItemIds: [] };
+    return { fetched: result.totalBookmarks, inserted: result.inserted };
   });
   // Chain the content-extraction worker after new bookmarks land as 'pending'
   // — only after a successful sync, and outside the funnel: it fetches web

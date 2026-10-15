@@ -9,6 +9,7 @@ import * as schema from '@/lib/database/schema';
 import { runMigrations } from '@/lib/database/migrations';
 import type { FavbaseDb } from '@/lib/database';
 import { CUT_SHORT_MARKER, withChunkWritesCutShort } from '@/tests/ingest-test-support';
+import { embedBacklogIds } from '@/tests/processing-backlog-support';
 
 // No storage mock: the service's load graph is storage-free by contract
 // (tests/lib-import-smoke.test.ts).
@@ -146,9 +147,9 @@ describe('youtube-sync-service (in-memory PGlite)', () => {
 
     const result = await syncPlaylistsToDb(db, batches);
     expect(result).toMatchObject({ playlists: 2, entries: 3, inserted: 3 });
-    // Auto-tagging input: content-persisted new items only — the empty-
+    // Content-persisted items only enter the embed / tag backlog — the empty-
     // description video is excluded even though its item row was inserted.
-    expect(result.newItemIds).toEqual(['vid-1', 'vid-3']);
+    expect(await embedBacklogIds(db, 'youtube')).toEqual(['vid-1', 'vid-3']);
 
     // sources: one row per playlist, title persisted
     const sourceA = await getSource('pl-a');
@@ -291,8 +292,6 @@ describe('youtube-sync-service (in-memory PGlite)', () => {
       makeBatch(makePlaylist('pl-a', 'List A RENAMED'), [mutated]),
     ]);
     expect(result.inserted).toBe(0); // nothing new → no content re-persist
-    // Nothing newly persisted → auto-tagging gets an empty batch on re-sync.
-    expect(result.newItemIds).toEqual([]);
 
     const item = await getItem('vid-10');
     expect(item.title).toBe('Video vid-10');
@@ -422,17 +421,16 @@ describe('youtube-sync-service (in-memory PGlite)', () => {
     // The next full refetch: all three are known, so production skips their
     // details (`needsDetails`) and they arrive as membership entries only —
     // there is no description in hand for any of them.
-    const result = await syncPlaylistsToDb(db, [
-      makeBatch(makePlaylist('pl-a'), [], videos.map(toEntry)),
-    ]);
+    await syncPlaylistsToDb(db, [makeBatch(makePlaylist('pl-a'), [], videos.map(toEntry))]);
 
     const unreached = await getItem('vid-72');
     expect(unreached.contentState).toBe('chunked');
     expect((await getContent(unreached.id))?.plainText).toBe(fullDescription);
     const chunks = await getChunks(unreached.id);
     expect(chunks.map((c) => c.chunkText).join('')).toContain('The tail of the description.');
-    // Healed videos reach the embed / tag lanes.
-    expect([...result.newItemIds].sort()).toEqual(['vid-71', 'vid-72']);
+    // Healed videos reach the embed / tag backlog beside the one the cut-short
+    // run did land.
+    expect(await embedBacklogIds(db, 'youtube')).toEqual(['vid-70', 'vid-71', 'vid-72']);
   });
 
   // -------------------------------------------------------------------------

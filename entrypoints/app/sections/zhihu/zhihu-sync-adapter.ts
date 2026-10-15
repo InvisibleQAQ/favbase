@@ -39,7 +39,7 @@ export async function runZhihuFavoritesSync(
       },
       control,
     );
-    return { fetched: result.total, inserted: result.inserted, newItemIds: result.newItemIds };
+    return { fetched: result.total, inserted: result.inserted };
   });
 }
 

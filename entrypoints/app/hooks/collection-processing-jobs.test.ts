@@ -7,15 +7,15 @@ vi.mock('@/lib/storage', () => ({
 }));
 
 const tagging = vi.hoisted(() => ({
-  tagNewItems: vi.fn(async () => undefined),
   tagPlatformBacklog: vi.fn(async (_platform: string) => undefined),
   tagPlatformItem: vi.fn(async () => 'tagged' as const),
 }));
 vi.mock('@/lib/tagging', () => tagging);
-vi.mock('@/lib/embedding', () => ({
-  embedPlatformBacklog: vi.fn(async () => undefined),
+const embedding = vi.hoisted(() => ({
+  embedPlatformBacklog: vi.fn(async (_platform: string) => undefined),
   embedPlatformItem: vi.fn(async () => 'embedded' as const),
 }));
+vi.mock('@/lib/embedding', () => embedding);
 
 import { getJob, pauseJob, resumeJob, setJobGate } from './background-jobs-store';
 import {
@@ -82,15 +82,15 @@ describe('collection processing jobs', () => {
 
     try {
       startCollectionProcessingJobs(
-        { jobPlatform: 'p-trace-batch', itemPlatform: 'x', itemIds: ['a'] },
+        { jobPlatform: 'p-trace-batch', itemPlatform: 'x' },
         { embed: () => releaseFirst.promise, tag: async () => {} },
       );
       startCollectionProcessingJobs(
-        { jobPlatform: 'p-trace-batch', itemPlatform: 'x', itemIds: ['b'] },
+        { jobPlatform: 'p-trace-batch', itemPlatform: 'x' },
         { embed: async () => {}, tag: async () => {} },
       );
       startCollectionProcessingJobs(
-        { jobPlatform: 'p-trace-batch', itemPlatform: 'x', itemIds: ['c'] },
+        { jobPlatform: 'p-trace-batch', itemPlatform: 'x' },
         { embed: async () => {}, tag: async () => {} },
       );
       await flush();
@@ -114,21 +114,19 @@ describe('collection processing jobs', () => {
     }
   });
 
-  it('drains the whole Tags backlog at sync end, ignoring the fresh ids', async () => {
+  it('drains the whole Embed and Tags backlogs at every sync end through the default deps', async () => {
+    embedding.embedPlatformBacklog.mockClear();
     tagging.tagPlatformBacklog.mockClear();
-    tagging.tagNewItems.mockClear();
 
-    startCollectionProcessingJobs({
-      jobPlatform: 'p-default-tag',
-      itemPlatform: 'x',
-      itemIds: ['a', 'b'],
-    });
+    startCollectionProcessingJobs({ jobPlatform: 'p-default-backlog', itemPlatform: 'x' });
     await flush();
 
+    expect(embedding.embedPlatformBacklog).toHaveBeenCalledTimes(1);
+    expect(embedding.embedPlatformBacklog.mock.calls[0]?.[0]).toBe('x');
     expect(tagging.tagPlatformBacklog).toHaveBeenCalledTimes(1);
     expect(tagging.tagPlatformBacklog.mock.calls[0]?.[0]).toBe('x');
-    expect(tagging.tagNewItems).not.toHaveBeenCalled();
-    expect(getJob('p-default-tag', 'tag')?.phase).toBe('completed');
+    expect(getJob('p-default-backlog', 'embed')?.phase).toBe('completed');
+    expect(getJob('p-default-backlog', 'tag')?.phase).toBe('completed');
   });
 
   it('coalesces a third colliding tag backlog into the pending drain', async () => {
@@ -143,17 +141,11 @@ describe('collection processing jobs', () => {
     });
 
     startCollectionProcessingJobs(
-      { jobPlatform: 'p-tag-coalesce', itemPlatform: 'x', itemIds: ['a'] },
+      { jobPlatform: 'p-tag-coalesce', itemPlatform: 'x' },
       depsFor('a', releaseFirst.promise),
     );
-    startCollectionProcessingJobs(
-      { jobPlatform: 'p-tag-coalesce', itemPlatform: 'x', itemIds: ['b'] },
-      depsFor('b'),
-    );
-    startCollectionProcessingJobs(
-      { jobPlatform: 'p-tag-coalesce', itemPlatform: 'x', itemIds: ['c'] },
-      depsFor('c'),
-    );
+    startCollectionProcessingJobs({ jobPlatform: 'p-tag-coalesce', itemPlatform: 'x' }, depsFor('b'));
+    startCollectionProcessingJobs({ jobPlatform: 'p-tag-coalesce', itemPlatform: 'x' }, depsFor('c'));
     await flush();
     expect(tagRuns).toEqual(['a']);
 
@@ -170,9 +162,9 @@ describe('collection processing jobs', () => {
     const releaseBacklog = deferred();
     const tagged: string[] = [];
 
-    // Per-item platforms hand the funnel zero ids; the backlog still runs.
+    // Per-item platforms still get the sync-end backlog drain.
     startCollectionProcessingJobs(
-      { jobPlatform: 'p-tag-backlog-stream', itemPlatform: 'bookmarks', itemIds: [] },
+      { jobPlatform: 'p-tag-backlog-stream', itemPlatform: 'bookmarks' },
       { embed: async () => {}, tag: () => releaseBacklog.promise },
     );
     await flush();
@@ -207,17 +199,11 @@ describe('collection processing jobs', () => {
     });
 
     startCollectionProcessingJobs(
-      { jobPlatform: 'p-embed-coalesce', itemPlatform: 'x', itemIds: [] },
+      { jobPlatform: 'p-embed-coalesce', itemPlatform: 'x' },
       depsFor('a', releaseFirst.promise),
     );
-    startCollectionProcessingJobs(
-      { jobPlatform: 'p-embed-coalesce', itemPlatform: 'x', itemIds: [] },
-      depsFor('b'),
-    );
-    startCollectionProcessingJobs(
-      { jobPlatform: 'p-embed-coalesce', itemPlatform: 'x', itemIds: [] },
-      depsFor('c'),
-    );
+    startCollectionProcessingJobs({ jobPlatform: 'p-embed-coalesce', itemPlatform: 'x' }, depsFor('b'));
+    startCollectionProcessingJobs({ jobPlatform: 'p-embed-coalesce', itemPlatform: 'x' }, depsFor('c'));
     await flush();
     expect(embedRuns).toEqual(['a']);
 
@@ -235,7 +221,7 @@ describe('collection processing jobs', () => {
     const embedded: string[] = [];
 
     startCollectionProcessingJobs(
-      { jobPlatform: 'p-batch-stream', itemPlatform: 'x', itemIds: ['seed'] },
+      { jobPlatform: 'p-batch-stream', itemPlatform: 'x' },
       { embed: () => releaseBatch.promise, tag: async () => {} },
     );
     await flush();
@@ -267,9 +253,9 @@ describe('collection processing jobs', () => {
 
     try {
       startCollectionProcessingJobs(
-        { jobPlatform: 'p-trace-failure', itemPlatform: 'x', itemIds: [] },
+        { jobPlatform: 'p-trace-failure', itemPlatform: 'x' },
         {
-          embed: async (_platform, _ids, onProgress) => {
+          embed: async (_platform, onProgress) => {
             onProgress({ done: 1, total: 2 });
             throw new Error('provider stopped');
           },
@@ -383,36 +369,15 @@ describe('collection processing jobs', () => {
     }
   });
 
-  it('dispatches both lanes on zero new items (backlog drains)', async () => {
-    const calls: string[] = [];
-
-    startCollectionProcessingJobs(
-      { jobPlatform: 'p-empty-ids', itemPlatform: 'x', itemIds: [] },
-      {
-        embed: async (_platform, ids) => {
-          calls.push(`embed:${ids.length}`);
-        },
-        tag: async (_platform, ids) => {
-          calls.push(`tag:${ids.length}`);
-        },
-      },
-    );
-    await flush();
-
-    expect(calls.sort()).toEqual(['embed:0', 'tag:0']);
-    expect(getJob('p-empty-ids', 'embed')?.phase).toBe('completed');
-    expect(getJob('p-empty-ids', 'tag')?.phase).toBe('completed');
-  });
-
   it('runs independently controllable Embed and Tags lanes', async () => {
     const reachTagCheckpoint = deferred();
     let tagContinued = false;
 
     startCollectionProcessingJobs(
-      { jobPlatform: 'p-processing', itemPlatform: 'x', itemIds: ['a', 'b'] },
+      { jobPlatform: 'p-processing', itemPlatform: 'x' },
       {
         embed: async () => {},
-        tag: async (_platform, _ids, _onProgress, control) => {
+        tag: async (_platform, _onProgress, control) => {
           await reachTagCheckpoint.promise;
           await control.checkpoint();
           tagContinued = true;
@@ -457,14 +422,8 @@ describe('collection processing jobs', () => {
       },
     };
 
-    startCollectionProcessingJobs(
-      { jobPlatform: 'p-batches', itemPlatform: 'x', itemIds: ['a'] },
-      firstDeps,
-    );
-    startCollectionProcessingJobs(
-      { jobPlatform: 'p-batches', itemPlatform: 'x', itemIds: ['b'] },
-      secondDeps,
-    );
+    startCollectionProcessingJobs({ jobPlatform: 'p-batches', itemPlatform: 'x' }, firstDeps);
+    startCollectionProcessingJobs({ jobPlatform: 'p-batches', itemPlatform: 'x' }, secondDeps);
     await flush();
 
     expect(calls).toEqual(['embed:a', 'tag:a']);
@@ -486,28 +445,23 @@ describe('collection processing jobs', () => {
       const deps = {
         embed: async (
           _platform: string,
-          ids: string[],
           _onProgress: (p: { done: number; total: number }) => void,
           control: { checkpoint: () => Promise<void> },
         ) => {
           await control.checkpoint();
-          calls.push(`embed:${ids.join(',')}`);
+          calls.push('embed');
         },
         tag: async (
           _platform: string,
-          ids: string[],
           _onProgress: (p: { done: number; total: number }) => void,
           control: { checkpoint: () => Promise<void> },
         ) => {
           await control.checkpoint();
-          calls.push(`tag:${ids.join(',')}`);
+          calls.push('tag');
         },
       };
 
-      startCollectionProcessingJobs(
-        { jobPlatform: 'p-gated-batch', itemPlatform: 'x', itemIds: ['a', 'b'] },
-        deps,
-      );
+      startCollectionProcessingJobs({ jobPlatform: 'p-gated-batch', itemPlatform: 'x' }, deps);
       await flush();
       await flush();
 
@@ -522,7 +476,7 @@ describe('collection processing jobs', () => {
       resumeJob('p-gated-batch', 'tag');
       await flush();
 
-      expect(calls.sort()).toEqual(['embed:a,b', 'tag:a,b']);
+      expect(calls.sort()).toEqual(['embed', 'tag']);
       expect(getJob('p-gated-batch', 'embed')?.phase).toBe('completed');
     } finally {
       setJobGate(null);

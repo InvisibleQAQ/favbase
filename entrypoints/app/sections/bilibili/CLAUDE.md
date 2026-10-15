@@ -17,7 +17,7 @@ app.html B站收藏夹页（`/collections/bilibili[/:mediaId]`）的平台 adapt
 
 - 「B站同步成功意味着什么」只在 `bilibili-sync-adapter.ts` 的 `runBilibiliSync` 定义一处；手动 runner 与 daily auto-sync registry 引用同一个函数。
 - `runBilibiliSync` 先 `checkAuth()`（读 cookie、零网络）再进 funnel `runPlatformSync`：未登录在 funnel 之前抛 `BiliAuthError`，不算一次尝试、不写 Platform Sync Record（docs/32 §5.2）。页面的未登录态就靠这个错误类识别。
-- 它回报 `newItemIds: []` 是故意的：逐条转录自己 enqueue embed/tag，funnel 只需派发 backlog lane。
+- 新视频的 embed / tag 由逐条转录自己 enqueue；funnel 收尾的 backlog lane 补逐条派发没处理完的条目（中断、失败、被 Tagging Budget 挡下）。
 - `auto-transcribe-runtime` 在 adapter 里动态 import：转录 runtime 不进 App 启动 chunk。
 - 挂载时拉夹列表（`use-bili-fav-folders.ts` 的 `fetchAndSyncFolders()`）不是 Platform Sync：不经 adapter/funnel、不算尝试。别把它接进 funnel，否则每次打开页面都会占掉当天的自动全量同步名额。mount 也不扫历史 pending。
 - 路由选中的夹经 `preferFolderId` 排到 Fetch producer 首位；优先级只属于 Fetch，Transcript 不维护第二套排序。

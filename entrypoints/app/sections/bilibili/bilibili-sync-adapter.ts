@@ -57,9 +57,10 @@ export async function runBilibiliSync(
   // page's logged-out state still keys off this same error class.
   // fetchAndSyncFolders checks again — it also serves the page's mount path.
   await checkAuth();
-  // Transcription enqueues embed/tag per durable item itself, so newItemIds is
-  // empty: the funnel's batch embed and tag lanes (whole-backlog drains) just
-  // retry items an earlier interrupted run left unembedded or untagged.
+  // Transcription enqueues embed/tag per durable item itself; the funnel's batch
+  // embed and tag lanes (whole-backlog drains) pick up whatever that per-item
+  // dispatch left unembedded or untagged: an interrupted run, a failure, items
+  // a spent Tagging Budget deferred.
   await runPlatformSync(ITEM_PLATFORM, control, async () => {
     const folders = await fetchAndSyncFolders(control);
     onFolders?.(folders);
@@ -72,7 +73,7 @@ export async function runBilibiliSync(
       onProgress,
       control,
     );
-    return { fetched: result.fetchedCount, inserted: result.insertedCount, newItemIds: [] };
+    return { fetched: result.fetchedCount, inserted: result.insertedCount };
   });
 }
 

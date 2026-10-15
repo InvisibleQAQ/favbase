@@ -14,7 +14,7 @@ GitHub Star 收录领域：全量拉取 starred repos，新仓库的 README mark
 - 回填边界（有意决策）：诚实 `no_content` 的仓库永不补拉，健康的已入库仓库也不重拉——insert-only 快照。
 - 唯一例外是幽灵仓库（声明有 content 但零 chunk 行，bug 的产物）：`getReposNeedingReadme` 把它们与新仓库一起补拉 README 自愈。这是「无回填」的 bug 修复例外，不要推广成通用回填。
 - 没有 README 或拉取失败 → `'no_content'`。不要用 `'pending'`：那会把条目喂给 auto-transcribe。
-- 同步不 inline embed：`newItemIds`（含自愈的 id）由 app 侧 `github-sync-adapter.ts` 经 Platform Sync funnel 派发 embed / tag lane。
+- 同步不 inline embed：app 侧 `github-sync-adapter.ts` 经 Platform Sync funnel 派发 embed / tag backlog lane，本次写入 README 的仓库（含自愈的幽灵）都在积压里。
 - `platformMeta` 形状：`{ description, language, stargazersCount, forksCount, topics, pushedAt, starredAt, ownerAvatarUrl }`（两个时间是 ISO 字符串）。
 - 唯一 decoder 是 `narrowGithubMeta`，唯一 Row mapper 是 `toGithubRepoItem`（分页查询与 `sections/github-stars` 的 tagged card 共用），改形状只此一处。
 - `toGithubRepoItem` 的参数是不含 `publishedAt` 的六列，比 `PagedItemRow` 窄；按参数逆变照样能传给 `taggedCard`，不要「补齐」它。

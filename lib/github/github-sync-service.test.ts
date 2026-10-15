@@ -8,6 +8,7 @@ import { and, eq } from 'drizzle-orm';
 import * as schema from '@/lib/database/schema';
 import { runMigrations } from '@/lib/database/migrations';
 import type { FavbaseDb } from '@/lib/database';
+import { embedBacklogIds } from '@/tests/processing-backlog-support';
 
 import {
   syncStarsToDb,
@@ -115,8 +116,8 @@ describe('github-sync-service (in-memory PGlite)', () => {
 
     const result = await syncStarsToDb(db, repos);
     expect(result).toMatchObject({ total: 3, synced: 3, dropped: 0, inserted: 3 });
-    // No readmeById → nothing content-persisted, auto-tag/embed get an empty batch.
-    expect(result.newItemIds).toEqual([]);
+    // No readmeById → nothing content-persisted, the embed / tag backlog stays empty.
+    expect(await embedBacklogIds(db, 'github')).toEqual([]);
 
     // sources: single upserted "stars" row
     const source = await getStarsSource();
@@ -251,13 +252,9 @@ describe('github-sync-service (in-memory PGlite)', () => {
     const readme = '# repo-70\n\nA useful **tool**.';
     const readmeById = new Map([['70', readme]]);
 
-    const result = await syncStarsToDb(
-      db,
-      [makeRepo({ id: 70 }), makeRepo({ id: 71 })],
-      readmeById,
-    );
-    // Only the repo whose content was actually persisted feeds auto-tag/embed.
-    expect(result.newItemIds).toEqual(['70']);
+    await syncStarsToDb(db, [makeRepo({ id: 70 }), makeRepo({ id: 71 })], readmeById);
+    // Only the repo whose content was actually persisted enters the embed / tag backlog.
+    expect(await embedBacklogIds(db, 'github')).toEqual(['70']);
 
     const withReadme = await getItem(70);
     expect(withReadme.contentState).toBe('chunked');
@@ -297,8 +294,7 @@ describe('github-sync-service (in-memory PGlite)', () => {
 
   it('oversized README is head-truncated to MAX_README_CHARS at the persistence boundary', async () => {
     const giant = 'a'.repeat(MAX_README_CHARS + 500);
-    const result = await syncStarsToDb(db, [makeRepo({ id: 80 })], new Map([['80', giant]]));
-    expect(result.newItemIds).toEqual(['80']);
+    await syncStarsToDb(db, [makeRepo({ id: 80 })], new Map([['80', giant]]));
 
     const item = await getItem(80);
     const contents = await db
@@ -309,18 +305,13 @@ describe('github-sync-service (in-memory PGlite)', () => {
     expect(contents[0].plainText).toBe(giant.slice(0, MAX_README_CHARS));
   });
 
-  it('re-sync never writes content for pre-existing repos (insert-only, empty newItemIds)', async () => {
+  it('re-sync never writes content for pre-existing repos (insert-only)', async () => {
     await syncStarsToDb(db, [makeRepo({ id: 90 })]); // first sync: no README
     const item = await getItem(90);
     expect(item.contentState).toBe('no_content');
 
     // A later sync offering a README for the known repo must NOT backfill.
-    const second = await syncStarsToDb(
-      db,
-      [makeRepo({ id: 90 })],
-      new Map([['90', '# late readme']]),
-    );
-    expect(second.newItemIds).toEqual([]);
+    await syncStarsToDb(db, [makeRepo({ id: 90 })], new Map([['90', '# late readme']]));
 
     const after = await getItem(90);
     expect(after.contentState).toBe('no_content'); // insert-only, first-write-wins
@@ -382,13 +373,9 @@ describe('github-sync-service (in-memory PGlite)', () => {
     expect((await getItem(120)).contentState).toBe('chunked'); // the lie
 
     // Next sync hands the refetched README to the ingest heal sweep.
-    const result = await syncStarsToDb(
-      db,
-      [makeRepo({ id: 120 })],
-      new Map([['120', '# refetched readme']]),
-    );
-    // Healed id flows into newItemIds → the embed/tag lanes pick it up.
-    expect(result.newItemIds).toEqual(['120']);
+    await syncStarsToDb(db, [makeRepo({ id: 120 })], new Map([['120', '# refetched readme']]));
+    // Healed → back in the backlog the sync-end embed / tag drains claim.
+    expect(await embedBacklogIds(db, 'github')).toEqual(['120']);
 
     const healed = await getItem(120);
     expect(healed.contentState).toBe('chunked');
@@ -408,8 +395,7 @@ describe('github-sync-service (in-memory PGlite)', () => {
 
     // Re-sync where the README fetch failed again (no readmeById entry) —
     // no text this run, no persisted plainText → honest no_content.
-    const result = await syncStarsToDb(db, [makeRepo({ id: 130 })]);
-    expect(result.newItemIds).toEqual([]);
+    await syncStarsToDb(db, [makeRepo({ id: 130 })]);
     expect((await getItem(130)).contentState).toBe('no_content');
   });
 
@@ -420,8 +406,8 @@ describe('github-sync-service (in-memory PGlite)', () => {
     const item = await getItem(140);
     await db.delete(schema.itemChunks).where(eq(schema.itemChunks.itemId, item.id));
 
-    const result = await syncStarsToDb(db, [makeRepo({ id: 140 })]);
-    expect(result.newItemIds).toEqual(['140']);
+    await syncStarsToDb(db, [makeRepo({ id: 140 })]);
+    expect(await embedBacklogIds(db, 'github')).toEqual(['140']);
 
     const healed = await getItem(140);
     expect(healed.contentState).toBe('chunked');

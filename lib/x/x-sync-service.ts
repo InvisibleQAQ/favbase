@@ -16,9 +16,12 @@
  * Embedding is NOT run inline during sync (D3 — a bulk sync of thousands of
  * bookmarks would hammer the embedding provider). Content is persisted +
  * chunked → `content_state='chunked'`; the app-side Sync Adapter
- * (x-sync-adapter.ts) hands `newItemIds` to the Platform Sync funnel, which
- * dispatches the shared embed/tag lanes after the sync returns. Full-text
- * (ILIKE) search works right after sync.
+ * (x-sync-adapter.ts) runs this inside the Platform Sync funnel, which
+ * dispatches the shared embed/tag backlog lanes after the sync returns. The
+ * dispatch lives app-side, NOT here: the tagging/embedding barrels resolve
+ * LLM/embedding config from chrome.storage, which this lib-layer service must
+ * not reach (tests/lib-import-smoke.test.ts). Full-text (ILIKE) search works
+ * right after sync.
  */
 
 import { and, desc, eq, sql, type SQL } from 'drizzle-orm';
@@ -79,14 +82,6 @@ export interface SyncBookmarksResult {
   synced: number;
   /** Items newly inserted this run (content persisted for these only). */
   inserted: number;
-  /**
-   * platformItemIds whose content was persisted this run — auto-tagging +
-   * auto-embed input. The dispatch lives app-side (the Sync Adapter's Platform
-   * Sync funnel), NOT here: the tagging/embedding barrels resolve
-   * LLM/embedding config from chrome.storage, which this lib-layer service
-   * must not reach (tests/lib-import-smoke.test.ts).
-   */
-  newItemIds: string[];
 }
 
 /** Row shape returned to the UI — zero drizzle knowledge required downstream. */
@@ -216,7 +211,6 @@ export async function syncBookmarksToDb(
     total: bookmarks.length,
     synced: bookmarks.length,
     inserted: result.inserted.length,
-    newItemIds: result.contentPersisted,
   };
 }
 

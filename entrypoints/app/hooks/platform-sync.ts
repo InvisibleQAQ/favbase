@@ -17,12 +17,6 @@ export interface PlatformSyncOutcome {
   fetched: number;
   /** Items newly inserted this run — the page's "N new". */
   inserted: number;
-  /**
-   * platformItemIds this run persisted; [] when the platform processes per item
-   * itself (bilibili / bookmarks / douyin). Both batch lanes drain the whole
-   * platform backlog and ignore it (docs/41 D7), so it has no consumer today.
-   */
-  newItemIds: string[];
 }
 
 export interface PlatformSyncDeps {
@@ -82,7 +76,6 @@ export async function runPlatformSync(
   deps.dispatch({
     jobPlatform: jobPlatformForCollection(platform),
     itemPlatform: platform,
-    itemIds: outcome.newItemIds,
   });
   await deps.recordSuccess(platform, {
     at: deps.now(),

@@ -14,6 +14,7 @@ AI 标签：内容落库后自动打标 + 标签 CRUD。`tags` / `item_tags` 的
 - `TaggedItem.platformMeta` 整列透传给卡片 adapter 不受上一条限制：那是列引用，不是读 key。
 - 资格规则只来自 `lib/collections/collection-processing-policy.ts` 的 Tags pending candidate（eligible + `chunked|embedded` + 无 tag）；Tags 不要求 chunk 行。
 - `tagPlatformItem` never throws：返回 `'tagged' | 'skipped' | 'failed' | 'deferred'`，已有链接幂等跳过，失败保持未打标；`item-tagged` 事件只在成功时发。`generateTags` 自己抛错不吞，失败语义由 service 层决定。
+- `tagPlatformBacklog` 同样 never throws：读配置或查候选失败只记日志、报 `0/0` 后返回，条目仍是 Tags pending candidate，由下一次同步收尾续上。否则一次成功的 Platform Sync 会以 failed 的 Tags run 收尾。`tagNewItems` 的循环本来不抛，不用包。
 - 没有启用开关：`enabled` 派生自 LLM 配置可解析（`lib/storage/resolve.ts` 的 `resolveLlmConfig`，与总结共用）。未配置时静默 no-op，backlog 报 `0/0` 且不查 DB：每次 Platform Sync 收尾都会派发 `tagPlatformBacklog`，没配 LLM 的用户也一样。
 - `tagNewItems` 串行逐条，单条失败不中断；每条之前执行 cooperative checkpoint，不中断进行中的 LLM / DB 工作。队列与暂停状态归 app 层的 Tags lane，lib 不 import store。
 - `onProgress` 从 0 单调推进，`skipped` / `failed` 同样推进；正常到输入总数，遇 `'deferred'` 提前结束，那一条不推进。
@@ -34,7 +35,15 @@ AI 标签：内容落库后自动打标 + 标签 CRUD。`tags` / `item_tags` 的
 - `tagNewItems` 在第一条 `'deferred'` 处正常返回，不是失败：额度全平台共用，后面的条目同样会被挡。被挡下的条目仍是 Tags pending candidate，由下一次同步收尾的 backlog 续上，lib 不记「谁被挡过」。
 - 上限每次检查都重读 settings，别缓存：调高要对进行中的 run 立即生效。
 
+## 跨标签页的条目认领
+
+- 每个 app.html 标签页各有一份 job store、各跑一份 Tags backlog，DB 却是共用的：`tagPlatformItem` 按条目认领（`TaggingDeps.claim`，默认是 `ifAvailable` 的 Web Lock），否则两个标签页会对同一条各调一次 LLM。去重只在这里做，lane 不另做。
+- 认领被别处持有时返回 `'skipped'`：持有方正在打这一条；它失败的话，条目仍是 pending candidate，由下一次同步续上。
+- 从候选检查到写库都在认领之内，别把候选查询挪到认领外面：拿到认领时，另一个标签页可能刚打完这一条，只有认领内的检查看得到。
+- 没有 `navigator.locks` 时返回 `'failed'`，不退回无认领执行，与账本锁同一立场（`lib/storage/CLAUDE.md`）。
+
 ## 坑
 
 - 本目录的测试要 `vi.mock('@/lib/storage')`：`config.ts` 与 `budget.ts` 走 storage barrel，加载时触碰 `chrome.runtime`。
+- Node 与 happy-dom 都没有 `navigator.locks`：测试里调真实的 `tagPlatformItem` / `tagNewItems` / `tagPlatformBacklog` 要注入 `claim`，否则每一条都是 `'failed'`。
 - 预算日界（`budget.ts` 的 `localDayKey`）与每日自动同步（`entrypoints/app/hooks/daily-sync-gate.ts`）是同一个本地自然日的两份实现：lib 不能 import `entrypoints/`。改一边要同改另一边。

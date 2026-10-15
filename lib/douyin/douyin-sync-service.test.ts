@@ -271,7 +271,7 @@ describe('douyin-sync-service (in-memory PGlite)', () => {
     const world: World = { favorites: favs(['1', '2', '3', '4', '5']) };
     const { transport, requests } = fakeDouyin(world);
 
-    const { result, error, states } = await run(transport, FRESH);
+    const { result, error, states, persisted } = await run(transport, FRESH);
 
     expect(error).toBeNull();
     expect(listCursors(requests)).toEqual(['0', String(TOP - 1000), String(TOP - 3000)]);
@@ -284,7 +284,7 @@ describe('douyin-sync-service (in-memory PGlite)', () => {
     expect(result).toMatchObject({ fetched: 5, inserted: 5, folders: 0 });
     // Every fixture is a transcribable video: inserted 'pending', no content
     // landed, nothing to dispatch (docs/37 D1).
-    expect(result?.newItemIds).toEqual([]);
+    expect(persisted).toEqual([]);
   });
 
   it('D-a: items from the all-favorites list carry no Source, and are still queryable', async () => {
@@ -760,14 +760,13 @@ describe('douyin-sync-service (in-memory PGlite)', () => {
       ...world.favorites,
     ];
     const next = fakeDouyin(world);
-    const { result, error, persisted } = await run(next.transport, DONE);
+    const { error, persisted } = await run(next.transport, DONE);
 
     expect(error).toBeNull();
     expect(listCursors(next.requests)).toEqual(['0', String(TOP + 3000)]);
     expect((await getItem('12')).contentState).toBe('chunked');
     expect(await chunkCountOf('12')).toBe(1);
     expect(persisted.flat().sort()).toEqual(['11', '12', '13', '14']);
-    expect([...(result?.newItemIds ?? [])].sort()).toEqual(['11', '12', '13', '14']);
   });
 
   it('D-g: a run that ingests no page still sweeps once: with nothing new and no folder, the cut-short page is healed and dispatched', async () => {
@@ -785,7 +784,6 @@ describe('douyin-sync-service (in-memory PGlite)', () => {
       expect(await chunkCountOf(id)).toBe(1);
     }
     expect(persisted.map((ids) => [...ids].sort())).toEqual([['11', '12']]);
-    expect([...(result?.newItemIds ?? [])].sort()).toEqual(['11', '12']);
   });
 
   // -------------------------------------------------------------------------
@@ -797,7 +795,7 @@ describe('douyin-sync-service (in-memory PGlite)', () => {
     const { transport } = fakeDouyin({ favorites: favs(['1', '2']) });
     const { result, persisted } = await run(transport, FRESH);
 
-    expect(result).toMatchObject({ inserted: 2, newItemIds: [] });
+    expect(result).toMatchObject({ inserted: 2 });
     expect(persisted).toEqual([]);
     for (const id of ['1', '2']) {
       expect((await getItem(id)).contentState).toBe('pending');

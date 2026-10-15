@@ -37,7 +37,7 @@ describe('x Sync Adapter (shared by manual page + daily auto-sync)', () => {
   beforeEach(() => {
     outcome = undefined;
     mocks.getXAuth.mockReset().mockResolvedValue(AUTH);
-    mocks.syncBookmarks.mockReset().mockResolvedValue({ total: 0, newItemIds: [], inserted: 0 });
+    mocks.syncBookmarks.mockReset().mockResolvedValue({ total: 0, inserted: 0 });
     mocks.runPlatformSync
       .mockReset()
       .mockImplementation(async (_platform, _control, sync: () => Promise<PlatformSyncOutcome>) => {
@@ -70,7 +70,7 @@ describe('x Sync Adapter (shared by manual page + daily auto-sync)', () => {
       async (_auth: unknown, onPage: (fetchedCount: number, page: number) => void) => {
         onPage(20, 1);
         onPage(37, 2);
-        return { total: 37, newItemIds: [], inserted: 0 };
+        return { total: 37, inserted: 0 };
       },
     );
 
@@ -83,11 +83,11 @@ describe('x Sync Adapter (shared by manual page + daily auto-sync)', () => {
     ]);
   });
 
-  it('reports tweets read, items inserted ("N new") and the persisted ids to the funnel', async () => {
-    mocks.syncBookmarks.mockResolvedValue({ total: 37, newItemIds: ['t1', 't2'], inserted: 5 });
+  it('reports tweets read and items inserted ("N new") to the funnel', async () => {
+    mocks.syncBookmarks.mockResolvedValue({ total: 37, inserted: 5 });
 
     await runXBookmarksSync(() => undefined, control);
 
-    expect(outcome).toEqual({ fetched: 37, inserted: 5, newItemIds: ['t1', 't2'] });
+    expect(outcome).toEqual({ fetched: 37, inserted: 5 });
   });
 });

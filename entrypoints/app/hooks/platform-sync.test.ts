@@ -10,7 +10,7 @@ vi.mock('@/lib/database', () => ({ initDbProxy: vi.fn() }));
 import { runPlatformSync, type PlatformSyncDeps, type PlatformSyncOutcome } from './platform-sync';
 
 const NOW = new Date(2026, 8, 30, 10, 0, 0);
-const OUTCOME: PlatformSyncOutcome = { fetched: 55, inserted: 2, newItemIds: ['a', 'b'] };
+const OUTCOME: PlatformSyncOutcome = { fetched: 55, inserted: 2 };
 const OPEN: CooperativeCheckpoint = { checkpoint: async () => undefined };
 
 function makeDeps(calls: string[], overrides: Partial<PlatformSyncDeps> = {}): PlatformSyncDeps {
@@ -57,7 +57,6 @@ describe('runPlatformSync (the Platform Sync funnel)', () => {
     expect(deps.dispatch).toHaveBeenCalledWith({
       jobPlatform: 'github-stars',
       itemPlatform: 'github',
-      itemIds: ['a', 'b'],
     });
     expect(deps.recordSuccess).toHaveBeenCalledWith('github', {
       at: NOW,

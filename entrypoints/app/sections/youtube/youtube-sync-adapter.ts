@@ -29,7 +29,7 @@ export async function runYoutubePlaylistsSync(
   onProgress({ fetchedCount: 0, playlistIndex: 0, playlistCount: 0 });
   await runPlatformSync(ITEM_PLATFORM, control, async () => {
     const result = await syncYoutubePlaylists(config, onProgress, control);
-    return { fetched: result.entries, inserted: result.inserted, newItemIds: result.newItemIds };
+    return { fetched: result.entries, inserted: result.inserted };
   });
 }
 

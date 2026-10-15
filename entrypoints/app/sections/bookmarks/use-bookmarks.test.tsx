@@ -123,7 +123,7 @@ describe('useBookmarks sync ownership', () => {
     expect(extractionMocks.startBookmarkExtraction).toHaveBeenCalledTimes(1);
   });
 
-  it('dispatches the backlog embed lane (empty ids) after the metadata sync succeeds', async () => {
+  it('dispatches the embed and tag backlog lanes after the metadata sync succeeds', async () => {
     await act(async () => {
       root.render(<Probe />);
     });
@@ -135,7 +135,6 @@ describe('useBookmarks sync ownership', () => {
     expect(processingMocks.startCollectionProcessingJobs).toHaveBeenCalledWith({
       jobPlatform: 'bookmarks',
       itemPlatform: 'bookmarks',
-      itemIds: [],
     });
   });
 

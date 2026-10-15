@@ -33,7 +33,7 @@ describe('youtube Sync Adapter (shared by manual page + daily auto-sync)', () =>
       .mockResolvedValue({ youtubeApiKey: 'key', youtubeChannel: '@chan' });
     mocks.syncYoutubePlaylists
       .mockReset()
-      .mockResolvedValue({ playlists: 0, entries: 0, inserted: 0, newItemIds: [] });
+      .mockResolvedValue({ playlists: 0, entries: 0, inserted: 0 });
     mocks.runPlatformSync
       .mockReset()
       .mockImplementation(async (_platform, _control, sync: () => Promise<PlatformSyncOutcome>) => {
@@ -61,17 +61,12 @@ describe('youtube Sync Adapter (shared by manual page + daily auto-sync)', () =>
     );
   });
 
-  it('reports membership entries, items inserted and the persisted ids to the funnel', async () => {
-    mocks.syncYoutubePlaylists.mockResolvedValue({
-      playlists: 2,
-      entries: 7,
-      inserted: 2,
-      newItemIds: ['v1', 'v2'],
-    });
+  it('reports membership entries and items inserted to the funnel', async () => {
+    mocks.syncYoutubePlaylists.mockResolvedValue({ playlists: 2, entries: 7, inserted: 2 });
 
     await runYoutubePlaylistsSync(() => undefined, control);
 
-    expect(outcome).toEqual({ fetched: 7, inserted: 2, newItemIds: ['v1', 'v2'] });
+    expect(outcome).toEqual({ fetched: 7, inserted: 2 });
   });
 });
 

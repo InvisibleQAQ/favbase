@@ -28,8 +28,8 @@ app.html 专用的共享 hooks 与页面运行时 job 调度（只跑在 Extensi
 
 - 每个 `(jobPlatform, lane)` 串行、可暂停，不同平台的 lane 可并行；item 在领取前 checkpoint。
 - 碰撞策略只在这里声明、由 store 执行：batch（embed 与 tag）= `'coalesce'`（runner 都是整份 backlog drain，可互换）、streaming drain = `'queue'`。都不丢工作，模块内不得出现 `settled` 重试递归。
-- 同步收尾时 Embed 与 Tags 都恒派发平台整份 backlog（`embedPlatformBacklog` / `tagPlatformBacklog`，零新条目也派发），funnel 传来的 ids 被忽略。不要改回「Tags 只吃本轮新 ids」：中断、失败、被 Tagging Budget 挡下的条目都靠下一次同步收尾续上（docs/41 D7）。
-- 逐条派发与 tag backlog 共用 `(jobPlatform, 'tag')`、串行执行；同一条被两边各领一次不会重复花钱，靠 `tagPlatformItem` 对已打标条目的幂等跳过（不读账本、不调 LLM），lane 不另做去重。
+- 同步收尾时 Embed 与 Tags 都恒派发平台整份 backlog（`embedPlatformBacklog` / `tagPlatformBacklog`，零新条目也派发）。不要改回只处理本轮新入库的条目：中断、失败、被 Tagging Budget 挡下的条目都靠下一次同步收尾续上（docs/41 D7）。
+- 逐条派发与 tag backlog 共用 `(jobPlatform, 'tag')`、串行执行。同一条被领两次也不会重复花钱：同一标签页内靠 `tagPlatformItem` 对已打标条目的幂等跳过，跨标签页靠它的条目认领（`lib/tagging/CLAUDE.md`）。lane 不另做去重。
 - streaming inbox 在 drain 结算后若有迟到 item 必须 re-wake。
 - 终态 `job:completed|failed` trace 在 runner wrapper 内发出：queued run 的 `settled` 解析时 store 可能已启动下一个 run，读快照会串台。
 - provider 保存后的恢复只走 `resumeCollectionProcessing`（`collection-processing-resume.ts`）；Settings 不接触 job key 与 lane。
@@ -39,7 +39,7 @@ app.html 专用的共享 hooks 与页面运行时 job 调度（只跑在 Extensi
 - `runPlatformSync` 是 Platform Sync 被记录、同步后批量 lane 被派发的唯一位置。各平台 `*-sync-adapter.ts` 在函数体**内部**调用它，只包住联系平台的那一段。
 - 顺序是契约：`checkpoint`（born-paused 的 run 恢复前不记尝试）→ 记尝试 → 同步 → 失败：记失败并 rethrow **原**错误 / 成功：先派发 lane 再记成功。
 - 不联网就能判定的凭据缺失在 funnel **之前**处理（空转 return 或抛原错误类），不算尝试、不写记录。funnel 不做策略：不认识静默错误、闸门、冷却。
-- `startCollectionProcessingJobs` 只许出现在定义处与 funnel（守卫：`tests/platform-completeness-contract.test.ts`）。逐条处理的平台（bilibili / bookmarks / douyin）自己经 `enqueueCollectionProcessingItem` 派发、给 funnel 传 `newItemIds: []`——这是合法路径，不是绕过。
+- `startCollectionProcessingJobs` 只许出现在定义处与 funnel（守卫：`tests/platform-completeness-contract.test.ts`）。逐条处理的平台（bilibili / bookmarks / douyin）另经 `enqueueCollectionProcessingItem` 逐条派发——这是合法路径，不是绕过。
 - 「平台同步成功意味着什么」只在 adapter 定义一次：手动 hook 与 daily registry 引用同一个 `run<P>Sync`，不得在触发方复制凭据解析或后处理。触发策略（UI 门、冷却、daily 的 `<p>AutoSyncPolicy`）留在触发方，不进 `run<P>Sync`。
 
 ## Job 命名空间

@@ -107,7 +107,7 @@ describe('bilibili Sync Adapter (shared by manual page + daily auto-sync)', () =
     expect(seen).toEqual([[10, 20]]);
   });
 
-  it('reports videos paged and inserted; no batch tag ids (transcription processes per item)', async () => {
+  it('reports videos paged and inserted to the funnel', async () => {
     mocks.runBiliStreamingSync.mockResolvedValue({
       fetchedCount: 40,
       syncedCount: 38,
@@ -116,7 +116,7 @@ describe('bilibili Sync Adapter (shared by manual page + daily auto-sync)', () =
 
     await runBilibiliSync(noProgress, control);
 
-    expect(outcome).toEqual({ fetched: 40, inserted: 5, newItemIds: [] });
+    expect(outcome).toEqual({ fetched: 40, inserted: 5 });
   });
 
   it('rethrows the logged-out error BEFORE the funnel (no attempt, no request)', async () => {

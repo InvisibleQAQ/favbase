@@ -9,6 +9,7 @@ import * as schema from '@/lib/database/schema';
 import { runMigrations } from '@/lib/database/migrations';
 import type { FavbaseDb } from '@/lib/database';
 import { CUT_SHORT_MARKER, withChunkWritesCutShort } from '@/tests/ingest-test-support';
+import { embedBacklogIds } from '@/tests/processing-backlog-support';
 
 // No storage mock: the service's load graph is storage-free by contract
 // (tests/lib-import-smoke.test.ts). The DB path never embeds inline (D3).
@@ -105,8 +106,8 @@ describe('x-sync-service (in-memory PGlite)', () => {
 
     const result = await syncBookmarksToDb(db, bookmarks);
     expect(result).toMatchObject({ total: 3, synced: 3, inserted: 3 });
-    // Auto-tagging input: every tweet carries text, so all new items qualify.
-    expect(result.newItemIds).toEqual(['1', '2', '3']);
+    // Every tweet carries text, so all new items enter the embed / tag backlog.
+    expect(await embedBacklogIds(db, 'x')).toEqual(['1', '2', '3']);
 
     // sources: single "bookmarks" row
     const source = await getBookmarksSource();
@@ -188,14 +189,19 @@ describe('x-sync-service (in-memory PGlite)', () => {
     // Already known → incremental would skip in production; direct DB path
     // still inserts nothing new.
     expect(result.inserted).toBe(0);
-    // Nothing newly persisted → auto-tagging gets an empty batch on re-sync.
-    expect(result.newItemIds).toEqual([]);
 
     const item = await getItem('10');
     expect(item.title).toBe('tweet 10 full text');
     const meta = item.platformMeta as Record<string, unknown>;
     expect(meta.text).toBe('tweet 10 full text');
     expect(meta.likeCount).toBe(5);
+
+    // Nothing newly persisted: the stored content keeps its first write.
+    const contents = await db
+      .select({ plainText: schema.itemContents.plainText })
+      .from(schema.itemContents)
+      .where(eq(schema.itemContents.itemId, item.id));
+    expect(contents).toEqual([{ plainText: 'tweet 10 full text' }]);
 
     const author = await db
       .select()
@@ -257,7 +263,7 @@ describe('x-sync-service (in-memory PGlite)', () => {
     // Production's next sync stops at the first known id (`syncBookmarks` →
     // `shouldStop`), so its batch carries only what is newer: nothing here
     // can hand '72' its text again.
-    const result = await syncBookmarksToDb(db, [makeTweet({ id: '73' })]);
+    await syncBookmarksToDb(db, [makeTweet({ id: '73' })]);
 
     const unreached = await getItem('72');
     expect(unreached.contentState).toBe('chunked');
@@ -271,8 +277,9 @@ describe('x-sync-service (in-memory PGlite)', () => {
       .from(schema.itemChunks)
       .where(eq(schema.itemChunks.itemId, unreached.id));
     expect(chunks).toEqual([{ chunkText: 'tweet 72, never reached' }]);
-    // Healed tweets reach the embed / tag lanes with the new one.
-    expect([...result.newItemIds].sort()).toEqual(['71', '72', '73']);
+    // Healed tweets reach the embed / tag backlog beside the new one and the
+    // one the cut-short run did land.
+    expect(await embedBacklogIds(db, 'x')).toEqual(['70', '71', '72', '73']);
   });
 
   // -------------------------------------------------------------------------

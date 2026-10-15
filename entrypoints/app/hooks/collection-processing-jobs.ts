@@ -19,22 +19,9 @@ interface ProcessingProgress {
   total: number;
 }
 
-type ProcessingWorker = (
-  platform: CollectionPlatform,
-  itemIds: string[],
-  onProgress: (progress: ProcessingProgress) => void,
-  control: CooperativeCheckpoint,
-) => Promise<void>;
-
-export interface CollectionProcessingJobDeps {
-  embed: ProcessingWorker;
-  tag: ProcessingWorker;
-}
-
 export interface StartCollectionProcessingJobsInput {
   jobPlatform: string;
   itemPlatform: CollectionPlatform;
-  itemIds: string[];
 }
 
 type ProcessingBacklogWorker = (
@@ -93,18 +80,9 @@ const itemDeps: CollectionProcessingItemDeps = {
 
 const streamLanes = new Map<string, ProcessingLaneState>();
 
-const defaultDeps: CollectionProcessingJobDeps = {
-  // Each lane's input is the platform's WHOLE backlog ('chunked' for embed, the
-  // Tags pending candidates for tag) — the ids a sync just persisted are part
-  // of it by definition, and an earlier interrupted run's leftovers get drained
-  // on the next dispatch instead of waiting for a settings-page save. So do the
-  // items a spent Tagging Budget deferred (docs/41 D7). itemIds are ignored here.
-  embed: (platform, _itemIds, onProgress, control) =>
-    embedPlatformBacklog(platform, undefined, onProgress, control),
-  tag: (platform, _itemIds, onProgress, control) =>
-    tagPlatformBacklog(platform, undefined, onProgress, control),
-};
-
+// Each lane's input is the platform's WHOLE backlog ('chunked' for embed, the
+// Tags pending candidates for tag), never a list of ids — so the post-sync
+// dispatch and the provider-save resume below share these deps.
 const defaultBacklogDeps: CollectionProcessingBacklogDeps = {
   embed: (platform, onProgress, control) =>
     embedPlatformBacklog(platform, undefined, onProgress, control),
@@ -140,11 +118,17 @@ export function startCollectionProcessingBacklog(
   );
 }
 
+/**
+ * The Platform Sync funnel's post-sync dispatch: both lanes drain the platform
+ * backlog. Whatever this sync persisted is part of it by definition, and an
+ * earlier interrupted run's leftovers — and the items a spent Tagging Budget
+ * deferred (docs/41 D7) — get drained at the next sync end instead of waiting
+ * for a settings-page save.
+ */
 export function startCollectionProcessingJobs(
-  { jobPlatform, itemPlatform, itemIds }: StartCollectionProcessingJobsInput,
-  deps: CollectionProcessingJobDeps = defaultDeps,
+  { jobPlatform, itemPlatform }: StartCollectionProcessingJobsInput,
+  deps: CollectionProcessingBacklogDeps = defaultBacklogDeps,
 ): void {
-  const ids = [...itemIds];
   const embedDiagnostic: EmbeddingTraceDetails = {
     traceId: createEmbeddingTraceId('batch'),
     platform: itemPlatform,
@@ -159,11 +143,11 @@ export function startCollectionProcessingJobs(
   startBatchLane(
     jobPlatform,
     'embed',
-    (setProgress, control) => deps.embed(itemPlatform, ids, setProgress, control),
+    (setProgress, control) => deps.embed(itemPlatform, setProgress, control),
     embedDiagnostic,
   );
   startBatchLane(jobPlatform, 'tag', (setProgress, control) =>
-    deps.tag(itemPlatform, ids, setProgress, control),
+    deps.tag(itemPlatform, setProgress, control),
   );
 }
 

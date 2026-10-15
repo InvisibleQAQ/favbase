@@ -54,6 +54,11 @@ export interface TaggingDeps {
   ) => Promise<GeneratedTags>;
   /** The Tagging Budget (docs/41): checked before each LLM call, charged after it. */
   budget: TaggingBudget;
+  /**
+   * Cross-tab per-item claim: runs `run` while holding the claim on `key`, or
+   * resolves `null` without running it when another holder has the claim.
+   */
+  claim: <T>(key: string, run: () => Promise<T>) => Promise<T | null>;
 }
 
 const defaultDeps: TaggingDeps = {
@@ -61,6 +66,7 @@ const defaultDeps: TaggingDeps = {
   getConfig: getTaggingConfig,
   generate: generateTags,
   budget: storageTaggingBudget,
+  claim: claimItemLock,
 };
 
 // ---------------------------------------------------------------------------
@@ -73,11 +79,18 @@ const defaultDeps: TaggingDeps = {
  * end of the transcription pipeline.
  *
  * 'skipped': tagging not configured (no LLM apiKey), item missing, item
- * already tagged (idempotent — re-transcription won't re-tag), or the LLM
- * returned no tags. 'failed': LLM/DB error (logged, item stays untagged; no
- * retry, no keyword fallback by design). 'deferred': today's Tagging Budget
- * is spent or its ledger is unreadable — no LLM call, no DB write; the item
- * stays pending for a later run. Not a failure.
+ * already tagged (idempotent — re-transcription won't re-tag), the LLM
+ * returned no tags, or another app.html tab holds this item's claim (that tab
+ * is tagging it; if it fails, the item stays a pending candidate for the next
+ * sync). 'failed': LLM/DB error (logged, item stays untagged; no retry, no
+ * keyword fallback by design). 'deferred': today's Tagging Budget is spent or
+ * its ledger is unreadable — no LLM call, no DB write; the item stays pending
+ * for a later run. Not a failure.
+ *
+ * Everything from the candidate check through the DB write runs inside the
+ * item's claim: each tab drains its own Tags backlog over the one shared DB,
+ * and a tab granted the claim after another tab finished must see the item
+ * already tagged.
  *
  * This is the only place the budget is checked and charged (docs/41 §3): the
  * check runs only for an item that is about to cost a call, and every call
@@ -93,58 +106,72 @@ export async function tagPlatformItem(
     const config = await d.getConfig();
     if (!config.enabled) return 'skipped';
 
-    const db = d.db();
-    const policy = createCollectionProcessingPolicy(db, platform);
-    const itemRows = await db
-      .select({
-        id: items.id,
-        title: items.title,
-        authorName: items.authorName,
-        platformMeta: items.platformMeta,
-      })
-      .from(items)
-      .where(and(eq(items.platformItemId, platformItemId), policy.tagging.pendingCandidate))
-      .limit(1);
-    if (itemRows.length === 0) return 'skipped';
-    const item = itemRows[0];
-    // Past the candidate check this item will cost a call: check before reading
-    // anything else, so a spent day does not run the library-wide tag query per item.
-    if (!(await hasBudgetLeft(d.budget, platform, platformItemId))) return 'deferred';
-
-    const contentRows = await db
-      .select({ plainText: itemContents.plainText })
-      .from(itemContents)
-      .where(eq(itemContents.itemId, item.id))
-      .limit(1);
-
-    // Existing tags stay library-wide (no platform filter): the LLM should
-    // reuse tag names across platforms, not fork per-platform duplicates.
-    const existing = await getAllUsedTags(undefined, db);
-    // Which meta key (if any) holds a description the Content does not already
-    // carry is a platform fact — the descriptor names it, this module never
-    // does (docs/32 Step 2).
-    const field = isCollectionPlatform(platform)
-      ? PLATFORM_DESCRIPTORS[platform].descriptionField
-      : null;
-    const description = field
-      ? (item.platformMeta as Record<string, unknown>)[field]
-      : undefined;
-    const input: TaggingInput = {
-      title: item.title,
-      author: item.authorName,
-      description: typeof description === 'string' && description ? description : undefined,
-      content: contentRows[0]?.plainText,
-    };
-    const names = await generateAndCharge(d, config, input, existing.map((tag) => tag.name));
-    if (names.length === 0) return 'skipped';
-
-    await linkTagsToItem(db, item.id, names);
-    emitDomainEvent('item-tagged', { platform, platformItemId });
-    return 'tagged';
+    const result = await d.claim(`${platform}:${platformItemId}`, () =>
+      tagClaimedItem(d, config, platform, platformItemId),
+    );
+    // null: another tab holds the claim and is tagging this item right now.
+    return result ?? 'skipped';
   } catch (err) {
     console.error('[tagging] Tagging failed for %s:%s:', platform, platformItemId, err);
     return 'failed';
   }
+}
+
+/** The body of tagPlatformItem that runs under the item's claim. May throw; the caller catches. */
+async function tagClaimedItem(
+  d: TaggingDeps,
+  config: ResolvedTaggingConfig,
+  platform: string,
+  platformItemId: string,
+): Promise<TagItemResult> {
+  const db = d.db();
+  const policy = createCollectionProcessingPolicy(db, platform);
+  const itemRows = await db
+    .select({
+      id: items.id,
+      title: items.title,
+      authorName: items.authorName,
+      platformMeta: items.platformMeta,
+    })
+    .from(items)
+    .where(and(eq(items.platformItemId, platformItemId), policy.tagging.pendingCandidate))
+    .limit(1);
+  if (itemRows.length === 0) return 'skipped';
+  const item = itemRows[0];
+  // Past the candidate check this item will cost a call: check before reading
+  // anything else, so a spent day does not run the library-wide tag query per item.
+  if (!(await hasBudgetLeft(d.budget, platform, platformItemId))) return 'deferred';
+
+  const contentRows = await db
+    .select({ plainText: itemContents.plainText })
+    .from(itemContents)
+    .where(eq(itemContents.itemId, item.id))
+    .limit(1);
+
+  // Existing tags stay library-wide (no platform filter): the LLM should
+  // reuse tag names across platforms, not fork per-platform duplicates.
+  const existing = await getAllUsedTags(undefined, db);
+  // Which meta key (if any) holds a description the Content does not already
+  // carry is a platform fact — the descriptor names it, this module never
+  // does (docs/32 Step 2).
+  const field = isCollectionPlatform(platform)
+    ? PLATFORM_DESCRIPTORS[platform].descriptionField
+    : null;
+  const description = field
+    ? (item.platformMeta as Record<string, unknown>)[field]
+    : undefined;
+  const input: TaggingInput = {
+    title: item.title,
+    author: item.authorName,
+    description: typeof description === 'string' && description ? description : undefined,
+    content: contentRows[0]?.plainText,
+  };
+  const names = await generateAndCharge(d, config, input, existing.map((tag) => tag.name));
+  if (names.length === 0) return 'skipped';
+
+  await linkTagsToItem(db, item.id, names);
+  emitDomainEvent('item-tagged', { platform, platformItemId });
+  return 'tagged';
 }
 
 /**
@@ -184,7 +211,15 @@ export async function tagNewItems(
   }
 }
 
-/** Retry the unfinished AI-tagging work for one Collection platform. */
+/**
+ * Retry the unfinished AI-tagging work for one Collection platform: every
+ * pending Tags candidate, oldest first, through `tagNewItems`.
+ *
+ * Never throws, like tagPlatformItem: a Platform Sync that succeeded must not
+ * end with a failed Tags run. When tagging is not configured, or the config or
+ * candidate read fails (logged), it reports `{ done: 0, total: 0 }` and
+ * returns; the items stay pending candidates for the next sync.
+ */
 export async function tagPlatformBacklog(
   platform: CollectionPlatform,
   deps?: Partial<TaggingDeps>,
@@ -192,24 +227,16 @@ export async function tagPlatformBacklog(
   control?: CooperativeCheckpoint,
 ): Promise<void> {
   const d = { ...defaultDeps, ...deps };
-  const config = await d.getConfig();
-  if (!config.enabled) {
+  const backlog = await readTagBacklog(d, platform);
+  if (!backlog) {
     onProgress?.({ done: 0, total: 0 });
     return;
   }
 
-  const db = d.db();
-  const policy = createCollectionProcessingPolicy(db, platform);
-  const candidates = await db
-    .select({ platformItemId: items.platformItemId })
-    .from(items)
-    .where(policy.tagging.pendingCandidate)
-    .orderBy(asc(items.createdAt), asc(items.id));
-
   await tagNewItems(
     platform,
-    candidates.map((item) => item.platformItemId),
-    { ...d, getConfig: async () => config },
+    backlog.platformItemIds,
+    { ...d, getConfig: async () => backlog.config },
     onProgress,
     control,
   );
@@ -340,6 +367,45 @@ export async function removeTagFromPlatformItem(
 // ---------------------------------------------------------------------------
 // Internal
 // ---------------------------------------------------------------------------
+
+/** Every page of this extension's origin shares Web Locks: exactly the cross-tab scope. */
+const ITEM_CLAIM_LOCK_PREFIX = 'favbase:tagging-item:';
+
+/**
+ * The default item claim: a non-blocking Web Lock per item. Without
+ * `navigator.locks` this rejects (tagPlatformItem reports 'failed'): it never
+ * tags unclaimed.
+ */
+async function claimItemLock<T>(key: string, run: () => Promise<T>): Promise<T | null> {
+  return navigator.locks.request(
+    `${ITEM_CLAIM_LOCK_PREFIX}${key}`,
+    { ifAvailable: true },
+    async (lock) => (lock ? run() : null),
+  );
+}
+
+/** The backlog to drain, or null when there is none to run: tagging unconfigured, or the read failed (logged). */
+async function readTagBacklog(
+  d: TaggingDeps,
+  platform: CollectionPlatform,
+): Promise<{ config: ResolvedTaggingConfig; platformItemIds: string[] } | null> {
+  try {
+    const config = await d.getConfig();
+    if (!config.enabled) return null;
+
+    const db = d.db();
+    const policy = createCollectionProcessingPolicy(db, platform);
+    const candidates = await db
+      .select({ platformItemId: items.platformItemId })
+      .from(items)
+      .where(policy.tagging.pendingCandidate)
+      .orderBy(asc(items.createdAt), asc(items.id));
+    return { config, platformItemIds: candidates.map((item) => item.platformItemId) };
+  } catch (err) {
+    console.error('[tagging] Failed to read the Tags backlog for %s:', platform, err);
+    return null;
+  }
+}
 
 /** Budget check before a call. An unreadable ledger counts as spent: no ledger, no spending. */
 async function hasBudgetLeft(

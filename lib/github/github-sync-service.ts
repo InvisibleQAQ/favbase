@@ -19,9 +19,9 @@
  * chunks via the shared ingest content channel → `content_state='chunked'`
  * only AFTER chunk rows land (never 'pending' — that feeds auto-transcribe).
  * Embedding is NOT run inline (D3) — the app-side Sync Adapter
- * (github-sync-adapter.ts) hands `SyncStarsResult.newItemIds` to the Platform
- * Sync funnel, which dispatches the shared embed/tag lanes after the sync
- * returns.
+ * (github-sync-adapter.ts) runs this inside the Platform Sync funnel, which
+ * dispatches the shared embed/tag backlog lanes after the sync returns; the
+ * READMEs persisted here (healed ghosts included) are part of that backlog.
  */
 
 import { and, desc, eq, sql, type SQL } from 'drizzle-orm';
@@ -92,8 +92,6 @@ export interface SyncStarsResult {
   droppedRepoIds: string[];
   /** Repos newly inserted this run (the Platform Sync Record's "N new"). */
   inserted: number;
-  /** platformItemIds whose README content was persisted this run — auto-tag/embed input. */
-  newItemIds: string[];
 }
 
 /** Progress callback for the serial README fetch phase (new repos only). */
@@ -297,7 +295,6 @@ export async function syncStarsToDb(
     dropped: droppedRepoIds.length,
     droppedRepoIds,
     inserted: result.inserted.length,
-    newItemIds: result.contentPersisted,
   };
 }
 

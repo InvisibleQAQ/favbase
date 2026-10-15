@@ -8,6 +8,7 @@ import { and, eq } from 'drizzle-orm';
 import * as schema from '@/lib/database/schema';
 import { runMigrations } from '@/lib/database/migrations';
 import type { FavbaseDb } from '@/lib/database';
+import { embedBacklogIds } from '@/tests/processing-backlog-support';
 
 // No storage mock: the service's load graph is storage-free by contract
 // (tests/lib-import-smoke.test.ts). The DB path never embeds inline (D3).
@@ -130,9 +131,9 @@ describe('zhihu-sync-service (in-memory PGlite)', () => {
 
     const result = await syncFavoritesToDb(db, collections, favorites);
     expect(result).toMatchObject({ total: 3, synced: 3, inserted: 3, collections: 2 });
-    // Auto-tagging input: content-persisted new items only — zvideo (no body)
-    // is excluded even though its item row was inserted.
-    expect(result.newItemIds).toEqual(['answer:1', 'article:3']);
+    // Content-persisted items only enter the embed / tag backlog — zvideo (no
+    // body) is excluded even though its item row was inserted.
+    expect(await embedBacklogIds(db, 'zhihu')).toEqual(['answer:1', 'article:3']);
 
     // sources: one row per collection, lastFetchedAt stamped
     const c1 = await getSource('c1');
@@ -198,7 +199,7 @@ describe('zhihu-sync-service (in-memory PGlite)', () => {
     expect(await getSource('c1')).toBeUndefined();
 
     const result = await syncFavoritesToDb(db, [makeCollection('c1')], []);
-    expect(result).toMatchObject({ total: 0, synced: 0, inserted: 0, collections: 1, newItemIds: [] });
+    expect(result).toMatchObject({ total: 0, synced: 0, inserted: 0, collections: 1 });
 
     // "Last synced" is the Platform Sync Record's job (docs/32 Step 1); the
     // ingest invariant kept here is that an empty collection is still a Source.
@@ -237,8 +238,6 @@ describe('zhihu-sync-service (in-memory PGlite)', () => {
       [mutated],
     );
     expect(result.inserted).toBe(0);
-    // Nothing newly persisted → auto-tagging gets an empty batch on re-sync.
-    expect(result.newItemIds).toEqual([]);
 
     const item = await getItem('answer:10');
     expect(item.title).toBe('answer 10');
@@ -267,9 +266,9 @@ describe('zhihu-sync-service (in-memory PGlite)', () => {
   it('re-sync appends only new items without duplicating rows / links / content', async () => {
     const collections = [makeCollection('c1')];
     await syncFavoritesToDb(db, collections, [makeFavorite({ id: '20' })]);
-    const second = await syncFavoritesToDb(db, collections, [makeFavorite({ id: '20' }), makeFavorite({ id: '21' })]);
-    // Mixed known + new batch: only the genuinely new item feeds auto-tagging.
-    expect(second.newItemIds).toEqual(['answer:21']);
+    await syncFavoritesToDb(db, collections, [makeFavorite({ id: '20' }), makeFavorite({ id: '21' })]);
+    // Mixed known + new batch: the new item joins the embed / tag backlog.
+    expect(await embedBacklogIds(db, 'zhihu')).toEqual(['answer:20', 'answer:21']);
 
     const itemRows = await db.select().from(schema.items).where(eq(schema.items.platform, 'zhihu'));
     expect(itemRows).toHaveLength(2);

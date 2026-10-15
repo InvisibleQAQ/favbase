@@ -27,7 +27,7 @@ describe('github Sync Adapter (shared by manual page + daily auto-sync)', () => 
   beforeEach(() => {
     outcome = undefined;
     mocks.getSettings.mockReset().mockResolvedValue({ githubToken: 'tok' });
-    mocks.syncStars.mockReset().mockResolvedValue({ total: 0, inserted: 0, newItemIds: [] });
+    mocks.syncStars.mockReset().mockResolvedValue({ total: 0, inserted: 0 });
     mocks.runPlatformSync
       .mockReset()
       .mockImplementation(async (_platform, _control, sync: () => Promise<PlatformSyncOutcome>) => {
@@ -67,7 +67,7 @@ describe('github Sync Adapter (shared by manual page + daily auto-sync)', () => 
         onStars(1, 2, 30);
         onStars(2, 2, 55);
         onReadme(1, 3);
-        return { total: 55, inserted: 0, newItemIds: [] };
+        return { total: 55, inserted: 0 };
       },
     );
 
@@ -81,12 +81,12 @@ describe('github Sync Adapter (shared by manual page + daily auto-sync)', () => 
     ]);
   });
 
-  it('reports stars read, repos inserted and the persisted ids to the funnel', async () => {
-    mocks.syncStars.mockResolvedValue({ total: 55, inserted: 2, newItemIds: ['a', 'b'] });
+  it('reports stars read and repos inserted to the funnel', async () => {
+    mocks.syncStars.mockResolvedValue({ total: 55, inserted: 2 });
 
     await runGithubStarsSync(() => undefined, control);
 
-    expect(outcome).toEqual({ fetched: 55, inserted: 2, newItemIds: ['a', 'b'] });
+    expect(outcome).toEqual({ fetched: 55, inserted: 2 });
   });
 });
 

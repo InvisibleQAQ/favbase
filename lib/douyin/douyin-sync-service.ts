@@ -23,9 +23,9 @@
  * per page) and the caller hears each page's content-persisted ids
  * (`onPagePersisted`, D-b): a first full sync is paced at roughly 2 minutes
  * per 100 favorites (docs/33 Step 3), and a run that fails half way must
- * neither lose what it fetched nor leave items that are chunked but never
- * dispatched to the embed / tag lanes. Where the first
- * full walk stopped is a two-field breakpoint the caller stores (design B,
+ * neither lose what it fetched nor leave items that are chunked but
+ * unprocessed until some later sync succeeds. Where the first full walk
+ * stopped is a two-field breakpoint the caller stores (design B,
  * `lib/douyin/CLAUDE.md`).
  *
  * The insert-only rule (lib/ingest/CLAUDE.md) applies: items / authors /
@@ -182,8 +182,6 @@ export interface SyncDouyinResult {
   inserted: number;
   /** Public folders found. */
   folders: number;
-  /** Every platformItemId whose content landed this run (the union of the `onPagePersisted` calls). */
-  newItemIds: string[];
 }
 
 /** Row shape returned to the UI — zero drizzle knowledge required downstream. */
@@ -282,7 +280,6 @@ export async function syncDouyinCollectionsToDb(
   let fetched = 0;
   let pages = 0;
   let inserted = 0;
-  const newItemIds: string[] = [];
 
   const countPage = (page: DouyinAwemePage) => {
     fetched += page.awemes.length;
@@ -293,10 +290,7 @@ export async function syncDouyinCollectionsToDb(
   // The one exit for content that landed, whichever ingest call wrote it.
   const report = (result: IngestResult) => {
     inserted += result.inserted.length;
-    if (result.contentPersisted.length > 0) {
-      newItemIds.push(...result.contentPersisted);
-      opts.onPagePersisted?.(result.contentPersisted);
-    }
+    if (result.contentPersisted.length > 0) opts.onPagePersisted?.(result.contentPersisted);
   };
 
   const persist = async (awemes: DouyinRawAweme[], origin: PageOrigin) => {
@@ -389,7 +383,7 @@ export async function syncDouyinCollectionsToDb(
     });
   }
 
-  return { fetched, inserted, folders: folders.length, newItemIds };
+  return { fetched, inserted, folders: folders.length };
 }
 
 /** The older (smaller) of two µs cursors; the walk already guarantees it, this keeps the write monotone. */

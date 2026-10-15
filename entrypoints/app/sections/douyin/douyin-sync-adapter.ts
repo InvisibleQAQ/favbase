@@ -28,10 +28,12 @@ export interface DouyinSyncProgress {
  * Inside the funnel: read the backfill breakpoint, run the paced domain sync
  * through the tab transport, write the breakpoint back on every change. Pages
  * are persisted as they arrive, so their items are dispatched to the embed /
- * tag lanes per page, here (docs/33 D-b) — a run that fails at page 80 must
- * not leave 79 pages of items chunked and never processed, and the funnel
- * only dispatches on success. The funnel therefore gets `newItemIds: []`;
- * its success-time embed and tag backlog passes still run.
+ * tag lanes per page, here (docs/33 D-b) — the funnel only dispatches on
+ * success, and a run that fails at page 80 must not leave 79 pages of items
+ * chunked until the next successful sync. The funnel's success-time embed and
+ * tag backlog passes still run, and pick up whatever the per-page dispatch
+ * left unembedded or untagged (an interrupted run, a failure, items a spent
+ * Tagging Budget deferred).
  *
  * Videos take the other lane (docs/37 Step 3): the sync runs through
  * `runDouyinStreamingSync` (`auto-transcribe-runtime.ts`), which feeds each
@@ -66,7 +68,7 @@ export async function runDouyinSync(
       onProgress: (fetchedCount, page) => onProgress({ fetchedCount, page }),
       control,
     });
-    return { fetched: result.fetched, inserted: result.inserted, newItemIds: [] };
+    return { fetched: result.fetched, inserted: result.inserted };
   });
 }
 

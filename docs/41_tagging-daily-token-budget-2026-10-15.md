@@ -141,18 +141,39 @@
 **对 §4 的补充**（实现时发现）：
 
 1. `tagPlatformBacklog` 只收 `CollectionPlatform`，所以 `ProcessingWorker.platform` 与 `StartCollectionProcessingJobsInput.itemPlatform` 从 `string` 收窄成 `CollectionPlatform`。唯一的非测试调用方 `platform-sync.ts` 本来就传 `CollectionPlatform`。
-2. 同步收尾的 tag run 现在可能以 failed 收尾：`tagNewItems` 从不抛错，`tagPlatformBacklog` 读配置或查候选失败会抛。这与 embed backlog、保存 LLM 设置后的续跑是同一个行为。
-3. 计划之外还有几处写着「funnel 只补跑 embed 积压」，已一并改掉：`entrypoints/app/sections/bookmarks/CLAUDE.md`、`.trellis/spec/frontend/platform-onboarding.md`，以及 bookmarks / bilibili / douyin 三个 sync adapter 的注释。
+2. 计划之外还有几处写着「funnel 只补跑 embed 积压」，已一并改掉：`entrypoints/app/sections/bookmarks/CLAUDE.md`、`.trellis/spec/frontend/platform-onboarding.md`，以及 bookmarks / bilibili / douyin 三个 sync adapter 的注释。
 
-**发现、未改的**：
+**复核发现的三处缺口，已修**（提交 `7172d64` 之后，用户要求一并处理）：
 
-- `PlatformSyncOutcome.newItemIds` 已经没有生产消费者：两条 batch lane 都忽略它。字段与各平台 adapter 的返回值没删，删掉要改所有 adapter 及其测试，不在本步范围。
-- 两个 app.html 标签页同时同步同一平台时，两边各跑一份 tag backlog。后启动的那份查到的候选，正是先启动那份还没打完的部分，之后两边会对同一批条目各调一次 LLM。总花费仍受共用账本约束（D5），浪费的是当天的额度。Step 2 之前同步收尾只派本轮新 ids，第二次同步插不进新条目就不派 tag；整份 backlog 只由保存 LLM 设置的续跑派发，重叠窗口小得多。job store 是每个标签页一份，跨标签页去重要另加协调（例如按平台的 Web Lock），本步未做。频率 `[UNKNOWN]`。
+1. **两个 app.html 标签页对同一条各调一次 LLM。** job store 每个标签页一份，DB 却是共用的。两个标签页同时同步同一平台，各跑一份 tag backlog，按同样的顺序同步推进，对同一批条目各花一次钱。总花费仍受账本约束（D5），浪费的是当天额度。Step 2 之前同步收尾只派本轮新 ids，只有保存 LLM 设置的续跑会派整份 backlog，重叠窗口小得多。
+   - 修法：`tagPlatformItem` 按条目认领（`TaggingDeps.claim`，默认 `ifAvailable` 的 Web Lock，锁名带 platform 与 platformItemId）。认领被别处持有时返回 `'skipped'`。
+   - 从候选检查到写库都在认领之内：拿到认领时另一个标签页可能刚打完这一条。预算检查的位置不变（§6 Step 1 修正 5），铁律 1 照旧。
+   - 两个标签页的 drain 因此交替推进、分摊工作，同一条只花一次钱。
+   - 否决按平台加锁：拿不到锁就跳过，会漏掉持有方查询之后才入库的条目；排队等锁，又盖不住逐条派发。
+   - 没有 `navigator.locks` 时返回 `'failed'`，不退回无认领执行，与账本锁同一立场。
+2. **同步收尾的 Tags run 可能以 failed 收尾。** `tagNewItems` 从不抛错，`tagPlatformBacklog` 读配置或查候选失败会抛。修法：`tagPlatformBacklog` 也 never throws，失败只记日志、报 `0/0`，条目留给下一次同步。持续的 DB 故障仍会经 coverage 查询把段显示成 failed，不会被藏起来。Embed backlog 不变：它的失败要把 provider 问题暴露出来，而打标签的 provider 失败本来就按条目吞掉。
+3. **funnel 上的 ids 没有消费者。** 两条 batch lane 都是整份 backlog drain 之后，`PlatformSyncOutcome.newItemIds` 和派发入参里的 `itemIds` 就是死数据。已经全部删掉：
+   - funnel 与派发入参（`startCollectionProcessingJobs` 改用 `startCollectionProcessingBacklog` 的那份 deps）；
+   - 各平台 Sync Adapter 的返回值；
+   - github / x / youtube / zhihu / douyin sync service 结果里的同名字段。
+   - bilibili 的 `newItemIds` 保留：它驱动 `insertedCount` 与转录回调，是真消费者。
+   - 原来断言 `newItemIds` 的 lib 测试，凡是在证明真实行为的（例如 github 幽灵自愈），都改成断言 Embed 积压里的条目（`tests/processing-backlog-support.ts` 的 `embedBacklogIds`）；纯透传的断言直接删掉。
 
-**验证**：
+**残留**：LLM 返回空标签的条目（`'skipped'`）仍是 pending candidate。持有方释放认领后，另一个标签页的 drain 走到它，会再调一次 LLM。单标签页下次同步本来也会重试这一条，量级可以忽略。
+
+**验证（`7172d64`）**：
 
 - 5 个新增 / 改动的用例先对旧代码跑红。
 - `pnpm vitest run entrypoints/app/hooks`：21 个文件 / 167 个用例通过。
 - `pnpm compile`：通过。
 - `pnpm test`：根目录 245 个文件 / 2264 个用例，packages 15 个文件 / 263 个用例，全绿。
 - 本步不涉及 UI，没跑 `pnpm build`。
+
+**验证（三处修复）**：
+
+- 认领与 backlog 不抛错的用例先对旧代码跑：7 个失败，5 个是认领、2 个是 backlog。「LLM 未配置时不认领」是位置守卫，旧代码上本来就过。
+- 变异检查：把候选查询挪到认领外面，「候选检查在认领之内」与「被别处持有」两个用例都会失败。
+- 删 ids 管线是纯重构，没有行为变化，不适用先红后绿。
+- `pnpm compile`：通过。
+- `pnpm test`：根目录 245 个文件 / 2271 个用例，packages 15 个文件 / 263 个用例，全绿。
+- 不涉及 UI，没跑 `pnpm build`。

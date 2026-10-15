@@ -48,10 +48,10 @@ describe('bookmarks Sync Adapter (shared by manual page + daily auto-sync)', () 
     ]);
   });
 
-  it('reports bookmarks read and items inserted; no batch tag ids (extraction processes per item)', async () => {
+  it('reports bookmarks read and items inserted to the funnel', async () => {
     await runBookmarksSync(() => undefined, control);
 
-    expect(outcome).toEqual({ fetched: 3, inserted: 2, newItemIds: [] });
+    expect(outcome).toEqual({ fetched: 3, inserted: 2 });
   });
 
   it('chains content extraction only after the funnel returned', async () => {

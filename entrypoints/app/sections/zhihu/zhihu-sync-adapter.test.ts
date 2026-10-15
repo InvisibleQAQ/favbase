@@ -25,7 +25,7 @@ let outcome: PlatformSyncOutcome | undefined;
 describe('zhihu Sync Adapter (shared by manual page + daily auto-sync)', () => {
   beforeEach(() => {
     outcome = undefined;
-    mocks.syncFavorites.mockReset().mockResolvedValue({ total: 0, inserted: 0, newItemIds: [] });
+    mocks.syncFavorites.mockReset().mockResolvedValue({ total: 0, inserted: 0 });
     mocks.runPlatformSync
       .mockReset()
       .mockImplementation(async (_platform, _control, sync: () => Promise<PlatformSyncOutcome>) => {
@@ -46,7 +46,7 @@ describe('zhihu Sync Adapter (shared by manual page + daily auto-sync)', () => {
       async (onPage: (fetchedCount: number, current: number, total: number) => void) => {
         onPage(12, 1, 3);
         onPage(20, 2, 3);
-        return { total: 20, inserted: 0, newItemIds: [] };
+        return { total: 20, inserted: 0 };
       },
     );
 
@@ -59,11 +59,11 @@ describe('zhihu Sync Adapter (shared by manual page + daily auto-sync)', () => {
     ]);
   });
 
-  it('reports entries read, items inserted and the persisted ids to the funnel', async () => {
-    mocks.syncFavorites.mockResolvedValue({ total: 12, inserted: 1, newItemIds: ['z1'] });
+  it('reports entries read and items inserted to the funnel', async () => {
+    mocks.syncFavorites.mockResolvedValue({ total: 12, inserted: 1 });
 
     await runZhihuFavoritesSync(() => undefined, control);
 
-    expect(outcome).toEqual({ fetched: 12, inserted: 1, newItemIds: ['z1'] });
+    expect(outcome).toEqual({ fetched: 12, inserted: 1 });
   });
 });

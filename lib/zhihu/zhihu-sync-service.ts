@@ -18,9 +18,9 @@
  * entries are never deleted.
  *
  * Auto-tag + auto-embed are NOT fired here (ST3): the app-side Sync Adapter
- * (zhihu-sync-adapter.ts) hands `newItemIds` to the Platform Sync funnel,
- * which registers embed/tag as `startJob` background jobs for every platform
- * from one seam, with done/total progress. This wrapper only fetches +
+ * (zhihu-sync-adapter.ts) runs this inside the Platform Sync funnel, which
+ * registers the embed/tag backlog drains as `startJob` background jobs for
+ * every platform from one seam, with done/total progress. This wrapper only fetches +
  * persists. Full-text (ILIKE) search works right after sync either way.
  *
  * Runs in the app.html page context only (manual sync button → RPC proxy →
@@ -85,8 +85,6 @@ export interface SyncZhihuResult {
   inserted: number;
   /** Public collections found. */
   collections: number;
-  /** platformItemIds whose content was persisted this run — auto-tagging input. */
-  newItemIds: string[];
 }
 
 /** Row shape returned to the UI — zero drizzle knowledge required downstream. */
@@ -173,7 +171,7 @@ export async function syncFavoritesToDb(
   }
 
   if (collections.length === 0) {
-    return { total: favorites.length, synced: byId.size, inserted: 0, collections: 0, newItemIds: [] };
+    return { total: favorites.length, synced: byId.size, inserted: 0, collections: 0 };
   }
 
   const result = await ingestCollection(db, {
@@ -229,7 +227,6 @@ export async function syncFavoritesToDb(
     synced: byId.size,
     inserted: result.inserted.length,
     collections: collections.length,
-    newItemIds: result.contentPersisted,
   };
 }
 

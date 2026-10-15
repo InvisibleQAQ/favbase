@@ -113,7 +113,7 @@ function funnelPlatform(
   itemPlatform: CollectionPlatform,
   jobPlatform: string,
   funnelDeps: PlatformSyncDeps,
-  sync: () => Promise<{ fetched: number; inserted: number; newItemIds: string[] }>,
+  sync: () => Promise<{ fetched: number; inserted: number }>,
   over: Partial<AutoSyncPlatform> = {},
 ): AutoSyncPlatform {
   return platform({
@@ -340,7 +340,6 @@ describe('useDailyAutoSync', () => {
           funnelPlatform('youtube', 'youtube-playlists', store.funnelDeps, async () => ({
             fetched: 0,
             inserted: 0,
-            newItemIds: [],
           })),
         ],
         deps,
@@ -395,7 +394,6 @@ describe('useDailyAutoSync', () => {
           funnelPlatform('zhihu', 'zhihu-favorites', store.funnelDeps, async () => ({
             fetched: 3,
             inserted: 1,
-            newItemIds: ['z1'],
           })),
         ],
         deps,

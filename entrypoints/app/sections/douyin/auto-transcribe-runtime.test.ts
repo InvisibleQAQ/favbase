@@ -52,7 +52,7 @@ function pending(awemeId: string, durationMs: number | null = 61_400): DouyinPen
   return { awemeId, title: `title ${awemeId}`, coverUrl: null, authorName: 'Alice', durationMs };
 }
 
-const RESULT = { fetched: 2, inserted: 2, folders: 0, newItemIds: [] };
+const RESULT = { fetched: 2, inserted: 2, folders: 0 };
 const OPTS = { backfill: { resumeCursor: null, backfillDone: false } };
 
 describe('runDouyinStreamingSync', () => {

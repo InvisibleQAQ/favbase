@@ -108,7 +108,7 @@
 ## 同步编排
 
 - 全部收藏条目不挂 Source，没有合成的「全部收藏」Source：它会在 chip 行与 Dashboard 细分里冒出一个假夹。所以存在零 link 的条目，查询照常返回。
-- 逐页入库 + 逐页回调 `onPagePersisted`，由 app 侧逐条派发处理 lane：funnel 只在整次成功时派发，否则中途失败的运行里已入库的条目不会被派发。
+- 逐页入库 + 逐页回调 `onPagePersisted`，由 app 侧逐条派发处理 lane：funnel 只在整次成功时派发，否则中途失败的运行里已入库的条目要等到之后某一次同步成功收尾才被处理。
 - 头部段在**整页**都已知时才停，不用「首个已知 id 即停」：重新收藏的旧视频会顶到最前面，压住新的。
 - 运行开头那次 `ingestCollection`（公开夹 → Source）无条件执行并带 `content`：它是本次运行保证有的那一次幽灵清扫，增量运行可能一页都不入库。别改成「有夹才调」，也别去掉 `content`。规则见 `lib/ingest/CLAUDE.md`。
 - 作者 id 用 `sec_uid`（`uid` 会轮换）；`sec_uid` 为空的作品没有作者行，ingest 随之丢掉该条目。
