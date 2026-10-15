@@ -22,19 +22,36 @@ describe('nav-section CSS variables', () => {
     });
   });
 
-  it('gives both levels one active treatment: accent ink on an 8% brand wash', () => {
+  it('paints the active root in the brand color, its title one readable stage darker', () => {
+    const { palette } = theme.vars;
     const vars = navSectionCssVars.vertical(theme);
 
-    // favbase override of Minimal (primary.main at root, grey action.selected on
-    // sub items): the derived accent clears WCAG under every preset, and one
-    // treatment means the active row reads the same at any depth.
-    expect(vars['--nav-item-root-active-color']).toBe(theme.vars.palette.text.accent);
-    expect(vars['--nav-item-sub-active-color']).toBe(theme.vars.palette.text.accent);
-    expect(vars['--nav-item-root-active-bg']).toBe(vars['--nav-item-sub-active-bg']);
+    // Minimal's `primary.main` row; only the text drops to `primary.dark`
+    // (coral `main` is 2.4:1 as text on the wash).
+    expect(vars['--nav-item-root-active-color']).toBe(palette.primary.main);
+    expect(vars['--nav-item-root-active-title-color']).toBe(palette.primary.dark);
     // varAlpha renders the channel wash as `rgba(var(--…-mainChannel …) / 8%)`.
     expect(vars['--nav-item-root-active-bg']).toContain('primary-mainChannel');
     expect(vars['--nav-item-root-active-bg']).toContain('8%');
     expect(vars['--nav-item-root-active-hover-bg']).toContain('16%');
+    // Dark scheme: Minimal's `--nav-item-root-active-color-on-dark` for both.
+    expect(vars).toMatchObject(
+      theme.applyStyles('dark', {
+        '--nav-item-root-active-color': palette.primary.light,
+        '--nav-item-root-active-title-color': palette.primary.light,
+      }),
+    );
+  });
+
+  it("keeps Minimal's grey sub treatment: ink on action.hover (vertical) / action.selected (mini)", () => {
+    const { palette } = theme.vars;
+    const vertical = navSectionCssVars.vertical(theme);
+    const mini = navSectionCssVars.mini(theme);
+
+    expect(vertical['--nav-item-sub-active-color']).toBe(palette.text.primary);
+    expect(vertical['--nav-item-sub-active-bg']).toBe(palette.action.hover);
+    expect(mini['--nav-item-sub-active-color']).toBe(palette.text.primary);
+    expect(mini['--nav-item-sub-active-bg']).toBe(palette.action.selected);
   });
 
   it('draws the tree connector with the divider role, expanded rail only', () => {

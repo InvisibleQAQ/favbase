@@ -83,7 +83,9 @@ function PlatformCard({
     >
       {/* Unselected: the platform's identity glyph on `background.neutral`,
           the ground its 3:1 floor is validated against (a translucent grey
-          wash over paper is not). Selected: the app nav's active treatment. */}
+          wash over paper is not). Selected: `text.accent` on the 8% brand wash.
+          That is no longer the app nav's active glyph (`primary.main` since
+          docs/31 Step 7); whether the tile should follow is undecided. */}
       <Box
         sx={(theme) => ({
           width: 44,

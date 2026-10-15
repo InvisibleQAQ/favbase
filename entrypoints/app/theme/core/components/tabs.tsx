@@ -82,6 +82,27 @@ const tabsVariants = {
         },
       },
     },
+    /**
+     * favbase override: MUI's `textColorPrimary` inks the selected Tab
+     * `primary.main` (2.5:1 as coral text on white). The icon keeps `main`, the
+     * label drops to `primary.dark`; dark scheme `primary.light` for both. User
+     * decision 2026-10-14 (docs/31 Step 7), same rule as the nav root row.
+     * Written from the Tabs root (`.<tabs> .MuiTab-root.Mui-selected`, 0-3-0)
+     * so it outranks MUI's own `.Mui-selected` rule on the Tab (0-2-0).
+     */
+    {
+      props: (props) => props.textColor === 'primary',
+      style: ({ theme }) => ({
+        [`& .${tabClasses.root}.${tabClasses.selected}`]: {
+          color: theme.vars.palette.primary.dark,
+          [`& .${tabClasses.icon}`]: { color: theme.vars.palette.primary.main },
+          ...theme.applyStyles('dark', {
+            color: theme.vars.palette.primary.light,
+            [`& .${tabClasses.icon}`]: { color: theme.vars.palette.primary.light },
+          }),
+        },
+      }),
+    },
     {
       props: (props) => props.indicatorColor === 'custom',
       style: ({ theme }) => ({ ...customTabsIndicatorStyles.root(theme) }),
@@ -111,6 +132,13 @@ const tabsVariants = {
     {
       props: (props) => props.indicatorColor === 'inherit',
       style: { backgroundColor: 'currentColor' },
+    },
+    {
+      // Light keeps MUI's `primary.main`; dark follows the label to `primary.light`.
+      props: (props) => props.indicatorColor === 'primary',
+      style: ({ theme }) => ({
+        ...theme.applyStyles('dark', { backgroundColor: theme.vars.palette.primary.light }),
+      }),
     },
     {
       props: (props) => props.indicatorColor === 'custom',

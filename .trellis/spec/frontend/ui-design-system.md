@@ -105,7 +105,9 @@ WCAG on `main` — docs/25 D14) and `text.accent` by `accentTextFor` (light
 `primary.darker`, dark `primary.light`). Never hard-code a brand shade that a
 preset is supposed to move; wash with
 `varAlpha(theme.vars.palette.primary.mainChannel, 0.08 / 0.16)` and ink with
-`text.accent`.
+`text.accent`. The only brand text that is not `text.accent` is the two
+`primary.dark` labels the user accepted: the active nav root title (section 8)
+and the Settings tracks' selected tab label (section 11).
 
 ### Semantic roles
 
@@ -358,7 +360,13 @@ someone adds the rows:
   when selected. MUI's own 48px minimum height is **left alone** — the theme
   does not restate it. `indicatorColor="custom"` selects the segmented-pill
   form (52px rows on a `background.neutral` track, indicator drawn as a z1
-  pill); no app surface uses it today.
+  pill); no app surface uses it today. `textColor="primary"` +
+  `indicatorColor="primary"` is the brand-ink opt-in (favbase override of MUI's
+  `textColorPrimary`, docs/31 Step 7): selected label `primary.dark`, icon and
+  indicator `primary.main`, all three `primary.light` in dark. The defaults
+  stay `inherit`; only the Settings tracks opt in (section 11). That opt-in is
+  locked by computed color in `sections/settings/settings-navigation.test.tsx`,
+  not by `theme-contract.test.ts`, which still has no Tabs row.
 - `MuiOutlinedInput`: `shared.inputOutlined` hairline, `text.primary` when
   focused.
 - `MuiSkeleton`: `animation="wave"` and `variant="rounded"` by default; the
@@ -511,19 +519,33 @@ Preserve:
   `deepMatch` so a detail route stays on its platform leaf)
 - icon-only Header/nav controls carry a translated `aria-label` and Tooltip
 
-Navigation active state — one treatment at every depth:
+Navigation active state — Minimal's two levels (user decision 2026-10-14,
+docs/31 Step 7):
 
 ~~~tsx
+// root row (icon, disclosure arrow inherit the row color)
 {
-  color: 'var(--nav-item-root-active-color)',          // text.accent, WCAG-safe per preset
+  color: 'var(--nav-item-root-active-color)',          // primary.main; dark: primary.light
   backgroundColor: 'var(--nav-item-root-active-bg)',   // varAlpha(primary.mainChannel, 0.08)
   '&:hover': { backgroundColor: 'var(--nav-item-root-active-hover-bg)' }, // 0.16
 }
+// root title
+{ color: 'var(--nav-item-root-active-title-color)' }   // primary.dark; dark: primary.light
+// sub row
+{
+  color: 'var(--nav-item-sub-active-color)',           // text.primary
+  backgroundColor: 'var(--nav-item-sub-active-bg)',    // action.hover (vertical) / action.selected (mini)
+}
 ~~~
 
-`primary.main` is never nav text (2.5:1 on paper). Platform identity color is
-allowed only on an **inactive** platform leaf's icon glyph; the active row's
-accent ink wins.
+The one deviation from Minimal is the root title: coral `primary.main` is
+2.4:1 as text on the wash, so the text drops to `primary.dark` (4.3:1) while
+the glyphs keep `main`. That is still under the section 12 floor for coral and
+the orange preset (4.0:1); the user accepted it for this row and for the
+Settings tracks' selected label (section 11), and it is not a precedent. The
+dark-scheme values are set inside `nav-section/styles/css-vars.ts`, not in the
+components. Platform identity color stays on a platform leaf's icon glyph in
+every state.
 
 Tree connectors: a 12px masked bullet per sub row plus a 2px spine drawn by
 `NavCollapse`, both `palette.divider`; the spine stops half a bullet short of
@@ -767,11 +789,20 @@ what stays forbidden is inventing the numbers on them.
   (`'/'`) -- `RouterLink` adds the hash router's `#`, so a hand-written `'#/'`
   is a broken link, not a shortcut.
 - `SettingsTabs({ value, onChange, tabs, ariaLabel })` and
-  `SectionRail({ value, onChange, items, ariaLabel })` are the theme's default
-  underline Tabs: no local `variant`, `scrollButtons`, indicator or track
-  *skin*, and no segmented pill. Labels stay on one line
-  (`whiteSpace: 'nowrap'`) and overflow into a scroll; never compress four
-  localized labels into equal-width tracks.
+  `SectionRail({ value, onChange, items, ariaLabel })` are the theme's
+  underline Tabs in brand ink: both pass `textColor="primary"` and
+  `indicatorColor="primary"` and nothing else of skin — no local `variant`,
+  `scrollButtons`, indicator or track *skin*, no selected wash, and no
+  segmented pill. The selected tab's icon and underline are `primary.main`, its
+  label `primary.dark` (coral `main` is 2.5:1 as text on white), all
+  `primary.light` in dark; resting tabs stay `text.secondary` (user decision
+  2026-10-14, docs/31 Step 7). The label is the same accepted exception as the
+  nav root title (section 8): on `background.default` coral reads 4.63:1 but
+  orange (preset4) 4.22:1, and on the high-contrast ground 4.28 / 3.89; the
+  icon and underline in `main` are under the 3:1 non-text floor for coral
+  (2.54) and orange (1.93), and selection is still carried by the label's ink
+  and weight. Labels stay on one line (`whiteSpace: 'nowrap'`) and overflow
+  into a scroll; never compress four localized labels into equal-width tracks.
 - The top `SettingsTabs` track is the one sanctioned exception, and it is
   *positioning*, not skin: `width: 'fit-content'` plus `mx: 'auto'` centers the
   row inside the page (user decision 2026-09-08). The accepted cost is stated
@@ -811,11 +842,12 @@ what stays forbidden is inventing the numbers on them.
 ~~~
 
 Tests assert one route `h1`, one panel `h2`, no nested `.MuiCard-root`, compact
-scrollable tab tracks, accessible tablist labels, the ancestry handed to the
-title bar, and unchanged save/deep-link behavior. The rendered trail (`nav` plus
-`aria-current="page"`) is locked once in `custom-breadcrumbs.test.tsx` and once
-in `section-title-bar.test.tsx`; page tests that mock the title bar assert the
-`links` data, never a mock's DOM.
+scrollable tab tracks, the selected tab's brand ink in both schemes
+(`settings-navigation.test.tsx`), accessible tablist labels, the ancestry
+handed to the title bar, and unchanged save/deep-link behavior. The rendered
+trail (`nav` plus `aria-current="page"`) is locked once in
+`custom-breadcrumbs.test.tsx` and once in `section-title-bar.test.tsx`; page
+tests that mock the title bar assert the `links` data, never a mock's DOM.
 
 ### Chat
 
@@ -851,12 +883,16 @@ deliberately not the same skin (docs/25 Step 10, user decision 2026-09-04,
 resolving the consistency review Step 7 deferred). Pick by what the rows *are*,
 not by what the neighbouring page does:
 
-**(a) Secondary navigation** — the theme's default underline Tabs, no local
-visual override. `indicatorColor` stays `'inherit'`, so the indicator is
-`currentColor` ink on the trailing edge, **not** `primary.main`; the resting
-label is `text.secondary` and the selected one is `text.primary` semibold; there
-is no wash. The only precedent is `sections/settings/section-rail.tsx`, which
-owns just orientation and (while vertical) `justifyContent: 'flex-start'`.
+**(a) Secondary navigation** — the theme's underline Tabs in brand ink,
+opted in with `textColor="primary"` + `indicatorColor="primary"` and no other
+local visual override: the indicator on the trailing edge and the selected
+icon are `primary.main`, the selected label `primary.dark` semibold (dark:
+`primary.light` for all three), the resting label `text.secondary`; there is
+no wash. (The color half supersedes the 2026-09-04 `inherit` / `currentColor`
+/ `text.primary` form, user decision 2026-10-14, docs/31 Step 7; the no-wash
+half stands.) The only precedent is `sections/settings/section-rail.tsx`,
+which owns just orientation and (while vertical) `justifyContent:
+'flex-start'`.
 
 **(b) A card's data rows that double as a segment selector** — indicator
 hidden (`display: 'none'`), 4px row spacing set through `tabsClasses.list`
@@ -869,10 +905,10 @@ only precedent is `sections/overview/analytics-platform-composition.tsx`.
 
 **Do not unify them.** An underline next to a donut legend marks nothing the
 arc and the dot do not already mark, and it fights the selected wash on the same
-row. Conversely, moving the 8% brand wash onto the Settings rail would collide
-with `components/nav-section`'s active treatment (identical wash and accent
-ink), flattening an in-page secondary rail into something that reads like
-primary navigation.
+row. Conversely, the Settings rail already shares the nav root's brand ink;
+adding the 8% brand wash would make it identical to `components/nav-section`'s
+root active treatment, flattening an in-page secondary rail into something
+that reads like primary navigation.
 
 ### Overlay Defaults
 

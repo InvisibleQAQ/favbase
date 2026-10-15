@@ -173,7 +173,6 @@ const ItemRoot = styled('div', { shouldForwardProp })<StyledState>(({ active, op
     ...(active && {
       color: 'var(--nav-item-sub-active-color)',
       backgroundColor: 'var(--nav-item-sub-active-bg)',
-      '&:hover': { backgroundColor: 'var(--nav-item-sub-active-hover-bg)' },
     }),
   };
 
@@ -225,18 +224,17 @@ const ItemDisclosure = styled(ButtonBase)(({ theme }) => ({
 }));
 
 /**
- * @slot icon — platform rows tint the glyph with their identity color while
- * inactive; the active row's accent ink wins (icons inherit the row color).
+ * @slot icon — platform rows always tint the glyph with their identity color:
+ * an active platform leaf takes Minimal's grey sub treatment, so there is no
+ * brand ink to yield to. Other icons inherit the row color.
  */
-const ItemIcon = styled('span', { shouldForwardProp })<StyledState>(
-  ({ platform, active, theme }) => ({
-    ...navItemStyles.icon,
-    width: 'var(--nav-icon-size)',
-    height: 'var(--nav-icon-size)',
-    margin: 'var(--nav-icon-margin)',
-    ...(platform && !active && { color: theme.vars.palette.platform[platform] }),
-  }),
-);
+const ItemIcon = styled('span', { shouldForwardProp })<StyledState>(({ platform, theme }) => ({
+  ...navItemStyles.icon,
+  width: 'var(--nav-icon-size)',
+  height: 'var(--nav-icon-size)',
+  margin: 'var(--nav-icon-margin)',
+  ...(platform && { color: theme.vars.palette.platform[platform] }),
+}));
 
 /**
  * @slot texts
@@ -246,7 +244,8 @@ const ItemTexts = styled('span', { shouldForwardProp })<StyledState>(() => ({
 }));
 
 /**
- * @slot title
+ * @slot title — an active root row's text drops one stage to stay readable
+ * (`styles/css-vars.ts`); its glyphs keep `primary.main`.
  */
 const ItemTitle = styled('span', { shouldForwardProp })<StyledState>(({ theme }) => ({
   ...navItemStyles.title(theme),
@@ -254,6 +253,10 @@ const ItemTitle = styled('span', { shouldForwardProp })<StyledState>(({ theme })
   fontWeight: theme.typography.fontWeightMedium,
   variants: [
     { props: { active: true }, style: { fontWeight: theme.typography.fontWeightSemiBold } },
+    {
+      props: { active: true, variant: 'rootItem' },
+      style: { color: 'var(--nav-item-root-active-title-color)' },
+    },
   ],
 }));
 

@@ -2,7 +2,7 @@
 
 - 分支：`feat/minimal-ui-polish`（worktree `.claude/worktrees/minimal-ui-polish`，原因见 §6）
 - 参考：app.html ↔ <https://minimals.cc/dashboard>，welcome.html ↔ <https://minimals.cc/>；源码 `$MIN` = `C:\Users\18368\Desktop\00_myCode\35_minimal\minimal-dashboard\minimal-dashboard v7.7.0\Vite.js (JavaScript，TypeScript)\minimal-vite-ts-main\src`
-- 状态：**Step 1 已落地并补验完毕**（四处实现缺陷；首轮未验证的三项已于同日补验，见 §2「验证」）；**Step 2 已落地（2026-09-27）**——用户决定按 Minimal 原样移植深色 CTA 卡，替换点见 §4 Step 2，截图验收已按 §1 补完；**Step 3 已落地（2026-09-27）**——用户决定推翻 docs/28 D8，五个 section 标题换 Minimal `SectionTitle` 的中性写法、hero 保 coral，替换点见 §4 Step 3，截图验收已按 §1 补完，D-d 于 2026-09-28 按第一轮截图改为 Minimal 的 `inline-block`；**Step 4 已落地（2026-09-28）**——用户决定逐段对照 Minimal 源文件移植段落装饰线（`FloatLine` 一族 + `MotionViewport`），映射与替换点见 §4 Step 4，截图验收已按 §1 补完；**Step 5 已落地（2026-09-28）**——用户决定 Dashboard KPI 数字整体照搬 Minimal 的 `h4`（字体、字重、行高、字号四项，不只是原写法的放大字号），生成的 CSS 已在测试环境核对，实机截图验收已补完（用户改从 worktree 的 `.output` 加载扩展之后），顺带验出侧栏断点与 Minimal 不同，记在 §3；**Step 6 已落地（2026-09-28）**——本文原本没有 Step 6，用户说「完成 step6」后问过，选定 §3 的侧栏断点一项：dashboard shell 照 Minimal 在 `lg` 而不是 `md` 切换，Chat 卡片高度与历史 Drawer 两处隐藏耦合随之收掉，见 §4 Step 6，实机量值与 minimals.cc 同点一致
+- 状态：**Step 1 已落地并补验完毕**（四处实现缺陷；首轮未验证的三项已于同日补验，见 §2「验证」）；**Step 2 已落地（2026-09-27）**——用户决定按 Minimal 原样移植深色 CTA 卡，替换点见 §4 Step 2，截图验收已按 §1 补完；**Step 3 已落地（2026-09-27）**——用户决定推翻 docs/28 D8，五个 section 标题换 Minimal `SectionTitle` 的中性写法、hero 保 coral，替换点见 §4 Step 3，截图验收已按 §1 补完，D-d 于 2026-09-28 按第一轮截图改为 Minimal 的 `inline-block`；**Step 4 已落地（2026-09-28）**——用户决定逐段对照 Minimal 源文件移植段落装饰线（`FloatLine` 一族 + `MotionViewport`），映射与替换点见 §4 Step 4，截图验收已按 §1 补完；**Step 5 已落地（2026-09-28）**——用户决定 Dashboard KPI 数字整体照搬 Minimal 的 `h4`（字体、字重、行高、字号四项，不只是原写法的放大字号），生成的 CSS 已在测试环境核对，实机截图验收已补完（用户改从 worktree 的 `.output` 加载扩展之后），顺带验出侧栏断点与 Minimal 不同，记在 §3；**Step 6 已落地（2026-09-28）**——本文原本没有 Step 6，用户说「完成 step6」后问过，选定 §3 的侧栏断点一项：dashboard shell 照 Minimal 在 `lg` 而不是 `md` 切换，Chat 卡片高度与历史 Drawer 两处隐藏耦合随之收掉，见 §4 Step 6，实机量值与 minimals.cc 同点一致；**Step 7 已落地（2026-10-14）**——用户对照截图指出侧栏激活行不是主题色，决定 root 照 Minimal 用 `primary.main`（标题文字降到 `primary.dark`）、sub 照 Minimal 灰底，同日补上设置页 Tabs 与 section rail 的同一取色，见 §4 Step 7
 
 ## §0 结论
 
@@ -48,9 +48,9 @@ BrowserOS neo 的 MCP 工具驱动不了扩展页：`tabs new` 打开 `chrome-ex
 - **暗色下品牌图标是一块白底方块**（2026-09-27 补验暗色时看到）。app.html 有四处用 `/icon/128.png`（`nav-vertical.tsx`、`nav-mobile.tsx`、`chat-header.tsx`、`chat-message-list.tsx`），welcome 的 `BrandMark` 与 `bilibili-showcase.tsx` 用 `/icon/48.png`。`public/icon/` 下五张 PNG 都是 color type 2（RGB、无 alpha 通道、无 `tRNS`），128.png 四角实测 `rgba(255, 255, 255, 255)`。亮色下白底融进背景看不出来，暗色下就露出一块白方块（截图里看到的是侧栏与 Chat 标题两处；welcome 暗色没截，按文件格式推断相同）。这不是移植缺陷（资源本来就这样，Minimal 的 logo 是透明 SVG），而是缺一份应用内用的透明底 logo。修它要新资源，或决定暗色下给 logo 加底，所以不属于 Step 1，只记在这里。
 - **（已解决，2026-09-28 转为 Step 6 落地，见 §4 Step 6；下文是原记录，只把 [UNKNOWN] 改成查到的来源）侧栏在 900px 就展开，Minimal 是 1200px**（2026-09-28 Step 5 截图验收时量到）。favbase `entrypoints/app/layouts/dashboard/layout.tsx:44` 的 `layoutQuery` 默认 `md`；Minimal 的 `nav-vertical.tsx` 默认值虽也是 `md`，但 `$MIN/layouts/dashboard/layout.tsx:59` 把 `lg` 传给 header（`:104`）、nav（`:171`）与 main（`:185`），所以 minimals.cc 在 900–1199 是汉堡菜单 + 满宽内容。favbase 在这一段多出 300px 侧栏，Dashboard 的 `md: 3` KPI 行就被挤扁：900 宽卡宽 118（Minimal 约 191），标题逐词折行、「1 / 6」折三行、卡高 248；1024 宽卡宽 149、仍折两行；1199 宽 193 才正常；≥1200 两边一致（卡宽约 185）。`layouts/CLAUDE.md:11` 只描述了「header 高度在 `layoutQuery`=md 切换」，docs/25 里查不到选 `md` 的理由，所以是移植偏离还是有意为之 ~~**[UNKNOWN]**~~——**已查明**（Step 6）：有意为之，且早于 Minimal 移植。首个提交 `ba3c942`（2026-06-20，Material Kit 时代）是 `lg`，`defdf00`（2026-07-06）把它降成 `md`，理由只有 commit message 里一句「Lower nav breakpoint lg->md so desktop sidebar shows at 900px」；docs/23 / docs/25 移植 Minimal 时都没有重新审视它，所以 docs/25 里找不到。改它会同时移动 header 高度切换、`NavToggleButton` 的显隐与 mobile drawer 的出现宽度（三者共用这一个 `layoutQuery`；`layout.test.tsx` 只在 `:229` 的注释里提到它，没有按具体宽度的断言），所以要单独决定，不属于 Step 5，只记在这里。
 
-## §4 设计步骤（Step 2–6 均已落地）
+## §4 设计步骤（Step 2–7 均已落地）
 
-每一条都会推翻或扩展一条已记录的决定，所以不自作主张。Step 2 的两条冲突与 Step 3 的 D8 冲突已由用户 2026-09-27 决定推翻；Step 4 无冲突，用户 2026-09-28 决定了映射方式；Step 5 与 docs/25 D8 的冲突由用户 2026-09-28 决定只开一处例外（D8 本身是 PRD 默认，主题字阶不变）；Step 6 不是本节原有的一条，而是 §3 的未定性项，推翻的是 `defdf00` 的 `md`，用户 2026-09-28 决定照 Minimal。
+每一条都会推翻或扩展一条已记录的决定，所以不自作主张。Step 2 的两条冲突与 Step 3 的 D8 冲突已由用户 2026-09-27 决定推翻；Step 4 无冲突，用户 2026-09-28 决定了映射方式；Step 5 与 docs/25 D8 的冲突由用户 2026-09-28 决定只开一处例外（D8 本身是 PRD 默认，主题字阶不变）；Step 6 不是本节原有的一条，而是 §3 的未定性项，推翻的是 `defdf00` 的 `md`，用户 2026-09-28 决定照 Minimal；Step 7 推翻 docs/25 Step 4 的 `text.accent` 激活色与两级同色，用户 2026-10-14 决定照 Minimal（只有 root 标题文字降一阶）。
 
 ### Step 2 — welcome 结尾改成 Minimal 的深色 CTA 大卡（已落地 2026-09-27）
 
@@ -211,6 +211,30 @@ BrowserOS neo 的 MCP 工具驱动不了扩展页：`tabs new` 打开 `chrome-ex
   - **Chat 历史 Drawer**：1024 宽点开，paper `left` 0、宽 320，从视口左缘滑出，与 Minimal 同。截图里 paper 右缘那道 2px 红褐色竖线是 `:focus-visible` 轮廓：CDP 里用 JS `.click()` 打开、没有指针事件，浏览器按键盘交互给 paper 画焦点环，与本步无关。
   - 截图：Dashboard 900 / 1024 / 1199 / 1200、Chat 1024 / 1200 / 1024 开 Drawer，亮色 en。暗色与 zh-CN 没截：本步只动断点，不动颜色与文案。
 - **顺带看到、不在本步范围**：welcome 的 `WelcomeLayout` 仍是 `md`，与 Minimal `MainLayout` 一致，不是遗漏；Chat 自己的 rail / Drawer 断点 `lg` 是 docs/25 Step 9 的决定，本来就与新的 shell 断点相同。
+
+### Step 7 — 侧栏激活行用主题色（已落地 2026-10-14）
+
+- **来源**：用户对照 minimals.cc 截图（`/dashboard/booking`）指出，当前路由对应的侧栏行在 Minimal 里是主题色，favbase 的 `/settings` 等路由没有。
+- **实测（同一 BrowserOS，CDP 读计算色）**：Minimal Booking 行图标与文字都是 `rgb(0,167,111)`（`primary.main`），洗底 8%；favbase Settings 行是 `rgb(122,39,20)`（`text.accent` = coral `primary.darker`），读起来是暗红褐，不是主题色。
+- **根因**：docs/25 Step 4 在 `components/nav-section/styles/css-vars.ts` 把 root 激活色从 `primary.main` 换成 `text.accent`（对比度理由），并把 sub 级改成与 root 同一套（docs/25 第 542 行：手册两条要求互斥时取了可观测的那条）。两处都不是用户决定。
+- **Minimal**：`$MIN/components/nav-section/styles/css-vars.ts`——root `primary.main` + 8% / 16%，暗色 `--nav-item-root-active-color-on-dark` = `primary.light`（组件里 `applyStyles('dark')`）；sub `text.primary` + `action.selected`，vertical 覆盖为 `action.hover`，sub 激活无 hover 覆盖。
+- **对比度（亮色，8% 洗底上的文字）**：`main` coral 2.37、orange 1.83、cyan 3.16、red 3.27、blue 4.51、purple 5.61；`dark` coral 4.32、orange 4.00，其余 ≥ 5.86；`darker` 全部 ≥ 8.29。
+- **用户决定（2026-10-14）**：
+  1. root：整行（图标、disclosure 箭头）`primary.main`，**标题文字降一阶到 `primary.dark`**（形照搬、色取可读下限；coral 4.32 / orange 4.00 未到 4.5，用户接受）。暗色两者都是 `primary.light`，与 Minimal 相同。
+  2. sub：照搬 Minimal 的灰色处理，主题色只留在父级；激活平台叶的图标保留平台身份色（没有主色要让位）。
+- **默认决定**：暗色覆盖写在 `css-vars.ts`（`theme.applyStyles('dark')` 直接改两个变量的值），不像 Minimal 那样放进 vertical / mini 两个 `nav-item.tsx`：`css-vars.ts` 是激活色的唯一 owner，组件不做 scheme 判断。新增变量 `--nav-item-root-active-title-color`；删除 favbase 自加的 `--nav-item-sub-active-hover-bg`。
+- **替换点**：`components/nav-section/styles/css-vars.ts`；`vertical/nav-item.tsx` 与 `mini/nav-item.tsx`（root 激活标题取 title 变量、sub 激活删 hover、图标平台色去掉 `!active`）；测试 `components/nav-section/css-vars.test.ts`、`layouts/dashboard/nav-vertical.test.tsx`；文档 `components/nav-section/CLAUDE.md`、spec `ui-design-system.md` §8 与 §11 一句。
+- **验证**：`pnpm vitest run entrypoints/app/components/nav-section entrypoints/app/layouts/dashboard` 6 个文件 / 37 例通过；`pnpm compile` 通过。实机：构建到临时目录、http 起页并注入 chrome stub（不碰已加载的扩展与用户标签），1440 宽读计算色——`/settings/connections/github` Settings 行 `rgb(252,126,91)` / 标题 `rgb(196,80,46)` / 洗底 8%；`/collections/bilibili` Collections 行同上，B 站叶 `rgb(28,37,46)` + `rgba(145,158,171,0.08)`、图标 `rgb(194,24,91)`；暗色 Collections 行与标题都是 `rgb(253,164,138)`，B 站叶白字灰底；mini 形态 Settings tile 与 vertical 相同。
+- ~~**核对后不在本步**：设置页顶部 Tabs 与左侧 section rail 的选中态是 `text.primary` + `currentColor` 下划线，与 Minimal Tabs 默认一致，不是遗漏。~~ 判断错了，见下面的「设置页 Tabs 与 section rail」。
+
+#### 设置页 Tabs 与 section rail（补，2026-10-14）
+
+- **问题**：首轮漏掉。用户重建后指出 `/settings` 内容区仍没有主题色：顶部 `SettingsTabs` 与左侧 `SectionRail` 的选中项是黑字 + 黑下划线（主题默认 `textColor` / `indicatorColor: 'inherit'`）。
+- **用户决定（2026-10-14）**：「主题色墨 + 下划线，无洗底」，取色规则同 root 行：下划线与选中图标 `primary.main`，选中文字 `primary.dark`，暗色三者都是 `primary.light`；未选中 `text.secondary`、选中 semibold 不变。只推翻 2026-09-04 决定（spec §11 Vertical Tabs 形态 (a)）里颜色那一半；rail 不加洗底、两种竖向 Tabs 不统一，照旧。
+- **对比度**：亮色 `background.default` 上选中文字 `dark` coral 4.63、orange 4.22，其余 ≥ 6.58；高对比底 `#F4F6F8` 上 coral 4.28、orange 3.89。图标与下划线 `main` coral 2.54、orange 1.93，低于 3:1 非文本下限，选中仍由文字墨色与字重表达。暗色 `light` 在 `#141A21` 上 ≥ 6.44。
+- **Owner**：`theme/core/components/tabs.tsx` 加两条按 MUI 标准 prop 键控的 variant。Tabs root `textColor === 'primary'` 写 `& .MuiTab-root.Mui-selected`（0,3,0），压过 MUI Tab 自带的 `textColorPrimary` `&.Mui-selected`（0,2,0）；图标再往下一层取 `main`。indicator `indicatorColor === 'primary'` 只补暗色，亮色沿用 MUI 的 `primary.main`。`MuiTabs.defaultProps` 不动，因为 Dashboard 构成卡依赖 `inherit`；两个组件只加 `textColor` / `indicatorColor="primary"`。
+- **替换点**：`theme/core/components/tabs.tsx`；`sections/settings/settings-tabs.tsx`、`section-rail.tsx`；测试 `sections/settings/settings-navigation.test.tsx`（亮暗两例，读 computed color）；文档 `sections/settings/CLAUDE.md`、`theme/CLAUDE.md` 的例外条、spec §4 一句（`text.accent` 之外仅有的两处品牌色文字）、§7 `MuiTabs`、§8 一句、§11 Settings 与 Vertical Tabs (a)。
+- **验证**：`pnpm vitest run entrypoints/app/sections/settings entrypoints/app/theme entrypoints/app/components/nav-section entrypoints/app/layouts` 21 个文件 / 225 例通过；`pnpm compile` 通过。关掉 theme 的 root variant，亮色例变红（标签读到 MUI 自带的 `#FC7E5B`）；只关暗色 indicator 规则，暗色例变红（下划线读到 `#FC7E5B`）。实机：同上的隔离构建，1440 宽 `/settings/general/language` 读计算色——亮色顶部 Tabs 与 rail 的选中标签 `rgb(196,80,46)`、图标与下划线 `rgb(252,126,91)`、未选中 `rgb(99,115,129)`；暗色三者都是 `rgb(253,164,138)`。
 
 ## §5 拒绝（沿用既有决定，本次不再提）
 

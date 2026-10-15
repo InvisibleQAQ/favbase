@@ -18,10 +18,12 @@ interface SettingsTabsProps {
 }
 
 /**
- * Settings top-level tabs — Minimal's underline form, straight off the theme
- * defaults (`scrollable`, `textColor`/`indicatorColor: 'inherit'`, 40px list
- * gap). No local variant switch: one track at every width, horizontally
- * scrollable when four localized labels outgrow it.
+ * Settings top-level tabs — Minimal's underline form on the theme defaults
+ * (`scrollable`, 40px list gap), opted into brand ink with
+ * `textColor`/`indicatorColor="primary"` (treatment in
+ * `theme/core/components/tabs.tsx`, docs/31 Step 7). No local variant switch:
+ * one track at every width, horizontally scrollable when four localized labels
+ * outgrow it.
  */
 export function SettingsTabs({ value, onChange, tabs, ariaLabel }: SettingsTabsProps) {
   return (
@@ -29,6 +31,8 @@ export function SettingsTabs({ value, onChange, tabs, ariaLabel }: SettingsTabsP
       value={value}
       onChange={(_, v) => onChange(v)}
       aria-label={ariaLabel}
+      textColor="primary"
+      indicatorColor="primary"
       // Centering the whole track is a deliberate local override of Minimal's
       // left-aligned tabs (user decision 2026-09-08): the row leaves the left
       // baseline of the `Settings` h1 and its breadcrumbs, and that is accepted.

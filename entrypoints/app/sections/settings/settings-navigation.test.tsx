@@ -6,7 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@mui/material/useMediaQuery', () => ({ default: () => true }));
 
-import { ThemeProvider } from '../../theme/theme-provider';
+import { COLOR_MODE_STORAGE_KEY, ThemeProvider } from '../../theme/theme-provider';
+import { themeConfig } from '../../theme/theme-config';
 import { SectionRail } from './section-rail';
 import { SettingsTabs, type SettingsTabItem } from './settings-tabs';
 
@@ -107,5 +108,77 @@ describe('Settings responsive navigation', () => {
     // `fit-content` must not have come from swapping the theme's `scrollable`
     // default for `standard`/`centered`: a full row still has to scroll.
     expect(tabs[0].querySelector('.MuiTabs-scroller.MuiTabs-scrollableX')).not.toBeNull();
+  });
+
+  describe('brand ink on the selected tab (user decision 2026-10-14, docs/31 Step 7)', () => {
+    afterEach(() => {
+      localStorage.clear();
+      document.documentElement.removeAttribute('data-color-scheme');
+    });
+
+    /** Both tracks in one tree; each element is one `.MuiTabs-root` and its computed ink. */
+    function renderTracks(mode: 'light' | 'dark') {
+      localStorage.setItem(COLOR_MODE_STORAGE_KEY, mode);
+      act(() => {
+        root.render(
+          <ThemeProvider>
+            <SettingsTabs
+              value="connections"
+              onChange={() => {}}
+              ariaLabel="Settings"
+              tabs={[...TOP_TABS]}
+            />
+            <SectionRail
+              value="github"
+              onChange={() => {}}
+              ariaLabel="Connections"
+              items={[
+                { value: 'github', label: 'GitHub', icon: 'mdi:github' },
+                { value: 'youtube', label: 'YouTube', icon: 'mdi:youtube' },
+              ]}
+            />
+          </ThemeProvider>,
+        );
+      });
+      expect(document.documentElement.getAttribute('data-color-scheme')).toBe(mode);
+
+      const tracks = [...container.querySelectorAll('.MuiTabs-root')];
+      expect(tracks).toHaveLength(2);
+      return tracks.map((track) => {
+        const selected = track.querySelector('[role="tab"][aria-selected="true"]')!;
+        const resting = track.querySelector('[role="tab"][aria-selected="false"]')!;
+        return {
+          label: getComputedStyle(selected).color,
+          icon: getComputedStyle(selected.querySelector('.MuiTab-icon')!).color,
+          indicator: getComputedStyle(track.querySelector('.MuiTabs-indicator')!).backgroundColor,
+          resting: getComputedStyle(resting).color,
+        };
+      });
+    }
+
+    const { primary } = themeConfig.palette;
+
+    it('light: icon and underline in primary.main, label one stage darker', () => {
+      // Coral `main` is 2.5:1 as text on white, so only the label drops to `dark`.
+      for (const ink of renderTracks('light')) {
+        expect(ink).toEqual({
+          label: primary.dark,
+          icon: primary.main,
+          indicator: primary.main,
+          resting: themeConfig.scheme.light.text.secondary,
+        });
+      }
+    });
+
+    it('dark: label, icon and underline all in primary.light', () => {
+      for (const ink of renderTracks('dark')) {
+        expect(ink).toEqual({
+          label: primary.light,
+          icon: primary.light,
+          indicator: primary.light,
+          resting: themeConfig.scheme.dark.text.secondary,
+        });
+      }
+    });
   });
 });

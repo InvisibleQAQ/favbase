@@ -33,7 +33,7 @@
 ## 色彩
 
 - 平台身份色（`theme.vars.palette.platform[id]`）只上字形：OrbitCore 芯片、marquee pill、picker 图标格。label、底、边框保持中性；ink 品牌由主题解析成墨色，本页不写平台分支。chat 演示的来源字形刻意不着色，跟 app 真实的 `sections/chat/source-card.tsx` 走（docs/39 D1-a）。
-- picker 未选中图标格的底必须是 `background.neutral`：平台色的 3:1 只对 `background.default` / `neutral` 验证过（`app/theme/core/palette.test.ts`），原来的 `grey.500` 10% 洗底上 YouTube 暗色只有 2.99:1。选中态照 app nav 激活态：`text.accent` 字形 + `primary` 8% 洗底。
+- picker 未选中图标格的底必须是 `background.neutral`：平台色的 3:1 只对 `background.default` / `neutral` 验证过（`app/theme/core/palette.test.ts`），原来的 `grey.500` 10% 洗底上 YouTube 暗色只有 2.99:1。选中态是 `text.accent` 字形 + `primary` 8% 洗底；app nav 的 root 激活字形自 docs/31 Step 7 起是 `primary.main`，两者已不同色，picker 跟不跟是未决的用户决定，别顺手改。
 - 平台字形不拿来表达别的意思：书签的 `solar:bookmark-bold-duotone` 在本页是琥珀色，how-it-works 步骤 01 因此换成非平台字形（docs/39 D1-b）。
 - 可读文字不用 `text.disabled`（亮色 2.7:1），用 `text.secondary`。
 - 不写局部焦点环：`ButtonBase` 渲染 `<button>`，主题 CssBaseline 的 `button:focus-visible` 环（亮 `primary.darker`、暗 `primary.main`）已经覆盖；`.Mui-focusVisible` 与 `:focus-visible` 同时成立（MUI 的 `isFocusVisible` 就是 `matches(':focus-visible')`）。局部写 `primary.main` 在亮色只有 2.5:1。

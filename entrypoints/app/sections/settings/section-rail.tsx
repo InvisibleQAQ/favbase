@@ -24,9 +24,10 @@ interface SectionRailProps<T extends string> {
  * horizontal on narrow screens. Shared by every tab (AI / 账号连接 / 通用 /
  * 存储) so each gets the same left sidebar; feed it that tab's items.
  *
- * Visuals are the theme's Tabs defaults (Minimal underline indicator in
- * `currentColor`, selected label at `text.primary` semibold) — this component
- * owns orientation and row alignment, nothing else.
+ * Visuals are the theme's underline Tabs in brand ink
+ * (`textColor`/`indicatorColor="primary"`, treatment in
+ * `theme/core/components/tabs.tsx`, docs/31 Step 7) with no selected wash —
+ * this component owns orientation and row alignment, nothing else.
  */
 export function SectionRail<T extends string>({
   value,
@@ -43,6 +44,8 @@ export function SectionRail<T extends string>({
       value={value}
       onChange={(_, v) => onChange(v as T)}
       aria-label={ariaLabel}
+      textColor="primary"
+      indicatorColor="primary"
     >
       {items.map((item) => (
         <Tab

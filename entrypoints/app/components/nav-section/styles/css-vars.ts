@@ -10,11 +10,12 @@ import { varAlpha } from 'minimal-shared/utils';
  */
 
 /**
- * favbase override of Minimal's active colors: one treatment for both levels —
- * the derived accent ink (`text.accent`, WCAG-safe under every color preset)
- * over an 8% brand wash. Minimal uses `primary.main` (2.5:1 on paper) at root
- * and a grey `action.selected` on sub items; Favbase keeps the brand wash so
- * the active row reads the same wherever it sits in the tree.
+ * Active colors follow Minimal, with one readability override (user decision
+ * 2026-10-14). Root: the row — icon, disclosure arrow — in `primary.main`, but
+ * the title in `primary.dark`: `main` is 2.4:1 as coral text on the 8% wash,
+ * `dark` is the lightest stage that still reads (4.3:1). The dark scheme uses
+ * `primary.light` for both, Minimal's `--nav-item-root-active-color-on-dark`.
+ * Sub: Minimal's grey treatment; the brand color stays on the parent row.
  */
 function colorVars(theme: Theme, variant: 'vertical' | 'mini') {
   const {
@@ -26,19 +27,24 @@ function colorVars(theme: Theme, variant: 'vertical' | 'mini') {
     '--nav-item-hover-bg': palette.action.hover,
     '--nav-item-caption-color': palette.text.disabled,
     // root
-    '--nav-item-root-active-color': palette.text.accent,
+    '--nav-item-root-active-color': palette.primary.main,
+    '--nav-item-root-active-title-color': palette.primary.dark,
     '--nav-item-root-active-bg': varAlpha(palette.primary.mainChannel, 0.08),
     '--nav-item-root-active-hover-bg': varAlpha(palette.primary.mainChannel, 0.16),
     '--nav-item-root-open-color': palette.text.primary,
     '--nav-item-root-open-bg': palette.action.hover,
     // sub
-    '--nav-item-sub-active-color': palette.text.accent,
-    '--nav-item-sub-active-bg': varAlpha(palette.primary.mainChannel, 0.08),
-    '--nav-item-sub-active-hover-bg': varAlpha(palette.primary.mainChannel, 0.16),
+    '--nav-item-sub-active-color': palette.text.primary,
+    '--nav-item-sub-active-bg': palette.action.selected,
     '--nav-item-sub-open-color': palette.text.primary,
     '--nav-item-sub-open-bg': palette.action.hover,
     ...(variant === 'vertical' && {
+      '--nav-item-sub-active-bg': palette.action.hover,
       '--nav-subheader-color': palette.text.disabled,
+    }),
+    ...theme.applyStyles('dark', {
+      '--nav-item-root-active-color': palette.primary.light,
+      '--nav-item-root-active-title-color': palette.primary.light,
     }),
   };
 }

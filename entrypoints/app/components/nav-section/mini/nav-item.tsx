@@ -145,7 +145,6 @@ const ItemRoot = styled(ButtonBase, { shouldForwardProp })<StyledState>(({
     ...(active && {
       color: 'var(--nav-item-sub-active-color)',
       backgroundColor: 'var(--nav-item-sub-active-bg)',
-      '&:hover': { backgroundColor: 'var(--nav-item-sub-active-hover-bg)' },
     }),
   };
 
@@ -164,21 +163,19 @@ const ItemRoot = styled(ButtonBase, { shouldForwardProp })<StyledState>(({
 });
 
 /**
- * @slot icon — platform tint while inactive, same rule as the vertical rail.
+ * @slot icon — platform tint at every state, same rule as the vertical rail.
  */
-const ItemIcon = styled('span', { shouldForwardProp })<StyledState>(
-  ({ platform, active, theme }) => ({
-    ...navItemStyles.icon,
-    width: 'var(--nav-icon-size)',
-    height: 'var(--nav-icon-size)',
-    margin: 'var(--nav-icon-root-margin)',
-    ...(platform && !active && { color: theme.vars.palette.platform[platform] }),
-    variants: [{ props: { variant: 'subItem' }, style: { margin: 'var(--nav-icon-sub-margin)' } }],
-  }),
-);
+const ItemIcon = styled('span', { shouldForwardProp })<StyledState>(({ platform, theme }) => ({
+  ...navItemStyles.icon,
+  width: 'var(--nav-icon-size)',
+  height: 'var(--nav-icon-size)',
+  margin: 'var(--nav-icon-root-margin)',
+  ...(platform && { color: theme.vars.palette.platform[platform] }),
+  variants: [{ props: { variant: 'subItem' }, style: { margin: 'var(--nav-icon-sub-margin)' } }],
+}));
 
 /**
- * @slot title
+ * @slot title — active root tile: readable title stage, as the vertical rail.
  */
 const ItemTitle = styled('span', { shouldForwardProp })<StyledState>(({ active, theme }) => ({
   ...navItemStyles.title(theme),
@@ -189,7 +186,12 @@ const ItemTitle = styled('span', { shouldForwardProp })<StyledState>(({ active, 
   variants: [
     {
       props: { variant: 'rootItem' },
-      style: { ...(active && { fontWeight: theme.typography.fontWeightBold }) },
+      style: {
+        ...(active && {
+          fontWeight: theme.typography.fontWeightBold,
+          color: 'var(--nav-item-root-active-title-color)',
+        }),
+      },
     },
     {
       props: { variant: 'subItem' },

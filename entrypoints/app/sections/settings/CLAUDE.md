@@ -21,14 +21,14 @@ app.html 设置页：顶部 Tab + 每个 tab 内「二级导航 rail + 右侧单
 
 ### 导航视觉（刻意决定，别顺手改）
 
-- 两级导航都吃主题默认的下划线 Tabs（`theme/core/components/tabs.tsx`），组件本地不传 `variant`、不覆盖指示条。
+- 两级导航都是主题的下划线 Tabs，组件本地不传 `variant`、不写指示条或选中色的 `sx`；选中态的主题色只靠 `textColor` / `indicatorColor="primary"` 两个 prop 打开，取色归 `theme/core/components/tabs.tsx`（用户决定 2026-10-14，docs/31 Step 7）。守卫：`settings-navigation.test.tsx` 读亮暗两态的计算色。
 - 标签绝不折行（`whiteSpace: 'nowrap'`），溢出就横滑，中英文长标签都不压缩。
 - `settings-tabs.tsx` 整条轨道居中是对 Minimal 左对齐的刻意偏离（用户决定，`.trellis/spec/frontend/ui-design-system.md` §11），代价是脱离 h1 的左基线，已接受，禁止推回左对齐。
 - 居中不能用 `centered`（与主题默认的 `scrollable` 互斥，告警且无效），也不能给 `MuiTabs-list` 做 flex 居中（溢出时左端滚不到）。
 - 同一处的 `maxWidth: 1` 是承重的，禁止当冗余删：窄屏靠它夹住 `fit-content`，删错的后果是 390px 下首个 tab 停在容器外、点不到。
 - `section-rail.tsx` 不居中。它保留 `useMediaQuery` 的两形态：`md+` 竖排、窄屏横排（`settings-navigation.test.tsx` 锁横排可滚）。
 - 竖排 `Tab` 保留 `justifyContent: 'flex-start'`：每行都带图标，MUI 默认居中会排成参差的图标列；横排保持居中。
-- 竖排 rail 只吃默认下划线、不加选中洗底，与 Dashboard 图例的竖向 Tabs 形态刻意不统一，禁止顺手统一（spec §11 Vertical Tabs）：洗底会与侧栏 `components/nav-section/` 的激活态重影，把页内二级导航拉平成一级导航。
+- 竖排 rail 只有主题色墨 + 下划线、不加选中洗底，与 Dashboard 图例的竖向 Tabs 形态刻意不统一，禁止顺手统一（spec §11 Vertical Tabs）：洗底会与侧栏 `components/nav-section/` 的激活态重影，把页内二级导航拉平成一级导航。
 - 每个 active section 只渲染一个 `SettingsPanel`（标题是 h2），禁止 Card 嵌套；`sections/overview/export-card.tsx` 也复用它。
 
 ### 保存模型（LLM / ASR / Embedding / GitHub / YouTube 五卡）

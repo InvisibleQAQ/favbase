@@ -191,7 +191,19 @@ describe('Collections sidebar navigation', () => {
     );
   });
 
-  it('marks the active row with the active class and the accent ink', () => {
+  it('paints the active root row in the brand color with a readable title', () => {
+    render();
+
+    const row = itemRootOf(container.querySelector('a[href="/settings"]')!);
+    expect(row.className).toContain(navSectionClasses.state.active);
+    // Glyphs inherit the row's `primary.main`; the title drops to `primary.dark`.
+    expect(getComputedStyle(row).color).toBe(themeConfig.palette.primary.main);
+    expect(getComputedStyle(row.querySelector(`.${navSectionClasses.item.title}`)!).color).toBe(
+      themeConfig.palette.primary.dark,
+    );
+  });
+
+  it('marks an active platform leaf grey and keeps its platform icon color', () => {
     render(false, '/collections/bilibili/123');
 
     const platformLink = container.querySelector('a[href="/collections/bilibili"]');
@@ -200,9 +212,25 @@ describe('Collections sidebar navigation', () => {
     // deepMatch: a detail route still belongs to its platform leaf.
     const row = itemRootOf(platformLink!);
     expect(row.className).toContain(navSectionClasses.state.active);
-    // `--nav-item-sub-active-color` resolves to the derived accent ink, which
-    // for the default (coral) preset is `primary.darker` on the light scheme.
-    expect(getComputedStyle(row).color).toBe(themeConfig.palette.primary.darker);
+    // Minimal's sub treatment: the brand color stays on the parent root row.
+    expect(getComputedStyle(row).color).toBe(themeConfig.scheme.light.text.primary);
+    expect(getComputedStyle(row.querySelector(`.${navSectionClasses.item.icon}`)!).color).toBe(
+      platformPalette.light.bilibili,
+    );
+    expect(
+      getComputedStyle(itemRootOf(container.querySelector('a[href="/collections"]')!)).color,
+    ).toBe(themeConfig.palette.primary.main);
+  });
+
+  it('paints the active mini tile like the expanded root row', () => {
+    render(true);
+
+    const tile = itemRootOf(container.querySelector('a[href="/settings"]')!);
+    expect(tile.className).toContain(navSectionClasses.state.active);
+    expect(getComputedStyle(tile).color).toBe(themeConfig.palette.primary.main);
+    expect(getComputedStyle(tile.querySelector(`.${navSectionClasses.item.title}`)!).color).toBe(
+      themeConfig.palette.primary.dark,
+    );
   });
 
   it('renders mini rows as tiles that open their flyout from the keyboard', async () => {

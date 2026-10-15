@@ -20,6 +20,13 @@ reason. Read those before "restoring" Minimal or MUI behaviour.
   / soft `primary`, a selected toggle). `primary.main` is a block and icon
   signal; as small text it fails contrast. `text.accent` is derived from the
   active preset (`accentTextFor` in `core/palette.ts`), never hard-coded.
+- Exception, exactly two places (user decision, docs/31 Step 7): the active
+  nav root title (owner `components/nav-section/styles/css-vars.ts`) and the
+  selected label of a `textColor="primary"` Tabs (owner
+  `core/components/tabs.tsx`, used only by the Settings tabs and rail) are
+  `primary.dark` (dark: `primary.light`), under 4.5:1 for orange, and for
+  coral on the nav wash or the high-contrast ground. Not a precedent: any
+  other brand-ink text stays `text.accent`.
 - One `primary` ramp serves both schemes; a preset swaps the whole ramp
   (`with-settings/update-core.ts`). `contrastText` is picked per preset by WCAG
   (`pickContrastText`), not Minimal's always-white, so some presets carry dark
@@ -116,3 +123,7 @@ reason. Read those before "restoring" Minimal or MUI behaviour.
   they come from).
 - `with-settings/color-presets.test.ts`, `with-settings/update-core.test.ts` —
   the preset table and settings application.
+- The `textColor` / `indicatorColor="primary"` Tabs variants are guarded
+  outside this directory, by computed colour in both schemes:
+  `sections/settings/settings-navigation.test.tsx`. `theme-contract.test.ts`
+  has no Tabs row.
