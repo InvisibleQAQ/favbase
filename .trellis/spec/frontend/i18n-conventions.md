@@ -108,6 +108,7 @@ export interface TranscribeStatusPush {
 | Panel chrome | `panel.*` / `sidebar.*` | `panel.expand` |
 | Subtitle actions | `subtitle.*` | `subtitle.jumpTo` |
 | Collection pipeline strip | `pipeline.*` | `pipeline.fetch` |
+| Collection-page Tagging Budget notice (the user's own daily limit, never worded as a quota; docs/41) | `taggingBudget.*` | `taggingBudget.reached` |
 | Global background-job reminder | `backgroundJobs.*` | `backgroundJobs.kind.sync` |
 | app.html sidebar / Header chrome | `nav.*` / `header.*` | `nav.groupCollections`, `header.settingsAria` |
 | Breadcrumb ancestry (shared by every route with a trail) | `breadcrumbs.*` | `breadcrumbs.home` |

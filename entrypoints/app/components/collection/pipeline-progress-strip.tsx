@@ -11,12 +11,16 @@ export type PipelineSegmentState =
   | 'pausing'
   | 'paused'
   | 'completed'
-  | 'failed';
+  | 'failed'
+  /** Held back on purpose, not failed and not finished; `note` says why. */
+  | 'deferred';
 
 export interface PipelineProgressSegment {
   id: string;
   /** Pre-translated short label. */
   label: string;
+  /** Pre-translated reason, shown after the label (a deferred segment carries one). */
+  note?: string;
   /** `null` renders `--` while DB-backed coverage is unavailable. */
   done: number | null;
   /** `null` renders `--`; only a running segment animates indeterminately. */
@@ -69,6 +73,7 @@ export function PipelineProgressStrip({ segments }: PipelineProgressStripProps) 
         const active = segment.state === 'running' || segment.state === 'pausing' || segment.state === 'paused';
         const unknownRunning = (segment.state === 'running' || segment.state === 'pausing') && segment.total == null;
         const percent = visiblePercent(segment);
+        const label = segment.note ? `${segment.label} · ${segment.note}` : segment.label;
         // Text never borrows the stamp color: active reads in the accent shade,
         // failure in the scheme-safe error shade, everything else in secondary.
         // Coral and error.main stay on the bar fill, where they are blocks.
@@ -100,10 +105,10 @@ export function PipelineProgressStrip({ segments }: PipelineProgressStripProps) 
               <Typography
                 variant="caption"
                 noWrap
-                title={segment.label}
+                title={label}
                 sx={(theme) => ({ ...textColor(theme), minWidth: 0 })}
               >
-                {segment.label}
+                {label}
               </Typography>
               <Typography
                 variant="caption"
@@ -119,7 +124,7 @@ export function PipelineProgressStrip({ segments }: PipelineProgressStripProps) 
               </Typography>
             </Box>
             <LinearProgress
-              aria-label={segment.label}
+              aria-label={label}
               variant={unknownRunning ? 'indeterminate' : 'determinate'}
               value={unknownRunning ? undefined : (percent ?? 0)}
               color={segment.state === 'failed' ? 'error' : 'primary'}

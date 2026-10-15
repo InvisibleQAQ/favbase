@@ -51,8 +51,9 @@ A Collection Item linked to at least one Used Tag, regardless of how many tags i
 _Avoid_: Tagged task, completed item
 
 **Tagging Budget**:
-The daily allowance of input plus output tokens on this device that automatic tagging may spend from the configured LLM provider, shared by every Collection Platform.
-_Avoid_: LLM quota, LLM token limit, max tokens
+The daily limit the user sets on how many input plus output tokens automatic tagging may spend from their own LLM provider key on this device, shared by every Collection Platform.
+favbase holds no allowance of its own: the user's key balance is the real one, and the limit is the user's guard on it.
+_Avoid_: quota, LLM quota, LLM token limit, max tokens
 
 **Processing Coverage**:
 A read-only, platform-scoped snapshot of how many locally persisted, eligible Collection Items have completed each content-processing stage.
@@ -145,6 +146,8 @@ _Avoid_: API key, provider key, password
 - Every **Collection Platform** draws on the same **Tagging Budget**; there is no per-platform allowance
 - The **Tagging Budget** limits automatic tagging only; Chat and video summaries spend from the same LLM provider without counting toward it or being stopped by it
 - The **Tagging Budget** renews at the start of each local day, the same day boundary the daily automatic trigger uses
+- Reaching the **Tagging Budget** holds automatic tagging back without failing it, and leaves no paused **Pipeline Run** behind; untagged items wait for the next local day's **Platform Sync**, or continue at once when the user raises the limit
+- A platform Collection page presents a reached **Tagging Budget**, with today's spend, only while the LLM is configured and Tags work is waiting there; it is never a **Configuration Blocker**
 - A pause request lets the current **Pipeline Run** item settle, then stops before the stage claims its next item
 - A paused **Pipeline Run** remains controllable across Collection route changes in the current app-page runtime, but not after that runtime closes
 - A paused **Pipeline Run** remains unfinished and appears in the global do-not-close reminder until it resumes and settles

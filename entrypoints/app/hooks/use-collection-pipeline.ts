@@ -6,14 +6,17 @@ import type { BackgroundJob } from './background-jobs-store';
 import {
   buildPipelineSegments,
   collectionPipelineStages,
+  deriveTaggingBudgetHold,
   type CollectionPipelineContentStage,
   type PipelineRuntimeSnapshot,
   type ProcessingCoverageStatus,
+  type TaggingBudgetHold,
 } from './pipeline-segments';
 import {
   useProcessingCoverage,
   type ProcessingCoverageRefreshKey,
 } from './use-processing-coverage';
+import { useTaggingBudgetReachedSpend } from './use-tagging-tokens-spent-today';
 
 export interface UseCollectionPipelineInput {
   platform: CollectionPlatform;
@@ -37,6 +40,8 @@ export interface UseCollectionPipelineResult {
   coverage: ProcessingCoverage;
   coverageStatus: ProcessingCoverageStatus;
   segments: PipelineProgressSegment[];
+  /** Tags stopped at the user's daily limit with items waiting; feeds `TaggingBudgetNotice`. */
+  taggingBudgetHold: TaggingBudgetHold | null;
 }
 
 /** Coverage re-query key: sync settle + embed/tag completions, plus whatever the platform appends. */
@@ -52,8 +57,8 @@ export function collectionCoverageRefreshKey(
 
 /**
  * One collection page's pipeline: DB coverage (+ its refresh key), the shared
- * `pipeline.*` labels and the standard Fetch → content? → Embedding → Tagging
- * segments. Views inject only the platform-shaped parts.
+ * `pipeline.*` labels, the standard Fetch → content? → Embedding → Tagging
+ * segments and the Tagging Budget hold. Views inject only the platform-shaped parts.
  */
 export function useCollectionPipeline({
   platform,
@@ -69,6 +74,8 @@ export function useCollectionPipeline({
     platform,
     collectionCoverageRefreshKey(syncing, embedJob, tagJob, extraRefreshKey),
   );
+  const spentAtCap = useTaggingBudgetReachedSpend();
+  const taggingBudgetHold = deriveTaggingBudgetHold(coverage, coverageStatus, spentAtCap);
   const segments = buildPipelineSegments({
     coverage,
     coverageStatus,
@@ -82,7 +89,8 @@ export function useCollectionPipeline({
       content,
       embedJob,
       tagJob,
+      taggingDeferredNote: taggingBudgetHold ? t('pipeline.taggingBudgetReached') : null,
     }),
   });
-  return { coverage, coverageStatus, segments };
+  return { coverage, coverageStatus, segments, taggingBudgetHold };
 }

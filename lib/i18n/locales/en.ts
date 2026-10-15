@@ -346,6 +346,11 @@ const en: Record<LocaleKeys, string> = {
   'configurationBlocker.configure.asr': 'Configure ASR',
   'configurationBlocker.configure.embedding': 'Configure Embedding',
   'configurationBlocker.configure.llm': 'Configure LLM',
+  // Tagging Budget notice (docs/41 D8): the limit is the user's own guard on their key, not a favbase quota.
+  'taggingBudget.reached': 'Auto-tagging has used {{spent}} tokens today and reached your daily limit, so it is paused.',
+  'taggingBudget.pending': "{{count}} items are still untagged and will continue at tomorrow's sync.",
+  'taggingBudget.pending.one': "{{count}} item is still untagged and will continue at tomorrow's sync.",
+  'taggingBudget.adjust': 'Adjust limit',
 
   // Breadcrumb ancestry shared by every route that shows a trail (docs/25 Step 7).
   'breadcrumbs.home': 'Home',
@@ -454,6 +459,8 @@ const en: Record<LocaleKeys, string> = {
   'pipeline.readme': 'README',
   'pipeline.embedding': 'Embed',
   'pipeline.tagging': 'Tags',
+  // Why the Tags segment is held (docs/41 D8), appended to the segment label.
+  'pipeline.taggingBudgetReached': 'Daily limit reached',
   // Unified fetch button (every platform) — same operation as pipeline.fetch.
   'pipeline.fetchNow': 'Fetch now',
   'pipeline.fetching': 'Fetching...',

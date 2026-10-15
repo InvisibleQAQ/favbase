@@ -26,7 +26,7 @@
 - 配置门早退（凭据未配置）留在 view，不进 scaffold；早退页面仍用 `SectionTitleBar` 保住单 h1。
 - 平台状态（库空 / 未登录 / 需配置）由 view 构造、经 slot 注入，scaffold 不认识它们。省略 `authFailedState` 时该 phase 回退渲染 `emptyState`。
 - 两套 popover：主 grid 的 popover 在 scaffold；`tag-filtered` phase 的 popover 封在 `TaggedItemGrid` 内，该 phase scaffold 不渲染主 popover。
-- `configurationNotice` 是预构造的 slot：scaffold 不读 provider 配置。
+- `configurationNotice` 是预构造的 slot：scaffold 不读 provider 配置。view 往里放 `CollectionConfigurationNotice` 与 `TaggingBudgetNotice` 两个组件；后者每个平台 view 都必须传（守卫：`tests/platform-completeness-contract.test.ts`，可选 slot 漏传时 `tsc` 不报）。
 - `CollectionPageCopy` 只放各平台不同的文案。逐字相同的外壳文案（获取按钮两态、错误态标题与重试、同步失败横幅）由 scaffold 经 `useCollectionChromeCopy` 自取，不要加回 copy 字段。
 - 同步失败横幅只在 `hasSyncError && libraryCount > 0` 时渲染（库空时走 sync-error phase）；文字色 `error.dark`（暗色 `error.light`），不用 `error.main`。
 - `breadcrumbs` 原样转给 `SectionTitleBar links`：scaffold 不构造也不翻译祖先路径。
@@ -62,4 +62,6 @@
 - `SearchField` 不写尺寸，高度由主题的输入框目标决定；`placeholder` 同时是它的可访问名。
 - `PipelineProgressStrip` 纯展示、无段级控件：暂停 / 继续归 `components/library-gate/`，由 scaffold 放在 pipeline 行尾。它自身不带 `mb`，外边距归 scaffold 的 pipeline 行。未知或零分母不伪造百分比。
 - strip 的文字色：活动段 `text.accent`、失败 `error.dark`（暗色 `error.light`）、其余 `text.secondary`。珊瑚与 `error.main` 只做进度条填充，不做文字。
+- `deferred` 段是有意延后，既不是失败也不是完成（docs/41 D8）：文字色归「其余」，进度条不降透明。`note` 是预翻译的原因，显示为 `label · note`，同时进 `title` 与进度条的 `aria-label`。
+- 「调整上限」这类去设置页的链接不进段内（docs/41 §3 铁律 6），放在 scaffold 的配置提醒 slot。
 - `SyncNowButton` 的唯一消费方是 `components/collection-states/`；变体只有 `contained` / `soft`，由那里按规则选。

@@ -31,6 +31,7 @@ import {
 } from '../../hooks/collection-sync-error-message';
 import { Iconify } from '../../components/iconify';
 import { CollectionConfigurationNotice } from '../../components/configuration-blocker';
+import { TaggingBudgetNotice } from '../../components/collection-states';
 import { AutoTranscribeBar, useAutoTranscribe } from '../../components/auto-transcribe';
 import { biliAutoTranscribePipeline } from './auto-transcribe-runtime';
 import { FolderChips } from './folder-chips';
@@ -197,7 +198,7 @@ function BilibiliCollectionPage({
   const transcribeJob = useJob(JOB_PLATFORM, 'transcribe');
   const embedJob = useJob(JOB_PLATFORM, 'embed');
   const tagJob = useJob(JOB_PLATFORM, 'tag');
-  const { coverage, coverageStatus, segments } = useCollectionPipeline({
+  const { coverage, coverageStatus, segments, taggingBudgetHold } = useCollectionPipeline({
     platform: PLATFORM,
     syncing,
     fetch: backgroundJobRuntime(syncJob, fetchedCountProgress),
@@ -273,12 +274,15 @@ function BilibiliCollectionPage({
       skeleton={<VideoGridSkeleton />}
       configurationNotice={
         loginState === 'logged_in' ? (
-          <CollectionConfigurationNotice
-            platform={PLATFORM}
-            coverage={coverage}
-            coverageStatus={coverageStatus}
-            prerequisiteBlocked={autoTranscribe.state.prerequisiteBlocked}
-          />
+          <>
+            <CollectionConfigurationNotice
+              platform={PLATFORM}
+              coverage={coverage}
+              coverageStatus={coverageStatus}
+              prerequisiteBlocked={autoTranscribe.state.prerequisiteBlocked}
+            />
+            <TaggingBudgetNotice hold={taggingBudgetHold} />
+          </>
         ) : undefined
       }
       pipeline={loginState === 'logged_in' ? pipeline : undefined}
@@ -341,7 +345,7 @@ function BilibiliFallbackPage({
   const transcribeJob = useJob(JOB_PLATFORM, 'transcribe');
   const embedJob = useJob(JOB_PLATFORM, 'embed');
   const tagJob = useJob(JOB_PLATFORM, 'tag');
-  const { coverage, coverageStatus, segments } = useCollectionPipeline({
+  const { coverage, coverageStatus, segments, taggingBudgetHold } = useCollectionPipeline({
     platform: PLATFORM,
     syncing,
     fetch: backgroundJobRuntime(syncJob, fetchedCountProgress),
@@ -396,11 +400,14 @@ function BilibiliFallbackPage({
       authFailedState={<NotLoggedIn onRetry={onSync} />}
       configurationNotice={
         loginState === 'logged_in' ? (
-          <CollectionConfigurationNotice
-            platform={PLATFORM}
-            coverage={coverage}
-            coverageStatus={coverageStatus}
-          />
+          <>
+            <CollectionConfigurationNotice
+              platform={PLATFORM}
+              coverage={coverage}
+              coverageStatus={coverageStatus}
+            />
+            <TaggingBudgetNotice hold={taggingBudgetHold} />
+          </>
         ) : undefined
       }
       pipeline={loginState === 'logged_in' ? pipeline : undefined}

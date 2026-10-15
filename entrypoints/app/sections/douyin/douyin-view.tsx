@@ -5,6 +5,7 @@ import {
   EmptyLibraryState,
   FacetChips,
   NotLoggedInState,
+  TaggingBudgetNotice,
   type SiteAction,
 } from '../../components/collection-states';
 import { PipelineProgressStrip, CollectionPageScaffold } from '../../components/collection';
@@ -73,7 +74,7 @@ export function DouyinView() {
   // refresh; the shared `transcribe` job is the content stage's runtime.
   const autoTranscribe = useAutoTranscribe(douyinAutoTranscribePipeline);
   const transcribeJob = useJob(JOB_PLATFORM, 'transcribe');
-  const { coverage, coverageStatus, segments } = useCollectionPipeline({
+  const { coverage, coverageStatus, segments, taggingBudgetHold } = useCollectionPipeline({
     platform: PLATFORM,
     syncing: douyin.syncing,
     fetch: backgroundJobRuntime(douyin.syncJob, fetchedCountProgress),
@@ -188,12 +189,15 @@ export function DouyinView() {
       // Both optional slots are passed on purpose: `tsc` would not notice a
       // missing one, and without the notice a Tags backlog has no way back.
       configurationNotice={
-        <CollectionConfigurationNotice
-          platform={PLATFORM}
-          coverage={coverage}
-          coverageStatus={coverageStatus}
-          prerequisiteBlocked={autoTranscribe.state.prerequisiteBlocked}
-        />
+        <>
+          <CollectionConfigurationNotice
+            platform={PLATFORM}
+            coverage={coverage}
+            coverageStatus={coverageStatus}
+            prerequisiteBlocked={autoTranscribe.state.prerequisiteBlocked}
+          />
+          <TaggingBudgetNotice hold={taggingBudgetHold} />
+        </>
       }
       pipeline={authFailed ? undefined : pipeline}
     />

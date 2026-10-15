@@ -6,7 +6,7 @@ app.html 专用的共享 hooks 与页面运行时 job 调度（只跑在 Extensi
 
 - 平台感知层只有四个模块：`library-gate`、`use-daily-auto-sync`、`platform-sync`、`use-credential-gated-library`，可以读 storage / DB、认识平台词汇。其余全部是泛型层：零 storage、不 import 任何具体平台的模块（`collection-job-platform` 是纯判别符映射，两档都可 import）。
 - 依赖单向：平台感知层向泛型层注入（`setJobGate`、`deps` 参数）；泛型层反向 import 即违规，`background-jobs-store` 尤其不得 import `library-gate`。
-- 唯一的 storage 例外：`use-tagging-tokens-spent-today` 只经 `@/lib/storage` 的 typed get / watch 读 Tagging Budget 账本（docs/41），不认识平台、不碰 job store。它不是给泛型层加 storage 读的先例。
+- 唯一的 storage 例外：`use-tagging-tokens-spent-today` 只经 `@/lib/storage` 的 typed get / watch 读 Tagging Budget 账本、经 `useSettings` 读上限与 LLM 配置（docs/41），不认识平台、不碰 job store。它不是给泛型层加 storage 读的先例。
 - 两档都不得 import `sections/`：各平台 Sync Adapter 的聚合点在 app 根 `collection-platform-auto-sync.ts`，由 `App.tsx` 注入 `useDailyAutoSync(platforms)`（hook 没有默认 registry）。守卫：`tests/platform-completeness-contract.test.ts`。
 - `useCollectionLibrary` 的 DB 依赖只有 `initDbProxy` 与 `@/lib/database/collection-queries` 的 `getPlatformLastSyncedAt`（按判别符读，不认识具体平台）；凭据与配置解析留在 `sections/<platform>/<platform>-sync-adapter.ts`，hook 的 `syncFn` 只引用 adapter。
 
@@ -69,6 +69,9 @@ app.html 专用的共享 hooks 与页面运行时 job 调度（只跑在 Extensi
 - `resolveCollectionPhase`（`collection-phase.ts`）的分支顺序即契约：view 只做 `switch(phase)`，不各自排优先级。
 - pipeline 段的形状只在 `collectionPipelineStages` 声明（Fetch → 可选 content 段 → Embedding → Tagging），view 经 `useCollectionPipeline` 消费，不手写 stages 数组。
 - pipeline 段是纯展示快照，没有段级 pause / resume：运行控制只归 per-platform 闸门（`library-gate.ts` + `components/library-gate/`）。
+- 段状态的判定顺序是契约（`pipeline-segments.ts` 的 `segmentState`）：`deferred` 盖过 `completed` 与 idle，因为 Tags drain 在第一条 `'deferred'` 处结束后 phase 是 `completed`；它不盖 failed、running / pausing / paused，也不盖 coverage 未就绪。
+- Tagging Budget 的「已达上限」是派生态，只在 `useCollectionPipeline` 算一次（docs/41 D8），同时喂 Tags 段的 `deferred` 和 view 的 `TaggingBudgetNotice`，不进 job store、不持久化。
+- LLM 未配置时不报「已达上限」（`useTaggingBudgetReachedSpend` 返回 `null`）：那时挡住条目的是配置，由 Configuration Blocker 说，两条提醒同时出现会自相矛盾。
 - `transcriptionStage`（`pipeline-segments.ts`）是转录平台共享的 content 段：runtime 读该平台的 `transcribe` job（手动与自动转录共用同一个 key），view 不自己拼段对象。
 - 进度契约：Fetch 段完成后保留本次总数并显示 100%（`completedProgress: 'last-run'`）；同步进度带 `fetchedCount`、远端总数未知的平台用 `fetchedCountProgress`，其余用默认 `readJobProgress`。
 - `useCollectionBreadcrumbs` 是收藏路由祖先的唯一 owner，每个平台收藏页 view 必须调用它（守卫：同一契约测试）。末项永远无 href；文案取导航名（`nav.*`），可能与页面 h1 不逐字相同（聚合页 h1「全部收藏」/ 末项「收藏夹」）。
@@ -86,8 +89,8 @@ app.html 专用的共享 hooks 与页面运行时 job 调度（只跑在 Extensi
 
 - `useCollectionBreadcrumbs` 不要 memo：`t` 是稳定的模块函数，`useMemo` 会把字符串冻在旧 locale。
 - `useCountdown` 在渲染期读 `Date.now()`，不要把 `now` 存进 state：没有倒计时时 state 不 tick，页面挂了很久才出现的 deadline 首帧会按挂载时刻多算。
-- `useTaggingTokensSpentToday` 同理：state 里存账本，读数每次渲染按 `new Date()` 算，昨天的账本才会读成 0。没有午夜定时器（刻意），页面跨过零点后要等下一次渲染才归零。
-- import `use-tagging-tokens-spent-today`（含间接）就会加载 `@/lib/storage` barrel（它和 `@/lib/tagging/budget` 都走 barrel），没有 `chrome` 的测试里会出 unhandled rejection：凡是 import 链上有它的模块，测试都要 mock 这个 hook。
+- `useTaggingTokensSpentToday` 与 `useTaggingBudgetReachedSpend` 同理：state 里存账本，读数每次渲染按 `new Date()` 算，昨天的账本才会读成 0。没有午夜定时器（刻意），页面跨过零点后要等下一次渲染才归零。
+- import `use-tagging-tokens-spent-today`（含间接）就会加载 `@/lib/storage` barrel（它、`useSettings` 和 `@/lib/tagging/budget` 都走 barrel），没有 `chrome` 的测试里会出 unhandled rejection。`useCollectionPipeline` 调用它，所以渲染真实 `useCollectionPipeline` 的测试要 mock 这个 hook；整体 mock 掉 `use-collection-pipeline` 的 view 测试不受影响。
 - `facetQuery` 函数体里的 `as TQuery` 不能删：去掉后 `tsc` 报 TS2345（`TQuery` 可能被实例化成约束的另一个子类型）。
 - `useJobsBadge` 只写不清理：unload 不可靠，关掉 app.html 后由 SW 的 `lib/background/jobs-badge.ts` 擦除；action API 失败只 warn，不能拖垮页面。
 - `useCollectionPipeline` 的 coverage refresh key 里 `syncing` 独立于 Fetch 段的 running：github 在 readme 相位提前 settle Fetch 段，而 sync job 仍在跑。

@@ -101,7 +101,7 @@ vi.mock('../../components/configuration-blocker', () => ({
 vi.mock('../../hooks/use-collection-pipeline', () => ({
   useCollectionPipeline: (input: PipelineInput) => {
     mocks.pipeline.last = input;
-    return { coverage: null, coverageStatus: 'loading', segments: [] };
+    return { coverage: null, coverageStatus: 'loading', segments: [], taggingBudgetHold: null };
   },
 }));
 

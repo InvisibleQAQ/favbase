@@ -336,6 +336,11 @@ const zhCN = {
   'configurationBlocker.configure.asr': '配置 ASR',
   'configurationBlocker.configure.embedding': '配置 Embedding',
   'configurationBlocker.configure.llm': '配置 LLM',
+  // Tagging Budget 提醒（docs/41 D8）：上限是用户给自己 key 设的闸，不是 favbase 的额度。
+  'taggingBudget.reached': '今天自动打标签已用 {{spent}} token，达到你设置的每日上限，已暂停。',
+  'taggingBudget.pending': '还有 {{count}} 个条目没有标签，明天同步时继续。',
+  'taggingBudget.pending.one': '还有 {{count}} 个条目没有标签，明天同步时继续。',
+  'taggingBudget.adjust': '调整上限',
 
   // 面包屑祖先路径，所有带 trail 的路由共用（docs/25 Step 7）。
   'breadcrumbs.home': '首页',
@@ -444,6 +449,8 @@ const zhCN = {
   'pipeline.readme': 'README',
   'pipeline.embedding': '向量',
   'pipeline.tagging': '标签',
+  // Tags 段的延后说明（docs/41 D8），拼在段标签之后。
+  'pipeline.taggingBudgetReached': '已达每日上限',
   // Unified fetch button (every platform) — same operation as pipeline.fetch.
   'pipeline.fetchNow': '立即获取',
   'pipeline.fetching': '获取中...',

@@ -13,6 +13,7 @@ import type { UseCollectionPipelineResult } from './use-collection-pipeline';
 
 const mocks = vi.hoisted(() => ({
   useProcessingCoverage: vi.fn(),
+  useTaggingBudgetReachedSpend: vi.fn<() => number | null>(),
 }));
 
 vi.mock('@/lib/i18n/use-translation', () => ({
@@ -21,6 +22,11 @@ vi.mock('@/lib/i18n/use-translation', () => ({
 
 vi.mock('./use-processing-coverage', () => ({
   useProcessingCoverage: mocks.useProcessingCoverage,
+}));
+
+// The real hook loads the `@/lib/storage` barrel, which touches `chrome` on load.
+vi.mock('./use-tagging-tokens-spent-today', () => ({
+  useTaggingBudgetReachedSpend: mocks.useTaggingBudgetReachedSpend,
 }));
 
 import { collectionCoverageRefreshKey, useCollectionPipeline } from './use-collection-pipeline';
@@ -80,6 +86,8 @@ describe('useCollectionPipeline', () => {
       loading: false,
       error: null,
     });
+    mocks.useTaggingBudgetReachedSpend.mockReset();
+    mocks.useTaggingBudgetReachedSpend.mockReturnValue(null);
     container = document.createElement('div');
     document.body.append(container);
     root = createRoot(container);
@@ -139,5 +147,80 @@ describe('useCollectionPipeline', () => {
       percent: 100,
       state: 'completed',
     });
+  });
+
+  it('reports no Tagging Budget hold and no note while under the daily limit', () => {
+    act(() =>
+      root.render(
+        <Probe platform="x" syncing={false} fetch={null} embedJob={null} tagJob={job(3)} />,
+      ),
+    );
+
+    expect(latest?.taggingBudgetHold).toBeNull();
+    expect(latest?.segments.find((segment) => segment.id === 'tagging')).toEqual({
+      id: 'tagging',
+      label: 'L:pipeline.tagging',
+      done: 3,
+      total: 8,
+      state: 'completed',
+    });
+  });
+
+  it('holds the Tags segment at the daily limit over a completed drain, with the translated note', () => {
+    mocks.useTaggingBudgetReachedSpend.mockReturnValue(10_000_000);
+
+    act(() =>
+      root.render(
+        <Probe platform="x" syncing={false} fetch={null} embedJob={null} tagJob={job(3)} />,
+      ),
+    );
+
+    expect(latest?.taggingBudgetHold).toEqual({ spent: 10_000_000, pending: 5 });
+    expect(latest?.segments.find((segment) => segment.id === 'tagging')).toEqual({
+      id: 'tagging',
+      label: 'L:pipeline.tagging',
+      done: 3,
+      total: 8,
+      state: 'deferred',
+      note: 'L:pipeline.taggingBudgetReached',
+    });
+  });
+
+  it('keeps a running Tags segment running while still reporting the hold', () => {
+    mocks.useTaggingBudgetReachedSpend.mockReturnValue(10_000_000);
+
+    act(() =>
+      root.render(
+        <Probe platform="x" syncing={false} fetch={null} embedJob={null} tagJob={job(4, true)} />,
+      ),
+    );
+
+    expect(latest?.taggingBudgetHold).toEqual({ spent: 10_000_000, pending: 5 });
+    expect(latest?.segments.find((segment) => segment.id === 'tagging')).toEqual({
+      id: 'tagging',
+      label: 'L:pipeline.tagging',
+      done: 1,
+      total: 4,
+      state: 'running',
+    });
+  });
+
+  it('reports no hold at the limit when no untagged item is waiting', () => {
+    mocks.useTaggingBudgetReachedSpend.mockReturnValue(10_000_000);
+    mocks.useProcessingCoverage.mockReturnValue({
+      coverage: { ...coverage, tagging: { done: 8, total: 8 } },
+      status: 'ready',
+      loading: false,
+      error: null,
+    });
+
+    act(() =>
+      root.render(
+        <Probe platform="x" syncing={false} fetch={null} embedJob={null} tagJob={null} />,
+      ),
+    );
+
+    expect(latest?.taggingBudgetHold).toBeNull();
+    expect(latest?.segments.find((segment) => segment.id === 'tagging')?.state).toBe('idle');
   });
 });

@@ -15,6 +15,13 @@
 - 状态组件不认识 auth 的 `reason`：`missing` / `rejected` 两套文案由 view 选键传入。
 - `FacetChips` 只做一维带计数的单选 facet。facet 形状不归一，调用方传 `getKey` / `getName`；顺序归调用方的查询，组件不排序。
 
+### `TaggingBudgetNotice`（docs/41 D8）
+
+- 何时显示不归这里：组件只渲染 `useCollectionPipeline` 算好的 `taggingBudgetHold`，为 `null` 就不渲染，不自己读账本或 settings。
+- 它不是 Configuration Blocker（docs/41 §3 铁律 5）：不用 Alert、不用 warning 配色、不复用 `configurationBlocker.*` 的文案，也不并进 `CollectionConfigurationNotice`。用户的闸起了作用，不是哪里没配好。
+- 「调整上限」链到 `settingsPath('ai/llm')`，不带 `?resume=`：每次保存 LLM 设置都会对全部平台续跑 Tags。
+- 文案口径（上限是用户自己的闸，不是 favbase 的额度）归 `lib/i18n/CLAUDE.md`。
+
 ## 刻意不进来的
 
 形状不同的留在各自 view，不要为了「统一」塞进来：
@@ -22,3 +29,7 @@
 - bookmarks `EmptyState`：没有按钮——挂载已同步过且没有 http(s) 书签，是另一个状态，不是「从未同步」。
 - B站 `NotLoggedIn`（动作是重试，不是打开站点 + 获取）、`EmptyFolderState`、`SelectFolderState`。
 - 形状不同的 chip 行自己组合 `CollapsibleChipRow`：github `LanguageChips`（语言色点）、bookmarks `FolderChips`（无计数）、B站 `FolderChips`（加载骨架 + 空态）。
+
+## 坑
+
+- barrel 经 `TaggingBudgetNotice` value-import 了 `@/lib/i18n` 的 index（`formatCompactNumber`），它加载时读 `chrome.storage`。凡是 import 本 barrel 的测试都要 mock `@/lib/i18n`，只 mock `use-translation` 不够。

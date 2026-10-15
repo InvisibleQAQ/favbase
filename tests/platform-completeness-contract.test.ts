@@ -465,11 +465,20 @@ describe('platform completeness contract', () => {
           missing.push(`${platform}: lazy page module does not exist (${importPath})`);
         } else if (!viewFile) {
           missing.push(`${platform}: lazy page does not render a sections/ view`);
-        } else if (!readFileSync(viewFile, 'utf8').includes('useCollectionBreadcrumbs(')) {
-          // Every collection route sits under Home > Collections. The trail is
-          // derived from the navigation registry, so a new platform gets it by
-          // calling the shared hook — never by hand-writing crumbs.
-          missing.push(`${platform}: collection page ancestry (useCollectionBreadcrumbs)`);
+        } else {
+          const view = readFileSync(viewFile, 'utf8');
+          if (!view.includes('useCollectionBreadcrumbs(')) {
+            // Every collection route sits under Home > Collections. The trail is
+            // derived from the navigation registry, so a new platform gets it by
+            // calling the shared hook — never by hand-writing crumbs.
+            missing.push(`${platform}: collection page ancestry (useCollectionBreadcrumbs)`);
+          }
+          if (!view.includes('<TaggingBudgetNotice')) {
+            // `configurationNotice` is an optional slot, so `tsc` stays quiet
+            // when a view forgets the Tagging Budget notice — and that page
+            // would then never say why its Tags stopped (docs/41 D8).
+            missing.push(`${platform}: Tagging Budget notice (TaggingBudgetNotice)`);
+          }
         }
       }
     }

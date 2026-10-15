@@ -12,6 +12,7 @@ import { useCollectionPipeline } from '../../hooks/use-collection-pipeline';
 import { useCollectionBreadcrumbs } from '../../hooks/use-collection-breadcrumbs';
 import { Iconify } from '../../components/iconify';
 import { CollectionConfigurationNotice } from '../../components/configuration-blocker';
+import { TaggingBudgetNotice } from '../../components/collection-states';
 import { BookmarkCard } from './bookmark-card';
 import { BookmarkExtractionPanel } from './bookmark-extraction-panel';
 import { BookmarkGridSkeleton } from './bookmark-grid-skeleton';
@@ -49,7 +50,7 @@ export function BookmarksView() {
   // "All" chip and never forces a folder into the URL (bilibili does).
   const breadcrumbs = useCollectionBreadcrumbs(PLATFORM);
   const extraction = useBookmarkExtraction(bm.lastSyncedAt?.getTime());
-  const { coverage, coverageStatus, segments } = useCollectionPipeline({
+  const { coverage, coverageStatus, segments, taggingBudgetHold } = useCollectionPipeline({
     platform: PLATFORM,
     syncing: bm.syncing,
     fetch: backgroundJobRuntime(bm.syncJob),
@@ -127,11 +128,14 @@ export function BookmarksView() {
       }
       emptyState={<EmptyState />}
       configurationNotice={
-        <CollectionConfigurationNotice
-          platform={PLATFORM}
-          coverage={coverage}
-          coverageStatus={coverageStatus}
-        />
+        <>
+          <CollectionConfigurationNotice
+            platform={PLATFORM}
+            coverage={coverage}
+            coverageStatus={coverageStatus}
+          />
+          <TaggingBudgetNotice hold={taggingBudgetHold} />
+        </>
       }
       pipeline={pipeline}
     />

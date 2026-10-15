@@ -5,6 +5,7 @@ import {
   EmptyLibraryState,
   FacetChips,
   NeedsConfigState,
+  TaggingBudgetNotice,
 } from '../../components/collection-states';
 import { DashboardContent } from '../../layouts/dashboard';
 import {
@@ -48,7 +49,7 @@ export function YoutubeView() {
   const { t } = useTranslation();
   const yt = useYoutubePlaylists();
   const breadcrumbs = useCollectionBreadcrumbs(PLATFORM);
-  const { coverage, coverageStatus, segments } = useCollectionPipeline({
+  const { coverage, coverageStatus, segments, taggingBudgetHold } = useCollectionPipeline({
     platform: PLATFORM,
     syncing: yt.syncing,
     fetch: backgroundJobRuntime(yt.syncJob, fetchedCountProgress),
@@ -151,11 +152,14 @@ export function YoutubeView() {
         />
       }
       configurationNotice={
-        <CollectionConfigurationNotice
-          platform={PLATFORM}
-          coverage={coverage}
-          coverageStatus={coverageStatus}
-        />
+        <>
+          <CollectionConfigurationNotice
+            platform={PLATFORM}
+            coverage={coverage}
+            coverageStatus={coverageStatus}
+          />
+          <TaggingBudgetNotice hold={taggingBudgetHold} />
+        </>
       }
       pipeline={
         !yt.settingsLoading && yt.configured && yt.syncError?.kind !== 'auth'

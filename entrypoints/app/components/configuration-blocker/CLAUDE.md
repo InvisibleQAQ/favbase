@@ -12,6 +12,7 @@ Collection 页面的 provider 配置阻塞横幅（`CollectionConfigurationNotic
 - `role="status"` 显式覆盖 Alert 默认的 `role="alert"`：这是被动区域，页面加载时不得有 live alert 抢读屏。
 - 文字不用 `warning.main`、不用珊瑚色：正文 `text.primary`，图标与链接 `text.accent`。
 - provider 阻塞项链接到设置页对应的 AI 叶子（`settingsPath('ai/<capability>')`）并带 `?resume=<platform>`。
+- 达到 Tagging Budget 不是阻塞项（docs/41 §3 铁律 5）：它的提醒是 `components/collection-states/` 的 `TaggingBudgetNotice`，与本横幅并排放在同一个 slot，不并进来，也不进 `deriveConfigurationBlockers`。
 
 ## 坑
 

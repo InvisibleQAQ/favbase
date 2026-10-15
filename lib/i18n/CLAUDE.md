@@ -22,6 +22,7 @@
 - 「从平台拉取收藏」只有一个说法：获取 / Fetch。`backgroundJobs.kind.sync` 与 `pipeline.fetch` 文案必须一致；各平台获取按钮统一用 `pipeline.fetchNow` / `pipeline.fetching`，不加 per-platform 的 `*.sync` / `*.syncing`，不引入第二个「同步」说法。
 - 知识库闸门按钮固定 `pipeline.pauseLibrary` / `pipeline.resumeLibrary`；段级暂停控件（`pipeline.control.*`）已下线，不得复活。
 - provider 配置阻塞提示统一用 `configurationBlocker.*`；何时显示归 `entrypoints/app/components/configuration-blocker/CLAUDE.md`。
+- Tagging Budget 的收藏页提醒用 `taggingBudget.*`，Tags 段的短说明用 `pipeline.taggingBudgetReached`。favbase 自己没有额度，上限是用户给自己的 key 设的闸（docs/41 §1）：文案写「你设置的每日上限」并给出今日已用，不写「额度」/ quota。
 - WebDAV 拒绝远端 Settings 的文案（`settings.sync.err.*`）必须说明本地设置未被覆盖，或需要升级。
 - Agent Bridge（`settings.agentBridge.*`）：可见文案里配对密钥固定叫「配对 Token」/ pairing token（代码与域术语仍是 Bridge Token），不写成 API key；不出现 Bridge / daemon 这类实现词，用户要照敲的字面命令（如 `favbase doctor`）除外。
 - Agent Skills 的可见文案（`settings.agentBridge.*`、`welcome.agentSkills.*`）笼统写 AI agent，不点名 Claude Code / Codex（用户决定 2026-10-13）：`favbase setup` 只给这两家装 skill，其余 agent 走 `npx skills add InvisibleQAQ/favbase -g`（根 `README.md`），笼统说法因此成立。

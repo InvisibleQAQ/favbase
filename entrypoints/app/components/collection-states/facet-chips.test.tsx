@@ -25,6 +25,12 @@ vi.mock('@/lib/i18n/use-translation', () => ({
   }),
 }));
 
+// The barrel carries `TaggingBudgetNotice`, whose `formatCompactNumber` comes
+// from the `@/lib/i18n` index, which reads `chrome.storage` on load.
+vi.mock('@/lib/i18n', () => ({
+  formatCompactNumber: (value: number) => String(value),
+}));
+
 vi.mock('../iconify', () => ({
   Iconify: ({ icon, width }: { icon: string; width?: number }) => (
     <span data-icon={icon} data-width={width} />

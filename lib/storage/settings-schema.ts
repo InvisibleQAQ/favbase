@@ -82,7 +82,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   prefMode: 'efficiency',
   temperature: 0.3,
   maxTokens: 100000,
-  taggingDailyTokenBudget: 5_000_000,
+  taggingDailyTokenBudget: 10_000_000,
 };
 
 const LEGACY_ASR_FIELDS = [

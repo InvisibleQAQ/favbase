@@ -5,6 +5,7 @@ import {
   EmptyLibraryState,
   FacetChips,
   NotLoggedInState,
+  TaggingBudgetNotice,
   type SiteAction,
 } from '../../components/collection-states';
 import { PipelineProgressStrip, CollectionPageScaffold } from '../../components/collection';
@@ -51,7 +52,7 @@ export function ZhihuView() {
   const { t } = useTranslation();
   const zhihu = useZhihuFavorites();
   const breadcrumbs = useCollectionBreadcrumbs(PLATFORM);
-  const { coverage, coverageStatus, segments } = useCollectionPipeline({
+  const { coverage, coverageStatus, segments, taggingBudgetHold } = useCollectionPipeline({
     platform: PLATFORM,
     syncing: zhihu.syncing,
     fetch: backgroundJobRuntime(zhihu.syncJob, fetchedCountProgress),
@@ -141,11 +142,14 @@ export function ZhihuView() {
         />
       }
       configurationNotice={
-        <CollectionConfigurationNotice
-          platform={PLATFORM}
-          coverage={coverage}
-          coverageStatus={coverageStatus}
-        />
+        <>
+          <CollectionConfigurationNotice
+            platform={PLATFORM}
+            coverage={coverage}
+            coverageStatus={coverageStatus}
+          />
+          <TaggingBudgetNotice hold={taggingBudgetHold} />
+        </>
       }
       pipeline={zhihu.syncError?.kind === 'auth' ? undefined : pipeline}
     />

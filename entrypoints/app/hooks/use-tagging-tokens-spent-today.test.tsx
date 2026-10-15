@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   getTaggingBudgetLedger: vi.fn<() => Promise<TaggingBudgetLedger | null>>(),
   watchers: [] as Array<(ledger: TaggingBudgetLedger | null) => void>,
   unwatch: vi.fn(),
+  settings: { loading: false, limit: 1_000, llm: true },
 }));
 
 vi.mock('@/lib/storage', () => ({
@@ -24,7 +25,22 @@ vi.mock('@/lib/storage', () => ({
   settingsStorage: { getValue: vi.fn() },
 }));
 
-import { useTaggingTokensSpentToday } from './use-tagging-tokens-spent-today';
+vi.mock('@/lib/hooks/useSettings', () => ({
+  useSettings: () => ({
+    settings: { taggingDailyTokenBudget: mocks.settings.limit },
+    loading: mocks.settings.loading,
+  }),
+}));
+// Mocked rather than real: a `VITE_*_API_KEY` in `.env.local` would make the
+// real resolver report the LLM configured.
+vi.mock('@/lib/storage/resolve', () => ({
+  resolveLlmConfig: () => ({ enabled: mocks.settings.llm }),
+}));
+
+import {
+  useTaggingBudgetReachedSpend,
+  useTaggingTokensSpentToday,
+} from './use-tagging-tokens-spent-today';
 
 const TODAY = '2026-10-15';
 const YESTERDAY = '2026-10-14';
@@ -163,5 +179,109 @@ describe('useTaggingTokensSpentToday', () => {
     act(() => root.render(<></>));
 
     expect(mocks.unwatch).toHaveBeenCalledOnce();
+  });
+});
+
+describe('useTaggingBudgetReachedSpend', () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  function ReachedProbe() {
+    const spent = useTaggingBudgetReachedSpend();
+    return <output data-reached>{spent === null ? 'null' : String(spent)}</output>;
+  }
+
+  const reached = () => container.querySelector('[data-reached]')?.textContent;
+  const render = () => act(async () => root.render(<ReachedProbe />));
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 9, 15, 12, 0, 0));
+    mocks.getTaggingBudgetLedger.mockReset();
+    mocks.watchers.length = 0;
+    mocks.unwatch.mockReset();
+    mocks.settings.loading = false;
+    mocks.settings.limit = 1_000;
+    mocks.settings.llm = true;
+    container = document.createElement('div');
+    document.body.append(container);
+    root = createRoot(container);
+  });
+
+  afterEach(() => {
+    act(() => root.unmount());
+    container.remove();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("returns today's spend once it has reached the saved limit", async () => {
+    mocks.getTaggingBudgetLedger.mockResolvedValue({ day: TODAY, tokens: 1_000 });
+    await render();
+    expect(reached()).toBe('1000');
+  });
+
+  it('returns the overshoot, not the limit, when the last call went past it', async () => {
+    mocks.getTaggingBudgetLedger.mockResolvedValue({ day: TODAY, tokens: 1_350 });
+    await render();
+    expect(reached()).toBe('1350');
+  });
+
+  it('returns null below the limit', async () => {
+    mocks.getTaggingBudgetLedger.mockResolvedValue({ day: TODAY, tokens: 999 });
+    await render();
+    expect(reached()).toBe('null');
+  });
+
+  it("reads yesterday's spend as nothing spent", async () => {
+    mocks.getTaggingBudgetLedger.mockResolvedValue({ day: YESTERDAY, tokens: 9_999_999 });
+    await render();
+    expect(reached()).toBe('null');
+  });
+
+  // Missing configuration is what holds the items then, and the Configuration
+  // Blocker already says so; a second notice would contradict it.
+  it('returns null while the LLM is not configured', async () => {
+    mocks.settings.llm = false;
+    mocks.getTaggingBudgetLedger.mockResolvedValue({ day: TODAY, tokens: 5_000 });
+    await render();
+    expect(reached()).toBe('null');
+  });
+
+  it('returns null while settings are still loading', async () => {
+    mocks.settings.loading = true;
+    mocks.getTaggingBudgetLedger.mockResolvedValue({ day: TODAY, tokens: 5_000 });
+    await render();
+    expect(reached()).toBe('null');
+  });
+
+  it('returns null while the ledger is unknown', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    mocks.getTaggingBudgetLedger.mockRejectedValue(new Error('storage unavailable'));
+    await render();
+    expect(reached()).toBe('null');
+  });
+
+  it('clears once the limit is raised above the spend', async () => {
+    mocks.getTaggingBudgetLedger.mockResolvedValue({ day: TODAY, tokens: 1_000 });
+    await render();
+    expect(reached()).toBe('1000');
+
+    mocks.settings.limit = 2_000;
+    await render();
+
+    expect(reached()).toBe('null');
+  });
+
+  it('follows charges pushed by the ledger watch', async () => {
+    mocks.getTaggingBudgetLedger.mockResolvedValue({ day: TODAY, tokens: 400 });
+    await render();
+    expect(reached()).toBe('null');
+
+    act(() => {
+      for (const watcher of mocks.watchers) watcher({ day: TODAY, tokens: 1_200 });
+    });
+
+    expect(reached()).toBe('1200');
   });
 });

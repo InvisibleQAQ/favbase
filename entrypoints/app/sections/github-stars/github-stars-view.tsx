@@ -1,7 +1,11 @@
 import { formatDateTime } from '@/lib/i18n';
 import { useTranslation } from '@/lib/i18n/use-translation';
 import { CollectionConfigurationNotice } from '../../components/configuration-blocker';
-import { EmptyLibraryState, NeedsConfigState } from '../../components/collection-states';
+import {
+  EmptyLibraryState,
+  NeedsConfigState,
+  TaggingBudgetNotice,
+} from '../../components/collection-states';
 import { DashboardContent } from '../../layouts/dashboard';
 import {
   PipelineProgressStrip,
@@ -80,7 +84,7 @@ export function GithubStarsView() {
           lastProgress: fetchRuntime.progress,
         }
       : fetchRuntime;
-  const { coverage, coverageStatus, segments } = useCollectionPipeline({
+  const { coverage, coverageStatus, segments, taggingBudgetHold } = useCollectionPipeline({
     platform: PLATFORM,
     syncing: gh.syncing,
     fetch: settledFetchRuntime,
@@ -180,11 +184,14 @@ export function GithubStarsView() {
         />
       }
       configurationNotice={
-        <CollectionConfigurationNotice
-          platform={PLATFORM}
-          coverage={coverage}
-          coverageStatus={coverageStatus}
-        />
+        <>
+          <CollectionConfigurationNotice
+            platform={PLATFORM}
+            coverage={coverage}
+            coverageStatus={coverageStatus}
+          />
+          <TaggingBudgetNotice hold={taggingBudgetHold} />
+        </>
       }
       pipeline={
         !gh.settingsLoading && gh.configured && gh.syncError?.kind !== 'auth'

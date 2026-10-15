@@ -6,6 +6,7 @@ import {
   EmptyLibraryState,
   FacetChips,
   NotLoggedInState,
+  TaggingBudgetNotice,
   type SiteAction,
 } from '../../components/collection-states';
 import { PipelineProgressStrip, CollectionPageScaffold } from '../../components/collection';
@@ -59,7 +60,7 @@ export function XView() {
   const { t } = useTranslation();
   const x = useXBookmarks();
   const breadcrumbs = useCollectionBreadcrumbs(PLATFORM);
-  const { coverage, coverageStatus, segments } = useCollectionPipeline({
+  const { coverage, coverageStatus, segments, taggingBudgetHold } = useCollectionPipeline({
     platform: PLATFORM,
     syncing: x.syncing,
     fetch: backgroundJobRuntime(x.syncJob, fetchedCountProgress),
@@ -168,11 +169,14 @@ export function XView() {
         />
       }
       configurationNotice={
-        <CollectionConfigurationNotice
-          platform={PLATFORM}
-          coverage={coverage}
-          coverageStatus={coverageStatus}
-        />
+        <>
+          <CollectionConfigurationNotice
+            platform={PLATFORM}
+            coverage={coverage}
+            coverageStatus={coverageStatus}
+          />
+          <TaggingBudgetNotice hold={taggingBudgetHold} />
+        </>
       }
       pipeline={x.syncError?.kind === 'auth' ? undefined : pipeline}
     />

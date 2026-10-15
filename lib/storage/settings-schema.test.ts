@@ -14,11 +14,11 @@ describe('canonicalizeSettings', () => {
     });
   });
 
-  it('defaults the Tagging Budget to five million tokens a day and keeps a valid cap', () => {
+  it('defaults the Tagging Budget to ten million tokens a day and keeps a valid cap', () => {
     // docs/41 D6: no "unlimited" switch, so the default is the protection for
     // users who never open the setting.
-    expect(DEFAULT_SETTINGS.taggingDailyTokenBudget).toBe(5_000_000);
-    expect(canonicalizeSettings({}).taggingDailyTokenBudget).toBe(5_000_000);
+    expect(DEFAULT_SETTINGS.taggingDailyTokenBudget).toBe(10_000_000);
+    expect(canonicalizeSettings({}).taggingDailyTokenBudget).toBe(10_000_000);
     expect(
       canonicalizeSettings({ taggingDailyTokenBudget: 200_000 }).taggingDailyTokenBudget,
     ).toBe(200_000);

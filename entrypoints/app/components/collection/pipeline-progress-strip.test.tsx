@@ -104,6 +104,39 @@ describe('PipelineProgressStrip', () => {
     ).toBe('pausing');
   });
 
+  it('names why a deferred segment waits in its label, title and progress bar, still without controls', () => {
+    act(() => {
+      root.render(
+        <PipelineProgressStrip
+          segments={[
+            { id: 'embedding', label: 'Embed', done: 8, total: 8, state: 'idle' },
+            {
+              id: 'tagging',
+              label: 'Tags',
+              done: 3,
+              total: 8,
+              state: 'deferred',
+              note: 'Daily limit reached',
+            },
+          ]}
+        />,
+      );
+    });
+
+    const segment = container.querySelector('[data-segment-id="tagging"]');
+    expect(segment?.getAttribute('data-segment-state')).toBe('deferred');
+    expect(segment?.textContent).toBe('Tags · Daily limit reached3/8 38%');
+    expect(segment?.querySelector('[title]')?.getAttribute('title')).toBe(
+      'Tags · Daily limit reached',
+    );
+    expect(
+      container.querySelector('[aria-label="Tags · Daily limit reached"]')?.getAttribute('aria-valuenow'),
+    ).toBe('38');
+    // A segment without a note keeps its bare label.
+    expect(container.querySelector('[aria-label="Embed"]')).not.toBeNull();
+    expect(container.querySelectorAll('button')).toHaveLength(0);
+  });
+
   it('keeps unavailable coverage explicit while loading', () => {
     act(() => {
       root.render(

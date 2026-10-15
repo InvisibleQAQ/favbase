@@ -5,6 +5,7 @@ import {
   buildPipelineSegment,
   buildPipelineSegments,
   collectionPipelineStages,
+  deriveTaggingBudgetHold,
   fetchedCountProgress,
   readJobProgress,
   transcriptionStage,
@@ -307,5 +308,103 @@ describe('collectionPipelineStages', () => {
       label: 'Transcribe',
       runtime: null,
     });
+  });
+});
+
+describe('Tagging Budget hold (docs/41 D8)', () => {
+  const ready = {
+    acquisition: { done: 12, total: null },
+    content: { done: 8, total: 12 },
+    embedding: { done: 8, total: 8 },
+    tagging: { done: 3, total: 8 },
+  };
+  const tagSegment = (overrides: Partial<Parameters<typeof buildPipelineSegment>[0]> = {}) =>
+    buildPipelineSegment({
+      id: 'tagging',
+      label: 'Tags',
+      idle: { done: 3, total: 8 },
+      running: false,
+      deferredNote: 'Daily limit reached',
+      ...overrides,
+    });
+
+  it('derives a hold only at the cap, with ready coverage and untagged items waiting', () => {
+    expect(deriveTaggingBudgetHold(ready, 'ready', 1_200)).toEqual({ spent: 1_200, pending: 5 });
+    expect(deriveTaggingBudgetHold(ready, 'ready', null)).toBeNull();
+    expect(deriveTaggingBudgetHold(ready, 'loading', 1_200)).toBeNull();
+    expect(deriveTaggingBudgetHold(ready, 'error', 1_200)).toBeNull();
+    expect(
+      deriveTaggingBudgetHold({ ...ready, tagging: { done: 8, total: 8 } }, 'ready', 1_200),
+    ).toBeNull();
+    expect(
+      deriveTaggingBudgetHold({ ...ready, tagging: { done: 0, total: null } }, 'ready', 1_200),
+    ).toBeNull();
+  });
+
+  it('shows a held Tags segment as deferred over an idle or completed run, with DB coverage and the note', () => {
+    expect(tagSegment()).toEqual({
+      id: 'tagging',
+      label: 'Tags',
+      done: 3,
+      total: 8,
+      state: 'deferred',
+      note: 'Daily limit reached',
+    });
+    // A drain that stopped at the first deferred item settles as completed.
+    expect(tagSegment({ phase: 'completed' })).toMatchObject({ state: 'deferred', done: 3, total: 8 });
+  });
+
+  it('never lets the hold hide live, paused, failed or unknown work', () => {
+    expect(
+      tagSegment({ running: true, phase: 'running', progress: { done: 1, total: 4 } }),
+    ).toEqual({ id: 'tagging', label: 'Tags', done: 1, total: 4, state: 'running' });
+    expect(tagSegment({ running: true, phase: 'pausing' }).state).toBe('pausing');
+    expect(tagSegment({ running: true, phase: 'paused' }).state).toBe('paused');
+    expect(tagSegment({ phase: 'failed' }).state).toBe('failed');
+    expect(tagSegment({ error: true }).state).toBe('failed');
+    expect(tagSegment({ coverageStatus: 'loading' })).toEqual({
+      id: 'tagging',
+      label: 'Tags',
+      done: null,
+      total: null,
+      state: 'loading',
+    });
+    expect(tagSegment({ coverageStatus: 'error' }).state).toBe('failed');
+  });
+
+  it('carries the note only on a deferred segment', () => {
+    expect(tagSegment({ running: true, phase: 'running' })).not.toHaveProperty('note');
+    expect(tagSegment({ deferredNote: undefined })).toEqual({
+      id: 'tagging',
+      label: 'Tags',
+      done: 3,
+      total: 8,
+      state: 'idle',
+    });
+  });
+
+  it('passes the note to the Tagging stage only', () => {
+    const labels = { fetch: 'Fetch', embedding: 'Embed', tagging: 'Tags' };
+    const stages = collectionPipelineStages({
+      labels,
+      fetch: null,
+      embedJob: null,
+      tagJob: null,
+      taggingDeferredNote: 'Daily limit reached',
+    });
+    expect(stages.map((stage) => stage.deferredNote)).toEqual([
+      undefined,
+      undefined,
+      'Daily limit reached',
+    ]);
+    expect(
+      collectionPipelineStages({ labels, fetch: null, embedJob: null, tagJob: null, taggingDeferredNote: null })[2],
+    ).not.toHaveProperty('deferredNote');
+
+    const segments = buildPipelineSegments({ coverage: ready, coverageStatus: 'ready', stages });
+    expect(segments.map((segment) => segment.state)).toEqual(['idle', 'idle', 'deferred']);
+    expect(segments.filter((segment) => 'note' in segment).map((segment) => segment.id)).toEqual([
+      'tagging',
+    ]);
   });
 });

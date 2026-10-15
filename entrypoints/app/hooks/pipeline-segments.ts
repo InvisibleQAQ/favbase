@@ -3,7 +3,7 @@ import type {
   ProcessingCoverageCount,
 } from '@/lib/collections';
 
-import type { PipelineProgressSegment } from '../components/collection';
+import type { PipelineProgressSegment, PipelineSegmentState } from '../components/collection';
 import type { BackgroundJob } from './background-jobs-store';
 
 export interface BuildPipelineSegmentInput {
@@ -17,6 +17,8 @@ export interface BuildPipelineSegmentInput {
   percent?: number | null;
   error?: boolean;
   coverageStatus?: ProcessingCoverageStatus;
+  /** Pre-translated reason the stage is held back; present = deferred while not active. */
+  deferredNote?: string;
 }
 
 export type ProcessingCoverageStatus = 'loading' | 'ready' | 'error';
@@ -41,6 +43,7 @@ export interface PipelineStageInput {
   coverage: keyof ProcessingCoverage;
   completedProgress?: 'last-run';
   runtime?: PipelineRuntimeSnapshot | null;
+  deferredNote?: string;
 }
 
 export interface BuildPipelineSegmentsInput {
@@ -68,6 +71,31 @@ export interface CollectionPipelineStagesInput {
   content?: CollectionPipelineContentStage | null;
   embedJob: BackgroundJob | null;
   tagJob: BackgroundJob | null;
+  /** Pre-translated reason the Tagging stage is held back by the Tagging Budget. */
+  taggingDeferredNote?: string | null;
+}
+
+/** Automatic tagging stopped at the user's daily limit while untagged items wait (docs/41 D8). */
+export interface TaggingBudgetHold {
+  /** Tokens spent today, at or past the limit. */
+  spent: number;
+  /** Tags pending candidates on this platform. */
+  pending: number;
+}
+
+/**
+ * Derived, never stored: the hold exists while today's spend is at the limit
+ * (`spentAtCap`, `null` below it) and the platform's DB coverage shows
+ * untagged items, so a reload or another platform page reads the same.
+ */
+export function deriveTaggingBudgetHold(
+  coverage: ProcessingCoverage,
+  coverageStatus: ProcessingCoverageStatus,
+  spentAtCap: number | null,
+): TaggingBudgetHold | null {
+  if (spentAtCap === null || coverageStatus !== 'ready') return null;
+  const pending = (coverage.tagging.total ?? 0) - coverage.tagging.done;
+  return pending > 0 ? { spent: spentAtCap, pending } : null;
 }
 
 /**
@@ -108,6 +136,37 @@ export function fetchedCountProgress(
   return progress ? { done: progress.fetchedCount, total: null } : null;
 }
 
+interface SegmentStateInput {
+  active: boolean;
+  running: boolean;
+  phase?: PipelineRuntimePhase;
+  error: boolean;
+  coverageStatus: ProcessingCoverageStatus;
+  deferredNote?: string;
+}
+
+/**
+ * The order is the contract. A deferral outranks only a settled run (a Tags
+ * drain that stopped at its first deferred item settles as `completed`) and
+ * idle coverage; failure, live or paused work and unknown coverage stay visible.
+ */
+function segmentState({
+  active,
+  running,
+  phase,
+  error,
+  coverageStatus,
+  deferredNote,
+}: SegmentStateInput): PipelineSegmentState {
+  if (error || phase === 'failed') return 'failed';
+  if (deferredNote && !active && coverageStatus === 'ready') return 'deferred';
+  if (phase) return phase;
+  if (running) return 'running';
+  if (coverageStatus === 'error') return 'failed';
+  if (coverageStatus === 'loading') return 'loading';
+  return 'idle';
+}
+
 /** Runtime progress wins only while a stage is active; idle always reflects DB coverage. */
 export function buildPipelineSegment({
   id,
@@ -120,6 +179,7 @@ export function buildPipelineSegment({
   percent,
   error = false,
   coverageStatus = 'ready',
+  deferredNote,
 }: BuildPipelineSegmentInput): PipelineProgressSegment {
   const active = running || phase === 'running' || phase === 'pausing' || phase === 'paused';
   const count = phase === 'completed' && terminalProgress
@@ -129,21 +189,15 @@ export function buildPipelineSegment({
     : coverageStatus === 'ready'
       ? idle
       : { done: null, total: null };
+  const state = segmentState({ active, running, phase, error, coverageStatus, deferredNote });
   return {
     id,
     label,
     done: count.done,
     total: count.total,
     ...(percent != null ? { percent } : {}),
-    state: error || phase === 'failed'
-      ? 'failed'
-      : phase ?? (running
-        ? 'running'
-        : coverageStatus === 'error'
-          ? 'failed'
-          : coverageStatus === 'loading'
-            ? 'loading'
-            : 'idle'),
+    ...(state === 'deferred' ? { note: deferredNote } : {}),
+    state,
   };
 }
 
@@ -170,6 +224,7 @@ export function buildPipelineSegments({
       percent: retainedCompletion ? 100 : null,
       error: runtime?.error != null,
       coverageStatus,
+      deferredNote: stage.deferredNote,
     });
   });
 }
@@ -184,6 +239,7 @@ export function collectionPipelineStages({
   content,
   embedJob,
   tagJob,
+  taggingDeferredNote,
 }: CollectionPipelineStagesInput): PipelineStageInput[] {
   return [
     {
@@ -207,6 +263,7 @@ export function collectionPipelineStages({
       label: labels.tagging,
       coverage: 'tagging',
       runtime: backgroundJobRuntime(tagJob),
+      ...(taggingDeferredNote ? { deferredNote: taggingDeferredNote } : {}),
     },
   ];
 }

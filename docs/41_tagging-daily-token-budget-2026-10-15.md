@@ -1,10 +1,10 @@
 # 41 Tagging Budget：自动打标签的每日 token 上限（2026-10-15）
 
-> 状态：**设计已定（用户 2026-10-15 逐条确认）；Step 1–3 已落地（2026-10-15，见 §6），Step 4 未开工**。执行稿是任务目录 `.trellis/tasks/10-15-tagging-daily-token-budget/prd.md`（`.trellis/` 不进版本库，决策以本文为准）。
+> 状态：**设计已定（用户 2026-10-15 逐条确认）；Step 1–4 已落地（2026-10-15，见 §6）**。执行稿是任务目录 `.trellis/tasks/10-15-tagging-daily-token-budget/prd.md`（`.trellis/` 不进版本库，决策以本文为准）。
 >
 > 起因：自动打标签对每条 Collection Item 发一次 `generateObject`（`lib/tagging/tagger.ts`），输入是标题、简介、正文前 2000 字和 50 个已有标签（`lib/tagging/prompt.ts`）。花费与收藏数成正比，而且无人值守：首次同步几千条收藏，就可能一次烧掉用户 LLM key 的大部分余额。仓库里没有任何节流；设置页 LLM 卡上的 `maxTokens` 没有消费者（`lib/summary/CLAUDE.md`），而且它是单次请求的输出上限，本来就管不到这件事。
 >
-> 术语：**Tagging Budget**（`CONTEXT.md`）。规则落地后的 owner：`lib/tagging/CLAUDE.md`（预算语义、扣账）、`lib/storage/CLAUDE.md`（账本 key）、`entrypoints/app/hooks/CLAUDE.md`（Tags lane 的形状）、`entrypoints/app/sections/settings/CLAUDE.md`（保存后续跑）。本文只记决策、否决与落地经过。
+> 术语：**Tagging Budget**（`CONTEXT.md`）。规则落地后的 owner：`lib/tagging/CLAUDE.md`（预算语义、扣账）、`lib/storage/CLAUDE.md`（账本 key）、`entrypoints/app/hooks/CLAUDE.md`（Tags lane 的形状、收藏页的派生态）、`entrypoints/app/sections/settings/CLAUDE.md`（保存后续跑）、`entrypoints/app/components/collection-states/CLAUDE.md`（收藏页提醒）、`lib/i18n/CLAUDE.md`（文案口径）。本文只记决策、否决与落地经过。
 
 ## §1 决策
 
@@ -15,11 +15,13 @@
 | D3 | **计量 = 输入 + 输出**：扣 `usage.inputTokens + usage.outputTokens`（AI SDK v6 `LanguageModelUsage`；reasoning tokens 已含在 output 里，缓存命中的输入照算）。端点不回传用量（字段为 `undefined`）时按字符数估：system + prompt + 输出 JSON 的字符数，宁多勿少。`NoObjectGeneratedError` 带 `usage`，照扣；没有 usage 的抛错（HTTP 错误等）记 0 | 用户口径「一天总共花费的 token 数（包含输入输出）」。字符数对中文接近、对英文高估约 4 倍，高估是预算的安全方向 |
 | D4 | **先查后扣**：调用前今日剩余 > 0 即放行，调用后按实际用量扣。不做调用前的预估拦截 | 超支有界：最多「同时在跑的 tag lane 数 × 一次调用」，约一两万 token，对百万级上限可忽略 |
 | D5 | **账本是设备本地状态**：`storage.local` 一个 key，值 `{ day: 本地日期 YYYY-MM-DD, tokens }`；`day` 不是今天即视为 0。日界与每日自动同步同口径（`entrypoints/app/hooks/daily-sync-gate.ts` 的本地自然日）。读改写在 `navigator.locks` 下串行。不进 WebDAV（`lib/storage/CLAUDE.md`：只同步 settings 与 locale） | 两个 app.html 标签页可能同时跑 tag lane，不加锁会互相覆盖、少记用量。上限值在 settings 里，随 WebDAV 同步；用量各设备各算 |
-| D6 | **设置**：`UserSettings` 新键 `taggingDailyTokenBudget`，正整数，默认 **5_000_000**（用户决定），没有「不限」开关。放在 LLM 卡「高级」区，与 `maxTokens` 并排；不是连接字段，改了不用重测即可保存；下方显示「今日已用 X / 上限」。`maxTokens` 不动 | `maxTokens` 是单次请求的输出上限，与每日总量是两个概念（用户澄清 2026-10-15，`CONTEXT.md` Flagged ambiguities）。想不限的用户填一个大数，少一个 UI 状态 |
+| D6 | **设置**：`UserSettings` 新键 `taggingDailyTokenBudget`，正整数，默认 **10_000_000**（用户决定；Step 1–3 时是 5_000_000，Step 4 时改），没有「不限」开关。放在 LLM 卡「高级」区，与 `maxTokens` 并排；不是连接字段，改了不用重测即可保存；下方显示「今日已用 X / 上限」。`maxTokens` 不动 | `maxTokens` 是单次请求的输出上限，与每日总量是两个概念（用户澄清 2026-10-15，`CONTEXT.md` Flagged ambiguities）。想不限的用户填一个大数，少一个 UI 状态 |
 | D7 | **用完后条目留待打，同步收尾续上**：`tagPlatformItem` 新增结果 `'deferred'`（不调 LLM、不改库），批量循环在第一条 `'deferred'` 处结束，run 正常完成，不是失败。Tags lane 改成与 Embed 同形：每次 Platform Sync 收尾恒派发本平台整份 Tags backlog，碰撞策略 `'queue'` → `'coalesce'`；逐条派发路径不变 | 下一个自然日的同步按平台自然续上。顺带关掉现存缺口：失败或中断的条目以前只能等 LLM 配置保存时补打（docs/33「Step 2.5 落地记录」里「中断那一次调用里已经切完块的条目没人派发」一条） |
-| D8 | **呈现与续跑**：「今日额度已用完」是派生状态，等于「账本今日已用 ≥ 上限」且「该平台 Tags coverage 有待打条目」；不是 run 的新终态，不进 toast，不是 Configuration Blocker。LLM 卡每次保存成功，都对 `COLLECTION_PLATFORMS` 的每个平台派发 Tags backlog，不再只认 `?resume`；`?resume` 只剩 Embedding 在用 | 刷新页面、换平台页都一致，无需持久化 run 结果。用户调高上限就是「现在就要继续」；Tags lane 是 coalesce 积压排空，没有积压的平台以 0/0 立即结束 |
+| D8 | **呈现与续跑**：「已达每日上限」是派生状态，等于「账本今日已用 ≥ 上限」且「LLM 已配置」且「该平台 Tags coverage 有待打条目」（LLM 未配置时挡住条目的是配置，由 Configuration Blocker 解释）；不是 run 的新终态，不进 toast，不是 Configuration Blocker。LLM 卡每次保存成功，都对 `COLLECTION_PLATFORMS` 的每个平台派发 Tags backlog，不再只认 `?resume`；`?resume` 只剩 Embedding 在用 | 刷新页面、换平台页都一致，无需持久化 run 结果。用户调高上限就是「现在就要继续」；Tags lane 是 coalesce 积压排空，没有积压的平台以 0/0 立即结束 |
 
-默认值的后果：按每条约 2k tokens 估（`[UNKNOWN]` 未实测，见 §5），5M 约等于每天 2500 条，2500 条以内的收藏库首次同步当天基本打完。所以默认值防的是上万条的超大库和失控循环，不会让普通用户第一天的账单变小。这是用户知情后的选择。
+默认值的后果：按每条约 2k tokens 估（`[UNKNOWN]` 未实测，见 §5），10M 约等于每天 5000 条，5000 条以内的收藏库首次同步当天基本打完。所以默认值防的是上万条的超大库和失控循环，不会让普通用户第一天的账单变小。这是用户知情后的选择。
+
+功能定位（用户 2026-10-15，Step 4 时补）：favbase 自己没有额度，真实的额度是用户自己 API key 的余额。上限是用户给自己的 key 设的一道闸，达到时告诉用户今天花了多少，由用户决定是否继续：调高上限并保存就是立刻继续，不管它就等下一个自然日的同步。所以文案不得写成软件给的额度（不用「额度」/ quota），要写「你设置的每日上限」，并给出今日已用。本文其余地方的「额度」是设计讨论用语，不是界面文案。
 
 ## §2 否决清单（后续不得重提）
 
@@ -32,7 +34,7 @@
 | 超额就跳过、不续跑 | 被挡下的条目永远没有标签，与 docs/38 §2 否决「单条重试上限」同理 |
 | 用完后 lane 停在跨天倒计时等待态（类似自动转录的 `quota_paused`） | 多一个跨天等待态与计时器；同步收尾和保存设置已经能续上 |
 | 调用前预估这次会不会超、超就不发 | 精度换不来什么，D4 的超支本来就有界 |
-| 默认不限 | 需要保护的恰恰是不会去设置的人 |
+| 默认不限 | 需要保护的恰恰是不会去设置的人（用户 2026-10-15 Step 4 时再次考虑默认关闭，随即撤回，维持本条） |
 | 单条失败的重试上限 | 同 docs/38 §2：没有 `'error'` 重试入口时，上限等于永久丢条目 |
 
 ## §3 铁律（实现时不得违反）
@@ -72,17 +74,17 @@
 - 文档：`entrypoints/app/sections/settings/CLAUDE.md`「LLM / Embedding 保存成功后据 `resume` 恢复」一条拆开改写。
 - 验收：只改预算不需要重测连接即可保存；保存成功派发全部平台，保存 reject 不派发；「今日已用」随账本实时变化。
 
-### Step 4 — 收藏页呈现
+### Step 4 — 收藏页呈现（已落地 2026-10-15，见 §6）
 
 - Tags 段：D8 的派生状态成立时显示独立状态，不是 failed，也不是 completed；文案放 `pipeline.*`，由 view 翻译后传给零 `t()` 的共享组件（根 `CLAUDE.md` i18n 规则）。改动落在 `entrypoints/app/hooks/pipeline-segments.ts`（派生）与 `components/collection/` 的段状态类型（展示）。
-- 「调整上限」链接：因为铁律 6，链接不放在段内，放在 scaffold 的「配置提醒」位置（区块顺序见 `components/collection/CLAUDE.md`），由一个独立组件渲染，链到 `settingsPath('ai/llm')`；不并入 `CollectionConfigurationNotice`（铁律 5）。**这一点偏离了讨论时「Tags 段附链接」的说法，开工前请用户确认。**
+- 「调整上限」链接：因为铁律 6，链接不放在段内，放在 scaffold 的「配置提醒」位置（区块顺序见 `components/collection/CLAUDE.md`），由一个独立组件渲染，链到 `settingsPath('ai/llm')`；不并入 `CollectionConfigurationNotice`（铁律 5）。这一点偏离了讨论时「Tags 段附链接」的说法，用户 2026-10-15 已确认。
 - 验收：刷新页面后状态仍在；各平台页一致；跨日或调高上限后状态消失。
 
 ## §5 残留与未知
 
 - `[UNKNOWN]` 每条约 2k tokens 是粗估，没有实测。Step 1 落地后用真实 usage 回填本节，并据此复核默认值的说法。
 - `[UNKNOWN]` 个别 provider 对 4xx 是否计费；D3 按记 0 处理。
-- 稳定失败的条目（模型对某条内容每次都输出坏 JSON）每天都会被积压排空重试、每天扣额度。按 5M 的量级可以忽略，不加上限（§2 最后一行）。
+- 稳定失败的条目（模型对某条内容每次都输出坏 JSON）每天都会被积压排空重试、每天扣额度。按 10M 的量级可以忽略，不加上限（§2 最后一行）。
 - 用量按设备分别计算，两台设备各有一份额度。
 - Knowledge Tool（`getProcessingCoverage`，Chat 与 Agent Bridge 共用）不报告预算耗尽：外部 agent 会把待打条目说成「还在处理中」。这句话本身不算错（明天会继续），v1 不改 Agent Bridge 的工具契约。
 - `maxTokens` 仍然没有消费者（`lib/summary/CLAUDE.md` 已记），不在本任务范围内。
@@ -214,3 +216,47 @@
 - `pnpm test`：根目录 247 个文件 / 2290 个用例，packages 15 个文件 / 263 个用例，全绿。
 - `pnpm build`：通过，background graph 仍是 14 个模块，新 hook 没有进 SW 的模块图。
 - 没有在浏览器里看过设置页的新布局与读数行。
+
+### Step 4（2026-10-15）
+
+**落地**：按 D8 与铁律 4–6 落地；默认上限改为 10M（D6）。
+
+- 派生：`entrypoints/app/hooks/use-tagging-tokens-spent-today.ts` 新增 `useTaggingBudgetReachedSpend`。settings 与账本都已知、LLM 已配置、今日已用 ≥ 已保存上限时，它返回今日已用，否则返回 `null`。「用完」的算术复用 `lib/tagging/budget.ts` 的 `remainingTaggingBudget`。
+- `pipeline-segments.ts` 的 `deriveTaggingBudgetHold` 再叠上「coverage ready 且 Tags 有待打」。两者都在 `useCollectionPipeline` 里算一次，产出 Tags 段的 `deferred` 状态和 `taggingBudgetHold`。
+- 展示：`PipelineProgressStrip` 加 `deferred` 状态与预翻译的 `note`，段标签显示为「标签 · 已达每日上限」，仍然零按钮。
+- 提醒：`components/collection-states/tagging-budget-notice.tsx` 的 `TaggingBudgetNotice`，一个 `role="status"` 区域：今日已用、待打条目数，加一个「调整上限」链接到 `settingsPath('ai/llm')`，不带 `?resume=`。每个平台 view 都把它和 `CollectionConfigurationNotice` 一起放进 `configurationNotice` slot。
+- 守卫：`tests/platform-completeness-contract.test.ts` 逐平台断言 view 渲染了 `<TaggingBudgetNotice`。`configurationNotice` 是可选 slot，漏传时 `tsc` 不报。
+
+**Step 3 遗留问题的结论**：两条路都没走，hook 直接在 `useCollectionPipeline` 里调用。Step 3 担心「所有平台 view 的测试都要补 mock」，实际不成立：现有的两个 view 测试本来就整体 mock 了 `use-collection-pipeline`，只有 `use-collection-pipeline.test.tsx` 要 mock 这个 hook。`budget.ts` 的 import 没动。
+
+**对 §4 与 §1 的补充**（实现时发现）：
+
+1. 段状态的判定改写成一个早返回的函数 `segmentState`。没有 note 时，它与旧的嵌套三元逐字等价，旧测试守着。
+   - `deferred` 盖过 `completed` 与 idle：同步收尾的 drain 在第一条 `'deferred'` 处结束后，phase 是 `completed`，不盖就永远显示不出来。
+   - 它不盖 failed、running / pausing / paused，也不盖 coverage 未就绪（loading / error）。执行稿的排序草稿会让 `deferred` 盖过后两者，所以条件里多了 `coverageStatus === 'ready'`。hold 本来就要求 coverage ready，这一条只在纯函数层面起作用。
+2. `TaggingBudgetNotice` 用的 `formatCompactNumber` 来自 `@/lib/i18n` 的 index，它加载时就读 `chrome.storage`。提醒经 `collection-states` 的 barrel 导出，所以 import 这个 barrel 的两个既有测试（`collection-states.test.tsx`、`facet-chips.test.tsx`）补了 `@/lib/i18n` 的 mock，坑记进了该目录的 `CLAUDE.md`。没有为此改成 import 叶子文件：barrel 本来就是 view 用的翻译半边，view 早已 import `@/lib/i18n`。
+3. 提醒的两句话分两行显示，不拼成一段：zh 的句号后不该有空格，en 的句号后必须有，分行就不用按语言选分隔符。
+4. 「调整上限」按钮用 `color="primary"` 的 text 变体（`text.accent` 墨），即 `.trellis/spec/frontend/ui-design-system.md` §7 的行内链接角色。`CollectionConfigurationNotice` 的按钮是 inherit，因为它在着色的 Alert 里；本提醒没有底色。
+5. 铁律 1 说 app 层不另做预算判断。收藏页的「已达上限」只是呈现：它复用 `remainingTaggingBudget`，不拦任何调用，`tagPlatformItem` 仍是唯一的拦截点。`lib/tagging/CLAUDE.md` 的对应条目已补上这半句。
+6. Step 3「已知瑕疵」里 en 读数显示「5M / 5M」的例子按旧默认值写；默认 10M 下，同样的窗口从 9.95M 开始。
+
+**残留**：
+
+- 没有跨午夜定时器（同 Step 3）：页面挂过零点后，提醒与 `deferred` 段要等下一次渲染才消失。
+- 提醒与 `CollectionConfigurationNotice` 同在一个 slot、同一个显示条件：pipeline 被认证失败隐藏时，提醒仍可能出现。bilibili 两处都只在已登录时渲染。
+- 账本读不出来时两边不对称：`tagPlatformItem` 按用完处理、每条都 `'deferred'`（铁律 3），收藏页的 hook 却读不到用量、返回 `null`，于是 Tags 停了但页面不提醒。没有用量就写不出「今日已用」，v1 接受。
+
+**验证**：
+
+- 新增用例先对旧代码跑红，22 个失败：
+  - pipeline-segments 3 个：`deriveTaggingBudgetHold` 不存在、段没有 `deferred` 与 `note`、stages 不带 `deferredNote`；
+  - use-collection-pipeline 4 个：结果里没有 `taggingBudgetHold`；
+  - hook 9 个：`useTaggingBudgetReachedSpend` 不存在；
+  - strip 1 个：label 不带 note；提醒 3 个：组件不存在；默认值 1 个；
+  - 契约守卫 1 个：每个平台 view 都缺提醒。
+- 两个反向守卫在旧代码上本来就绿：「hold 不盖运行中、暂停、失败与未就绪」「note 只在 deferred 段」。
+- 变异检查：去掉 `coverageStatus === 'ready'`，1 个用例失败；去掉 `!active`，3 个用例失败。
+- `pnpm compile`：通过。
+- `pnpm test`：根目录 248 个文件 / 2312 个用例，packages 15 个文件 / 263 个用例，全绿。
+- `pnpm build`：通过，background graph 仍是 14 个模块。
+- 没有在浏览器里看过 `deferred` 段与提醒的实际渲染（亮暗两态、390px 窄屏）。

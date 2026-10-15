@@ -40,7 +40,12 @@ vi.mock('../components/configuration-blocker', () => ({
 }));
 
 vi.mock('../hooks/use-collection-pipeline', () => ({
-  useCollectionPipeline: () => ({ coverage: null, coverageStatus: 'loading', segments: [] }),
+  useCollectionPipeline: () => ({
+    coverage: null,
+    coverageStatus: 'loading',
+    segments: [],
+    taggingBudgetHold: null,
+  }),
 }));
 
 vi.mock('./github-stars/use-github-stars', () => ({

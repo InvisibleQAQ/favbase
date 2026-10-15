@@ -26,7 +26,7 @@ AI 标签：内容落库后自动打标 + 标签 CRUD。`tags` / `item_tags` 的
 
 ## Tagging Budget（docs/41）
 
-- 检查与扣账只在 `tagPlatformItem` 一处（docs/41 §3）：lane、app 层、平台 adapter 不另做预算判断，也不按平台分账。
+- 检查与扣账只在 `tagPlatformItem` 一处（docs/41 §3）：lane、app 层、平台 adapter 不另做预算判断，也不按平台分账。收藏页的「已达上限」只是呈现：它复用 `budget.ts` 的 `remainingTaggingBudget`，不拦任何调用。
 - 先查后扣：剩余 `> 0` 即放行，调用后按实际用量扣；不做调用前预估（docs/41 §2 已否决，超支本来有界）。
 - 账本读失败按用完处理（`'deferred'`）：读不到账本就不花钱。
 - 调用一结算就扣账，早于空标签判断与写库；扣账失败只 warn，不得把 `'tagged'` 改成 `'failed'`（钱已经花了）。
