@@ -11,6 +11,8 @@ import type { FavbaseDb } from '@/lib/database';
 import { onDomainEvent } from '@/lib/events';
 import type { ResolvedTaggingConfig } from './config';
 import type { TaggingInput } from './prompt';
+import { TaggingSpendError, type GeneratedTags } from './tagger';
+import type { TaggingBudget } from './budget';
 import {
   tagPlatformItem,
   tagPlatformBacklog,
@@ -50,10 +52,30 @@ type GenerateFn = (
   config: ResolvedTaggingConfig,
   input: TaggingInput,
   existingTags: string[],
-) => Promise<string[]>;
+) => Promise<GeneratedTags>;
 
-function makeGenerate(names: string[] = ['前端', 'React']) {
-  return vi.fn<GenerateFn>(async () => names);
+function makeGenerate(names: string[] = ['前端', 'React'], tokens = 100) {
+  return vi.fn<GenerateFn>(async () => ({ tags: names, tokens }));
+}
+
+/**
+ * A Tagging Budget fake with a cap and a running total, so tests read what was
+ * charged instead of how often `charge` was called. `steps` records the order
+ * of budget calls for the check-before / charge-after assertions.
+ */
+function fakeBudget(cap = Number.POSITIVE_INFINITY) {
+  const state = { spent: 0, steps: [] as string[] };
+  const budget = {
+    remaining: vi.fn<TaggingBudget['remaining']>(async () => {
+      state.steps.push('remaining');
+      return cap - state.spent;
+    }),
+    charge: vi.fn<TaggingBudget['charge']>(async (tokens) => {
+      state.steps.push(`charge:${tokens}`);
+      state.spent += tokens;
+    }),
+  };
+  return Object.assign(state, { budget });
 }
 
 describe('tagging-service (in-memory PGlite)', () => {
@@ -109,11 +131,13 @@ describe('tagging-service (in-memory PGlite)', () => {
   function deps(overrides?: {
     getConfig?: () => Promise<ResolvedTaggingConfig>;
     generate?: Mock<GenerateFn>;
+    budget?: TaggingBudget;
   }) {
     return {
       db: () => db,
       getConfig: async () => enabledConfig,
       generate: makeGenerate(),
+      budget: fakeBudget().budget,
       ...overrides,
     };
   }
@@ -336,6 +360,142 @@ describe('tagging-service (in-memory PGlite)', () => {
   });
 
   // -------------------------------------------------------------------------
+  // Tagging Budget (docs/41): checked and charged only inside tagPlatformItem
+  // -------------------------------------------------------------------------
+
+  describe('Tagging Budget', () => {
+    it('defers a spent day without calling the LLM, charging, or writing rows', async () => {
+      await seedItem('BV-SPENT');
+      const spent = fakeBudget(0);
+      const d = deps({ budget: spent.budget });
+
+      expect(await tagPlatformItem('bilibili', 'BV-SPENT', d)).toBe('deferred');
+      expect(d.generate).not.toHaveBeenCalled();
+      expect(spent.budget.charge).not.toHaveBeenCalled();
+      expect(await db.select().from(schema.tags)).toHaveLength(0);
+      expect(await db.select().from(schema.itemTags)).toHaveLength(0);
+    });
+
+    it('checks before the call and charges the reported spend after it', async () => {
+      await seedItem('BV-ORDER');
+      const ledger = fakeBudget(1_000);
+      const generate = vi.fn<GenerateFn>(async () => {
+        ledger.steps.push('generate');
+        return { tags: ['a'], tokens: 123 };
+      });
+
+      expect(
+        await tagPlatformItem('bilibili', 'BV-ORDER', deps({ generate, budget: ledger.budget })),
+      ).toBe('tagged');
+      expect(ledger.steps).toEqual(['remaining', 'generate', 'charge:123']);
+    });
+
+    it('charges a call whose answer had no usable tags', async () => {
+      await seedItem('BV-EMPTY');
+      const ledger = fakeBudget();
+      const d = deps({ generate: makeGenerate([], 50), budget: ledger.budget });
+
+      expect(await tagPlatformItem('bilibili', 'BV-EMPTY', d)).toBe('skipped');
+      expect(ledger.spent).toBe(50);
+    });
+
+    it('charges the known spend of a failed call, then reports failed', async () => {
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        await seedItem('BV-BADJSON');
+        const ledger = fakeBudget();
+        const generate = vi.fn<GenerateFn>(async () => {
+          throw new TaggingSpendError(77, new Error('bad json'));
+        });
+
+        expect(
+          await tagPlatformItem('bilibili', 'BV-BADJSON', deps({ generate, budget: ledger.budget })),
+        ).toBe('failed');
+        expect(ledger.spent).toBe(77);
+        expect(await db.select().from(schema.itemTags)).toHaveLength(0);
+      } finally {
+        errSpy.mockRestore();
+      }
+    });
+
+    it('charges nothing for a failure that carries no spend', async () => {
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        await seedItem('BV-HTTP');
+        const ledger = fakeBudget();
+        const generate = vi.fn<GenerateFn>(async () => {
+          throw new Error('HTTP 401');
+        });
+
+        expect(
+          await tagPlatformItem('bilibili', 'BV-HTTP', deps({ generate, budget: ledger.budget })),
+        ).toBe('failed');
+        expect(ledger.spent).toBe(0);
+      } finally {
+        errSpy.mockRestore();
+      }
+    });
+
+    it("keeps 'tagged' when charging fails: the money is already spent", async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const listener = vi.fn();
+      const off = onDomainEvent('item-tagged', listener);
+      try {
+        await seedItem('BV-CHARGEFAIL');
+        const ledger = fakeBudget();
+        ledger.budget.charge.mockRejectedValue(new Error('storage down'));
+
+        expect(
+          await tagPlatformItem('bilibili', 'BV-CHARGEFAIL', deps({ budget: ledger.budget })),
+        ).toBe('tagged');
+        expect(await db.select().from(schema.itemTags)).toHaveLength(2);
+        expect(listener).toHaveBeenCalledTimes(1);
+        expect(warnSpy).toHaveBeenCalled();
+      } finally {
+        off();
+        warnSpy.mockRestore();
+      }
+    });
+
+    it('defers when the ledger cannot be read: no ledger, no spending', async () => {
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        await seedItem('BV-NOLEDGER');
+        const ledger = fakeBudget();
+        ledger.budget.remaining.mockRejectedValue(new Error('storage down'));
+        const d = deps({ budget: ledger.budget });
+
+        expect(await tagPlatformItem('bilibili', 'BV-NOLEDGER', d)).toBe('deferred');
+        expect(d.generate).not.toHaveBeenCalled();
+        expect(errSpy).toHaveBeenCalled();
+      } finally {
+        errSpy.mockRestore();
+      }
+    });
+
+    it('never consults the budget for an item that needs no LLM call', async () => {
+      await seedItem('BV-ALREADY');
+      await addTagToPlatformItem('bilibili', 'BV-ALREADY', 'manual', db);
+      const ledger = fakeBudget(0);
+
+      expect(
+        await tagPlatformItem('bilibili', 'BV-ALREADY', deps({ budget: ledger.budget })),
+      ).toBe('skipped');
+      expect(
+        await tagPlatformItem('bilibili', 'BV-MISSING', deps({ budget: ledger.budget })),
+      ).toBe('skipped');
+      expect(
+        await tagPlatformItem(
+          'bilibili',
+          'BV-ALREADY',
+          deps({ getConfig: async () => disabledConfig, budget: ledger.budget }),
+        ),
+      ).toBe('skipped');
+      expect(ledger.budget.remaining).not.toHaveBeenCalled();
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // tagNewItems (batch entry for collection syncs — audit docs/16 MEDIUM-2)
   // -------------------------------------------------------------------------
 
@@ -370,7 +530,7 @@ describe('tagging-service (in-memory PGlite)', () => {
         await seedItem('t4', 'x');
         const generate = vi.fn<GenerateFn>(async (_config, input) => {
           if (input.title.includes('t3')) throw new Error('LLM boom');
-          return ['技术'];
+          return { tags: ['技术'], tokens: 100 };
         });
 
         await expect(tagNewItems('x', ['t3', 't4'], deps({ generate }))).resolves.toBeUndefined();
@@ -411,6 +571,31 @@ describe('tagging-service (in-memory PGlite)', () => {
         { done: 1, total: 2 },
         { done: 2, total: 2 },
       ]);
+    });
+
+    it('ends the run at the first deferred item without throwing; progress stops there', async () => {
+      // Cap 150, 100 tokens a call: the first call leaves 50 > 0, so the second
+      // still goes out (D4's bounded overspend); the third finds -50 and defers.
+      for (const id of ['tb1', 'tb2', 'tb3', 'tb4']) await seedItem(id, 'x');
+      const ledger = fakeBudget(150);
+      const generate = makeGenerate(['技术'], 100);
+      const onProgress = vi.fn();
+
+      await expect(
+        tagNewItems('x', ['tb1', 'tb2', 'tb3', 'tb4'], deps({ generate, budget: ledger.budget }), onProgress),
+      ).resolves.toBeUndefined();
+
+      expect(generate).toHaveBeenCalledTimes(2);
+      expect(ledger.spent).toBe(200);
+      // tb4 is never claimed: the run stops instead of deferring item by item.
+      expect(ledger.budget.remaining).toHaveBeenCalledTimes(3);
+      expect(onProgress.mock.calls.map((c) => c[0])).toEqual([
+        { done: 0, total: 4 },
+        { done: 1, total: 4 },
+        { done: 2, total: 4 },
+      ]);
+      const tagsById = await getTagsForPlatformItems('x', ['tb1', 'tb2', 'tb3', 'tb4'], db);
+      expect(Object.keys(tagsById).sort()).toEqual(['tb1', 'tb2']);
     });
 
     it('checks cooperative control before claiming each item', async () => {
@@ -492,6 +677,18 @@ describe('tagging-service (in-memory PGlite)', () => {
 
       expect(generate).toHaveBeenCalledTimes(1);
       expect(generate.mock.calls[0][1].title).toBe('Title of BV-VALID');
+    });
+
+    it('leaves the whole backlog pending when the day is already spent', async () => {
+      await seedItem('x-wait-1', 'x');
+      await seedItem('x-wait-2', 'x');
+      const generate = makeGenerate();
+      const onProgress = vi.fn();
+
+      await tagPlatformBacklog('x', deps({ generate, budget: fakeBudget(0).budget }), onProgress);
+
+      expect(generate).not.toHaveBeenCalled();
+      expect(onProgress.mock.calls.map((call) => call[0])).toEqual([{ done: 0, total: 2 }]);
     });
 
     it('is idempotent across backlog reruns', async () => {

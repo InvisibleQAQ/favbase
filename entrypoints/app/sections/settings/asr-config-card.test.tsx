@@ -53,6 +53,7 @@ function settings(asrProvider: UserSettings['asrProvider']): UserSettings {
     prefMode: 'efficiency',
     temperature: 0.3,
     maxTokens: 100_000,
+    taggingDailyTokenBudget: 5_000_000,
   };
 }
 

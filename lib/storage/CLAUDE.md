@@ -38,4 +38,7 @@ WXT storage 的统一管理目录，对外 import 面是 `@/lib/storage`。每�
 - Agent Bridge config / status：UI 与 scheduler 只能经 `agent-bridge.ts` 的 typed get / watch（它在边界补齐旧存量缺失的字段）。`lastAuthFailureAt` 是事故痕迹，成功握手也不清除。
 - ASR quota guard（`local:asr-quota-pause`）：只存 provider 与 reset 时间，不保存也不恢复转录队列。读取方必须核对当前 `settings.asrProvider`，否则切换 provider 后会被旧 guard 阻塞。
 - `asr-prerequisite.ts` 是转录前置条件的 ASR 半边（有没有 key、等 key、读写 quota guard）的唯一实现，各平台的 auto-transcribe adapter 共用；别在 adapter 里再抄一份 `settingsStorage.watch`。它先 watch 再读初值，反过来有 initial-read / watch 竞态。
+- Tagging Budget 账本（`local:tagging-budget-ledger`）：只经 `tagging-budget.ts` 读写，UI 只用它的 typed get / watch。
+- 账本扣账的读改写在 `navigator.locks` 下串行（两个 app.html 标签页会同时扣）；没有 locks 就拒绝，不得退回无锁执行。
+- 账本的坏值读成 `null`（今天没花），不读成「已用完」：被挡下的条目永不扣账，读成用完会让打标签卡死到有人手动清存储。剩余额度与日界的语义归 `lib/tagging/CLAUDE.md`。
 - X 认证 header、WebDAV 三个 key 的 owner：`lib/x/CLAUDE.md`、`lib/sync/CLAUDE.md`。

@@ -37,6 +37,13 @@ export {
 } from './asr-prerequisite';
 
 export {
+  type TaggingBudgetLedger,
+  chargeTaggingBudget,
+  getTaggingBudgetLedger,
+  watchTaggingBudgetLedger,
+} from './tagging-budget';
+
+export {
   type ThemeColorPreset,
   type ThemeContrast,
   type ThemeSettings,

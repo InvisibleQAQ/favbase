@@ -14,6 +14,16 @@ describe('canonicalizeSettings', () => {
     });
   });
 
+  it('defaults the Tagging Budget to five million tokens a day and keeps a valid cap', () => {
+    // docs/41 D6: no "unlimited" switch, so the default is the protection for
+    // users who never open the setting.
+    expect(DEFAULT_SETTINGS.taggingDailyTokenBudget).toBe(5_000_000);
+    expect(canonicalizeSettings({}).taggingDailyTokenBudget).toBe(5_000_000);
+    expect(
+      canonicalizeSettings({ taggingDailyTokenBudget: 200_000 }).taggingDailyTokenBudget,
+    ).toBe(200_000);
+  });
+
   it('migrates legacy flat ASR fields into the canonical provider record', () => {
     const canonical = canonicalizeSettings({
       groqApiKey: 'groq-key',
@@ -64,6 +74,11 @@ describe('canonicalizeSettings', () => {
       { temperature: 3 },
       { maxTokens: 1.5 },
       { maxTokens: 0 },
+      { taggingDailyTokenBudget: 0 },
+      { taggingDailyTokenBudget: -1 },
+      { taggingDailyTokenBudget: 1.5 },
+      { taggingDailyTokenBudget: Number.POSITIVE_INFINITY },
+      { taggingDailyTokenBudget: '5000000' },
       { githubToken: 42 },
       { configSavedAt: { llm: -1 } },
       { groqApiKey: 42 },

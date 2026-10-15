@@ -38,6 +38,10 @@ export const STORAGE_KEYS = {
   // (entrypoints/app/sections/douyin/douyin-sync-adapter.ts). See
   // lib/douyin/CLAUDE.md and docs/33.
   douyinBackfill: 'local:douyin-backfill',
+  // Tagging Budget ledger ({ day: local YYYY-MM-DD, tokens }): what automatic
+  // tagging has spent on this device today. Device-local; read and written only
+  // through tagging-budget.ts. The daily cap itself is in settings. See docs/41.
+  taggingBudgetLedger: 'local:tagging-budget-ledger',
 } as const;
 
 export const STORAGE_PREFIXES = {

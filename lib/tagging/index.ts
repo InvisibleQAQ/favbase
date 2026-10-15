@@ -7,7 +7,8 @@ export {
   MAX_EXISTING_TAGS,
   type TaggingInput,
 } from './prompt';
-export { generateTags, normalizeTags } from './tagger';
+export { generateTags, normalizeTags, TaggingSpendError, type GeneratedTags } from './tagger';
+export type { TaggingBudget } from './budget';
 export {
   tagPlatformItem,
   tagPlatformBacklog,

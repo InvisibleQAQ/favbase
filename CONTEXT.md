@@ -50,6 +50,10 @@ _Avoid_: Orphan tag, configured tag
 A Collection Item linked to at least one Used Tag, regardless of how many tags it has.
 _Avoid_: Tagged task, completed item
 
+**Tagging Budget**:
+The daily allowance of input plus output tokens on this device that automatic tagging may spend from the configured LLM provider, shared by every Collection Platform.
+_Avoid_: LLM quota, LLM token limit, max tokens
+
 **Processing Coverage**:
 A read-only, platform-scoped snapshot of how many locally persisted, eligible Collection Items have completed each content-processing stage.
 It does not claim that the local collection contains every current item from the external platform.
@@ -138,6 +142,9 @@ _Avoid_: API key, provider key, password
 - Resolving a **Configuration Blocker** resumes the affected platform's pending work in the current app-page runtime
 - Each **Pipeline Run** belongs to one pipeline stage and is controlled independently; stage controls do not imply an atomic whole-pipeline operation
 - Fetch, Embed, and Tags **Pipeline Runs** share one control contract across all supported Collection platforms
+- Every **Collection Platform** draws on the same **Tagging Budget**; there is no per-platform allowance
+- The **Tagging Budget** limits automatic tagging only; Chat and video summaries spend from the same LLM provider without counting toward it or being stopped by it
+- The **Tagging Budget** renews at the start of each local day, the same day boundary the daily automatic trigger uses
 - A pause request lets the current **Pipeline Run** item settle, then stops before the stage claims its next item
 - A paused **Pipeline Run** remains controllable across Collection route changes in the current app-page runtime, but not after that runtime closes
 - A paused **Pipeline Run** remains unfinished and appears in the global do-not-close reminder until it resumes and settles
@@ -183,6 +190,7 @@ _Avoid_: API key, provider key, password
 - "Selected platform" in onboarding previously sounded like an availability gate; it is now defined as an **Onboarding Platform Preference**, never a platform enablement setting.
 - "Last synced" was read off the **Sources** a **Platform Sync** touched, so a failed **Platform Sync**, or one that found nothing, left no trace and the platform looked never synced. It now means the latest successful **Platform Sync** in the **Platform Sync Record** (user decision 2026-09-29, docs/32 D1; the code switched over in docs/32 Step 1, 2026-09-30).
 - "Already synced today", as the daily automatic trigger reads it, previously meant a **Platform Sync** that succeeded today, so a failed attempt was retried on every return to the tab. It now means any **Platform Sync** attempt today, whatever its outcome (user decision 2026-09-29, docs/32 D2; the code switched over in docs/32 Step 1, 2026-09-30).
+- "Max tokens" in the LLM settings is the output cap of a single request; it is not the **Tagging Budget**, which caps a whole local day of automatic tagging, input and output together (user clarification 2026-10-15).
 - "Stuck" previously mixed missing provider configuration with slow, failed, or paused work; only missing configuration with eligible pending work is a **Configuration Blocker**.
 - "Agent Skills" is a UI label, not a term: the Settings section named Agent Skills configures one **Agent Bridge** (enable, port, **Bridge Token**, connection status), not a list of installable skills. A Skill is still only the markdown that teaches an agent to call the **favbase CLI**; when the two readings could be confused, say Agent Bridge.
 - A repository markdown that installs the CLI is an **Agent Setup Guide**, not a Skill; only the markdown that teaches an agent to call the **favbase CLI** (`skills/favbase/SKILL.md`, shipped inside the CLI) is a Skill.

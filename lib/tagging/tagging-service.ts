@@ -11,7 +11,8 @@ import { itemContents } from '@/lib/database/entities/item-contents';
 import { tags } from '@/lib/database/entities/tags';
 import { itemTags } from '@/lib/database/entities/item-tags';
 import { getTaggingConfig, type ResolvedTaggingConfig } from './config';
-import { generateTags } from './tagger';
+import { generateTags, TaggingSpendError, type GeneratedTags } from './tagger';
+import { storageTaggingBudget, type TaggingBudget } from './budget';
 import type { TaggingInput } from './prompt';
 import { getAllUsedTags, type UsedTag } from './tag-queries';
 
@@ -40,7 +41,7 @@ export interface TaggedItem {
   tags: TagRef[];
 }
 
-export type TagItemResult = 'tagged' | 'skipped' | 'failed';
+export type TagItemResult = 'tagged' | 'skipped' | 'failed' | 'deferred';
 
 /** Injectable seams for tests (mirrors IndexingDeps DI style). */
 export interface TaggingDeps {
@@ -50,13 +51,16 @@ export interface TaggingDeps {
     config: ResolvedTaggingConfig,
     input: TaggingInput,
     existingTags: string[],
-  ) => Promise<string[]>;
+  ) => Promise<GeneratedTags>;
+  /** The Tagging Budget (docs/41): checked before each LLM call, charged after it. */
+  budget: TaggingBudget;
 }
 
 const defaultDeps: TaggingDeps = {
   db: getDb,
   getConfig: getTaggingConfig,
   generate: generateTags,
+  budget: storageTaggingBudget,
 };
 
 // ---------------------------------------------------------------------------
@@ -71,7 +75,13 @@ const defaultDeps: TaggingDeps = {
  * 'skipped': tagging not configured (no LLM apiKey), item missing, item
  * already tagged (idempotent — re-transcription won't re-tag), or the LLM
  * returned no tags. 'failed': LLM/DB error (logged, item stays untagged; no
- * retry, no keyword fallback by design).
+ * retry, no keyword fallback by design). 'deferred': today's Tagging Budget
+ * is spent or its ledger is unreadable — no LLM call, no DB write; the item
+ * stays pending for a later run. Not a failure.
+ *
+ * This is the only place the budget is checked and charged (docs/41 §3): the
+ * check runs only for an item that is about to cost a call, and every call
+ * that came back is charged, whether or not it produced tags.
  */
 export async function tagPlatformItem(
   platform: string,
@@ -97,6 +107,9 @@ export async function tagPlatformItem(
       .limit(1);
     if (itemRows.length === 0) return 'skipped';
     const item = itemRows[0];
+    // Past the candidate check this item will cost a call: check before reading
+    // anything else, so a spent day does not run the library-wide tag query per item.
+    if (!(await hasBudgetLeft(d.budget, platform, platformItemId))) return 'deferred';
 
     const contentRows = await db
       .select({ plainText: itemContents.plainText })
@@ -116,16 +129,13 @@ export async function tagPlatformItem(
     const description = field
       ? (item.platformMeta as Record<string, unknown>)[field]
       : undefined;
-    const names = await d.generate(
-      config,
-      {
-        title: item.title,
-        author: item.authorName,
-        description: typeof description === 'string' && description ? description : undefined,
-        content: contentRows[0]?.plainText,
-      },
-      existing.map((tag) => tag.name),
-    );
+    const input: TaggingInput = {
+      title: item.title,
+      author: item.authorName,
+      description: typeof description === 'string' && description ? description : undefined,
+      content: contentRows[0]?.plainText,
+    };
+    const names = await generateAndCharge(d, config, input, existing.map((tag) => tag.name));
     if (names.length === 0) return 'skipped';
 
     await linkTagsToItem(db, item.id, names);
@@ -145,10 +155,16 @@ export async function tagPlatformItem(
  * never-throws / idempotent / unconfigured-silent-skip semantics, so one bad
  * item never aborts the rest. Fire-and-forget from callers (`void tagNewItems(…)`).
  *
+ * The first 'deferred' item ends the run: the Tagging Budget is shared by every
+ * platform and only renews tomorrow (or when the cap is raised), so the rest
+ * would defer too. The run still completes normally — it does not throw.
+ *
  * `onProgress` (mirrors the embed lane) fires once with `{ done: 0, total }`
- * before the loop (total = `ids.length`, the input count — a 'skipped' item
- * still advances `done`, unlike embed's filtered total) then again after each
- * item settles. Monotonic, always reaches 100%. Pure notifier — never throws.
+ * before the loop (total = `ids.length`, the input count — a 'skipped' or
+ * 'failed' item still advances `done`, unlike embed's filtered total) then
+ * again after each item settles. Monotonic; reaches `total` unless the run
+ * ends early at a 'deferred' item, which does not advance it. Pure notifier —
+ * never throws.
  */
 export async function tagNewItems(
   platform: string,
@@ -162,7 +178,7 @@ export async function tagNewItems(
   onProgress?.({ done, total });
   for (const platformItemId of platformItemIds) {
     await control?.checkpoint();
-    await tagPlatformItem(platform, platformItemId, deps);
+    if ((await tagPlatformItem(platform, platformItemId, deps)) === 'deferred') return;
     done += 1;
     onProgress?.({ done, total });
   }
@@ -324,6 +340,56 @@ export async function removeTagFromPlatformItem(
 // ---------------------------------------------------------------------------
 // Internal
 // ---------------------------------------------------------------------------
+
+/** Budget check before a call. An unreadable ledger counts as spent: no ledger, no spending. */
+async function hasBudgetLeft(
+  budget: TaggingBudget,
+  platform: string,
+  platformItemId: string,
+): Promise<boolean> {
+  try {
+    return (await budget.remaining()) > 0;
+  } catch (err) {
+    console.error(
+      '[tagging] Tagging Budget unreadable; deferring %s:%s:',
+      platform,
+      platformItemId,
+      err,
+    );
+    return false;
+  }
+}
+
+/**
+ * One LLM call, charged as soon as it settles — before anything else can fail.
+ * A failed call is charged what it is known to have cost, then rethrown.
+ */
+async function generateAndCharge(
+  d: TaggingDeps,
+  config: ResolvedTaggingConfig,
+  input: TaggingInput,
+  existingTags: string[],
+): Promise<string[]> {
+  let generated: GeneratedTags;
+  try {
+    generated = await d.generate(config, input, existingTags);
+  } catch (err) {
+    await chargeQuietly(d.budget, err instanceof TaggingSpendError ? err.tokens : 0);
+    throw err;
+  }
+  await chargeQuietly(d.budget, generated.tokens);
+  return generated.tags;
+}
+
+/** The money is already spent, so a failed charge only warns: it never turns a result into 'failed'. */
+async function chargeQuietly(budget: TaggingBudget, tokens: number): Promise<void> {
+  if (tokens <= 0) return;
+  try {
+    await budget.charge(tokens);
+  } catch (err) {
+    console.warn('[tagging] Failed to charge %d tokens to the Tagging Budget:', tokens, err);
+  }
+}
 
 async function resolveItemId(
   db: FavbaseDb,

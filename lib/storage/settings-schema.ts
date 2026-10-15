@@ -38,6 +38,11 @@ export interface UserSettings {
   prefMode: 'quality' | 'efficiency';
   temperature: number;
   maxTokens: number;
+  /**
+   * Tagging Budget: input + output tokens automatic tagging may spend per local
+   * day on this device (docs/41). Not `maxTokens`, which caps one request's output.
+   */
+  taggingDailyTokenBudget: number;
   /** Per-section manual-save timestamps (ms epoch). */
   configSavedAt?: Partial<Record<'llm' | 'asr' | 'embedding' | 'github' | 'youtube', number>>;
 }
@@ -77,6 +82,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   prefMode: 'efficiency',
   temperature: 0.3,
   maxTokens: 100000,
+  taggingDailyTokenBudget: 5_000_000,
 };
 
 const LEGACY_ASR_FIELDS = [
@@ -171,6 +177,11 @@ const UserSettingsSchema = z.object({
   prefMode: z.enum(['quality', 'efficiency']).default(DEFAULT_SETTINGS.prefMode),
   temperature: z.number().finite().min(0).max(2).default(DEFAULT_SETTINGS.temperature),
   maxTokens: z.number().int().positive().default(DEFAULT_SETTINGS.maxTokens),
+  taggingDailyTokenBudget: z
+    .number()
+    .int()
+    .positive()
+    .default(DEFAULT_SETTINGS.taggingDailyTokenBudget),
   configSavedAt: z.record(z.string(), z.number().finite().nonnegative()).optional(),
 }).passthrough();
 
