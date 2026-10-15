@@ -31,7 +31,7 @@ export interface DouyinSyncProgress {
  * tag lanes per page, here (docs/33 D-b) — a run that fails at page 80 must
  * not leave 79 pages of items chunked and never processed, and the funnel
  * only dispatches on success. The funnel therefore gets `newItemIds: []`;
- * its success-time embed backlog pass still runs.
+ * its success-time embed and tag backlog passes still run.
  *
  * Videos take the other lane (docs/37 Step 3): the sync runs through
  * `runDouyinStreamingSync` (`auto-transcribe-runtime.ts`), which feeds each

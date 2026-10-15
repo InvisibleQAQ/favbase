@@ -58,8 +58,8 @@ export async function runBilibiliSync(
   // fetchAndSyncFolders checks again — it also serves the page's mount path.
   await checkAuth();
   // Transcription enqueues embed/tag per durable item itself, so newItemIds is
-  // empty: the funnel's batch embed lane (backlog-only) just retries items an
-  // earlier interrupted run left 'chunked'.
+  // empty: the funnel's batch embed and tag lanes (whole-backlog drains) just
+  // retry items an earlier interrupted run left unembedded or untagged.
   await runPlatformSync(ITEM_PLATFORM, control, async () => {
     const folders = await fetchAndSyncFolders(control);
     onFolders?.(folders);

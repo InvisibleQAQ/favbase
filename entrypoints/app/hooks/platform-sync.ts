@@ -17,7 +17,11 @@ export interface PlatformSyncOutcome {
   fetched: number;
   /** Items newly inserted this run — the page's "N new". */
   inserted: number;
-  /** platformItemIds for the batch tag lane; [] when the platform processes per item itself (bilibili / bookmarks). */
+  /**
+   * platformItemIds this run persisted; [] when the platform processes per item
+   * itself (bilibili / bookmarks / douyin). Both batch lanes drain the whole
+   * platform backlog and ignore it (docs/41 D7), so it has no consumer today.
+   */
   newItemIds: string[];
 }
 

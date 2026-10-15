@@ -14,7 +14,7 @@ AI 标签：内容落库后自动打标 + 标签 CRUD。`tags` / `item_tags` 的
 - `TaggedItem.platformMeta` 整列透传给卡片 adapter 不受上一条限制：那是列引用，不是读 key。
 - 资格规则只来自 `lib/collections/collection-processing-policy.ts` 的 Tags pending candidate（eligible + `chunked|embedded` + 无 tag）；Tags 不要求 chunk 行。
 - `tagPlatformItem` never throws：返回 `'tagged' | 'skipped' | 'failed' | 'deferred'`，已有链接幂等跳过，失败保持未打标；`item-tagged` 事件只在成功时发。`generateTags` 自己抛错不吞，失败语义由 service 层决定。
-- 没有启用开关：`enabled` 派生自 LLM 配置可解析（`lib/storage/resolve.ts` 的 `resolveLlmConfig`，与总结共用）。未配置时静默 no-op，backlog 报 `0/0` 且不查 DB。
+- 没有启用开关：`enabled` 派生自 LLM 配置可解析（`lib/storage/resolve.ts` 的 `resolveLlmConfig`，与总结共用）。未配置时静默 no-op，backlog 报 `0/0` 且不查 DB：每次 Platform Sync 收尾都会派发 `tagPlatformBacklog`，没配 LLM 的用户也一样。
 - `tagNewItems` 串行逐条，单条失败不中断；每条之前执行 cooperative checkpoint，不中断进行中的 LLM / DB 工作。队列与暂停状态归 app 层的 Tags lane，lib 不 import store。
 - `onProgress` 从 0 单调推进，`skipped` / `failed` 同样推进；正常到输入总数，遇 `'deferred'` 提前结束，那一条不推进。
 - 喂给 prompt 的已有标签取全库，不按平台过滤：LLM 应跨平台复用标签名。页面级筛选才传 `platform`。
@@ -31,7 +31,7 @@ AI 标签：内容落库后自动打标 + 标签 CRUD。`tags` / `item_tags` 的
 - 调用一结算就扣账，早于空标签判断与写库；扣账失败只 warn，不得把 `'tagged'` 改成 `'failed'`（钱已经花了）。
 - 拿到回应之后才失败的路径必须包成 `TaggingSpendError(tokens, cause)` 抛出，否则按 0 扣账；没拿到回应的错误（HTTP、网络）原样抛。
 - 用量只许多估：端点不报或报 0 的那一项按字符数估（openai-compatible 把缺失的计数转成 0）。
-- `tagNewItems` 在第一条 `'deferred'` 处正常返回，不是失败：额度全平台共用，后面的条目同样会被挡。
+- `tagNewItems` 在第一条 `'deferred'` 处正常返回，不是失败：额度全平台共用，后面的条目同样会被挡。被挡下的条目仍是 Tags pending candidate，由下一次同步收尾的 backlog 续上，lib 不记「谁被挡过」。
 - 上限每次检查都重读 settings，别缓存：调高要对进行中的 run 立即生效。
 
 ## 坑

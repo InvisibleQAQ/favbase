@@ -10,12 +10,7 @@ import {
   embeddingTraceError,
   type EmbeddingTraceDetails,
 } from '@/lib/embedding/diagnostics';
-import {
-  tagNewItems,
-  tagPlatformBacklog,
-  tagPlatformItem,
-  type TagItemResult,
-} from '@/lib/tagging';
+import { tagPlatformBacklog, tagPlatformItem, type TagItemResult } from '@/lib/tagging';
 
 import { getJob, startJob, type JobCollisionPolicy } from './background-jobs-store';
 
@@ -25,7 +20,7 @@ interface ProcessingProgress {
 }
 
 type ProcessingWorker = (
-  platform: string,
+  platform: CollectionPlatform,
   itemIds: string[],
   onProgress: (progress: ProcessingProgress) => void,
   control: CooperativeCheckpoint,
@@ -38,7 +33,7 @@ export interface CollectionProcessingJobDeps {
 
 export interface StartCollectionProcessingJobsInput {
   jobPlatform: string;
-  itemPlatform: string;
+  itemPlatform: CollectionPlatform;
   itemIds: string[];
 }
 
@@ -99,14 +94,15 @@ const itemDeps: CollectionProcessingItemDeps = {
 const streamLanes = new Map<string, ProcessingLaneState>();
 
 const defaultDeps: CollectionProcessingJobDeps = {
-  // The embed lane's input is the platform's WHOLE 'chunked' backlog — the ids
-  // a sync just persisted are part of it by definition, and an earlier
-  // interrupted run's leftovers get drained on the next dispatch instead of
-  // waiting for the manual settings-page rebuild. itemIds are ignored here.
+  // Each lane's input is the platform's WHOLE backlog ('chunked' for embed, the
+  // Tags pending candidates for tag) — the ids a sync just persisted are part
+  // of it by definition, and an earlier interrupted run's leftovers get drained
+  // on the next dispatch instead of waiting for a settings-page save. So do the
+  // items a spent Tagging Budget deferred (docs/41 D7). itemIds are ignored here.
   embed: (platform, _itemIds, onProgress, control) =>
     embedPlatformBacklog(platform, undefined, onProgress, control),
-  tag: (platform, itemIds, onProgress, control) =>
-    tagNewItems(platform, itemIds, undefined, onProgress, control),
+  tag: (platform, _itemIds, onProgress, control) =>
+    tagPlatformBacklog(platform, undefined, onProgress, control),
 };
 
 const defaultBacklogDeps: CollectionProcessingBacklogDeps = {
@@ -157,7 +153,7 @@ export function startCollectionProcessingJobs(
     stage: 'scheduler',
   };
 
-  // Embed ALWAYS dispatches — zero new items still means the backlog query
+  // Both lanes ALWAYS dispatch — zero new items still means the backlog query
   // runs (it completes instantly at 0/0 when there is nothing to drain).
   embeddingTrace('scheduler:batch-dispatch', embedDiagnostic);
   startBatchLane(
@@ -166,9 +162,6 @@ export function startCollectionProcessingJobs(
     (setProgress, control) => deps.embed(itemPlatform, ids, setProgress, control),
     embedDiagnostic,
   );
-
-  // Tags are per-item work on exactly the fresh ids — nothing to do on empty.
-  if (ids.length === 0) return;
   startBatchLane(jobPlatform, 'tag', (setProgress, control) =>
     deps.tag(itemPlatform, ids, setProgress, control),
   );
@@ -180,17 +173,10 @@ function startBatchLane(
   run: Parameters<typeof startJob>[2],
   diagnostic?: EmbeddingTraceDetails,
 ): void {
-  // Collision policy is declared here, executed by the job store: embed batch
-  // runners are interchangeable whole-backlog drains, so colliding dispatches
-  // coalesce into ONE pending drain; tag batches carry distinct fresh ids, so
-  // every dispatch queues and runs. Neither ever discards work.
-  const handle = startObservedJob(
-    jobPlatform,
-    lane,
-    run,
-    lane === 'embed' ? 'coalesce' : 'queue',
-    diagnostic,
-  );
+  // Collision policy is declared here, executed by the job store: batch runners
+  // on both lanes are interchangeable whole-backlog drains, so colliding
+  // dispatches coalesce into ONE pending drain — which never discards work.
+  const handle = startObservedJob(jobPlatform, lane, run, 'coalesce', diagnostic);
   if (diagnostic && handle.dispatch !== 'started') {
     embeddingTrace(`scheduler:batch-${handle.dispatch}`, diagnostic);
   }

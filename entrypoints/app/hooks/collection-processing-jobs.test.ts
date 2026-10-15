@@ -6,6 +6,17 @@ vi.mock('@/lib/storage', () => ({
   getEnvModel: () => '',
 }));
 
+const tagging = vi.hoisted(() => ({
+  tagNewItems: vi.fn(async () => undefined),
+  tagPlatformBacklog: vi.fn(async (_platform: string) => undefined),
+  tagPlatformItem: vi.fn(async () => 'tagged' as const),
+}));
+vi.mock('@/lib/tagging', () => tagging);
+vi.mock('@/lib/embedding', () => ({
+  embedPlatformBacklog: vi.fn(async () => undefined),
+  embedPlatformItem: vi.fn(async () => 'embedded' as const),
+}));
+
 import { getJob, pauseJob, resumeJob, setJobGate } from './background-jobs-store';
 import {
   enqueueCollectionProcessingItem,
@@ -41,21 +52,19 @@ describe('collection processing jobs', () => {
     expect(getJob('p-embed-resume', 'tag')).toBeNull();
   });
 
-  it('queues one follow-up backlog run when the same capability lane is active', async () => {
+  it('coalesces colliding Tags backlog resumes into one follow-up run', async () => {
     const releaseFirst = deferred();
     const tag = vi
       .fn()
       .mockImplementationOnce(() => releaseFirst.promise)
       .mockResolvedValue(undefined);
 
-    startCollectionProcessingBacklog(
-      { jobPlatform: 'p-resume', itemPlatform: 'x', capability: 'llm' },
-      { embed: async () => {}, tag },
-    );
-    startCollectionProcessingBacklog(
-      { jobPlatform: 'p-resume', itemPlatform: 'x', capability: 'llm' },
-      { embed: async () => {}, tag },
-    );
+    for (let i = 0; i < 3; i += 1) {
+      startCollectionProcessingBacklog(
+        { jobPlatform: 'p-resume', itemPlatform: 'x', capability: 'llm' },
+        { embed: async () => {}, tag },
+      );
+    }
     await flush();
 
     expect(tag).toHaveBeenCalledTimes(1);
@@ -105,37 +114,85 @@ describe('collection processing jobs', () => {
     }
   });
 
-  it('runs three colliding tag batches in dispatch order (queue policy)', async () => {
+  it('drains the whole Tags backlog at sync end, ignoring the fresh ids', async () => {
+    tagging.tagPlatformBacklog.mockClear();
+    tagging.tagNewItems.mockClear();
+
+    startCollectionProcessingJobs({
+      jobPlatform: 'p-default-tag',
+      itemPlatform: 'x',
+      itemIds: ['a', 'b'],
+    });
+    await flush();
+
+    expect(tagging.tagPlatformBacklog).toHaveBeenCalledTimes(1);
+    expect(tagging.tagPlatformBacklog.mock.calls[0]?.[0]).toBe('x');
+    expect(tagging.tagNewItems).not.toHaveBeenCalled();
+    expect(getJob('p-default-tag', 'tag')?.phase).toBe('completed');
+  });
+
+  it('coalesces a third colliding tag backlog into the pending drain', async () => {
     const releaseFirst = deferred();
-    const calls: string[] = [];
+    const tagRuns: string[] = [];
     const depsFor = (label: string, hold?: Promise<void>) => ({
       embed: async () => {},
       tag: async () => {
-        calls.push(label);
+        tagRuns.push(label);
         if (hold) await hold;
       },
     });
 
     startCollectionProcessingJobs(
-      { jobPlatform: 'p-three-batches', itemPlatform: 'x', itemIds: ['a'] },
+      { jobPlatform: 'p-tag-coalesce', itemPlatform: 'x', itemIds: ['a'] },
       depsFor('a', releaseFirst.promise),
     );
     startCollectionProcessingJobs(
-      { jobPlatform: 'p-three-batches', itemPlatform: 'x', itemIds: ['b'] },
+      { jobPlatform: 'p-tag-coalesce', itemPlatform: 'x', itemIds: ['b'] },
       depsFor('b'),
     );
     startCollectionProcessingJobs(
-      { jobPlatform: 'p-three-batches', itemPlatform: 'x', itemIds: ['c'] },
+      { jobPlatform: 'p-tag-coalesce', itemPlatform: 'x', itemIds: ['c'] },
       depsFor('c'),
     );
     await flush();
-    expect(calls).toEqual(['a']);
+    expect(tagRuns).toEqual(['a']);
 
     releaseFirst.resolve();
     await flush();
     await flush();
-    expect(calls).toEqual(['a', 'b', 'c']);
-    expect(getJob('p-three-batches', 'tag')?.phase).toBe('completed');
+    // Same as embed: the pending whole-backlog drain covers the third
+    // dispatch's items by definition. Exactly two runs, no loss.
+    expect(tagRuns).toEqual(['a', 'b']);
+    expect(getJob('p-tag-coalesce', 'tag')?.phase).toBe('completed');
+  });
+
+  it('parks a streaming tag drain behind the sync-end Tags backlog on the same lane', async () => {
+    const releaseBacklog = deferred();
+    const tagged: string[] = [];
+
+    // Per-item platforms hand the funnel zero ids; the backlog still runs.
+    startCollectionProcessingJobs(
+      { jobPlatform: 'p-tag-backlog-stream', itemPlatform: 'bookmarks', itemIds: [] },
+      { embed: async () => {}, tag: () => releaseBacklog.promise },
+    );
+    await flush();
+
+    const ticket = enqueueCollectionProcessingItem(
+      { jobPlatform: 'p-tag-backlog-stream', itemPlatform: 'bookmarks', itemId: 'a' },
+      {
+        embed: async () => 'embedded' as const,
+        tag: async (_platform, itemId) => {
+          tagged.push(itemId);
+          return 'tagged' as const;
+        },
+      },
+    );
+    await flush();
+    expect(tagged).toEqual([]);
+
+    releaseBacklog.resolve();
+    await expect(ticket.tag).resolves.toBe('tagged');
+    expect(tagged).toEqual(['a']);
   });
 
   it('coalesces a third colliding embed backlog into the pending drain', async () => {
@@ -326,7 +383,7 @@ describe('collection processing jobs', () => {
     }
   });
 
-  it('dispatches the embed lane on zero new items (backlog drain) but skips the tag lane', async () => {
+  it('dispatches both lanes on zero new items (backlog drains)', async () => {
     const calls: string[] = [];
 
     startCollectionProcessingJobs(
@@ -335,16 +392,16 @@ describe('collection processing jobs', () => {
         embed: async (_platform, ids) => {
           calls.push(`embed:${ids.length}`);
         },
-        tag: async () => {
-          calls.push('tag');
+        tag: async (_platform, ids) => {
+          calls.push(`tag:${ids.length}`);
         },
       },
     );
     await flush();
 
-    expect(calls).toEqual(['embed:0']);
+    expect(calls.sort()).toEqual(['embed:0', 'tag:0']);
     expect(getJob('p-empty-ids', 'embed')?.phase).toBe('completed');
-    expect(getJob('p-empty-ids', 'tag')).toBeNull();
+    expect(getJob('p-empty-ids', 'tag')?.phase).toBe('completed');
   });
 
   it('runs independently controllable Embed and Tags lanes', async () => {

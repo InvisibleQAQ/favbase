@@ -562,7 +562,7 @@ C. 接口序位（D5，同文件）
 
 **发现、未改的**
 
-- **中断那一次调用里已经切完块的条目没人派发**。`ingestCollection` 在 5a 中途抛错，`contentPersisted` 随之丢掉：排在失败条目之前、已经 `'chunked'` 且有 chunk 行的条目不是幽灵，之后的清扫不会再报它们。embed lane 是整库 backlog drain，下一次成功同步会捡到；tag lane 只吃 id（`entrypoints/app/hooks/collection-processing-jobs.ts:108-109`），这些条目要等 LLM 配置保存触发的 tag backlog 才会打标。所有平台都这样，抖音每次中断至多一页减一条。Step 2.5 之前就有，不在范围内。
+- **中断那一次调用里已经切完块的条目没人派发**。`ingestCollection` 在 5a 中途抛错，`contentPersisted` 随之丢掉：排在失败条目之前、已经 `'chunked'` 且有 chunk 行的条目不是幽灵，之后的清扫不会再报它们。embed lane 是整库 backlog drain，下一次成功同步会捡到；tag lane 只吃 id（`entrypoints/app/hooks/collection-processing-jobs.ts:108-109`），这些条目要等 LLM 配置保存触发的 tag backlog 才会打标。所有平台都这样，抖音每次中断至多一页减一条。Step 2.5 之前就有，不在范围内。（2026-10-15：docs/41 Step 2 已关闭。tag lane 改成与 embed 同形的整份 backlog drain，下一次成功同步就会捡到这些条目。这里的行号指改动前的代码。）
 - **第 1 步的清扫排在 `collects/list` 请求之后**（正文写的是「Source upsert 调用」）。那次请求失败的运行不清扫，幽灵等下一次请求成功的运行；正文都在库里，不丢。
 - **事务变大了**：一次入库的全部新正文现在在一个事务里。抖音每页 20 条无所谓；github / zhihu 首次同步可能是几千条（github 每条至多 100 KB，知乎没有上限）。数据量没变（此前是几千条独立的自动提交语句），实际耗时与内存没测 `[UNKNOWN]`。（复核补了一个下限数字与 RPC 期限的事实，见下方「Step 2.5 复核」第 5 条。）
 - **调用不带 `content` 而声明 `'chunked'`** 仍以 `'has_content'` 入库且没有正文（正文明写「行为不变」）。今天没有平台这样调；有的话，「`'has_content'` ⇒ 正文已落盘」对它不成立。

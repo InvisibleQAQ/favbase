@@ -27,8 +27,9 @@ app.html 专用的共享 hooks 与页面运行时 job 调度（只跑在 Extensi
 ## 处理 lane（`collection-processing-jobs.ts`）
 
 - 每个 `(jobPlatform, lane)` 串行、可暂停，不同平台的 lane 可并行；item 在领取前 checkpoint。
-- 碰撞策略只在这里声明、由 store 执行：tag batch = `'queue'`（每批 ids 不同，逐批必跑）、embed batch = `'coalesce'`（runner 都是整份 `'chunked'` backlog drain，可互换）、streaming drain = `'queue'`。三者都不丢工作，模块内不得出现 `settled` 重试递归。
-- 同步收尾时 Embed 恒派发平台整份 backlog（`embedPlatformBacklog`，零新条目也派发），Tags 只吃本轮新 ids。
+- 碰撞策略只在这里声明、由 store 执行：batch（embed 与 tag）= `'coalesce'`（runner 都是整份 backlog drain，可互换）、streaming drain = `'queue'`。都不丢工作，模块内不得出现 `settled` 重试递归。
+- 同步收尾时 Embed 与 Tags 都恒派发平台整份 backlog（`embedPlatformBacklog` / `tagPlatformBacklog`，零新条目也派发），funnel 传来的 ids 被忽略。不要改回「Tags 只吃本轮新 ids」：中断、失败、被 Tagging Budget 挡下的条目都靠下一次同步收尾续上（docs/41 D7）。
+- 逐条派发与 tag backlog 共用 `(jobPlatform, 'tag')`、串行执行；同一条被两边各领一次不会重复花钱，靠 `tagPlatformItem` 对已打标条目的幂等跳过（不读账本、不调 LLM），lane 不另做去重。
 - streaming inbox 在 drain 结算后若有迟到 item 必须 re-wake。
 - 终态 `job:completed|failed` trace 在 runner wrapper 内发出：queued run 的 `settled` 解析时 store 可能已启动下一个 run，读快照会串台。
 - provider 保存后的恢复只走 `resumeCollectionProcessing`（`collection-processing-resume.ts`）；Settings 不接触 job key 与 lane。

@@ -1,6 +1,6 @@
 # 41 Tagging Budget：自动打标签的每日 token 上限（2026-10-15）
 
-> 状态：**设计已定（用户 2026-10-15 逐条确认）；Step 1 已落地（2026-10-15，见 §6），Step 2–4 未开工**。执行稿是任务目录 `.trellis/tasks/10-15-tagging-daily-token-budget/prd.md`（`.trellis/` 不进版本库，决策以本文为准）。
+> 状态：**设计已定（用户 2026-10-15 逐条确认）；Step 1、Step 2 已落地（2026-10-15，见 §6），Step 3–4 未开工**。执行稿是任务目录 `.trellis/tasks/10-15-tagging-daily-token-budget/prd.md`（`.trellis/` 不进版本库，决策以本文为准）。
 >
 > 起因：自动打标签对每条 Collection Item 发一次 `generateObject`（`lib/tagging/tagger.ts`），输入是标题、简介、正文前 2000 字和 50 个已有标签（`lib/tagging/prompt.ts`）。花费与收藏数成正比，而且无人值守：首次同步几千条收藏，就可能一次烧掉用户 LLM key 的大部分余额。仓库里没有任何节流；设置页 LLM 卡上的 `maxTokens` 没有消费者（`lib/summary/CLAUDE.md`），而且它是单次请求的输出上限，本来就管不到这件事。
 >
@@ -59,7 +59,7 @@
 - 文档：`lib/tagging/CLAUDE.md`（预算约束；`onProgress`「必达输入总数」的契约改为「可在 `'deferred'` 处提前结束」）、`lib/storage/CLAUDE.md`（账本 owner）。
 - 验收：跨日归零；先查后扣；usage 缺失走估算；`NoObjectGeneratedError` 扣其 usage；无 usage 的抛错记 0；`'deferred'` 不调 LLM；批量在 `'deferred'` 处停；扣账失败不改 `'tagged'`；账本读失败返回 `'deferred'`；非法设置值被 `canonicalizeSettings` 拒绝。每组先写测试、对旧代码跑红。
 
-### Step 2 — Tags lane 改成积压排空
+### Step 2 — Tags lane 改成积压排空（已落地 2026-10-15，见 §6）
 
 - `entrypoints/app/hooks/collection-processing-jobs.ts`：`defaultDeps.tag` 改走 `tagPlatformBacklog`，忽略 itemIds（照抄 embed 那段注释的写法）；`startCollectionProcessingJobs` 去掉「ids 为空不派 tag」的早退；`startBatchLane` 两条 lane 都用 `'coalesce'`。逐条派发 `enqueueCollectionProcessingItem` 不变：积压排空与逐条派发走同一个 `(jobPlatform, 'tag')` key，串行执行，`tagPlatformItem` 的幂等跳过保证不会重复花钱。
 - 文档：`entrypoints/app/hooks/CLAUDE.md`「处理 lane」里 tag batch = `'queue'` 与「Tags 只吃本轮新 ids」两条；`lib/tagging/CLAUDE.md` 对应条目；`platform-sync.ts` 里 `PlatformSyncOutcome.newItemIds` 的注释若提到 tag 一并改；docs/33「Step 2.5 落地记录」的「中断那一次调用里已经切完块的条目没人派发」一条加指针到本文。
@@ -130,3 +130,29 @@
 - `pnpm test`：根目录 245 个文件 / 2262 个用例，packages 15 个文件 / 263 个用例，全绿。
 - `pnpm build`：通过，background graph 14 个模块。
 - 每组测试都先对旧代码跑红，再写实现。
+
+### Step 2（2026-10-15）
+
+**落地**：按 D7 与铁律 1、2 落地。lane 里没有任何预算判断；`lib/tagging` 只改了 `tagNewItems` 的 JSDoc。
+
+- `defaultDeps.tag` 改走 `tagPlatformBacklog`，忽略 funnel 传来的 ids；`startCollectionProcessingJobs` 去掉了「ids 为空不派 tag」的早退；`startBatchLane` 两条 lane 都用 `'coalesce'`。
+- `enqueueCollectionProcessingItem` 未动。
+
+**对 §4 的补充**（实现时发现）：
+
+1. `tagPlatformBacklog` 只收 `CollectionPlatform`，所以 `ProcessingWorker.platform` 与 `StartCollectionProcessingJobsInput.itemPlatform` 从 `string` 收窄成 `CollectionPlatform`。唯一的非测试调用方 `platform-sync.ts` 本来就传 `CollectionPlatform`。
+2. 同步收尾的 tag run 现在可能以 failed 收尾：`tagNewItems` 从不抛错，`tagPlatformBacklog` 读配置或查候选失败会抛。这与 embed backlog、保存 LLM 设置后的续跑是同一个行为。
+3. 计划之外还有几处写着「funnel 只补跑 embed 积压」，已一并改掉：`entrypoints/app/sections/bookmarks/CLAUDE.md`、`.trellis/spec/frontend/platform-onboarding.md`，以及 bookmarks / bilibili / douyin 三个 sync adapter 的注释。
+
+**发现、未改的**：
+
+- `PlatformSyncOutcome.newItemIds` 已经没有生产消费者：两条 batch lane 都忽略它。字段与各平台 adapter 的返回值没删，删掉要改所有 adapter 及其测试，不在本步范围。
+- 两个 app.html 标签页同时同步同一平台时，两边各跑一份 tag backlog。后启动的那份查到的候选，正是先启动那份还没打完的部分，之后两边会对同一批条目各调一次 LLM。总花费仍受共用账本约束（D5），浪费的是当天的额度。Step 2 之前同步收尾只派本轮新 ids，第二次同步插不进新条目就不派 tag；整份 backlog 只由保存 LLM 设置的续跑派发，重叠窗口小得多。job store 是每个标签页一份，跨标签页去重要另加协调（例如按平台的 Web Lock），本步未做。频率 `[UNKNOWN]`。
+
+**验证**：
+
+- 5 个新增 / 改动的用例先对旧代码跑红。
+- `pnpm vitest run entrypoints/app/hooks`：21 个文件 / 167 个用例通过。
+- `pnpm compile`：通过。
+- `pnpm test`：根目录 245 个文件 / 2264 个用例，packages 15 个文件 / 263 个用例，全绿。
+- 本步不涉及 UI，没跑 `pnpm build`。

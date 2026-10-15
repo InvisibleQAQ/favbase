@@ -257,8 +257,8 @@ not apply (§4.3).
   default `'drop'` collision (a second chain while one runs is a no-op). The
   funnel closure returns `newItemIds: []`: the pending items have no text
   yet, and the worker dispatches each one itself (below); the funnel's
-  backlog-only embed lane still picks up items an interrupted run left
-  `'chunked'`.
+  whole-backlog embed and tag lanes still pick up items an interrupted run
+  left `'chunked'`.
 - The worker `await control.checkpoint()`s before claiming each item, so the
   library gate can pause it between items.
 - Each item settles through `settleItemContent(db, itemId, text, chunker)`

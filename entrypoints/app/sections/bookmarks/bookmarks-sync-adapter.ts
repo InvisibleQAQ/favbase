@@ -15,7 +15,7 @@ export interface BookmarksSyncProgress {
 /**
  * The bookmarks platform Sync Adapter — the single implementation of what a
  * bookmarks sync means: the local `chrome.bookmarks` tree sync through the
- * Platform Sync funnel (attempt record + backlog embed dispatch), then the
+ * Platform Sync funnel (attempt record + embed / tag backlog dispatch), then the
  * chained content-extraction stage. Both the manual page (mount auto-sync +
  * fetch button) and the daily auto-sync coordinator run this exact function.
  * Local browser data — no auth to resolve, so every run is an attempt.
@@ -25,9 +25,10 @@ export async function runBookmarksSync(
   control: CooperativeCheckpoint,
 ): Promise<void> {
   onProgress({ done: 0, total: null });
-  // Empty ids = backlog-only dispatch, no tag lane: the funnel still drains
-  // the embed backlog, because bookmarks left 'chunked' by an interrupted
-  // earlier run are not re-picked by extraction (it only sees 'pending').
+  // Empty ids: extraction dispatches each item itself. The funnel still drains
+  // the embed and tag backlogs, because bookmarks left 'chunked' by an
+  // interrupted earlier run are not re-picked by extraction (it only sees
+  // 'pending').
   await runPlatformSync(ITEM_PLATFORM, control, async () => {
     const result = await syncBookmarks(control);
     onProgress({ done: result.totalBookmarks, total: null });
